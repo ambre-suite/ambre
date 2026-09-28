@@ -30,9 +30,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- the same operations in two interleavings; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react | none | verified |
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction tallies and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe` today, but its root carries no `#![forbid(unsafe_code)]`, so nothing refuses the next one (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-089` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
-| `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic queue, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
-| `TOILE-UI-311` | `INV` | The UI thread MUST NOT block on the Logic queue. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the three senders are `try_send` and no path awaits capacity, and the absence is the proof | none | verified |
+| `TOILE-089` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
+| `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic channel, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
 | `TOILE-UI-101` | `INV` | The canvas dispatch over the display events MUST be exhaustive -- no wildcard arm -- so a new event is a compile error and never a silent drop. | this spec section 4 | exhaustive-match -- the dispatch of `ui/view.rs` carries **no `_` arm**, so adding an event fails the build | none | verified |
 
 ### 1.2 Do one thing to the board
@@ -53,7 +52,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
-| `TOILE-216` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the remote path returns `Vec<ToileEvent>` and not an outcome, so it has nowhere to put a delta | none | verified |
+
+**Frame:** `SYNC-101`
 
 ### 1.4 Hand a change to the Sync worker
 
@@ -86,8 +86,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-312` | `POST` | A command sent from the drawing thread MUST reach the Logic thread addressed to the document it was drawn on. | this spec section 4; `ambre-spec-message-bus.md` | type-level -- the two board paths wrap the command in `LogicCommand::App` with the view's own document id, the id is not a parameter of the send, and the construction is the proof | none | verified |
-| `TOILE-UI-100` | `FAIL` | A full queue MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
-| `TOILE-UI-313` | `FAIL` | A full queue MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | type-level -- the camera path is a try-send whose `Full` arm warns and returns `false`, and the arm is the only way the call answers a full queue | none | verified |
+| `TOILE-UI-100` | `FAIL` | A full channel MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
+| `TOILE-UI-313` | `FAIL` | A full channel MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | type-level -- the camera path is a try-send whose `Full` arm warns and returns `false`, and the arm is the only way the call answers a full channel | none | verified |
 | `TOILE-UI-314` | `FRAME` | Sending a command MUST NOT change what the canvas draws: the gesture is already on screen and no answer is awaited. | this spec section 4 | type-level -- the three senders take `&self`, so no send can touch the view's render state | none | verified |
 
 ### 1.8 Fan one answer out to the three threads
@@ -104,10 +104,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 32 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other application
-  holds: the index equivalence and the convergence of every derived cache. Both under one property test,
-  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and
-  `TOILE-023`, a measurement; ten verified rows are structural.
+* **Verification.** 30 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other
+  application holds: the index equivalence and the convergence of every derived cache. Both under
+  one property test, neither at a culling camera (`TOILE-206`). What is loose is four rules nothing
+  exercises and `TOILE-023`, a measurement; ten verified rows are structural.
 
 ---
 
@@ -243,7 +243,7 @@ that owns it, in `ambre-bus::app::toile`, where the code is authoritative.
 
 ```rust
 /// What a handler returns. The `ambre-logic` dispatcher is the only place that
-/// turns any of these four into a message on a queue (`TOILE-089`).
+/// turns any of these four into a message on a channel (`TOILE-089`).
 pub struct ToileOutcome {
     pub display:   Vec<ToileEvent>,     // to the UI thread
     pub update:    Option<Vec<u8>>,     // the CRDT delta to broadcast
@@ -390,7 +390,7 @@ and it is why the two are one property test.
 The user touches no part of this document directly. What it exposes is the answer every other Toile feature
 draws from, and the rules that keep the drawing thread honest. It holds view state and the current visible set
 and nothing else (`TOILE-UI-001`). Every mutation leaves as a command (`TOILE-UI-099`), carrying the document
-it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`). A full queue drops
+it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`). A full channel drops
 that command rather than blocking the frame, and both paths say so: the edit path (`TOILE-UI-100`) and the
 camera path (`TOILE-UI-313`). The dropped camera is offered again on the next frame (`BUS-024`).
 
@@ -418,7 +418,7 @@ error rather than a silent drop (`TOILE-UI-101`).
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | The whiteboard job, not the vector-fabrication job | competing on vector-fabrication depth | it is another product's metier and another audience's need. Toile is a Miro, not a Figma: its job is a team thinking together and then presenting -- brainstorming, workshops, diagramming, notes turned into a deck. That audience is the privacy-conscious European team, not the professional designer, who chooses a competitor for its ecosystem, its developer handoff and its design tokens, none of which Ambre offers. The rule of thumb is one sentence: a capability that serves a team thinking together is core, and a capability that serves one person fabricating a precise artifact is not. Two capabilities sit on the far side of that line and are built anyway, the constraint solver (`features/ambre-spec-toile-auto-layout.md`) and the boolean combinators (`features/ambre-spec-toile-vector-paths.md`): they stay in the tree, earn no stabilization budget, carry no promise, and are candidates for removal |
-| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed document-state enum exists to avoid. A value returned by a plain method is testable on the host with no queue, no worker and no browser, and it keeps the state free of a transport handle, leaving the dispatcher as the single place where a board change becomes traffic |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed document-state enum exists to avoid. A value returned by a plain method is testable on the host with no channel, no worker and no browser, and it keeps the state free of a transport handle, leaving the dispatcher as the single place where a board change becomes traffic |
 | The derivation finishes inside the command | a deferred pass on a timer | it buys a shorter command and pays with a screen showing a stale plane. Finishing inside, what the user reads is never a board from before their gesture, there is no second scheduler to reason about, and the cull bounds the work to the visible set |
 | The UI is handed the visible set, never the board | iterating the whole document per frame | it is the shape a plane makes impossible: fifty thousand elements cannot be walked per frame, and the thread that paints must not hold a second model of the document. The index answers in O(log N + k), so the cost follows the screen |
 | The spatial index is a cache, never the truth | treating the index as the source of truth, and writing the document from it | a remote change arrives as operations on the document, so an authoritative index desyncs the moment two peers move the same element. A cache is rebuildable, and the rebuild is the oracle the equivalence property compares against |
@@ -454,7 +454,7 @@ error rather than a silent drop (`TOILE-UI-101`).
 * **No budget is measured.** Not one of the Toile rows of `ambre-spec-budgets.md` has
   a benchmark, so every cost above is a claim about a number nothing weighs. Two of those rows are
   already known to be false.
-* **The engine has no queue seam, and needs none.** Trame drives its Logic-to-Sync boundary through
+* **The engine has no channel seam, and needs none.** Trame drives its Logic-to-Sync boundary through
   a mock sink. Toile asserts on the returned outcome instead, which is stronger: the value is the
   contract, and a test that reads it cannot miss a send. Three sections of the corpus named the mock
   seam for Toile all the same, and the crate has never used it.

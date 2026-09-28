@@ -19,9 +19,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-017` | `INV` | One gesture that writes cells MUST become one undo item, however many times the document is committed to carry it out. | this spec section 3; architecture section 2.D | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item`; `::filtered_column_edit_is_one_undo_item` -- the two-commit case; `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo`; `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group` -- four gestures that write cells, the gesture that deletes lines being outside this row and held by `TRAME-088` | none | verified |
-| `TRAME-121` | `INV` | `Ctrl+Shift+Z` MUST redo. | this spec section 4 | `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- it seeds the keymap from the declared table and reads the three chords back, so a removed `Ctrl+Shift+Z` binding fails it | none | verified |
 | `TRAME-151` | `INV` | `Ctrl+Y` MUST redo, the binding users of other spreadsheets reach for. | this spec section 4 | `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- it seeds the keymap from the declared table and reads the three chords back, so a removed `Ctrl+Y` binding fails it | none | verified |
-| `TRAME-152` | `INV` | `Ctrl+Z` MUST undo. | this spec section 4 | `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- it seeds the keymap from the declared table and reads the three chords back, so a removed `Ctrl+Z` binding fails it | none | verified |
 | `TRAME-123` | `IO` | A named snapshot MUST be restorable after the session that made it. | this spec section 6 | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-153` | `CONC` | Two peers MUST converge when one restores a snapshot while the other edits. | this spec section 2 | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -36,11 +34,11 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   `ambre-spec-budgets.md section 6`, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 4 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
-  for gestures that write cells alone: the line delete contradicts it and `TRAME-088` carries
-  that failure. The three chords are read back off the seeded keymap, and version history is
-  unbuilt on both sides of the grammar. What a restore owes the snapshot list is open, and so is
-  what two peers reach when one restores while the other edits. The shared rules and their coverage are
+* **Verification.** 2 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
+  for gestures that write cells alone: the line delete contradicts it and `TRAME-088` carries that
+  failure. The three chords are read back off the seeded keymap, and version history is unbuilt on
+  both sides of the grammar. What a restore owes the snapshot list is open, and so is what two peers
+  reach when one restores while the other edits. The shared rules and their coverage are
   `ambre-spec-undo.md`.
 
 ---
@@ -105,8 +103,8 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 
 | Trigger | Sends |
 |---|---|
-| `Ctrl+Z` | `Undo` (`TRAME-152`) |
-| `Ctrl+Shift+Z` | `Redo` (`TRAME-121`) |
+| `Ctrl+Z` | `Undo` (`UNDO-010`) |
+| `Ctrl+Shift+Z` | `Redo` (`UNDO-011`) |
 | `Ctrl+Y` | `Redo` (`TRAME-151`), the second binding users of other spreadsheets reach for |
 | the toolbar's two buttons | the same two intents, through the shared command path |
 

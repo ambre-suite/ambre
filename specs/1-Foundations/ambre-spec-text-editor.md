@@ -29,7 +29,7 @@ rules live beside the design they constrain, rather than in the thread's own doc
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
 | `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | none | verified |
 | `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | none | unheld -- both use `fill_path`, which a rotation maps, rather than `fill_rect`, which maps a bounding box alone, and no test observes a rotated edit; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-037` | `INV` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the five replay one operation corpus through the wrapper and through the core | partial -- Toile's wrapper has no such belt; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-037` | `INV` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the five replay one operation corpus through the wrapper and through the core | partial -- Toile's wrapper has no such belt; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
 | `UI-THREAD-014` | `INV` | Every editor in the suite MUST take its input pipe, its composition machine, its caret and its selection model from this one substrate. | this spec section 2; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the `One text-editing substrate` Story (`ambre-roadmap.md` E8). `CANVAS-037` holds the caret and selection half for the two wrappers that exist; the input pipe is a second crate and the third application has no crate at all | unimplemented |
 | `UI-THREAD-018` | `INV` | The moving end of a selection MUST be named the focus and the fixed one the anchor, in every application and in this core. | this spec section 2 | not built | unbuilt -- lands with the `One name for the moving selection end` Story (`ambre-roadmap.md` E8). This core and the board already say focus; the grid says active beside its anchor, so one selection has two vocabularies and nothing refuses a third | unimplemented |
 
@@ -68,10 +68,10 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 4 `verified`, 7 `untested`, 2 `unimplemented`. The four held rules are the two
-  the compiler holds and the two assertions of one host-tier test. What is loose is everything the
-  gestures owe. The parity belt that proves a wrapper delegates covers one wrapper of two, and the
-  drain at paint time is a call nothing checks.
+* **Verification.** 4 `verified`, 1 `partial`, 6 `untested`, 2 `unimplemented`. The four held rules
+  are the two the compiler holds and the two assertions of one host-tier test. What is loose is
+  everything the gestures owe. The parity belt that proves a wrapper delegates covers one wrapper of
+  two, and the drain at paint time is a call nothing checks.
 
 ---
 

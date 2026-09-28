@@ -38,13 +38,14 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | none | fails -- on the column axis the window is sized from the uniform metric, and a resized column can be a third of it, so a screen of narrow columns runs past the last one requested. Those columns are never asked for, and the same window evicts them if an earlier one had brought them in (section 5). The row axis survives by margin, not by rule; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | `ambre_trame::ui::view::tests::the_viewport_queue_coalesces_to_one_request` -- every request source collapses to one drain; `::a_dropped_request_is_re_offered_not_doubled` -- a dropped request is re-offered, never doubled | none | verified |
 | `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | none | unheld -- `scroll_by` writes the origin and reads nothing else, but no test drives it: `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-175` | `POST` | A selection or a fill handle held past an edge of the cells MUST scroll the grid towards it, and the range MUST reach the nearest edge cell. | this spec section 3 | `ambre_trame::ui::grid::tests::kinetic::a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell` | partial -- the geometry is tested; the per-frame step of the view is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.3 The wheel turns
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and feeds the accumulator, and no test drives the wheel path at all (section 5); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and zeroes the velocity, and no test drives the wheel path at all; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | partial -- the model is tested (`KINETIC-009`); `handle_wheel` passing the line and page modes to it is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | none | unheld -- `handle_wheel` returns before reading the delta, which is also what hands the gesture to the browser, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 An answer arrives
@@ -67,10 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 6 `verified`, 1 `failing`, 10 `untested`, 2 `unimplemented`. What holds is what is
-  drawn or hit-tested, and the one-slot queue that caps a frame at one request (`TRAME-UI-025`).
-  What is loose is every state machine: the window, the version guard, the eviction, the wheel, the
-  metric adoption. The one failure is the narrow-column window (`TRAME-UI-144`).
+* **Verification.** 6 `verified`, 2 `partial`, 1 `failing`, 9 `untested`, 2 `unimplemented`. What
+  holds is what is drawn or hit-tested, and the one-slot queue that caps a frame at one request
+  (`TRAME-UI-025`). What is loose is every state machine: the window, the version guard, the
+  eviction, the wheel, the metric adoption. The one failure is the narrow-column window
+  (`TRAME-UI-144`).
 
 ---
 
@@ -128,7 +130,8 @@ active filter hides, so the axis closes over it (`features/ambre-spec-trame-shar
 * `crates/ambre-trame/src/ui/grid/state.rs` -- the window, the version, the eviction, the answer;
 * `ui/grid/geometry.rs` -- pixel to index and back, for hit-testing;
 * `render/layout.rs` -- the same walk, for drawing;
-* `ui/view/input.rs` -- the wheel, the momentum coast, the scroll accumulator;
+* `ui/view/input.rs` -- the wheel, the finger, the edge scroll and the scroll accumulator, over the
+  shared model of `1-Foundations/ambre-spec-kinetic-scroll.md`;
 * `ui/view/frame.rs` -- the one-slot queue and the per-frame flush;
 * `logic/commands.rs` -- the window is recomputed and answered whole.
 
@@ -141,7 +144,9 @@ active filter hides, so the axis closes over it (`features/ambre-spec-trame-shar
 | Trigger | Behaviour |
 |---|---|
 | wheel, or two fingers on a touchpad | pixels accumulate; whole rows and columns are peeled off and the remainder is kept, so a slow glide advances one row at a time |
-| a flick on a touchpad | the release speed carries the axis on, decaying each frame until it dies or hits an edge |
+| a flick on a touchpad | the glide's speed carries the axis on once it pauses, decaying each frame until it dies or hits an edge |
+| a finger dragged on the grid | the grid follows it by whole cells, and a flick keeps it moving; a finger that barely moves is a click |
+| a selection or a fill handle dragged past the edge of the cells | the grid scrolls towards that edge, faster the deeper, and the range follows to the edge cell (`TRAME-UI-175`) |
 | a wheel notch, a line delta or a page delta | applied once, with no coast (`TRAME-UI-026`) |
 | `Ctrl` with the wheel | left to the browser: the page zooms, the grid does not |
 | the zoom menu in the status bar | scales the cells, both header strips and the cell font together, and re-requests the window |
@@ -175,7 +180,7 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
 | A late answer is dropped on a version compare | cancelling the outstanding request | the queue cannot do it: a request already sent is answered, and the answer arrives whether the window still wants it or not. |
 | A cell outside the new window is evicted | keeping every cell ever received | it is unbounded on a 100 000-row sheet, and a cell that stays in the cache after leaving the window is a value nothing will refresh, which reads as authoritative. |
 | A band entering by a scroll is painted blank, not pending | painting the pending fill uniformly | it is what a full repaint does, and the pending fill is grey: a grey flash on every scroll reads as a fault rather than as a wait. |
-| Only a high-resolution pixel gesture gets momentum | one path for every scroll source | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click. |
+| Only a high-resolution pixel gesture gets momentum, from the shared model | one path for every scroll source | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click. |
 | Freeze stays local | freezing as a document property, synchronized to every collaborator | a frozen pane is a reading preference and screens differ; sharing it would make two users fight over one number. |
 
 ---
@@ -192,8 +197,9 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
   `Ctrl` with the wheel is handed to the browser and no two-finger gesture reaches the grid, in
   Trame as in Toile. The rule is `UI-THREAD-013`, on the shared zoom engine, and it ships with
   "One zoom model" at V1.
-* **The whole wheel and momentum path has no test.** The crate's rule is that an interaction
-  lands with a geometry round trip and a recording of what it painted
+* **The wheel path of the view has no test.** The model under it is tested
+  (`1-Foundations/ambre-spec-kinetic-scroll.md`), and the view only feeds it. The crate's
+  rule is that an interaction lands with a geometry round trip and a recording of what it painted
   (`ambre-spec-testing.md section 6`). It is pure state over an injected clock, so nothing
   about it needs a browser.
 * **A screen of narrow columns is not fetched** (`TRAME-UI-144`). `viewport_cols` sizes the request

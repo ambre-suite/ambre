@@ -42,8 +42,6 @@ ambre-draw = { path = "../ambre-draw" }
 # autofilter buttons (the GPU surface has no fill_path). Host + wasm.
 kurbo      = { workspace = true }
 ambre-canvas   = { path = "../ambre-canvas" }
-# UI Thread <-> Logic frame channels (shared memory, Main instance).
-flume      = { workspace = true }
 web-sys    = { workspace = true }
 wasm-bindgen = { workspace = true }
 

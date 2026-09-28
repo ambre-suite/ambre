@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip | none | verified |
-| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | none | partial -- the purge covers the cell styles and the test asserts the text alone, while the width or height of the removed line, and its hidden-row mark, are never dropped; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | none | fails -- the purge covers the cell styles and the test asserts the text alone, while the width or height of the removed line, and its hidden-row mark, are never dropped; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-172` | `FRAME` | Deleting a line MUST NOT drop a cell that sits on another line. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the lines above and below the removed one keep their values across the round trip | none | verified |
 
 ### 1.4 Drag a line to another slot
@@ -78,7 +78,7 @@ status values are normative in `ambre-spec-template.md`.
   for. No bench measures it.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 13 `verified`, 3 `failing`, 4 `untested`. What holds is the single-line gesture
+* **Verification.** 13 `verified`, 4 `failing`, 3 `untested`. What holds is the single-line gesture
   and the frame conditions around it. What is loose is the metrics that follow a line, the drag that
   lands on its own slot and the guard past the used range. Both failures matter: a multi-line
   delete returns only the last of its deltas, so the peers see one row go where four went

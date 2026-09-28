@@ -18,10 +18,10 @@ use serde::{Deserialize, Serialize};
 /// cell race exactly once, so the merged style is always one writer's, never a
 /// per-attribute blend.
 #[derive(Serialize, Deserialize, Default)]
-struct StyleRecord {
-    bold: bool,
-    italic: bool,
-    style: CellStyle,
+pub(super) struct StyleRecord {
+    pub(super) bold: bool,
+    pub(super) italic: bool,
+    pub(super) style: CellStyle,
 }
 
 impl TrameState {

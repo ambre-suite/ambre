@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`; `::fill_series_single_cell_increments_by_one`; `group6::fill_merged_series_increments_per_block` | none | verified |
-| `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` -- the only text source in the suite, which takes the merged path | partial -- on the plain path nothing fills text: one test forces `Copy` over numbers, the other fills a formula; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` -- the only text source in the suite, which takes the merged path | partial -- on the plain path nothing fills text: one test forces `Copy` over numbers, the other fills a formula; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-069` | `POST` | A filled formula MUST have its relative references shifted by its own offset from the source. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_copies_text_and_reindexes_formula` | none | verified |
 | `TRAME-UI-070` | `POST` | A source tiled by equal merged blocks MUST fill block by block, not cell by cell. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`; `::fill_merged_series_increments_per_block`; `::fill_multi_merged_source_continues_pattern` | none | verified |
 | `TRAME-UI-134` | `POST` | A fill MUST write every cell between the source and the edge of the drag. | this spec section 3 | none | unheld -- both paths walk whole blocks and leave a partial tail unwritten in silence. What keeps the tail empty is the UI snapping the destination, not a guard the engine holds; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
   the operation that row was written for. No bench measures it.
 * **Boundary.** none of its own: the fill writes cells to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 3 `verified`, 6 `untested`, 1 `qa-manual`. What is proven is what the fill
+* **Verification.** 3 `verified`, 1 `partial`, 5 `untested`, 1 `qa-manual`. What is proven is what the fill
   produces on the numeric and the merged paths. What is loose is what it refuses, and one claim is
   withdrawn. `TRAME-UI-068` cited two tests that assert something else: one forces `Copy` over a
   numeric source, the other fills a formula (`TRAME-UI-069`). Neither fills text, and every

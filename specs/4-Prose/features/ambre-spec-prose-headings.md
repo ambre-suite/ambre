@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: HEADINGS
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial
 
 > Six levels of section title. Each one carries its level and nothing else. The number in front of
 > it, and its place in the outline, are computed from the document order when the page is drawn.
@@ -17,31 +17,27 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-030` | `OBS` | The number drawn in front of a heading MUST be the one its position implies, read from the headings before it in document order. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-090` | `INV` | The document MUST NOT hold a heading's number, nor its place in the outline. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-029` | `OBS` | A heading whose stored level is outside one to six MUST be numbered as the nearest level inside it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-031` | `INV` | A level MUST reach a block only through a typed command; it MUST NOT be written as an untyped attribute. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-030` | `OBS` | The number drawn in front of a heading MUST be the one its position implies, read from the headings before it in document order. | this spec section 3 | `ambre_prose::numbering::tests::a_heading_is_numbered_by_the_headings_before_it` -- it reads the numbers off a six-heading document; `ambre_prose::numbering::tests::an_insertion_renumbers_what_follows_it` | none | verified |
+| `PROSE-FEAT-090` | `INV` | The document MUST NOT hold a heading's number, nor its place in the outline. | this spec section 3; this spec section 5 | `ambre_prose::numbering::tests::numbering_leaves_the_document_untouched` -- it compares the whole document value across a numbering pass; structural -- no container of section 3 carries a number or an outline place | none | verified |
+| `PROSE-FEAT-029` | `OBS` | A heading whose stored level is outside one to six MUST be numbered as the nearest level inside it. | this spec section 3 | `ambre_prose::numbering::tests::a_level_outside_the_range_is_numbered_at_the_nearest_one` -- it stores a zero and a nine the way an import does, and reads the numbers back | none | verified |
+| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | `ambre_prose::numbering::tests::a_level_outside_the_range_is_numbered_at_the_nearest_one` -- it reads the stored levels back after the pass; `ambre_prose::logic::interop::tests::the_walk_keeps_a_stored_level_outside_the_range` -- the export reads the stored level; `ambre_prose::interop::markdown_write::tests::a_level_beyond_six_is_spelled_six_and_reported` | none | verified |
+| `PROSE-FEAT-031` | `INV` | A level MUST reach a block only through a typed command; it MUST NOT be written as an untyped attribute. | this spec section 3 | type-level -- a level reaches a block through `BlockInit::Heading` and `ProseCommand::SetHeadingLevel` alone, and neither carries an untyped attribute name | none | verified |
 
 ### 1.2 Turn a paragraph into a heading, or change its level
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | `ambre_prose::logic::blocks::tests::a_heading_level_is_clamped_to_the_six_the_format_declares` -- it drives a nine and a zero through both writing paths | none | verified |
+| `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | `ambre_prose::logic::blocks::tests::a_level_makes_a_heading_and_taking_it_away_makes_a_paragraph` -- it drives the gesture both ways and reads the type back | none | verified |
+| `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | `ambre_prose::logic::blocks::tests::setting_a_level_leaves_every_other_block_as_it_was` -- it reads the neighbour text, type and document order back | none | verified |
 
 * **Budget.** the section numbering, shared with the list ordinals in one row of
   `ambre-spec-budgets.md section 1`: both walk the block tree once per layout.
 * **Boundary.** none of its own: a heading is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 8 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line `lib.rs`
-  and `ambre-bus` carries no Prose command, so no row can be held either way. One row has an oracle
-  already, the shape a property test reaches. Numbering a document with levels in range and
-  numbering it with a level outside one to six must agree (`PROSE-FEAT-029`).
-  `PROSE-FEAT-031` is compiler-held the day the command enum exists, since an untyped attribute
-  write is a variant that is not there. The rest wait on the gesture: what setting a level leaves
-  behind and what it must not touch.
+* **Verification.** 8 `verified`. The numbering is a pure read over the block tree, so a test
+  builds a document and reads the numbers back. `PROSE-FEAT-031` is compiler-held: an untyped
+  attribute write is a variant that is not there. The Markdown export reads the stored level.
 
 ---
 
@@ -96,18 +92,22 @@ Without the clamp, a level of zero indexes the counter vector below its first co
 | Shape | Carries |
 |---|---|
 | `InsertBlock { init: BlockInit::Heading { level }, .. }` | the level, mandatory at creation |
-| `SetHeadingLevel { block_id, level }` | the new level of an existing heading |
+| `SetHeadingLevel { block_id, level }` | the new level, or `None` to take it away |
 
 Both are typed, so no path can create a heading without a level or write a level onto a block that
-is not one (`PROSE-FEAT-031`). What each leaves behind is `PROSE-FEAT-092`, and what neither may
-touch is `PROSE-FEAT-093`.
+is not one (`PROSE-FEAT-031`). Taking the level away leaves a paragraph. That is the other half of
+one control: the style picker offers the six levels and the paragraph beside them. So one command
+carries both directions rather than a second one that undoes the first. What each leaves behind is
+`PROSE-FEAT-092`, and what neither may touch is `PROSE-FEAT-093`. A block that is neither a
+paragraph nor a heading is refused.
 
 **What reads this feature.** The table of contents reads the outline
 (`features/ambre-spec-prose-table-of-contents.md`). Pagination reads the heading's own settings for
 its keep-with-next rule (`features/ambre-spec-prose-pagination.md`), and the cross references read
 the number (`features/ambre-spec-prose-cross-references.md`). None of the three stores what it read.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/numbering.rs` for the walk, and
+`crates/ambre-prose/src/logic/blocks.rs` for the two writing paths.
 
 ---
 

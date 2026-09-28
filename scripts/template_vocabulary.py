@@ -8,7 +8,7 @@ spelling are each right about themselves, and every row between them is wrong.
 Nothing below is typed out here that the template does not say first.
 
 **The shape is the contract.** Where a heading counts the members of its table
--- "The six status values", "The eight kinds" -- the count is read with the
+-- "The seven status values", "The eight kinds" -- the count is read with the
 table and a mismatch fails here. That is the whole guard: a parse that stops
 matching returns an empty set, and an empty closed set is a gate that accepts
 everything. Failing at import is loud; narrowing to whatever the parse found is
@@ -194,7 +194,7 @@ COLUMNS = _columns()
 ID, KIND, STATEMENT, SOURCES, MECHANISM, GAP, STATUS = COLUMNS
 
 STATUSES = tuple(
-    _token(cells[0], "statuses") for cells in _counted("**The six status values.**")
+    _token(cells[0], "statuses") for cells in _counted("**The seven status values.**")
 )
 STATE_KINDS, OPERATION_KINDS = _kinds()
 KINDS = STATE_KINDS + OPERATION_KINDS
@@ -210,7 +210,7 @@ MECHANISM_TOKENS = _mechanism_tokens()
 # The tokens a reader cannot grep for, and the two that name no mechanism at
 # all. Both sets are the template's own sentences, which say why each is what it
 # is; neither is a subset a script may widen.
-LOCATED_TOKENS = _sentence_tokens("**Seven tokens must carry one**")
+LOCATED_TOKENS = _sentence_tokens("**Eight tokens must carry one**")
 BARE_TOKENS = _sentence_tokens("**Two tokens must not**")
 
 # The three questions a contract table does not answer, in the order the

@@ -45,7 +45,7 @@ impl LogicState {
             vec![AppEvent::Toile(answer)],
             None,
             None,
-            None,
+            false,
             Vec::new(),
         );
     }
@@ -68,7 +68,7 @@ impl LogicState {
             tracing::warn!("Logic: .ambre export asked of a document that is not open");
             return;
         };
-        self.dispatch_outcome(document_id, vec![answer], None, None, None, Vec::new());
+        self.dispatch_outcome(document_id, vec![answer], None, None, false, Vec::new());
     }
 
     /// Write a document to a native `.ambre` file **sealed under a passphrase**
@@ -95,7 +95,7 @@ impl LogicState {
             let answer = doc
                 .state
                 .export_failed_event("the document could not be read".to_owned());
-            self.dispatch_outcome(document_id, vec![answer], None, None, None, Vec::new());
+            self.dispatch_outcome(document_id, vec![answer], None, None, false, Vec::new());
             return;
         };
         let id = RequestId::next();
@@ -133,7 +133,7 @@ impl LogicState {
             Ok(data) => doc.state.export_complete_event(filename, data),
             Err(reason) => doc.state.export_failed_event(reason),
         };
-        self.dispatch_outcome(document_id, vec![event], None, None, None, Vec::new());
+        self.dispatch_outcome(document_id, vec![event], None, None, false, Vec::new());
         true
     }
 
@@ -187,6 +187,9 @@ impl LogicState {
             command,
             AppCommand::Toile(ToileCommand::ExportAmbreFile)
                 | AppCommand::Trame(ambre_bus::TrameCommand::ExportAmbreFile)
+                | AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
+                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                })
         ) {
             self.export_ambre_file(document_id);
             return;
@@ -213,28 +216,43 @@ impl LogicState {
         match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
                 let outcome = state.handle_command(cmd);
-                let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+                let persist = outcome.update.is_some();
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Trame).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    snapshot,
+                    persist,
                     // Trame issues no service-plane requests (no interop plane).
                     Vec::new(),
                 );
             }
             (DocState::Toile(state), AppCommand::Toile(cmd)) => {
                 let outcome = state.handle_command(cmd);
-                let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+                let persist = outcome.update.is_some();
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    snapshot,
+                    persist,
                     outcome.requests,
                 );
+            }
+            (DocState::Prose(state), AppCommand::Prose(cmd)) => {
+                let outcome = state.handle_view_command(cmd);
+                let persist = outcome.update.is_some();
+                self.dispatch_outcome(
+                    document_id,
+                    outcome.display.into_iter().map(AppEvent::Prose).collect(),
+                    outcome.update,
+                    outcome.ephemeral,
+                    persist,
+                    // Prose issues no service-plane request yet: the picture
+                    // route lands with the "Images" Story.
+                    Vec::new(),
+                );
+                self.owe_layout(document_id);
             }
             // A mismatched (state, command) pair is impossible by routing. The
             // `document_id` selects a single `DocState`, and the UI only ever
@@ -248,34 +266,36 @@ impl LogicState {
     }
 
     /// Fan an already-typed outcome out to the UI Thread (display events), to
-    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence. The
-    /// snapshot is a full one, captured while the `state` borrow was live.
-    /// Shared by every `AppCommand` arm; the arm only decides which `AppEvent`
-    /// variant wraps the display events and whether a snapshot was taken.
+    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence, which
+    /// logs the same delta. Shared by every `AppCommand` arm; the arm only
+    /// decides which `AppEvent` variant wraps the display events and whether
+    /// the delta is saved.
     fn dispatch_outcome(
         &mut self,
         document_id: DocumentId,
         display: Vec<AppEvent>,
         update: Option<Vec<u8>>,
         ephemeral: Option<Vec<u8>>,
-        snapshot: Option<Vec<u8>>,
+        persist: bool,
         requests: Vec<ToileRequest>,
     ) {
         for event in display {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         if let Some(payload) = update {
-            tracing::info!(
+            tracing::debug!(
                 "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
                 payload.len(),
             );
+            // The delta that leaves for the relay is the one saved: it holds
+            // every operation the command wrote.
+            if persist {
+                self.owe_delta(document_id, payload.clone());
+            }
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
                 payload,
             });
-        }
-        if let Some(snapshot) = snapshot {
-            self.send_to_persist(document_id, snapshot);
         }
         if let Some(payload) = ephemeral {
             self.send_to_sync(SyncCommand::SendEphemeral {
@@ -341,13 +361,13 @@ impl LogicState {
             return;
         };
         let outcome = state.handle_service_event(id, evt);
-        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+        let persist = outcome.update.is_some();
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
             outcome.update,
             outcome.ephemeral,
-            snapshot,
+            persist,
             outcome.requests,
         );
     }
@@ -369,13 +389,13 @@ impl LogicState {
             return;
         };
         let outcome = state.handle_service_error(id, reason);
-        let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+        let persist = outcome.update.is_some();
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
             outcome.update,
             outcome.ephemeral,
-            snapshot,
+            persist,
             outcome.requests,
         );
     }
@@ -389,7 +409,7 @@ impl LogicState {
             );
             return;
         };
-        let (events, snapshot): (Vec<AppEvent>, Option<Vec<u8>>) = match doc {
+        let (events, persist): (Vec<AppEvent>, bool) = match doc {
             DocState::Trame(state) => {
                 let events = state.apply_remote(payload);
                 // Persist the merged state locally whenever the remote delta
@@ -397,20 +417,26 @@ impl LogicState {
                 // refresh then restores it even for a client that only ever
                 // receives, never edits. Otherwise such a client has no local
                 // snapshot and depends entirely on a fresh server replay.
-                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
-                (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Trame).collect(), persist)
             }
             DocState::Toile(state) => {
                 let events = state.apply_remote(payload);
-                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
-                (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Toile).collect(), persist)
+            }
+            DocState::Prose(state) => {
+                let events = state.apply_remote(payload);
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Prose).collect(), persist)
             }
         };
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
-        if let Some(snapshot) = snapshot {
-            self.send_to_persist(document_id, snapshot);
+        if persist {
+            self.owe_delta(document_id, payload.to_vec());
+            self.owe_layout(document_id);
         }
     }
 
@@ -425,23 +451,29 @@ impl LogicState {
             );
             return;
         };
-        let (events, snapshot): (Vec<AppEvent>, Option<Vec<u8>>) = match doc {
+        let (events, persist): (Vec<AppEvent>, bool) = match doc {
             DocState::Trame(state) => {
                 let events = state.apply_remote_batch(payloads);
-                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
-                (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Trame).collect(), persist)
             }
             DocState::Toile(state) => {
                 let events = state.apply_remote_batch(payloads);
-                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
-                (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Toile).collect(), persist)
+            }
+            DocState::Prose(state) => {
+                let events = state.apply_remote_batch(payloads);
+                let persist = !events.is_empty();
+                (events.into_iter().map(AppEvent::Prose).collect(), persist)
             }
         };
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
-        if let Some(snapshot) = snapshot {
-            self.send_to_persist(document_id, snapshot);
+        if persist {
+            self.owe_snapshot(document_id);
+            self.owe_layout(document_id);
         }
     }
 
@@ -470,6 +502,11 @@ impl LogicState {
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect(),
+            DocState::Prose(state) => state
+                .apply_ephemeral(from_user_id, payload)
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect(),
         };
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
@@ -491,6 +528,11 @@ impl LogicState {
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect(),
+            DocState::Prose(state) => state
+                .drop_presence(user_id)
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect(),
         };
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
@@ -502,6 +544,7 @@ impl LogicState {
         match &self.docs.get(&document_id)?.state {
             DocState::Trame(state) => Some(state.export_snapshot()),
             DocState::Toile(state) => Some(state.export_snapshot()),
+            DocState::Prose(state) => Some(state.export_snapshot()),
         }
     }
 }

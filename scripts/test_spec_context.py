@@ -137,6 +137,14 @@ class Closure(unittest.TestCase):
         self.assertLess(spine.index(f"{spec_context.BLOCK} 2 -- WHAT IT MUST NOT CHANGE"),
                         spine.index(f"{spec_context.BLOCK} 3 -- THE OPERATION IT BELONGS TO"))
 
+    def test_a_frame_cited_under_the_table_is_carried(self):
+        """An operation that obeys a shared frame names it on a `**Frame:**`
+        line, and the builder must see that frame beside the postcondition."""
+        records, graph = spec_context.load()
+        text = "\n".join(spec_context.closure("TRAME-UI-059", records, graph))
+        block = text.split(f"{spec_context.BLOCK} 2")[1].split(f"{spec_context.BLOCK} 3")[0]
+        self.assertIn("`UI-THREAD-044`", block)
+
     def test_the_gap_and_its_story_are_carried(self):
         records, graph = spec_context.load()
         unbuilt = next(rid for rid, row in records.items()
@@ -192,6 +200,15 @@ class Stories(unittest.TestCase):
     def test_every_row_landing_with_it_is_compiled(self):
         for rid in self.ids:
             self.assertIn(f"# CONTEXT FOR `{rid}`", self.out)
+
+    def test_each_document_it_lands_in_states_its_margin_under_the_caps(self):
+        """The margin comes before the closures, where a writer reads it first,
+        and from the gates' own counters, so it cannot disagree with them."""
+        for doc in {self.records[rid]["document"] for rid in self.ids}:
+            used = spec_context.spec_answers.answer_words((contracts.SPECS / doc).read_text())
+            self.assertIn(f"answers {used} of", self.text)
+            self.assertLess(self.text.index(f"`{Path(doc).name}` -- answers"),
+                            self.text.index("# CONTEXT FOR `"))
 
     def test_a_row_landing_with_another_story_is_left_out(self):
         other = next(rid for rid in self.records if rid not in self.ids)

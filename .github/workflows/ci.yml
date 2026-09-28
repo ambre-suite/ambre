@@ -70,6 +70,18 @@ jobs:
       # What the corpus derives: the feature inventory of each application must
       # be what the feature documents say today (`ambre-spec-template.md` §4).
       - run: just inventory
+      # A frozen shape section is the record of what one `SCHEMA_VERSION`
+      # wrote, so it never moves. The check compares the shape files against
+      # the default branch, which a depth-1 checkout does not carry: two
+      # commits are fetched, because a push of `main` itself is read against
+      # its parent.
+      - name: Fetch the base branch
+        run: git fetch --depth=2 origin main:refs/remotes/origin/main
+      - run: just schema-freeze
+      # What each crate can reach: fixture machinery out of the client build,
+      # a generator driving commands, and a shared control with no whole-style
+      # type to emit.
+      - run: just crate-boundaries
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose
@@ -96,6 +108,35 @@ jobs:
         with:
           tool: cargo-deny
       - run: just deny
+
+  # ---------------------------------------------------------------------------
+  # fuzz -- one minute of libFuzzer on each untrusted reader: the wire decode,
+  # the `.ambre` container, the formula parser and the Markdown reader
+  # (`ambre-spec-testing.md section 2`). A crash fails the job and uploads the
+  # input that caused it.
+  # ---------------------------------------------------------------------------
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz
+          workspaces: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: just fuzz 60
+      - name: Upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
 
   # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"

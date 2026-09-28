@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `DOCFILE-001` | `IO` | A `.ambre` round trip MUST be the identity on document state, leaving nothing a warning list could report: the payload **is** the document. | this spec section 3 | `ambre_core::docfile::tests::round_trip_is_the_identity_on_the_container`; `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state`; `::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `::round_trip_is_byte_identical_on_a_bare_document`; `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant` | none | verified |
 | `DOCFILE-006` | `INV` | The container layer MUST NOT compress or encrypt: the two entry points are pure functions over bytes, and protection is a separate stage. | this spec section 5 | crate-graph -- `ambre-core` declares no crypto and no compression dependency, so neither is reachable from the container | none | verified |
 | `DOCFILE-007` | `INV` | There MUST be one container for every app: the only app-dependent value in the header is the `doc_type` byte. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout` -- it pins the 22-byte layout, and one writer takes the type as a parameter, so a per-app variant has nowhere to be written | none | verified |
-| `DOCFILE-011` | `INV` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none | unheld -- `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `DOCFILE-011` | `INV` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | `ambre_logic::dispatch::tests::a_snapshot_on_the_wire_carries_no_container_header` -- `SnapshotNeeded` is the one path that hands a snapshot to Sync, and the test reads the payload the dispatcher sends and refuses `AMBRE_MAGIC` in its first four bytes; structural -- the sealing entry point answers `RestEvent::DocFileSealed` to the surface that asked, so its bytes reach a download and never a relay message | none | verified |
 | `DOCFILE-008` | `INV` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | human-review -- the reviewer of a bump reads the diff for one frozen artifact per `doc_type`, which is the step section 3 spells out. `just fixtures-freeze <name>` writes the artifact and the gate then holds it for good (`FIXTURE-018`, `FIXTURE-019`, `FIXTURE-021`) | unheld -- what no check can hold is the binding: the bump commit is the last one whose writer still emits the outgoing version, so nothing can reconstruct that artifact afterwards to prove it was owed | human-review |
 | `DOCFILE-010` | `INV` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | `ambre_core::docfile::tests::the_sealed_layout_is_the_spec_layout` -- the 45-byte header and its version byte; `::the_plaintext_reader_refuses_a_sealed_file_by_name`; `::the_sealed_parser_refuses_a_plaintext_file_by_name` -- the two refusals that make the version the discriminator; `::an_unknown_sealed_layout_is_refused_without_a_migration_promise`; `::migrating_a_sealed_version_says_it_is_sealed`; `::a_truncated_sealed_header_is_rejected_at_every_length` -- the reader on inputs it must not guess at; `::a_sealed_round_trip_recovers_the_envelope` | none | verified |
 | `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | `ambre_toile::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`; `ambre_trame::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted` -- asserted on the command's label, the one string a user reads before clicking, rather than on a tooltip or a dialog, so a surface that drops the warning cannot compile green | none | verified |
@@ -43,7 +43,7 @@ migrates or refuses before an application sees a payload.
 | `DOCFILE-012` | `FRAME` | A reader MUST NOT consult the file's name or extension. | this spec section 3 | type-level -- both entry points take a byte slice, so there is no path, no name and no extension in scope to branch on | none | verified |
 | `DOCFILE-004` | `FRAME` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | none | verified |
 | `DOCFILE-013` | `FAIL` | A version newer than the binary's MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`; `::migrating_from_a_newer_version_is_refused` | none | verified |
-| `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`; `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | none | verified |
+| `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`; `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/docfile.rs`, run by the CI `fuzz` job | none | verified |
 
 ### 1.3 Seal a `.ambre` file, and open one back
 
@@ -60,9 +60,10 @@ the cipher never leave the Sync worker (`DOCFILE-014`).
 * **Boundary.** the container holds no key (`DOCFILE-006`), and it keeps the bytes it produces on a
   local disk (`DOCFILE-011`). The seal is the one place a key appears, in the Sync worker for one
   call, and no application links against a cipher (`DOCFILE-014`, `ARCH-004`).
-* **Verification.** 15 `verified`, 1 `untested`, 1 `human-review`. This is pure byte handling on
-  the host tier, so a test reaches every rule the container makes about bytes. The two gaps reach
-  outside it: a bump obligation no test can time, and what another crate must keep off the wire.
+* **Verification.** 16 `verified`, 1 `human-review`. This is pure byte handling on the host tier,
+  so a test reaches every rule the container makes about bytes. What the wire must not carry is
+  held one crate away, at the single seam that hands a snapshot to Sync. The one gap left is a
+  bump obligation no test can time.
 
 ---
 
@@ -463,8 +464,6 @@ plaintext path above. So a sealed file whose *inner* container is older migrates
   sealed lineage seals what the plaintext lineage wrote, unchanged.
 * **Nothing rules on a file larger than memory.** Both entry points take and return a `Vec<u8>`, so
   a document is read whole. No row bounds the size a reader accepts, and no budget names one.
-* **Nothing fuzzes the header.** It is a parser on untrusted input and it has no fuzz target
-  (`ambre-spec-testing.md section 8`); the belt is a corpus of malformed inputs as unit tests.
 
 ---
 

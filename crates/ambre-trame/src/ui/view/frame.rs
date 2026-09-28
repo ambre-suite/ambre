@@ -157,7 +157,9 @@ impl TrameView {
             TrameEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: payload.to_tsv(),
+                    html: None,
                     ambre: postcard::to_allocvec(&payload).ok(),
+                    plain: false,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);
@@ -209,8 +211,8 @@ impl TrameView {
                 // Other UiEvent variants (session, CRUD, channels...) are not yet
                 // consumed by the Trame view; ignore them for now.
                 Ok(_) => {}
-                Err(flume::TryRecvError::Empty) => break,
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(ambre_bus::conduit::TryRecvError::Empty) => break,
+                Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
                     self.signal_fatal("Logic thread disconnected");
                     break;
                 }
@@ -229,6 +231,7 @@ impl TrameView {
         // Advance any touchpad momentum coast before the viewport flush, so the
         // ScrollViewport it produces ships this same frame.
         self.step_momentum();
+        self.step_edge_scroll();
 
         // The first fetch of the document joins the coalescing queue, so it
         // takes the same re-offer as every other one. Sent and forgotten, a full

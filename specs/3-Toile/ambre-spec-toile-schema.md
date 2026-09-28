@@ -47,7 +47,6 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-228` | `CONC` | Two concurrent restyles of one element MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws 48 interleavings of restyles of the same element across two peers and compares the full rendered viewport, so a blend of two writers' attributes diverges (Trame's dedicated no-blend tests have no counterpart here) | none | verified |
 | `TOILE-230` | `INV` | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it clears a frame's auto-layout and reads back `None` with the key gone, and the clear of an already-absent key broadcasting nothing, both of which a marker would break | none | verified |
 | `TOILE-027` | `INV` | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version` -- the stamp `schema::stamp` writes inside the scaffolding commit of `from_doc`, alongside the board defaults, so a board carries it before any user edit (the protocol it obeys is `ambre-spec-schema-version.md`) | none | verified |
-| `TOILE-028` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- none is possible today, this being the Toile half of `SCHEMA-009`, because the rule binds a code change to a constant and nothing compares this build's layouts against the previous release's. It is human review, named as such, and the registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- a frame's `notes`, seeded at frame birth so two concurrent first edits both survive; `ambre_toile::logic::convergence_tests::concurrent_first_decks_converge_on_one_list` -- the deck, where two peers writing a first slide order keep both slides; `ambre_toile::logic::schema::tests::a_board_whose_deck_sits_in_the_presentation_map_keeps_it` -- the step that carries an older board into the root containers | none | verified |
 | `TOILE-030` | `CONC` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none | fails -- for a sticky and a text element, the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message. It lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | failing |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
@@ -55,11 +54,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 8 `verified`, 1 `failing`, 2 `untested`. What holds is the table's shape: the
-  container per subject, the composite key re-read as its pair, the absent key that is the value.
-  What is loose is the move-invariance two paste tests never walk and the fixed-width id no type
-  constrains. Section 7 counts 25 bytes of it. The one failure names the code that breaks it
-  (`TOILE-030`).
+* **Verification.** 8 `verified`, 1 `failing`, 1 `untested`. What holds is the table's shape: the
+  container per subject, and the composite key re-read as its pair. The key set a build writes is
+  held too, append-only, by a CI gate. What is loose is the move-invariance two paste tests never
+  walk. The one failure names the code that breaks it (`TOILE-030`).
 
 ---
 
@@ -242,7 +240,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
 | Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. `1 -> 2` puts the layout version in front of every `style` register, `2 -> 3` carries the deck out of the `presentation` map into two root containers | architecture section 2.D; `SCHEMA-010` |
-| Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |
 | Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |

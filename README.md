@@ -110,7 +110,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-prose` | Word processor application |
 | `ambre-toile` | Whiteboard/presentation application |
 | `ambre-murmure` | Secure messaging |
-| `ambre-app` | Main WASM application (UI integration) |
+| `ambre-app` | Main WASM application (UI integration). High-level integration and the shell only: the logic of an application lives in its own crate (`ARCH-018`) |
 
 ## Specifications
 
@@ -135,7 +135,7 @@ three started applications all follow this shape.
 Every spec declares its rules as a contract table, one falsifiable rule per row. Three documents
 govern them, and each answers one question:
 
-* **What a rule looks like** -- the grammar, the six status values, the binding of an unbuilt row to
+* **What a rule looks like** -- the grammar, the seven status values, the binding of an unbuilt row to
   a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative.
 * **How a rule is verified** -- the mechanism ladder, the three tiers, the regime per component
   shape: [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md).

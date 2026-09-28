@@ -173,6 +173,33 @@ fn main() {
     emit_palette(&mut rs, "LIGHT", &tokens.canvas.light);
     emit_palette(&mut rs, "DARK", &tokens.canvas.dark);
 
+    // The chrome colours too, for the canvas content that shares their
+    // meaning. An accent or a status drawn on a page reads the same token as
+    // the DOM control beside it.
+    rs.push_str("/// Chrome colours for one theme, readable by the canvas. Generated from\n");
+    rs.push_str("/// `tokens.ron`.\n");
+    rs.push_str("pub struct ChromePalette {\n");
+    for (name, _) in tokens.chrome.light.vars() {
+        let field = name.replace('-', "_");
+        rs.push_str(&format!("    pub {field}: Color,\n"));
+    }
+    rs.push_str("}\n\n");
+    let emit_chrome = |rs: &mut String, name: &str, colors: &ChromeColors| {
+        rs.push_str(&format!(
+            "pub const {name}: ChromePalette = ChromePalette {{\n"
+        ));
+        for (var, hex) in colors.vars() {
+            let field = var.replace('-', "_");
+            let (r, g, b) = hex_rgb(hex);
+            rs.push_str(&format!(
+                "    {field}: Color::from_rgba8({r}, {g}, {b}, 255),\n"
+            ));
+        }
+        rs.push_str("};\n\n");
+    };
+    emit_chrome(&mut rs, "CHROME_LIGHT", &tokens.chrome.light);
+    emit_chrome(&mut rs, "CHROME_DARK", &tokens.chrome.dark);
+
     for (_, rust_name, value) in tokens.scale.entries() {
         rs.push_str(&format!("pub const {rust_name}: f32 = {value}.0;\n"));
     }

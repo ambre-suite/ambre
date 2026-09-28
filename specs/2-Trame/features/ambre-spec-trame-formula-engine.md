@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-006` | `INV` | A reference past the used range MUST read empty, never an error. | this spec section 3 | `ambre_trame::formula::compile::tests::ref_beyond_used_range_is_virtual`; `ambre_trame::formula::vm::tests::push_cell_virtual_beyond_used_range_reads_empty` | none | verified |
 | `TRAME-007` | `INV` | A reference to a deleted row or column MUST read `#REF!`. | this spec section 4 | `ambre_trame::formula::vm::tests::push_cell_deleted_bound_yields_ref_error` | none | verified |
 | `TRAME-208` | `INV` | Every operator MUST propagate an operand error rather than coerce it. | this spec section 4 | `ambre_trame::formula::vm::tests::every_operator_propagates_an_operand_error` -- it covers eleven operator shapes; `::unary_not_propagates_an_operand_error` -- the prefix form | none | verified |
-| `TRAME-013` | `INV` | No text typed into a cell MUST make the engine panic. | this spec section 3 | `ambre_trame::formula::prop_tests::parser_never_panics_on_arbitrary_text`; `::parser_never_panics_on_formula_noise`; `::compile_emits_balanced_bytecode`; `::vm_is_total_and_deterministic` -- four proptests | none | verified |
+| `TRAME-013` | `INV` | No text typed into a cell MUST make the engine panic. | this spec section 3 | `ambre_trame::formula::prop_tests::parser_never_panics_on_arbitrary_text`; `::parser_never_panics_on_formula_noise`; `::compile_emits_balanced_bytecode`; `::vm_is_total_and_deterministic` -- four proptests; `ambre_trame::formula::parser::tests::a_formula_past_a_bound_is_refused_before_it_recurses`; `::the_worst_admitted_formula_fits_a_small_stack`; cargo-fuzz -- `fuzz/fuzz_targets/formula.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-021` | `INV` | A formula result MUST NOT depend on what the reader is looking at. | this spec section 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum`; `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | none | verified |
 | `TRAME-034` | `INV` | A reference to another sheet MUST survive that sheet being renamed. | this spec section 3 | `ambre_trame::formula::render::tests::canonicalize_name_to_id`; `::display_id_to_name`; `ambre_trame::formula::parser::tests::id_qualified_cell_resolves_index`; `::sheet_qualified_resolves_index` | none | verified |
 | `TRAME-036` | `INV` | Operators MUST bind in the order a spreadsheet user expects. | this spec section 4 | `ambre_trame::formula::parser::tests::arithmetic_precedence`; `::parens_override_precedence`; `::comparison_chain`; `ambre_trame::formula::vm::tests::precedence` | none | verified |
@@ -224,6 +224,13 @@ cell's displayed text (`features/ambre-spec-trame-engine.md`, `TRAME-UI-014`).
 **Operators**, tightest first: `^`, then `*` `/`, then `+` `-`, then `&`, then the comparisons
 `=` `<>` `<=` `>=` `<` `>`. Unary minus binds tighter than `^`. Only `^` groups to the right
 (`TRAME-036`, `TRAME-037`).
+
+**Bounds.** The parser, the compiler and the drop of the tree all recurse. So a formula is refused
+before parsing past 8 192 characters, past 64 levels of parentheses or calls, or past 512
+operators (`TRAME-013`). The first two are Excel's own limits.
+
+A wasm thread gets 1 MiB of stack. A native release build overflows it past about 256 levels and
+2 048 operators, so both bounds keep a margin of four. That was measured on x86, not yet on wasm.
 
 **Errors a cell can show:**
 

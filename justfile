@@ -168,7 +168,9 @@ cov:
 
 # no implementation in the specs: fails on any function body in a ```rust fence,
 # on Rust shapes left in a non-rust fence, on a disallowed fence tag (lua, ...),
-# and on an unterminated fence (ambre-spec-template.md section 0, Fences rule).
+# on an unterminated fence (ambre-spec-template.md section 0, Fences rule), on a
+# rule cited outside its application, and on a test that cites a rule whose
+# `Mechanism` does not name it (the defects listed in spec_code_citations.allow aside).
 spec-code:
     python3 scripts/spec_code.py --check
 
@@ -278,6 +280,25 @@ spec-answers-detail:
 prose:
     python3 scripts/prose.py --check
 
+# Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
+# the value types a build writes. A belt in the crate holds a build against that
+# text, and the belt alone is weak: regenerating the section in place turns it
+# green with the version never raised, while every peer on the old version reads
+# a document it cannot parse. A section is the record of what one version wrote,
+# so this refuses any section the base revision carries whose body moved. Pass
+# `--base` to name another revision.
+
+# append-only schema freezes: a published shape section never moves.
+schema-freeze:
+    python3 scripts/schema_freeze.py --check
+
+# Three reachability rules a manifest line could erase: fixture machinery out
+# of the client build (`FIXTURE-007`), a generator driving commands rather than
+# the CRDT (`FIXTURE-004`), and a shared control with no whole-style type to
+# emit (`SCHEMA-002`).
+crate-boundaries:
+    python3 scripts/crate_boundaries.py --check
+
 # The checks in `scripts/` guard every Rust comment, every document and every
 # contract row, and nothing guarded the checks. Three defects shipped in the
 # prose one, and the worst produced no symptom: a table row left the reader's
@@ -324,6 +345,13 @@ inventory-write:
 # cargo-deny: advisories, licences, sources, and the ZK capability bans.
 deny:
     cargo deny check
+
+# cargo-fuzz: each untrusted reader, for `seconds` apiece (`ambre-spec-testing.md
+# section 2`). The targets live in `fuzz/`, a workspace of its own, so the
+# sanitizer flags never reach the main build. A crash stops the run and leaves
+# its input under `fuzz/artifacts/`.
+fuzz seconds="60":
+    cd fuzz && for target in wire_decode docfile formula markdown; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
 # Local convenience: bring the db-tier backing services up.
 services-up:

@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-197` | `PRE` | The key column of an approximate lookup MUST already be ascending. | this spec section 3 | none | unheld -- `vlookup` stops at the first key above the target, so an unsorted column answers whatever row it stopped on: a plausible neighbour, with no notice; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-198` | `PRE` | A recomputation MUST be given its clock before it runs. | this spec section 2 | none | unheld -- `with_now` is an optional builder step, and an `EvalContext` that skips it carries `now_serial: 0.0`, so `TODAY()` answers 1899-12-30: a valid-looking date, not an error; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-014` | `POST` | A total over whole numbers MUST equal the naive total. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`; `::engine_sum_matches_naive_sum`; `::average_times_count_equals_sum`; `::min_max_bound_every_element` -- four proptests over integer inputs | none | verified |
-| `TRAME-199` | `POST` | A total MUST NOT depend on the order of the cells. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`; `::product_is_order_independent` -- both bound their inputs to integers on purpose (`prop_tests.rs` header) | partial -- `sum` is a left fold over `f64`, which is not associative, so over decimals the rule is untested and not expected to hold; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-199` | `POST` | A total MUST NOT depend on the order of the cells. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`; `::product_is_order_independent` -- both bound their inputs to integers on purpose (`prop_tests.rs` header) | partial -- `sum` is a left fold over `f64`, which is not associative, so over decimals the rule is untested and not expected to hold; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-051` | `POST` | A range given where a value is expected MUST be read cell by cell. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_flattens_range_like_scalars`; `::engine_sum_matches_naive_sum`; `ambre_trame::formula::functions::tests::sum_basic` | none | verified |
 | `TRAME-200` | `POST` | A value stored as text MUST count in a total when it reads as a number. | this spec section 4 | none | unheld -- `flatten_numeric_inner` parses it, section 4 decides it, and nothing asserts it. The two halves of the model also disagree: `ISNUMBER("1")` answers false while `SUM("1")` answers 1; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-056` | `POST` | A total MUST NOT silently drop a cell it cannot read. | this spec section 5 | none | fails -- `flatten_numeric_inner` skips an error value exactly as it skips an empty one, so `=SUM(A1:A3)` answers the sum of the readable cells when one of them holds `#REF!`. Neither behaviour is asserted anywhere; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -65,11 +65,11 @@ status values are normative in `ambre-spec-template.md`.
   `features/ambre-spec-trame-formula-engine.md` owns.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
-* **Verification.** 10 `verified`, 2 `failing`, 9 `untested`, 7 `unimplemented`. What holds is the
-  arithmetic core, on fifteen mechanisms, a signature and a property among them. What is loose is
-  the edges of the library, and the failures are the expensive kind. A total that is quietly wrong
-  reads like a total that is right (`TRAME-056`). The other is an order independence `f64` addition
-  cannot give outside whole numbers (`TRAME-199`).
+* **Verification.** 10 `verified`, 1 `partial`, 2 `failing`, 8 `untested`, 7 `unimplemented`. What
+  holds is the arithmetic core, on fifteen mechanisms, a signature and a property among them. What
+  is loose is the edges of the library, and the failures are the expensive kind. A total that is
+  quietly wrong reads like a total that is right (`TRAME-056`). The other is an order independence
+  `f64` addition cannot give outside whole numbers (`TRAME-199`).
 
 ---
 

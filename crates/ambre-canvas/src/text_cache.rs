@@ -18,21 +18,13 @@ use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
 
-/// Map a toolbar font-family label (`"Sans"`/`"Serif"`/`"Monospace"`/`"Default"`)
-/// to the actually-registered face (`host.rs` loads Noto Sans + DejaVu Serif +
-/// DejaVu Sans Mono). Shared so the canvas renderers and the inline editors (grid
-/// / whiteboard) resolve the same face for the same label. An unknown label falls
-/// back to the default sans.
+/// Map a font-family label to the face the application ships.
+///
+/// A thin wrapper over [`ambre_draw::resolve_family`], which is where the
+/// mapping lives. The canvas renderers, the inline editors and the Prose
+/// paginator all reach the same face for one label (`CANVAS-017`).
 pub fn registered_family_name(label: Option<&str>) -> &'static str {
-    match label {
-        // Toolbar labels AND the already-loaded serif / mono face names both map
-        // to their face, so routing every family through here is idempotent.
-        Some("Serif" | "DejaVu Serif") => "DejaVu Serif",
-        Some("Monospace" | "DejaVu Sans Mono") => "DejaVu Sans Mono",
-        // Sans / Default / None, the CSS generic "sans-serif", and any unknown
-        // label fall back to the bundled sans.
-        _ => "Noto Sans",
-    }
+    ambre_draw::resolve_family(label).face_name()
 }
 
 // -----------------------------------------------------------------------------
@@ -100,15 +92,17 @@ impl TextCache {
     /// into `font_cx`. If any did, clear the layout cache. Strings that shaped
     /// before the face was available (as tofu) then re-shape with real glyphs.
     ///
-    /// Returns `true` when coverage changed: the caller must then force a full
-    /// repaint (the cached GPU layers still hold the tofu pixels).
-    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> bool {
-        if self.lazy_fonts.drain_into(font_cx) {
+    /// Returns the faces registered, empty when coverage did not change. A
+    /// non-empty return means the caller must force a full repaint: the cached
+    /// GPU layers still hold the tofu pixels. It must also hand the same bytes
+    /// to the threads that keep a context of their own (`CANVAS-068`).
+    #[must_use]
+    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> Vec<Vec<u8>> {
+        let faces = self.lazy_fonts.drain_into(font_cx);
+        if !faces.is_empty() {
             self.layouts.clear();
-            true
-        } else {
-            false
         }
+        faces
     }
 
     pub fn reset_frame_stats(&mut self) {

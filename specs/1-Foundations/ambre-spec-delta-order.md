@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: DELTA ORDER AND THE QUARANTINE
 
 **Type:** Horizontal (framework)
+**Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the ordering, the quarantine and the replay ship. Nothing ever asks
 this client for a snapshot, so a parent adopted before its contents arrive is a theoretical case.
 The missing-history request has no rate.
@@ -40,6 +41,7 @@ A sealed delta arrives from the relay. Either its base is one this client holds,
 | `SYNC-007` | `POST` | A quarantine overflow MUST drop the oldest entry. | this spec section 3 | none | unheld -- `::quarantine_overflow_drops_oldest_and_warns` is named for this rule and does not assert it: it counts the warning and reads the quarantine's length, never which entry left. An overflow dropping the newest, the one whose base is most likely to land next, passes; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-084` | `POST` | A quarantine overflow MUST emit exactly one warning. | this spec section 3 | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` -- its warning count, one at the hard cap, so a warning per further arrival fails | none | verified |
 | `SYNC-032` | `FRAME` | Receiving an update MUST NOT open one it quarantines. | `ZK-001`; this spec section 3 | none | unheld -- the quarantine holds the wire message and the open runs at release, so the rule holds by construction; nothing refuses a future release path that opens on arrival to inspect the payload; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-101` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3 | type-level -- Toile's and Prose's remote paths answer display events and no outcome, so neither has a field a delta could leave by; Prose `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast` | partial -- Toile is held by its type alone, and no row names what holds Trame's remote path; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SYNC-083` | `FAIL` | An update whose parent snapshot is unknown MUST be quarantined, never applied. | this spec section 3 | `ambre_sync::updates::tests::update_with_unknown_snapshot_quarantined` -- the update is held and the Logic thread is handed nothing | none | verified |
 
 ### 1.3 Open a document
@@ -73,10 +75,10 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 6 `verified`, 2 `failing`, 10 `untested`, 0 `unimplemented`. What holds is the
+* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`. What holds is the
   quarantine itself. An update ahead of its snapshot waits, one whose base is known is delivered,
-  the release runs in clock order, and the overflow warns once. What is loose is everything about the
-  clock and the socket, both needing a driven transport the host tier does not have.
+  the release runs in clock order, and the overflow warns once. What is loose is everything about
+  the clock and the socket, both needing a driven transport the host tier does not have.
 
 ---
 

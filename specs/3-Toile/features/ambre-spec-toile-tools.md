@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-247` | `POST` | Arming a tool MUST abandon any gesture in flight on the previous one. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it arms a shape, presses, switches, and reads the machine idle | none | verified |
 | `TOILE-UI-369` | `POST` | Arming a tool MUST emit nothing of the gesture it abandons. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it reads no preview left after the switch | none | verified |
 | `TOILE-UI-248` | `FRAME` | Arming a tool MUST NOT touch the document or the selection. | this spec section 2 | type-level -- the switch returns nothing and holds no document handle, so the only state it can reach is the draft it drops | none | verified |
-| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host | partial -- nothing drives `ambre_app::platform::target_is_editable`, which reads the tag off the event and is the half that has to run; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host | partial -- nothing drives `ambre_app::platform::target_is_editable`, which reads the tag off the event and is the half that has to run; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.3 Drag on the board
 
@@ -89,8 +89,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 23 `verified`, 6 `untested`, 1 `qa-manual`. What holds is the machine: the
-  modes, the transitions and the command each gesture ends in, a click on a handle included. What
+* **Verification.** 23 `verified`, 1 `partial`, 5 `untested`, 1 `qa-manual`. What holds is the machine: the
+  modes, the transitions and the command each gesture ends in, handle clicks included. What
   is loose is the pan. Its three `Space` rows rest on DOM glue no host test reaches, and a
   degenerate pen path is driven by nothing (`TOILE-UI-254`).
 

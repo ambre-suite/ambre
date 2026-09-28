@@ -18,6 +18,9 @@ ambre-chrome = { path = "../ambre-chrome" }
 ambre-draw   = { path = "../ambre-draw" }
 ambre-trame  = { path = "../ambre-trame" }
 ambre-toile  = { path = "../ambre-toile" }
+# The Prose view state and its page painter; already in the graph through
+# ambre-logic, named here because the host drives the view directly.
+ambre-prose  = { path = "../ambre-prose" }
 # `toile-pdf`: the deck's PDF export runs on the Logic thread, where the base
 # font faces live (`toile-pdf-export`). The launcher is the build that ships it.
 ambre-logic  = { path = "../ambre-logic", features = ["toile-pdf"] }
@@ -38,9 +41,8 @@ leptos_icons = { workspace = true }
 icondata     = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
+tracing-subscriber = { workspace = true }
 
-# UI <-> Logic channels (shared memory, this Main instance).
-flume        = { workspace = true }
 # Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
 # and the clipboard ClipboardPayload onto the OS clipboard (`trame-clipboard`).
 postcard     = { workspace = true }

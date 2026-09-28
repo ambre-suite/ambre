@@ -95,7 +95,7 @@ so an application tests its view on the host tier with no browser.
 ```rust
 // inherent methods on each app view (for example ambre_trame::ui::TrameView),
 // dispatched by AppView's match arms:
-fn update(&mut self);                                   // drain inbound (flume try_recv) -> dirty flags, no GPU
+fn update(&mut self);                                   // drain inbound (link try_recv) -> dirty flags, no GPU
 fn plan_repaint(&mut self, hud_tick: bool) -> RepaintPlan;
 fn paint_content(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
 fn paint_overlay(&mut self, s: &mut WgpuSurface, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);

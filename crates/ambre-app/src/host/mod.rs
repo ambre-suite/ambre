@@ -36,7 +36,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
 use ambre_bus::app::toile::ElementId;
-use ambre_bus::{DocType, DocumentId};
+use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
     ContentRepaint, FrameStats, GpuState, InputEvent, Layer, OverlayRepaint, RafControl,
@@ -55,10 +55,25 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
 mod frame;
+mod probe;
+
+pub(crate) use probe::mark;
+mod prose;
 mod run;
 mod web_embed;
 
 pub use frame::{FrameHost, MakeChild};
+pub use prose::{ProseSignals, ProseView};
+
+/// Where a finger is in its gesture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TouchPhase {
+    Down,
+    Move,
+    Up,
+    /// The browser took the gesture over (`KINETIC-010`).
+    Cancel,
+}
 pub use run::run_with;
 
 /// Private clipboard MIME type carrying the base64 postcard
@@ -82,8 +97,11 @@ pub(crate) const AMBRE_CLIPBOARD_WEB_TOKEN_TYPE: &str = "web application/x-ambre
 /// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
 /// `UI-THREAD-007`). Written into the clipboard event's `DataTransfer`
 /// *synchronously* during `copy`/`cut`, it always reaches the OS clipboard. The
-/// async payload write does not: it needs a user-activation context Firefox
-/// denies from the rAF loop. On `paste`, a value here equal to this page's token
+/// async write that follows replaces it. Chrome keeps it under the `web `
+/// variant, which a `paste` event cannot see (`UI-THREAD-054`). Firefox refuses
+/// that variant and the write carries the standard types alone (`UI-THREAD-055`).
+///
+/// On `paste`, a value here equal to this page's token
 /// proves the clipboard still holds THIS tab's own last copy. The view then
 /// pastes its in-memory `last_clip` at full fidelity. Any foreign copy (another
 /// app / tab) overwrites the clipboard and drops the marker, so its absence
@@ -102,37 +120,64 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
 /// `navigator.clipboard.write`. It carries the tab-separated `text/plain`, the
-/// private `web ` payload type and the `web ` ownership token. The write replaces
+/// `text/html` a view wrote for another editor, the private `web ` payload type
+/// and the `web ` ownership token. The write replaces
 /// the whole clipboard, so it re-publishes everything the copy event established
-/// rather than dropping the token a frame after the copy (`UI-THREAD-023`). Runs
-/// in addition to the synchronous `setData` (which serves Ctrl+V); any failure
-/// is ignored -- Ctrl+V still works.
-pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>, token: String) {
+/// rather than dropping the token a frame after the copy (`UI-THREAD-023`).
+/// Where the browser refuses the `web ` types, it writes the standard ones
+/// alone (`UI-THREAD-055`). Runs
+/// in addition to the synchronous `setData`; a failure is ignored, and the
+/// synchronous formats stay. A success replaces them, so `published` records
+/// it and the next `paste` event reads the clipboard back (`UI-THREAD-054`).
+pub(crate) fn async_write_clipboard(
+    tsv: String,
+    html: Option<String>,
+    payload_b64: Option<String>,
+    token: String,
+    published: Rc<std::cell::Cell<bool>>,
+) {
     let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        // Build the `{ mime: Promise<string> }` record ClipboardItem expects.
-        let record = js_sys::Object::new();
-        let text_promise = js_sys::Promise::resolve(&JsValue::from_str(&tsv));
-        let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/plain"), &text_promise);
-        if let Some(b64) = payload_b64 {
-            let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
-            let _ = js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
-        }
-        let token_promise = js_sys::Promise::resolve(&JsValue::from_str(&token));
-        let _ = js_sys::Reflect::set(
-            &record,
-            &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TOKEN_TYPE),
-            &token_promise,
-        );
-        let Ok(item) = web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record)
-        else {
-            return;
+        let text = ("text/plain", Some(tsv.as_str()));
+        let marked = html
+            .as_deref()
+            .map(|h| ambre_bus::ClipboardBlob::mark_html(h, &token));
+        let html = ("text/html", html.as_deref());
+        let payload = (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64.as_deref());
+        let token = (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token.as_str()));
+        // Firefox rejects the `web ` types in the ClipboardItem constructor
+        // (throwaway Firefox 156 run). The copy event left only the token, so
+        // without a second attempt no other application could paste the copy.
+        // The standard write carries the token in an HTML comment where the
+        // view wrote HTML (`UI-THREAD-055`, `UI-THREAD-056`).
+        let (item, web) = match clipboard_item(&[text, html, payload, token]) {
+            Some(item) => (item, true),
+            None => match clipboard_item(&[text, ("text/html", marked.as_deref())]) {
+                Some(item) => (item, false),
+                None => return,
+            },
         };
         let items = js_sys::Array::of1(&item);
-        let _ = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+        let written = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+        // Only a landed write of the `web ` types moves the token out of the
+        // paste event's reach (`UI-THREAD-054`).
+        published.set(web && written.is_ok());
     });
+}
+
+/// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
+/// `None` when the browser refuses one of the types.
+fn clipboard_item(entries: &[(&str, Option<&str>)]) -> Option<web_sys::ClipboardItem> {
+    let record = js_sys::Object::new();
+    for (kind, value) in entries {
+        if let Some(value) = value {
+            let promise = js_sys::Promise::resolve(&JsValue::from_str(value));
+            js_sys::Reflect::set(&record, &JsValue::from_str(kind), &promise).ok()?;
+        }
+    }
+    web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record).ok()
 }
 
 /// The decoded result of an async clipboard read. The shell sends it to the
@@ -160,6 +205,8 @@ pub enum AppView {
     Trame(TrameView),
     /// A Toile (whiteboard) document.
     Toile(ToileView),
+    /// A Prose (text) document.
+    Prose(ProseView),
 }
 
 impl AppView {
@@ -168,6 +215,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.update(),
             AppView::Toile(v) => v.update(),
+            AppView::Prose(v) => v.update(),
         }
     }
 
@@ -176,6 +224,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
+            AppView::Prose(v) => v.plan_repaint(now_ms, hud_tick),
         }
     }
 
@@ -190,6 +239,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Toile(v) => v.paint_content(surface, font_cx, text_cache, strip),
+            AppView::Prose(v) => v.paint_content(surface, font_cx, text_cache, strip),
         }
     }
 
@@ -204,6 +254,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Toile(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
+            AppView::Prose(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
         }
     }
 
@@ -212,6 +263,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.resize(width, height),
             AppView::Toile(v) => v.resize(width, height),
+            AppView::Prose(v) => v.resize(width, height),
         }
     }
 
@@ -220,6 +272,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
+            AppView::Prose(v) => v.handle_input(ev),
         }
     }
 
@@ -233,6 +286,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
+            AppView::Prose(v) => v.clipboard_write(cut),
         }
     }
 
@@ -243,6 +297,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.poll_clipboard(),
             AppView::Toile(v) => v.poll_clipboard(),
+            AppView::Prose(v) => v.poll_clipboard(),
         }
     }
 
@@ -255,7 +310,48 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
             AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
+            AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
         }
+    }
+
+    /// Text dropped at a canvas point. Only Prose takes it.
+    fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+        match self {
+            AppView::Trame(_) | AppView::Toile(_) => false,
+            AppView::Prose(v) => v.drop_text(x, y, text),
+        }
+    }
+
+    /// A finger on the canvas. Every application takes it apart from the
+    /// mouse.
+    fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+        match self {
+            AppView::Toile(v) => {
+                let (x, y) = (f64::from(x), f64::from(y));
+                match phase {
+                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Move => v.touch_move(x, y, now_ms),
+                    TouchPhase::Up => v.touch_up(x, y, now_ms),
+                    TouchPhase::Cancel => v.touch_cancel(),
+                }
+            }
+            AppView::Trame(v) => {
+                match phase {
+                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Move => v.touch_move(x, y, now_ms),
+                    TouchPhase::Up => v.touch_up(now_ms),
+                    TouchPhase::Cancel => v.touch_cancel(),
+                }
+                true
+            }
+            AppView::Prose(v) => v.touch(phase, x, y, now_ms),
+        }
+    }
+
+    /// Whether a consumed press captures the pointer, and a finger pans
+    /// rather than selects. Every application does.
+    fn captures_pointer(&self) -> bool {
+        true
     }
 
     /// Swap the active document in place, keeping the GPU surface.
@@ -263,6 +359,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
+            AppView::Prose(v) => v.set_document(document_id),
         }
     }
 
@@ -272,7 +369,7 @@ impl AppView {
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
-            AppView::Trame(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
         }
     }
 
@@ -282,7 +379,7 @@ impl AppView {
     fn visible_web_embeds(&self) -> Vec<VisibleWebEmbed> {
         match self {
             AppView::Toile(v) => v.visible_web_embeds(),
-            AppView::Trame(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
         }
     }
 
@@ -294,7 +391,7 @@ impl AppView {
     fn child_route(&self) -> Option<ElementId> {
         match self {
             AppView::Toile(v) => v.child_route(),
-            AppView::Trame(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) => None,
         }
     }
 
@@ -303,7 +400,7 @@ impl AppView {
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
             AppView::Toile(v) => v.embed_to_child_space(screen),
-            AppView::Trame(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) => None,
         }
     }
 }

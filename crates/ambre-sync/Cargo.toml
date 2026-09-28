@@ -19,11 +19,6 @@ ambre-core     = { path = "../ambre-core" }
 # ambre-crypto's own target-specific dependency, so nothing extra is needed here.
 ambre-crypto   = { path = "../ambre-crypto" }
 
-# Internal event bus + mock transports: the producer (WS/HTTP callbacks) and the
-# consumer (the select loop) live in the SAME Sync worker, so flume's async
-# waker fires correctly here (the old cross-worker freeze does not apply).
-flume = { workspace = true }
-
 tracing  = { workspace = true }
 serde    = { workspace = true }
 serde_json = { workspace = true }

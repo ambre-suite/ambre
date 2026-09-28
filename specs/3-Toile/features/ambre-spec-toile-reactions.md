@@ -27,7 +27,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-FEAT-056` | `OBS` | Asking one deleted target for its tally MUST answer nothing, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::tally_skips_a_deleted_target` -- it asks the single-target path after the delete. That path is a second guard, on the element map rather than on the visible set, and the only caller it has is that test (section 6) | none | verified |
 | `TOILE-FEAT-057` | `OBS` | The board's tallies MUST cover what is on screen, so a reacted target scrolled out of view costs nothing to derive. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the whole-board derivation routes each entry by its target and drops the ones the cull left out, so an off-screen target is skipped exactly as a deleted one is, and no test distinguishes the two; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-058` | `INV` | The chips of one target MUST keep the same order from one read to the next, so a count does not shuffle under the reader. | this spec section 3 | none | unheld -- the order is a sorted map flushed into a vector, and no test ever puts two distinct emoji on one target: every reaction test uses a single glyph; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-FEAT-059` | `OBS` | Votes on a target MUST fold into one signed total and one voter count. | this spec section 3 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reads the voter count for a single positive weight | partial -- nothing sums two weights, and nothing sums weights of opposite signs, which is the only case the signed total exists for; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-059` | `OBS` | Votes on a target MUST fold into one signed total and one voter count. | this spec section 3 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reads the voter count for a single positive weight | partial -- nothing sums two weights, and nothing sums weights of opposite signs, which is the only case the signed total exists for; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-080` | `OBS` | A badge MUST keep one screen size through the whole zoom range. | this spec section 4 | none | unheld -- the chip metrics are logical pixels and only the element box is mapped to screen, so the size is fixed by construction, but no test paints the same tally at two zooms; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-299` | `OBS` | A badge row MUST stay legible over whatever it sits on, in edit mode and in presentation alike. | this spec section 4 | none | unheld -- the row is painted after the content and after the presence overlay, and unconditionally on mode, but the order is two call sites and nothing holds it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-022` | `OBS` | A user MUST be able to cast a vote. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -48,7 +48,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-FEAT-020` | `POST` | Clearing a reaction the user does not have MUST do nothing at all: no delta, and nothing to undo. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it clears twice and reads nothing broadcast by the second clear | none | verified |
 | `TOILE-FEAT-063` | `POST` | Placing again the reaction the user already has MUST do nothing at all, on the same terms. | this spec section 3 | none | unheld -- the skip is a byte comparison against the stored value and no test places the same reaction twice, so a gesture that would otherwise cost an undo item is unheld; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-021` | `FAIL` | A reaction MUST NOT be written before the user's canonical identity is known. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_before_session_ready_is_a_noop` -- it reacts on a state with no identity and reads nothing broadcast and no tally | none | verified |
-| `TOILE-FEAT-064` | `FAIL` | A reaction the client cannot write MUST tell the user, rather than leave the gesture looking applied. | this spec section 3; section 6 | none | fails -- an encode failure logs a warning and returns an empty outcome, so the picker closes on a reaction that was never written and nothing on screen says so. The channel is not what fails here: the encode does, upstream of any send, so the lossless outbox never sees it; lands with the `A refused command names what it refused` Story (`ambre-roadmap.md` E5) | failing |
+| `TOILE-FEAT-064` | `FAIL` | A reaction the client cannot write MUST tell the user, rather than leave the gesture looking applied. | this spec section 3; section 6 | `ambre_toile::logic::state::reactions::tests::a_reaction_that_will_not_encode_answers_a_write_failure` -- it encodes a value that refuses to be written and requires a typed write failure back, so the warning-and-empty-outcome the code used to answer fails it | none | verified |
 | `TOILE-FEAT-065` | `FRAME` | Reacting MUST NOT touch anybody else's reaction on that target. | this spec section 3; section 5 | structural -- the write is one insert or one delete under the key built from this user's identity, so no other user's key is reachable | none | verified |
 
 ### 1.3 Undo a reaction
@@ -81,10 +81,11 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
   pass per element. It costs what the board has reacted to and not what it holds.
 * **Boundary.** none of its own: a reaction is written to the document, and `ZK-001` seals every
   payload before it leaves the client. The emoji is document data like any other.
-* **Verification.** 20 `verified`, 1 `failing`, 8 `untested`, 6 `unimplemented`. What holds is the
-  convergence: two devices, two users and a deleted target, and a reaction on a deleted target
-  answering an error. What is loose is the painting: a chip size nothing measures, a vote chip nothing
-  can build. An emoji order is loose too, and no test can shuffle it because no test ever places two.
+* **Verification.** 21 `verified`, 1 `partial`, 7 `untested`, 6 `unimplemented`. What holds is the
+  convergence: two devices, two users and a deleted target. Both refusals answer an error a test
+  reads: a deleted target, and a reaction that will not encode. What is loose is the painting: a
+  chip size nothing measures, a vote chip nothing can build. An emoji order is loose on the same
+  terms.
 
 ---
 
@@ -139,9 +140,9 @@ own entry. One commit, so one undo item (`TOILE-FEAT-023`).
 4. write or delete the one key, commit once, and emit the event (`TOILE-FEAT-062`,
    `TOILE-FEAT-067`).
 
-An encode failure between 3 and 4 logs a warning and returns the same empty outcome as step 1. The
-two refusals are indistinguishable to the caller, and neither reaches the user
-(`TOILE-FEAT-064`).
+An encode failure between 3 and 4 answers a typed write failure, which the caller can tell from a
+reaction that landed (`TOILE-FEAT-064`). Step 1 stays silent, and for its own reason: no picker
+opens before an identity is known, so there is no gesture to explain (`TOILE-FEAT-021`).
 
 **Steps, when the board is derived:**
 
@@ -215,9 +216,9 @@ resolve and are tested like every other menu entry
   that answers "what did I put here" are both `pub`, both tested, and named nowhere else in the
   workspace. The badge pass reads the derived map instead, so the guard on element existence that
   only the single-target path carries protects nothing that renders (`TOILE-FEAT-056`).
-* **A reaction that will not encode is lost in the logs** (`TOILE-FEAT-064`). An entry that
-  will not decode is skipped at derivation on the same terms. Both are one line of `tracing` or
-  less, and the user sees a gesture that did nothing.
+* **An entry that will not decode is skipped at derivation.** Nothing says so on screen: the badge
+  simply counts one person fewer than reacted. The write side now answers a typed failure
+  (`TOILE-FEAT-064`); the read side still drops in silence.
 * **Culled and deleted are the same answer** (`TOILE-FEAT-057`). The board's derivation drops a
   target the cull left out and a target that no longer exists through one condition. No test can
   tell them apart, and a bug in the cull would read as a correct delete.

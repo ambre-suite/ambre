@@ -69,8 +69,6 @@ base64 = { workspace = true }
 # ambre-canvas and shared; the view only paints through WgpuSurface
 # (`toile-board-rendering`).
 ambre-canvas = { path = "../ambre-canvas" }
-# UI Thread <-> Logic frame channels (shared memory, Main instance).
-flume = { workspace = true }
 web-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 # Shared SVG icon data (pure static strings, no Leptos): used host-side to build

@@ -5,16 +5,97 @@ edition = "2024"
 license.workspace = true
 description = "Word processing application for Ambre — rich text, layout, import/export"
 
+[features]
+# Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`).
+# Non-default and host-only. It forwards `ambre-core/fixtures` explicitly: a
+# Cargo feature never enables its dependency's feature implicitly, and the gated
+# code names `ambre_core::FixtureShape`.
+fixtures = ["ambre-core/fixtures"]
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
+pulldown-cmark = { workspace = true }
+
+# The command registry the shell's palette and keymap read: Prose's table
+# declares its entries there, as ambre-toile's and ambre-trame's do. A leaf
+# with an empty dependency table (`UI-THREAD-027`).
+ambre-commands = { path = "../ambre-commands" }
+
+# Family resolution and script classification, shared with the renderers
+# (`CANVAS-017`). Pagination must resolve a label exactly as the UI thread
+# does, or two peers break pages differently (`PROSE-108`). ambre-draw is the
+# lightest crate that holds it: geometry, colour and text, no graphics stack.
 ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# CRDT
+# CRDT: `LoroMovableTree` for the block hierarchy, `LoroText` for a body,
+# `LoroMap` for the registers, `UndoManager` for the local history
+# (`features/ambre-spec-prose-engine.md section 3`).
 loro = { workspace = true }
+
+# The presence frame, and nothing else: a CRDT delta is already bytes
+# (`features/ambre-spec-prose-engine.md section 3.D`).
+postcard = { workspace = true }
+
+# The typographic layout pagination measures with: line breaking and glyph
+# metrics, not just the run types a draw surface exposes
+# (`features/ambre-spec-prose-engine.md section 5`). Only parley -- not the
+# whole GPU canvas crate -- so the Logic worker's wasm stays lean.
+parley = { workspace = true }
+
+# Word and grapheme boundaries for the word count (UAX #29). A character is a
+# grapheme cluster and a word is a word segment holding a letter or a digit
+# (`features/ambre-spec-prose-word-count.md section 2`), and neither can be
+# answered from `char` alone. Already in the graph through `convert_case`, and
+# budgeted in `ambre-spec-budgets.md section 5`.
+unicode-segmentation = { workspace = true }
+
+# The HTML reader of a paste from a web page, a word processor or another
+# editor (`features/ambre-spec-prose-clipboard.md`), and later of an HTML
+# import, which must be the same reader (`PROSE-IO-025`). Clipboard HTML is
+# routinely malformed, and only a WHATWG tree builder closes the implied tags
+# as a browser does; a hand-rolled tokenizer would drift on every source.
+# Pure Rust, maintained by Servo, and budgeted in `ambre-spec-budgets.md
+# section 5`. The tree it builds is Prose's own arena, not `markup5ever_rcdom`,
+# which its authors publish as unsupported and test-only.
+html5ever = { workspace = true }
+
+# The Prose chrome -- the comment panel and the suggestion popover
+# (`PROSE-UI-050`, `PROSE-UI-052`) -- is wasm-only Leptos, as ambre-toile's and
+# ambre-trame's chrome are. Scoped to wasm32, so the host tests never build it.
+# web-sys gives the reply field its keyboard event.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The shared menu type the page's context menu is built from, so the shell
+# only renders Prose's entries (`ARCH-018`).
+ambre-chrome = { path = "../ambre-chrome" }
+leptos = { workspace = true }
+web-sys = { workspace = true }
+
+# Placement holds universal rules over an unenumerated input space: a walk that
+# terminates, a page it never goes back to, and a cut only ever taken at a line
+# (`PROSE-017`, `PROSE-078`, `PROSE-071`). proptest pulls `wait-timeout`, which
+# does not build on wasm32, and placement is host-testable, so it is gated to
+# the host target as ambre-toile and ambre-trame do.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
+# The recording surface: the painter is driven against it and its ordered
+# draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
+# The same crate as the runtime dependency, with its test double switched on.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# The HTML paste bench holds the "Prose HTML clipboard import" row of the
+# budget registry. Host-only, as the other benches of the workspace are.
+criterion = { workspace = true }
+
+[[bench]]
+name = "html_paste"
+harness = false
+
+# The keystroke bench holds the "Logic pass that answers a keystroke" row.
+[[bench]]
+name = "keystroke"
+harness = false
 
 [lints]
 workspace = true

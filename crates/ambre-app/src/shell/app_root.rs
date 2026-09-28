@@ -59,7 +59,7 @@ fn set_web_link(
 fn follow_shell_nav(
     nav: toile_chrome::ShellNav,
     navigate: &impl Fn(&str, leptos_router::NavigateOptions),
-    boot_is_toile: bool,
+    booted: ambre_bus::DocType,
 ) {
     match nav {
         toile_chrome::ShellNav::Url(url) => {
@@ -76,7 +76,7 @@ fn follow_shell_nav(
             doc_type,
         } => {
             let path = crate::route::doc_path(doc_type, document_id);
-            if crate::route::needs_reload(doc_type, boot_is_toile) {
+            if crate::route::needs_reload(doc_type, booted) {
                 if let Some(window) = web_sys::window() {
                     let _ = window.location().set_href(&path);
                 }
@@ -116,6 +116,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         find_state_toile,
         find_result_toile,
         boot_is_toile,
+        boot_is_prose,
+        prose_figures,
+        prose_signals,
         formula_ref,
         formula_text,
         formula_action,
@@ -236,7 +239,42 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             toile_followed_link.set(None);
-            follow_shell_nav(nav, &navigate, boot_is_toile);
+            follow_shell_nav(
+                nav,
+                &navigate,
+                crate::route::booted_kind(boot_is_toile, boot_is_prose),
+            );
+        });
+    }
+    // A Prose link followed with the modifier leaves through the same shell
+    // path (`PROSE-UI-071`): the page hands the target over and never opens it.
+    if boot_is_prose {
+        let navigate = leptos_router::hooks::use_navigate();
+        Effect::new(move |_| {
+            let Some(url) = prose_signals.followed.get() else {
+                return;
+            };
+            prose_signals.followed.set(None);
+            follow_shell_nav(
+                toile_chrome::ShellNav::Url(url),
+                &navigate,
+                crate::route::booted_kind(boot_is_toile, boot_is_prose),
+            );
+        });
+        // The link cursor over a link's text, the text cursor elsewhere
+        // (`PROSE-UI-153`).
+        Effect::new(move |_| {
+            let cursor = if prose_signals.over_link.get() {
+                "pointer"
+            } else {
+                "text"
+            };
+            if let Some(doc) = web_sys::window().and_then(|w| w.document())
+                && let Some(el) = doc.get_element_by_id("ambre-canvas")
+                && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
+            {
+                let _ = html.style().set_property("cursor", cursor);
+            }
         });
     }
     let link_text = RwSignal::new(String::new());
@@ -314,8 +352,54 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |id: CommandId| {
             // The palette is a UI-only intent in both applications: it opens an
             // overlay and reaches no Logic thread (`CHROME-008`).
-            if id == trame_chrome::PALETTE || id == toile_chrome::PALETTE {
+            if id == trame_chrome::PALETTE
+                || id == toile_chrome::PALETTE
+                || id == ambre_prose::commands::PALETTE
+            {
                 palette_open.set(true);
+                return;
+            }
+            // Prose declares its file commands beside the palette: the native
+            // save, and the Markdown import and export. Each maps to one typed
+            // command, so it is built here rather than through a table
+            // (`PROSE-IO-020`).
+            if boot_is_prose {
+                if id == ambre_prose::commands::SAVE_FILE
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Prose(
+                            ambre_bus::app::prose::ProseCommand::ExportDocument {
+                                format: ambre_bus::app::prose::ExportFormat::Ambre,
+                            },
+                        ),
+                    });
+                } else if id == ambre_prose::commands::IMPORT_MARKDOWN
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    open_markdown_picker(document_id, tx.clone(), toasts);
+                } else if id == ambre_prose::commands::EXPORT_MARKDOWN
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Prose(
+                            ambre_bus::app::prose::ProseCommand::ExportDocument {
+                                format: ambre_bus::app::prose::ExportFormat::Markdown(
+                                    ambre_bus::app::prose::MarkdownFlavor::Gfm,
+                                ),
+                            },
+                        ),
+                    });
+                } else if id == ambre_prose::commands::COPY || id == ambre_prose::commands::CUT {
+                    exec_clipboard(id == ambre_prose::commands::COPY);
+                } else if id == ambre_prose::commands::PASTE
+                    || id == ambre_prose::commands::PASTE_PLAIN
+                {
+                    let plain = id == ambre_prose::commands::PASTE_PLAIN;
+                    read_clipboard(clipboard_paste.clone(), toasts, plain);
+                }
                 return;
             }
             // The sealed save is a UI-only intent in both applications: a
@@ -428,56 +512,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     });
                 }
             } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
-                // Copy/cut (`trame-clipboard`): focus the canvas text pipe and ask the
-                // browser to fire the `copy`/`cut` DOM event the host listeners
-                // service. They write both the TSV and the typed payload.
-                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                    if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
-                        && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
-                    {
-                        let _ = el.focus();
-                    }
-                    let cmd = if id == trame_chrome::COPY {
-                        "copy"
-                    } else {
-                        "cut"
-                    };
-                    if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
-                        let _ = html_doc.exec_command(cmd);
-                    }
-                }
+                exec_clipboard(id == trame_chrome::COPY);
             } else if id == trame_chrome::PASTE {
-                // Paste (`trame-clipboard`): `execCommand("paste")` is blocked by browsers,
-                // so read the OS clipboard via the async Clipboard API (allowed in this
-                // click gesture). The read is decoded and handed to the host, which
-                // routes it to the active view through the same ladder as Ctrl+V
-                // (`UI-THREAD-024`, `UI-THREAD-025`).
-                let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
-                // `navigator.clipboard` is undefined outside a secure context, such as
-                // http:// on a LAN IP. There the button cannot read at all, so tell
-                // the user instead of failing silently.
-                let available = clipboard
-                    .as_ref()
-                    .map(|c| {
-                        let v: &wasm_bindgen::JsValue = c.as_ref();
-                        !v.is_undefined() && !v.is_null()
-                    })
-                    .unwrap_or(false);
-                if let Some(clipboard) = clipboard.filter(|_| available) {
-                    let paste_tx = clipboard_paste.clone();
-                    // Call `read()` synchronously, still inside the click's user
-                    // gesture: Firefox shows its mandatory "paste" confirmation
-                    // right away instead of deferring it to the next click.
-                    let read_promise = clipboard.read();
-                    wasm_bindgen_futures::spawn_local(paste_from_clipboard(
-                        read_promise,
-                        clipboard,
-                        paste_tx,
-                        toasts,
-                    ));
-                } else {
-                    toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
-                }
+                read_clipboard(clipboard_paste.clone(), toasts, false);
             } else if id == trame_chrome::IMPORT_CSV {
                 // Interop (`trame-import-export`): open a file picker, read the chosen
                 // CSV bytes, and send them to the Logic thread. It creates a new sheet
@@ -714,6 +751,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let ctx_entries = Memo::new(move |_| {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
+        } else if boot_is_prose {
+            ambre_prose::chrome::context_entries()
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
         }
@@ -731,7 +770,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         docs,
         username,
         dev_mode,
-        boot_is_toile,
+        booted: crate::route::booted_kind(boot_is_toile, boot_is_prose),
         toasts,
     };
     let landing_tx = to_logic.clone();
@@ -841,7 +880,25 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 })}
             </Tabs>
             <StatusBar slot>
-                {if boot_is_toile {
+                {if boot_is_prose {
+                    // The five figures of the Prose document
+                    // (`PROSE-FEAT-040`), in the shared status band.
+                    view! {
+                        <ambre_chrome::StatusLabel label="Prose" />
+                        <span class="statusbar-stats">
+                            {move || {
+                                prose_figures.get().map(|figures| {
+                                    figures
+                                        .into_iter()
+                                        .map(|figure| view! { <span class="stat">{figure}</span> })
+                                        .collect_view()
+                                })
+                            }}
+                        </span>
+                        <span class="spacer"></span>
+                    }
+                    .into_any()
+                } else if boot_is_toile {
                     // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.
                     view! {
@@ -1380,6 +1437,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             open=palette_open
             table=if boot_is_toile {
                 ambre_toile::ui::commands::COMMANDS
+            } else if boot_is_prose {
+                ambre_prose::commands::COMMANDS
             } else {
                 trame_chrome::COMMANDS
             }
@@ -1488,6 +1547,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
             />
         })}
 
+        // Prose annotations: the comment panel and the suggestion popover,
+        // both DOM chrome (`PROSE-UI-050`, `PROSE-UI-052`).
+        {boot_is_prose.then(|| view! {
+            <ambre_prose::chrome::ProseCommentsPanel signals=prose_signals />
+            <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
+            <ambre_prose::chrome::ProseFormatBar signals=prose_signals />
+            <ambre_prose::chrome::ProseSlashMenu signals=prose_signals />
+            <ambre_prose::chrome::ProseRuler signals=prose_signals />
+        })}
+
         // The deck panel (`toile-presentation`): the surface that adds a frame
         // to the presentation, reorders it and removes it (`TOILE-FEAT-026`).
         // It holds no order of its own. It renders the frames the canvas view
@@ -1526,5 +1595,60 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 move || landing::landing_view(landing_signals, landing_tx.clone())
             }
         </Show>
+    }
+}
+
+/// Copy or cut from a menu: focus the text pipe and ask the browser to fire
+/// the `copy`/`cut` DOM event the host listeners service. They write every
+/// format the active view offers.
+fn exec_clipboard(copy: bool) {
+    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+        if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
+            && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
+        {
+            let _ = el.focus();
+        }
+        let cmd = if copy { "copy" } else { "cut" };
+        if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
+            let _ = html_doc.exec_command(cmd);
+        }
+    }
+}
+
+/// Paste from a menu. `execCommand("paste")` is blocked by browsers, so read
+/// the OS clipboard via the async Clipboard API, allowed in this click
+/// gesture. The read is decoded and handed to the host, which routes it to the
+/// active view through the same ladder as Ctrl+V (`UI-THREAD-024`,
+/// `UI-THREAD-025`). `plain` keeps the text alone (`PROSE-UI-227`).
+fn read_clipboard(
+    paste_tx: ambre_bus::conduit::Sender<crate::host::ClipboardPaste>,
+    toasts: Toasts,
+    plain: bool,
+) {
+    let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
+    // `navigator.clipboard` is undefined outside a secure context, such as
+    // http:// on a LAN IP. There the entry cannot read at all, so tell the
+    // user instead of failing silently.
+    let available = clipboard
+        .as_ref()
+        .map(|c| {
+            let v: &wasm_bindgen::JsValue = c.as_ref();
+            !v.is_undefined() && !v.is_null()
+        })
+        .unwrap_or(false);
+    if let Some(clipboard) = clipboard.filter(|_| available) {
+        // Call `read()` synchronously, still inside the click's user gesture:
+        // Firefox shows its mandatory "paste" confirmation right away instead
+        // of deferring it to the next click.
+        let read_promise = clipboard.read();
+        wasm_bindgen_futures::spawn_local(paste_from_clipboard(
+            read_promise,
+            clipboard,
+            paste_tx,
+            toasts,
+            plain,
+        ));
+    } else {
+        toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
     }
 }

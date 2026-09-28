@@ -95,9 +95,19 @@ pub struct FrameHost {
     /// `copy`/`cut`, re-published by the async write (`UI-THREAD-023`), and read
     /// back to answer rung 2 of the Paste-button path.
     clip_token: String,
+    /// Whether the asynchronous write of the last copy reached the clipboard.
+    /// It replaces the synchronous formats, token included, with `web `
+    /// variants a `paste` event cannot see (`UI-THREAD-054`).
+    clip_published: Rc<std::cell::Cell<bool>>,
     /// Clipboard reads the Paste button hands over, already decoded by the shell.
     /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
-    paste_rx: flume::Receiver<ClipboardPaste>,
+    paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
+
+    /// The command channel to the Logic thread, held for one purpose. A font
+    /// face fetched after boot has to reach the threads that measure on a
+    /// context of their own (`CANVAS-068`). Only this thread can fetch, and
+    /// Prose paginates on the Logic thread.
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 
     /// The live child views behind the top-level document's visible `doc_embed`s,
     /// keyed by the **board element** that carries each reference. Reconciled
@@ -148,14 +158,17 @@ impl FrameHost {
         perf: web_sys::Performance,
         make_child: Option<MakeChild>,
         clip_token: String,
-        paste_rx: flume::Receiver<ClipboardPaste>,
+        paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     ) -> Self {
         Self {
             gpu: None,
             view,
             perf,
             clip_token,
+            clip_published: Rc::new(std::cell::Cell::new(false)),
             paste_rx,
+            to_logic,
             children: HashMap::new(),
             child_sizes: HashMap::new(),
             make_child,
@@ -181,6 +194,12 @@ impl FrameHost {
     /// clipboard event listeners in `run` read it back to decide a same-tab copy.
     pub(crate) fn clip_token(&self) -> &str {
         &self.clip_token
+    }
+
+    /// Whether the last copy's asynchronous write reached the clipboard
+    /// (`UI-THREAD-054`). A new copy clears it; the write sets it on success.
+    pub(crate) fn clip_published(&self) -> Rc<std::cell::Cell<bool>> {
+        Rc::clone(&self.clip_published)
     }
 
     /// Forward an input event to the view. Returns `true` if the caller should
@@ -290,6 +309,24 @@ impl FrameHost {
     /// `own_copy` signals the clipboard still holds this tab's ownership token.
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         self.view.paste_clipboard(blob, own_copy);
+    }
+
+    /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
+    /// takes it (`PROSE-UI-204`); answers whether it did.
+    pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+        self.view.drop_text(x, y, text)
+    }
+
+    /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
+    /// pointer apart (`PROSE-UI-217`); answers whether it did.
+    pub fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+        self.view.touch(phase, x, y, now_ms)
+    }
+
+    /// Whether a consumed press captures the pointer, so a drag keeps its
+    /// moves past the canvas edge. Only Prose asks for it (`PROSE-UI-038`).
+    pub fn captures_pointer(&self) -> bool {
+        self.view.captures_pointer()
     }
 
     /// Switch the active document on the live view, keeping the GPU surface.
@@ -405,7 +442,13 @@ impl FrameHost {
         // opaque Ambre bytes for a full-fidelity internal round-trip.
         if let Some(blob) = self.view.poll_clipboard() {
             let payload_b64 = blob.ambre.as_deref().map(base64_encode);
-            async_write_clipboard(blob.text, payload_b64, self.clip_token.clone());
+            async_write_clipboard(
+                blob.text,
+                blob.html,
+                payload_b64,
+                self.clip_token.clone(),
+                Rc::clone(&self.clip_published),
+            );
         }
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that
@@ -413,11 +456,19 @@ impl FrameHost {
         // layers still hold tofu pixels for the affected strings. Force a
         // full view repaint to re-shape and redraw them. Scoped so the short
         // GPU borrow ends before we touch `self.view`.
-        let fonts_changed = {
+        let new_faces = {
             let Some(gpu) = self.gpu.as_mut() else { return };
             gpu.text_cache.poll_lazy_fonts(&mut gpu.font_cx)
         };
-        if fonts_changed {
+        if !new_faces.is_empty() {
+            // The same face, to the Logic thread. It measures Prose pages on a
+            // sealed context and cannot fetch, so a script it never receives
+            // paginates into tofu (`CANVAS-068`, `PROSE-115`). A full channel
+            // drops the face rather than stall the frame; the next lazy fetch
+            // is a fresh delivery.
+            let _ = self
+                .to_logic
+                .try_send(LogicCommand::LoadFonts { faces: new_faces });
             if let Some((w, h)) = self.gpu.as_ref().map(|g| (g.width, g.height)) {
                 self.view.resize(w, h);
             }

@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` -- the single result and the broadcast delta; `::boolean_is_one_undo_item` -- the one commit; `::keep_sources_leaves_inputs` -- the kept sources | partial -- nothing reads the style back, so a result carrying the second source's fill, or none at all, would pass the three; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` -- the single result and the broadcast delta; `::boolean_is_one_undo_item` -- the one commit; `::keep_sources_leaves_inputs` -- the kept sources | partial -- nothing reads the style back, so a result carrying the second source's fill, or none at all, would pass the three; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | none | unheld -- the handler skips both with a `continue`, so they never enter `sources` and never reach the delete, but no test passes an ineligible id and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-036` | `FAIL` | Fewer than two eligible outlines MUST be refused rather than write a degenerate element. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::fewer_than_two_eligible_is_rejected` -- the handler; `ambre_toile::logic::boolean::tests::fewer_than_two_paths_is_empty` -- the solver | none | verified |
 | `TOILE-FEAT-037` | `FAIL` | An empty result MUST be refused rather than write an element with no outline. | this spec section 3 | none | unheld -- the handler returns `BooleanEmpty` and writes nothing, and `ambre_toile::logic::boolean::tests::intersect_of_disjoint_is_empty` holds that the solver produces the empty result and stops there, so the refusal itself is undriven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -51,10 +51,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the pen is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The finished path enters the document as one create and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 4 `verified`, 1 `failing`, 8 `untested`. What holds is the combinator geometry,
-  the most thoroughly tested pure function in the application -- and nothing can call it. What is
-  loose is the pen itself: both refusals its handler makes, both frame conditions, and the style the
-  result carries that nothing reads back.
+* **Verification.** 4 `verified`, 1 `partial`, 1 `failing`, 7 `untested`. What holds is the
+  combinator geometry, the most thoroughly tested pure function in the application -- and nothing
+  can call it. What is loose is the pen itself: both refusals its handler makes, both frame
+  conditions, and the style the result carries that nothing reads back.
 
 ---
 

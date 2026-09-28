@@ -432,6 +432,55 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 // Public API
 // -----------------------------------------------------------------------------
 
+/// The longest formula the parser reads, in characters: Excel's own limit.
+pub const MAX_FORMULA_CHARS: usize = 8_192;
+
+/// The deepest parenthesis or call nesting it reads: Excel's own limit.
+pub const MAX_FORMULA_NESTING: usize = 64;
+
+/// The most operators it reads. Each one can add a level to the tree, and the
+/// parser, the compiler and the drop all walk the tree by recursion. A release
+/// build overflows a 1 MiB stack past about 256 nested levels and 2 048
+/// operators, so both bounds keep a margin of four.
+pub const MAX_FORMULA_OPERATORS: usize = 512;
+
+/// Refuse, before any recursion, a formula that could nest deeper than the
+/// stack holds (`TRAME-013`). One linear scan; text between double quotes is
+/// skipped, and a quoted sheet name is counted, which can only over-estimate.
+fn within_bounds(input: &str) -> Result<(), String> {
+    if input.chars().count() > MAX_FORMULA_CHARS {
+        return Err(format!(
+            "formula longer than {MAX_FORMULA_CHARS} characters"
+        ));
+    }
+    let (mut depth, mut deepest, mut operators) = (0_usize, 0_usize, 0_usize);
+    let mut quoted = false;
+    for c in input.chars() {
+        match c {
+            '"' => quoted = !quoted,
+            _ if quoted => {}
+            '(' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            ')' => depth = depth.saturating_sub(1),
+            '+' | '-' | '*' | '/' | '^' | '&' | '=' | '<' | '>' => operators += 1,
+            _ => {}
+        }
+    }
+    if deepest > MAX_FORMULA_NESTING {
+        return Err(format!(
+            "formula nested deeper than {MAX_FORMULA_NESTING} levels"
+        ));
+    }
+    if operators > MAX_FORMULA_OPERATORS {
+        return Err(format!(
+            "formula with more than {MAX_FORMULA_OPERATORS} operators"
+        ));
+    }
+    Ok(())
+}
+
 /// Parse a formula string (without the leading `=`) into an [`Expr`] AST.
 ///
 /// # Errors
@@ -442,6 +491,7 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
     if input.trim().is_empty() {
         return Err("empty formula".into());
     }
+    within_bounds(input)?;
     match expr.parse(input.trim()) {
         Ok(("", ast)) => Ok(ast),
         Ok((rest, _)) => Err(format!("unexpected trailing input: '{rest}'")),

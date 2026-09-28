@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-IO-005` | `POST` | A CSV export MUST write evaluated values, never formula sources. | this spec section 3 | `ambre_trame::logic::tests::group7::csv_export_evaluates_formulas` | none | verified |
 | `TRAME-IO-027` | `POST` | An export MUST bound its range by the cells the sheet holds, never by the materialized row and column lists. | this spec section 3; section 5 | `ambre_trame::logic::tests::group6::csv_export_trims_empty_trailing_columns`; `::csv_import_then_export_drops_trailing_empties` | none | verified |
-| `TRAME-IO-026` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none | unheld -- both exporters read alone, and a shared reference proves nothing here, since a Loro container mutates through one. No test asserts the empty outcome; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-026` | `FRAME` | A CSV export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none | unheld -- both exporters read alone, and a shared reference proves nothing here, since a Loro container mutates through one. No test asserts the empty outcome; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-IO-041` | `FAIL` | An export with nothing to write MUST say so, and MUST NOT answer with silence. | this spec section 3; section 6 | none | fails -- an unknown sheet and an empty sheet both return an outcome carrying no event at all, so the button produces no file and no notice; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.4 Save the document as a file

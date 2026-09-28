@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: FOOTNOTES
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the notes are placed on their page and not yet drawn
 
 > A note at the foot of the page, called from a mark in the text. The note keeps one identity for
 > the life of the document. The number the reader sees is counted from the order of the calls
@@ -18,73 +18,73 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-013` | `OBS` | The number drawn in front of a note MUST be counted from the order of the calls in the document, at the moment the document is read. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-095` | `INV` | The document MUST NOT hold a note's number. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-096` | `INV` | A note's identity MUST be minted once. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-280` | `INV` | A note's identity MUST survive a move of its call, an edit of its body, and a remote change. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-013` | `OBS` | The number drawn in front of a note MUST be counted from the order of the calls in the document, at the moment the document is read. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number` | none | verified |
+| `PROSE-FEAT-095` | `INV` | The document MUST NOT hold a note's number. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number` | none | verified |
+| `PROSE-FEAT-096` | `INV` | A note's identity MUST be minted once. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change`; `::a_note_lands_as_one_call_and_an_entry_holding_its_text` | none | verified |
+| `PROSE-FEAT-280` | `INV` | A note's identity MUST survive a move of its call, an edit of its body, and a remote change. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change` | none | verified |
+| `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | `ambre_prose::logic::notes::tests::two_converged_peers_count_the_same_numbers` | none | verified |
+| `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned` | none | verified |
+| `PROSE-FEAT-305` | `INV` | A note's text MUST live in a block of its own, which the note's entry names and the body flow never holds, and deleting the note MUST remove that block. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::notes::tests::a_note_holds_its_text_in_a_block_out_of_the_flow` | none | verified |
+| `PROSE-FEAT-308` | `INV` | A document written under schema version 8 MUST keep each note's text and its marks once read. | this spec section 3; `ambre-spec-prose-schema.md section 7` | `ambre_prose::logic::notes::tests::a_version_8_note_moves_to_a_block_with_its_marks` | none | verified |
 
 ### 1.2 Add a note
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-099` | `POST` | After the command, the document MUST hold the note's body and one call to it at the position the caret was in. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-100` | `FRAME` | Adding a note MUST NOT put the note's text in the block the call sits in, and MUST NOT touch another note. | this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-071` | `FAIL` | A note MUST be refused in a header or a footer, and the refusal MUST be reported. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-099` | `POST` | After the command, the document MUST hold the note's body and one call to it at the position the caret was in. | this spec section 3; this spec section 4 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text` | none | verified |
+| `PROSE-FEAT-100` | `FRAME` | Adding a note MUST NOT put the note's text in the block the call sits in, and MUST NOT touch another note. | this spec section 5 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text`; `::a_note_touches_no_other_note` | none | verified |
+| `PROSE-FEAT-071` | `FAIL` | A note MUST be refused in a header or a footer, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_is_refused_in_a_band_and_the_refusal_is_reported` | none | verified |
+| `PROSE-FEAT-306` | `FAIL` | A note MUST be refused in a note's own text, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_refuses_a_note_a_comment_and_a_split` | none | verified |
+| `PROSE-FEAT-307` | `FAIL` | A comment MUST be refused in a note's text, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_refuses_a_note_a_comment_and_a_split` | none | verified |
 
 ### 1.3 Delete a note
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-070` | `POST` | Deleting a note MUST remove its body and every call still carrying its identity. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-101` | `FRAME` | Deleting a note MUST NOT change the text a call sat in, beyond the call itself, and MUST NOT touch another note. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-070` | `POST` | Deleting a note MUST remove its body and every call still carrying its identity. | this spec section 3 | `ambre_prose::logic::notes::tests::deleting_a_note_removes_its_body_and_its_calls_and_nothing_else`; `::a_note_deleted_while_a_peer_edits_it_leaves_no_call` | none | verified |
+| `PROSE-FEAT-101` | `FRAME` | Deleting a note MUST NOT change the text a call sat in, beyond the call itself, and MUST NOT touch another note. | this spec section 3 | `ambre_prose::logic::notes::tests::deleting_a_note_removes_its_body_and_its_calls_and_nothing_else` | none | verified |
 
 ### 1.4 Delete the text a note is called from
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-069` | `FRAME` | Deleting the text a call sits on MUST NOT remove the note it reached. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-069` | `FRAME` | Deleting the text a call sits on MUST NOT remove the note it reached. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned` | none | verified |
 
 * **Budget.** none of its own. The notes are collected, shaped and placed with the page, the fourth
   step of `features/ambre-spec-prose-pagination.md section 3`, charged to the pagination rows of
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a note is text in the document, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 12 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. Two rows are reachable by a property test without a page. Numbering gives the first
-  call in document order the first number and leaves no gap (`PROSE-FEAT-013`). Agreement means
-  two documents converged on the same text count the same numbers (`PROSE-FEAT-097`). The rest
-  wait on a page:
-  * the identity that outlives a gesture (`PROSE-FEAT-096`);
-  * the orphan policy and the set nothing carries (`PROSE-FEAT-098`);
-  * what each command may touch in the block its call sits in (`PROSE-FEAT-100`,
-    `PROSE-FEAT-101`).
+* **Verification.** 16 `verified`, each by a unit test on the engine in
+  `crates/ambre-prose/src/logic/notes.rs`. The two concurrent rows run two peers over one document
+  and exchange their updates (`PROSE-FEAT-097`, `PROSE-FEAT-070`). Where a note is drawn is the
+  pagination's to verify (`PROSE-015`, `PROSE-035`).
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-Two peers over one set of notes. No test resolves yet: the last column names the row each row rests
-on.
+Two peers over one set of notes. The last column names the test that plays the row.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| adds a note before an existing one | -- | one more note, no number anywhere | the new note as one, the old one as two, on both screens | none -- `PROSE-FEAT-013` |
-| adds a note at the end | adds a note at the end at the same moment | both notes, in the order the text converged on | the same two notes, numbered one after the other | none -- `PROSE-FEAT-097` |
-| deletes the sentence that calls a note | -- | the note, with no call left | the note gone from the page, and listed as orphaned for review | none -- `PROSE-FEAT-069`, `PROSE-FEAT-098` |
-| deletes a note | edits that note's text at the same moment | no note | the note gone on both screens, and no call left behind | none -- `PROSE-FEAT-070` |
-| moves a paragraph past another note | -- | the two calls, in the new order | the two numbers swapped, on both screens | none -- `PROSE-FEAT-013` |
-| tries to add a note in the footer | -- | nothing | a refusal, and the footer unchanged | none -- `PROSE-FEAT-071` |
+| adds a note before an existing one | -- | one more note, no number anywhere | the new note as one, the old one as two, on both screens | `a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number` |
+| adds a note at the end | adds a note at the end at the same moment | both notes, in the order the text converged on | the same two notes, numbered one after the other | `two_converged_peers_count_the_same_numbers` |
+| deletes the sentence that calls a note | -- | the note, with no call left | the note gone from the page, and listed as orphaned for review | `deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned` |
+| deletes a note | edits that note's text at the same moment | no note | the note gone on both screens, and no call left behind | `a_note_deleted_while_a_peer_edits_it_leaves_no_call` |
+| moves a paragraph past another note | -- | the two calls, in the new order | the two numbers swapped, on both screens | `a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number` |
+| tries to add a note in the footer | -- | nothing | a refusal, and the footer unchanged | `a_note_is_refused_in_a_band_and_the_refusal_is_reported` |
 
 ---
 
 ## 3. MODEL
 
-**Containers.** The note's body is one annotation entry of the shared annotation map. The call
-is an inline mark on the text carrying that entry's identity. Both are declared in
-`ambre-spec-prose-schema.md section 3`. The identity is a value the peer that creates the note
-mints (`section 2` of that document) once, for the life of the note (`PROSE-FEAT-096`).
+**Containers.** The note is one annotation entry of the shared annotation map, and its text is a
+block of its own. That block is a root paragraph marked as a note: the entry names it, and the body
+flow never holds it (`PROSE-FEAT-305`). The call is an inline mark on the text carrying that entry's
+identity. Both are declared in `ambre-spec-prose-schema.md section 3`. The identity is a value the
+peer that creates the note mints (`section 2` of that document) once, for the life of the note
+(`PROSE-FEAT-096`).
 
 **The number is not stored.** It is counted by walking the block tree in document order and, inside
 each block, the positions of the calls (`PROSE-FEAT-013`). It is nowhere written down
@@ -117,7 +117,13 @@ that call through any later reflow. The separator is drawn once per page. An edi
 removes a call forces a full recomputation. All three are
 `features/ambre-spec-prose-pagination.md`, `PROSE-015` and `PROSE-035`.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**The call is a carrier character.** The insert writes one U+FFFC and marks it with the note's
+identity, so the call is selected and deleted whole, as section 4 draws it. The author's own text
+never carries a call (`PROSE-FEAT-100`).
+
+**Code:** `crates/ambre-prose/src/note.rs` reads the notes and counts the numbers.
+`crates/ambre-prose/src/logic/notes.rs` holds the three commands. The list reaches the view as
+`FootnotesUpdated`, after each command and at each pause in typing.
 
 ---
 
@@ -153,20 +159,6 @@ whole and deleted whole.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing surfaces an orphan.** `PROSE-FEAT-069` requires the note to be kept for review, and no
-  event carries the orphan set and no command lists it. A comment orphaned by the same rule has the
-  same gap.
-* **The refusal has no event.** `PROSE-FEAT-071` requires the refusal to be reported, and the
-  engine declares one untyped error alone (`features/ambre-spec-prose-engine.md section 3`). Four features
-  report through the same gap, and it lands with the `A refused command names what it refused`
-  Story (`ambre-roadmap.md` E5).
-* **What the call is a mark on is not settled.** Section 3 makes the call an inline mark and says
-  that deleting the character it sits on deletes it. Section 4 says it draws as its number and is
-  selected and deleted whole, as one character. Either the mark rides a character the author typed,
-  and removing the call takes that character with it. The other shape has the insert write a
-  carrier character no rule declares. `PROSE-FEAT-100` and `PROSE-FEAT-101` bound what each command
-  may touch around the call; which of the two shapes the schema holds is undecided
-  (`ambre-spec-prose-schema.md section 3`).
 * **The note's entry carries no author and no stamp**, while a comment's carries both
   (`ambre-spec-prose-schema.md section 3`). Whether a note shows who wrote it is undecided.
 * **Nothing rules on an endnote.** Every rule here places the note on its call's page, and no

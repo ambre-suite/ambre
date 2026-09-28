@@ -32,7 +32,7 @@ pub(crate) fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
 pub(crate) fn dispatch_to_current(
     id: CommandId,
     current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: &flume::Sender<LogicCommand>,
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
 ) {
     let Some(document_id) = current_doc.get_untracked() else {
         return;
@@ -45,13 +45,65 @@ pub(crate) fn dispatch_to_current(
 /// Open a transient `<input type="file">` picker for a CSV import
 /// (`trame-import-export`). On selection it reads the file bytes off the main
 /// thread (`File::array_buffer`). It then sends a [`TrameCommand::ImportCsv`]
-/// to the Logic thread, which converts them into a new sheet client-side. The
-/// picker element never reaches the DOM. The code leaks the change closure,
-/// because the picker is one-shot and lives only until the user picks a file.
+/// to the Logic thread, which converts them into a new sheet client-side.
 pub(crate) fn open_csv_picker(
     document_id: DocumentId,
-    tx: flume::Sender<LogicCommand>,
+    tx: ambre_bus::conduit::Sender<LogicCommand>,
     toasts: Toasts,
+) {
+    open_file_picker(
+        ".csv,text/csv",
+        "Could not read the CSV file",
+        toasts,
+        move |data| {
+            let _ = tx.try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Trame(TrameCommand::ImportCsv {
+                    data,
+                    delimiter: None,
+                    has_header: false,
+                    target_sheet_id: None,
+                    start_row: 0,
+                    start_col: 0,
+                }),
+            });
+        },
+    );
+}
+
+/// Open a transient `<input type="file">` picker for a Markdown import
+/// (`PROSE-IO-027`). The bytes go to the Logic thread, which converts them
+/// client-side (`PROSE-IO-001`).
+pub(crate) fn open_markdown_picker(
+    document_id: DocumentId,
+    tx: ambre_bus::conduit::Sender<LogicCommand>,
+    toasts: Toasts,
+) {
+    open_file_picker(
+        ".md,.markdown,text/markdown",
+        "Could not read the Markdown file",
+        toasts,
+        move |data| {
+            let _ = tx.try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ImportDocument {
+                    format: ambre_bus::app::prose::ImportFormat::Markdown,
+                    data,
+                }),
+            });
+        },
+    );
+}
+
+/// Open a transient file picker and hand the chosen file's bytes to `on_bytes`.
+/// The picker element never reaches the DOM. The code leaks the change
+/// closure, because the picker is one-shot and lives only until the user picks
+/// a file.
+fn open_file_picker(
+    accept: &str,
+    unreadable: &'static str,
+    toasts: Toasts,
+    on_bytes: impl Fn(Vec<u8>) + Clone + 'static,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -64,31 +116,18 @@ pub(crate) fn open_csv_picker(
         return;
     };
     input.set_type("file");
-    let _ = input.set_attribute("accept", ".csv,text/csv");
+    let _ = input.set_attribute("accept", accept);
 
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         let Some(file) = picker.files().and_then(|fs| fs.get(0)) else {
             return;
         };
-        let tx = tx.clone();
+        let on_bytes = on_bytes.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => {
-                    let data = js_sys::Uint8Array::new(&buf).to_vec();
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Trame(TrameCommand::ImportCsv {
-                            data,
-                            delimiter: None,
-                            has_header: false,
-                            target_sheet_id: None,
-                            start_row: 0,
-                            start_col: 0,
-                        }),
-                    });
-                }
-                Err(_) => toasts.warning("Could not read the CSV file"),
+                Ok(buf) => on_bytes(js_sys::Uint8Array::new(&buf).to_vec()),
+                Err(_) => toasts.warning(unreadable),
             }
         });
     });
@@ -105,49 +144,19 @@ pub(crate) fn open_csv_picker(
 /// active view through the same ladder as the native `paste` event
 /// (`UI-THREAD-024`). Best-effort: a clipboard the browser will not surface
 /// (permission denied, unsupported) earns a log line, not a failure -- Ctrl+V
-/// still works.
+/// still works. `plain` keeps the text alone, for the paste-as-plain-text
+/// entry (`PROSE-UI-227`).
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
-    paste_tx: flume::Sender<host::ClipboardPaste>,
+    paste_tx: ambre_bus::conduit::Sender<host::ClipboardPaste>,
     toasts: Toasts,
+    plain: bool,
 ) {
-    let mut blob = ambre_bus::ClipboardBlob::default();
-    let mut token: Option<String> = None;
-    let mut found = false;
-
-    // Structured read: the private type, the ownership token and the plain text,
-    // in whatever order the browser lists them.
-    if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
-        && let Ok(items) = val.dyn_into::<js_sys::Array>()
-    {
-        for item in items.iter() {
-            let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else {
-                continue;
-            };
-            let types = item.types();
-            let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
-            if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
-                && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
-            {
-                blob.ambre = host::base64_decode(&b64);
-                found = true;
-            }
-            if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
-                && let Some(t) =
-                    read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
-            {
-                token = Some(t);
-                found = true;
-            }
-            if has("text/plain")
-                && let Some(text) = read_clipboard_item(&item, "text/plain").await
-            {
-                blob.text = text;
-                found = true;
-            }
-        }
-    }
+    let (mut blob, mut token, mut found) = match read_clipboard_blob(read_promise).await {
+        Some((blob, token)) => (blob, token, true),
+        None => (ambre_bus::ClipboardBlob::default(), None, false),
+    };
 
     // Fallback for browsers without structured `read()`.
     if !found
@@ -164,9 +173,81 @@ pub(crate) async fn paste_from_clipboard(
         return;
     }
 
+    if plain {
+        blob = ambre_bus::ClipboardBlob {
+            text: blob.text,
+            plain: true,
+            ..ambre_bus::ClipboardBlob::default()
+        };
+        token = None;
+    }
+
     // The host compares the token and pastes through the active view
     // (`UI-THREAD-024`, `UI-THREAD-025`).
     let _ = paste_tx.try_send(host::ClipboardPaste { blob, token });
+}
+
+/// The asynchronous clipboard, or `None` where it is undefined: outside a
+/// secure context, such as http:// on a LAN IP.
+pub(crate) fn async_clipboard() -> Option<web_sys::Clipboard> {
+    let clipboard = web_sys::window()?.navigator().clipboard();
+    let v: &wasm_bindgen::JsValue = clipboard.as_ref();
+    (!v.is_undefined() && !v.is_null()).then_some(clipboard)
+}
+
+/// Decode a structured `read()`: the private bytes, the ownership token, the
+/// HTML and the plain text, in whatever order the browser lists them. `None`
+/// when the read was refused or surfaced nothing.
+pub(crate) async fn read_clipboard_blob(
+    read_promise: js_sys::Promise,
+) -> Option<(ambre_bus::ClipboardBlob, Option<String>)> {
+    let mut blob = ambre_bus::ClipboardBlob::default();
+    let mut token: Option<String> = None;
+    let mut found = false;
+    let val = wasm_bindgen_futures::JsFuture::from(read_promise)
+        .await
+        .ok()?;
+    let items = val.dyn_into::<js_sys::Array>().ok()?;
+    for item in items.iter() {
+        let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else {
+            continue;
+        };
+        let types = item.types();
+        let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
+        if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
+            && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
+        {
+            blob.ambre = host::base64_decode(&b64);
+            found = true;
+        }
+        if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
+            && let Some(t) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
+        {
+            token = Some(t);
+            found = true;
+        }
+        if has("text/html")
+            && let Some(html) = read_clipboard_item(&item, "text/html").await
+        {
+            blob.html = Some(html).filter(|h| !h.is_empty());
+            found = true;
+        }
+        if has("text/plain")
+            && let Some(text) = read_clipboard_item(&item, "text/plain").await
+        {
+            blob.text = text;
+            found = true;
+        }
+    }
+    // A browser that refused the `web ` types left the token in the HTML
+    // (`UI-THREAD-056`).
+    let token = token.or_else(|| {
+        blob.html
+            .as_deref()
+            .and_then(ambre_bus::ClipboardBlob::html_token)
+            .map(str::to_owned)
+    });
+    found.then_some((blob, token))
 }
 
 /// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob
@@ -292,8 +373,15 @@ pub(crate) fn initials(name: Option<&str>) -> String {
     }
 }
 
+/// The main side of the Sync -> Logic channel. An event from the Sync worker
+/// is lossless (a CRDT delta, a service answer), and the main thread may not
+/// wait for room (`ARCH-021`). So what the channel cannot take waits in the
+/// backlog, and the relay offers it again each frame (`BUS-025`). Shared by
+/// the worker's `onmessage` and the relay, both on the main thread.
+pub(crate) type SyncInbox = Rc<RefCell<ambre_bus::conduit::Backlog<LogicEvent>>>;
+
 pub(crate) fn spawn_sync_worker(
-    to_logic: flume::Sender<LogicEvent>,
+    to_logic: SyncInbox,
     sync_ready: Rc<Cell<bool>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
@@ -311,9 +399,7 @@ pub(crate) fn spawn_sync_worker(
                 return;
             }
             match postcard::from_bytes::<LogicEvent>(&bytes) {
-                Ok(event) => {
-                    let _ = to_logic.send(event);
-                }
+                Ok(event) => to_logic.borrow_mut().push(event),
                 Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
             }
         });
@@ -345,8 +431,8 @@ pub(crate) fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
 pub(crate) fn dispatch_command(
     id: CommandId,
     document_id: DocumentId,
-    to_logic: &flume::Sender<LogicCommand>,
-) -> Result<(), flume::TrySendError<LogicCommand>> {
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+) -> Result<(), ambre_bus::conduit::TrySendError<LogicCommand>> {
     let Some(command) = trame_chrome::command_to_app(id) else {
         tracing::warn!("no LogicCommand mapping for {id:?}");
         return Ok(());
@@ -547,11 +633,12 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
 pub(crate) fn install_command_keys(
     keymap: Keymap,
     current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
     find_state_toile: RwSignal<bool>,
     active_tool_toile: RwSignal<ambre_toile::ui::Tool>,
     boot_is_toile: bool,
+    prose_format: Option<RwSignal<Option<CommandId>>>,
 ) {
     let document = web_sys::window()
         .expect("no window")
@@ -585,6 +672,18 @@ pub(crate) fn install_command_keys(
                 event.prevent_default();
                 if id == toile_chrome::FIND {
                     find_state_toile.set(true);
+                }
+                return;
+            }
+            // Prose: a formatting chord leaves its id where the format bar's
+            // controls leave theirs, and the view drains both the same way
+            // (`PROSE-UI-056`). A chrome text field keeps its own chords.
+            if let Some(format) = prose_format
+                && ambre_prose::commands::mark_key(id).is_some()
+            {
+                if !target_is_editable(&event) {
+                    event.prevent_default();
+                    format.set(Some(id));
                 }
                 return;
             }
@@ -726,10 +825,7 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
         return;
     }
 
-    let store = match ambre_logic::persistence::PersistenceStore::open()
-        .recv_async()
-        .await
-    {
+    let store = match ambre_logic::persistence::PersistenceStore::open().await {
         Ok(Ok(store)) => store,
         _ => {
             toasts.error("Ambre could not open its local store for that file");
@@ -740,7 +836,6 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
     // and an open transaction goes with it.
     let committed = store
         .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
-        .recv_async()
         .await;
     if committed != Ok(true) {
         toasts.error("Ambre could not store that file locally");

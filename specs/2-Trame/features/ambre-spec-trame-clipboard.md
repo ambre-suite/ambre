@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE TRAME CLIPBOARD
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
+**Implementation:** partial -- a plain paste is not built
 
 > A user selects a thousand rows, scrolls past them and copies. What lands on the clipboard is the
 > whole selection, not the part that was on screen. Pasted formulas point at their new neighbours.
@@ -24,7 +24,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-059` | `POST` | A copy MUST cover the whole selection, never only the cells the viewport holds. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it spans five hundred rows and asserts the far cell is in the payload | none | verified |
-| `TRAME-UI-060` | `FRAME` | A copy MUST NOT change the document. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it asserts the outcome carries no delta; type-level -- `copy_range` takes `&self` and returns `TrameOutcome::display_only` (`logic/clipboard.rs`) | none | verified |
+
+**Frame:** `UI-THREAD-044`
 
 ### 1.3 Cut the selection
 
@@ -40,18 +41,19 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-061` | `POST` | A pasted formula MUST have its relative references shifted by the paste offset. | this spec section 3 | `ambre_trame::logic::tests::group5::paste_reindexes_relative_formula` | none | verified |
 | `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-174` | `POST` | A plain paste MUST land the plain-text mirror as literal cells, whatever typed payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the "Paste as plain text in Trame" Story (`ambre-roadmap.md` E6). The host already strips the typed payload on the chord, but the view ignores the flag and Trame offers no menu entry | unimplemented |
+| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 
 * **Budget.** none: a copy serialises the selection once, and
   `ambre-spec-budgets.md` budgets no clipboard operation.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 3 `verified`, 5 `untested`, 1 `qa-manual`. What holds is the three rules that
-  live in the Logic thread, where a test can reach them. The copy that writes no delta is among
-  them. What is loose is everything above the seam -- the ownership token and the cut -- browser
-  state, the gap the edit session has. The cut is worse: the source clear is sent
-  whether or not the paste was, against section 5, and it loses data outright.
+* **Verification.** 2 `verified`, 1 `partial`, 4 `untested`, 1 `qa-manual`, 1 `unimplemented`. What
+  holds is the three rules that live in the Logic thread, where a test can reach them. The copy that
+  writes no delta is among them. What is loose is everything above the seam -- the ownership token
+  and the cut -- browser state, the gap the edit session has. The cut is worse: the source clear is
+  sent whether or not the paste was, against section 5, and it loses data outright.
 
 ---
 
@@ -105,6 +107,7 @@ above. This document states what Trame puts in it, never how the seam works.
 | `Ctrl+C`, `Ctrl+X`, `Ctrl+V` | ride the native clipboard events; they are not decoded as key chords |
 | `Ctrl+Insert`, `Shift+Insert`, `Shift+Delete` | the legacy set, mapped to the same three intents (`ambre-spec-commands.md`, `UI-THREAD-011`) |
 | the context menu | `Cut`, `Copy` and `Paste`, cell scope only (`features/ambre-spec-trame-context-menu.md section 3`) |
+| `Ctrl+Shift+V`, or its menu entry | `TRAME-UI-174`, on the "Paste as plain text in Trame" Story (`ambre-roadmap.md` E6) |
 | `Escape` | drops the marching ants and cancels a pending cut |
 
 **Inside an edit session** the selection of the text wins: a copy returns the selected substring and

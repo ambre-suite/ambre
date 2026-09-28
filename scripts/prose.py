@@ -23,6 +23,11 @@ two meanings, the passive voice, one negative per sentence, and a comment that
 states what the code does instead of why. Those stay a human read of the diff.
 The script narrows the read; it does not replace it.
 
+**Why a breach fails, and never warns.** The limits frame a writer that runs
+long, an agent first. A failure costs a rerun; a warning is read once and then
+ignored, and the corpus grows back. A story to demote them to warnings was
+withdrawn for that reason.
+
 **Scope.** The comments of `crates/**/*.rs`, and the prose of the corpus.
 
 Usage:

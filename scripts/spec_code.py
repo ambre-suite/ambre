@@ -10,9 +10,28 @@ describing a test suite that did not exist.
 
 This makes the rule mechanical instead of aspirational.
 
+It also holds the citations the source makes back into the specs, in two
+directions a reader otherwise trusts blindly:
+
+  - **ownership.** A rule ID cited under `crates/ambre-X/src` belongs to a spec
+    of X or of the foundations, or the file path names the application that
+    owns it (`ambre-bus/src/app/prose.rs` cites Prose). A shared crate citing
+    an application rule is a shared layer that knows one application.
+  - **test and mechanism.** A test whose doc comment cites a rule is named by
+    that rule's `Mechanism` cell. A test that claims a rule the row does not
+    credit it with is either a missing mechanism or a false claim.
+
+The reverse -- a test a `Mechanism` names must cite its rule -- is counted and
+not enforced: the corpus never asked a test to cite, so it fails on most of them
+and a list of those failures would freeze nothing useful.
+
+The defects found when the check landed are listed in `ALLOW`, one per line.
+The list only shrinks: a new defect fails, and so does a line no defect matches.
+
 Run: `just spec-code` (list), `just spec-code --check` (fail on any body).
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -22,7 +41,11 @@ from pathlib import Path
 # here (`ambre-spec-template.md section 0`).
 from template_vocabulary import FENCE_TAGS
 
-SPECS = Path(__file__).resolve().parent.parent / "specs"
+ROOT = Path(__file__).resolve().parent.parent
+SPECS = ROOT / "specs"
+CRATES = ROOT / "crates"
+INDEX = SPECS / "1-Foundations" / "ambre-contract-index.json"
+ALLOW = Path(__file__).resolve().parent / "spec_code_citations.allow"
 
 # `specs/audits/` holds the non-normative analysis documents that live under
 # `specs/` without being specs. An audit quotes real source on purpose, so it is
@@ -193,6 +216,115 @@ def fence_issues(text: str):
         yield open_line, "unterminated", f"```{tag or '(none)'}"
 
 
+# A rule ID as the corpus mints them: `KINETIC-002`, `PROSE-UI-137`. Only an ID
+# the index answers counts, so a lookalike (`UTF-008`) is never a citation.
+RULE_ID = re.compile(r"\b[A-Z][A-Z0-9]*(?:-[A-Z]+)*-\d{3}\b")
+FN = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)")
+# A `Mechanism` cell names a test by its path; the last segment is the `fn`.
+MECHANISM_FN = re.compile(r"`(?:\w+::)+(\w+)`")
+
+
+def application(document: str) -> str | None:
+    """The application a spec belongs to (`3-Toile/...` -> `toile`), or None for the foundations."""
+    head = document.split("/", 1)[0]
+    if head.startswith("1-"):
+        return None
+    return head.split("-", 1)[1].lower()
+
+
+def owner_defects(rows: dict, path: str, text: str):
+    """Yield (line_no, rule_id) for each rule this source file may not cite."""
+    crate, _, inner = path.partition("/src/")
+    crate = crate.removeprefix("crates/ambre-")
+    for n, line in enumerate(text.splitlines(), 1):
+        for rule in RULE_ID.findall(line):
+            if rule not in rows:
+                continue
+            app = application(rows[rule]["document"])
+            if app is None or app == crate or app in re.split(r"[/_.]", inner):
+                continue
+            yield n, rule
+
+
+def test_citations(text: str):
+    """Yield (fn_name, rule_ids) for every test whose doc comment cites a rule."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        found = FN.match(line)
+        if not found:
+            continue
+        attrs, doc = [], []
+        j = i - 1
+        while j >= 0 and lines[j].strip().startswith(("#[", "///")):
+            (attrs if lines[j].strip().startswith("#[") else doc).append(lines[j])
+            j -= 1
+        if any("test" in a for a in attrs):
+            yield found.group(1), {r for d in doc for r in RULE_ID.findall(d)}
+
+
+def citation_defects(rows: dict, sources: dict[str, str]):
+    """Every ownership and test-mechanism defect, as (kind, subject, rule_id, where).
+
+    Also returns how many tests a `Mechanism` names without the test citing it,
+    the reverse direction this gate counts and does not enforce.
+    """
+    named: dict[str, set[str]] = {}
+    for rule, row in rows.items():
+        for name in MECHANISM_FN.findall(row["mechanism"]):
+            named.setdefault(name, set()).add(rule)
+    defects, cited = [], {}
+    for path, text in sources.items():
+        if "/src/" in path:
+            for n, rule in owner_defects(rows, path, text):
+                defects.append(("owner", path, rule, f"{path}:{n}"))
+        for name, rules in test_citations(text):
+            cited.setdefault(name, set()).update(rules)
+            for rule in sorted(rules):
+                if rule in rows and rule not in named.get(name, ()):
+                    defects.append(("test", name, rule, path))
+    uncited = sum(
+        1 for name, rules in named.items() for r in rules if name in cited and r not in cited[name]
+    )
+    return defects, uncited
+
+
+def read_allow() -> set[tuple[str, str, str]]:
+    if not ALLOW.exists():
+        return set()
+    out = set()
+    for line in ALLOW.read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            kind, subject, rule = line.split()
+            out.add((kind, subject, rule))
+    return out
+
+
+def check_citations() -> int:
+    """Print the citation defects outside `ALLOW` and the stale lines of it; return their count."""
+    rows = {r["id"]: r for r in json.loads(INDEX.read_text())}
+    sources = {
+        str(p.relative_to(ROOT)): p.read_text() for p in sorted(CRATES.rglob("*.rs"))
+        if "/target/" not in str(p)
+    }
+    defects, uncited = citation_defects(rows, sources)
+    allow = read_allow()
+    seen = {(k, s, r) for k, s, r, _ in defects}
+    fresh = [d for d in defects if d[:3] not in allow]
+    stale = sorted(allow - seen)
+    for kind, subject, rule, where in fresh:
+        if kind == "owner":
+            print(f"\n{where}  OWNER: {rule} belongs to no spec of this crate or of the foundations")
+        else:
+            print(f"\n{where}  TEST: `{subject}` cites {rule}, whose `Mechanism` does not name it")
+    for kind, subject, rule in stale:
+        print(f"\n{ALLOW.name}: `{kind} {subject} {rule}` matches no defect -- delete the line")
+    print(
+        f"\n{len(defects)} citation defects, {len(defects) - len(fresh)} listed in {ALLOW.name}; "
+        f"{uncited} tests a `Mechanism` names without the test citing the rule (counted)"
+    )
+    return len(fresh) + len(stale)
+
+
 def main() -> int:
     check = "--check" in sys.argv
     total = 0
@@ -223,6 +355,15 @@ def main() -> int:
             fence_defects += 1
             print(f"\n{rel}:{lineno}  LOOSE-IMPL (statement at fence depth 0): {sig}")
     print(f"\n{total} lines of function bodies across {files} specs; {fence_defects} fence defects")
+    citations = check_citations()
+    if check and citations:
+        print(
+            "\nERROR: a rule cited in a crate belongs to that crate's application or to "
+            "the foundations, and a test that cites a rule is named by its `Mechanism`. "
+            "Move the citation, add the test to the row, or drop the claim.",
+            file=sys.stderr,
+        )
+        return 1
     if check and (total or fence_defects):
         print(
             "\nERROR: a spec states what and why, the source states how "

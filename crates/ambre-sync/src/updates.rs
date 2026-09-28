@@ -741,7 +741,7 @@ mod tests {
     /// snapshot id.
     fn setup() -> (
         SyncState,
-        flume::Receiver<LogicEvent>,
+        ambre_bus::conduit::Receiver<LogicEvent>,
         DocumentId,
         DocumentKey,
         SigningKey,
@@ -776,7 +776,7 @@ mod tests {
         pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
     }
 
-    fn drain(rx: &flume::Receiver<LogicEvent>) -> Vec<LogicEvent> {
+    fn drain(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> Vec<LogicEvent> {
         rx.try_iter().collect()
     }
 
@@ -856,7 +856,7 @@ mod tests {
     // -- Snapshot lifecycle (upload adoption + cold-start seq gating) ----------
 
     /// Drain the WsClientMsg this state sent to its mock WS, decoded.
-    fn drain_ws(rx: &flume::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+    fn drain_ws(rx: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
         rx.try_iter()
             .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
             .collect()
@@ -868,7 +868,7 @@ mod tests {
     #[test]
     fn open_document_ready_gates_request_missing_on_covered_seq() {
         let (mut state, _rx, doc, key, _sk, _snap) = setup();
-        let (ws_tx, ws_rx) = flume::unbounded();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let snapshot_id = SnapshotId::new();
 
@@ -906,7 +906,7 @@ mod tests {
     #[test]
     fn open_document_ready_without_snapshot_requests_full_history() {
         let (mut state, _rx, doc, key, _sk, _snap) = setup();
-        let (ws_tx, ws_rx) = flume::unbounded();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
 
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
@@ -994,7 +994,7 @@ mod tests {
     #[test]
     fn open_document_ready_deferred_to_initial_replay() {
         let (mut state, rx, doc, key, _sk, _snap) = setup();
-        let (ws_tx, _ws_rx) = flume::unbounded();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
 
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
@@ -1089,7 +1089,7 @@ mod tests {
     fn document_ready_carries_the_role_on_both_paths() {
         // Deferred path: server document over a live WS, ready only after replay.
         let (mut state, rx, doc, key, _sk, _snap) = setup();
-        let (ws_tx, _ws_rx) = flume::unbounded();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,

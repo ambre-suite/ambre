@@ -6,7 +6,7 @@
 use ambre_bus::{DocType, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand};
 use ambre_sync::mock::MockWsTransport;
 
-fn drain_rest(rx: &flume::Receiver<LogicEvent>, expected_id: RequestId) -> RestEvent {
+fn drain_rest(rx: &ambre_bus::conduit::Receiver<LogicEvent>, expected_id: RequestId) -> RestEvent {
     let events: Vec<LogicEvent> = rx.try_iter().collect();
     for evt in events {
         if let LogicEvent::Rest { id, evt } = evt {
@@ -22,7 +22,7 @@ fn setup(
     with_mock: bool,
 ) -> (
     ambre_sync::SyncState,
-    flume::Receiver<LogicEvent>,
+    ambre_bus::conduit::Receiver<LogicEvent>,
     MockWsTransport,
 ) {
     let (logic_sink, logic_rx) = ambre_sync::LogicSink::channel();

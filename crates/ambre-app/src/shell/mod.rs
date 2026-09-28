@@ -20,8 +20,8 @@ use app_root::AppRoot;
 /// so the imperative engine wiring in `main` can read it back.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_shell(
-    to_logic: flume::Sender<LogicCommand>,
-    clipboard_paste: flume::Sender<ClipboardPaste>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     boot_doc: Option<DocumentId>,
@@ -43,6 +43,9 @@ pub(crate) fn mount_shell(
         RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
     >,
     boot_is_toile: bool,
+    boot_is_prose: bool,
+    prose_figures: RwSignal<Option<[String; 5]>>,
+    prose_signals: crate::host::ProseSignals,
     style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
     chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>>,
     formula_ref: RwSignal<String>,
@@ -163,6 +166,9 @@ pub(crate) fn mount_shell(
             find_state_toile,
             find_result_toile,
             boot_is_toile,
+            boot_is_prose,
+            prose_figures,
+            prose_signals,
             formula_ref,
             formula_text,
             formula_action,

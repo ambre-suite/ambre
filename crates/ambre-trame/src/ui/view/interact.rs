@@ -504,17 +504,13 @@ impl TrameView {
             self.handle_input(&InputEvent::Text { text: blob.text });
             return;
         }
-        // `own_copy` means the clipboard still carries THIS tab's ownership token,
-        // so it holds our own last copy. Paste it from memory at full fidelity,
-        // immune to the (Firefox-fragile) async OS payload write. Otherwise a
-        // foreign copy replaced it -- honor the OS blob.
-        let source = match &self.last_clip {
-            Some(clip) if own_copy => clip,
-            _ => &blob,
-        };
+        // The kept copy serves on this tab's token, whatever the asynchronous
+        // OS write did; otherwise the OS blob does (`UI-THREAD-053`).
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, own_copy);
         let payload = source
             .ambre
             .as_ref()
+            .filter(|_| !source.plain)
             .and_then(|bytes| postcard::from_bytes::<ambre_bus::ClipboardPayload>(bytes).ok());
         match payload {
             Some(payload) => self.grid_paste_payload(payload),

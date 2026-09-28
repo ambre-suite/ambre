@@ -264,7 +264,7 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
         }
     }
     // Stamp the new version inside the same commit as the shape change
-    // (`TRAME-026`).
+    // (`SCHEMA-018`).
     stamp(doc);
     doc.commit();
     Ok(())
@@ -561,6 +561,20 @@ mod tests {
         assert!(matches!(
             gate(&bytes).expect_err("refused"),
             SchemaError::VersionUnreadable { .. }
+        ));
+    }
+
+    /// The engine's refusal comes first, before the register is read. The order
+    /// is the rule (`SCHEMA-014`). A payload read after a failed import shows an
+    /// absent register, which `SCHEMA-005` values at 0, which the verdict calls
+    /// `Older`. The migration path opens, and bytes the engine just refused are
+    /// carried forward and opened. That is the back door `SCHEMA-013` closes
+    /// for a register that is present and unreadable.
+    #[test]
+    fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
+        assert!(matches!(
+            gate(&[0xFF, 0x00, 0xFF]).expect_err("refused"),
+            SchemaError::PayloadRejected
         ));
     }
 

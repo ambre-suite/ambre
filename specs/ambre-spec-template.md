@@ -76,13 +76,15 @@ the eight kinds of section 1.C, and it is closed.
 ```text
 # AMBRE -- FEATURE: [NAME]        (a schema: # AMBRE -- SPEC: [APP] CRDT SCHEMA)
 **Type:** Vertical (feature) | Horizontal (framework) | Schema (persistence format)
+**Applications:** Prose, Trame, Toile      (a horizontal document whose rules each app holds)
 **Implementation:** implemented | partial | design-only
 
 > Two or three lines, in user terms: what this holds, and the problem it solves.
 ```
 
 `Type` says what kind of document this is. `Implementation` is about **the code it describes**, and
-it is what stops a stub reading like a shipped subsystem.
+it is what stops a stub reading like a shipped subsystem. `Applications` is optional: a horizontal
+document declares it when some of its rules bind what each application does with the shared code.
 
 | Value | Means |
 | :--- | :--- |
@@ -151,7 +153,7 @@ carries both:
 | `Sources` | where the rule comes from, `;` between one source and the next. Each source names its kind, its target and, where it has one, its section, in one of six forms: **a section** of this spec (`this spec section 3`); a **named `document.md`**, with the section it lands in and the rule ids it cites (`` `1-Foundations/ambre-spec-message-bus.md section 4` (`BUS-018`) ``); a **bare rule id**, which resolves through the ledger without naming the file that declares it (`` `ZK-001` ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; or **`derived`**, which claims no source but the design. A source outside the six is refused on its own, whatever the sources beside it read. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Mechanism` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable. The `Verification` answer under the table asks a different question, and section 5 says why the column is the cell that carries the mechanism's name |
 | `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
-| `Status` | one of the six values below. An empty cell fails |
+| `Status` | one of the seven values below. An empty cell fails |
 
 **The mechanism tokens.** The closed set `Mechanism` draws on. Each token names a rung of the
 ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
@@ -159,7 +161,7 @@ where the two disagree; this table invents no rung of its own.
 
 | Token | The rung it names |
 | :--- | :--- |
-| `` `ambre_crate::module::test_name` `` | the belt: a test that runs in a tier of `ambre-spec-testing.md section 4`. `Trame`, `Toile`, `Prose` or `chrome` may precede it when the same rule is held once per application |
+| `` `ambre_crate::module::test_name` `` | the belt: a test that runs in a tier of `ambre-spec-testing.md section 4`. `Trame`, `Toile`, `Prose` or `chrome` may precede it when the same rule is held once per application, below |
 | `` `::second_test` `` | a continuation of the path before it, in that path's module |
 | `type-level` | newtypes, enums, typestate, `#[must_use]` -- the invariant holds if it compiles |
 | `structural` | the construction is the proof: the state has no shape the violation could take |
@@ -168,6 +170,7 @@ where the two disagree; this table invents no rung of its own.
 | `target-build` | the build is the mechanism: the code compiles only under this flag, this manifest entry or this generated file, so the CI build fails without it |
 | `lint-wall` | `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` |
 | `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
+| `ci-gate` | a gate in `scripts/`, run by a `just` recipe in the CI `lint` job. The clause names the script |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
 | `qa-manual` | the two places the doctrine declares mechanism-free: the wgpu pipeline, and the DOM glue |
 | `human-review` | cryptography, line by line, by decision |
@@ -179,11 +182,21 @@ says where the mechanism is, and nothing more: it locates, and it argues nothing
 the tier or the feature the test runs under. On a token it names the shape, or what the reviewer
 reads.
 
-**Seven tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
-`target-build`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny` names one
-file. These seven name a shape or a habit, so the bare token tells a reader nothing to go and read.
+**Eight tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
+`target-build`, `ci-gate`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny`
+names one file. These eight name a shape, a habit or one script of fifteen, so the bare token
+tells a reader nothing to go and read.
 **Two tokens must not**: `none` and `not built` name no mechanism for a clause to locate. What
 follows either one is an argument, and it belongs in `Gap`.
+
+**A rule each application holds names a test in each.** A test of the shared crate proves the
+shared code, and never that an application calls it: `KINETIC-002` read `verified` while Toile broke
+it. So a row binding what each application does labels its tests `Prose`, `Trame` or `Toile`, and
+its document declares the `Applications` field. Such a row is `verified` only once every declared
+application has its test; until then it is `untested`, and `Gap` names the ones missing.
+`contracts.py` fails a labelled row whose document declares no field, a label the field leaves out,
+and a `verified` row missing an application. A row with no label is the shared code's own rule, and
+the reviewer holds which rows need one.
 
 **The six gap openers.** The closed set `Gap` opens on. What follows an opener is prose, and it is
 the one place in the row where an argument belongs.
@@ -204,13 +217,17 @@ the one place in the row where an argument belongs.
   cell says what is loose, and one cell saying both says neither.
 * **A `verified` row with a gap fails.** A status saying something turns red, beside a cell saying
   which half is loose, is two answers to one question. Move the status or close the gap.
+* **A `partial` row names its mechanism and opens its gap on `partial -- `.** An `untested` row
+  opening on it fails. The rule is half held, and `untested` reads as a row nothing tests at all.
+  A gap that holds nothing opens on `unheld -- `.
 
-**The six status values.** `Owes` is what the row must carry beside the status, and
+**The seven status values.** `Owes` is what the row must carry beside the status, and
 `contracts.py` holds it.
 
 | Value | Means | Owes |
 | :--- | :--- | :--- |
 | `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` | the mechanism |
+| `partial` | a mechanism holds part of the rule, and `Gap` says which part is left | the mechanism and a Story |
 | `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | a Story |
 | `untested` | the code exists, nothing holds it, and a mechanism could | a Story |
 | `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | nothing |
@@ -261,6 +278,12 @@ every row of it is an `INV`.
 `FRAME`.** A frame condition is the rule nobody writes, and it is the one that catches an operation
 which fixes its target and corrupts a neighbour. It is legitimately `untested`: naming what an
 operation leaves alone costs a row, and proving it costs an isolation assertion.
+
+A frame another document already states is cited, not copied. The line under the operation table
+reads ``**Frame:** `UI-THREAD-044` ``. It names the shared `FRAME` rows the operation obeys, and
+answers the completeness rule as a local row does. A copy under a second id drifts from its
+original, so `contracts.py` refuses two rows whose statements match word for word, whatever they
+cite.
 
 **Four rules a script cannot hold**, and they are what keeps two kinds from becoming one:
 
@@ -347,7 +370,7 @@ directly under the table in every document that carries one.
 | :--- | :--- | :--- |
 | `Budget` | what this costs, and where the figure lives | a row of `ambre-spec-budgets.md`, cited; or `none`, and why |
 | `Boundary` | whether anything here reaches the relay, holds a key or opens a socket | the rule that seals it; or `none`, and why |
-| `Verification` | how much of the table is held, and by what | the counts per status, and the rows that are the gaps |
+| `Verification` | how much of the table is held, and by what | the counts per status, written by `just contracts-write`, then the rows that are the gaps |
 
 **The three answers together are one paragraph, and one paragraph is six sentences.** That is
 `prose.py`'s cap, and a reader sees the three bullets as one block. Six sentences under the 25-word
@@ -388,7 +411,7 @@ itself is stated in the section that owns it, never here.
 | The header says what the reader is holding | `spec_shape.py` -- a missing field, or `Implementation` outside the three values. `feature_inventory.py`, **asymmetric** -- `implemented` beside an unbuilt row; claiming less than the rows show passes | whether the clause after the value is true |
 | A vocabulary is declared once, here | `template_vocabulary.py` -- a table of this file reworded, duplicated, or carrying a row count its heading does not state. It raises at import, so every gate that reads a vocabulary goes red | a count opening a bullet list, which no table check reads: moving one bullet between sections leaves it stating a number nothing holds |
 | A rule says what it binds | `contracts.py` -- a `Kind` cell outside the eight, and a table mixing a state kind with an operation kind | whether the kind is the right one of the eight, per section 1.C |
-| An operation declares its frame | `contracts.py` -- an operation table with a `POST` and no `FRAME` | whether the frame names the right state |
+| An operation declares its frame | `contracts.py` -- an operation table with a `POST`, no `FRAME` and no `**Frame:**` line; a `**Frame:**` line citing no `FRAME` row; two rows stating one rule word for word | whether the frame names the right state |
 | One row, one rule | `contracts.py` -- a second MUST after an `and`, outside `FAIL` and `FRAME`. It **reports** the ones carrying a subject between the two, and fails on the rest | whether a reported row is a convergence rule, which states one thing from both ends |
 | One assertion is not two guarantees | `contracts.py` **reports** a test backing two `verified` rows, and fails on none | whether each row has its own assertion |
 | Every claim carries its status | `contracts.py` -- a missing or unknown `Status`. `feature_inventory.py` -- a feature document declaring no contract table | -- |

@@ -26,6 +26,10 @@
 * **A row that ships moves three cells.** `Mechanism` names the mechanism, `Gap` reads `none`,
   and `Status` becomes `verified`. The ladder of mechanisms is `ai/ambre-testing.md`.
 * **A row whose mechanism does not exist becomes `untested`**, and it keeps its Story.
+* **A row whose mechanism holds part of the rule becomes `partial`**, its `Gap` opening on
+  `partial -- `, and it keeps its Story.
 * **Regenerate the three artefacts:** `just index-write`, `just contracts-write`, `just
-  inventory-write`. Each one re-reads the corpus, so the order is free.
+  inventory-write`. Each one re-reads the corpus, so the order is free. The counts of each
+  `Verification` answer and the `human-review` table of `CONTRIBUTING.md` are among them:
+  never recount them by hand.
 * **Ticking the box is the whole of it**, as `specs/ambre-roadmap.md` section 1 states.

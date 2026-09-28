@@ -22,6 +22,10 @@ use super::*;
 /// relay, the dispatcher, the SPA route poll. So this driver knows nothing about
 /// commands or Leptos. `raf` gates only the render (a modal / landing overlay
 /// freezes the canvas), never the relay.
+///
+/// `to_logic` carries the one command this driver sends itself. A font face
+/// fetched on demand is forwarded to the Logic thread (`CANVAS-068`). That
+/// thread measures Prose pages on a context of its own, and cannot fetch.
 #[allow(clippy::too_many_arguments)]
 pub fn run_with<F, C, P>(
     canvas_id: &str,
@@ -29,7 +33,8 @@ pub fn run_with<F, C, P>(
     make_child_fn: C,
     mut pre_frame: P,
     raf: RafControl,
-    paste_rx: flume::Receiver<ClipboardPaste>,
+    paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
     F: FnOnce(f64, f64, TextInput) -> AppView,
@@ -95,6 +100,7 @@ where
         Some(make_child),
         clip_token,
         paste_rx,
+        to_logic,
     )));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------
@@ -125,9 +131,15 @@ where
         });
     }
 
+    // The plain-paste chord rides the browser's own `paste` event, which says
+    // nothing of the chord that raised it. The keydown notes it, and the
+    // `paste` listener that follows reads and clears it (`PROSE-UI-227`).
+    let plain_paste = Rc::new(std::cell::Cell::new(false));
+
     // -- Keyboard input -> view. ----------------------------------------------
     {
         let host_c = Rc::clone(&host);
+        let plain_c = Rc::clone(&plain_paste);
         // The canvas text pipe: the one editable element whose keydowns the grid
         // owns. Navigation/edit keys ride the document listener even while it is
         // focused, since text itself arrives via the textarea `input` event.
@@ -142,6 +154,11 @@ where
                 if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
                     return;
                 }
+                plain_c.set(
+                    event.shift_key()
+                        && (event.ctrl_key() || event.meta_key())
+                        && event.key().eq_ignore_ascii_case("v"),
+                );
                 let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
                     key: event.key(),
                     ctrl: event.ctrl_key(),
@@ -227,6 +244,9 @@ where
             let host_e = Rc::clone(&host_c);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
+                    // A new copy owns the clipboard until its own asynchronous
+                    // write lands (`UI-THREAD-054`).
+                    host_e.borrow().clip_published().set(false);
                     match host_e.borrow_mut().clipboard_write(cut) {
                         // Nothing selected: let the browser default proceed.
                         ambre_bus::CopyOutcome::Nothing => {}
@@ -240,13 +260,11 @@ where
                         }
                         // Authoritative copy: the full payload is built on the Logic
                         // thread and mirrored to the OS clipboard a frame later
-                        // (`poll_clipboard` -> `async_write_clipboard`). That async
-                        // write needs a user-activation context Firefox denies from
-                        // the rAF loop, so it is best-effort. To make a same-tab
-                        // paste reliable regardless, we ALSO write the ownership
-                        // token synchronously here -- this always reaches the OS
-                        // clipboard. Prevent the default so the browser does not
-                        // clobber the clipboard with the empty textarea.
+                        // (`poll_clipboard` -> `async_write_clipboard`). Until
+                        // that write lands, the ownership token written here is
+                        // all the clipboard holds (`UI-THREAD-007`). Prevent the
+                        // default so the browser does not clobber the clipboard
+                        // with the empty textarea.
                         ambre_bus::CopyOutcome::Deferred => {
                             let token = host_e.borrow().clip_token().to_owned();
                             if let Some(data) = event.clipboard_data() {
@@ -268,8 +286,10 @@ where
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
+        let plain_c = Rc::clone(&plain_paste);
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
+                let plain = plain_c.replace(false);
                 let Some(data) = event.clipboard_data() else {
                     return;
                 };
@@ -281,26 +301,74 @@ where
                 let ambre = data
                     .get_data(AMBRE_CLIPBOARD_TYPE)
                     .ok()
-                    .filter(|s| !s.is_empty())
+                    .filter(|s| !s.is_empty() && !plain)
                     .and_then(|b64| base64_decode(&b64));
                 let text = data.get_data("text/plain").unwrap_or_default();
-                // Same-tab ownership: the synchronous token survives even when the
-                // async payload write failed (Firefox). So a match means paste our
-                // own in-memory copy at full fidelity.
-                let own_copy = {
+                // The formatting another editor wrote, for a view that reads it.
+                let html = data
+                    .get_data("text/html")
+                    .ok()
+                    .filter(|s| !s.is_empty() && !plain);
+                // Same-tab ownership: the synchronous token is here while no
+                // asynchronous write replaced it, or in the HTML a browser
+                // refusing the `web ` types received (`UI-THREAD-056`). A match means paste our own
+                // in-memory copy at full fidelity.
+                let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().to_owned();
                     data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
                         .is_ok_and(|t| !t.is_empty() && t == token)
+                        || html
+                            .as_deref()
+                            .and_then(ambre_bus::ClipboardBlob::html_token)
+                            == Some(token.as_str())
                 };
-                if ambre.is_none() && text.is_empty() && !own_copy {
+                // After the last copy's asynchronous write landed, the token
+                // and the private bytes sit under `web ` types the event cannot
+                // see. Read them back through the asynchronous API. A refused
+                // read pastes what the event carried (`UI-THREAD-054`).
+                if !plain
+                    && !own_copy
+                    && host_c.borrow().clip_published().get()
+                    && let Some(clipboard) = crate::platform::async_clipboard()
+                {
+                    event.prevent_default();
+                    let fallback = ambre_bus::ClipboardBlob {
+                        text,
+                        html,
+                        ambre,
+                        plain: false,
+                    };
+                    let read = clipboard.read();
+                    let host_a = Rc::clone(&host_c);
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let (blob, own_copy) = match crate::platform::read_clipboard_blob(read)
+                            .await
+                        {
+                            Some((blob, token)) => {
+                                let own = token.as_deref() == Some(host_a.borrow().clip_token());
+                                (blob, own)
+                            }
+                            None => (fallback, false),
+                        };
+                        host_a.borrow_mut().paste_clipboard(blob, own_copy);
+                    });
+                    return;
+                }
+                if ambre.is_none() && html.is_none() && text.is_empty() && !own_copy {
                     return;
                 }
                 // Prevent the native insert (which would also fire `input` and
                 // double-paste); route through the host's paste path.
                 event.prevent_default();
-                host_c
-                    .borrow_mut()
-                    .paste_clipboard(ambre_bus::ClipboardBlob { text, ambre }, own_copy);
+                host_c.borrow_mut().paste_clipboard(
+                    ambre_bus::ClipboardBlob {
+                        text,
+                        html,
+                        ambre,
+                        plain,
+                    },
+                    own_copy,
+                );
             },
         );
         ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())
@@ -446,10 +514,32 @@ where
             .map(|w| w.device_pixel_ratio())
             .unwrap_or(1.0);
 
+        // A cancel carries no reliable position, so the last one stands in.
+        let mut last = (0.0, 0.0);
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
-                let x = event.offset_x() as f64 * dpr;
-                let y = event.offset_y() as f64 * dpr;
+                let cancelled = event.type_() == "pointercancel";
+                let (x, y) = if cancelled {
+                    last
+                } else {
+                    (event.offset_x() as f64 * dpr, event.offset_y() as f64 * dpr)
+                };
+                last = (x, y);
+                // A finger pans the view rather than selecting.
+                if event.pointer_type() == "touch" && host_c.borrow().captures_pointer() {
+                    let phase = match event.type_().as_str() {
+                        "pointerdown" => TouchPhase::Down,
+                        "pointermove" => TouchPhase::Move,
+                        "pointerup" => TouchPhase::Up,
+                        "pointercancel" => TouchPhase::Cancel,
+                        _ => return,
+                    };
+                    let now = event.time_stamp();
+                    if host_c.borrow_mut().touch(phase, x as f32, y as f32, now) {
+                        event.prevent_default();
+                    }
+                    return;
+                }
                 let ev = match event.type_().as_str() {
                     "pointerdown" => InputEvent::PointerDown {
                         x,
@@ -460,24 +550,73 @@ where
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     "pointermove" => InputEvent::PointerMove { x, y },
-                    "pointerup" => InputEvent::PointerUp {
+                    // The browser took a mouse gesture over: it ends where
+                    // it last was, as a release (`KINETIC-010`).
+                    "pointerup" | "pointercancel" => InputEvent::PointerUp {
                         x,
                         y,
-                        button: event.button(),
+                        button: if cancelled { 0 } else { event.button() },
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     _ => return,
                 };
+                let is_down = matches!(ev, InputEvent::PointerDown { .. });
                 let consumed = host_c.borrow_mut().handle_input(&ev);
                 if consumed {
                     event.prevent_default();
+                    // A drag keeps its moves past the canvas edge, so the
+                    // page can scroll under it (`PROSE-UI-038`).
+                    if is_down
+                        && host_c.borrow().captures_pointer()
+                        && let Some(target) = event
+                            .current_target()
+                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    {
+                        let _ = target.set_pointer_capture(event.pointer_id());
+                    }
                 }
             },
         );
-        for event_type in &["pointerdown", "pointermove", "pointerup"] {
+        for event_type in &["pointerdown", "pointermove", "pointerup", "pointercancel"] {
             canvas
                 .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
                 .expect("add pointer listener");
+        }
+        cb.forget();
+    }
+
+    // -- Dropped text -> view. -----------------------------------------------
+    // `dragover` must be cancelled for the canvas to accept a drop. Only plain
+    // text is read; a dropped file is left to the browser (`PROSE-UI-204`).
+    {
+        let host_c = Rc::clone(&host);
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |event: web_sys::DragEvent| {
+            let Some(data) = event.data_transfer() else {
+                return;
+            };
+            if event.type_() == "dragover" {
+                if data.types().includes(&"text/plain".into(), 0) {
+                    event.prevent_default();
+                }
+                return;
+            }
+            let text = data.get_data("text/plain").unwrap_or_default();
+            if text.is_empty() {
+                return;
+            }
+            let x = (event.offset_x() as f64 * dpr) as f32;
+            let y = (event.offset_y() as f64 * dpr) as f32;
+            if host_c.borrow_mut().drop_text(x, y, text) {
+                event.prevent_default();
+            }
+        });
+        for event_type in &["dragover", "drop"] {
+            canvas
+                .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
+                .expect("add drop listener");
         }
         cb.forget();
     }

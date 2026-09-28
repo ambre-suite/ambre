@@ -9,8 +9,11 @@ reads it.
 
 The rules it enforces, beyond generating the file:
 
-  * a status must be one of the six declared values;
-  * a `failing`, `untested` or `unimplemented` row must name the Story that closes
+  * a status must be one of the seven declared values;
+  * **a rule half held is `partial`, never `untested`.** The status names a
+    mechanism and a `Gap` opening on `partial -- `, so the ledger tells a row
+    whose wiring is loose from a row nothing tests;
+  * a `partial`, `failing`, `untested` or `unimplemented` row must name the Story that closes
     its gap ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved". Reading the
@@ -49,8 +52,13 @@ The rules it enforces, beyond generating the file:
     both legitimately carry a list; the other six kinds do not. A second MUST
     after an `and` is two rules under one status, and the half nothing tests
     breaks in green;
+  * **a rule each application holds names a test in each one.** A row labelling
+    its tests `Prose`, `Trame` or `Toile` sits in a document declaring
+    `**Applications:**`, and is `verified` only once every declared application
+    has its test. One test of the shared crate proved `KINETIC-002` while Toile
+    broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
-  * **every gap that can close names its Story.** A `failing`, `untested` or
+  * **every gap that can close names its Story.** A `partial`, `failing`, `untested` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
     resolve to one open row of it. A per-document ceiling on `unverified` sums
     three states nobody can compare: a rule the code breaks today reads as a
@@ -59,10 +67,12 @@ The rules it enforces, beyond generating the file:
     gap cannot close carries `qa-manual` or `human-review`, which owe no Story:
     they are decisions, not debt;
   * **the counts under a table are the table's own.** The `Verification` answer
-    is written by hand, beside a table that is not, so the two drift: a document
+    opens on counts `--write` derives from the table and writes over the head of
+    the bullet, keeping the prose after it. A count by hand drifts: a document
     claiming one `verified` row fewer than it carries claims it in prose nobody
-    recounts. A status the answer leaves out claims zero, so an omission is
-    compared like a figure. The presence of the label stays `spec_shape.py`,
+    recounts. Without `--write`, a count off the table is refused as stale. The
+    `human-review` table of `CONTRIBUTING.md` is written from the rows the same
+    way. The presence of the label stays `spec_shape.py`,
     which holds the three answers together.
 
 What this still cannot see: a row citing a test that runs, passes, and does not
@@ -77,6 +87,7 @@ roll-up behind.
 import json
 import re
 import sys
+import textwrap
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import NamedTuple
@@ -112,7 +123,7 @@ JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that close them
 LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
 # The three that are debt: each owes an open Story of the roadmap.
-OWES_STORY = ("failing", "untested", "unimplemented")
+OWES_STORY = ("partial", "failing", "untested", "unimplemented")
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 
 # An id minted once, then withdrawn because the rule it carried left the
@@ -125,6 +136,24 @@ APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 # the same document already states it, which is the only other entry this
 # register takes.
 RETIRED = {
+    # Withdrawn into the shared row that states the same rule word for word,
+    # found by `twin_defects`: each application held a copy of it.
+    "TRAME-026": "SCHEMA-018",
+    "TOILE-028": "SCHEMA-018",
+    "PROSE-029": "SCHEMA-018",
+    "TRAME-225": "SCHEMA-019",
+    "TOILE-258": "SCHEMA-019",
+    "PROSE-103": "SCHEMA-019",
+    "TRAME-UI-003": "UI-THREAD-002",
+    "TOILE-UI-311": "UI-THREAD-002",
+    "PROSE-UI-003": "UI-THREAD-002",
+    "TRAME-152": "UNDO-010",
+    "TOILE-095": "UNDO-010",
+    "TRAME-121": "UNDO-011",
+    "TOILE-096": "UNDO-011",
+    "TRAME-UI-060": "UI-THREAD-044",
+    "TOILE-216": "SYNC-101",
+    "PROSE-049": "SYNC-101",
     "PROSE-020": "PRESENCE-003",
     "PROSE-021": "PRESENCE-004",
     "PROSE-UI-011": "PRESENCE-001, PRESENCE-003, PRESENCE-005",
@@ -191,6 +220,9 @@ RETIRED = {
     "TRAME-IO-032": "PDF-001",
     "PROSE-IO-034": "PDF-006",
     "PROSE-IO-036": "CANVAS-028",
+    "PROSE-102": "SCHEMA-017",
+    "TRAME-224": "SCHEMA-017",
+    "TOILE-257": "SCHEMA-017",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to
@@ -223,6 +255,11 @@ ROW = re.compile(
 # mechanism leaves open are two columns, and a header that merges them back into
 # one is refused (`ambre-spec-template.md section 1.B`).
 TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
+# `**Frame:** `UI-THREAD-044`` on the line that closes an operation table: the
+# operation leaves alone what a shared `FRAME` row states, so it cites that row
+# instead of copying its statement under a second id.
+FRAME_LINE = re.compile(r"^\*\*Frame:\*\*\s*(?P<ids>.+)$")
+FRAME_ID = re.compile(r"`([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+)`")
 
 
 def header_cells(header: str) -> list[str]:
@@ -482,6 +519,59 @@ MECHANISM_PATH = re.compile(
     r"`(?:::)?[a-z_][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*`$"
 )
 
+# The header field a shared document declares the applications it binds with:
+# `**Applications:** Prose, Trame, Toile`. A row labelling its tests per
+# application is a rule each of them must hold, so it names one test for each
+# (`ambre-spec-template.md section 1.B`). One test of the shared crate proves
+# the shared code, never that an application calls it: `KINETIC-002` read
+# `verified` while Toile broke it.
+APPLICATIONS = re.compile(r"^\*\*Applications:\*\*\s+(?P<apps>.+?)\s*$")
+APPLICATION_NAMES = ("Prose", "Trame", "Toile")
+APPLICATION_LABEL = re.compile(r"(?:^|;)\s*(Prose|Trame|Toile)\s+`")
+
+
+def declared_applications(line: str) -> tuple[list[str], list[str]] | None:
+    """The applications a header line declares, and the names it gets wrong."""
+    m = APPLICATIONS.match(line)
+    if not m:
+        return None
+    names = [name.strip() for name in m["apps"].split(",")]
+    return names, [name for name in names if name not in APPLICATION_NAMES]
+
+
+def per_application_defects(
+    where: str, mechanism: str, status: str, apps: list[str] | None
+) -> list[str]:
+    """Whether a row held once per application names a test in each one.
+
+    A row with no label is the shared code's own rule, and passes. A labelled
+    row may be `verified` only once every declared application has its test:
+    the ones missing are the half nothing holds.
+    """
+    labels = set(APPLICATION_LABEL.findall(mechanism))
+    if not labels:
+        return []
+    if apps is None:
+        return [
+            f"{where}: the `Mechanism` names a test per application, and the "
+            f"document declares no `**Applications:**` field to hold it to"
+        ]
+    stray = sorted(labels - set(apps))
+    if stray:
+        return [
+            f"{where}: the `Mechanism` labels {', '.join(stray)}, which the "
+            f"`**Applications:**` field does not declare"
+        ]
+    missing = [app for app in apps if app not in labels]
+    if status == "verified" and missing:
+        return [
+            f"{where}: `verified` with no test in {', '.join(missing)} -- a rule "
+            f"each application must hold is proven in each, so the row is "
+            f"`partial` until every declared application names its test"
+        ]
+    return []
+
+
 # `GAP_OPENERS` is the closed set a `Gap` cell opens on. The template writes the
 # five carrying an argument with the dash and the space that argument follows,
 # and `none` bare, so the two families are read off the spelling rather than
@@ -546,6 +636,19 @@ def gap_defects(where: str, cell: str, mechanism: str, status: str) -> list[str]
         defects.append(
             f"{where}: `Mechanism` is {mechanism!r} and `Gap` is {cell!r} -- a row "
             f"with no mechanism and no gap claims a coverage it does not have"
+        )
+    held = mechanism.split(";")[0].partition(" -- ")[0].strip() not in BARE_TOKENS
+    half = cell.startswith("partial -- ")
+    if status == "partial" and not (half and held):
+        defects.append(
+            f"{where}: status is `partial` -- the row names the mechanism that "
+            f"holds half the rule, and `Gap` opens on 'partial -- ' to say which "
+            f"half is left"
+        )
+    if status == "untested" and half:
+        defects.append(
+            f"{where}: `untested` beside a `Gap` opening on 'partial -- ' -- a rule "
+            f"half held is `partial`, and one nothing holds opens on 'unheld -- '"
         )
     if status == "verified" and not bare:
         defects.append(
@@ -910,6 +1013,13 @@ COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
 COUNT_SEP = re.compile(r",\s+(?:and\s+)?")
 
 
+def continues_bullet(line: str) -> bool:
+    """Whether a line carries on the bullet above it: indented, not blank, and
+    not a nested bullet of its own."""
+    stripped = line.strip()
+    return line[:1] in (" ", "\t") and bool(stripped) and not stripped.startswith(("* ", "- "))
+
+
 def stated_counts(text: str) -> dict[str, int]:
     """The counts one `Verification` answer opens on, empty when it opens on none.
 
@@ -930,7 +1040,9 @@ def stated_counts(text: str) -> dict[str, int]:
     return counts
 
 
-def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
+def table_defects(
+    spec: str, table: list[tuple[int, str, str]], frame: list[str] | None = None
+) -> list[str]:
     """Whether one table that declares `Kind` obeys the grammar of section 1.C.
 
     Two rules about the table as a whole; the cells of one row are
@@ -945,6 +1057,10 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     refusal the operation performs. Writing both for one condition states one
     guard twice, and doubles one test into two `verified` rows. The template
     carries the test that separates them; a reader applies it.
+
+    `frame` holds the ids a `**Frame:**` line under the table cites. A cited
+    shared `FRAME` answers the completeness rule as a local one does; `main`
+    checks, once the corpus is read, that each id is a `FRAME` row.
     """
     defects = []
     # An unknown kind is reported once, by `row_defects`, which reads the cell
@@ -961,13 +1077,89 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
             f"{sorted(state)} and the operation kinds {sorted(operation)} -- an "
             f"operation carries a table of its own, under its own heading"
         )
-    if "POST" in kinds and "FRAME" not in kinds:
+    if frame is not None and "POST" not in kinds:
+        defects.append(
+            f"{spec}:{lineno}: a `**Frame:**` line closes a table that declares "
+            f"no `POST` -- the line answers an operation's frame, and this table "
+            f"states none"
+        )
+    if "POST" in kinds and "FRAME" not in kinds and not frame:
         defects.append(
             f"{spec}:{lineno}: this operation declares a `POST` and no `FRAME` "
             f"-- state what it MUST NOT touch, `untested` when nothing "
             f"isolates it"
         )
     return defects
+
+
+def render_counts(counts: Counter) -> str:
+    """The count run a `Verification` answer opens on, in the order of `STATUSES`."""
+    return ", ".join(f"{counts[s]} `{s}`" for s in STATUSES if counts[s])
+
+
+def rewrite_answer(path: Path, lineno: int, counts: Counter) -> bool:
+    """Writes the table's counts over the head of its `Verification` bullet.
+
+    The counts are derived, so a writer never states them: the run the bullet
+    opens on is replaced, the prose after it is kept, and the bullet is rewrapped
+    to the column limit. Answers whether the file changed.
+    """
+    lines = path.read_text().split("\n")
+    start = lineno - 1
+    end = start + 1
+    while end < len(lines) and continues_bullet(lines[end]):
+        end += 1
+    head = ANSWER.match(lines[start])
+    text = " ".join([head["text"]] + [l.strip() for l in lines[start + 1:end]])
+    pos, stated = 0, False
+    while (m := COUNT.match(text, pos)) is not None:
+        stated, pos = True, m.end()
+        sep = COUNT_SEP.match(text, pos)
+        if sep is None or COUNT.match(text, sep.end()) is None:
+            break
+        pos = sep.end()
+    rest = text[pos:] if stated else f". {text}"
+    body = f"* **Verification.** {render_counts(counts)}{rest}"
+    wrapped = textwrap.wrap(
+        body, width=100, subsequent_indent="  ",
+        break_long_words=False, break_on_hyphens=False,
+    )
+    if wrapped == lines[start:end]:
+        return False
+    lines[start:end] = wrapped
+    path.write_text("\n".join(lines))
+    return True
+
+
+# The list of `human-review` rows in `CONTRIBUTING.md`, written from the rows
+# between two markers, as the ledger is: a list kept by hand drifts.
+CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+REVIEW_OPEN = "<!-- human-review rows: generated by `just contracts-write`, never edit -->"
+REVIEW_CLOSE = "<!-- end of the human-review rows -->"
+
+
+def render_review_table(reviewed: list[tuple[str, str, str]]) -> str:
+    """The table of `human-review` rows, one line each, sorted by spec then id."""
+    lines = ["| Row | What the reviewer holds | Spec |", "| :--- | :--- | :--- |"]
+    for rid, statement, spec in sorted(reviewed, key=lambda r: (r[2], r[0])):
+        lines.append(f"| `{rid}` | {statement} | `{spec}` |")
+    return "\n".join(lines)
+
+
+def review_table_defects(reviewed: list[tuple[str, str, str]]) -> list[str]:
+    """Whether `CONTRIBUTING.md` lists the `human-review` rows the corpus holds."""
+    text = CONTRIBUTING.read_text()
+    head, sep, tail = text.partition(REVIEW_OPEN + "\n")
+    _, sep2, after = tail.partition(REVIEW_CLOSE)
+    if not sep or not sep2:
+        return [f"CONTRIBUTING.md: the `human-review` table has lost its markers"]
+    fresh = f"{head}{REVIEW_OPEN}\n{render_review_table(reviewed)}\n{REVIEW_CLOSE}{after}"
+    if fresh == text:
+        return []
+    if "--write" in sys.argv:
+        CONTRIBUTING.write_text(fresh)
+        return []
+    return ["CONTRIBUTING.md: the `human-review` table is stale -- run `just contracts-write`"]
 
 
 def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -> list[str]:
@@ -987,12 +1179,13 @@ def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -
         if status not in STATUSES:
             defects.append(
                 f"{where}: the `Verification` answer counts {status!r}, which is "
-                f"no status of the six"
+                f"no status of the seven"
             )
         elif stated.get(status, 0) != counts.get(status, 0):
             defects.append(
                 f"{where}: the `Verification` answer says {stated.get(status, 0)} "
-                f"`{status}` and the table holds {counts.get(status, 0)}"
+                f"`{status}` and the table holds {counts.get(status, 0)} -- the "
+                f"counts are derived: run `just contracts-write`"
             )
     return defects
 
@@ -1092,13 +1285,15 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "  split is the whole point: one number is a debt, the other is a plan.",
         "* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,",
         "  `human-review`, `qa-manual`. That number is the coverage debt of the product.",
-        "* **Every gap that can close names its Story.** A `failing`, `untested` or",
+        "* **Partial** counts a shipped row a mechanism holds in part: `partial`.",
+        "* **Every gap that can close names its Story.** A `partial`, `failing`, `untested` or",
         "  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and",
         "  `contracts.py` fails when that Story does not resolve. The roadmap is the debt",
         "  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
-        f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
+        f"**{sum(total.values())} rows: {shipped} shipped, of which {total['partial']} partial "
+        f"and {loose} loose. "
         f"{total['unimplemented']} unbuilt.**",
         "",
         "| Status | " + " | ".join(a.split("-", 1)[-1] for a in APPS) + " | Total |",
@@ -1114,8 +1309,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "",
         "> A document with no shipped row is omitted. `Loose` is the column to read.",
         "",
-        "| Document | Rows | Shipped | `verified` | Loose | Unbuilt |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+        "| Document | Rows | Shipped | `verified` | Partial | Loose | Unbuilt |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for spec, counts in sorted(per_spec.items()):
         built = sum(counts[s] for s in STATUSES if s != "unimplemented")
@@ -1124,7 +1319,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         slack = sum(counts[s] for s in LOOSE)
         lines.append(
             f"| `{Path(spec).name}` | {sum(counts.values())} | {built} | "
-            f"{counts['verified']} | {slack or ''} | {counts['unimplemented'] or ''} |"
+            f"{counts['verified']} | {counts['partial'] or ''} | {slack or ''} | "
+            f"{counts['unimplemented'] or ''} |"
         )
 
     ids_by_spec: dict[str, list[str]] = defaultdict(list)
@@ -1147,8 +1343,39 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
     return "\n".join(lines)
 
 
+def twin_defects(rows: list[tuple[str, str, str, str]]) -> list[str]:
+    """Every row stating a rule another row states word for word.
+
+    `rows` holds (where, id, statement, sources). A rule copied into a second
+    spec drifts: the copy is edited, the original is not, and two ids claim one
+    rule with two statuses. A copy that cites its twin is a deliberate instance
+    of it, which a reader can follow; a copy that cites nothing is the drift
+    waiting. Only the exact statement is compared, so a near copy passes:
+    similarity would flag rules that share a verb and nothing else.
+    """
+    by_text: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    for where, rid, statement, sources in rows:
+        text = " ".join(statement.split()).lower()
+        if text:
+            by_text[text].append((where, rid, sources))
+    defects = []
+    for twins in by_text.values():
+        if len(twins) < 2:
+            continue
+        ids = {rid for _, rid, _ in twins}
+        for where, rid, _ in twins:
+            others = ", ".join(sorted(ids - {rid}))
+            defects.append(
+                f"{where}: states word for word the rule of {others} -- keep one "
+                f"row, retire the other, and cite the kept `FRAME` on a "
+                f"`**Frame:**` line"
+            )
+    return defects
+
+
 def main() -> int:
     per_spec: dict[str, Counter] = {}
+    reviewed: list[tuple[str, str, str]] = []
     seen: dict[str, str] = {}
     errors: list[str] = []
     per_crate, pooled = declared_fns()
@@ -1163,6 +1390,11 @@ def main() -> int:
     # declared further down the corpus, so resolving one during the pass would
     # answer on the half read so far.
     cited_sources: list[tuple[str, str]] = []
+    # Every row's statement, for `twin_defects` once the corpus is read.
+    statements: list[tuple[str, str, str, str]] = []
+    # Each id's kind, and the `**Frame:**` citations checked against it at the end.
+    kind_of: dict[str, str] = {}
+    frame_refs: list[tuple[str, str]] = []
     # The rows `split_report` prints: a second keyword the refusal does not reach.
     split_candidates: list[tuple[str, str]] = []
 
@@ -1171,21 +1403,44 @@ def main() -> int:
             continue
         counts: Counter = Counter()
         answer: tuple[int, str] | None = None
+        in_answer = False
         rel = str(path.relative_to(SPECS))
         # The table being read, and whether its header declares `Kind`. A table
         # ends where the pipes do, so a heading, a bullet or a blank line
         # closes it and the rows it collected are checked as one operation.
         table: list[tuple[int, str, str]] = []
         columns: list[str] | None = None
+        apps: list[str] | None = None
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             stripped = line.lstrip()
+            declared = declared_applications(line)
+            if declared:
+                apps, unknown = declared
+                for name in unknown:
+                    errors.append(
+                        f"{rel}:{lineno}: `**Applications:**` names {name!r} -- "
+                        f"the field lists {', '.join(APPLICATION_NAMES)}"
+                    )
             head = TABLE_HEAD.match(line)
             # A blank line does not close a table: an author who breaks a long
             # operation table over one still writes one operation, and treating
             # the halves as two tables checked each half against nothing.
+            framed = FRAME_LINE.match(stripped)
+            frame = FRAME_ID.findall(framed["ids"]) if framed else None
+            if framed:
+                for ref in frame:
+                    frame_refs.append((f"{rel}:{lineno}", ref))
+                if not frame:
+                    errors.append(f"{rel}:{lineno}: a `**Frame:**` line cites no id")
+                elif columns is None or not table:
+                    errors.append(
+                        f"{rel}:{lineno}: a `**Frame:**` line that closes no "
+                        f"contract table -- it goes on the line under the "
+                        f"operation it frames"
+                    )
             if head or (stripped and not stripped.startswith("|")):
                 if columns is not None and table:
-                    errors += table_defects(rel, table)
+                    errors += table_defects(rel, table, frame)
                 table = []
                 columns = header_cells(line) if head else None
                 if columns is not None and KIND not in columns:
@@ -1208,9 +1463,17 @@ def main() -> int:
             errors += loose_citation_defects(
                 line, f"{path.relative_to(SPECS)}:{lineno}", bound, schedule, closed
             )
+            # A bullet wraps onto indented lines, and a count cut at the end of
+            # the first line must still reach the parse: the continuation is
+            # joined to the text until the bullet ends.
             bullet = ANSWER.match(line)
             if bullet:
                 answer = (lineno, bullet["text"])
+                in_answer = True
+            elif in_answer and answer and continues_bullet(line):
+                answer = (answer[0], f"{answer[1]} {stripped}")
+            else:
+                in_answer = False
             if not m:
                 continue
             rid, status, rest = m["id"], m["status"], m["rest"]
@@ -1226,6 +1489,7 @@ def main() -> int:
                 statement = cell.get(STATEMENT, "")
                 errors += row_defects(where, kind_cell, statement, cell.get(SOURCES, ""))
                 cited_sources.append((where, cell.get(SOURCES, "")))
+                statements.append((where, rid, statement, cell.get(SOURCES, "")))
                 # Both grammars need the two cells apart. A header that declares
                 # no `Gap` states the mechanism and the argument about it in one
                 # cell, which is the shape neither grammar can read.
@@ -1240,7 +1504,9 @@ def main() -> int:
                     mechanism = cell.get(MECHANISM, "")
                     errors += mechanism_defects(where, mechanism)
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
+                    errors += per_application_defects(where, mechanism, status, apps)
                 kind = kind_cell.strip("`")
+                kind_of[rid] = kind
                 table.append((lineno, rid, kind))
                 if (
                     kind not in BUNDLING_KINDS
@@ -1297,15 +1563,30 @@ def main() -> int:
                         leans[name].append(rid)
 
             counts[status] += 1
+            if status == "human-review":
+                reviewed.append((rid, cell.get(STATEMENT, "").strip(), path.name))
         if columns is not None and table:
             errors += table_defects(rel, table)
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
-            errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
+            found = answer_defects(str(path.relative_to(SPECS)), answer, counts)
+            if found and answer and "--write" in sys.argv:
+                rewrite_answer(path, answer[0], counts)
+                found = []
+            errors += found
 
+    errors += review_table_defects(reviewed)
     errors += audit_coverage_defects(findings, cited_audit)
     for where, sources in cited_sources:
         errors += source_defects(where, sources, seen)
+    errors += twin_defects(statements)
+    for where, ref in frame_refs:
+        if kind_of.get(ref) != "FRAME":
+            what = f"a `{kind_of[ref]}` row" if ref in kind_of else "no row"
+            errors.append(
+                f"{where}: `**Frame:**` cites `{ref}`, which is {what} -- the "
+                f"line cites a `FRAME` row"
+            )
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)

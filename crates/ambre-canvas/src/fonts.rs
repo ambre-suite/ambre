@@ -15,8 +15,9 @@
 //   2. The fetch resolves on this same thread (spawn_local) and drops the bytes
 //      into a shared inbox.
 //   3. Each frame `drain_into(font_cx)` registers any arrived faces into the
-//      shared `FontContext` and reports whether coverage changed. The caller
-//      can then drop the stale (tofu) layouts and force a repaint.
+//      shared `FontContext` and hands their bytes back. The caller drops the
+//      stale (tofu) layouts and forces a repaint. It also ships the same bytes
+//      to the Logic thread, which measures on a context of its own.
 //
 // A script is fetched at most once regardless of the outcome (success, HTTP
 // failure, or still in flight): `requested` latches on the first sighting.
@@ -49,134 +50,52 @@ const BASE_FONTS: [(&str, &str); 6] = [
     ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
 ];
 
-/// Fetch the [`BASE_FONTS`] same-origin and register every face that resolves
-/// into `font_cx`. Shared by the UI-thread GPU bootstrap and any other consumer
-/// that needs a text-capable `FontContext`. The PDF export pass is one: its
-/// fresh context would otherwise have zero faces and emit no glyphs. Fetch runs
-/// where a browser event loop exists; a face that fails to fetch is skipped.
-#[cfg(target_arch = "wasm32")]
-pub async fn load_base_fonts(font_cx: &mut parley::FontContext) {
-    for (url, label) in BASE_FONTS {
-        match crate::host::fetch_bytes(url).await {
-            Some(bytes) => {
-                font_cx.collection.register_fonts(bytes.into(), None);
-                tracing::info!("{label} loaded");
-            }
-            None => tracing::warn!("Failed to fetch {url}"),
-        }
-    }
-}
-
 /// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
-/// resolved. Used by the Main thread to seed the Logic thread's PDF-export
-/// `FontContext` (`LogicCommand::LoadFonts`). The Logic worker cannot fetch.
-/// The Main thread -- which has a browser event loop -- fetches on its behalf
-/// and ships the bytes across. A face that fails to fetch is simply omitted.
+/// resolved. The UI thread builds its own context from them, and the Main
+/// thread ships the same bytes to the Logic thread (`LogicCommand::LoadFonts`),
+/// which cannot fetch. A face that fails to fetch is logged and omitted.
 #[cfg(target_arch = "wasm32")]
 pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
     let mut faces = Vec::new();
-    for (url, _) in BASE_FONTS {
-        if let Some(bytes) = crate::host::fetch_bytes(url).await {
-            faces.push(bytes);
+    for (url, label) in BASE_FONTS {
+        match crate::host::fetch_bytes(url).await {
+            Some(bytes) => {
+                tracing::info!("{label} loaded");
+                faces.push(bytes);
+            }
+            None => tracing::warn!("Failed to fetch {url}"),
         }
     }
     faces
 }
 
-/// Build a fresh [`parley::FontContext`] with the [`BASE_FONTS`] registered.
+/// Build the UI thread's [`parley::FontContext`] with the [`BASE_FONTS`]
+/// registered, on the one constructor [`font_context_from_bytes`].
 #[cfg(target_arch = "wasm32")]
 pub async fn font_context_from() -> parley::FontContext {
-    let mut font_cx = parley::FontContext::new();
-    load_base_fonts(&mut font_cx).await;
-    font_cx
+    font_context_from_bytes(fetch_base_font_faces().await)
 }
 
-/// Build a [`parley::FontContext`] by registering each already-fetched face in
-/// `faces`. Cross-platform and fetch-free, unlike [`font_context_from`]. The
-/// Logic thread cannot fetch: it blocks on its inbound selector and has no
-/// browser event loop. It builds its PDF-export context from the base-font
-/// bytes the Main thread fetched and delivered (`LogicCommand::LoadFonts`).
+/// Build a [`parley::FontContext`] holding the faces in `faces` and nothing else
+/// (`CANVAS-069`).
+///
+/// The context is sealed, so no face of the machine is discoverable from it. A
+/// codepoint the shipped faces miss draws as tofu here and on every peer alike.
+/// Fetch-free, so a host test reaches the same constructor the browser runs.
 pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parley::FontContext {
-    let mut font_cx = parley::FontContext::new();
+    let mut font_cx = ambre_draw::sealed_font_context();
     for bytes in faces {
         font_cx.collection.register_fonts(bytes.into(), None);
     }
     font_cx
 }
 
-/// A script whose coverage is absent from the base fonts and is fetched on
-/// demand from the Ambre static server.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum LazyFont {
-    /// Han ideographs, Kana, Hangul, CJK symbols and full/half-width forms.
-    Cjk,
-    /// Arabic, its supplements, and the Arabic presentation forms.
-    Arabic,
-    /// Devanagari.
-    Devanagari,
-    /// Full-color emoji (Noto Color Emoji, CBDT bitmap build). Cross-app
-    /// capability: reaction badges (Toile), message reactions (Murmure), and
-    /// any inline emoji. Rasterized into the RGBA color atlas (see `atlas.rs`).
-    Emoji,
-}
-
-impl LazyFont {
-    /// Classify a codepoint into the lazy script that covers it, or `None` when
-    /// the base fonts already cover it (Latin, Cyrillic, Greek, punctuation,
-    /// symbols...). Only a `Some` codepoint can ever trigger a fetch.
-    ///
-    /// Ranges follow the Unicode blocks. They intentionally err on the side of
-    /// the common blocks per script rather than exhaustively. A rare unassigned
-    /// codepoint in a covered block simply maps to that script's face. That is
-    /// harmless: it still renders tofu, but from the right family.
-    pub fn for_char(c: char) -> Option<LazyFont> {
-        match c as u32 {
-            // Arabic, Arabic Supplement, Arabic Extended-A, and the two
-            // presentation-forms blocks.
-            0x0600..=0x06FF
-            | 0x0750..=0x077F
-            | 0x08A0..=0x08FF
-            | 0xFB50..=0xFDFF
-            | 0xFE70..=0xFEFF => Some(LazyFont::Arabic),
-            // Devanagari.
-            0x0900..=0x097F => Some(LazyFont::Devanagari),
-            // CJK: symbols & punctuation, Hiragana, Katakana (0x3000..0x30FF),
-            // Han ext-A (0x3400..0x4DBF), Han unified (0x4E00..0x9FFF), Hangul
-            // syllables (0xAC00..0xD7AF), CJK compatibility ideographs
-            // (0xF900..0xFAFF), half/full-width forms (0xFF00..0xFFEF).
-            0x3000..=0x30FF
-            | 0x3400..=0x4DBF
-            | 0x4E00..=0x9FFF
-            | 0xAC00..=0xD7AF
-            | 0xF900..=0xFAFF
-            | 0xFF00..=0xFFEF => Some(LazyFont::Cjk),
-            // Emoji: the supplementary-plane pictograph blocks (symbols &
-            // pictographs, supplemental, extended-A), the enclosed/symbol
-            // blocks incl. regional indicators (0x1F000..=0x1F2FF), plus the
-            // BMP Miscellaneous Symbols + Dingbats (0x2600..=0x27BF) and the
-            // Misc Symbols and Arrows subset that is emoji (0x2B00..=0x2BFF).
-            // The BMP text-arrows block (0x2190..=0x21FF) is deliberately left
-            // to the base fonts. Those glyphs render as monochrome symbols, not
-            // color emoji, so claiming them here would fetch the emoji face and
-            // still tofu. ZWJ sequences and skin-tone modifiers are handled by
-            // font shaping once the face is loaded.
-            0x1F000..=0x1FAFF | 0x2600..=0x27BF | 0x2B00..=0x2BFF => Some(LazyFont::Emoji),
-            _ => None,
-        }
-    }
-
-    /// Same-origin asset URL for this script's on-demand face. These files must
-    /// be present under `crates/ambre-app/fonts/` (copied to `dist/fonts/` by
-    /// Trunk) -- a missing file simply logs a warning and leaves tofu boxes.
-    fn asset_url(self) -> &'static str {
-        match self {
-            LazyFont::Cjk => "/fonts/NotoSansSC-Regular.otf",
-            LazyFont::Arabic => "/fonts/NotoSansArabic-Regular.ttf",
-            LazyFont::Devanagari => "/fonts/NotoSansDevanagari-Regular.ttf",
-            LazyFont::Emoji => "/fonts/NotoColorEmoji.ttf",
-        }
-    }
-}
+/// A script the base faces do not cover, fetched on demand.
+///
+/// Defined in `ambre-draw` so the Logic thread reaches the same classification
+/// without the graphics stack: Prose names the scripts a measurement was
+/// missing (`PROSE-110`).
+pub use ambre_draw::LazyFont;
 
 /// Font blobs fetched since the last drain, awaiting registration into the
 /// `FontContext`. Shared with the in-flight fetch tasks (same thread).
@@ -225,21 +144,28 @@ impl LazyFontLoader {
         }
     }
 
-    /// Register any fetched faces into `font_cx`. Returns `true` when at least
-    /// one new face was registered. The caller then drops stale layouts, which
-    /// shaped as tofu, and forces a repaint so they re-shape with glyphs.
-    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> bool {
+    /// Register any fetched faces into `font_cx` and return their bytes. An
+    /// empty return means nothing arrived. A non-empty one means coverage
+    /// changed: the caller drops the stale layouts, which shaped as tofu, and
+    /// forces a repaint so they re-shape with glyphs.
+    ///
+    /// The bytes come back because this thread is not the only one that
+    /// measures on them. The Logic thread paginates Prose on a sealed context
+    /// of its own, and cannot fetch. So the same face travels to it over the
+    /// bus (`CANVAS-068`). One clone per lazy script, once, against a
+    /// document that would otherwise paginate on tofu.
+    #[must_use]
+    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<Vec<u8>> {
         let pending = std::mem::take(&mut self.inbox.borrow_mut().pending);
-        if pending.is_empty() {
-            return false;
-        }
-        for bytes in pending {
+        for bytes in &pending {
             // Registered as an additional family in the shared collection;
             // Parley's script-based fallback then selects it for runs the base
             // families cannot shape.
-            font_cx.collection.register_fonts(bytes.into(), None);
+            font_cx
+                .collection
+                .register_fonts(bytes.clone().into(), None);
         }
-        true
+        pending
     }
 
     /// Number of scripts a fetch has been started for (test/diagnostic hook).
@@ -271,6 +197,13 @@ impl LazyFontLoader {
     #[cfg(not(target_arch = "wasm32"))]
     fn request(&self, font: LazyFont) {
         let _ = font.asset_url();
+    }
+
+    /// Stand in for a resolved fetch, so a test can drain what a browser would
+    /// have delivered.
+    #[cfg(test)]
+    fn deliver(&self, bytes: Vec<u8>) {
+        self.inbox.borrow_mut().pending.push(bytes);
     }
 }
 
@@ -317,12 +250,52 @@ mod tests {
         assert_eq!(loader.requested_count(), 2);
     }
 
+    /// A drained face comes back to the caller, which owes it to the threads
+    /// that keep a `FontContext` of their own (`CANVAS-068`).
+    ///
+    /// The Logic thread paginates Prose on a sealed context and cannot fetch.
+    /// A face this thread keeps to itself leaves that context short, and the
+    /// pages measure on tofu.
+    #[test]
+    fn a_drained_face_comes_back_for_the_other_threads() {
+        let mut loader = LazyFontLoader::new();
+        // Any blob will do: `register_fonts` ignores what it cannot parse,
+        // and what this holds is the hand-over, not the parsing.
+        let face = b"not a real face".to_vec();
+        loader.deliver(face.clone());
+
+        let mut font_cx = parley::FontContext::new();
+        let drained = loader.drain_into(&mut font_cx);
+
+        assert_eq!(drained, vec![face], "the bytes registered here travel on");
+        assert!(
+            loader.drain_into(&mut font_cx).is_empty(),
+            "a face is handed over once"
+        );
+    }
+
+    /// The UI thread's context holds the faces it was built from and nothing
+    /// of the machine (`CANVAS-069`).
+    ///
+    /// The families below ship with common desktop distributions and none is
+    /// one of Ambre's own faces. A default context finds them where they exist.
+    #[test]
+    fn a_built_context_discovers_no_face_of_the_machine() {
+        let mut font_cx = super::font_context_from_bytes(Vec::new());
+        for family in ["DejaVu Sans", "Liberation Sans", "FreeSans", "Arial"] {
+            assert!(
+                font_cx.collection.family_id(family).is_none(),
+                "the UI context found `{family}` on the machine"
+            );
+        }
+    }
+
     #[test]
     fn drain_is_empty_without_fetches() {
         // Native builds never populate the inbox, so a drain is always a no-op.
         let mut loader = LazyFontLoader::new();
         loader.observe("中文");
         let mut font_cx = parley::FontContext::new();
-        assert!(!loader.drain_into(&mut font_cx));
+        assert!(loader.drain_into(&mut font_cx).is_empty());
     }
 }

@@ -60,7 +60,7 @@ pub struct LandingSignals {
     /// The app kind this page booted with (`lib.rs`, fixed per page load): drives
     /// the in-place-swap vs. hard-reload choice when opening/creating a document
     /// ([`route::needs_reload`]).
-    pub boot_is_toile: bool,
+    pub booted: DocType,
     /// Where a refused `.ambre` file reaches the user (`DOCFILE-005`). The
     /// launcher raises no other notification, so this is the one handle it
     /// needs.
@@ -72,13 +72,13 @@ pub struct LandingSignals {
 /// thread without a page reload.
 pub fn landing_view(
     signals: LandingSignals,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> impl IntoView {
     let LandingSignals {
         docs,
         username,
         dev_mode,
-        boot_is_toile,
+        booted,
         toasts,
     } = signals;
 
@@ -91,7 +91,7 @@ pub fn landing_view(
     let on_pick = {
         let navigate = use_navigate();
         Callback::new(move |doc_type: DocType| {
-            open_document(&navigate, doc_type, DocumentId::new(), boot_is_toile);
+            open_document(&navigate, doc_type, DocumentId::new(), booted);
         })
     };
 
@@ -184,7 +184,7 @@ pub fn landing_view(
                         children={
                             let to_logic = to_logic_cards.clone();
                             move |d: DocItem| {
-                                doc_card(d, docs, to_logic.clone(), pending_delete, dialog_ref, boot_is_toile)
+                                doc_card(d, docs, to_logic.clone(), pending_delete, dialog_ref, booted)
                             }
                         }
                     />
@@ -260,10 +260,10 @@ fn open_document(
     navigate: &impl Fn(&str, leptos_router::NavigateOptions),
     doc_type: DocType,
     document_id: DocumentId,
-    boot_is_toile: bool,
+    booted: DocType,
 ) {
     let path = route::doc_path(doc_type, document_id);
-    if route::needs_reload(doc_type, boot_is_toile) {
+    if route::needs_reload(doc_type, booted) {
         if let Some(window) = web_sys::window() {
             let _ = window.location().set_href(&path);
         }
@@ -336,10 +336,10 @@ pub fn NewDocPicker(
 fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     pending_delete: RwSignal<Option<(DocumentId, String)>>,
     dialog_ref: NodeRef<html::Dialog>,
-    boot_is_toile: bool,
+    booted: DocType,
 ) -> impl IntoView {
     let doc_type = d.doc_type;
     let id = d.document_id;
@@ -355,7 +355,7 @@ fn doc_card(
         let navigate = use_navigate();
         move |_| {
             if !editing.get() {
-                open_document(&navigate, doc_type, id, boot_is_toile);
+                open_document(&navigate, doc_type, id, booted);
             }
         }
     };
@@ -504,7 +504,7 @@ fn rel_time(updated_at_ms: u64) -> String {
 /// until `/api/auth/config` has answered.
 fn sign_in_panel(
     dev_mode: RwSignal<Option<bool>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> impl IntoView {
     move || match dev_mode.get() {
         None => view! {

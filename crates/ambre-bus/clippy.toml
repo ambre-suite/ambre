@@ -1,0 +1,10 @@
+# The crate that holds the channels of the Main instance takes no lock
+# (`ARCH-020`). On the page's main thread a contended lock ends in
+# `Atomics.wait`, which the browser refuses, so a lock here is a crash waiting
+# for contention. The channels stand on `crossbeam-queue` and atomics instead.
+disallowed-types = [
+    { path = "std::sync::Mutex", reason = "a contended lock waits, and the main thread may not (ARCH-020)" },
+    { path = "std::sync::RwLock", reason = "a contended lock waits, and the main thread may not (ARCH-020)" },
+    { path = "std::sync::Condvar", reason = "a condition variable waits, and the main thread may not (ARCH-020)" },
+    { path = "std::sync::Barrier", reason = "a barrier waits, and the main thread may not (ARCH-020)" },
+]

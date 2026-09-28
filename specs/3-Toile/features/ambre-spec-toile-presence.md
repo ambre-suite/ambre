@@ -59,22 +59,22 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral frame whatever the frame's fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the frame is there | none | verified |
-| `TOILE-183` | `FRAME` | Broadcasting MUST NOT write a delta, MUST NOT push an undo item, and MUST NOT ask for a repaint: the local pointer is the browser's, not the board's. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the absent delta and the empty display list | partial -- nothing reads the undo stack, so a handler that pushed an item and wrote nothing else would pass the two assertions; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-183` | `FRAME` | Broadcasting MUST NOT write a delta, MUST NOT push an undo item, and MUST NOT ask for a repaint: the local pointer is the browser's, not the board's. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the absent delta and the empty display list | partial -- nothing reads the undo stack, so a handler that pushed an item and wrote nothing else would pass the two assertions; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-184` | `FAIL` | Given a sample it cannot encode, the client MUST drop it silently and MUST NOT surface an error: a lost sample is corrected by the next one. | this spec section 3 | none | unheld -- the encode failure is logged and yields an empty outcome, and no test can reach it: every field of the sample is a plain postcard type; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-073` | `POST` | A gesture on the board MUST broadcast the local peer's cursor, selection and in-flight stroke. | this spec section 3 | `ambre_toile::ui::presence::tests::a_sample_is_sent_on_a_change_or_on_the_heartbeat` -- the schedule alone: a changed sample goes at once, an unchanged one waits for the heartbeat | partial -- what the sample is built from is `ToileView::presence_sample`, and no test reads it, so a sample carrying a cursor and neither the selection nor the stroke would pass; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-073` | `POST` | A gesture on the board MUST broadcast the local peer's cursor, selection and in-flight stroke. | this spec section 3 | `ambre_toile::ui::presence::tests::a_sample_is_sent_on_a_change_or_on_the_heartbeat` -- the schedule alone: a changed sample goes at once, an unchanged one waits for the heartbeat | partial -- what the sample is built from is `ToileView::presence_sample`, and no test reads it, so a sample carrying a cursor and neither the selection nor the stroke would pass; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-074` | `POST` | The highlighter MUST be a tool the user can pick. | this spec section 4 | `ambre_toile::ui::tool::tests::the_highlighter_streams_a_point_and_writes_nothing` -- it drives a press, two moves and a release through the picked tool and reads a live point on each | none | verified |
 | `TOILE-UI-377` | `FRAME` | The highlighter's trail MUST NOT become an element. | this spec section 4 | `ambre_toile::ui::tool::tests::the_highlighter_streams_a_point_and_writes_nothing` -- the same press, moves and release read no command at all | none | verified |
 
 * **Budget.** the presence overlay under 1 ms per frame (`ambre-spec-budgets.md section 2`), held by no bench.
-  It is skipped whole when no peer is known (`TOILE-UI-218`). A board with peers pays a scan of the visible
+  It is skipped when no peer is known (`TOILE-UI-218`). A board with peers pays a scan of the visible
   set per ghost, section 6, and an alone board pays nothing.
 * **Boundary.** every presence frame leaves the client, sealed by `ZK-005`: the relay reads
   `document_id`, `pub_key` and `counter` alone. `ambre-sync` resolves the author first, so no peer
   paints a cursor under another name (`SYNC-014`).
-* **Verification.** 22 `verified`, 6 `untested`. What holds is the round trip: a sample leaves on every
-  gesture and on a heartbeat. A peer who leaves goes, and a ghost carries its session's name. What is loose is
-  one shape: a rule whose failure shows only on a screen or a wire no test drives. That is the pass orders,
-  the second board, an inbound sample's frame condition.
+* **Verification.** 22 `verified`, 2 `partial`, 4 `untested`. What holds is the round trip: a sample
+  leaves on every gesture and on a heartbeat. A peer who leaves goes, and a ghost carries its
+  session's name. What is loose is one shape: a rule whose failure shows only on a screen or a wire
+  no test drives. Namely the pass orders, the second board, an inbound sample's frame condition.
 
 ---
 

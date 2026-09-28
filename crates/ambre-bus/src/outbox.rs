@@ -54,20 +54,20 @@ impl SendOutcome {
 /// emitters call [`send`](Self::send), and the frame hook calls
 /// [`flush`](Self::flush).
 pub struct Outbox {
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: crate::conduit::Sender<LogicCommand>,
     held: VecDeque<LogicCommand>,
     capacity: usize,
 }
 
 impl Outbox {
     /// An outbox over `to_logic`, holding up to [`HOLD_CAPACITY`] commands.
-    pub fn new(to_logic: flume::Sender<LogicCommand>) -> Self {
+    pub fn new(to_logic: crate::conduit::Sender<LogicCommand>) -> Self {
         Self::with_capacity(to_logic, HOLD_CAPACITY)
     }
 
     /// An outbox with an explicit hold bound. A test drives the refusal branch
     /// through a small one instead of filling sixty-four slots.
-    pub fn with_capacity(to_logic: flume::Sender<LogicCommand>, capacity: usize) -> Self {
+    pub fn with_capacity(to_logic: crate::conduit::Sender<LogicCommand>, capacity: usize) -> Self {
         Self {
             to_logic,
             held: VecDeque::new(),
@@ -99,8 +99,8 @@ impl Outbox {
         }
         match self.to_logic.try_send(cmd) {
             Ok(()) => SendOutcome::Sent,
-            Err(flume::TrySendError::Full(cmd)) => self.hold(cmd),
-            Err(flume::TrySendError::Disconnected(_)) => SendOutcome::Disconnected,
+            Err(crate::conduit::TrySendError::Full(cmd)) => self.hold(cmd),
+            Err(crate::conduit::TrySendError::Disconnected(_)) => SendOutcome::Disconnected,
         }
     }
 
@@ -113,11 +113,13 @@ impl Outbox {
         while let Some(cmd) = self.held.pop_front() {
             match self.to_logic.try_send(cmd) {
                 Ok(()) => {}
-                Err(flume::TrySendError::Full(cmd)) => {
+                Err(crate::conduit::TrySendError::Full(cmd)) => {
                     self.held.push_front(cmd);
                     return SendOutcome::Held;
                 }
-                Err(flume::TrySendError::Disconnected(_)) => return SendOutcome::Disconnected,
+                Err(crate::conduit::TrySendError::Disconnected(_)) => {
+                    return SendOutcome::Disconnected;
+                }
             }
         }
         SendOutcome::Sent
@@ -155,7 +157,7 @@ mod tests {
 
     #[test]
     fn an_open_channel_takes_the_command_and_the_outbox_stays_idle() {
-        let (tx, rx) = flume::bounded(2);
+        let (tx, rx) = crate::conduit::local(2);
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert!(!outbox.is_busy());
@@ -164,7 +166,7 @@ mod tests {
 
     #[test]
     fn a_full_channel_holds_the_command_instead_of_dropping_it() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
@@ -176,51 +178,51 @@ mod tests {
 
     #[test]
     fn a_flush_after_the_reader_drains_sends_the_held_command() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         let mut outbox = Outbox::new(tx);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
-        assert!(rx.recv().is_ok());
+        assert!(rx.try_recv().is_ok());
         assert_eq!(outbox.flush(), SendOutcome::Sent);
         assert!(!outbox.is_busy());
-        assert_eq!(document_byte(&rx.recv().unwrap()), 2);
+        assert_eq!(document_byte(&rx.try_recv().unwrap()), 2);
     }
 
     #[test]
     fn a_held_queue_keeps_the_order_the_user_typed() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         let mut outbox = Outbox::with_capacity(tx, 4);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
         outbox.send(cmd(3));
         // The reader takes one slot at a time, so the flush is partial first.
-        assert!(rx.recv().is_ok());
+        assert!(rx.try_recv().is_ok());
         assert_eq!(outbox.flush(), SendOutcome::Held);
-        assert_eq!(document_byte(&rx.recv().unwrap()), 2);
+        assert_eq!(document_byte(&rx.try_recv().unwrap()), 2);
         assert_eq!(outbox.flush(), SendOutcome::Sent);
-        assert_eq!(document_byte(&rx.recv().unwrap()), 3);
+        assert_eq!(document_byte(&rx.try_recv().unwrap()), 3);
     }
 
     #[test]
     fn a_send_while_busy_never_overtakes_a_held_command() {
-        let (tx, rx) = flume::bounded(2);
+        let (tx, rx) = crate::conduit::local(2);
         let mut outbox = Outbox::with_capacity(tx, 4);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
         // The queue is full, so the outbox holds this one.
         assert_eq!(outbox.send(cmd(3)), SendOutcome::Held);
         // The reader frees a slot, and the next send must still queue behind 3.
-        assert!(rx.recv().is_ok());
+        assert!(rx.try_recv().is_ok());
         assert_eq!(outbox.send(cmd(4)), SendOutcome::Held);
-        assert!(rx.recv().is_ok());
+        assert!(rx.try_recv().is_ok());
         assert_eq!(outbox.flush(), SendOutcome::Sent);
-        assert_eq!(document_byte(&rx.recv().unwrap()), 3);
-        assert_eq!(document_byte(&rx.recv().unwrap()), 4);
+        assert_eq!(document_byte(&rx.try_recv().unwrap()), 3);
+        assert_eq!(document_byte(&rx.try_recv().unwrap()), 4);
     }
 
     #[test]
     fn the_hold_bound_refuses_rather_than_grows() {
-        let (tx, _rx) = flume::bounded(1);
+        let (tx, _rx) = crate::conduit::local(1);
         let mut outbox = Outbox::with_capacity(tx, 2);
         outbox.send(cmd(1));
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn a_gone_logic_thread_is_reported_not_held() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         drop(rx);
         let mut outbox = Outbox::new(tx);
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Disconnected);

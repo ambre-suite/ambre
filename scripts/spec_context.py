@@ -63,7 +63,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contract_index  # noqa: E402  -- the two artefacts, and where they live
 import contracts  # noqa: E402  -- the corpus has one contract parser
+import spec_answers  # noqa: E402  -- the answer budget, as the gate counts it
 import spec_refs  # noqa: E402  -- the document and section namespaces
+import spec_shape  # noqa: E402  -- the prose ceiling, as the gate counts it
 from template_vocabulary import KIND  # noqa: E402  -- the column name, as declared
 
 # The kind whose whole job is to say what an operation leaves alone. It is read
@@ -158,7 +160,8 @@ def table_of(path: Path, rid: str) -> tuple[str, list[str], list[tuple[str, str]
     heading, opened = "", ""
     block: list[str] = []
     reading = False
-    for line in lines_of(path) + ("",):
+    lines = lines_of(path) + ("",)
+    for at, line in enumerate(lines):
         if contracts.TABLE_HEAD.match(line):
             columns = contracts.header_cells(line)
             reading = KIND in columns
@@ -175,6 +178,11 @@ def table_of(path: Path, rid: str) -> tuple[str, list[str], list[tuple[str, str]
         ids = [found for found in (contracts.ROW.match(kept) for kept in block)
                if found]
         if any(found["id"] == rid for found in ids):
+            # The `**Frame:**` line under the table is part of the operation: it
+            # names the shared frame the operation obeys in place of a local row.
+            after = next((kept for kept in lines[at:] if kept.strip()), "")
+            if contracts.FRAME_LINE.match(after.strip()):
+                block += ["", after]
             return opened, block, [(found["id"], found["rest"]) for found in ids]
         reading, block = False, []
         if line.startswith(("## ", "### ")):
@@ -292,6 +300,11 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict],
 
     frames = [(rid2, rest) for rid2, rest in siblings
               if records.get(rid2, {}).get("kind") == FRAME and rid2 != rid]
+    for line in table:
+        framed = contracts.FRAME_LINE.match(line.strip())
+        if framed:
+            frames += [(ref, "") for ref in contracts.FRAME_ID.findall(framed["ids"])
+                       if ref in records and ref != rid]
     out += [f"{BLOCK} 2 -- WHAT IT MUST NOT CHANGE", ""]
     out += [f"* `{rid2}` -- {records[rid2]['statement']}" for rid2, _ in frames] or [
         "No frame condition sits beside it. Its table binds state, or the "
@@ -426,6 +439,25 @@ def landing(lineno: int, records: dict[str, dict],
     return sorted(set(ids), key=lambda rid: (records[rid]["document"], rid))
 
 
+def margins(docs: list[str]) -> list[str]:
+    """What each document a story lands in has left under the two caps an edit hits.
+
+    The gates report a cap once it is crossed, after the writing. Printed here,
+    before it, an answer at 148 of 150 words tells the writer to cut before
+    adding. The numbers come from the gates' own counters, so the two agree.
+    """
+    out = ["What each document has left before the writing caps:", ""]
+    for doc in docs:
+        text = (contracts.SPECS / doc).read_text()
+        used = spec_answers.answer_words(text)
+        share = spec_shape.prose_share(text)
+        out.append(
+            f"* `{Path(doc).name}` -- answers {used} of {spec_answers.ANSWER_WORDS_TARGET} "
+            f"words; prose {share:.1f} of {spec_shape.PROSE_MAX:.0f} percent"
+        )
+    return out + [""]
+
+
 def for_story(name: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
     """The closure of every row one story lands, under the roadmap row itself.
 
@@ -451,7 +483,8 @@ def for_story(name: str, records: dict[str, dict], graph: list[dict]) -> list[st
     out += [f"{len(ids)} rows land with it, across {len(docs)} {read}:", ""]
     out += [f"* `{rid}` (`{records[rid]['kind']}`, {records[rid]['status']}) -- "
             f"{records[rid]['statement']}" for rid in ids]
-    out += ["", "Each closure follows, in document order. A design section, an "
+    out += [""] + margins(docs)
+    out += ["Each closure follows, in document order. A design section, an "
             "operation table or a roadmap row quoted once is not quoted again: "
             "the later closure names the id that carries it.", ""]
 

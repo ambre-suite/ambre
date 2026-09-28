@@ -445,3 +445,52 @@ fn bool_literal_matches_only_a_whole_word() {
     ));
     assert!(matches!(parse("TRUE+1"), Expr::BinOp { .. }));
 }
+
+/// `TRAME-013`: the formula the fuzzer found, 2 356 nested parentheses,
+/// overflowed the stack. Past each bound the formula is refused as an error.
+#[test]
+fn a_formula_past_a_bound_is_refused_before_it_recurses() {
+    let nested = format!("{}1{}", "(".repeat(2_356), ")".repeat(2_356));
+    assert!(parse_formula(&nested).is_err());
+    let long = "1".repeat(MAX_FORMULA_CHARS + 1);
+    assert!(parse_formula(&long).is_err());
+    let chain = vec!["1"; MAX_FORMULA_OPERATORS + 2].join("+");
+    assert!(parse_formula(&chain).is_err());
+    // Inside a string an operator or a parenthesis is text.
+    let text = format!("\"{}\"", "(-".repeat(MAX_FORMULA_OPERATORS));
+    assert!(parse_formula(&text).is_ok());
+}
+
+/// `TRAME-013`: the worst formula each bound still admits parses, compiles,
+/// renders and drops on a 1 MiB stack, the default of a wasm thread. A debug
+/// build spends several times the stack per level, so it gets 16 MiB.
+#[test]
+fn the_worst_admitted_formula_fits_a_small_stack() {
+    let worst = [
+        format!(
+            "{}1{}",
+            "SUM(".repeat(MAX_FORMULA_NESTING),
+            ")".repeat(MAX_FORMULA_NESTING)
+        ),
+        vec!["1"; MAX_FORMULA_OPERATORS + 1].join("^"),
+        vec!["1"; MAX_FORMULA_OPERATORS + 1].join("+"),
+        format!("{}1", "-".repeat(MAX_FORMULA_OPERATORS)),
+    ];
+    let run = std::thread::Builder::new()
+        .stack_size(if cfg!(debug_assertions) {
+            16 << 20
+        } else {
+            1 << 20
+        })
+        .spawn(move || {
+            let mut indices = crate::formula::compile::SheetIndices::new();
+            indices.insert(0, crate::formula::test_index::index_with(4, 4));
+            for formula in &worst {
+                let ast = parse_formula(formula).expect("admitted");
+                let _ = crate::formula::compile::compile(&ast, &indices);
+                let _ = crate::formula::render::render(&ast);
+            }
+        })
+        .expect("thread spawns");
+    assert!(run.join().is_ok());
+}

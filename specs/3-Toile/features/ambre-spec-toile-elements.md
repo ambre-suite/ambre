@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-186` | `INV` | Every cache the board derives -- the paint order, the bounds and the spatial index -- MUST equal what a rebuild from the document alone produces. | this spec section 3 | proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws a random operation sequence and compares the three caches against a rebuild | none | verified |
-| `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`) | partial -- the resize, the rotate, the restyle and the body overwrite each carry the same early return and no test, the delete and the reorder never read the flag, and the operation strategy the property tests draw from has no lock case, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`) | partial -- the resize, the rotate, the restyle and the body overwrite each carry the same early return and no test, the delete and the reorder never read the flag, and the operation strategy the property tests draw from has no lock case, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-187` | `CONC` | Two peers that applied different operations to one board MUST hold the same elements, the same box per element and the same paint order. | this spec section 2 | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws two operation sequences and compares the elements, the boxes and the paint order | none | verified |
 
 ### 1.2 Place an element on the board
@@ -92,10 +92,10 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 28 `verified`, 0 `failing`, 5 `untested`. What holds best is align and distribute:
-  nine tests over the pure geometry, five over the handler. A place in the 2-peer property strategy
-  lets `TOILE-037` claim convergence rather than assert it. A missing id now answers an error across
-  move, restyle and delete. What is loose is the lock, across five commands.
+* **Verification.** 28 `verified`, 1 `partial`, 0 `failing`, 4 `untested`. What holds best is align
+  and distribute: nine tests over the pure geometry, five over the handler. A place in the 2-peer
+  property strategy lets `TOILE-037` claim convergence rather than assert it. A missing id now
+  answers an error across move, restyle and delete. What is loose is the lock, across five commands.
 
 ---
 

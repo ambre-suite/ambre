@@ -169,7 +169,7 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
   its own. The export would then await a fetch it cannot await today, so the two gaps below are its
   prerequisites rather than its neighbours.
 * **The export freezes the document while it runs** (`TOILE-IO-099`). The handler is called from
-  `handle_app_command`, itself called from the thread's `Selector::wait()` loop, and it returns only once the
+  `handle_app_command`, itself called from the thread's parking loop, and it returns only once the
   file is assembled. Until then no UI command is dequeued and no remote delta is applied. The deltas queue
   rather than drop, so nothing is lost; the board is simply unresponsive, for the 3 s the budget allows 50
   slides. Closing it means taking the walk off the command loop: its own worker, or a resumable pass the loop

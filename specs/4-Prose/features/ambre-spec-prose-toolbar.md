@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE CONTEXTUAL TOOLBAR
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the five mark controls are built; the others are not
 
 > Select a few words and a small bar appears above them. It shows what the selection already is --
 > bold, italic, a heading -- and lets the author change it.
@@ -22,62 +22,65 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-054` | `OBS` | Each control MUST report the state of the whole selection. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, never as the state of either end. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-055` | `OBS` | The bar MUST stay over the text it was raised on while the page scrolls or zooms. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-057` | `INV` | The bar MUST NOT hold document content: the state it renders MUST arrive from the Logic thread with the selection it describes. | this spec section 3; `PROSE-UI-001` | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-097` | `INV` | The state a control shows MUST be rebuilt from the current selection; a mark MUST NOT be carried over from the selection before it. | this spec section 5 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-056` | `INV` | A control and the keyboard chord for the same formatting MUST resolve to one command id. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-054` | `OBS` | Each control MUST report the state of the whole selection. | this spec section 3 | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` | none | verified |
+| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, never as the state of either end. | this spec section 3 | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` | none | verified |
+| `PROSE-UI-055` | `OBS` | The bar MUST stay over the text it was raised on while the page scrolls or zooms. | this spec section 3 | `ambre_prose::input_tests::the_bar_follows_its_text_through_a_scroll_and_a_zoom` | none | verified |
+| `PROSE-UI-057` | `INV` | The bar MUST NOT hold document content: the state it renders MUST arrive from the Logic thread with the selection it describes. | this spec section 3; `PROSE-UI-001` | `ambre_prose::input_tests::the_marks_shown_are_the_ones_read_for_this_selection` | none | verified |
+| `PROSE-UI-097` | `INV` | The state a control shows MUST be rebuilt from the current selection; a mark MUST NOT be carried over from the selection before it. | this spec section 5 | `ambre_prose::input_tests::the_marks_shown_are_the_ones_read_for_this_selection` | none | verified |
+| `PROSE-UI-056` | `INV` | A control and the keyboard chord for the same formatting MUST resolve to one command id. | this spec section 3; `ambre-spec-chrome.md` | `ambre_prose::commands::tests::a_control_and_its_chord_resolve_to_one_command_id` | none | verified |
+| `PROSE-UI-098` | `INV` | The bar MUST NOT have a path into the document of its own: every control MUST reach it through a command the plane already declares. | this spec section 5 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
+| `PROSE-UI-192` | `INV` | One gesture on a control MUST be taken back by one undo, whatever the number of blocks it covers. | derived | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
 
 ### 1.2 Raise the bar
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-053` | `POST` | The bar MUST appear only over a non-empty selection. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-099` | `FRAME` | Raising the bar MUST NOT write to the document, and MUST NOT move or shrink the selection it was raised on. | derived | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-053` | `POST` | The bar MUST appear only over a non-empty selection. | this spec section 3 | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it` | none | verified |
+| `PROSE-UI-099` | `FRAME` | Raising the bar MUST NOT write to the document, and MUST NOT move or shrink the selection it was raised on. | derived | `ambre_prose::input_tests::raising_the_bar_writes_nothing_and_keeps_the_selection` | none | verified |
 
 ### 1.3 Dismiss the bar
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-100` | `POST` | The bar MUST disappear when the selection is emptied or cancelled. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-101` | `FRAME` | Dismissing the bar MUST NOT write to the document: a formatting applied before it closed MUST stay applied. | derived | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-100` | `POST` | The bar MUST disappear when the selection is emptied or cancelled. | this spec section 3 | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it` | none | verified |
+| `PROSE-UI-101` | `FRAME` | Dismissing the bar MUST NOT write to the document: a formatting applied before it closed MUST stay applied. | derived | `ambre_prose::input_tests::dismissing_the_bar_writes_nothing` | none | verified |
 
 ### 1.4 Format from a control
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-102` | `POST` | A control MUST apply or remove its formatting over the whole selection. | this spec section 4 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-103` | `POST` | A control reporting mixed MUST apply its formatting to the whole selection rather than remove it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-104` | `FRAME` | A control MUST NOT change the text of the selection, its extent, or any formatting the control does not name. | derived | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-102` | `POST` | A control MUST apply or remove its formatting over the whole selection. | this spec section 4 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
+| `PROSE-UI-103` | `POST` | A control reporting mixed MUST apply its formatting to the whole selection rather than remove it. | this spec section 3 | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` | none | verified |
+| `PROSE-UI-104` | `FRAME` | A control MUST NOT change the text of the selection, its extent, or any formatting the control does not name. | derived | `ambre_prose::input_tests::a_control_leaves_the_text_the_selection_and_other_marks` | none | verified |
+| `PROSE-UI-188` | `POST` | The link control MUST apply a link to the whole selection, or remove the one it carries. | this spec section 3 | not built | unbuilt -- lands with the "The format bar's other controls" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-189` | `POST` | A heading or quote control MUST set its style on every block the selection covers. | this spec section 3; `PROSE-UI-102` | not built | unbuilt -- lands with the "The format bar's other controls" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-190` | `POST` | A colour or size control MUST apply its value to the whole selection, and a value the registry refuses MUST be shown to the author. | this spec section 3; `PROSE-FEAT-022` | not built | unbuilt -- lands with the "The format bar's other controls" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-191` | `POST` | Superscript, subscript and clearing the formatting MUST each reach a control of the bar. | `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "The format bar's other controls" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own. The bar is repositioned inside the frame that paints the page, the
   row of `ambre-spec-budgets.md section 2`. A static element over the canvas costs a compositor
   recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-054` and `PROSE-UI-096` are a fold over the marks of a range, so a host test reaches
-  them without a browser. So are the three rows a control writes, which a delta answers.
-  `PROSE-UI-055` and `PROSE-UI-053` are browser behaviour
-  and land in the wasm tier of `ambre-spec-testing.md section 6`.
-
+* **Verification.** 15 `verified`, 0 `untested`, 4 `unimplemented`.
+  Every built row runs on the host against the view state and the Logic thread, with no browser.
+  The four open rows are the controls past the five marks.
+  The DOM element itself renders `ToolbarState` and holds no rule of its own.
 ---
 
 ## 2. WHAT EACH USER SEES
 
 The bar is local: it is raised by a selection, and a selection stays on the peer that made it
-(`PROSE-UI-010`). What converges is what its controls write. No test resolves yet: the last column
-names the row each scenario rests on.
+(`PROSE-UI-010`). What converges is what its controls write. The last column names the test, or
+the row a scenario rests on when no test resolves it.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| selects a sentence | selects nothing | nothing: a selection is local | a bar over Alice's sentence, and no bar for Bob | none -- `PROSE-UI-053` |
-| makes the sentence bold | reads it | the bold mark over the range | the sentence bold on both screens, the control lit for Alice | none -- `PROSE-UI-102` |
-| selects a range half of which is bold | -- | nothing | the bold control mixed, neither on nor off | none -- `PROSE-UI-096` |
-| makes it bold | makes the same range italic at the same moment | both marks, neither lost | bold and italic text for both | none -- `PROSE-FEAT-008` |
-| scrolls while the bar is open | -- | nothing | the bar still over the same words | none -- `PROSE-UI-055` |
+| selects a sentence | selects nothing | nothing: a selection is local | a bar over Alice's sentence, and no bar for Bob | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it` |
+| makes the sentence bold | reads it | the bold mark over the range | the bold mark in both documents, the control lit for Alice | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` |
+| selects a range half of which is bold | -- | nothing | the bold control mixed, neither on nor off | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` |
+| makes it bold | makes the same range italic at the same moment | both marks, neither lost | both marks in both documents | none -- `PROSE-FEAT-008` |
+| scrolls while the bar is open | -- | nothing | the bar still over the same words | `ambre_prose::input_tests::the_bar_follows_its_text_through_a_scroll_and_a_zoom` |
 
 ---
 
@@ -91,14 +94,17 @@ the selection is. The view publishes a state and the element renders it
 (`ambre-spec-ui.md section 2`, Canvas to DOM by signal).
 
 ```rust
-// ambre-prose/src/ui/toolbar.rs -- published to the chrome component, never drawn on the canvas
+// ambre-prose/src/view/toolbar.rs -- published to the chrome component, never drawn on the canvas
 
 pub struct ToolbarState {
-    pub visible: bool,
-    /// The selection's bottom-centre, in canvas space. The element is transform-synced to it.
-    pub anchor:  Vec2,
-    pub active:  ActiveMarks,
+    /// The top-centre of the selection's first line, on the canvas. `None` hides the bar.
+    pub anchor: Option<(f32, f32)>,
+    /// `None` until the Logic thread answered for this very selection.
+    pub active: Option<ActiveMarks>,
 }
+
+// ambre-bus/src/app/prose.rs -- read by `ProseCommand::ReadMarks`,
+// answered by `ProseEvent::SelectionMarks` with the selection it describes
 
 pub struct ActiveMarks {
     pub bold:          TriState,
@@ -121,8 +127,8 @@ to the whole range rather than removing it (`PROSE-UI-103`).
 **Steps, on every selection change:**
 
 1. the view reads the new selection; an empty one hides the bar and stops (`PROSE-UI-053`);
-2. it folds the marks carried by the range into `ActiveMarks`, one `TriState` per control
-   (`PROSE-UI-054`);
+2. it sends `ReadMarks` for the range. The Logic thread folds its marks into `ActiveMarks`, one
+   `TriState` per control, and answers with the range (`PROSE-UI-054`);
 3. it computes the anchor rectangle from the selection's geometry and raises the signal;
 4. the element positions itself against the anchor, and follows it each frame while it is visible
    (`PROSE-UI-055`).
@@ -134,9 +140,9 @@ keyboard chord invokes. That id resolves to one command of the plane
 
 | Control | Command |
 |---|---|
-| bold, italic, underline, strikethrough, inline code | `ApplyMark` or `RemoveMark`, on the selected range |
+| bold, italic, underline, strikethrough, inline code | `FormatSelection`, on the selected range, in one commit |
 | the link control | `ApplyMark` with the `a` key, or `RemoveMark` with it |
-| the heading controls | `SetHeadingLevel`, on the block the selection starts in |
+| the heading controls | `SetHeadingLevel`, on every block the selection covers |
 | the quote control | `SetBlockStyle`, with the built-in `quote` style |
 | the overflow control | opens the colour and size controls, which write through `ApplyMark` |
 
@@ -144,7 +150,10 @@ keyboard chord invokes. That id resolves to one command of the plane
 the Logic thread reports about it. The bar never remembers a mark across a selection change
 (`PROSE-UI-097`).
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/view/toolbar.rs` for the state and the commands a control sends,
+`crates/ambre-prose/src/logic/marks.rs` for the fold, and `ProseFormatBar` in
+`crates/ambre-prose/src/chrome/mod.rs` for the element. The five controls built are the marks;
+the link, heading, quote and overflow controls are not.
 
 ---
 
@@ -178,28 +187,10 @@ respecified here (`ambre-spec-chrome.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the bar, its state and its
-  anchor are a design, and every row above is `unimplemented`.
-* **The fold has no declared source.** `ActiveMarks` is a fold over the marks of a range, and no
-  event of `ProseEvent` carries them. The view is told the layout and the runs, not the formatting
-  of a selection (`features/ambre-spec-prose-engine.md section 3`). Either an event is
-  missing or the fold is meant to run over the run cache, and no document says which.
-* **The controls are fewer than the marks.** The registry declares eleven presentation marks plus
-  the link (`ambre-spec-prose-schema.md section 3`). The bar names five, a link, three heading
-  levels and a quote, and defers colour and size to an overflow nothing specifies. Superscript,
-  subscript and clearing formatting reach no surface at all.
 * **No control opens a comment or a suggestion.** Both features record the same absence, and the
   bar is where a selection-scoped gesture would live
   (`features/ambre-spec-prose-comments.md section 6`,
   `features/ambre-spec-prose-track-changes.md section 6`).
-* **A refused mark value has nowhere to go.** `PROSE-FEAT-022` requires a malformed value to be
-  reported to the author, and no event carries the refusal. The colour and size controls therefore
-  have no failure path (`features/ambre-spec-prose-inline-styles.md section 6`). It lands with the
-  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
-* **What a control applies to is stated twice, and differently.** Section 4 says a control
-  applies its formatting to the whole selection, which is what `PROSE-UI-102` carries. The control
-  table of section 3 sends the heading and quote controls to the block the selection starts in.
-  A selection spanning three paragraphs therefore has two answers, and nothing rules between them.
 * **The anchor has no rule when the selection leaves the window.** A selection scrolled off screen
   keeps an anchor with no pixels under it. Nothing says whether the bar hides, sticks to the
   edge or follows the anchor out of view.

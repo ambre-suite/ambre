@@ -1,0 +1,1087 @@
+//! The shaped run: what pagination shaped, handed to the view as it is
+//! (`features/ambre-spec-prose-page-rendering.md section 2`).
+//!
+//! Pagination shapes every block to find where it breaks. The view draws and
+//! hit-tests that same shape rather than shaping a second time on the thread
+//! that paints (`PROSE-UI-006`, `PROSE-UI-114`). A run holds no GPU handle
+//! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
+
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
+
+use ambre_core::Uuid;
+use ambre_draw::{BoundingBox, Layout, ParleyBrush};
+use loro::TreeID;
+use parley::{Affinity, Cursor, Selection};
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::layout::measure::{EffectiveStyle, MarkedSpan};
+use crate::layout::pass::PageLayout;
+use crate::layout::place::BlockLayout;
+
+/// One stretch of a run's lines, shaped on its own (`PROSE-128`).
+///
+/// A run shaped whole is one segment. An edit re-shapes from the line before
+/// the one it touched, and keeps the lines above it where they were shaped.
+#[derive(Clone)]
+struct Segment {
+    /// The glyphs, their clusters and the line boxes, as the shaper left them.
+    layout: Arc<Layout<ParleyBrush>>,
+    /// The byte the layout's text starts at, in the run's text.
+    start: usize,
+    /// How many of the layout's lines the run keeps. The lines after them
+    /// were shaped before an edit, and a later segment holds what replaced
+    /// them.
+    lines: usize,
+    /// The index of its first line among the run's lines.
+    first_line: usize,
+}
+
+/// Where one line of the run is: its segment, its index there, its top, and
+/// the shift that moves its segment's coordinates to the run's.
+#[derive(Clone, Copy, Debug)]
+struct LineAt {
+    segment: usize,
+    local: usize,
+    top: f32,
+    shift: f32,
+}
+
+/// One block's text, shaped and broken into lines: enough to draw and to
+/// hit-test.
+pub struct ParleyRunData {
+    /// The shaped stretches of the text, in order. Never empty.
+    segments: Vec<Segment>,
+    /// Every line of the run, in order, across the segments.
+    lines: Vec<LineAt>,
+    /// The height every line takes, summed as the shaper sums it.
+    height: f32,
+    /// The byte offset each code point starts at, the text's length last. An
+    /// offset in the document counts code points, and the shaper counts bytes.
+    char_starts: Vec<u32>,
+    /// How far the text sits from the left of the content box. It is the
+    /// block's left indent, which the width it was broken to left out.
+    indent_px: f32,
+    /// The text the glyphs were shaped from. The caret walks its graphemes
+    /// and its words, which the glyphs alone do not tell apart.
+    text: String,
+    /// The style the text was shaped in, so a draft typed into the block is
+    /// shaped alike (`PROSE-UI-134`). `None` for a run shaped without one.
+    style: Option<EffectiveStyle>,
+    /// The spans shaped bold or italic, in bytes, so a draft typed after one
+    /// takes its marks (`PROSE-UI-208`).
+    marks: Vec<MarkedSpan>,
+    /// The width the text was broken to, when pagination shaped it. Only such
+    /// a run is re-shaped in part (`PROSE-128`).
+    width_px: Option<f32>,
+}
+
+impl ParleyRunData {
+    /// The run of `text` as `layout` shaped it, `indent_px` from the left of
+    /// the content box.
+    #[must_use]
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: f32) -> Self {
+        let mut char_starts: Vec<u32> = text
+            .char_indices()
+            .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
+            .collect();
+        char_starts.push(u32::try_from(text.len()).unwrap_or(u32::MAX));
+        let lines = layout.len();
+        let mut data = Self {
+            segments: vec![Segment {
+                layout: Arc::new(layout),
+                start: 0,
+                lines,
+                first_line: 0,
+            }],
+            lines: Vec::new(),
+            height: 0.0,
+            char_starts,
+            indent_px,
+            text: text.to_owned(),
+            style: None,
+            marks: Vec::new(),
+            width_px: None,
+        };
+        data.index_lines();
+        data
+    }
+
+    /// The run `previous` holds with every line from `cut` on replaced by
+    /// `tail`, which is `text` shaped from the start of that line
+    /// (`PROSE-128`). The lines above `cut` keep their glyphs.
+    ///
+    /// The caller has checked that `text` and `previous` agree up to that
+    /// line, in text and in marks.
+    pub(crate) fn with_tail(
+        previous: &Self,
+        cut: usize,
+        (text, marks): (&str, &[MarkedSpan]),
+        tail: Layout<ParleyBrush>,
+    ) -> Option<Self> {
+        let start = previous.line_start(cut)?;
+        let mut segments: Vec<Segment> = Vec::with_capacity(previous.segments.len() + 1);
+        for segment in &previous.segments {
+            if segment.first_line >= cut {
+                break;
+            }
+            let mut kept = segment.clone();
+            kept.lines = kept.lines.min(cut - segment.first_line);
+            segments.push(kept);
+        }
+        let lines = tail.len();
+        segments.push(Segment {
+            layout: Arc::new(tail),
+            start,
+            lines,
+            first_line: cut,
+        });
+        let mut data = Self::new(text, Layout::new(), previous.indent_px);
+        data.segments = segments;
+        data.style = previous.style.clone();
+        data.marks = marks.to_vec();
+        data.width_px = previous.width_px;
+        data.index_lines();
+        Some(data)
+    }
+
+    /// Record the style, the marks and the width the text was shaped in.
+    pub(crate) fn shaped_in(
+        &mut self,
+        style: &EffectiveStyle,
+        marks: &[MarkedSpan],
+        width_px: f32,
+    ) {
+        self.style = Some(style.clone());
+        self.marks = marks.to_vec();
+        self.width_px = Some(width_px);
+    }
+
+    /// The width the text was broken to, when pagination shaped it.
+    pub(crate) fn width_px(&self) -> Option<f32> {
+        self.width_px
+    }
+
+    /// How many shaped stretches the run holds.
+    pub(crate) fn segment_count(&self) -> usize {
+        self.segments.len()
+    }
+
+    /// Number the lines across the segments, and sum their heights.
+    ///
+    /// The shaper rounds each baseline from the height summed above it. A
+    /// line keeps its pixel only when its shift is rounded the same way. It
+    /// is the rounded top in the run less the rounded top in its segment.
+    fn index_lines(&mut self) {
+        let mut lines = Vec::new();
+        let mut top = 0.0_f32;
+        let mut y = 0.0_f64;
+        for (index, segment) in self.segments.iter_mut().enumerate() {
+            segment.first_line = lines.len();
+            let mut local_y = 0.0_f64;
+            for (local, line) in segment.layout.lines().take(segment.lines).enumerate() {
+                let height = line.metrics().line_height;
+                lines.push(LineAt {
+                    segment: index,
+                    local,
+                    top,
+                    shift: (y.round() - local_y.round()) as f32,
+                });
+                top += height;
+                y += f64::from(height);
+                local_y += f64::from(height);
+            }
+        }
+        self.lines = lines;
+        self.height = y as f32;
+    }
+
+    /// The byte line `line` starts at, in the run's text.
+    pub(crate) fn line_start(&self, line: usize) -> Option<usize> {
+        let at = self.lines.get(line)?;
+        let segment = self.segments.get(at.segment)?;
+        let start = segment.layout.get(at.local)?.text_range().start;
+        Some(segment.start + start)
+    }
+
+    /// The line a byte of the text falls on, the last one past the text.
+    pub(crate) fn line_at_byte(&self, byte: usize) -> usize {
+        let last = self.lines.len().saturating_sub(1);
+        self.lines
+            .iter()
+            .position(|at| {
+                self.segments.get(at.segment).is_some_and(|segment| {
+                    segment.layout.get(at.local).is_some_and(|line| {
+                        let range = line.text_range();
+                        (segment.start + range.start..segment.start + range.end).contains(&byte)
+                    })
+                })
+            })
+            .unwrap_or(last)
+    }
+
+    /// The marks of the code point before `offset`, its range aside. Text
+    /// typed at `offset` takes them, since each expands after its range
+    /// (`ambre-spec-prose-schema.md section 3`).
+    #[must_use]
+    pub fn marks_before(&self, offset: u32) -> MarkedSpan {
+        let Some(previous) = offset.checked_sub(1) else {
+            return MarkedSpan::default();
+        };
+        let byte = self.byte_of(previous);
+        self.marks
+            .iter()
+            .find(|span| span.start <= byte && byte < span.end)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// The marked spans the text was shaped with, in bytes.
+    #[must_use]
+    pub fn marks(&self) -> &[MarkedSpan] {
+        &self.marks
+    }
+
+    /// The style the text was shaped in, when the shaper recorded it.
+    #[must_use]
+    pub fn style(&self) -> Option<&EffectiveStyle> {
+        self.style.as_ref()
+    }
+
+    /// The text the glyphs were shaped from.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// How far the text sits from the left of the content box.
+    #[must_use]
+    pub fn indent_px(&self) -> f32 {
+        self.indent_px
+    }
+
+    /// The height the shaped text takes.
+    #[must_use]
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+
+    /// The widest line, its trailing spaces counted.
+    #[must_use]
+    pub fn full_width(&self) -> f32 {
+        self.lines()
+            .map(|(line, _)| line.metrics().advance)
+            .fold(0.0, f32::max)
+    }
+
+    /// Every line, in order, with the vertical shift that moves its glyphs
+    /// from where its segment put them to where the run draws them.
+    pub fn lines(&self) -> impl Iterator<Item = (parley::Line<'_, ParleyBrush>, f32)> + '_ {
+        (0..self.lines.len()).filter_map(|index| self.line(index))
+    }
+
+    /// Line `index`, with its vertical shift.
+    #[must_use]
+    pub fn line(&self, index: usize) -> Option<(parley::Line<'_, ParleyBrush>, f32)> {
+        let at = self.lines.get(index)?;
+        let line = self.segments.get(at.segment)?.layout.get(at.local)?;
+        Some((line, at.shift))
+    }
+
+    /// How many code points the run holds.
+    #[must_use]
+    pub fn len(&self) -> u32 {
+        u32::try_from(self.char_starts.len().saturating_sub(1)).unwrap_or(u32::MAX)
+    }
+
+    /// Whether the run holds no text.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The top of each line, relative to the top of the run, the run's height
+    /// last.
+    #[must_use]
+    pub fn line_tops(&self) -> Vec<f32> {
+        let mut tops: Vec<f32> = self.lines.iter().map(|at| at.top).collect();
+        tops.push(self.height);
+        tops
+    }
+
+    /// The code-point offset under a point inside the run.
+    #[must_use]
+    pub fn offset_at(&self, x: f32, y: f32) -> u32 {
+        let index = self
+            .lines
+            .partition_point(|at| at.top <= y)
+            .saturating_sub(1);
+        let Some((segment, local_y)) = self.on_line(index, y) else {
+            return 0;
+        };
+        let cursor = Cursor::from_point(&segment.layout, x, local_y);
+        self.offset_of_byte(segment.start + cursor.index())
+    }
+
+    /// Where a code-point offset sits inside the run: the caret's box.
+    #[must_use]
+    pub fn caret_box(&self, offset: u32) -> BoundingBox {
+        self.caret_box_at(offset, false)
+    }
+
+    /// The boxes a code-point range covers, one per line it crosses. Empty
+    /// for an empty range.
+    #[must_use]
+    pub fn range_boxes(&self, start: u32, end: u32) -> Vec<BoundingBox> {
+        if start >= end {
+            return Vec::new();
+        }
+        let (from, to) = (self.byte_of(start), self.byte_of(end));
+        let mut boxes = Vec::new();
+        for (index, segment) in self.segments.iter().enumerate() {
+            let segment_end = self.segment_end(index);
+            let local_from = from.max(segment.start);
+            let local_to = to.min(segment_end);
+            if local_from >= local_to {
+                continue;
+            }
+            let anchor = Cursor::from_byte_index(
+                &segment.layout,
+                local_from - segment.start,
+                Affinity::Downstream,
+            );
+            let focus = Cursor::from_byte_index(
+                &segment.layout,
+                local_to - segment.start,
+                Affinity::Upstream,
+            );
+            for (rect, _) in Selection::new(anchor, focus).geometry(&segment.layout) {
+                if let Some(line) = self.line_under(index, &rect) {
+                    boxes.push(shifted(rect, line.shift));
+                }
+            }
+        }
+        boxes
+    }
+
+    /// Where a code-point offset sits, on the side of a wrap point the
+    /// affinity names: the caret's box.
+    #[must_use]
+    pub fn caret_box_at(&self, offset: u32, upstream: bool) -> BoundingBox {
+        let (index, cursor) = self.cursor(offset, upstream);
+        let Some(segment) = self.segments.get(index) else {
+            return BoundingBox::default();
+        };
+        let caret = cursor.geometry(&segment.layout, 1.0);
+        let shift = self
+            .line_under(index, &caret)
+            .map_or(0.0, |line| line.shift);
+        self.past_indent(shifted(caret, shift))
+    }
+
+    /// A caret in an empty run, moved past the first-line indent: the run
+    /// has no character for the caret to stand before (`PROSE-FEAT-309`).
+    fn past_indent(&self, mut caret: BoundingBox) -> BoundingBox {
+        if !self.text.is_empty() {
+            return caret;
+        }
+        let indent = self
+            .line(0)
+            .and_then(|(line, _)| {
+                line.items().find_map(|item| match item {
+                    ambre_draw::PositionedLayoutItem::InlineBox(b) => Some(b.x + b.width),
+                    ambre_draw::PositionedLayoutItem::GlyphRun(_) => None,
+                })
+            })
+            .unwrap_or(0.0);
+        let shift = f64::from(indent) - caret.x0;
+        if shift > 0.0 {
+            caret.x0 += shift;
+            caret.x1 += shift;
+        }
+        caret
+    }
+
+    /// The line a caret sits on, the first one being zero.
+    #[must_use]
+    pub fn line_of(&self, offset: u32, upstream: bool) -> usize {
+        let caret = self.caret_box_at(offset, upstream);
+        let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
+        self.lines
+            .partition_point(|at| at.top <= middle)
+            .saturating_sub(1)
+            .min(self.line_count() - 1)
+    }
+
+    /// How many lines the run is broken into, never fewer than one.
+    #[must_use]
+    pub fn line_count(&self) -> usize {
+        self.lines.len().max(1)
+    }
+
+    /// The caret on line `line` nearest to `x`, and its affinity.
+    #[must_use]
+    pub fn at_line(&self, line: usize, x: f32) -> (u32, bool) {
+        let index = line.min(self.lines.len().saturating_sub(1));
+        let Some(at) = self.lines.get(index) else {
+            return (0, false);
+        };
+        let Some(segment) = self.segments.get(at.segment) else {
+            return (0, false);
+        };
+        let Some(local) = segment.layout.get(at.local) else {
+            return (0, false);
+        };
+        let metrics = local.metrics();
+        let cursor = Cursor::from_point(
+            &segment.layout,
+            x,
+            (metrics.min_coord + metrics.max_coord) / 2.0,
+        );
+        (
+            self.offset_of_byte(segment.start + cursor.index()),
+            cursor.affinity() == Affinity::Upstream,
+        )
+    }
+
+    /// The start or the end of the wrapped line under a caret, and the
+    /// affinity that keeps the caret on it (`PROSE-UI-159`).
+    #[must_use]
+    pub fn line_edge(&self, offset: u32, upstream: bool, end: bool) -> (u32, bool) {
+        let (index, cursor) = self.cursor(offset, upstream);
+        let Some(segment) = self.segments.get(index) else {
+            return (offset, upstream);
+        };
+        let here = Selection::new(cursor, cursor);
+        let moved = if end {
+            here.line_end(&segment.layout, false)
+        } else {
+            here.line_start(&segment.layout, false)
+        };
+        let focus = moved.focus();
+        (
+            self.offset_of_byte(segment.start + focus.index()),
+            focus.affinity() == Affinity::Upstream,
+        )
+    }
+
+    /// The grapheme boundary before an offset, or `None` at the start.
+    #[must_use]
+    pub fn grapheme_before(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let head = self.text.get(..byte)?;
+        let (at, _) = head.grapheme_indices(true).next_back()?;
+        Some(self.offset_of_byte(at))
+    }
+
+    /// The grapheme boundary after an offset, or `None` at the end.
+    #[must_use]
+    pub fn grapheme_after(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let tail = self.text.get(byte..)?;
+        let first = tail.graphemes(true).next()?;
+        Some(self.offset_of_byte(byte + first.len()))
+    }
+
+    /// The start of the word before an offset, or `None` at the start.
+    #[must_use]
+    pub fn word_before(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let head = self.text.get(..byte)?;
+        if head.is_empty() {
+            return None;
+        }
+        let at = head
+            .split_word_bound_indices()
+            .rev()
+            .find(|(_, word)| word.chars().any(char::is_alphanumeric))
+            .map_or(0, |(at, _)| at);
+        Some(self.offset_of_byte(at))
+    }
+
+    /// The end of the word after an offset, or `None` at the end.
+    #[must_use]
+    pub fn word_after(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let tail = self.text.get(byte..)?;
+        if tail.is_empty() {
+            return None;
+        }
+        let end = tail
+            .split_word_bound_indices()
+            .find(|(_, word)| word.chars().any(char::is_alphanumeric))
+            .map_or(tail.len(), |(at, word)| at + word.len());
+        Some(self.offset_of_byte(byte + end))
+    }
+
+    /// The word under an offset, as a code-point range. A space or a
+    /// punctuation mark is a word of its own, as a double click takes it.
+    #[must_use]
+    pub fn word_around(&self, offset: u32) -> (u32, u32) {
+        let byte = self.byte_of(offset);
+        for (at, word) in self.text.split_word_bound_indices() {
+            if byte < at + word.len() {
+                return (
+                    self.offset_of_byte(at),
+                    self.offset_of_byte(at + word.len()),
+                );
+            }
+        }
+        (self.len(), self.len())
+    }
+
+    /// The segment a caret falls in, and the caret there. A byte where one
+    /// segment ends and the next starts is the end of the first upstream,
+    /// and the start of the second downstream.
+    fn cursor(&self, offset: u32, upstream: bool) -> (usize, Cursor) {
+        let affinity = if upstream {
+            Affinity::Upstream
+        } else {
+            Affinity::Downstream
+        };
+        let byte = self.byte_of(offset);
+        let mut index = self
+            .segments
+            .partition_point(|segment| segment.start <= byte)
+            .saturating_sub(1);
+        if upstream && index > 0 && self.segments.get(index).is_some_and(|s| s.start == byte) {
+            index -= 1;
+        }
+        // `segments` is never empty, so the first one always answers.
+        let segment = self.segments.get(index).unwrap_or(&self.segments[0]);
+        let local = byte.saturating_sub(segment.start);
+        (
+            index,
+            Cursor::from_byte_index(&segment.layout, local, affinity),
+        )
+    }
+
+    /// The byte segment `index` stops at: where the next one starts, or the
+    /// end of the text.
+    fn segment_end(&self, index: usize) -> usize {
+        self.segments
+            .get(index + 1)
+            .map_or(self.text.len(), |next| next.start)
+    }
+
+    /// The run's line that a box of segment `index` sits on. The middle of
+    /// the box picks it, among the lines the run keeps of that segment.
+    fn line_under(&self, index: usize, rect: &BoundingBox) -> Option<LineAt> {
+        let segment = self.segments.get(index)?;
+        let middle = ((rect.y0 + rect.y1) / 2.0) as f32;
+        let kept = segment.lines.max(1);
+        let local = (0..kept)
+            .find(|&local| {
+                segment
+                    .layout
+                    .get(local)
+                    .is_some_and(|line| middle < line.metrics().max_coord)
+            })
+            .unwrap_or(kept - 1);
+        self.lines.get(segment.first_line + local).copied()
+    }
+
+    /// Segment of line `index`, and `y` moved into its coordinates and held
+    /// inside that line.
+    fn on_line(&self, index: usize, y: f32) -> Option<(&Segment, f32)> {
+        let at = self
+            .lines
+            .get(index.min(self.lines.len().checked_sub(1)?))?;
+        let segment = self.segments.get(at.segment)?;
+        let metrics = *segment.layout.get(at.local)?.metrics();
+        let local = y - at.shift;
+        let low = metrics.min_coord;
+        let high = (metrics.max_coord - 0.01).max(low);
+        Some((segment, local.clamp(low, high)))
+    }
+
+    fn byte_of(&self, offset: u32) -> usize {
+        let last = self.char_starts.last().copied().unwrap_or(0);
+        self.char_starts
+            .get(offset as usize)
+            .copied()
+            .unwrap_or(last) as usize
+    }
+
+    fn offset_of_byte(&self, byte: usize) -> u32 {
+        let byte = u32::try_from(byte).unwrap_or(u32::MAX);
+        let at = self.char_starts.partition_point(|start| *start < byte);
+        u32::try_from(at).unwrap_or(u32::MAX).min(self.len())
+    }
+}
+
+/// A box moved down by `shift`.
+fn shifted(mut rect: BoundingBox, shift: f32) -> BoundingBox {
+    rect.y0 += f64::from(shift);
+    rect.y1 += f64::from(shift);
+    rect
+}
+
+impl fmt::Debug for ParleyRunData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ParleyRunData")
+            .field("lines", &self.lines.len())
+            .field("segments", &self.segments.len())
+            .field("height", &self.height)
+            .field("chars", &self.len())
+            .finish()
+    }
+}
+
+/// A shaped run, shared between the side that shaped it and the side that
+/// draws it.
+///
+/// Both threads share one heap, so the hand-over is a reference count and not
+/// a copy. Two runs are equal when they are one shape. A block that was not
+/// shaped again keeps its run, and the view keeps what it built from it.
+#[derive(Clone, Debug)]
+pub struct ShapedRun(Arc<ParleyRunData>);
+
+impl ShapedRun {
+    /// The run of `text` as `layout` shaped it, `indent_px` from the left of
+    /// the content box.
+    #[must_use]
+    pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: f32) -> Self {
+        Self(Arc::new(ParleyRunData::new(text, layout, indent_px)))
+    }
+
+    /// The same, recording the style the text was shaped in.
+    #[must_use]
+    pub fn styled(text: &str, layout: Layout<ParleyBrush>, style: &EffectiveStyle) -> Self {
+        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        data.style = Some(style.clone());
+        Self(Arc::new(data))
+    }
+
+    /// The same, recording the spans shaped bold or italic as well.
+    #[must_use]
+    pub fn marked(
+        text: &str,
+        layout: Layout<ParleyBrush>,
+        style: &EffectiveStyle,
+        marks: &[MarkedSpan],
+    ) -> Self {
+        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        data.style = Some(style.clone());
+        data.marks = marks.to_vec();
+        Self(Arc::new(data))
+    }
+
+    /// A run over data the measurer assembled.
+    pub(crate) fn from_data(data: ParleyRunData) -> Self {
+        Self(Arc::new(data))
+    }
+
+    /// The shaped data.
+    #[must_use]
+    pub fn data(&self) -> &ParleyRunData {
+        &self.0
+    }
+}
+
+impl PartialEq for ShapedRun {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// One layout as the view receives it: the pages, the runs to draw on
+/// them, and the indices the view reads them through.
+///
+/// It is a whole value, stamped with the version the paginator gave it. The
+/// view keeps the newest it has seen and drops an older one
+/// (`PROSE-UI-016`). The indices are built here, on the thread that lays
+/// out, so taking a layout costs the view a pointer (`PROSE-UI-205`).
+///
+/// It carries the pages the view asked for, not the document
+/// (`PROSE-125`). The page geometry and the page count are the document's,
+/// so the column and the scroll range stay whole. The blocks, the runs and
+/// the tables are those of the pages in [`ShapedLayout::pages`] alone.
+#[derive(Clone, Debug, Default)]
+pub struct ShapedLayout {
+    pub version: u64,
+    /// The page geometry of the document, with the blocks of the window.
+    pub layout: Arc<PageLayout>,
+    /// The run of every block the window draws text for: body, bands and
+    /// notes alike.
+    pub blocks: HashMap<TreeID, ShapedRun>,
+    /// The number of every footnote the window draws, beside its text.
+    pub notes: HashMap<Uuid, ShapedRun>,
+    /// The cells of every table of the window, placed and shaped.
+    pub tables: HashMap<TreeID, Arc<TableShape>>,
+    /// Where each text block a cell of `tables` holds sits: its table, its
+    /// cell and its place in the cell.
+    cells: HashMap<TreeID, CellAt>,
+    /// Every block of the document, by its place in the flow. The Logic
+    /// thread shares one map between the layouts it hands, and builds it
+    /// again only when a block is added, removed or moved.
+    order: Arc<HashMap<TreeID, usize>>,
+    /// The place in the flow of the first block of `layout`.
+    first_index: usize,
+    /// The first and the last page the window carries.
+    pages: (u32, u32),
+    /// The first and the last block of the document that hold text.
+    ends: Option<TextEnds>,
+    /// The blocks each page of the window shows, by their place in the flow.
+    /// A frame reads its pages and never the whole document (`PROSE-UI-007`).
+    page_blocks: Vec<Vec<usize>>,
+}
+
+/// Where a text block sits in the tables of a layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CellAt {
+    table: TreeID,
+    cell: usize,
+    block: usize,
+}
+
+/// The two ends of the text of a document, which a selection of the whole
+/// document runs between (`PROSE-UI-167`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextEnds {
+    pub first: TreeID,
+    pub last: TreeID,
+    /// The length of the last block, in code points.
+    pub last_len: u32,
+}
+
+/// Where a window sits in the document it was cut from.
+#[derive(Clone, Debug, Default)]
+pub struct Window {
+    /// The place in the flow of the first block the window carries.
+    pub first_index: usize,
+    /// The first and the last page the window carries.
+    pub pages: (u32, u32),
+    /// Every block of the document, by its place in the flow.
+    pub order: Arc<HashMap<TreeID, usize>>,
+    pub ends: Option<TextEnds>,
+}
+
+impl ShapedLayout {
+    /// A layout of the whole document and its runs, with the indices built
+    /// from them.
+    #[must_use]
+    pub fn new(
+        version: u64,
+        layout: Arc<PageLayout>,
+        blocks: HashMap<TreeID, ShapedRun>,
+        notes: HashMap<Uuid, ShapedRun>,
+        tables: HashMap<TreeID, Arc<TableShape>>,
+    ) -> Self {
+        let ends = text_ends(layout.blocks.iter().map(|block| {
+            let run = blocks.get(&block.block_id);
+            (block.block_id, run.map(|run| run.data().len()))
+        }));
+        let window = Window {
+            first_index: 0,
+            pages: (0, layout.page_count.saturating_sub(1)),
+            order: Arc::new(order_of(&layout.blocks)),
+            ends,
+        };
+        let cells = tables
+            .iter()
+            .flat_map(|(table, shape)| {
+                shape
+                    .cells
+                    .iter()
+                    .enumerate()
+                    .flat_map(move |(cell, held)| {
+                        held.blocks
+                            .iter()
+                            .enumerate()
+                            .map(move |(block, (id, _, _))| {
+                                (
+                                    *id,
+                                    CellAt {
+                                        table: *table,
+                                        cell,
+                                        block,
+                                    },
+                                )
+                            })
+                    })
+            })
+            .collect();
+        Self {
+            version,
+            layout,
+            blocks,
+            notes,
+            tables,
+            cells,
+            ..Self::default()
+        }
+        .with_window(window)
+    }
+
+    /// The cell that holds text block `block`, and its run there.
+    #[must_use]
+    pub fn cell_run(&self, block: &TreeID) -> Option<(&CellShape, &ShapedRun)> {
+        let at = self.cells.get(block)?;
+        let cell = self.tables.get(&at.table)?.cells.get(at.cell)?;
+        let (_, _, run) = cell.blocks.get(at.block)?;
+        Some((cell, run))
+    }
+
+    /// The same layout, read as the window `window` describes.
+    #[must_use]
+    pub fn with_window(mut self, window: Window) -> Self {
+        let (first, last) = window.pages;
+        let mut page_blocks = vec![Vec::new(); last.saturating_sub(first) as usize + 1];
+        for (local, block) in self.layout.blocks.iter().enumerate() {
+            for page in block.page_span() {
+                let at = page.checked_sub(first).map(|at| at as usize);
+                if let Some(blocks) = at.and_then(|at| page_blocks.get_mut(at)) {
+                    blocks.push(window.first_index + local);
+                }
+            }
+        }
+        self.order = window.order;
+        self.first_index = window.first_index;
+        self.pages = window.pages;
+        self.ends = window.ends;
+        self.page_blocks = page_blocks;
+        self
+    }
+
+    /// The place of a block in the flow of the document, whether or not the
+    /// window carries it.
+    #[must_use]
+    pub fn index_of(&self, block: &TreeID) -> Option<usize> {
+        self.order.get(block).copied()
+    }
+
+    /// The block at a place in the flow, when the window carries it.
+    #[must_use]
+    pub fn block(&self, index: usize) -> Option<&BlockLayout> {
+        self.layout.blocks.get(index.checked_sub(self.first_index)?)
+    }
+
+    /// The blocks the window carries, each with its place in the flow.
+    pub fn window_blocks(&self) -> impl DoubleEndedIterator<Item = (usize, &BlockLayout)> {
+        let first = self.first_index;
+        self.layout
+            .blocks
+            .iter()
+            .enumerate()
+            .map(move |(local, block)| (first + local, block))
+    }
+
+    /// How many blocks the document holds, carried or not.
+    #[must_use]
+    pub fn block_count(&self) -> usize {
+        self.order.len()
+    }
+
+    /// Whether the window carries a block.
+    #[must_use]
+    pub fn carries(&self, block: &TreeID) -> bool {
+        self.index_of(block)
+            .and_then(|index| self.block(index))
+            .is_some()
+    }
+
+    /// The first and the last page the window carries.
+    #[must_use]
+    pub fn pages(&self) -> std::ops::RangeInclusive<u32> {
+        self.pages.0..=self.pages.1
+    }
+
+    /// The two ends of the text of the document.
+    #[must_use]
+    pub fn ends(&self) -> Option<TextEnds> {
+        self.ends
+    }
+
+    /// The indices of the blocks a page shows, in flow order. Empty for a
+    /// page the window does not carry.
+    #[must_use]
+    pub fn blocks_on(&self, page: u32) -> &[usize] {
+        page.checked_sub(self.pages.0)
+            .and_then(|at| self.page_blocks.get(at as usize))
+            .map_or(&[], Vec::as_slice)
+    }
+}
+
+/// Every block of `blocks`, by its place in the flow.
+#[must_use]
+pub fn order_of(blocks: &[BlockLayout]) -> HashMap<TreeID, usize> {
+    blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| (block.block_id, index))
+        .collect()
+}
+
+/// The first and the last block holding text, from blocks in flow order,
+/// each with the length of its text when it has one.
+///
+/// It reads from both ends, so a document whose ends hold text answers at
+/// once.
+pub fn text_ends<I>(blocks: I) -> Option<TextEnds>
+where
+    I: DoubleEndedIterator<Item = (TreeID, Option<u32>)> + Clone,
+{
+    let first = blocks.clone().find_map(|(id, len)| len.map(|_| id))?;
+    let (last, last_len) = blocks.rev().find_map(|(id, len)| Some((id, len?)))?;
+    Some(TextEnds {
+        first,
+        last,
+        last_len,
+    })
+}
+
+/// A table as the view draws it: where each cell sits, and the text it holds
+/// (`features/ambre-spec-prose-tables.md section 3`).
+///
+/// A merged region is one cell here, anchored at its top-left cell and as wide
+/// and tall as the rectangle it covers. A covered cell is absent, so it is
+/// neither measured nor painted (`PROSE-FEAT-048`, `PROSE-UI-147`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TableShape {
+    /// The top of each row from the table's top, and the bottom of the last.
+    pub row_tops: Vec<f32>,
+    pub cells: Vec<CellShape>,
+}
+
+/// One cell drawn, or one merged region drawn as a single cell.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellShape {
+    /// The cell the text sits in: a region's top-left cell.
+    pub cell: TreeID,
+    pub x_px: f32,
+    pub width_px: f32,
+    /// The rows the cell spans, the last one excluded.
+    pub rows: std::ops::Range<usize>,
+    /// The text blocks the cell holds, each with its top from the top of the
+    /// padded box, before the vertical alignment moves them.
+    pub blocks: Vec<(TreeID, f32, ShapedRun)>,
+    /// The height of that text, padding excluded: what the alignment places.
+    pub content_px: f32,
+    pub style: CellStyle,
+}
+
+/// What a cell stores about its own look (`ambre-spec-prose-schema.md
+/// section 3`), in pixels and packed colours.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CellStyle {
+    /// The fill as `0xRRGGBBAA`. None leaves the sheet showing.
+    pub fill: Option<u32>,
+    /// The stored border. None draws the theme's hairline (`PROSE-UI-181`).
+    pub border: Option<CellBorderPx>,
+    /// The inset on each of the four sides.
+    pub padding_px: f32,
+    pub valign: ambre_bus::app::prose::VAlign,
+}
+
+impl Default for CellStyle {
+    fn default() -> Self {
+        Self {
+            fill: None,
+            border: None,
+            padding_px: 0.0,
+            valign: ambre_bus::app::prose::VAlign::Top,
+        }
+    }
+}
+
+/// The four border widths of a cell, and their colour.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CellBorderPx {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+    /// As `0xRRGGBBAA`. None takes the theme's border colour.
+    pub color: Option<u32>,
+}
+
+// `PROSE-UI-113`: the run crosses from the thread that shapes to the thread
+// that draws. A field bound to one thread or to a device fails this build.
+const _: () = {
+    const fn crosses<T: Send + Sync + 'static>() {}
+    crosses::<ShapedRun>();
+    crosses::<ParleyRunData>();
+    crosses::<ShapedLayout>();
+    crosses::<TableShape>();
+};
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use crate::doc;
+    use crate::layout::measure::{EffectiveStyle, shipped_measurer};
+    use ambre_bus::app::prose::ParagraphStyle;
+
+    fn style() -> EffectiveStyle {
+        EffectiveStyle::from_parts(
+            &doc::DocDefaults::default(),
+            &ParagraphStyle::default(),
+            false,
+        )
+    }
+
+    #[test]
+    fn a_point_resolves_to_the_offset_the_caret_box_puts_there() {
+        let mut measurer = shipped_measurer();
+        let (_, run) = measurer.measure_run("h\u{e9}llo world", &style(), 400.0);
+        let run = run.data();
+        for offset in 0..=run.len() {
+            let caret = run.caret_box(offset);
+            let back = run.offset_at(caret.x0 as f32 + 0.1, (caret.y0 + caret.y1) as f32 / 2.0);
+            assert_eq!(back, offset, "offset {offset}");
+        }
+    }
+
+    /// `PROSE-FEAT-309`: the first line starts at its indent, and the lines
+    /// after it at the left edge. A caret in an empty paragraph sits where
+    /// its text will start.
+    #[test]
+    fn the_first_line_starts_at_its_indent() {
+        let mut measurer = shipped_measurer();
+        let mut indented = style();
+        indented.indent_first_px = 40.0;
+        let text = "one two three four five six seven eight nine ten eleven";
+        let (plain_metrics, plain) = measurer.measure_run(text, &style(), 120.0);
+        let (metrics, run) = measurer.measure_run(text, &indented, 120.0);
+        let run = run.data();
+        assert!(metrics.line_count >= plain_metrics.line_count);
+        let lines = run.range_boxes(0, run.len());
+        assert!((lines[0].x0 - 40.0).abs() < 1e-3);
+        assert!(lines[1..].iter().all(|line| line.x0.abs() < 1e-3));
+        assert!((run.caret_box(0).x0 - 40.0).abs() < 1e-3);
+        // A click inside the indent lands before the first character.
+        assert_eq!(run.offset_at(5.0, 5.0), 0);
+        // The plain run is untouched.
+        assert!(plain.data().caret_box(0).x0.abs() < 1e-3);
+        let (_, empty) = measurer.measure_run("", &indented, 120.0);
+        assert!((empty.data().caret_box(0).x0 - 40.0).abs() < 1e-3);
+        assert!((empty.data().caret_box_at(0, true).x0 - 40.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_range_covers_one_box_per_line_it_crosses() {
+        let mut measurer = shipped_measurer();
+        let text = "one two three four five six seven eight nine ten eleven";
+        let (metrics, run) = measurer.measure_run(text, &style(), 90.0);
+        assert!(metrics.line_count > 2);
+        let whole = run.data().range_boxes(0, run.data().len());
+        assert_eq!(whole.len(), metrics.line_count as usize);
+        assert!(run.data().range_boxes(3, 3).is_empty());
+    }
+
+    #[test]
+    fn a_shaped_layout_moves_to_another_thread_and_draws_there() {
+        let (_, shaped) = crate::view::tests::laid_out(3, 10);
+        let lines = std::thread::spawn(move || {
+            shaped
+                .blocks
+                .values()
+                .map(|run| run.data().line_tops().len())
+                .sum::<usize>()
+        })
+        .join()
+        .expect("the drawing thread returns");
+        assert!(lines >= 3);
+    }
+}

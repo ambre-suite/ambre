@@ -1,8 +1,9 @@
 # AMBRE -- FEATURE: FIND, AND REPLACE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- Trame and Toile search the whole document and Trame replaces in it.
-Prose is design-only. The one live session the "One find and replace" Story (`ambre-roadmap.md` E8)
+**Applications:** Prose, Trame, Toile
+**Implementation:** partial -- the three applications search the whole document, and Trame and
+Prose replace in it. The one live session the "One find and replace" Story (`ambre-roadmap.md` E8)
 wants is unbuilt everywhere.
 
 > A user types a word and the application takes them to it, wherever it is -- including far past the
@@ -28,25 +29,25 @@ and backward share a table rather than repeating one.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `FIND-002` | `POST` | A search MUST cover the whole scope, never only what the viewport holds. | this spec section 3 | Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps`; Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` | partial -- the walk is held, the bound is not. Both drive a walk that reads the whole map, and neither builds a camera or places a match outside one, so a viewport bound added to either walk would fail nothing; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
-| `FIND-003` | `POST` | Stepping MUST elect the hit adjacent to the resume point in the direction asked, wrapping at either end. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_focus_wraps_after_from` -- it steps off the first hit and reads the second back, then steps off the last and reads the first, so an engine that re-elected the current one fails it; `::find_backward_steps_to_previous_hit_wrapping` -- the other direction; Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps` -- the forward case | none | verified |
-| `FIND-010` | `POST` | A step with no usable resume point -- none given, or one that is no longer a match -- MUST elect the first hit. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- a search with no resume point focuses the first hit | partial -- the half that is held is the fresh search. Nothing drives the other half, a resume point edited away between two keystrokes, in any application; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `FIND-002` | `POST` | A search MUST cover the whole scope, never only what the viewport holds. | this spec section 3 | Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps`; Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`; Prose `ambre_prose::logic::find::tests::every_match_is_reported_in_document_order` | partial -- the walk is held, the bound is not. All three drive a walk that reads the whole map, and neither builds a camera or places a match outside one, so a viewport bound added to either walk would fail nothing; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
+| `FIND-003` | `POST` | Stepping MUST elect the hit adjacent to the resume point in the direction asked, wrapping at either end. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_focus_wraps_after_from` -- it steps off the first hit and reads the second back, then steps off the last and reads the first, so an engine that re-elected the current one fails it; `::find_backward_steps_to_previous_hit_wrapping` -- the other direction; Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps` -- the forward case; Prose `ambre_prose::logic::find::tests::opening_walking_and_closing_write_nothing` -- a step forward, a step back and a wrap past the first | none | verified |
+| `FIND-010` | `POST` | A step with no usable resume point -- none given, or one that is no longer a match -- MUST elect the first hit. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- a search with no resume point focuses the first hit | partial -- the half that is held is the fresh search. Nothing drives the other half, a resume point edited away between two keystrokes, in any application; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
 | `FIND-004` | `POST` | The current match MUST be brought into view. | this spec section 4; `3-Toile/features/ambre-spec-toile-viewport.md`, the camera reach a recentre uses | none | unheld -- Trame elects the match and moves the active cell to it (`ambre_trame::logic::tests::group6::find_next_matches_and_wraps`), and Toile resolves the recentre target, but the scroll itself is per-application UI and no test drives it end to end; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
-| `FIND-005` | `FAIL` | An empty query MUST clear the highlight. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query` -- the empty query answers with nothing | partial -- Trame clears the highlight on close and no test reads it back; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
-| `FIND-001` | `FRAME` | A search MUST NOT change the document. | this spec section 2 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`; `::find_focus_wraps_after_from`; `::find_backward_steps_to_previous_hit_wrapping`; `::find_honors_match_case_and_whole_word`; `::find_ignores_non_text_elements_and_empty_query` -- each asserting no delta | partial -- Trame's `find_next` answers a display-only outcome but takes `&mut self`, so only review holds it there; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `FIND-005` | `FAIL` | An empty query MUST clear the highlight. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query` -- the empty query answers with nothing | partial -- Trame clears the highlight on close and no test reads it back; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
+| `FIND-001` | `FRAME` | A search MUST NOT change the document. | this spec section 2 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`; `::find_focus_wraps_after_from`; `::find_backward_steps_to_previous_hit_wrapping`; `::find_honors_match_case_and_whole_word`; `::find_ignores_non_text_elements_and_empty_query` -- each asserting no delta; Prose `ambre_prose::logic::find::tests::opening_walking_and_closing_write_nothing` -- the version vector reads back unchanged | partial -- Trame's `find_next` answers a display-only outcome but takes `&mut self`, so only review holds it there; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.2 Replace the active match
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `FIND-007` | `POST` | A replace MUST rewrite the active match and then advance to the next. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances` -- over a matching active cell and a non-matching one | none | verified |
-| `FIND-008` | `FRAME` | A replace MUST NOT change any text outside the active match. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances` -- on the assertion that reads the next match back as its old text after the rewrite | none | verified |
+| `FIND-007` | `POST` | A replace MUST rewrite the active match and then advance to the next. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances` -- over a matching active cell and a non-matching one; Prose `ambre_prose::logic::find::tests::replace_one_replaces_exactly_the_current_range` -- the second match rewritten and the next one current | partial -- Toile has no replace at all; lands with the `One find and replace` Story (`ambre-roadmap.md` E8) | partial |
+| `FIND-008` | `FRAME` | A replace MUST NOT change any text outside the active match. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances` -- on the assertion that reads the next match back as its old text after the rewrite; Prose `ambre_prose::logic::find::tests::replace_one_replaces_exactly_the_current_range` -- the two other matches read back unchanged | partial -- Toile has no replace at all; lands with the `One find and replace` Story (`ambre-roadmap.md` E8) | partial |
 
 ### 1.3 Replace every match in scope
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `FIND-006` | `POST` | A replace-all MUST be a single undo item, whatever the match count. | this spec section 3; `ambre-spec-undo.md` | Trame `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group`; `::replace_all_spans_sheets` -- the cross-sheet path, which writes through a different door | none | verified |
+| `FIND-006` | `POST` | A replace-all MUST be a single undo item, whatever the match count. | this spec section 3; `ambre-spec-undo.md` | Trame `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group`; `::replace_all_spans_sheets` -- the cross-sheet path, which writes through a different door; Prose `ambre_prose::logic::find::tests::a_replace_all_is_one_undo_item` | partial -- Toile has no replace at all; lands with the `One find and replace` Story (`ambre-roadmap.md` E8) | partial |
 | `FIND-009` | `FRAME` | A replace-all MUST NOT change any text that no reported match covers. | this spec section 3; `2-Trame/features/ambre-spec-trame-find-replace.md` (`TRAME-UI-138`), the sheet-scope half | none | unheld -- Trame's `::replace_all_spans_sheets` drives the widest scope, where nothing is outside it, and no test rewrites a document holding text the query never matched. This is the row that keeps a replace-all from reaching past its own hit list; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own: a search is one linear walk over the scope, and a replace lands
@@ -55,10 +56,10 @@ and backward share a table rather than repeating one.
 * **Boundary.** none of its own: a search reads the document in the Logic thread and the query
   never leaves the client. A replace is a document write, and `ZK-001` seals every payload before
   it leaves.
-* **Verification.** 4 `verified`, 6 `untested`, 0 `unimplemented`. What the feature is for holds.
-  It wraps, it elects the adjacent hit, a replace stays inside its match, and a replace-all is one
-  undo item. What is loose is the reach, the reveal, the resume point an edit takes away, and the
-  frame condition of a replace-all.
+* **Verification.** 1 `verified`, 7 `partial`, 2 `untested`, 0 `unimplemented`. The step to the adjacent hit
+  holds in all three applications. The replace rows hold in Trame and Prose, and Toile has no
+  replace to hold them. What is loose besides is the reach, the reveal, the resume point an edit
+  takes away, and the frame condition of a replace-all.
 
 ---
 

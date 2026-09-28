@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | partial -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | unheld -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | none | fails -- `resolve_autofit` walks the viewport cache, and a column whose cells are all outside it measures zero and is set to the default width. A double-click below the loaded window narrows a full column to the width of an empty one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 
 * **Budget.** none: a resize writes one entry in the size register and repaints, and

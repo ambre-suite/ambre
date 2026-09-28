@@ -191,3 +191,32 @@ fn version_check() {
     let other_version = ambre_core::version::Version::new(2).unwrap();
     assert!(check_version(other_version).is_err());
 }
+
+/// `SRV-100`: a frame that does not decode is a typed error on either side
+/// of the socket. The cases are no bytes, a foreign version, and every
+/// truncation of a valid frame.
+#[test]
+fn a_frame_that_does_not_decode_is_a_typed_error() {
+    use crate::ws::{
+        WireDecodeError, WsClientMsg, decode_client_msg, decode_server_msg, encode_client_msg,
+    };
+    assert!(matches!(
+        decode_client_msg(&[]),
+        Err(WireDecodeError::Empty)
+    ));
+    assert!(matches!(
+        decode_server_msg(&[]),
+        Err(WireDecodeError::Empty)
+    ));
+    assert!(matches!(
+        decode_client_msg(&[0x02, 0x00]),
+        Err(WireDecodeError::UnsupportedVersion(0x02))
+    ));
+    let frame = encode_client_msg(&WsClientMsg::Subscribe {
+        document_id: DocumentId::new(),
+    });
+    for cut in 1..frame.len() {
+        assert!(decode_client_msg(&frame[..cut]).is_err(), "cut at {cut}");
+        let _ = decode_server_msg(&frame[..cut]);
+    }
+}

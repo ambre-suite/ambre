@@ -18,7 +18,7 @@
 
 | Operation | Target (P95 mobile) | Ceiling | Thread | Method |
 |-----------|-------------------|---------|--------|---------|
-| `flume` send/receive UI <-> Logic (shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
+| channel send/receive UI <-> Logic (`ambre_bus::conduit`, shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
 | Logic <-> Sync `postMessage` (postcard encode + structured clone / transfer) | < 1 ms | -- | Main <-> Sync | benchmark |
 | Scroll round-trip UI -> Logic -> UI (P1) | < 2 ms | -- | UI <-> Logic | benchmark e2e |
 | Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
@@ -57,7 +57,7 @@
 | Prose pagination, partial reflow of 10 pages or fewer | < 3 ms | -- | Logic | the early exit converges inside the frame; an edit whose reflow does not converge is charged to the row above -- **none exists**, and no code either |
 | Prose cold shape, 10 dirty blocks | < 5 ms | -- | Logic | a glyph-level pass, an order of magnitude over placement -- **none exists**, and no code either |
 | Prose cold shape at document open, about 300 blocks | < 150 ms | -- | Logic | one-shot, off the interactive path -- **none exists**, and no code either |
-| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on `flume`, no serialization -- **none exists**, and no code either |
+| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on an `ambre_bus::conduit` channel, no serialization -- **none exists**, and no code either |
 | Prose `export_snapshot()`, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose table-of-contents build, 50 headings | < 1 ms | -- | Logic | **none exists**, and no code either |
 | Prose list ordinals, 100 items | < 500 us | -- | Logic | derived at read time, never stored (`PROSE-FEAT-002`) -- **none exists**, and no code either |
@@ -71,15 +71,16 @@
 | Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame -- **none exists**, and no code either |
 | Prose Markdown export, 100 pages | < 50 ms | -- | Logic | no layout required -- **none exists**, and no code either |
 | Prose PDF export, 100 pages, without / with images | < 2 s / < 5 s | -- | Logic | shaping per page through the shared surface; the second figure adds the blob fetches -- **none exists**, and no code either |
-| Prose HTML clipboard import, 500 KB | < 100 ms | -- | Logic | on the paste path, so it is the one interop leg a user waits on -- **none exists**, and no code either |
+| Prose HTML clipboard import, 500 KB | < 100 ms | -- | Logic | on the paste path, so it is the one interop leg a user waits on -- `crates/ambre-prose/benches/html_paste.rs` measures the whole paste, desktop only; Google Docs, Word and the deepest nesting hold it, **a dense web page does not** |
 | Prose plaintext `.ambre` export, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose document to intermediate form, 100 pages | < 50 ms | -- | Logic | one tree walk, shared by all four export formats -- **none exists**, and no code either |
 | Prose scroll of one page | < 16 ms | -- | UI | culling plus the rebuild of the pages revealed (`features/ambre-spec-prose-viewport.md`) -- **none exists**, and no code either |
 | Prose slash menu opened | < 8 ms | -- | UI | **none exists**, and no code either |
 | Prose contextual toolbar shown | < 4 ms | -- | UI | **none exists**, and no code either |
-| Keystroke to a local draft echo | < 2 ms | -- | UI | the editor echoes locally with no round trip: Trame's inline cell editor, Prose's draft buffer -- **none exists** |
-| Keystroke to CRDT confirmation | < 15 ms | -- | UI <-> Logic | the round trip Prose budgets too -- **none exists** |
-| Keydown to a moved caret, end to end | < 50 ms | < 100 ms | UI <-> Logic | `performance.mark` and `performance.measure`, on desktop **and** mobile, over a single keystroke, a sustained typing burst and a 10 KB paste -- **none exists** |
+| Keystroke to a local draft echo | < 2 ms | -- | UI | the editor echoes locally with no round trip: Trame's inline cell editor, Prose's draft buffer -- the `ambre:echo` probe on the page's timeline, read by `scripts/keystroke_probes.mjs` over single keys, a burst and a 10 KB paste; `?probes` prints its median and 95th percentile. Read by hand on a desktop only, and never on the slow devices the target names; Trame's editor is not measured |
+| Keystroke to CRDT confirmation | 2 frames | -- | UI <-> Logic | counted in animation frames, not milliseconds: the first frame after the key paints the echo, and the answer is applied by the next one. The relay reads answers once a frame, so a time would measure the refresh rate, and reading sooner would move no pixel. The `ambre:confirm-frames` mark on the page's timeline, read by `scripts/keystroke_probes.mjs` over single keys, a burst and a 10 KB paste; `?probes` prints its median and 95th percentile. Read by hand on a desktop only, and never on the slow devices the target names |
+| Logic pass that answers a keystroke | < 4 ms | -- | Logic | from the pass taking the command to its answer leaving, the part of the confirmation the Logic thread holds: under a frame, with room for the relay. The `ambre:logic-pass` measure on the worker's timeline, read from a Chrome trace by `scripts/keystroke_probes.mjs` over single keys. Read by hand on a desktop only, and never on the slow devices the target names |
+| Keydown to a moved caret, end to end | < 50 ms | < 100 ms | UI <-> Logic | from the input handler to the end of the first frame that shows it -- the `ambre:caret` probe on the page's timeline, read by `scripts/keystroke_probes.mjs` over single keys, a burst and a 10 KB paste; `?probes` prints its median and 95th percentile. Read by hand on a desktop only, and never on the slow devices the target names |
 | `ScrollViewport` send | < 1 ms | -- | UI | non-blocking -- **none exists** |
 | Receive and render `TrameEvent::ViewportData` | < 5 ms | -- | UI | typed value by move, plus the vertex batch build -- **none exists** |
 | Autocompletion, computation plus dropdown | < 2 ms | -- | UI | static lookup, no round trip -- **none exists** |
@@ -87,11 +88,11 @@
 | Macro run fired by an edit trigger (wall clock) | -- | 2 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
 | Macro run fork, 10k-cell workbook | < 50 ms | -- | Logic | criterion -- **none exists** |
 
-* **The transport is not the cost.** UI <-> Logic stays zero-cost (`flume` by move, shared heap). The
-  Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone, or a zero-copy
-  `ArrayBuffer` transfer for a large payload. The relay's per-frame cadence bounds it, well under
-  the < 300 ms inter-user budget, because network latency dominates that path. The crypto bottleneck
-  is Ed25519, 80 to 250 us.
+* **The transport is not the cost.** UI <-> Logic stays zero-cost (`ambre_bus::conduit` by move,
+  shared heap). The Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone,
+  or a zero-copy `ArrayBuffer` transfer for a large payload. The relay's per-frame cadence bounds
+  it, well under the < 300 ms inter-user budget, because network latency dominates that path. The
+  crypto bottleneck is Ed25519, 80 to 250 us.
 * **p99 over peak.** A stable 45 FPS reads as smoother than 60 FPS with stutters, so the target is
   regularity. A guaranteed 60 FPS on every mobile device is not a goal.
 * **The `.ambre` container has no budget, and that is a result.** It adds a 22-byte write and a
@@ -107,11 +108,11 @@
 | Phase | Budget | Thread | Notes |
 |:---|:---|:---|:---|
 | Keypress -> `beforeinput` -> dispatch | ~0.1 ms | UI | Negligible |
-| `AppView::update` (drain the `flume` `UiEvent` queue) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
+| `AppView::update` (drain the `UiEvent` channel) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
 | Content hit-test and input dispatch (in view) | < 0.2 ms | UI | `AppView::handle_input`, pointer and keyboard on the canvas area |
 | View state update | < 0.5 ms | UI | Internal state mutations, transition logic |
 | `LoroText::insert` | < 0.1 ms | Logic | Sequential insert, off the render frame |
-| Text layout (Parley, dirty paragraph) | < 2 ms | UI or Logic | UI-thread shaping for the in-cell editor case (Trame cells, multi-line), typical < 0.5 ms. **Prose does NOT shape on the UI thread**: pagination shapes in the Logic thread and ships pre-shaped `ParleyRunData`, so this row is ~0 on the UI thread for Prose and 0.5-2 ms on the Logic thread (`features/ambre-spec-prose-pagination.md`, `features/ambre-spec-prose-page-rendering.md`) |
+| Text layout (Parley, dirty paragraph) | < 2 ms | UI or Logic | UI-thread shaping for the in-cell editor case (Trame cells, multi-line), typical < 0.5 ms. **Prose shapes on the UI thread the paragraphs an edit in flight changes, and no more**: each one whole, until the layout that answers carries it, and the input method's preview (`features/ambre-spec-prose-text-editing.md section 3`). Pagination shapes in the Logic thread and ships pre-shaped `ParleyRunData`, so this row is a paragraph or two per edit on the UI thread for Prose. `prose_paragraph_shape` in `crates/ambre-logic/benches/scale.rs` measures one paragraph natively. The budget holds up to 2 000 characters, a long paragraph of prose; a longer one costs what it costs, and nothing is degraded to save it (`PROSE-UI-215`) and 0.5-2 ms on the Logic thread (`features/ambre-spec-prose-pagination.md`, `features/ambre-spec-prose-page-rendering.md`) |
 | Content accessibility diff (AccessKit) | < 0.2 ms | UI | OS notifications on the delta only |
 | Glyph rasterization (Swash) on a new glyph | ~0 ms nominal | UI | Atlas hit |
 | Build the vertex batch (dirty only) | < 1 ms | UI | `QuadRenderer::begin_frame` plus the scene draw. Zero allocation in steady state |
@@ -126,7 +127,7 @@
 | `TextCache`, 100 distinct layouts, cold cache | < 1 ms | UI | Not a frame phase: the shape budget of the cache itself, off the critical path once warm |
 
 * **The scroll round-trip holds because the frame is a fifth of it.** Section 1 budgets the P1 scroll
-  round-trip at < 15 ms. Rendering consumes < 5 ms. `flume` transport is negligible: < 1 us per
+  round-trip at < 15 ms. Rendering consumes < 5 ms. Channel transport is negligible: < 1 us per
   hop, no serialization, no boundary memcpy. Most of the budget is left to the Logic thread.
 * **Threats to the frame, and the countermeasure each takes.**
   1. **Parley has no incremental layout** -> atomicity at the **paragraph**, one `Layout` per
@@ -248,8 +249,8 @@
 | `LoroDoc` | < 10 MB target, per 100k cells | |
 | `LoroDoc` Prose | < 10 MB, per 100 pages and 50 000 words | |
 | Prose page layout, 100 pages | < 200 KB | About 300 blocks, 20 footnotes and the header and footer runs. Derived, so it is re-allocated whole on a full recompute |
-| Prose transient shaped layouts, during measurement | peak < 5 MB | Released once placement is done: only a block that splits keeps its full layout (`PROSE-036`) |
-| Prose run cache, 500 blocks | < 20 MB | Shaped runs plus their glyph state, about 50 pages (`features/ambre-spec-prose-page-rendering.md`) |
+| Prose shaped runs, Logic thread | ~150 KB per page, unbounded | One run per block, kept past measurement and shared with the view (`PROSE-036`). Measured at about 18 KB a paragraph of eighty words, eight to a page: 43 MB for 300 pages. Bounding it is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
+| Prose run cache, 500 runs | < 1 MB | The drawing state of the runs painted lately, about 50 pages: an index into runs the Logic thread already holds (`features/ambre-spec-prose-page-rendering.md`) |
 | Prose view state, excluding the run cache | < 1 MB | |
 | Prose decoded pictures, per session | < 64 MiB | A bounded cache in the Logic thread, evicted least recently painted; it holds the pictures of a few pages and stays well inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
 | Prose vertex buffers and atlases, 3 pages | < 50 MB VRAM | Stated by the Prose design and larger than the shared wgpu row above, which is the arithmetic the two rows now make visible. Reconciled by the `The memory budgets add up` Story (`ambre-roadmap.md` E7) |

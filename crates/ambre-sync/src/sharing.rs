@@ -233,7 +233,7 @@ pub(crate) struct InviteParams {
 pub(crate) async fn invite_task<H: ShareHttp>(
     http: &H,
     p: InviteParams,
-    event_tx: &flume::Sender<SyncEvent>,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
     let search_url = format!(
@@ -317,7 +317,7 @@ pub(crate) struct FetchInviteeKeyParams {
 pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     http: &H,
     p: FetchInviteeKeyParams,
-    event_tx: &flume::Sender<SyncEvent>,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
     let search_url = format!(
@@ -374,7 +374,7 @@ pub(crate) struct RevokeParams {
 pub(crate) async fn revoke_task<H: ShareHttp>(
     http: &H,
     p: RevokeParams,
-    event_tx: &flume::Sender<SyncEvent>,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
     let revoke_url = format!(
@@ -449,7 +449,7 @@ pub(crate) struct ListMembersParams {
 pub(crate) async fn list_members_task<H: ShareHttp>(
     http: &H,
     p: ListMembersParams,
-    event_tx: &flume::Sender<SyncEvent>,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
 ) {
     let url = format!(
         "{}://{}/api/documents/{}/members",
@@ -675,12 +675,12 @@ mod tests {
 
     /// Fresh event + logic queues with their receivers.
     fn channels() -> (
-        flume::Sender<SyncEvent>,
-        flume::Receiver<SyncEvent>,
+        ambre_bus::conduit::UnboundedSender<SyncEvent>,
+        ambre_bus::conduit::Receiver<SyncEvent>,
         LogicSink,
-        flume::Receiver<LogicEvent>,
+        ambre_bus::conduit::Receiver<LogicEvent>,
     ) {
-        let (etx, erx) = flume::unbounded();
+        let (etx, erx) = ambre_bus::conduit::unbounded();
         let (sink, lrx) = LogicSink::channel();
         (etx, erx, sink, lrx)
     }

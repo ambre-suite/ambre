@@ -244,8 +244,54 @@ fn bench_remote_delta(c: &mut Criterion) {
     });
 }
 
+/// One paragraph shaped whole, as the view shapes the paragraph an edit in
+/// flight changes (`features/ambre-spec-prose-text-editing.md section 3`).
+///
+/// No corpus: the text is built here, at the lengths the budget row of text
+/// layout is read at (`ambre-spec-budgets.md section 2`). A native figure;
+/// the browser's is slower, and the row counts that apart.
+fn bench_prose_paragraph_shape(c: &mut Criterion) {
+    use ambre_prose::layout::{fonts, measure};
+    const FACES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+    let mut font_cx = parley::FontContext::new();
+    for face in ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"] {
+        let bytes =
+            std::fs::read(format!("{FACES}{face}")).unwrap_or_else(|e| panic!("{face}: {e}"));
+        fonts::register_faces(&mut font_cx, bytes);
+    }
+    let mut layout_cx = parley::LayoutContext::new();
+    let style = measure::EffectiveStyle::from_parts(
+        &ambre_prose::doc::DocDefaults::default(),
+        &ambre_bus::app::prose::ParagraphStyle::default(),
+        false,
+    );
+    let width = style.text_width_px(600.0);
+    let mut group = c.benchmark_group("prose_paragraph_shape");
+    for chars in [1_000_usize, 5_000, 20_000] {
+        let text: String = "lorem ipsum dolor sit amet "
+            .chars()
+            .cycle()
+            .take(chars)
+            .collect();
+        group.bench_function(format!("{chars}_chars"), |b| {
+            b.iter(|| {
+                measure::shape_paragraph(
+                    &mut font_cx,
+                    &mut layout_cx,
+                    (black_box(&text), &[]),
+                    &style,
+                    width,
+                )
+                .height()
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     scale,
+    bench_prose_paragraph_shape,
     bench_import,
     bench_trame_recompute,
     bench_trame_batch,

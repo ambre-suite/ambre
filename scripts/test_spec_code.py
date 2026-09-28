@@ -169,5 +169,40 @@ class LooseImplementation(unittest.TestCase):
         self.assertEqual([], list(spec_code.loose_impl(doc("```text", "let x = the caret", "```"))))
 
 
+ROWS = {
+    "KINETIC-002": {"document": "1-Foundations/ambre-spec-kinetic-scroll.md",
+                    "mechanism": "`ambre_trame::scroll::tests::glide`"},
+    "PROSE-085": {"document": "4-Prose/ambre-spec-prose.md", "mechanism": "none"},
+    "TOILE-261": {"document": "3-Toile/features/ambre-spec-toile-frames.md",
+                  "mechanism": "`ambre_toile::tool::tests::edit`"},
+}
+
+
+class Citations(unittest.TestCase):
+    def test_a_crate_cites_its_own_application_and_the_foundations(self):
+        text = doc("// TOILE-261", "// KINETIC-002")
+        self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-toile/src/a.rs", text)), [])
+
+    def test_a_path_that_names_the_application_may_cite_it(self):
+        text = doc("// PROSE-085")
+        self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-bus/src/app/prose.rs", text)), [])
+
+    def test_a_shared_crate_citing_an_application_rule_is_refused(self):
+        text = doc("// PROSE-085")
+        self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-bus/src/logic.rs", text)),
+                         [(1, "PROSE-085")])
+
+    def test_a_test_citing_a_rule_that_does_not_name_it_is_refused(self):
+        text = doc("/// `TOILE-261`: edits the title.", "#[test]", "fn other() {}",
+                   "/// `KINETIC-002`", "#[test]", "fn glide() {}")
+        defects, _ = spec_code.citation_defects(ROWS, {"crates/ambre-toile/src/t.rs": text})
+        self.assertEqual([d[:3] for d in defects], [("test", "other", "TOILE-261")])
+
+    def test_a_helper_citing_a_rule_is_no_test(self):
+        text = doc("/// `TOILE-261`", "fn helper() {}")
+        defects, _ = spec_code.citation_defects(ROWS, {"crates/ambre-toile/src/t.rs": text})
+        self.assertEqual(defects, [])
+
+
 if __name__ == "__main__":
     unittest.main()

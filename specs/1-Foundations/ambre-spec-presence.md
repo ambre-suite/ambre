@@ -50,7 +50,7 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 | `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | none | claim -- the rule holds today because no application interpolates at all, and an absence of code is not a mechanism: the first smoothing pass breaks it in silence, in whichever application writes one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that the snapshot and the element count are identical either side of the apply | none | verified |
 | `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame` -- it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | none | verified |
-| `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed | partial -- that the relay says it on both paths is `SRV-097`, whose announcement no test drives; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed | partial -- that the relay says it on both paths is `SRV-097`, whose announcement no test drives; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` -- its peer selects an element the frame does not carry, so one ghost is painted, the other is dropped, and nothing is raised | none | verified |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
@@ -60,7 +60,7 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 * **Boundary.** every presence frame leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
   `UserId` in `ambre-sync` first, so no peer paints under another name.
-* **Verification.** 10 `verified`, 4 `untested`. The identity half is held end to end, and a
+* **Verification.** 10 `verified`, 1 `partial`, 3 `untested`. The identity half is held end to end, and a
   departure travels twice. The relay says it, and the client ages a peer out if that word is lost.
   The four gaps are rules held by construction: an anchor type, an absent smoothing, a relay half,
   a cosmetic name.
@@ -100,7 +100,7 @@ identity rule: what a peer may assert about itself, and what the receiver has es
 
 The payload is postcard bytes inside an `Ephemeral` frame, so it is one of the few types in the
 suite that keeps `serde`. The resolved sample never leaves the process: it moves by value on
-`flume`, and carries none.
+an `ambre_bus::conduit` channel, and carries none.
 
 **The identity rule, stated once.** The payload carries no `user_id` (`PRESENCE-002`). The canonical
 one arrives out of band, on `LogicEvent::RemoteEphemeral { from_user_id }`, resolved by `ambre-sync`

@@ -24,6 +24,8 @@ use ambre_core::{
     DocType, DocumentId, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape,
 };
 
+use ambre_prose::ProseState;
+use ambre_prose::logic::fixtures::PROSE_FIXTURES;
 use ambre_toile::logic::state::ToileState;
 use ambre_toile::logic::state::fixtures::{TOILE_BENCH_FIXTURES, TOILE_FIXTURES};
 use ambre_trame::logic::TrameState;
@@ -206,7 +208,7 @@ pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, Fixture
 
 /// Every generator this build knows, in the order the driver walks them.
 ///
-/// The two per-engine registries, concatenated rather than spelled out here.
+/// The per-engine registries, concatenated rather than spelled out here.
 /// Each generator sits next to the engine whose commands it drives, so adding
 /// one takes a single edit in that crate. A second list here is the edit a
 /// contributor forgets, and the gate would then report a generator-less
@@ -218,7 +220,7 @@ pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, Fixture
 /// already uses.
 pub const REGISTRY: &[&dyn FixtureGen] = &merged_registry();
 
-/// Both per-engine registries, concatenated at compile time.
+/// The per-engine registries, concatenated at compile time.
 ///
 /// A `const fn` rather than a hand-written list, for the reason [`REGISTRY`]
 /// states. The `while` loops are what a `const fn` has instead of an iterator.
@@ -236,10 +238,15 @@ const fn merged_registry() -> [&'static dyn FixtureGen; REGISTRY_LEN] {
         out[TRAME_FIXTURES.len() + i] = TOILE_FIXTURES[i];
         i += 1;
     }
+    let mut i = 0;
+    while i < PROSE_FIXTURES.len() {
+        out[TRAME_FIXTURES.len() + TOILE_FIXTURES.len() + i] = PROSE_FIXTURES[i];
+        i += 1;
+    }
     out
 }
 
-const REGISTRY_LEN: usize = TRAME_FIXTURES.len() + TOILE_FIXTURES.len();
+const REGISTRY_LEN: usize = TRAME_FIXTURES.len() + TOILE_FIXTURES.len() + PROSE_FIXTURES.len();
 
 /// Every scale generator this build knows (`FIXTURE-022`).
 ///
@@ -294,10 +301,10 @@ pub enum FixtureError {
     #[error("fixture is not a valid .ambre container: {0}")]
     Container(#[from] DocFileError),
 
-    /// `DocState::new` returned `None` -- a `doc_type` whose engine does not
-    /// exist yet (`Prose`, `Murmure`). Unreachable for any fixture this spec
-    /// produces (excludes both) and present so the loader degrades cleanly
-    /// when they arrive.
+    /// No engine could be built for `doc_type`: `Murmure` has none yet, and
+    /// Prose's constructor answers `None` when it cannot seed a document.
+    /// Unreachable for any fixture this spec produces, and present so the
+    /// loader degrades cleanly.
     #[error("no engine for document type {doc_type:?}")]
     NoEngine { doc_type: DocType },
 
@@ -320,6 +327,7 @@ pub fn shape_of(state: &DocState) -> FixtureShape {
     match state {
         DocState::Trame(s) => s.fixture_shape(),
         DocState::Toile(s) => s.fixture_shape(),
+        DocState::Prose(s) => s.fixture_shape(),
     }
 }
 
@@ -343,6 +351,7 @@ pub fn canonical_dump(state: &DocState) -> String {
     match state {
         DocState::Trame(s) => s.canonical_dump(),
         DocState::Toile(s) => s.canonical_dump(),
+        DocState::Prose(s) => s.canonical_dump(),
     }
 }
 
@@ -440,7 +449,11 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     let mut state = match doc_type {
         DocType::Trame => DocState::Trame(Box::new(TrameState::with_peer(FIXTURE_IMPORT_PEER))),
         DocType::Toile => DocState::Toile(Box::new(ToileState::with_peer(FIXTURE_IMPORT_PEER))),
-        DocType::Prose | DocType::Murmure => return Err(FixtureError::NoEngine { doc_type }),
+        DocType::Prose => match ProseState::with_peer(FIXTURE_IMPORT_PEER) {
+            Some(prose) => DocState::Prose(Box::new(prose)),
+            None => return Err(FixtureError::NoEngine { doc_type }),
+        },
+        DocType::Murmure => return Err(FixtureError::NoEngine { doc_type }),
     };
     // The same bytes, header included: each app re-reads the header through
     // `read_ambre_plaintext_as`, which is also where the dispatch rule fires.
@@ -449,6 +462,7 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     let document_id = match &mut state {
         DocState::Trame(trame) => trame.import_ambre_plaintext(bytes).map(|(id, _events)| id),
         DocState::Toile(toile) => toile.import_ambre_plaintext(bytes).map(|(id, _events)| id),
+        DocState::Prose(prose) => prose.import_ambre_plaintext(bytes).map(|(id, _events)| id),
     }?;
     Ok((DocumentId::from_uuid(document_id), state))
 }
