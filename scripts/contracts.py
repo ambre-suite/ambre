@@ -49,6 +49,11 @@ The rules it enforces, beyond generating the file:
     both legitimately carry a list; the other six kinds do not. A second MUST
     after an `and` is two rules under one status, and the half nothing tests
     breaks in green;
+  * **a rule each application holds names a test in each one.** A row labelling
+    its tests `Prose`, `Trame` or `Toile` sits in a document declaring
+    `**Applications:**`, and is `verified` only once every declared application
+    has its test. One test of the shared crate proved `KINETIC-002` while Toile
+    broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
   * **every gap that can close names its Story.** A `failing`, `untested` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
@@ -481,6 +486,59 @@ MECHANISM_PATH = re.compile(
     r"^(?:(?:Trame|Toile|Prose|chrome)\s+)?"
     r"`(?:::)?[a-z_][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*`$"
 )
+
+# The header field a shared document declares the applications it binds with:
+# `**Applications:** Prose, Trame, Toile`. A row labelling its tests per
+# application is a rule each of them must hold, so it names one test for each
+# (`ambre-spec-template.md section 1.B`). One test of the shared crate proves
+# the shared code, never that an application calls it: `KINETIC-002` read
+# `verified` while Toile broke it.
+APPLICATIONS = re.compile(r"^\*\*Applications:\*\*\s+(?P<apps>.+?)\s*$")
+APPLICATION_NAMES = ("Prose", "Trame", "Toile")
+APPLICATION_LABEL = re.compile(r"(?:^|;)\s*(Prose|Trame|Toile)\s+`")
+
+
+def declared_applications(line: str) -> tuple[list[str], list[str]] | None:
+    """The applications a header line declares, and the names it gets wrong."""
+    m = APPLICATIONS.match(line)
+    if not m:
+        return None
+    names = [name.strip() for name in m["apps"].split(",")]
+    return names, [name for name in names if name not in APPLICATION_NAMES]
+
+
+def per_application_defects(
+    where: str, mechanism: str, status: str, apps: list[str] | None
+) -> list[str]:
+    """Whether a row held once per application names a test in each one.
+
+    A row with no label is the shared code's own rule, and passes. A labelled
+    row may be `verified` only once every declared application has its test:
+    the ones missing are the half nothing holds.
+    """
+    labels = set(APPLICATION_LABEL.findall(mechanism))
+    if not labels:
+        return []
+    if apps is None:
+        return [
+            f"{where}: the `Mechanism` names a test per application, and the "
+            f"document declares no `**Applications:**` field to hold it to"
+        ]
+    stray = sorted(labels - set(apps))
+    if stray:
+        return [
+            f"{where}: the `Mechanism` labels {', '.join(stray)}, which the "
+            f"`**Applications:**` field does not declare"
+        ]
+    missing = [app for app in apps if app not in labels]
+    if status == "verified" and missing:
+        return [
+            f"{where}: `verified` with no test in {', '.join(missing)} -- a rule "
+            f"each application must hold is proven in each, so the row is "
+            f"`untested` until every declared application names its test"
+        ]
+    return []
+
 
 # `GAP_OPENERS` is the closed set a `Gap` cell opens on. The template writes the
 # five carrying an argument with the dash and the space that argument follows,
@@ -1177,8 +1235,17 @@ def main() -> int:
         # closes it and the rows it collected are checked as one operation.
         table: list[tuple[int, str, str]] = []
         columns: list[str] | None = None
+        apps: list[str] | None = None
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             stripped = line.lstrip()
+            declared = declared_applications(line)
+            if declared:
+                apps, unknown = declared
+                for name in unknown:
+                    errors.append(
+                        f"{rel}:{lineno}: `**Applications:**` names {name!r} -- "
+                        f"the field lists {', '.join(APPLICATION_NAMES)}"
+                    )
             head = TABLE_HEAD.match(line)
             # A blank line does not close a table: an author who breaks a long
             # operation table over one still writes one operation, and treating
@@ -1240,6 +1307,7 @@ def main() -> int:
                     mechanism = cell.get(MECHANISM, "")
                     errors += mechanism_defects(where, mechanism)
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
+                    errors += per_application_defects(where, mechanism, status, apps)
                 kind = kind_cell.strip("`")
                 table.append((lineno, rid, kind))
                 if (

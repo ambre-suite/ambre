@@ -76,13 +76,15 @@ the eight kinds of section 1.C, and it is closed.
 ```text
 # AMBRE -- FEATURE: [NAME]        (a schema: # AMBRE -- SPEC: [APP] CRDT SCHEMA)
 **Type:** Vertical (feature) | Horizontal (framework) | Schema (persistence format)
+**Applications:** Prose, Trame, Toile      (a horizontal document whose rules each app holds)
 **Implementation:** implemented | partial | design-only
 
 > Two or three lines, in user terms: what this holds, and the problem it solves.
 ```
 
 `Type` says what kind of document this is. `Implementation` is about **the code it describes**, and
-it is what stops a stub reading like a shipped subsystem.
+it is what stops a stub reading like a shipped subsystem. `Applications` is optional: a horizontal
+document declares it when some of its rules bind what each application does with the shared code.
 
 | Value | Means |
 | :--- | :--- |
@@ -159,7 +161,7 @@ where the two disagree; this table invents no rung of its own.
 
 | Token | The rung it names |
 | :--- | :--- |
-| `` `ambre_crate::module::test_name` `` | the belt: a test that runs in a tier of `ambre-spec-testing.md section 4`. `Trame`, `Toile`, `Prose` or `chrome` may precede it when the same rule is held once per application |
+| `` `ambre_crate::module::test_name` `` | the belt: a test that runs in a tier of `ambre-spec-testing.md section 4`. `Trame`, `Toile`, `Prose` or `chrome` may precede it when the same rule is held once per application, below |
 | `` `::second_test` `` | a continuation of the path before it, in that path's module |
 | `type-level` | newtypes, enums, typestate, `#[must_use]` -- the invariant holds if it compiles |
 | `structural` | the construction is the proof: the state has no shape the violation could take |
@@ -186,6 +188,15 @@ names one file. These eight name a shape, a habit or one script of fifteen, so t
 tells a reader nothing to go and read.
 **Two tokens must not**: `none` and `not built` name no mechanism for a clause to locate. What
 follows either one is an argument, and it belongs in `Gap`.
+
+**A rule each application holds names a test in each.** A test of the shared crate proves the
+shared code, and never that an application calls it: `KINETIC-002` read `verified` while Toile broke
+it. So a row binding what each application does labels its tests `Prose`, `Trame` or `Toile`, and
+its document declares the `Applications` field. Such a row is `verified` only once every declared
+application has its test; until then it is `untested`, and `Gap` names the ones missing.
+`contracts.py` fails a labelled row whose document declares no field, a label the field leaves out,
+and a `verified` row missing an application. A row with no label is the shared code's own rule, and
+the reviewer holds which rows need one.
 
 **The six gap openers.** The closed set `Gap` opens on. What follows an opener is prose, and it is
 the one place in the row where an argument belongs.

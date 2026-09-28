@@ -2240,6 +2240,38 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
     );
 }
 
+/// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the column
+/// moving at the glide's speed, and a notch of the same size never does.
+#[test]
+fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
+    let mut rig = long_rig();
+    for step in 0..5 {
+        rig.ui.wheel(16.0, false, 16.0 * f64::from(step));
+    }
+    let glided = rig.ui.viewport.scroll_y;
+    rig.ui.tick_fling(64.0);
+    assert_eq!(
+        rig.ui.fling_speed(),
+        None,
+        "no motion while the glide lasts"
+    );
+    // The frame past the pause launches the motion, and the next one moves.
+    rig.ui.tick_fling(64.0 + 70.0);
+    let speed = rig.ui.fling_speed().expect("the paused glide carries on");
+    assert!((speed - 1.0).abs() < 0.05, "the glide's speed, {speed}");
+    assert!(rig.ui.tick_fling(64.0 + 86.0));
+    assert!(rig.ui.viewport.scroll_y > glided);
+
+    let mut rig = long_rig();
+    for step in 0..5 {
+        rig.ui.wheel(16.0, true, 16.0 * f64::from(step));
+    }
+    let stepped = rig.ui.viewport.scroll_y;
+    assert!(!rig.ui.tick_fling(64.0 + 70.0), "a notch never coasts");
+    assert_eq!(rig.ui.viewport.scroll_y, stepped);
+    assert_eq!(rig.ui.fling_speed(), None);
+}
+
 /// A finger that stays inside the slop is a tap, and its point comes back.
 #[test]
 fn a_finger_that_barely_moves_is_a_tap() {

@@ -155,6 +155,59 @@ class Conjunction(unittest.TestCase):
         self.assertEqual(("FAIL", "FRAME"), contracts.BUNDLING_KINDS)
 
 
+class PerApplication(unittest.TestCase):
+    """A rule each application must hold names a test in each one.
+
+    `KINETIC-002` read `verified` on one test of the shared crate while Toile
+    broke it: the shared code was proven, never that an application called it.
+    """
+
+    APPS = ["Prose", "Trame", "Toile"]
+    SHARED = "`ambre_draw::kinetic::tests::a_glide`"
+    TRAME = "Trame `ambre_trame::t::a`"
+    TOILE = "Toile `ambre_toile::t::b`"
+    PROSE = "Prose `ambre_prose::t::c`"
+
+    def defects(self, cell, status="verified", apps=APPS):
+        return contracts.per_application_defects(WHERE, cell, status, apps)
+
+    def test_the_shared_codes_own_rule_passes_with_no_label(self):
+        self.assertEqual([], self.defects(self.SHARED))
+
+    def test_a_test_in_each_application_is_verified(self):
+        self.assertEqual([], self.defects(f"{self.TRAME}; {self.TOILE}; {self.PROSE}"))
+
+    def test_a_missing_application_cannot_be_verified(self):
+        found = self.defects(f"{self.SHARED}; {self.TRAME}; {self.TOILE}")
+        self.assertEqual(1, len(found))
+        self.assertIn("no test in Prose", found[0])
+
+    def test_a_missing_application_may_stay_untested(self):
+        self.assertEqual([], self.defects(self.TRAME, status="untested"))
+
+    def test_chrome_is_no_application(self):
+        cell = f"{self.TRAME}; {self.TOILE}; {self.PROSE}; chrome `ambre_trame::c::d`"
+        self.assertEqual([], self.defects(cell))
+
+    def test_a_label_needs_the_header_field(self):
+        self.assertIn("declares no", self.defects(self.TRAME, apps=None)[0])
+
+    def test_a_label_the_field_leaves_out_is_refused(self):
+        found = self.defects(f"{self.TRAME}; {self.TOILE}", apps=["Trame"])
+        self.assertIn("does not declare", found[0])
+
+    def test_the_header_field_is_read_and_checked(self):
+        self.assertEqual(
+            (["Prose", "Trame"], []),
+            contracts.declared_applications("**Applications:** Prose, Trame"),
+        )
+        self.assertEqual(
+            (["Prose", "Murmure"], ["Murmure"]),
+            contracts.declared_applications("**Applications:** Prose, Murmure"),
+        )
+        self.assertIsNone(contracts.declared_applications("**Type:** Horizontal"))
+
+
 class Mechanism(unittest.TestCase):
     """A total read: the cell is a mechanism, and nothing else."""
 

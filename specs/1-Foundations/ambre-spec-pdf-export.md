@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: PDF EXPORT
 
 **Type:** Horizontal (framework)
+**Applications:** Prose, Trame, Toile
 **Implementation:** partial -- Toile exports through the shared surface, Trame and Prose do not.
 Exported text is not selectable in any of them.
 

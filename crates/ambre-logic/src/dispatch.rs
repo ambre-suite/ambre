@@ -1011,6 +1011,26 @@ mod tests {
         ));
     }
 
+    /// The history lives in the document's state, so closing drops it with the
+    /// rest in each application (`UNDO-004`).
+    #[test]
+    fn closing_a_document_of_each_kind_drops_its_state() {
+        for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
+            let (mut state, _ui, sync_rx) = harness();
+            let doc_id = DocumentId::new();
+            let doc = DocState::new(doc_type).expect("a state for each application");
+            state.docs.insert(doc_id, LiveDoc::new(doc));
+            state.handle_logic_command(LogicCommand::CloseDocument {
+                document_id: doc_id,
+            });
+            assert!(!state.docs.contains_key(&doc_id), "{doc_type:?} kept");
+            assert!(matches!(
+                sync_rx.try_recv(),
+                Ok(SyncCommand::CloseDocument { .. })
+            ));
+        }
+    }
+
     #[test]
     fn session_ready_seeds_user_id_into_open_and_future_toile_docs() {
         // #1: SessionReady seeds `my_user_id` into every already-open
