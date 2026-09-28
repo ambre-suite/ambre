@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-261` | `POST` | A double-click on a frame's title MUST open the editor on that title, carrying the title it replaces. | this spec section 4 | `ambre_toile::ui::edit::tests::the_editor_opens_on_a_frames_title` -- the editor half: it targets the title, not the frame's body | partial -- the double-click routed to the title band by `hit::frame_title_at` in the view is driven by no test, the view being built in a browser alone; lands with the `The Trame and Toile views built off the browser` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-261` | `POST` | A double-click on a frame's title MUST open the editor on that title, carrying the title it replaces. | this spec section 4 | `ambre_toile::ui::tool::tests::a_double_click_on_a_frames_title_edits_that_title` -- the band routes the gesture to the title; `ambre_toile::ui::edit::tests::the_editor_opens_on_a_frames_title` -- the editor targets the title, not the frame's body | none | verified |
 | `TOILE-262` | `FRAME` | An edit that types nothing over a frame nobody named MUST rename nothing: the placeholder is never written. | this spec section 4 | `ambre_toile::ui::edit::tests::an_untouched_placeholder_commits_nothing` | none | verified |
 
 * **Budget.** the membership change under 1 ms, the transform-command row of
@@ -68,11 +68,11 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 15 `verified`, 2 `partial`, 1 `failing`, 4 `untested`. What holds is membership
-  as data, the title beside it, and what a press on that title does. An element joins one frame,
-  detaches from its group and paints after it, and both the notes and the name converge. What is
+* **Verification.** 16 `verified`, 1 `partial`, 1 `failing`, 4 `untested`. What holds is membership
+  as data, the title beside it, and what a press or a double-click on it does. An element joins one
+  frame, detaches from its group and paints after it, and the notes and the name converge. What is
   loose is what the membership gesture refuses or skips, and the title's glyphs, which a host with
-  no font shapes none of. The failure is the two undo items a fired clamp produces (`TOILE-048`).
+  no font shapes none of. The failure is the two undo items a clamp produces (`TOILE-048`).
 
 ---
 

@@ -436,65 +436,27 @@ impl TrameView {
         if ctrl_key {
             return false;
         }
-        // Normalise the unit to physical pixels. Deltas already include dpr. A
-        // line step is one zoomed cell, so it scales with the grid zoom.
-        let z = self.state.zoom;
-        let (sx, sy) = match delta_mode {
-            1 => (COL_WIDTH * z, ROW_HEIGHT * z), // DOM_DELTA_LINE
-            2 => (self.state.canvas_width, self.state.canvas_height), // DOM_DELTA_PAGE
-            _ => (1.0, 1.0),                      // DOM_DELTA_PIXEL
-        };
-        let (px, py) = (dx * sx, dy * sy);
-        // The shared model applies the step one for one, and lets a trackpad
-        // glide coast once it pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
-        let (px, py) = self
-            .kinetic
-            .wheel(px as f32, py as f32, delta_mode != 0, self.perf.now());
-        self.scroll_accum_x += f64::from(px);
-        self.scroll_accum_y += f64::from(py);
-        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge) {
-            self.kinetic.stop();
-        }
+        let outcome = self
+            .scroll
+            .wheel(&mut self.state, dx, dy, delta_mode, self.perf.now());
+        self.note_scroll(outcome);
         true
     }
 
-    /// Peel whole rows/cols out of the pixel accumulator and pan the viewport,
-    /// keeping the sub-cell remainder. Shared by direct wheel input and the
-    /// momentum coast.
-    pub(crate) fn apply_scroll_accum(&mut self) -> ScrollOutcome {
-        // A whole-cell step is the base metric scaled by the grid zoom.
-        let z = self.state.zoom;
-        let step_x = COL_WIDTH * z;
-        let step_y = ROW_HEIGHT * z;
-        let dc = (self.scroll_accum_x / step_x) as i32;
-        let dr = (self.scroll_accum_y / step_y) as i32;
-        if dr == 0 && dc == 0 {
-            return ScrollOutcome::Idle;
-        }
-        self.scroll_accum_x -= dc as f64 * step_x;
-        self.scroll_accum_y -= dr as f64 * step_y;
-        if self.state.scroll_by(dr, dc) {
+    /// Queue the viewport request a pan owes. Returns the outcome unchanged.
+    fn note_scroll(&mut self, outcome: ScrollOutcome) -> ScrollOutcome {
+        if matches!(outcome, ScrollOutcome::Moved) {
             self.viewport_changed = true;
             self.pending_viewport
                 .coalesce(self.state.scroll_viewport_cmd());
-            ScrollOutcome::Moved
-        } else {
-            // Pinned against a grid border: the motion had nowhere to go.
-            ScrollOutcome::Edge
         }
+        outcome
     }
 
-    /// Advance the kinetic motion by one frame, from `update`. The motion
-    /// stops once it dies down or the viewport meets an edge.
+    /// Advance the kinetic motion by one frame, from `update`.
     pub(crate) fn step_momentum(&mut self) {
-        let Some((dx, dy)) = self.kinetic.tick(self.perf.now()) else {
-            return;
-        };
-        self.scroll_accum_x += f64::from(dx);
-        self.scroll_accum_y += f64::from(dy);
-        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge) {
-            self.stop_fling();
-        }
+        let outcome = self.scroll.tick(&mut self.state, self.perf.now());
+        self.note_scroll(outcome);
     }
 
     /// Grow the held selection or fill preview to the cell the drag points
@@ -523,18 +485,8 @@ impl TrameView {
             .filter(|_| held)
             .map(|(x, y)| self.state.edge_scroll_speed(x, y))
             .filter(|&(sx, sy)| sx != 0.0 || sy != 0.0);
-        let Some((sx, sy)) = speed else {
-            self.edge_ms = None;
-            return;
-        };
-        let now = self.perf.now();
-        let Some(last) = self.edge_ms.replace(now) else {
-            return;
-        };
-        let dt = (now - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS);
-        self.scroll_accum_x += sx * dt;
-        self.scroll_accum_y += sy * dt;
-        if matches!(self.apply_scroll_accum(), ScrollOutcome::Moved) {
+        let outcome = self.scroll.edge(&mut self.state, speed, self.perf.now());
+        if matches!(self.note_scroll(outcome), ScrollOutcome::Moved) {
             self.follow_drag();
         }
     }
@@ -542,23 +494,19 @@ impl TrameView {
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
     pub fn touch_down(&mut self, x: f32, y: f32, now_ms: f64) {
-        self.stop_fling();
-        self.kinetic.press(x, y, now_ms);
+        self.scroll.press(x, y, now_ms);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
     pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) {
-        if let Some((dx, dy)) = self.kinetic.sample(x, y, now_ms) {
-            self.scroll_accum_x += f64::from(dx);
-            self.scroll_accum_y += f64::from(dy);
-            self.apply_scroll_accum();
-        }
+        let outcome = self.scroll.pan(&mut self.state, x, y, now_ms);
+        self.note_scroll(outcome);
     }
 
     /// A finger lifted. A pan released with speed keeps moving; a tap is a
     /// click where it landed.
     pub fn touch_up(&mut self, now_ms: f64) {
-        if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
+        if let Release::Tap { x, y } = self.scroll.release(now_ms) {
             let (x, y) = (f64::from(x), f64::from(y));
             for ev in [
                 InputEvent::PointerDown {
@@ -583,14 +531,7 @@ impl TrameView {
     /// The browser cancelled the finger: no click and no flick
     /// (`KINETIC-010`).
     pub fn touch_cancel(&mut self) {
-        self.kinetic.cancel();
-    }
-
-    /// Halt any kinetic motion and clear its residue.
-    pub(crate) fn stop_fling(&mut self) {
-        self.kinetic.stop();
-        self.scroll_accum_x = 0.0;
-        self.scroll_accum_y = 0.0;
+        self.scroll.cancel();
     }
 
     /// Move the active cell by `(dr, dc)`; returns `true` (consumed). With

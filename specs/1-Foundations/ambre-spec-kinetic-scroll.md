@@ -54,18 +54,18 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does` | partial -- Trame and Toile coast in their views, which no native test builds; lands with the `The Trame and Toile views built off the browser` Story (`ambre-roadmap.md` E9) | partial |
-| `KINETIC-009` | `FRAME` | A wheel notch, a line step or a page step MUST NOT start a motion. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does` | partial -- Trame and Toile coast in their views, which no native test builds; lands with the `The Trame and Toile views built off the browser` Story (`ambre-roadmap.md` E9) | partial |
+| `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does`; Trame `ambre_trame::ui::view::scroll::tests::a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does`; Toile `ambre_toile::ui::kinetic::tests::a_paused_glide_keeps_the_board_moving_and_a_notch_never_does` | none | verified |
+| `KINETIC-009` | `FRAME` | A wheel notch, a line step or a page step MUST NOT start a motion. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does`; Prose `ambre_prose::input_tests::a_paused_glide_keeps_the_column_moving_and_a_notch_never_does`; Trame `ambre_trame::ui::view::scroll::tests::a_paused_glide_keeps_the_grid_moving_and_a_notch_never_does`; Toile `ambre_toile::ui::kinetic::tests::a_paused_glide_keeps_the_board_moving_and_a_notch_never_does` | none | verified |
 
 * **Budget.** none of its own: a tick is a multiplication and an exponential. What it costs is the
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 7 `verified`, 2 `partial`, 0 `untested`, 1 `qa-manual`, 1 `human-review`. The model's rows
-  are unit tests of `crates/ambre-draw`, which knows no application. The glide is also held once
-  per application, and only Prose builds its view in a native test. Prose's own rows hold what its
-  column does with the distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's
-  grid rows what its grid does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
+* **Verification.** 9 `verified`, 1 `human-review`, 1 `qa-manual`. The model's rows are unit tests
+  of `crates/ambre-draw`, which knows no application. The glide is also held once per application,
+  each driven natively with a clock the test sets. Prose's own rows hold what its column does with
+  the distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its
+  grid does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
 
 ---
 

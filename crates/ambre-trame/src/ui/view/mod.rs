@@ -374,18 +374,11 @@ pub struct TrameView {
     prev_left_col: u32,
 
     // -- Wheel / touchpad scroll ------------------------------------------------
-    /// Sub-cell wheel residue (physical px) carried between events, so slow
-    /// touchpad scrolls still accumulate into whole rows/cols rather than being
-    /// truncated away each frame.
-    scroll_accum_x: f64,
-    scroll_accum_y: f64,
-    /// The shared kinetic scroll: wheel glides, finger pans and the motion
-    /// either leaves (`1-Foundations/ambre-spec-kinetic-scroll.md`).
-    kinetic: ambre_draw::kinetic::Kinetic,
-    /// Where a held selection or fill drag last pointed, and when the edge
-    /// scroll last ticked (`KINETIC-007`).
+    /// The scroll motion, built apart from the browser so a native test drives
+    /// it (`scroll.rs`).
+    scroll: scroll::GridScroll,
+    /// Where a held selection or fill drag last pointed.
     drag_point: Option<(f64, f64)>,
-    edge_ms: Option<f64>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste
@@ -410,6 +403,7 @@ mod frame;
 mod input;
 mod interact;
 mod lifecycle;
+mod scroll;
 
 #[cfg(test)]
 mod tests {

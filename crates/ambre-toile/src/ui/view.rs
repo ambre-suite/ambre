@@ -2437,32 +2437,26 @@ impl ToileView {
         // editor on it (`toile-text-editing`), taking precedence over group
         // entering.
         if self.machine.tool() == Tool::Select {
-            // A frame's title is the one thing a double-click edits that the
-            // board hit test cannot see: the band sits outside the frame
-            // (`TOILE-261`).
-            if let Some(frame) = super::hit::frame_title_at(&self.display.nodes, screen, &self.cam)
-            {
-                self.open_frame_title_editor(frame);
-                return true;
-            }
-            let editable = hit_topmost(&self.display.nodes, world).filter(|hit| {
+            let nodes = &self.display.nodes;
+            let edit = super::tool::double_click_edit(nodes, screen, &self.cam, |hit| {
                 self.find_element(hit)
                     .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
             });
-            if let Some(hit) = editable {
-                self.open_editor(hit);
-                return true;
-            }
-            // No element under the pointer: a double-click on an arrow (its line
-            // or its caption) opens the caption editor on it
-            // (`toile-connectors`). An element that is there wins, whatever it
-            // is, so entering a group keeps working over a connector behind it.
-            if hit_topmost(&self.display.nodes, world).is_none()
-                && let Some(c) = label::connector_at(&self.display.nodes, world)
-            {
-                self.open_label_editor(c);
-                self.needs_full = true;
-                return true;
+            match edit {
+                Some(super::tool::DoubleClickEdit::FrameTitle(frame)) => {
+                    self.open_frame_title_editor(frame);
+                    return true;
+                }
+                Some(super::tool::DoubleClickEdit::Body(hit)) => {
+                    self.open_editor(hit);
+                    return true;
+                }
+                Some(super::tool::DoubleClickEdit::Caption(c)) => {
+                    self.open_label_editor(c);
+                    self.needs_full = true;
+                    return true;
+                }
+                None => {}
             }
         }
         let out = self.machine.double_click(world);
@@ -3333,8 +3327,7 @@ impl ToileView {
 
         // A flick or a glide keeps the board moving (`KINETIC-004`), and a
         // gesture held at an edge pans it (`TOILE-UI-380`).
-        if let Some(step) = self.kinetic.tick(now_ms) {
-            super::kinetic::move_view(&mut self.cam, step);
+        if super::kinetic::coast(&mut self.cam, &mut self.kinetic, now_ms) {
             self.queue_viewport();
         }
         self.step_edge_pan(now_ms);

@@ -20,12 +20,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2649 rows: 2402 shipped, of which 95 partial and 696 loose. 247 unbuilt.**
+**2649 rows: 2402 shipped, of which 92 partial and 696 loose. 247 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 246 | 221 | 543 | 601 | 1611 |
-| `partial` | 42 | 10 | 41 | 2 | 95 |
+| `verified` | 248 | 221 | 544 | 601 | 1614 |
+| `partial` | 40 | 10 | 40 | 2 | 92 |
 | `failing` | 39 | 49 | 22 |  | 110 |
 | `untested` | 234 | 131 | 197 | 2 | 564 |
 | `human-review` | 9 |  |  |  | 9 |
@@ -55,7 +55,7 @@
 | `ambre-spec-high-density.md` | 9 | 5 | 0 |  | 5 | 4 |
 | `ambre-spec-key-rotation.md` | 12 | 11 | 2 |  | 9 | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 5 | 1 | 12 |  |
-| `ambre-spec-kinetic-scroll.md` | 11 | 11 | 7 | 2 | 2 |  |
+| `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 |  | 2 |  |
 | `ambre-spec-launcher.md` | 17 | 17 | 7 |  | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 |  | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 1 | 4 |  |
@@ -112,7 +112,7 @@
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 5 | 8 |  |
 | `ambre-spec-toile-engine.md` | 40 | 40 | 32 |  | 8 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 9 |  | 6 |  |
-| `ambre-spec-toile-frames.md` | 22 | 22 | 15 | 2 | 5 |  |
+| `ambre-spec-toile-frames.md` | 22 | 22 | 16 | 1 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 12 | 12 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-groups.md` | 24 | 24 | 10 |  | 14 |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 35 | 1 | 5 | 12 |

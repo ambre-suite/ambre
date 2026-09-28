@@ -35,6 +35,16 @@ pub fn pan_by_wheel(
     move_view(cam, step);
 }
 
+/// Advance a flick or a glide by one frame (`KINETIC-004`). Answers whether
+/// the board moved, so the view knows to ask for what came into sight.
+pub fn coast(cam: &mut ViewportTransform, kinetic: &mut Kinetic, now_ms: f64) -> bool {
+    let Some(step) = kinetic.tick(now_ms) else {
+        return false;
+    };
+    move_view(cam, step);
+    true
+}
+
 /// Move the camera by a view step of the model.
 pub fn move_view(cam: &mut ViewportTransform, step: (f32, f32)) {
     cam.pan_by_screen(-Vec2::new(f64::from(step.0), f64::from(step.1)));
@@ -84,6 +94,56 @@ mod tests {
             (after.y - before.y + 12.0).abs() < 1e-6,
             "{before:?} {after:?}"
         );
+    }
+
+    /// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the
+    /// board moving at the glide's speed, and a notch of the same size never
+    /// does.
+    #[test]
+    fn a_paused_glide_keeps_the_board_moving_and_a_notch_never_does() {
+        let world = Point::new(10.0, 10.0);
+        let mut cam = ViewportTransform::new(800.0, 600.0);
+        let mut kinetic = Kinetic::default();
+        for step in 0..5 {
+            pan_by_wheel(
+                &mut cam,
+                &mut kinetic,
+                (0.0, 16.0),
+                false,
+                16.0 * f64::from(step),
+            );
+        }
+        let glided = (cam.world_to_screen() * world).y;
+        coast(&mut cam, &mut kinetic, 64.0);
+        assert_eq!(kinetic.speed(), None, "no motion while the glide lasts");
+        // The frame past the pause launches the motion, and the next one moves.
+        coast(&mut cam, &mut kinetic, 64.0 + 70.0);
+        let (_, vy) = kinetic.speed().expect("the paused glide carries on");
+        assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
+        assert!(coast(&mut cam, &mut kinetic, 64.0 + 86.0));
+        assert!(
+            (cam.world_to_screen() * world).y < glided,
+            "the content keeps going up"
+        );
+
+        let mut cam = ViewportTransform::new(800.0, 600.0);
+        let mut kinetic = Kinetic::default();
+        for step in 0..5 {
+            pan_by_wheel(
+                &mut cam,
+                &mut kinetic,
+                (0.0, 16.0),
+                true,
+                16.0 * f64::from(step),
+            );
+        }
+        let stepped = (cam.world_to_screen() * world).y;
+        assert!(
+            !coast(&mut cam, &mut kinetic, 64.0 + 70.0),
+            "a notch never coasts"
+        );
+        assert_eq!((cam.world_to_screen() * world).y, stepped);
+        assert_eq!(kinetic.speed(), None);
     }
 
     /// `TOILE-UI-380`: a view step moves the content by the same screen

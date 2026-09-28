@@ -13,8 +13,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    Anchor, CommentAnchor, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind,
-    EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
+    Anchor, CommentAnchor, ConnectorId, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
+    ElementKind, EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
@@ -1266,6 +1266,41 @@ pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> f64 {
     0.0
 }
 
+/// What a double-click with the select tool opens an editor on.
+#[derive(Debug, PartialEq)]
+pub enum DoubleClickEdit {
+    /// A frame's title, which sits outside the frame's own box.
+    FrameTitle(ElementId),
+    /// The body of an element that holds text.
+    Body(ElementId),
+    /// An arrow's caption.
+    Caption(ConnectorId),
+}
+
+/// The editor a double-click at `screen` opens, or `None` when it opens none
+/// and the gesture falls through to the tool. `editable` answers whether an
+/// element's body is text.
+///
+/// A frame's title comes first: the band sits outside the frame, where the
+/// board hit test cannot see it (`TOILE-261`). An arrow is edited only where no
+/// element is, so entering a group keeps working over a connector behind it.
+pub fn double_click_edit(
+    nodes: &[DisplayNode],
+    screen: Point,
+    cam: &ViewportTransform,
+    editable: impl Fn(&ElementId) -> bool,
+) -> Option<DoubleClickEdit> {
+    if let Some(frame) = super::hit::frame_title_at(nodes, screen, cam) {
+        return Some(DoubleClickEdit::FrameTitle(frame));
+    }
+    let world = cam.screen_to_world() * screen;
+    match hit_topmost(nodes, world) {
+        Some(hit) if editable(&hit) => Some(DoubleClickEdit::Body(hit)),
+        Some(_) => None,
+        None => super::label::connector_at(nodes, world).map(DoubleClickEdit::Caption),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1459,6 +1494,28 @@ mod tests {
         assert!(
             matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("f".into())]),
             "the title did not select its frame: {out:?}"
+        );
+    }
+
+    /// `TOILE-261`: a double-click on a frame's title opens the editor on that
+    /// title, and one inside the frame's box does not.
+    #[test]
+    fn a_double_click_on_a_frames_title_edits_that_title() {
+        let bounds = Rect::new(0.0, 0.0, 300.0, 300.0);
+        let disp = viewport(vec![frame_elem("f", bounds, "Agenda")]);
+        let cam = cam();
+        let band = super::super::render::frame_bands(&disp.nodes, &cam)
+            .next()
+            .expect("a named frame has a band")
+            .1;
+        assert_eq!(
+            double_click_edit(&disp.nodes, band.center(), &cam, |_| true),
+            Some(DoubleClickEdit::FrameTitle(ElementId("f".into())))
+        );
+        let inside = to_screen(&cam, Point::new(150.0, 150.0));
+        assert_ne!(
+            double_click_edit(&disp.nodes, inside, &cam, |_| false),
+            Some(DoubleClickEdit::FrameTitle(ElementId("f".into())))
         );
     }
 
