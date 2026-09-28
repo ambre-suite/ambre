@@ -7,7 +7,7 @@
 //! A document type is therefore defined in one place, whichever direction the
 //! message travels.
 //!
-//! Carried over a `flume` queue in shared memory -- typed Rust values by move,
+//! Carried over a `conduit` queue in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric UI -> Logic direction (commands) lives in
 //! [`crate::logic`].
 //!
@@ -185,4 +185,6 @@ pub enum AppEvent {
     Trame(crate::app::trame::TrameEvent),
     /// Display event for a Toile (whiteboard) document.
     Toile(crate::app::toile::ToileEvent),
+    /// Display event for a Prose (word processor) document.
+    Prose(crate::app::prose::ProseEvent),
 }

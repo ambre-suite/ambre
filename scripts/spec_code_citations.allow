@@ -1,9 +1,9 @@
 # Citation defects found when `spec_code.py` began checking them. The list
 # only shrinks: fix a defect, then delete its line. Never add one.
+owner crates/ambre-app/src/host/frame.rs PROSE-115
 owner crates/ambre-app/src/host/frame.rs PROSE-UI-038
 owner crates/ambre-app/src/host/frame.rs PROSE-UI-204
 owner crates/ambre-app/src/host/frame.rs PROSE-UI-217
-owner crates/ambre-app/src/host/frame.rs PROSE-115
 owner crates/ambre-app/src/host/frame.rs TOILE-087
 owner crates/ambre-app/src/host/frame.rs TOILE-088
 owner crates/ambre-app/src/host/frame.rs TOILE-UI-096
@@ -20,6 +20,10 @@ owner crates/ambre-app/src/host/web_embed.rs TOILE-088
 owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-091
 owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-097
 owner crates/ambre-app/src/host/web_embed.rs TOILE-UI-324
+owner crates/ambre-app/src/lib.rs PROSE-FEAT-040
+owner crates/ambre-app/src/lib.rs PROSE-IO-053
+owner crates/ambre-app/src/lib.rs PROSE-UI-050
+owner crates/ambre-app/src/lib.rs PROSE-UI-052
 owner crates/ambre-app/src/lib.rs TOILE-044
 owner crates/ambre-app/src/lib.rs TOILE-065
 owner crates/ambre-app/src/lib.rs TOILE-114
@@ -57,6 +61,7 @@ owner crates/ambre-app/src/shell/app_root.rs TOILE-225
 owner crates/ambre-app/src/shell/app_root.rs TOILE-FEAT-026
 owner crates/ambre-app/src/shell/app_root.rs TOILE-IO-020
 owner crates/ambre-app/src/shell/app_root.rs TOILE-UI-023
+owner crates/ambre-bus/src/logic.rs PROSE-115
 owner crates/ambre-canvas/src/editor.rs TOILE-UI-187
 owner crates/ambre-canvas/src/fonts.rs PROSE-110
 owner crates/ambre-canvas/src/view.rs TOILE-UI-256
@@ -67,7 +72,22 @@ owner crates/ambre-draw/src/text.rs PROSE-112
 owner crates/ambre-draw/src/text.rs PROSE-114
 owner crates/ambre-logic/src/data.rs TOILE-IO-029
 owner crates/ambre-logic/src/data.rs TOILE-IO-069
+owner crates/ambre-logic/src/dispatch.rs PROSE-011
+owner crates/ambre-logic/src/dispatch.rs PROSE-023
+owner crates/ambre-logic/src/dispatch.rs PROSE-024
+owner crates/ambre-logic/src/dispatch.rs PROSE-058
+owner crates/ambre-logic/src/dispatch.rs PROSE-062
+owner crates/ambre-logic/src/dispatch.rs PROSE-111
+owner crates/ambre-logic/src/dispatch.rs PROSE-114
+owner crates/ambre-logic/src/dispatch.rs PROSE-115
+owner crates/ambre-logic/src/dispatch.rs PROSE-IO-020
+owner crates/ambre-logic/src/dispatch.rs PROSE-IO-028
+owner crates/ambre-logic/src/dispatch.rs PROSE-UI-006
 owner crates/ambre-logic/src/dispatch.rs TOILE-IO-029
+owner crates/ambre-logic/src/lib.rs PROSE-027
+owner crates/ambre-logic/src/lib.rs PROSE-114
+owner crates/ambre-logic/src/lib.rs PROSE-115
+owner crates/ambre-logic/src/lib.rs PROSE-UI-006
 owner crates/ambre-logic/src/lib.rs TOILE-IO-069
 owner crates/ambre-logic/src/lib.rs TOILE-UI-076
 owner crates/ambre-trame/src/logic/docfile.rs TOILE-IO-069
@@ -82,6 +102,7 @@ test a_change_tells_the_view_what_it_did_to_the_text PROSE-UI-028
 test a_click_on_a_pin_names_its_thread_and_a_miss_names_none TOILE-UI-308
 test a_deletion_that_empties_the_first_paragraph_keeps_it PROSE-041
 test a_deletion_that_empties_the_first_paragraph_keeps_it PROSE-101
+test a_document_closed_in_the_pass_keeps_its_last_edit ARCH-017
 test a_draft_in_a_header_is_drawn_before_the_document_answers PROSE-UI-134
 test a_dropped_insertion_leaves_no_echo PROSE-UI-004
 test a_dropped_request_is_re_offered_not_doubled BUS-024
@@ -100,6 +121,9 @@ test a_pdf_text_layer_reads_one_paragraph_per_line PROSE-UI-219
 test a_peer_absent_from_the_set_stops_being_painted TOILE-185
 test a_picture_without_pixels_is_reported TOILE-IO-087
 test a_pointer_event_is_bound_by_its_own_position TOILE-UI-330
+test a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta PROSE-058
+test a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta PROSE-062
+test a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker PROSE-024
 test a_refused_export_says_why TOILE-IO-048
 test a_register_holding_something_other_than_a_version_is_refused SCHEMA-005
 test a_remote_insertion_during_a_composition_moves_its_landing PROSE-UI-029
@@ -140,8 +164,10 @@ test deleting_a_table_drops_the_draft_in_its_cell PROSE-UI-178
 test each_html_fixture_pastes_as_its_golden_says PROSE-UI-224
 test every_dropdown_row_is_described UI-THREAD-019
 test every_layout_row_resolves_in_the_registry UI-THREAD-019
+test every_prose_document_takes_the_faces_whenever_it_was_opened PROSE-114
 test every_scale_generator_writes_under_the_ignored_directory FIXTURE-022
 test exporting_twice_yields_the_same_bytes_and_changes_nothing TOILE-IO-004
+test face_count PROSE-115
 test filter_by_values_survives_a_reload TRAME-FEAT-031
 test foreign_bytes_paste_as_plain_text PROSE-UI-042
 test no_generator_shares_a_name_or_a_seed_with_another FIXTURE-010

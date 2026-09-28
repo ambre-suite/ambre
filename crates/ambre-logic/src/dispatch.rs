@@ -4,7 +4,7 @@
 //   - `handle_logic_command`: UI Thread -> Logic (content, control, service).
 //   - `handle_logic_event`:  Sync -> Logic (real-time push, service responses).
 // Both are pure Rust (no wasm glue). The whole routing layer is therefore
-// exercised on the host by the `tests` module at the bottom, with mock flume
+// exercised on the host by the `tests` module at the bottom, with test link
 // queues.
 // ============================================================================
 
@@ -31,6 +31,7 @@ impl LogicState {
                 document_id,
                 doc_type,
                 snapshot,
+                deltas,
             } => {
                 // Order-independent: the boot-time local restore and the route
                 // poll's `OpenDocument` race on startup. If the restore arrives
@@ -47,6 +48,11 @@ impl LogicState {
                     if let Some(name) = &self.my_display_name {
                         state.set_display_name(name);
                     }
+                    // The faces that already arrived, so a document opened after
+                    // boot measures on the same set as one opened before it
+                    // (`PROSE-115`). A sealed measuring context holds nothing
+                    // until this runs (`PROSE-114`).
+                    state.load_faces(&self.base_faces);
                     slot.insert(LiveDoc::new(state));
                 }
                 let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -62,16 +68,25 @@ impl LogicState {
                 // (`SCHEMA-012`) and reaches the user as the owning app's own
                 // refusal event. A restore that silently does nothing is
                 // indistinguishable from a document that never existed.
-                let events: Vec<AppEvent> = match doc.import_snapshot(&snapshot) {
-                    Ok(events) => events,
-                    Err(e) => {
+                let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
+                    Some(Ok(events)) => events,
+                    Some(Err(e)) => {
                         tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
                         vec![doc.refusal_event(&e)]
                     }
+                    None => Vec::new(),
                 };
+                // The deltas logged since the snapshot, imported the way a
+                // relay's replay is. The log is folded into a snapshot at once,
+                // so the next restore reads one row.
+                if !deltas.is_empty() {
+                    events.extend(doc.apply_remote_batch(&deltas));
+                    self.owe_snapshot(document_id);
+                }
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
+                self.owe_layout(document_id);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -85,11 +100,13 @@ impl LogicState {
                     // handler can emit further commands against it.
                     RestCommand::Logout => {
                         self.docs.clear();
+                        self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
                     }
                     RestCommand::DeleteDocument { document_id } => {
                         self.docs.remove(document_id);
+                        self.owed.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
                         self.forget_pending_seals(Some(*document_id));
                     }
@@ -118,14 +135,25 @@ impl LogicState {
                     if let Some(name) = &self.my_display_name {
                         state.set_display_name(name);
                     }
+                    // The faces that already arrived, so a document opened after
+                    // boot measures on the same set as one opened before it
+                    // (`PROSE-115`). A sealed measuring context holds nothing
+                    // until this runs (`PROSE-114`).
+                    state.load_faces(&self.base_faces);
                     slot.insert(LiveDoc::new(state));
                 }
                 self.send_to_sync(SyncCommand::OpenDocument {
                     document_id,
                     doc_type,
                 });
+                // An empty document is one blank page (`PROSE-011`), and the
+                // view shows it before anything arrives.
+                self.owe_layout(document_id);
             }
             LogicCommand::CloseDocument { document_id } => {
+                // The last edits of the pass are saved before the state goes,
+                // so closing a document never loses them (`ARCH-017`).
+                self.answer_document(document_id, true);
                 self.docs.remove(&document_id);
                 // Drop any in-flight service routes for this document. A response
                 // arriving after close has no engine to feed, and must not
@@ -150,21 +178,36 @@ impl LogicState {
                 });
             }
             LogicCommand::LoadFonts { faces } => {
-                // Seed the PDF-export FontContext once with the base faces the
-                // Main thread fetched (`toile-pdf-export`). Local-only: nothing
-                // is sent to Sync. A second seeding is ignored -- the faces are
-                // already registered and export needs them exactly once.
-                if self.export_cx.is_none() {
-                    tracing::info!(
-                        "Logic: seeding export FontContext with {} faces",
-                        faces.len()
-                    );
-                    let mut font_cx = parley::FontContext::new();
-                    for bytes in faces {
-                        font_cx.collection.register_fonts(bytes.into(), None);
-                    }
-                    self.export_cx = Some(font_cx);
+                // The Logic thread cannot fetch, so this is the only way a face
+                // reaches it (`CANVAS-067`). Local-only: nothing is sent to
+                // Sync. Two consumers take the same bytes.
+                tracing::info!("Logic: {} faces delivered", faces.len());
+                // Every open document that measures text. A Prose paginator
+                // shapes on a sealed context and holds nothing until now
+                // (`PROSE-114`, `PROSE-115`).
+                for doc in self.docs.values_mut() {
+                    doc.state.load_faces(&faces);
                 }
+                // A new face re-shapes the runs it covers (`PROSE-111`).
+                let open: Vec<DocumentId> = self.docs.keys().copied().collect();
+                for document_id in open {
+                    self.owe_layout(document_id);
+                }
+                // The PDF-export context (`toile-pdf-export`), built on the
+                // first delivery and extended by each later one, so a script
+                // face that arrived after boot exports too. Sealed, so the page
+                // is shaped on these faces and on none the machine carries
+                // (`PDF-007`).
+                let export_cx = self
+                    .export_cx
+                    .get_or_insert_with(ambre_draw::sealed_font_context);
+                for bytes in &faces {
+                    export_cx
+                        .collection
+                        .register_fonts(bytes.clone().into(), None);
+                }
+                // Kept for the documents opened after this point.
+                self.base_faces.extend(faces);
             }
         }
     }
@@ -406,7 +449,7 @@ impl LogicState {
 
 // -----------------------------------------------------------------------------
 // Tests -- the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
-// layer is exercisable on the host with mock flume queues. These pin the
+// layer is exercisable on the host with test link queues. These pin the
 // command/event mapping that is otherwise hand-written boilerplate (see the
 // service plane of ambre-spec-message-bus.md).
 // -----------------------------------------------------------------------------
@@ -419,16 +462,12 @@ mod tests {
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
-    fn harness() -> (
-        LogicState,
-        flume::Receiver<UiEvent>,
-        flume::Receiver<SyncCommand>,
-    ) {
-        let (to_ui, ui_rx) = flume::unbounded();
-        let (to_sync, sync_rx) = flume::unbounded();
+    fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
+        let (to_ui, ui_rx) = test_link();
+        let (to_sync, sync_rx) = test_link();
         // The persist queue is drained by the Main thread in production; tests
         // keep the receiver alive so sends never fail.
-        let (to_persist, persist_rx) = flume::unbounded();
+        let (to_persist, persist_rx) = test_link();
         std::mem::forget(persist_rx);
         (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
     }
@@ -449,6 +488,11 @@ mod tests {
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
+            DocType::Prose => {
+                AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
+                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                })
+            }
             other => panic!("no engine for {other:?}"),
         };
         state.handle_logic_command(LogicCommand::App {
@@ -469,6 +513,13 @@ mod tests {
                             data, ..
                         }),
                     ..
+                }
+                | UiEvent::Viewport {
+                    event:
+                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
+                            data, ..
+                        }),
+                    ..
                 } => Some(data),
                 _ => None,
             })
@@ -482,11 +533,186 @@ mod tests {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
-            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }) => {
-                data
-            }
+            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
+            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => data,
             other => panic!("the export answered with {other:?}"),
         }
+    }
+
+    /// `PROSE-IO-020`, `PROSE-IO-028`: the save command reaches the
+    /// dispatcher, and the file it writes opens in a fresh Prose document.
+    #[test]
+    fn a_prose_document_saves_to_a_native_file_and_reopens() {
+        let document_id = DocumentId::new();
+        let bytes = exported_file(DocType::Prose, document_id);
+        let mut reopened = ambre_prose::logic::ProseState::with_peer(9).expect("a document");
+        let (id, _) = reopened
+            .import_ambre_plaintext(&bytes)
+            .expect("the file opens");
+        assert_eq!(id, document_id.into());
+    }
+
+    /// `PROSE-062`: one outcome, three destinations.
+    ///
+    /// The display events reach the UI thread. The delta reaches the Sync
+    /// worker under the document id the registry keyed, and the presence frame
+    /// reaches it as an ephemeral. An engine answers a value and sends nothing
+    /// (`PROSE-024`), so this fan-out is the dispatcher's whole job and no
+    /// engine-side test can reach it.
+    #[test]
+    fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
+        let (mut state, ui, sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
+                block_id: block,
+                pos: 0,
+                text: "typed".to_owned(),
+            }),
+        });
+
+        let confirmed = std::iter::from_fn(|| ui.try_recv().ok())
+            .find_map(|evt| match evt {
+                UiEvent::Viewport {
+                    event: AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { delta }),
+                    document_id: id,
+                } if id == document_id => Some(delta),
+                _ => None,
+            })
+            .expect("the confirmed change reached the UI thread");
+        let broadcast = std::iter::from_fn(|| sync.try_recv().ok())
+            .find_map(|cmd| match cmd {
+                SyncCommand::SendUpdate {
+                    document_id: id,
+                    payload,
+                } if id == document_id => Some(payload),
+                _ => None,
+            })
+            .expect("the delta reached the Sync worker");
+        // One outcome, and the two halves carry the same bytes: the event is
+        // not a re-export (`PROSE-023`).
+        assert_eq!(confirmed, broadcast);
+    }
+
+    /// `PROSE-UI-006`: the layout reaches the view computed and shaped. The
+    /// view adopts it from the event alone, and holds nothing that could lay
+    /// text out. A caret move writes nothing, so it sends no layout.
+    #[test]
+    fn the_view_draws_a_layout_the_logic_thread_computed() {
+        use ambre_bus::app::prose::ProseEvent;
+        let (mut state, ui, _sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        state.answer_pass();
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        let prose = |command| LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(command),
+        };
+        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "typed".to_owned(),
+        }));
+        state.answer_pass();
+        let drain = |ui: &Receiver<UiEvent>| -> Vec<ProseEvent> {
+            std::iter::from_fn(|| ui.try_recv().ok())
+                .filter_map(|event| match event {
+                    UiEvent::Viewport {
+                        event: AppEvent::Prose(event),
+                        ..
+                    } => Some(event),
+                    _ => None,
+                })
+                .collect()
+        };
+        let events = drain(&ui);
+        let layouts = events
+            .iter()
+            .filter(|event| matches!(event, ProseEvent::LayoutShaped { .. }))
+            .count();
+        // One on opening, one for the edit.
+        assert_eq!(layouts, 2);
+        let mut view = ambre_prose::ui::ProseUiState::default();
+        for event in &events {
+            view.apply_event(event);
+        }
+        assert_eq!(
+            view.layout_version, 2,
+            "the later layout is the one in force"
+        );
+        assert_eq!(view.shaped.layout.page_count, 1);
+        assert!(
+            !view.shaped.blocks.is_empty(),
+            "the runs arrive shaped with the layout"
+        );
+
+        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
+            pos: ambre_bus::app::prose::CursorPosition {
+                block_id: block,
+                offset: 1,
+                anchor: None,
+            },
+        }));
+        assert!(
+            !drain(&ui)
+                .iter()
+                .any(|event| matches!(event, ProseEvent::LayoutShaped { .. })),
+            "a caret move lays nothing out"
+        );
+    }
+
+    /// The other half of `PROSE-062`: the presence frame leaves as an
+    /// ephemeral, and a caret produces no CRDT delta (`PROSE-058`).
+    #[test]
+    fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
+        let (mut state, _ui, sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
+                pos: ambre_bus::app::prose::CursorPosition {
+                    block_id: block,
+                    offset: 0,
+                    anchor: None,
+                },
+            }),
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync.try_recv().ok()).collect();
+        assert!(
+            sent.iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendEphemeral { document_id: id, .. } if *id == document_id)),
+            "the presence frame reached the Sync worker"
+        );
+        assert!(
+            !sent
+                .iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendUpdate { .. })),
+            "a caret is never written to the document"
+        );
     }
 
     /// `DOCFILE-007`, and the reason this command is served by the dispatcher:
@@ -495,7 +721,7 @@ mod tests {
     /// range at all.
     #[test]
     fn a_saved_file_carries_the_document_id_the_registry_keyed_it_under() {
-        for doc_type in [DocType::Trame, DocType::Toile] {
+        for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let document_id = DocumentId::new();
             let bytes = exported_file(doc_type, document_id);
             let header = ambre_core::docfile::read_ambre_plaintext(&bytes)
@@ -543,7 +769,8 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: header.document_id.into(),
             doc_type: header.doc_type,
-            snapshot: header.payload,
+            snapshot: Some(header.payload),
+            deltas: Vec::new(),
         });
         reopened.handle_logic_command(LogicCommand::App {
             document_id,
@@ -571,7 +798,7 @@ mod tests {
 
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
     /// UI queue, and the service request the seal produced.
-    fn sealing(doc_type: DocType) -> (LogicState, flume::Receiver<UiEvent>, RequestId, Vec<u8>) {
+    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, RequestId, Vec<u8>) {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();
         state.handle_logic_command(LogicCommand::OpenDocument {
@@ -601,7 +828,7 @@ mod tests {
     }
 
     /// The file bytes of the one export event on `ui`, if there is one.
-    fn export_bytes(ui: &flume::Receiver<UiEvent>) -> Option<Vec<u8>> {
+    fn export_bytes(ui: &Receiver<UiEvent>) -> Option<Vec<u8>> {
         std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
             UiEvent::Viewport {
                 event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
@@ -784,6 +1011,26 @@ mod tests {
         ));
     }
 
+    /// The history lives in the document's state, so closing drops it with the
+    /// rest in each application (`UNDO-004`).
+    #[test]
+    fn closing_a_document_of_each_kind_drops_its_state() {
+        for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
+            let (mut state, _ui, sync_rx) = harness();
+            let doc_id = DocumentId::new();
+            let doc = DocState::new(doc_type).expect("a state for each application");
+            state.docs.insert(doc_id, LiveDoc::new(doc));
+            state.handle_logic_command(LogicCommand::CloseDocument {
+                document_id: doc_id,
+            });
+            assert!(!state.docs.contains_key(&doc_id), "{doc_type:?} kept");
+            assert!(matches!(
+                sync_rx.try_recv(),
+                Ok(SyncCommand::CloseDocument { .. })
+            ));
+        }
+    }
+
     #[test]
     fn session_ready_seeds_user_id_into_open_and_future_toile_docs() {
         // #1: SessionReady seeds `my_user_id` into every already-open
@@ -837,7 +1084,8 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: doc_id,
             doc_type: DocType::Trame,
-            snapshot,
+            snapshot: Some(snapshot),
+            deltas: Vec::new(),
         });
         assert!(state.docs.contains_key(&doc_id));
     }
@@ -1017,8 +1265,8 @@ mod tests {
         });
         assert_eq!(state.docs[&doc_id].role, Role::Viewer);
 
-        let _ = sync_rx.drain();
-        let _ = ui_rx.drain();
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: set_cell("nope"),
@@ -1050,9 +1298,9 @@ mod tests {
 
     /// Drain every `SendUpdate` and report which documents produced one -- which
     /// document a delta belongs to is exactly what these tests are about.
-    fn updated_docs(sync_rx: &flume::Receiver<SyncCommand>) -> Vec<DocumentId> {
+    fn updated_docs(sync_rx: &Receiver<SyncCommand>) -> Vec<DocumentId> {
         sync_rx
-            .drain()
+            .try_iter()
             .filter_map(|cmd| match cmd {
                 SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
                 _ => None,
@@ -1125,6 +1373,32 @@ mod tests {
         ));
     }
 
+    /// The `.ambre` container is a file format, never a wire format
+    /// (`DOCFILE-011`). This is the one place a snapshot enters the wire, so it
+    /// is the one place the header could be added. The payload is the engine's
+    /// own export, and a container would announce itself in the first four
+    /// bytes.
+    #[test]
+    fn a_snapshot_on_the_wire_carries_no_container_header() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = DocumentId::new();
+        state.docs.insert(
+            doc_id,
+            LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
+        );
+        state.handle_logic_event(LogicEvent::SnapshotNeeded {
+            document_id: doc_id,
+        });
+
+        let Ok(SyncCommand::SendSnapshot { payload, .. }) = sync_rx.try_recv() else {
+            panic!("a snapshot is sent");
+        };
+        assert!(
+            !payload.starts_with(&ambre_core::AMBRE_MAGIC),
+            "the wire payload must be a bare snapshot, not a container"
+        );
+    }
+
     // -- Service-plane routing: interop media uploads (`toile-media`) ------
     //
     // A Toile media import issues `UploadMedia` requests, which the dispatcher
@@ -1172,7 +1446,7 @@ mod tests {
 
         // The request was lowered to a `RestCommand::UploadMedia` carrying the
         // document id the engine never holds, echoing Toile's own id.
-        let uploaded = sync_rx.drain().find_map(|cmd| match cmd {
+        let uploaded = sync_rx.try_iter().find_map(|cmd| match cmd {
             SyncCommand::Rest {
                 id: got,
                 cmd:
@@ -1195,7 +1469,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         // The confirmation is routed into the engine, which applies the import.
         state.handle_logic_event(LogicEvent::Rest {
@@ -1209,7 +1483,7 @@ mod tests {
         // The route is consumed and the outcome surfaces as a viewport repaint,
         // never as a raw `Rest` event to the UI.
         assert!(state.rest_routes.is_empty());
-        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        let events: Vec<UiEvent> = ui_rx.try_iter().collect();
         assert!(
             events.iter().any(|e| matches!(e, UiEvent::Viewport { .. })),
             "the applied import should repaint the board"
@@ -1237,7 +1511,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(id),
@@ -1249,7 +1523,7 @@ mod tests {
         // The route is dropped and the failure surfaces as an import failure on
         // the board, not as a stray `ApiError` to the UI.
         assert!(state.rest_routes.is_empty());
-        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        let events: Vec<UiEvent> = ui_rx.try_iter().collect();
         assert!(
             !events.iter().any(|e| matches!(e, UiEvent::ApiError { .. })),
             "a correlated failure must not reach the UI as a raw ApiError"
@@ -1277,7 +1551,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         // Closing the document drops its in-flight route so the response can no
         // longer reach a (now absent) engine, and cannot repaint the board.
@@ -1296,7 +1570,9 @@ mod tests {
         });
         // No panic, and above all no viewport for a document that no longer exists.
         assert!(
-            !ui_rx.drain().any(|e| matches!(e, UiEvent::Viewport { .. })),
+            !ui_rx
+                .try_iter()
+                .any(|e| matches!(e, UiEvent::Viewport { .. })),
             "a closed document must not repaint"
         );
     }
@@ -1327,12 +1603,106 @@ mod tests {
         // fetch delivered nothing (a missing face degrades text, not boot).
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some(), "export context is seeded");
-        assert!(ui_rx.drain().next().is_none(), "no UI event");
+        assert!(ui_rx.try_iter().next().is_none(), "no UI event");
         assert!(sync_rx.try_recv().is_err(), "nothing forwarded to Sync");
 
-        // A second delivery is ignored -- the guard keeps the first context.
+        // A second delivery extends the same context rather than replacing it:
+        // a script face fetched after boot must export too (`CANVAS-068`).
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some());
+    }
+
+    /// The faces the workspace ships, read off the tree. A running peer gets
+    /// the same bytes over the bus; here the test plays the Main thread.
+    fn shipped_faces() -> Vec<Vec<u8>> {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
+            .iter()
+            .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+            .collect()
+    }
+
+    /// The export context holds what was delivered and nothing of the machine
+    /// (`PDF-007`).
+    ///
+    /// The families below ship with common desktop distributions and none is
+    /// one of Ambre's own faces. A context that discovered the device would
+    /// find them, and shape a missing codepoint on one of them.
+    #[test]
+    fn the_export_context_holds_only_the_faces_delivered_to_it() {
+        let (mut state, _ui, _sync) = harness();
+        let faces = shipped_faces();
+        assert!(!faces.is_empty(), "the workspace ships its faces");
+        state.handle_logic_command(LogicCommand::LoadFonts { faces });
+        let Some(export_cx) = state.export_cx.as_mut() else {
+            panic!("a delivery seeds the export context");
+        };
+        assert!(
+            export_cx.collection.family_id("Noto Sans").is_some(),
+            "a delivered face is there"
+        );
+        for family in ["DejaVu Sans", "Liberation Sans", "FreeSans", "Arial"] {
+            assert!(
+                export_cx.collection.family_id(family).is_none(),
+                "the export context found `{family}` on the machine"
+            );
+        }
+    }
+
+    /// A delivery reaches the documents already open, and a document opened
+    /// afterwards takes the same set (`CANVAS-067`, `PROSE-115`).
+    ///
+    /// A Prose measuring context is sealed, so a document that misses the
+    /// delivery shapes every run into tofu and paginates on nothing
+    /// (`PROSE-114`).
+    #[test]
+    fn every_prose_document_takes_the_faces_whenever_it_was_opened() {
+        let (mut state, _ui, _sync) = harness();
+        let faces = shipped_faces();
+        assert!(!faces.is_empty(), "the workspace ships its faces");
+
+        let before = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: before,
+            doc_type: DocType::Prose,
+        });
+        assert_eq!(
+            state.docs[&before].state.face_count(),
+            0,
+            "nothing has been delivered yet"
+        );
+
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: faces.clone(),
+        });
+        assert_eq!(
+            state.docs[&before].state.face_count(),
+            faces.len(),
+            "a document open at delivery takes the faces"
+        );
+
+        let after = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: after,
+            doc_type: DocType::Prose,
+        });
+        assert_eq!(
+            state.docs[&after].state.face_count(),
+            faces.len(),
+            "a document opened afterwards takes the same set"
+        );
+
+        // A later delivery (a script face) reaches both (`CANVAS-068`).
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: vec![faces[0].clone()],
+        });
+        for id in [before, after] {
+            assert_eq!(
+                state.docs[&id].state.face_count(),
+                faces.len() + 1,
+                "a face fetched later reaches an open document too"
+            );
+        }
     }
 
     // -- The deck's PDF export (`toile-pdf-export`, `TOILE-IO-029`) ------------
@@ -1345,18 +1715,18 @@ mod tests {
     /// Ask a live board for its deck, and report the Toile event that came back.
     fn export_pdf_answer(
         state: &mut LogicState,
-        ui_rx: &flume::Receiver<UiEvent>,
+        ui_rx: &Receiver<UiEvent>,
         doc_id: DocumentId,
     ) -> ambre_bus::app::toile::ToileEvent {
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
-        let _ = ui_rx.drain().count();
+        ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ExportPdf),
         });
         ui_rx
-            .drain()
+            .try_iter()
             .find_map(|e| match e {
                 UiEvent::Viewport {
                     event: AppEvent::Toile(te),

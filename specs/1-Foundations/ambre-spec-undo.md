@@ -24,7 +24,7 @@ is normative in `ambre-spec-message-bus.md`. The prefix is `UNDO`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UNDO-004` | `INV` | The history MUST NOT survive the document being closed. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_stack_cleared_on_doc_close` | partial -- Trame holds the test, Toile and Prose have no equivalent and the mechanism tests that would cover them do not exist; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
+| `UNDO-004` | `INV` | The history MUST NOT survive the document being closed. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_stack_cleared_on_doc_close`; Toile `ambre_logic::dispatch::tests::closing_a_document_of_each_kind_drops_its_state`; Prose `ambre_logic::dispatch::tests::closing_a_document_of_each_kind_drops_its_state` | none | verified |
 | `UNDO-009` | `INV` | A command that changes nothing MUST NOT refresh the undo affordances. | this spec section 4 | none | unheld -- it is the half `UNDO-006` was carrying, and it binds every mutating command rather than the undo itself, so no test of this feature reaches it. In Toile the question does not arise: twenty-eight handlers of thirty emit no availability at all; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UNDO-010` | `INV` | `Ctrl+Z` MUST undo. | this spec section 4 | Trame `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- it seeds the keymap from the declared table and reads the chords back, so a removed `Ctrl+Z` binding fails it | partial -- Toile's `ToileView::handle_key` binds the chord and no test calls it, and Prose decodes it in its view with no test on the chord; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
 | `UNDO-011` | `INV` | `Ctrl+Shift+Z` MUST redo. | this spec section 4 | Trame `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- a removed `Ctrl+Shift+Z` binding fails it | partial -- Toile's `ToileView::handle_key` binds the chord and no test calls it, and Prose decodes it in its view with no test on the chord; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | partial |
@@ -50,7 +50,7 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 2 `verified`, 7 `partial`, 2 `untested`. In all three applications, an undo
+* **Verification.** 3 `verified`, 6 `partial`, 2 `untested`. In all three applications, an undo
   reverts the peer's own edit, and the history dies with the document. The reseed is clean. What is
   loose is a remote peer's operations, what an undo emits, and the affordances Prose does not show.
 

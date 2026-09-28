@@ -115,31 +115,6 @@ impl Clock for PerfClock<'_> {
     }
 }
 
-// -- Kinetic (momentum) touchpad scrolling ------------------------------------
-// Firefox/Linux does not deliver an OS momentum phase after a two-finger flick,
-// so we synthesise it: track the scroll velocity while the fingers drive, then
-// coast with friction once the wheel events stop.
-//
-/// Gap (ms) with no `wheel` event after which the gesture is considered ended
-/// and coasting may begin. Continuous touchpad scrolling fires well under this.
-const FLING_GAP_MS: f64 = 60.0;
-/// Velocity retained per 16.667 ms of coasting (~ exponential friction). This
-/// is a *time constant*, not a per-frame factor. The decay is raised to `dt /
-/// 16.667` each frame. The deceleration curve over wall-clock time is
-/// therefore identical at 60 Hz, 240 Hz, or any variable refresh rate.
-const FLING_FRICTION: f64 = 0.94;
-/// Minimum speed (physical px/ms) at gesture end to bother coasting at all.
-const FLING_START_PX_PER_MS: f64 = 0.05;
-/// Speed (physical px/ms) below which coasting stops.
-const FLING_STOP_PX_PER_MS: f64 = 0.012;
-/// Smoothing for the running velocity estimate: weight of the newest sample.
-const FLING_VELOCITY_BLEND: f64 = 0.8;
-/// A single pixel-mode `wheel` delta at or above this (physical px) is treated
-/// as a notched mouse wheel, not a touchpad glide. It is applied 1:1 with no
-/// inertia. Touchpad events stay well below this; a mouse notch (Chrome ~100
-/// px/dpr, Firefox uses line mode anyway) sits comfortably above it.
-const DISCRETE_WHEEL_PX: f64 = 40.0;
-
 /// Result of folding the pixel accumulator into a viewport pan.
 pub(crate) enum ScrollOutcome {
     /// Less than a whole row/col accumulated; nothing to do yet.
@@ -151,7 +126,7 @@ pub(crate) enum ScrollOutcome {
 }
 
 /// Backpressure outcome of a lossless UI->Logic send. Mirrors the two
-/// `flume::TrySendError` variants without carrying the (large) `LogicCommand`
+/// `ambre_bus::conduit::TrySendError` variants without carrying the (large) `LogicCommand`
 /// payload, so the `Err` path stays cheap (see `clippy::result_large_err`).
 pub(crate) enum SendError {
     /// The outbox took the command nowhere: the queue was full and the hold
@@ -240,7 +215,7 @@ pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: DocumentId,
     /// Outbound queue to the Logic thread, for the lossy class only.
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// The lossless send path: it keeps a command a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
     outbox: Outbox,
@@ -248,7 +223,7 @@ pub struct TrameView {
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
     /// Inbound queue from the Logic thread, drained each frame in `update`.
-    from_logic: flume::Receiver<UiEvent>,
+    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
 
     /// Grid navigation + cell cache.
     state: TrameUiState,
@@ -399,22 +374,11 @@ pub struct TrameView {
     prev_left_col: u32,
 
     // -- Wheel / touchpad scroll ------------------------------------------------
-    /// Sub-cell wheel residue (physical px) carried between events, so slow
-    /// touchpad scrolls still accumulate into whole rows/cols rather than being
-    /// truncated away each frame.
-    scroll_accum_x: f64,
-    scroll_accum_y: f64,
-    /// Running scroll velocity estimate (physical px/ms) from recent wheel
-    /// events; drives the momentum coast once the fingers lift.
-    fling_vx: f64,
-    fling_vy: f64,
-    /// Timestamp (perf ms) of the last wheel event. `>0` means a gesture is in
-    /// progress / just ended, and we should watch for the fling gap.
-    last_wheel_ms: f64,
-    /// True while coasting after a flick; cleared by a new wheel or a stop.
-    coasting: bool,
-    /// Timestamp (perf ms) of the last coast step, for the per-frame integration.
-    last_coast_ms: f64,
+    /// The scroll motion, built apart from the browser so a native test drives
+    /// it (`scroll.rs`).
+    scroll: scroll::GridScroll,
+    /// Where a held selection or fill drag last pointed.
+    drag_point: Option<(f64, f64)>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste
@@ -439,6 +403,7 @@ mod frame;
 mod input;
 mod interact;
 mod lifecycle;
+mod scroll;
 
 #[cfg(test)]
 mod tests {

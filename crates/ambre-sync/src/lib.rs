@@ -18,14 +18,13 @@
 //
 // Transport: inbound `SyncCommand`s arrive over `postMessage` from the Main
 // instance, decoded by `ambre-sync-worker` and fed into [`run_wasm`] via an
-// in-worker `flume` queue. Outbound `LogicEvent`s are emitted through a
-// [`LogicSink`] (the worker posts them back to Main via `postMessage`).
+// in-worker `ambre_bus::conduit::unbounded` queue. Outbound `LogicEvent`s are
+// emitted through a [`LogicSink`] (the worker posts them back to Main via
+// `postMessage`).
 //
-// This is now a SINGLE worker. The internal event bus and the command queue
-// both have their producer and consumer on it, so flume's async waker fires
-// correctly. The old cross-worker freeze that motivated `sab_channel` cannot
-// happen here. The select loop awaits both queues' `recv_async`; the worker's
-// JS event loop stays free for WebSocket / fetch.
+// This is a SINGLE worker: the internal event bus and the command queue both
+// have their producer and consumer on it. The select loop awaits both queues'
+// `recv`; the worker's JS event loop stays free for WebSocket / fetch.
 //
 // WebSocket topology (when implemented):
 //   ONE WebSocket per session, opened at Unlock, closed at Logout.
@@ -66,7 +65,7 @@ use hex::encode;
 /// Logic thread, so it cannot hold a queue `Sender<LogicEvent>` directly:
 /// instead it calls this type-erased closure. In the wasm worker the closure
 /// postcard-encodes the event and `postMessage`s it to the Main instance. In
-/// native tests it pushes into a `flume` queue (see [`LogicSink::channel`]).
+/// native tests it pushes into a `conduit` queue (see [`LogicSink::queue`]).
 ///
 /// `Rc`-backed (clonable, `'static`) so it can be captured by the `spawn_local`
 /// HTTP tasks and JS callbacks. Single-threaded by construction (one worker).
@@ -86,10 +85,10 @@ impl LogicSink {
         Self(std::rc::Rc::new(f))
     }
 
-    /// A sink backed by a fresh `flume` queue, returning the receiver so a
+    /// A sink backed by a fresh `conduit` queue, returning the receiver so a
     /// (native) test can drain what Sync emits.
-    pub fn channel() -> (Self, flume::Receiver<LogicEvent>) {
-        let (tx, rx) = flume::unbounded();
+    pub fn channel() -> (Self, ambre_bus::conduit::Receiver<LogicEvent>) {
+        let (tx, rx) = ambre_bus::conduit::unbounded();
         (
             Self::new(move |ev| {
                 let _ = tx.send(ev);
@@ -635,11 +634,11 @@ pub struct SyncState {
     reconnect_attempts: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
-    mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
+    mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
 
     // -- Internal event queue (carries WS frames + HTTP results into the     --
     // -- non-blocking select loop; producer and consumer are the same worker)  --
-    event_tx: Option<flume::Sender<SyncEvent>>,
+    event_tx: Option<ambre_bus::conduit::UnboundedSender<SyncEvent>>,
 
     // -- Per-document sync sessions --------------------------------------------
     documents: HashMap<DocumentId, SyncDocumentState>,
@@ -717,7 +716,7 @@ impl SyncState {
     /// [`run_wasm`] before the select loop, so JS closures and HTTP tasks can
     /// push events into the main loop without blocking.
     #[allow(dead_code)]
-    pub(crate) fn set_event_tx(&mut self, tx: flume::Sender<SyncEvent>) {
+    pub(crate) fn set_event_tx(&mut self, tx: ambre_bus::conduit::UnboundedSender<SyncEvent>) {
         self.event_tx = Some(tx);
     }
 
@@ -771,7 +770,7 @@ impl SyncState {
     /// Hook the in-memory mock transport onto this SyncState. In test mode the
     /// mock captures every WS message that would be sent, without touching
     /// JS / WASM APIs.
-    pub fn set_mock_ws(&mut self, tx: flume::Sender<Vec<u8>>) {
+    pub fn set_mock_ws(&mut self, tx: ambre_bus::conduit::UnboundedSender<Vec<u8>>) {
         self.mock_ws_tx = Some(tx);
     }
 
@@ -1062,17 +1061,17 @@ impl SyncState {
 /// Async entry point for the Sync worker (`ambre-sync-worker` calls this from
 /// `spawn_local`). Single-worker model:
 ///
-/// - `cmd_rx`: in-worker `flume` queue fed by the worker's `onmessage` handler
+/// - `cmd_rx`: in-worker `conduit` queue fed by the worker's `onmessage` handler
 ///   (decoded `SyncCommand`s relayed from the Main instance via `postMessage`).
 /// - `logic_sink`: emits `LogicEvent`s back to Main (postMessage).
 ///
 /// Internally it creates the event bus (`event_tx`/`event_rx`) into which WS /
-/// HTTP callbacks push `SyncEvent`s, then `select!`s over both `recv_async`
-/// futures. Producer and consumer share this worker, so the wakers fire; the
-/// worker's JS event loop stays free for WebSocket / fetch callbacks.
+/// HTTP callbacks push `SyncEvent`s, then `select!`s over both `recv`
+/// futures. The worker's JS event loop stays free for WebSocket / fetch
+/// callbacks.
 #[cfg(target_arch = "wasm32")]
 pub async fn run_wasm(
-    cmd_rx: flume::Receiver<SyncCommand>,
+    cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
     api_base: String,
 ) {
@@ -1081,17 +1080,17 @@ pub async fn run_wasm(
     tracing::info!("Ambre Sync worker starting (wasm async)");
 
     let mut state = SyncState::new(logic_sink, api_base, None);
-    let (event_tx, event_rx) = flume::unbounded::<SyncEvent>();
+    let (event_tx, event_rx) = ambre_bus::conduit::unbounded::<SyncEvent>();
     state.set_event_tx(event_tx);
 
     loop {
         futures_util::select! {
-            cmd = cmd_rx.recv_async().fuse() => match cmd {
+            cmd = cmd_rx.recv().fuse() => match cmd {
                 Ok(cmd) => state.handle_command(cmd),
                 // Command queue closed: the Main instance is gone (teardown).
                 Err(_) => break,
             },
-            ev = event_rx.recv_async().fuse() => match ev {
+            ev = event_rx.recv().fuse() => match ev {
                 Ok(ev) => state.handle_sync_event(ev),
                 // event_tx is held by `state`, so this only errors at teardown.
                 Err(_) => {}

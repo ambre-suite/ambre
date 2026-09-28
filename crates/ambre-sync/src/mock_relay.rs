@@ -8,7 +8,7 @@ use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 ///
 /// Manages document subscriptions, ordered update delivery (sequenced by a
 /// global `Seq`), and snapshot tracking. Clients connect via bidirectional
-/// `flume` queues, one queue pair per client. The full SecSync
+/// `ambre_bus::conduit` queues, one queue pair per client. The full SecSync
 /// pipeline (crypto, compression, quarantine) can then be exercised
 /// without a network or real server.
 ///
@@ -20,7 +20,7 @@ pub struct MockBlindRelay {
     /// their global sequence number).
     documents: HashMap<DocumentId, DocumentState>,
     /// Connected clients: user_id -> (client_tx for server->client msgs).
-    clients: HashMap<UserId, flume::Sender<WsServerMsg>>,
+    clients: HashMap<UserId, ambre_bus::conduit::UnboundedSender<WsServerMsg>>,
     /// Global sequence number, monotonically increasing per relay instance.
     next_seq: u64,
 }
@@ -47,9 +47,12 @@ impl MockBlindRelay {
     pub fn connect(
         &mut self,
         user_id: UserId,
-    ) -> (flume::Sender<Vec<u8>>, flume::Receiver<WsServerMsg>) {
-        let (client_tx, _relay_rx) = flume::unbounded::<Vec<u8>>();
-        let (relay_tx, client_rx) = flume::unbounded::<WsServerMsg>();
+    ) -> (
+        ambre_bus::conduit::UnboundedSender<Vec<u8>>,
+        ambre_bus::conduit::Receiver<WsServerMsg>,
+    ) {
+        let (client_tx, _relay_rx) = ambre_bus::conduit::unbounded::<Vec<u8>>();
+        let (relay_tx, client_rx) = ambre_bus::conduit::unbounded::<WsServerMsg>();
         self.clients.insert(user_id, relay_tx);
         (client_tx, client_rx)
     }
@@ -147,7 +150,7 @@ impl MockBlindRelay {
     }
 
     /// Drain all pending client messages and process them through the relay.
-    pub fn drain_client(&mut self, client_rx: &flume::Receiver<Vec<u8>>) -> usize {
+    pub fn drain_client(&mut self, client_rx: &ambre_bus::conduit::Receiver<Vec<u8>>) -> usize {
         let mut count = 0;
         while let Ok(wire) = client_rx.try_recv() {
             if self.handle_message(&wire) {

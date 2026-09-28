@@ -107,7 +107,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | none | unheld -- the mechanism tests do not exist; the dispatch calls the three routes but no test verifies that each destination receives what it should; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker`; `::a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta` | none | verified |
 | `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | exhaustive-match -- `ambre_prose::logic::ProseState::handle_command` matches a closed `ProseCommand`, which declares no connection, sharing or membership variant | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
@@ -115,10 +115,10 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 40 `verified`, 1 `untested`, nothing else. Seven rows are compiler-held: the
-  crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a shape no
-  command builds yet: the image block, and the block under a table cell. Each is read through the
-  format rather than through a gesture. The fan-out is driven across the real dispatcher.
+* **Verification.** 41 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+  lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
+  yet: the image block, and the block under a table cell. Each is read through the format rather
+  than through a gesture. The fan-out is driven across the real dispatcher.
 
 ---
 
@@ -282,7 +282,7 @@ then advances it. Exporting twice from the same vector yields the same bytes, an
 be truncated by an extra call. It is the mechanism `features/ambre-spec-trame-engine.md` already
 uses, so both applications have one delta model on the shared engine.
 
-**The state never sees a channel.** `ProseState` names no sender, no `SyncCommand` and no incoming
+**The state never sees a queue.** `ProseState` names no sender, no `SyncCommand` and no incoming
 event type. The generic dispatcher in `ambre-logic` routes what arrives to the four content methods
 above and fans the outcome back out (`PROSE-024`). A connection change, a sharing change or a
 revoked member is not document content and never reaches this state at all.
@@ -768,7 +768,7 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | One state per document, dispatched by a match | a trait object or a boxed `Any` in a registry | it trades the compiler's exhaustiveness for a downcast at every call site. A closed enum of document states means adding Prose adds an arm and no indirection, and a concrete value is what lets a host test build a document, drive it and read the answer with no worker and no browser |
-| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed enum exists to avoid. A value returned by a plain method is testable with no channel and keeps the state free of a transport handle, so the dispatcher is the single place where a document change becomes traffic |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed enum exists to avoid. A value returned by a plain method is testable with no queue and keeps the state free of a transport handle, so the dispatcher is the single place where a document change becomes traffic |
 | Every mutation is a typed command, and there is one entry point | letting a feature module open the CRDT and write to it | it is how the interception rules silently stop holding. One path into the document is one place to intercept it, which is what track changes, undo and the refusal rules all hang off; a second path would have to reimplement each of them |
 | The command plane carries no `serde` | serializing every command, as the Sync hop must | it pays the serialization on the hop that must not. The UI and Logic threads share one linear memory, so a value moves between them; deriving serialization on the plane would invite a copy on a hop that has none, and it is the derive that makes a network type by accident |
 | A delta is exported from a stored version vector | a single-drain export | its correctness depends on nobody calling it twice. Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand; exporting from a stored vector is idempotent, and it is the mechanism `features/ambre-spec-trame-engine.md` already uses -- one delta model for both applications |

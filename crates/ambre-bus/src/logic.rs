@@ -6,7 +6,7 @@
 //! [`crate::app`] (for example `crate::app::trame::TrameCommand`); `AppCommand` is a
 //! thin dispatch enum referencing them.
 //!
-//! Carried over a `flume` queue in shared memory -- typed Rust values by move,
+//! Carried over a `conduit` queue in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric Logic -> UI direction (events) lives in
 //! [`crate::ui`].
 //!
@@ -69,8 +69,11 @@ pub enum LogicCommand {
         /// race against [`OpenDocument`](LogicCommand::OpenDocument).
         doc_type: DocType,
         /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
-        /// storage.
-        snapshot: Vec<u8>,
+        /// storage, when one was saved.
+        snapshot: Option<Vec<u8>>,
+        /// The deltas logged since that snapshot, in no set order. A Loro
+        /// import does not depend on it.
+        deltas: Vec<Vec<u8>>,
     },
 
     // -- P3 -- Service plane (relayed request/response) -------------------------
@@ -119,12 +122,14 @@ pub enum LogicCommand {
     },
 
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
-    /// Seed the Logic thread's PDF-export `FontContext` with base font faces
-    /// (`toile-pdf-export`). Fetched by the Main thread at boot and
-    /// delivered here because the Logic worker cannot fetch: it blocks on its
-    /// inbound selector and has no browser event loop. Local-only -- it never
-    /// reaches Sync or the server. Each entry is one already-fetched font file's
-    /// bytes.
+    /// Hand the Logic thread font faces the UI thread has fetched
+    /// (`CANVAS-067`, `CANVAS-068`). It cannot fetch any itself: it blocks on
+    /// its inbound selector and has no browser event loop. Every open Prose
+    /// document takes them, so pagination measures on real glyphs
+    /// (`PROSE-115`), and the PDF-export `FontContext` takes them too
+    /// (`toile-pdf-export`). Sent at boot with the base faces, and again for
+    /// each script face fetched on demand. Local-only -- it never reaches Sync
+    /// or the server. Each entry is one font file's bytes.
     LoadFonts { faces: Vec<Vec<u8>> },
 }
 
@@ -143,7 +148,9 @@ pub enum AppCommand {
     Trame(crate::app::trame::TrameCommand),
     /// Command for a Toile (whiteboard) document.
     Toile(crate::app::toile::ToileCommand),
-    // Future document types: Prose(ProseCommand), Murmure(MurmureCommand),
+    /// Command for a Prose (word processor) document.
+    Prose(crate::app::prose::ProseCommand),
+    // Future document types: Murmure(MurmureCommand),
     // Rendezvous(RendezvousCommand), ...
     // Future plugin surface: Plugin(Box<dyn Plugin>).
 }
@@ -159,6 +166,7 @@ impl AppCommand {
         match self {
             Self::Trame(cmd) => cmd.is_mutating(),
             Self::Toile(cmd) => cmd.is_mutating(),
+            Self::Prose(cmd) => cmd.is_mutating(),
         }
     }
 }

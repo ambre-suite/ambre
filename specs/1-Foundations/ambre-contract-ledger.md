@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2740 rows: 2392 shipped, of which 99 partial and 706 loose. 348 unbuilt.**
+**2740 rows: 2391 shipped, of which 96 partial and 693 loose. 349 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 240 | 215 | 540 | 592 | 1587 |
-| `partial` | 46 | 10 | 40 | 3 | 99 |
+| `verified` | 250 | 215 | 540 | 597 | 1602 |
+| `partial` | 44 | 10 | 40 | 2 | 96 |
 | `failing` | 39 | 49 | 22 |  | 110 |
-| `untested` | 242 | 131 | 195 | 6 | 574 |
+| `untested` | 233 | 131 | 195 | 2 | 561 |
 | `human-review` | 9 |  |  |  | 9 |
 | `qa-manual` | 5 | 4 | 4 |  | 13 |
-| `unimplemented` | 156 | 57 | 24 | 111 | 348 |
+| `unimplemented` | 157 | 57 | 24 | 111 | 349 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,14 +40,14 @@
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 |  | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 |  | 7 | 1 |
-| `ambre-spec-architecture.md` | 29 | 29 | 10 | 3 | 16 |  |
+| `ambre-spec-architecture.md` | 29 | 29 | 13 | 3 | 13 |  |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 |  | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 1 | 10 | 1 |
-| `ambre-spec-clipboard.md` | 18 | 18 | 0 | 2 | 16 |  |
+| `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
 | `ambre-spec-delta-order.md` | 19 | 19 | 6 | 1 | 12 |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 1 |  | 5 |  |
-| `ambre-spec-docfile.md` | 17 | 17 | 15 |  | 2 |  |
+| `ambre-spec-docfile.md` | 17 | 17 | 16 |  | 1 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
@@ -62,9 +62,9 @@
 | `ambre-spec-message-bus.md` | 26 | 26 | 13 | 2 | 11 |  |
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 1 | 8 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 1 | 4 | 1 |
-| `ambre-spec-pdf-export.md` | 7 | 6 | 0 | 3 | 3 | 1 |
+| `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
-| `ambre-spec-render-assets.md` | 17 | 14 | 4 | 2 | 8 | 3 |
+| `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-schema-version.md` | 19 | 19 | 18 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 |  | 9 |  |
 | `ambre-spec-sequencer.md` | 19 | 18 | 5 | 2 | 11 | 1 |
@@ -74,7 +74,7 @@
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 1 | 8 | 6 |
-| `ambre-spec-undo.md` | 11 | 11 | 2 | 7 | 2 |  |
+| `ambre-spec-undo.md` | 11 | 11 | 3 | 6 | 2 |  |
 | `ambre-spec-zero-knowledge.md` | 14 | 14 | 6 | 2 | 6 |  |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 1 | 6 |  |
@@ -136,16 +136,16 @@
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  |  | 2 |
 | `ambre-spec-prose-comments.md` | 36 | 36 | 36 |  |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |  |
-| `ambre-spec-prose-engine.md` | 41 | 41 | 40 |  | 1 |  |
+| `ambre-spec-prose-engine.md` | 41 | 41 | 41 |  |  |  |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |  |
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |  |
-| `ambre-spec-prose-import-export.md` | 49 | 30 | 27 | 1 | 2 | 19 |
+| `ambre-spec-prose-import-export.md` | 49 | 30 | 29 |  | 1 | 19 |
 | `ambre-spec-prose-inline-styles.md` | 27 | 26 | 25 | 1 |  | 1 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |  |
-| `ambre-spec-prose-page-rendering.md` | 23 | 21 | 20 |  | 1 | 2 |
-| `ambre-spec-prose-pagination.md` | 51 | 50 | 49 |  | 1 | 1 |
+| `ambre-spec-prose-page-rendering.md` | 23 | 21 | 21 |  |  | 2 |
+| `ambre-spec-prose-pagination.md` | 51 | 50 | 50 |  |  | 1 |
 | `ambre-spec-prose-ruler.md` | 8 | 8 | 7 | 1 |  |  |
 | `ambre-spec-prose-selection.md` | 37 | 37 | 37 |  |  |  |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  |  | 2 |

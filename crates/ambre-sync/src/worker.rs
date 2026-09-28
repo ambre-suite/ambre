@@ -10,11 +10,11 @@
 //   Main  --(postcard SyncCommand bytes, Transferable ArrayBuffer)-->  here
 //   here  --(postcard LogicEvent  bytes, Transferable ArrayBuffer)-->  Main
 //
-// Inbound bytes are decoded in `onmessage` and pushed into an in-worker `flume`
-// queue feeding [`crate::run_wasm`]. Outbound events go through a
-// [`crate::LogicSink`] that encodes and posts them back. Producer and consumer
-// of every internal queue live in THIS worker. The event loop therefore stays
-// free for WebSocket / fetch callbacks, and flume's wakers fire correctly.
+// Inbound bytes are decoded in `onmessage` and pushed into an in-worker
+// `ambre_bus::conduit::unbounded` queue feeding [`crate::run_wasm`]. Outbound
+// events go through a [`crate::LogicSink`] that encodes and posts them back. The
+// loop awaits its queues, so the event loop stays free for WebSocket / fetch
+// callbacks.
 // ============================================================================
 
 use wasm_bindgen::JsCast;
@@ -66,7 +66,7 @@ pub fn start() {
     );
 
     // Inbound: onmessage decodes SyncCommand bytes and feeds the select loop.
-    let (cmd_tx, cmd_rx) = flume::unbounded::<SyncCommand>();
+    let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
         let bytes = array_buffer_to_vec(&e.data());
         match postcard::from_bytes::<SyncCommand>(&bytes) {

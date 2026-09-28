@@ -29,6 +29,7 @@ use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
     PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
+use ambre_draw::kinetic::Release;
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
@@ -73,19 +74,23 @@ use leptos::prelude::{GetUntracked, RwSignal, Set};
 /// `fatal` reports success on a send nobody made. The view is tearing down and
 /// no later frame will retry. A `false` here would keep a dead registry asking
 /// for ever instead of letting it go.
-fn send_session(to_logic: &flume::Sender<LogicCommand>, fatal: bool, cmd: LogicCommand) -> bool {
+fn send_session(
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    fatal: bool,
+    cmd: LogicCommand,
+) -> bool {
     if fatal {
         return true;
     }
     match to_logic.try_send(cmd) {
         Ok(()) => true,
-        Err(flume::TrySendError::Full(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
             // Neither an open nor a close is worth blocking the UI thread for.
             // Both are worth a warning, and both come back on a later frame.
             tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
             false
         }
-        Err(flume::TrySendError::Disconnected(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => {
             tracing::error!("Toile: UI->Logic channel disconnected");
             false
         }
@@ -208,8 +213,8 @@ fn trigger_download(_filename: &str, _data: &[u8]) {}
 
 pub struct ToileView {
     document_id: DocumentId,
-    to_logic: flume::Sender<LogicCommand>,
-    from_logic: flume::Receiver<UiEvent>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
     /// The lossless send path: it keeps an edit a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
     outbox: Outbox,
@@ -299,6 +304,14 @@ pub struct ToileView {
     last_pointer: Point,
     /// While panning (space-drag / Hand tool): the previous screen position.
     panning: Option<Point>,
+    /// The shared kinetic scroll: wheel glides, finger pans and the motion
+    /// either leaves (`1-Foundations/ambre-spec-kinetic-scroll.md`).
+    kinetic: ambre_draw::kinetic::Kinetic,
+    /// The finger down, if any: `true` when it pans, `false` when it acts
+    /// as the mouse.
+    finger_pans: Option<bool>,
+    /// When the edge pan of a held gesture last ticked (`TOILE-UI-380`).
+    edge_ms: Option<f64>,
     /// Space held: a drag pans in any tool (`toile-viewport`).
     space_down: bool,
 
@@ -545,8 +558,8 @@ impl ToileView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         document_id: DocumentId,
-        to_logic: flume::Sender<LogicCommand>,
-        from_logic: flume::Receiver<UiEvent>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
@@ -615,6 +628,9 @@ impl ToileView {
             click_edit_candidate: None,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
+            kinetic: Default::default(),
+            finger_pans: None,
+            edge_ms: None,
             space_down: false,
             pointer_mode: PointerMode::default(),
             detected_mouse: false,
@@ -873,7 +889,9 @@ impl ToileView {
             ToileEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: String::new(),
+                    html: None,
                     ambre: postcard::to_allocvec(&payload).ok(),
+                    plain: false,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);
@@ -1116,13 +1134,24 @@ impl ToileView {
             }
         };
         if zoom {
+            // A zoom never coasts, and stops a coast under way.
+            self.kinetic.stop();
             // Zoom about the cursor. A trackpad pinch and a mouse notch both land
             // here; only `dy` drives the factor.
             let factor = (-dy * ZOOM_PER_WHEEL_PX).exp();
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
-            // Two-finger scroll pans the 2D plane in both axes.
-            self.cam.pan_by_screen(Vec2::new(dx, dy));
+            // Two-finger scroll pans the 2D plane in both axes. The model
+            // applies the step one for one, and lets a glide coast once it
+            // pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
+            let now = self.clock_ms();
+            super::kinetic::pan_by_wheel(
+                &mut self.cam,
+                &mut self.kinetic,
+                (dx, dy),
+                delta_mode != 0,
+                now,
+            );
         }
         self.queue_viewport();
         true
@@ -1382,6 +1411,136 @@ impl ToileView {
         self.embed_sessions
             .close_all(|cmd| send_session(to_logic, fatal, cmd));
         self.embed_focus.blur();
+    }
+
+    /// The time on the frame clock's timeline, for an input that carries
+    /// none.
+    fn clock_ms(&self) -> f64 {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+            return perf.now();
+        }
+        self.frame_now_ms
+    }
+
+    /// A finger went down. It stops any motion left. On the empty board with
+    /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
+    /// otherwise it acts as the mouse.
+    pub fn touch_down(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        self.kinetic.stop();
+        let screen = Point::new(x, y);
+        let world = self.cam.screen_to_world() * screen;
+        let grabbable = hit_topmost(&self.display.nodes, world).is_some()
+            || self
+                .machine
+                .hover_handle(&self.selection, &self.display, &self.cam, screen)
+                .is_some();
+        let pans = super::kinetic::finger_pans(self.machine.tool(), grabbable);
+        self.finger_pans = Some(pans);
+        if pans {
+            self.last_pointer = screen;
+            self.kinetic.press(x as f32, y as f32, now_ms);
+            return true;
+        }
+        self.handle_input(&InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        })
+    }
+
+    /// A finger moved: a panning finger drags the board past the tap slop,
+    /// any other acts as the mouse.
+    pub fn touch_move(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        match self.finger_pans {
+            Some(true) => {
+                self.last_pointer = Point::new(x, y);
+                if let Some(step) = self.kinetic.sample(x as f32, y as f32, now_ms) {
+                    super::kinetic::move_view(&mut self.cam, step);
+                    self.queue_viewport();
+                }
+                true
+            }
+            Some(false) => self.handle_input(&InputEvent::PointerMove { x, y }),
+            None => false,
+        }
+    }
+
+    /// A finger lifted. A pan released with speed keeps the board moving; a
+    /// finger that never left the tap slop is a click where it went down.
+    pub fn touch_up(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        match self.finger_pans.take() {
+            Some(true) => {
+                if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
+                    let (x, y) = (f64::from(x), f64::from(y));
+                    self.handle_input(&InputEvent::PointerDown {
+                        x,
+                        y,
+                        button: 0,
+                        shift: false,
+                        ctrl: false,
+                    });
+                    self.handle_input(&InputEvent::PointerUp {
+                        x,
+                        y,
+                        button: 0,
+                        ctrl: false,
+                    });
+                }
+                true
+            }
+            Some(false) => self.handle_input(&InputEvent::PointerUp {
+                x,
+                y,
+                button: 0,
+                ctrl: false,
+            }),
+            None => false,
+        }
+    }
+
+    /// The browser cancelled the finger (`KINETIC-010`). A pan ends with no
+    /// click and no flick. A finger acting as the mouse ends its gesture where
+    /// it last was, as a release would (`KINETIC-011`).
+    pub fn touch_cancel(&mut self) -> bool {
+        match self.finger_pans.take() {
+            Some(true) => {
+                self.kinetic.cancel();
+                true
+            }
+            Some(false) => {
+                let at = self.last_pointer;
+                self.handle_input(&InputEvent::PointerUp {
+                    x: at.x,
+                    y: at.y,
+                    button: 0,
+                    ctrl: false,
+                })
+            }
+            None => false,
+        }
+    }
+
+    /// Pan the board under a gesture held at an edge, once a frame, and let
+    /// the gesture follow (`TOILE-UI-380`). The first tick only starts the
+    /// clock.
+    fn step_edge_pan(&mut self, now_ms: f64) {
+        let held = self.machine.is_active() || self.arrow_drag.is_some();
+        let speed = super::kinetic::edge_pan_speed(&self.cam, self.last_pointer);
+        if !held || speed == (0.0, 0.0) {
+            self.edge_ms = None;
+            return;
+        }
+        let Some(last) = self.edge_ms.replace(now_ms) else {
+            return;
+        };
+        let dt = (now_ms - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS) as f32;
+        super::kinetic::move_view(&mut self.cam, (speed.0 * dt, speed.1 * dt));
+        self.queue_viewport();
+        let at = self.last_pointer;
+        self.handle_pointer_move(at.x, at.y);
     }
 
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, ctrl: bool) -> bool {
@@ -2278,32 +2437,26 @@ impl ToileView {
         // editor on it (`toile-text-editing`), taking precedence over group
         // entering.
         if self.machine.tool() == Tool::Select {
-            // A frame's title is the one thing a double-click edits that the
-            // board hit test cannot see: the band sits outside the frame
-            // (`TOILE-257`).
-            if let Some(frame) = super::hit::frame_title_at(&self.display.nodes, screen, &self.cam)
-            {
-                self.open_frame_title_editor(frame);
-                return true;
-            }
-            let editable = hit_topmost(&self.display.nodes, world).filter(|hit| {
+            let nodes = &self.display.nodes;
+            let edit = super::tool::double_click_edit(nodes, screen, &self.cam, |hit| {
                 self.find_element(hit)
                     .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
             });
-            if let Some(hit) = editable {
-                self.open_editor(hit);
-                return true;
-            }
-            // No element under the pointer: a double-click on an arrow (its line
-            // or its caption) opens the caption editor on it
-            // (`toile-connectors`). An element that is there wins, whatever it
-            // is, so entering a group keeps working over a connector behind it.
-            if hit_topmost(&self.display.nodes, world).is_none()
-                && let Some(c) = label::connector_at(&self.display.nodes, world)
-            {
-                self.open_label_editor(c);
-                self.needs_full = true;
-                return true;
+            match edit {
+                Some(super::tool::DoubleClickEdit::FrameTitle(frame)) => {
+                    self.open_frame_title_editor(frame);
+                    return true;
+                }
+                Some(super::tool::DoubleClickEdit::Body(hit)) => {
+                    self.open_editor(hit);
+                    return true;
+                }
+                Some(super::tool::DoubleClickEdit::Caption(c)) => {
+                    self.open_label_editor(c);
+                    self.needs_full = true;
+                    return true;
+                }
+                None => {}
             }
         }
         let out = self.machine.double_click(world);
@@ -2625,7 +2778,7 @@ impl ToileView {
             }
             // The title band is screen space, and the editor takes world
             // coordinates, so the band is projected back through the camera
-            // (`TOILE-257`). Padding rides outside it, so the caret sits where
+            // (`TOILE-261`). Padding rides outside it, so the caret sits where
             // the painted glyphs did.
             EditTarget::FrameTitle(id) => {
                 let e = self.find_element(id)?;
@@ -2644,7 +2797,7 @@ impl ToileView {
 
     /// The screen-space band a frame's title occupies, or a band of the same
     /// shape when it carries none. An editor has to open on a frame the user is
-    /// naming for the first time (`TOILE-257`).
+    /// naming for the first time (`TOILE-261`).
     fn frame_title_band(&self, e: &DisplayElement) -> Rect {
         let title = match &e.geom {
             DisplayGeom::Frame(t) => t.as_str(),
@@ -2701,7 +2854,7 @@ impl ToileView {
         self.text_input.focus();
     }
 
-    /// Open the inline editor on a frame's title (`TOILE-257`). No-op for a
+    /// Open the inline editor on a frame's title (`TOILE-261`). No-op for a
     /// frame that has left the culled set.
     fn open_frame_title_editor(&mut self, id: ElementId) {
         let Some(e) = self.find_element(&id) else {
@@ -3047,8 +3200,8 @@ impl ToileView {
                 // Other UiEvent variants (session, CRUD, connection) are not yet
                 // consumed by the Toile view; ignore them for now.
                 Ok(_) => {}
-                Err(flume::TryRecvError::Empty) => break,
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(ambre_bus::conduit::TryRecvError::Empty) => break,
+                Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
                     self.signal_fatal("Logic thread disconnected");
                     break;
                 }
@@ -3171,6 +3324,13 @@ impl ToileView {
                 self.viewport_changed = true;
             }
         }
+
+        // A flick or a glide keeps the board moving (`KINETIC-004`), and a
+        // gesture held at an edge pans it (`TOILE-UI-380`).
+        if super::kinetic::coast(&mut self.cam, &mut self.kinetic, now_ms) {
+            self.queue_viewport();
+        }
+        self.step_edge_pan(now_ms);
 
         // Keep the status-bar aggregates (`toile-status-bar`) in step with the
         // selection. On a change, ask Logic for the fresh count/bounds. The reply
@@ -3628,8 +3788,8 @@ impl ToileView {
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport (`toile-clipboard`). When `own_copy` (the synchronous ownership
     /// token was still on the clipboard) it prefers the in-memory `last_clip` at
-    /// full fidelity. That is immune to the async OS write having failed on
-    /// Firefox. Otherwise it decodes the blob's Ambre bytes. Either way,
+    /// full fidelity, whatever the asynchronous OS write did. Otherwise it
+    /// decodes the blob's Ambre bytes. Either way,
     /// `PasteElements` lands the id-free payload at the cursor's world position. A
     /// blob with no decodable Ambre payload is ignored (plain-text paste into a
     /// board is out of MVP).
@@ -3644,13 +3804,11 @@ impl ToileView {
             }
             return;
         }
-        let source = match &self.last_clip {
-            Some(clip) if own_copy => clip,
-            _ => &blob,
-        };
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, own_copy);
         let Some(payload) = source
             .ambre
             .as_ref()
+            .filter(|_| !source.plain)
             .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes).ok())
         else {
             return;

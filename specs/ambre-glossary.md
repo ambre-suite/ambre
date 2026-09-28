@@ -28,15 +28,15 @@
 | thread | one of the three execution contexts of a client | | `1-Foundations/ambre-spec-architecture.md` |
 | instance | one running copy of the application | | `1-Foundations/ambre-spec-architecture.md` |
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
-| channel | a typed queue between two threads | | `1-Foundations/ambre-spec-architecture.md` |
-| conduit | the lock-free channel of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
+| conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |
 | envelope | the typed wrapper of one hop | | `1-Foundations/ambre-spec-message-bus.md` |
 | role gate | the check of this client's role on a document | | `1-Foundations/ambre-spec-message-bus.md` |
-| full channel | a channel with no room left | | `1-Foundations/ambre-spec-message-bus.md` |
+| full queue | a queue with no room left | | `1-Foundations/ambre-spec-message-bus.md` |
 | drop | throw a message or a command away | discard | `1-Foundations/ambre-spec-message-bus.md` |
 | command | a user intent travelling to the Logic thread | | `1-Foundations/ambre-spec-commands.md` |
 | chord | a key combination bound to a command | | `1-Foundations/ambre-spec-commands.md` |
@@ -56,7 +56,12 @@
 | sync | the thread owning the network and the crypto | | `1-Foundations/ambre-spec-sync.md` |
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| channel | a Murmure conversation: public, private or direct | | `Todo/ambre-murmure.md` |
+| topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |
+| PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
+| session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
+| peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
 | ephemeral | a message kept by nothing after delivery | | `1-Foundations/ambre-spec-broadcast.md` |
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
@@ -78,11 +83,21 @@
 | seal | encrypt, and bind the ciphertext to its context | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | sealed envelope | the shape every encrypted message takes | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | commitment tag | the tag binding a ciphertext to one key | | `1-Foundations/ambre-spec-sealed-envelope.md` |
+| Alice | an honest member in a scenario, like Bob and Carol | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| Mallory | a malicious member in a scenario, holding a legitimate key | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| Eve | a passive network attacker in a scenario | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key hierarchy | the derivation tree of every key a client holds | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
+| machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
+| inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |
+| inbox writer | a program that posts to an inbox and reads nothing | | `1-Foundations/ambre-spec-machine-access.md` |
+| addressed key | the key that opens only the frames sent to one machine | | `1-Foundations/ambre-spec-machine-access.md` |
+| macro | code stored in a document, run by a member client after approval | | `1-Foundations/ambre-spec-macros.md` |
+| integrator | the member who put one version of a macro in one document | | `1-Foundations/ambre-spec-macros.md` |
+| publisher | whoever wrote a macro; a third party signs the package it publishes | | `1-Foundations/ambre-spec-macros.md` |
 | container | the file wrapping a document on disk | | `1-Foundations/ambre-spec-docfile.md` |
 | doc_type | the header byte naming the owning application | | `1-Foundations/ambre-spec-docfile.md` |
 | magic | the four bytes opening every container | | `1-Foundations/ambre-spec-docfile.md` |

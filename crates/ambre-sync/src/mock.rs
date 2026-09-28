@@ -1,7 +1,7 @@
 // ambre-sync/src/mock.rs
 // ============================================================================
 // In-memory WebSocket transport for testing the Sync pipeline without WASM or
-// network. Two flume pairs form a bidirectional client<->server loop.
+// network. Two `ambre_bus::conduit` pairs form a bidirectional client<->server loop.
 
 use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_client_msg};
 
@@ -18,19 +18,19 @@ use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_clien
 /// ```
 pub struct MockWsTransport {
     /// Client -> Server: the Sync state pushes encoded `WsClientMsg` bytes here.
-    pub client_tx: flume::Sender<Vec<u8>>,
+    pub client_tx: ambre_bus::conduit::UnboundedSender<Vec<u8>>,
     /// Client -> Server: drained by the test harness.
-    pub server_rx: flume::Receiver<Vec<u8>>,
+    pub server_rx: ambre_bus::conduit::Receiver<Vec<u8>>,
     /// Server -> Client: the test harness pushes `WsServerMsg` here.
-    pub server_tx: flume::Sender<WsServerMsg>,
+    pub server_tx: ambre_bus::conduit::UnboundedSender<WsServerMsg>,
     /// Server -> Client: drained by the Sync state (via `receive_server_msg`).
-    pub client_rx: flume::Receiver<WsServerMsg>,
+    pub client_rx: ambre_bus::conduit::Receiver<WsServerMsg>,
 }
 
 impl MockWsTransport {
     pub fn new() -> Self {
-        let (client_tx, server_rx) = flume::unbounded();
-        let (server_tx, client_rx) = flume::unbounded();
+        let (client_tx, server_rx) = ambre_bus::conduit::unbounded();
+        let (server_tx, client_rx) = ambre_bus::conduit::unbounded();
         Self {
             client_tx,
             server_rx,
@@ -55,10 +55,14 @@ impl MockWsTransport {
     ///
     /// # Panics
     ///
-    /// When the client queue is closed. This is test scaffolding, and a
-    /// closed queue there is the test itself going wrong.
+    /// When no client message is pending. This is test scaffolding, and the
+    /// client runs on the test's own thread. A message not queued yet never
+    /// will be, so the test itself went wrong.
     pub fn recv_client_msg(&self) -> Result<WsClientMsg, WireDecodeError> {
-        let wire = self.server_rx.recv().expect("client channel disconnected");
+        let wire = self
+            .server_rx
+            .try_recv()
+            .expect("no pending client message");
         decode_client_msg(&wire)
     }
 
