@@ -38,7 +38,7 @@ impl RunDrawState {
     fn build(data: &ParleyRunData) -> Self {
         let mut glyph_runs = Vec::new();
         let tops = data.line_tops();
-        for (line_index, line) in data.layout().lines().enumerate() {
+        for (line_index, (line, _)) in data.lines().enumerate() {
             let top = tops.get(line_index).copied().unwrap_or(0.0);
             for (item_index, item) in line.items().enumerate() {
                 if matches!(item, ambre_draw::PositionedLayoutItem::GlyphRun(_)) {

@@ -1008,8 +1008,12 @@ impl ProseState {
             self.doc.set_next_commit_origin(comments::COMMENT_ORIGIN);
             self.doc.commit();
         }
-        display.extend(self.regrow_root());
-        self.doc.commit();
+        // Typed text grows a block and never empties one, so the tree cannot
+        // need a repair: the walk over the roots is skipped.
+        if !self.touched.only_typed() {
+            display.extend(self.regrow_root());
+            self.doc.commit();
+        }
         let update = self.flush_delta();
         if let Some(delta) = update.clone() {
             display.insert(0, ProseEvent::DocUpdated { delta });

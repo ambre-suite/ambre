@@ -159,11 +159,14 @@ fn draw_run<S: DrawSurface>(
 ) {
     let data: &ParleyRunData = run.data();
     let brush = Brush::Solid(color);
-    let transform = Affine::translate((placed.origin_x, placed.origin_y));
     for (line_index, item_index, _) in &cache.draw_state(key, run).glyph_runs {
-        let Some(line) = data.layout().get(*line_index) else {
+        let Some((line, shift)) = data.line(*line_index) else {
             continue;
         };
+        // A line shaped in a later segment is moved down to its place
+        // (`PROSE-128`).
+        let origin_y = placed.origin_y + f64::from(shift);
+        let transform = Affine::translate((placed.origin_x, origin_y));
         let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
             continue;
         };
@@ -173,7 +176,7 @@ fn draw_run<S: DrawSurface>(
             .peekable();
         if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);
-            draw_lines(surface, &glyphs, placed.origin_x, placed.origin_y, color);
+            draw_lines(surface, &glyphs, placed.origin_x, origin_y, color);
             continue;
         }
         let (mut from, mut shift) = (-BAND, 0.0);
@@ -181,15 +184,9 @@ fn draw_run<S: DrawSurface>(
             let left = placed.origin_x + from + shift;
             let right = placed.origin_x + to + shift;
             surface.push_clip(Rect::new(left, -BAND, right, BAND));
-            let moved = Affine::translate((placed.origin_x + shift, placed.origin_y));
+            let moved = Affine::translate((placed.origin_x + shift, origin_y));
             surface.draw_glyphs(&glyphs, &brush, moved);
-            draw_lines(
-                surface,
-                &glyphs,
-                placed.origin_x + shift,
-                placed.origin_y,
-                color,
-            );
+            draw_lines(surface, &glyphs, placed.origin_x + shift, origin_y, color);
             surface.pop_clip();
         };
         for cut in cuts {
@@ -241,9 +238,10 @@ fn draw_lines<S: DrawSurface>(
 
 /// Draw every glyph of a shaped text at `(x, y)`.
 fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64, color: Color) {
-    let transform = Affine::translate((x, y));
     let brush = Brush::Solid(color);
-    for line in shape.data().layout().lines() {
+    for (line, shift) in shape.data().lines() {
+        let y = y + f64::from(shift);
+        let transform = Affine::translate((x, y));
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
                 surface.draw_glyphs(&glyphs, &brush, transform);
@@ -502,7 +500,7 @@ impl ProseUiState {
         let compose = caret.and_then(|(line, caret, _)| {
             let (shaped_text, shape) = self.compose_shape.as_ref()?;
             (*shaped_text == self.composing).then(|| {
-                let width = f64::from(shape.data().layout().full_width());
+                let width = f64::from(shape.data().full_width());
                 (line, caret.x0, width, shape)
             })
         });

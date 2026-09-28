@@ -10,6 +10,7 @@
 use std::hint::black_box;
 
 use ambre_bus::app::prose::ProseCommand;
+use ambre_prose::events::ProseEvent;
 use ambre_prose::logic::ProseState;
 use criterion::{Criterion, criterion_group, criterion_main};
 
@@ -43,12 +44,25 @@ fn document() -> (ProseState, ambre_bus::app::prose::BlockId, u32) {
         panic!("a document holds a block");
     };
     let text = vec![PARAGRAPH.repeat(26); 40].join("\n");
-    state.handle_view_command(ProseCommand::Paste {
+    let pasted = state.handle_view_command(ProseCommand::Paste {
         at: (first, 0),
         text,
         html: None,
         payload: None,
     });
+    // The view says it took the paste, as it does before it types again.
+    // Without it every key lands at a position the view never saw, and is
+    // refused.
+    let seen = pasted
+        .display
+        .iter()
+        .filter_map(|event| match event {
+            ProseEvent::TextChanged { seq, .. } => Some(*seq),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    state.handle_view_command(ProseCommand::Sync { seen });
     let _ = state.layout_event();
     let Some(&last) = state.root_blocks().last() else {
         panic!("a document holds a block");
@@ -61,7 +75,9 @@ fn key(block_id: ambre_bus::app::prose::BlockId, pos: u32) -> ProseCommand {
     ProseCommand::InsertText {
         block_id,
         pos,
-        text: "a".to_owned(),
+        // Words of five letters, as a person types, and not one word
+        // growing without end.
+        text: if pos % 6 == 5 { " " } else { "a" }.to_owned(),
     }
 }
 
@@ -70,6 +86,15 @@ fn bench(c: &mut Criterion) {
     group.sample_size(50);
 
     let (mut state, block, mut pos) = document();
+    let answer = state.handle_view_command(key(block, pos));
+    assert!(
+        !answer
+            .display
+            .iter()
+            .any(|event| matches!(event, ProseEvent::Error(_))),
+        "the key is taken"
+    );
+    pos += 1;
     group.bench_function("whole pass", |b| {
         b.iter(|| {
             black_box(state.handle_view_command(key(block, pos)));

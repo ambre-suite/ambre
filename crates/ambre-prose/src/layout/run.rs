@@ -20,11 +20,43 @@ use crate::layout::measure::{EffectiveStyle, MarkedSpan};
 use crate::layout::pass::PageLayout;
 use crate::layout::place::BlockLayout;
 
+/// One stretch of a run's lines, shaped on its own (`PROSE-128`).
+///
+/// A run shaped whole is one segment. An edit re-shapes from the line before
+/// the one it touched, and keeps the lines above it where they were shaped.
+#[derive(Clone)]
+struct Segment {
+    /// The glyphs, their clusters and the line boxes, as the shaper left them.
+    layout: Arc<Layout<ParleyBrush>>,
+    /// The byte the layout's text starts at, in the run's text.
+    start: usize,
+    /// How many of the layout's lines the run keeps. The lines after them
+    /// were shaped before an edit, and a later segment holds what replaced
+    /// them.
+    lines: usize,
+    /// The index of its first line among the run's lines.
+    first_line: usize,
+}
+
+/// Where one line of the run is: its segment, its index there, its top, and
+/// the shift that moves its segment's coordinates to the run's.
+#[derive(Clone, Copy, Debug)]
+struct LineAt {
+    segment: usize,
+    local: usize,
+    top: f32,
+    shift: f32,
+}
+
 /// One block's text, shaped and broken into lines: enough to draw and to
 /// hit-test.
 pub struct ParleyRunData {
-    /// The glyphs, their clusters and the line boxes, as the shaper left them.
-    layout: Layout<ParleyBrush>,
+    /// The shaped stretches of the text, in order. Never empty.
+    segments: Vec<Segment>,
+    /// Every line of the run, in order, across the segments.
+    lines: Vec<LineAt>,
+    /// The height every line takes, summed as the shaper sums it.
+    height: f32,
     /// The byte offset each code point starts at, the text's length last. An
     /// offset in the document counts code points, and the shaper counts bytes.
     char_starts: Vec<u32>,
@@ -40,6 +72,9 @@ pub struct ParleyRunData {
     /// The spans shaped bold or italic, in bytes, so a draft typed after one
     /// takes its marks (`PROSE-UI-208`).
     marks: Vec<MarkedSpan>,
+    /// The width the text was broken to, when pagination shaped it. Only such
+    /// a run is re-shaped in part (`PROSE-128`).
+    width_px: Option<f32>,
 }
 
 impl ParleyRunData {
@@ -52,14 +87,138 @@ impl ParleyRunData {
             .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
             .collect();
         char_starts.push(u32::try_from(text.len()).unwrap_or(u32::MAX));
-        Self {
-            layout,
+        let lines = layout.len();
+        let mut data = Self {
+            segments: vec![Segment {
+                layout: Arc::new(layout),
+                start: 0,
+                lines,
+                first_line: 0,
+            }],
+            lines: Vec::new(),
+            height: 0.0,
             char_starts,
             indent_px,
             text: text.to_owned(),
             style: None,
             marks: Vec::new(),
+            width_px: None,
+        };
+        data.index_lines();
+        data
+    }
+
+    /// The run `previous` holds with every line from `cut` on replaced by
+    /// `tail`, which is `text` shaped from the start of that line
+    /// (`PROSE-128`). The lines above `cut` keep their glyphs.
+    ///
+    /// The caller has checked that `text` and `previous` agree up to that
+    /// line, in text and in marks.
+    pub(crate) fn with_tail(
+        previous: &Self,
+        cut: usize,
+        (text, marks): (&str, &[MarkedSpan]),
+        tail: Layout<ParleyBrush>,
+    ) -> Option<Self> {
+        let start = previous.line_start(cut)?;
+        let mut segments: Vec<Segment> = Vec::with_capacity(previous.segments.len() + 1);
+        for segment in &previous.segments {
+            if segment.first_line >= cut {
+                break;
+            }
+            let mut kept = segment.clone();
+            kept.lines = kept.lines.min(cut - segment.first_line);
+            segments.push(kept);
         }
+        let lines = tail.len();
+        segments.push(Segment {
+            layout: Arc::new(tail),
+            start,
+            lines,
+            first_line: cut,
+        });
+        let mut data = Self::new(text, Layout::new(), previous.indent_px);
+        data.segments = segments;
+        data.style = previous.style.clone();
+        data.marks = marks.to_vec();
+        data.width_px = previous.width_px;
+        data.index_lines();
+        Some(data)
+    }
+
+    /// Record the style, the marks and the width the text was shaped in.
+    pub(crate) fn shaped_in(
+        &mut self,
+        style: &EffectiveStyle,
+        marks: &[MarkedSpan],
+        width_px: f32,
+    ) {
+        self.style = Some(style.clone());
+        self.marks = marks.to_vec();
+        self.width_px = Some(width_px);
+    }
+
+    /// The width the text was broken to, when pagination shaped it.
+    pub(crate) fn width_px(&self) -> Option<f32> {
+        self.width_px
+    }
+
+    /// How many shaped stretches the run holds.
+    pub(crate) fn segment_count(&self) -> usize {
+        self.segments.len()
+    }
+
+    /// Number the lines across the segments, and sum their heights.
+    ///
+    /// The shaper rounds each baseline from the height summed above it. A
+    /// line keeps its pixel only when its shift is rounded the same way. It
+    /// is the rounded top in the run less the rounded top in its segment.
+    fn index_lines(&mut self) {
+        let mut lines = Vec::new();
+        let mut top = 0.0_f32;
+        let mut y = 0.0_f64;
+        for (index, segment) in self.segments.iter_mut().enumerate() {
+            segment.first_line = lines.len();
+            let mut local_y = 0.0_f64;
+            for (local, line) in segment.layout.lines().take(segment.lines).enumerate() {
+                let height = line.metrics().line_height;
+                lines.push(LineAt {
+                    segment: index,
+                    local,
+                    top,
+                    shift: (y.round() - local_y.round()) as f32,
+                });
+                top += height;
+                y += f64::from(height);
+                local_y += f64::from(height);
+            }
+        }
+        self.lines = lines;
+        self.height = y as f32;
+    }
+
+    /// The byte line `line` starts at, in the run's text.
+    pub(crate) fn line_start(&self, line: usize) -> Option<usize> {
+        let at = self.lines.get(line)?;
+        let segment = self.segments.get(at.segment)?;
+        let start = segment.layout.get(at.local)?.text_range().start;
+        Some(segment.start + start)
+    }
+
+    /// The line a byte of the text falls on, the last one past the text.
+    pub(crate) fn line_at_byte(&self, byte: usize) -> usize {
+        let last = self.lines.len().saturating_sub(1);
+        self.lines
+            .iter()
+            .position(|at| {
+                self.segments.get(at.segment).is_some_and(|segment| {
+                    segment.layout.get(at.local).is_some_and(|line| {
+                        let range = line.text_range();
+                        (segment.start + range.start..segment.start + range.end).contains(&byte)
+                    })
+                })
+            })
+            .unwrap_or(last)
     }
 
     /// The marks of the code point before `offset`, its range aside. Text
@@ -105,13 +264,29 @@ impl ParleyRunData {
     /// The height the shaped text takes.
     #[must_use]
     pub fn height(&self) -> f32 {
-        self.layout.height()
+        self.height
     }
 
-    /// The shaped layout, for the drawing to walk.
+    /// The widest line, its trailing spaces counted.
     #[must_use]
-    pub fn layout(&self) -> &Layout<ParleyBrush> {
-        &self.layout
+    pub fn full_width(&self) -> f32 {
+        self.lines()
+            .map(|(line, _)| line.metrics().advance)
+            .fold(0.0, f32::max)
+    }
+
+    /// Every line, in order, with the vertical shift that moves its glyphs
+    /// from where its segment put them to where the run draws them.
+    pub fn lines(&self) -> impl Iterator<Item = (parley::Line<'_, ParleyBrush>, f32)> + '_ {
+        (0..self.lines.len()).filter_map(|index| self.line(index))
+    }
+
+    /// Line `index`, with its vertical shift.
+    #[must_use]
+    pub fn line(&self, index: usize) -> Option<(parley::Line<'_, ParleyBrush>, f32)> {
+        let at = self.lines.get(index)?;
+        let line = self.segments.get(at.segment)?.layout.get(at.local)?;
+        Some((line, at.shift))
     }
 
     /// How many code points the run holds.
@@ -130,30 +305,29 @@ impl ParleyRunData {
     /// last.
     #[must_use]
     pub fn line_tops(&self) -> Vec<f32> {
-        let mut tops = Vec::with_capacity(self.layout.len() + 1);
-        let mut top = 0.0;
-        for line in self.layout.lines() {
-            tops.push(top);
-            top += line.metrics().line_height;
-        }
-        tops.push(self.layout.height());
+        let mut tops: Vec<f32> = self.lines.iter().map(|at| at.top).collect();
+        tops.push(self.height);
         tops
     }
 
     /// The code-point offset under a point inside the run.
     #[must_use]
     pub fn offset_at(&self, x: f32, y: f32) -> u32 {
-        let byte = Cursor::from_point(&self.layout, x, y).index();
-        self.offset_of_byte(byte)
+        let index = self
+            .lines
+            .partition_point(|at| at.top <= y)
+            .saturating_sub(1);
+        let Some((segment, local_y)) = self.on_line(index, y) else {
+            return 0;
+        };
+        let cursor = Cursor::from_point(&segment.layout, x, local_y);
+        self.offset_of_byte(segment.start + cursor.index())
     }
 
     /// Where a code-point offset sits inside the run: the caret's box.
     #[must_use]
     pub fn caret_box(&self, offset: u32) -> BoundingBox {
-        let caret =
-            Cursor::from_byte_index(&self.layout, self.byte_of(offset), Affinity::Downstream)
-                .geometry(&self.layout, 1.0);
-        self.past_indent(caret)
+        self.caret_box_at(offset, false)
     }
 
     /// The boxes a code-point range covers, one per line it crosses. Empty
@@ -163,20 +337,47 @@ impl ParleyRunData {
         if start >= end {
             return Vec::new();
         }
-        let from = Cursor::from_byte_index(&self.layout, self.byte_of(start), Affinity::Downstream);
-        let to = Cursor::from_byte_index(&self.layout, self.byte_of(end), Affinity::Upstream);
-        Selection::new(from, to)
-            .geometry(&self.layout)
-            .into_iter()
-            .map(|(rect, _)| rect)
-            .collect()
+        let (from, to) = (self.byte_of(start), self.byte_of(end));
+        let mut boxes = Vec::new();
+        for (index, segment) in self.segments.iter().enumerate() {
+            let segment_end = self.segment_end(index);
+            let local_from = from.max(segment.start);
+            let local_to = to.min(segment_end);
+            if local_from >= local_to {
+                continue;
+            }
+            let anchor = Cursor::from_byte_index(
+                &segment.layout,
+                local_from - segment.start,
+                Affinity::Downstream,
+            );
+            let focus = Cursor::from_byte_index(
+                &segment.layout,
+                local_to - segment.start,
+                Affinity::Upstream,
+            );
+            for (rect, _) in Selection::new(anchor, focus).geometry(&segment.layout) {
+                if let Some(line) = self.line_under(index, &rect) {
+                    boxes.push(shifted(rect, line.shift));
+                }
+            }
+        }
+        boxes
     }
 
     /// Where a code-point offset sits, on the side of a wrap point the
     /// affinity names: the caret's box.
     #[must_use]
     pub fn caret_box_at(&self, offset: u32, upstream: bool) -> BoundingBox {
-        self.past_indent(self.cursor(offset, upstream).geometry(&self.layout, 1.0))
+        let (index, cursor) = self.cursor(offset, upstream);
+        let Some(segment) = self.segments.get(index) else {
+            return BoundingBox::default();
+        };
+        let caret = cursor.geometry(&segment.layout, 1.0);
+        let shift = self
+            .line_under(index, &caret)
+            .map_or(0.0, |line| line.shift);
+        self.past_indent(shifted(caret, shift))
     }
 
     /// A caret in an empty run, moved past the first-line indent: the run
@@ -186,10 +387,8 @@ impl ParleyRunData {
             return caret;
         }
         let indent = self
-            .layout
-            .lines()
-            .next()
-            .and_then(|line| {
+            .line(0)
+            .and_then(|(line, _)| {
                 line.items().find_map(|item| match item {
                     ambre_draw::PositionedLayoutItem::InlineBox(b) => Some(b.x + b.width),
                     ambre_draw::PositionedLayoutItem::GlyphRun(_) => None,
@@ -209,28 +408,39 @@ impl ParleyRunData {
     pub fn line_of(&self, offset: u32, upstream: bool) -> usize {
         let caret = self.caret_box_at(offset, upstream);
         let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
-        let tops = self.line_tops();
-        let lines = self.layout.len().max(1);
-        tops.partition_point(|top| *top <= middle)
+        self.lines
+            .partition_point(|at| at.top <= middle)
             .saturating_sub(1)
-            .min(lines - 1)
+            .min(self.line_count() - 1)
     }
 
     /// How many lines the run is broken into, never fewer than one.
     #[must_use]
     pub fn line_count(&self) -> usize {
-        self.layout.len().max(1)
+        self.lines.len().max(1)
     }
 
     /// The caret on line `line` nearest to `x`, and its affinity.
     #[must_use]
     pub fn at_line(&self, line: usize, x: f32) -> (u32, bool) {
-        let tops = self.line_tops();
-        let top = tops.get(line).copied().unwrap_or(0.0);
-        let bottom = tops.get(line + 1).copied().unwrap_or(top);
-        let cursor = Cursor::from_point(&self.layout, x, (top + bottom) / 2.0);
+        let index = line.min(self.lines.len().saturating_sub(1));
+        let Some(at) = self.lines.get(index) else {
+            return (0, false);
+        };
+        let Some(segment) = self.segments.get(at.segment) else {
+            return (0, false);
+        };
+        let Some(local) = segment.layout.get(at.local) else {
+            return (0, false);
+        };
+        let metrics = local.metrics();
+        let cursor = Cursor::from_point(
+            &segment.layout,
+            x,
+            (metrics.min_coord + metrics.max_coord) / 2.0,
+        );
         (
-            self.offset_of_byte(cursor.index()),
+            self.offset_of_byte(segment.start + cursor.index()),
             cursor.affinity() == Affinity::Upstream,
         )
     }
@@ -239,15 +449,19 @@ impl ParleyRunData {
     /// affinity that keeps the caret on it (`PROSE-UI-159`).
     #[must_use]
     pub fn line_edge(&self, offset: u32, upstream: bool, end: bool) -> (u32, bool) {
-        let here = Selection::new(self.cursor(offset, upstream), self.cursor(offset, upstream));
+        let (index, cursor) = self.cursor(offset, upstream);
+        let Some(segment) = self.segments.get(index) else {
+            return (offset, upstream);
+        };
+        let here = Selection::new(cursor, cursor);
         let moved = if end {
-            here.line_end(&self.layout, false)
+            here.line_end(&segment.layout, false)
         } else {
-            here.line_start(&self.layout, false)
+            here.line_start(&segment.layout, false)
         };
         let focus = moved.focus();
         (
-            self.offset_of_byte(focus.index()),
+            self.offset_of_byte(segment.start + focus.index()),
             focus.affinity() == Affinity::Upstream,
         )
     }
@@ -317,13 +531,69 @@ impl ParleyRunData {
         (self.len(), self.len())
     }
 
-    fn cursor(&self, offset: u32, upstream: bool) -> Cursor {
+    /// The segment a caret falls in, and the caret there. A byte where one
+    /// segment ends and the next starts is the end of the first upstream,
+    /// and the start of the second downstream.
+    fn cursor(&self, offset: u32, upstream: bool) -> (usize, Cursor) {
         let affinity = if upstream {
             Affinity::Upstream
         } else {
             Affinity::Downstream
         };
-        Cursor::from_byte_index(&self.layout, self.byte_of(offset), affinity)
+        let byte = self.byte_of(offset);
+        let mut index = self
+            .segments
+            .partition_point(|segment| segment.start <= byte)
+            .saturating_sub(1);
+        if upstream && index > 0 && self.segments.get(index).is_some_and(|s| s.start == byte) {
+            index -= 1;
+        }
+        // `segments` is never empty, so the first one always answers.
+        let segment = self.segments.get(index).unwrap_or(&self.segments[0]);
+        let local = byte.saturating_sub(segment.start);
+        (
+            index,
+            Cursor::from_byte_index(&segment.layout, local, affinity),
+        )
+    }
+
+    /// The byte segment `index` stops at: where the next one starts, or the
+    /// end of the text.
+    fn segment_end(&self, index: usize) -> usize {
+        self.segments
+            .get(index + 1)
+            .map_or(self.text.len(), |next| next.start)
+    }
+
+    /// The run's line that a box of segment `index` sits on. The middle of
+    /// the box picks it, among the lines the run keeps of that segment.
+    fn line_under(&self, index: usize, rect: &BoundingBox) -> Option<LineAt> {
+        let segment = self.segments.get(index)?;
+        let middle = ((rect.y0 + rect.y1) / 2.0) as f32;
+        let kept = segment.lines.max(1);
+        let local = (0..kept)
+            .find(|&local| {
+                segment
+                    .layout
+                    .get(local)
+                    .is_some_and(|line| middle < line.metrics().max_coord)
+            })
+            .unwrap_or(kept - 1);
+        self.lines.get(segment.first_line + local).copied()
+    }
+
+    /// Segment of line `index`, and `y` moved into its coordinates and held
+    /// inside that line.
+    fn on_line(&self, index: usize, y: f32) -> Option<(&Segment, f32)> {
+        let at = self
+            .lines
+            .get(index.min(self.lines.len().checked_sub(1)?))?;
+        let segment = self.segments.get(at.segment)?;
+        let metrics = *segment.layout.get(at.local)?.metrics();
+        let local = y - at.shift;
+        let low = metrics.min_coord;
+        let high = (metrics.max_coord - 0.01).max(low);
+        Some((segment, local.clamp(low, high)))
     }
 
     fn byte_of(&self, offset: u32) -> usize {
@@ -341,11 +611,19 @@ impl ParleyRunData {
     }
 }
 
+/// A box moved down by `shift`.
+fn shifted(mut rect: BoundingBox, shift: f32) -> BoundingBox {
+    rect.y0 += f64::from(shift);
+    rect.y1 += f64::from(shift);
+    rect
+}
+
 impl fmt::Debug for ParleyRunData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ParleyRunData")
-            .field("lines", &self.layout.len())
-            .field("height", &self.layout.height())
+            .field("lines", &self.lines.len())
+            .field("segments", &self.segments.len())
+            .field("height", &self.height)
             .field("chars", &self.len())
             .finish()
     }
@@ -387,6 +665,11 @@ impl ShapedRun {
         let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
         data.style = Some(style.clone());
         data.marks = marks.to_vec();
+        Self(Arc::new(data))
+    }
+
+    /// A run over data the measurer assembled.
+    pub(crate) fn from_data(data: ParleyRunData) -> Self {
         Self(Arc::new(data))
     }
 

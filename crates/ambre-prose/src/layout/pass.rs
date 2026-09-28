@@ -135,8 +135,8 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
     let blocks = measure_document_with(
         measurer,
         document,
-        page_box.content_width_px,
-        &HashMap::new(),
+        (page_box.content_width_px, &doc::read_defaults(document)),
+        (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
     );
@@ -218,13 +218,13 @@ impl NotePlan {
             let (number_metrics, number) =
                 measurer.measure_run(&ordinal.to_string(), &style, width);
             let mut hung = style.clone();
-            hung.indent_left_px += number.data().layout().full_width() + NOTE_GAP_PX;
+            hung.indent_left_px += number.data().full_width() + NOTE_GAP_PX;
             let (metrics, _, run) = measurer.measure_with_lines(
-                text,
-                marks,
+                (text, marks),
                 &hung,
                 hung.text_width_px(content_width_px),
                 &[],
+                None,
             );
             let height = metrics.text_height_px.max(number_metrics.text_height_px);
             numbers.insert(*id, number);
@@ -415,6 +415,7 @@ pub(crate) fn measure_band(
         defaults: &defaults,
         content_width_px,
         cached: &cached,
+        previous: &cached,
         toc_pages: &toc_pages,
         notes: &NotePlan::default(),
     };
@@ -432,8 +433,8 @@ pub fn measure_document(
     measure_document_with(
         measurer,
         document,
-        content_width_px,
-        &HashMap::new(),
+        (content_width_px, &doc::read_defaults(document)),
+        (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
     )
@@ -446,26 +447,40 @@ pub fn measure_document(
 /// `toc_pages` holds the page each heading started on in the layout before,
 /// which is what a table of contents is measured with (`PROSE-019`). `notes`
 /// is the plan pass 0 read, and every call is measured against it.
+/// `previous` holds what an edited block measured before, whose lines above
+/// the edit its new run may keep (`PROSE-128`). `defaults` are the
+/// document's, which the caller has read or already holds.
 #[must_use]
 pub(crate) fn measure_document_with(
     measurer: &mut Measurer,
     document: &LoroDoc,
-    content_width_px: f32,
-    cached: &HashMap<TreeID, &MeasuredBlock>,
+    (content_width_px, defaults): (f32, &doc::DocDefaults),
+    (cached, previous): (
+        &HashMap<TreeID, &MeasuredBlock>,
+        &HashMap<TreeID, &MeasuredBlock>,
+    ),
     toc_pages: &HashMap<TreeID, u32>,
     notes: &NotePlan,
 ) -> Vec<MeasuredBlock> {
-    let Some(tree) = doc::blocks_read(document) else {
+    // A measurement already held proves the tree exists, so taking it
+    // attaches nothing (`PROSE-079`). Looking it up by path instead builds
+    // the value of the whole tree, once per keystroke.
+    let tree = if cached.is_empty() && previous.is_empty() {
+        doc::blocks_read(document)
+    } else {
+        Some(document.get_tree(doc::BLOCKS))
+    };
+    let Some(tree) = tree else {
         return Vec::new();
     };
-    let defaults = doc::read_defaults(document);
     let mut measured = Vec::new();
     let scope = Walk {
         document,
         tree: &tree,
-        defaults: &defaults,
+        defaults,
         content_width_px,
         cached,
+        previous,
         toc_pages,
         notes,
     };
@@ -482,6 +497,7 @@ struct Walk<'a> {
     defaults: &'a doc::DocDefaults,
     content_width_px: f32,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
+    previous: &'a HashMap<TreeID, &'a MeasuredBlock>,
     toc_pages: &'a HashMap<TreeID, u32>,
     notes: &'a NotePlan,
 }
@@ -492,13 +508,21 @@ struct Walk<'a> {
 /// the boundaries it breaks at (`PROSE-071`), so it is measured whole and
 /// placed as one block.
 fn walk(measurer: &mut Measurer, scope: &Walk<'_>, id: &TreeID, out: &mut Vec<MeasuredBlock>) {
-    let Some(block_type) = doc::block_type_of(scope.tree, id) else {
-        return;
+    // A block measured before keeps its type, so only an edited one is
+    // looked up in the tree.
+    let block_type = match scope.cached.get(id) {
+        Some(block) => {
+            out.push((*block).clone());
+            block.block_type
+        }
+        None => {
+            let Some(block_type) = doc::block_type_of(scope.tree, id) else {
+                return;
+            };
+            out.push(measure_one(measurer, scope, id, block_type));
+            block_type
+        }
     };
-    match scope.cached.get(id) {
-        Some(block) => out.push((*block).clone()),
-        None => out.push(measure_one(measurer, scope, id, block_type)),
-    }
     if block_type == BlockType::Table {
         return;
     }
@@ -557,8 +581,14 @@ fn measure_one(
                 crate::layout::measure::marked_text(&doc::get_block_text(document, id));
             let calls = scope.notes.calls_of(id);
             let offsets: Vec<u32> = calls.iter().map(|(offset, _)| *offset).collect();
-            let (metrics, lines, shaped) =
-                measurer.measure_with_lines(&text, &marks, &style, text_width_px, &offsets);
+            let previous = scope.previous.get(id).and_then(|block| block.run.as_ref());
+            let (metrics, lines, shaped) = measurer.measure_with_lines(
+                (&text, &marks),
+                &style,
+                text_width_px,
+                &offsets,
+                previous,
+            );
             run = Some(shaped);
             notes = calls
                 .iter()
@@ -829,6 +859,7 @@ fn cell_blocks(
         defaults,
         content_width_px: width_px,
         cached: &empty,
+        previous: &empty,
         toc_pages: &no_pages,
         notes: &NotePlan::default(),
     };

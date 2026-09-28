@@ -16,7 +16,11 @@ use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::layout::fonts;
-use crate::layout::run::ShapedRun;
+use crate::layout::run::{ParleyRunData, ShapedRun};
+
+/// How many shaped stretches a run may hold before an edit shapes it whole
+/// again (`PROSE-128`). Typing at the end of a paragraph adds one per line.
+const MAX_SEGMENTS: usize = 8;
 
 /// Pixels per point at 96 DPI. Every length the document stores in points is
 /// converted here and nowhere else.
@@ -341,16 +345,26 @@ impl Measurer {
     /// One shape serves both, so a block that calls a note pays nothing more
     /// than one that does not. An offset past the text is on the last line.
     /// The spans of `marks` are shaped bold or italic (`PROSE-UI-207`).
+    ///
+    /// `previous` is the run the block had before an edit. When it was shaped
+    /// alike, only its lines from the one before the edit on are shaped again
+    /// (`PROSE-128`).
     pub fn measure_with_lines(
         &mut self,
-        text: &str,
-        marks: &[MarkedSpan],
+        (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
         width_px: f32,
         offsets: &[u32],
+        previous: Option<&ShapedRun>,
     ) -> (TextMetrics, Vec<u32>, ShapedRun) {
-        let layout = self.shape(text, marks, style, width_px);
-        let last = layout.len().saturating_sub(1);
+        let run = previous
+            .and_then(|old| self.shape_tail(old.data(), (text, marks), style, width_px))
+            .unwrap_or_else(|| {
+                let layout = self.shape(text, marks, style, width_px);
+                let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+                data.shaped_in(style, marks, width_px);
+                ShapedRun::from_data(data)
+            });
         let lines = offsets
             .iter()
             .map(|offset| {
@@ -358,18 +372,77 @@ impl Measurer {
                     .char_indices()
                     .nth(*offset as usize)
                     .map_or(text.len(), |(at, _)| at);
-                let line = layout
-                    .lines()
-                    .position(|line| line.text_range().contains(&byte))
-                    .unwrap_or(last);
-                u32::try_from(line).unwrap_or(u32::MAX)
+                u32::try_from(run.data().line_at_byte(byte)).unwrap_or(u32::MAX)
             })
             .collect();
-        (
-            metrics_of(&layout),
-            lines,
-            ShapedRun::marked(text, layout, style, marks),
-        )
+        (run_metrics(run.data()), lines, run)
+    }
+
+    /// Shape `text` again from the line before the first one an edit
+    /// changed, keeping the lines of `previous` above it (`PROSE-128`).
+    ///
+    /// Lines are broken greedily, so a line ends where it would have ended
+    /// whatever follows the next one. `None` when the shortcut does not
+    /// hold. A new width, style or mark ahead of the edit breaks it. So do a
+    /// floor on the line height, justified or right-to-left text, an edit in
+    /// the first two lines, and too many segments already.
+    fn shape_tail(
+        &mut self,
+        previous: &ParleyRunData,
+        (text, marks): (&str, &[MarkedSpan]),
+        style: &EffectiveStyle,
+        width_px: f32,
+    ) -> Option<ShapedRun> {
+        let alike = previous.width_px() == Some(width_px)
+            && previous.style() == Some(style)
+            && style.at_least_floor_px.is_none()
+            && style.align != Align::Justify
+            && previous.segment_count() < MAX_SEGMENTS;
+        if !alike || text.chars().any(right_to_left) {
+            return None;
+        }
+        let common = previous
+            .text()
+            .bytes()
+            .zip(text.bytes())
+            .take_while(|(old, new)| old == new)
+            .count();
+        let cut = previous
+            .line_at_byte(common.saturating_sub(1))
+            .checked_sub(1)
+            .filter(|cut| *cut > 0)?;
+        let start = previous.line_start(cut)?;
+        if start > common || !text.is_char_boundary(start) {
+            return None;
+        }
+        let head = |spans: &[MarkedSpan]| -> Vec<MarkedSpan> {
+            spans
+                .iter()
+                .filter(|span| span.start < start)
+                .map(|span| MarkedSpan {
+                    end: span.end.min(start),
+                    ..*span
+                })
+                .collect()
+        };
+        if head(previous.marks()) != head(marks) {
+            return None;
+        }
+        let tail = text.get(start..)?;
+        let tail_marks: Vec<MarkedSpan> = marks
+            .iter()
+            .filter(|span| span.end > start)
+            .map(|span| MarkedSpan {
+                start: span.start.max(start) - start,
+                end: span.end - start,
+                ..*span
+            })
+            .collect();
+        // Only the paragraph's first line is indented, and it is kept.
+        let mut rest = style.clone();
+        rest.indent_first_px = 0.0;
+        let layout = self.shape(tail, &tail_marks, &rest, width_px);
+        ParleyRunData::with_tail(previous, cut, (text, marks), layout).map(ShapedRun::from_data)
     }
 
     /// Measure one block of the document, reading its text and its style.
@@ -533,6 +606,25 @@ fn metrics_of(layout: &Layout<ParleyBrush>) -> TextMetrics {
     }
 }
 
+/// The heights of a run that may hold several shaped stretches.
+fn run_metrics(run: &ParleyRunData) -> TextMetrics {
+    let line_tops = run.line_tops();
+    TextMetrics {
+        text_height_px: run.height(),
+        line_count: u32::try_from(line_tops.len().saturating_sub(1)).unwrap_or(u32::MAX),
+        line_tops,
+    }
+}
+
+/// Whether a character belongs to a right-to-left script. Such text is
+/// reordered across the whole paragraph, so it is never shaped in part.
+fn right_to_left(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF | 0x1_0800..=0x1_0FFF | 0x1_E800..=0x1_EFFF
+    ) || matches!(c, '\u{200F}' | '\u{202B}' | '\u{202E}' | '\u{2067}')
+}
+
 /// The parley alignment one document alignment asks for.
 fn alignment_of(align: Align) -> Alignment {
     match align {
@@ -546,6 +638,7 @@ fn alignment_of(align: Align) -> Alignment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use parley::BoundingBox;
 
     fn style() -> EffectiveStyle {
         EffectiveStyle::from_parts(
@@ -558,6 +651,138 @@ mod tests {
     /// Enough words that no reasonable width holds them on one line.
     const LONG: &str = "The quick brown fox jumps over the lazy dog, and then \
                         it jumps over another one, and over a third after that.";
+
+    /// Every line of `run`: where it starts, its top, its baseline in the
+    /// run, and every caret box.
+    #[allow(clippy::type_complexity)]
+    fn picture(
+        run: &ShapedRun,
+    ) -> (
+        Vec<usize>,
+        Vec<f32>,
+        Vec<f32>,
+        Vec<(u32, [i64; 4], u32)>,
+        Vec<[i64; 4]>,
+    ) {
+        let data = run.data();
+        let starts = (0..data.line_count())
+            .filter_map(|line| data.line_start(line))
+            .collect();
+        let baselines = data
+            .lines()
+            .map(|(line, shift)| line.metrics().baseline + shift)
+            .collect();
+        let carets = (0..=data.len())
+            .map(|offset| {
+                let caret = data.caret_box_at(offset, offset % 2 == 0);
+                let back =
+                    data.offset_at(caret.x0 as f32 + 0.1, ((caret.y0 + caret.y1) / 2.0) as f32);
+                (offset, rounded(caret), back)
+            })
+            .collect();
+        let boxes = data
+            .range_boxes(1, data.len().saturating_sub(1))
+            .into_iter()
+            .map(rounded)
+            .collect();
+        (starts, data.line_tops(), baselines, carets, boxes)
+    }
+
+    fn rounded(rect: BoundingBox) -> [i64; 4] {
+        let round = |v: f64| (v * 100.0).round() as i64;
+        [
+            round(rect.x0),
+            round(rect.y0),
+            round(rect.x1),
+            round(rect.y1),
+        ]
+    }
+
+    /// `PROSE-128`: a run shaped again from the line before an edit breaks,
+    /// draws and places its caret as a run shaped whole would.
+    #[test]
+    fn a_run_shaped_from_the_edit_on_matches_one_shaped_whole() {
+        let mut indented = style();
+        indented.indent_first_px = 40.0;
+        let mut centered = style();
+        centered.align = Align::Center;
+        let bold = |text: &str| {
+            vec![MarkedSpan {
+                start: 20,
+                end: text.len() / 2,
+                bold: true,
+                ..MarkedSpan::default()
+            }]
+        };
+        let plain = |_: &str| Vec::new();
+        shaped_in_part_as_whole(&style(), &plain);
+        shaped_in_part_as_whole(&indented, &bold);
+        shaped_in_part_as_whole(&centered, &bold);
+    }
+
+    fn shaped_in_part_as_whole(style: &EffectiveStyle, marks_of: &dyn Fn(&str) -> Vec<MarkedSpan>) {
+        let mut measurer = super::shipped_measurer();
+        let style = style.clone();
+        let width = 300.0;
+        let mut text = LONG.repeat(12);
+        let marks = marks_of(&text);
+        let (_, _, mut run) =
+            measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+        // Type at the end, in the middle, near the start; erase; paste a
+        // long word; and keep going past the segment cap.
+        let edits: Vec<(usize, &str, usize)> = (0..40)
+            .map(|step| match step % 5 {
+                0 => (text.len(), "a", 0),
+                1 => (text.len() / 2, "b ", 0),
+                2 => (90, "c", 0),
+                3 => (text.len() / 3, "", 3),
+                _ => (text.len() * 3 / 4, " unbreakablewordthatislong ", 0),
+            })
+            .collect();
+        let mut partial = 0;
+        for (at, insert, erase) in edits {
+            let mut at = at.min(text.len());
+            while !text.is_char_boundary(at) {
+                at -= 1;
+            }
+            let end = (at + erase).min(text.len());
+            text.replace_range(at..end, insert);
+            let marks = marks_of(&text);
+            let before = measurer.shaped();
+            let (metrics, _, next) =
+                measurer.measure_with_lines((&text, &marks), &style, width, &[], Some(&run));
+            let (whole_metrics, _, whole) =
+                measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+            assert_eq!(measurer.shaped(), before + 2);
+            if next.data().segment_count() > 1 {
+                partial += 1;
+            }
+            assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
+            assert_eq!(
+                picture(&next),
+                picture(&whole),
+                "lines after an edit at {at}"
+            );
+            run = next;
+        }
+        assert!(partial > 10, "the shortcut was taken {partial} times");
+    }
+
+    /// `PROSE-128`: a style or a width that changed shapes the run whole.
+    #[test]
+    fn a_new_width_shapes_the_run_whole() {
+        let mut measurer = super::shipped_measurer();
+        let style = style();
+        let text = LONG.repeat(6);
+        let (_, _, run) = measurer.measure_with_lines((&text, &[]), &style, 300.0, &[], None);
+        let longer = format!("{text}x");
+        let (_, _, wider) =
+            measurer.measure_with_lines((&longer, &[]), &style, 320.0, &[], Some(&run));
+        assert_eq!(wider.data().segment_count(), 1);
+        let (_, _, same) =
+            measurer.measure_with_lines((&longer, &[]), &style, 300.0, &[], Some(&run));
+        assert_eq!(same.data().segment_count(), 2);
+    }
 
     #[test]
     fn a_narrow_width_breaks_a_run_into_more_lines_than_a_wide_one() {

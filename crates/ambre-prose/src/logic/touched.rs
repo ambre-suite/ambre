@@ -111,6 +111,18 @@ impl Touched {
     pub(crate) fn take_structural(&self) -> bool {
         self.structural.swap(false, Ordering::Relaxed)
     }
+
+    /// Whether every change since the last layout only typed body text:
+    /// nothing structural, and no character erased. Such a change cannot
+    /// leave a block empty, so the tree needs no repair. It reads the state
+    /// and leaves it for the next layout.
+    pub(crate) fn only_typed(&self) -> bool {
+        if self.structural.load(Ordering::Relaxed) {
+            return false;
+        }
+        let moved = self.moved.lock().unwrap_or_else(PoisonError::into_inner);
+        moved.removed.is_empty() && moved.edits.iter().all(|&(_, _, delta)| delta > 0)
+    }
 }
 
 /// Whether one container change is text typed or erased in a body, and

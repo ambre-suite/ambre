@@ -214,8 +214,8 @@ impl Paginator {
         let measured = pass::measure_document_with(
             &mut self.measurer,
             document,
-            page_box.content_width_px,
-            &HashMap::new(),
+            (page_box.content_width_px, &self.defaults),
+            (&HashMap::new(), &HashMap::new()),
             &self.toc_pages,
             &self.notes,
         );
@@ -353,11 +353,17 @@ impl Paginator {
             .filter(|block| block.block_type != BlockType::Toc)
             .map(|block| (block.block_id, block))
             .collect();
+        let previous: HashMap<TreeID, &MeasuredBlock> = self
+            .measured
+            .iter()
+            .filter(|block| dirty.contains(&block.block_id))
+            .map(|block| (block.block_id, block))
+            .collect();
         pass::measure_document_with(
             &mut self.measurer,
             document,
-            page_box.content_width_px,
-            &cached,
+            (page_box.content_width_px, &self.defaults),
+            (&cached, &previous),
             &self.toc_pages,
             &self.notes,
         )
