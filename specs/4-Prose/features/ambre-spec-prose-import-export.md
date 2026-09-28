@@ -61,10 +61,10 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens` -- the save command goes through the real dispatcher; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the entry | none | verified |
+| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the entry | partial -- the dispatch path through the real dispatcher does not exist and no test drives it; the entry point is declared but no test verifies that it saves the document and the file can be reopened; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
 | `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once | unheld -- the Blob hand-off in `crates/ambre-app/src/host/prose.rs` runs in a browser; lands with the "The browser-driven belt" Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
-| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
+| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | unheld -- the mechanism test does not exist; the event carries the type but no test reads it back from a download to verify it serves the right path; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Large-file import" Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
@@ -119,8 +119,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 29 `verified`, 1 `untested`, 19 `unimplemented`. The native file and the
-  Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
+* **Verification.** 27 `verified`, 1 `partial`, 2 `untested`, 19 `unimplemented`. The native file
+  and the Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices
+  yet.
 
 ---
 

@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-107` | `INV` | Pagination MUST measure on the faces the application ships and on those alone: a face the device happens to carry MUST NOT enter a measurement. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | structural -- `ambre_prose::layout::belts::only_the_font_module_asks_a_context_what_it_holds` reads every source of the module and fails on a collection lookup outside `ambre_prose::layout::fonts::resolve`, over a context `PROSE-114` seals | none | verified |
 | `PROSE-108` | `INV` | A family label MUST resolve to one shipped face by the label alone: the resolution MUST NOT read the faces a context holds. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | type-level -- `ambre_prose::layout::fonts::resolve` takes a label and no context, so no device can reach it; `ambre_prose::layout::fonts::tests::resolution_reads_the_label_and_nothing_else` | none | verified |
 | `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
-| `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
+| `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | none | unheld -- the mechanism test does not exist; every open document takes faces over the bus, but no test opens documents before and after a delivery to verify they both paginate with it; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5), the first output that carries a page number off the screen | unimplemented |
 
 ### 1.2 Lay the whole document out again
@@ -99,11 +99,10 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 50 `verified`, 1 `unimplemented`: `PROSE-112`. The five
-  footnote rows run through the engine, since a note is written by its command. Termination rests
-  on `PROSE-078` and `PROSE-017`, which a property over generated documents holds together. Two
-  bans are structural, held by a test that reads the module's own
-  source. The schema holds `PROSE-065`.
+* **Verification.** 49 `verified`, 1 `untested`, 1 `unimplemented`: `PROSE-112`. The five footnote
+  rows run through the engine, since a note is written by its command. Termination rests on
+  `PROSE-078` and `PROSE-017`, which a property over generated documents holds together. Two bans
+  are structural, held by a test that reads the module's own source. The schema holds `PROSE-065`.
 
 ---
 

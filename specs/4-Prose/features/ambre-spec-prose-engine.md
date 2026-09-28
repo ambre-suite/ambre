@@ -107,7 +107,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker`; `::a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta` | none | verified |
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | none | unheld -- the mechanism tests do not exist; the dispatch calls the three routes but no test verifies that each destination receives what it should; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | exhaustive-match -- `ambre_prose::logic::ProseState::handle_command` matches a closed `ProseCommand`, which declares no connection, sharing or membership variant | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
@@ -115,10 +115,10 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 41 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
-  lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
-  yet: the image block, and the block under a table cell. Each is read through the format rather
-  than through a gesture. The fan-out is driven across the real dispatcher.
+* **Verification.** 40 `verified`, 1 `untested`, nothing else. Seven rows are compiler-held: the
+  crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a shape no
+  command builds yet: the image block, and the block under a table cell. Each is read through the
+  format rather than through a gesture. The fan-out is driven across the real dispatcher.
 
 ---
 
