@@ -2,7 +2,7 @@
 """The frozen schema sections of `crates/*/schema/shapes.txt`, held append-only.
 
 Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
-the value types a build writes (`PROSE-029`, `TRAME-026`, `TOILE-028`). A belt
+the value types a build writes (`SCHEMA-018`). A belt
 in the crate compares a build against that text. The belt alone is weak: a
 developer whose build moved the shape can regenerate the section in place and
 watch the belt go green, with the version never raised and every peer on the

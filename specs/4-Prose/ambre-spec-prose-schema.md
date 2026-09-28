@@ -66,15 +66,13 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-095` | `INV` | A converged document MUST hold only the parentages section 4 declares. | this spec section 4 | `ambre_prose::logic::convergence_tests::a_converged_document_holds_only_the_parentages_the_format_declares`; `ambre_prose::logic::blocks::tests::a_table_row_is_refused_at_the_root`; `::a_block_moved_under_its_own_descendant_is_refused`; `::an_insert_after_a_table_row_does_not_land_a_paragraph_under_the_table`; `::a_move_after_a_table_row_does_not_land_a_paragraph_under_the_table` | none | verified |
 | `PROSE-028` | `INV` | A Prose document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_prose::logic::tests::a_fresh_document_holds_one_paragraph_and_a_version` | none | verified |
 | `PROSE-097` | `INV` | A document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_prose::logic::tests::a_document_a_newer_client_wrote_leaves_this_one_untouched` | none | verified |
-| `PROSE-029` | `INV` | The key set a build writes, and the type each key's value holds, MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
-| `PROSE-103` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | architecture section 2.D; this spec section 7 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
   document costs is a row of `ambre-spec-budgets.md`, cited by the document that owns it.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 27 `verified`, 1 `unimplemented`. The bump obligation splits in two. A key or a
+* **Verification.** 25 `verified`, 1 `unimplemented`. The bump obligation splits in two. A key or a
   type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
   under an unchanged key stays a human read (`SCHEMA-017`). The four convergence rows each run a
   two-peer test.
@@ -309,7 +307,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `PROSE-028` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
 | Migration | the chain lives in `ambre-prose`; the foundation owns the protocol, never the semantics | architecture section 2.D |
-| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `PROSE-029`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | a map key no build knows is ignored on read, so a forward-written key is dropped rather than refused; the `ref` mark is the exception, a postcard record that tolerates none, and `PROSE-028` is what stops a stale build reading it | architecture section 2.D |
 | Size, ids | a body key is the tag, a separator and a `TreeID`; a document of 300 blocks carries 300 root containers keyed that way | this spec section 2 |
 | Size, blobs | an image node holds a hash and a display size; the document never holds pixels | `features/ambre-spec-prose-images.md` |

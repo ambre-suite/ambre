@@ -67,7 +67,7 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 ## 3. MODEL
 
 **Containers.** This feature owns none. It reads the page format, the block tree and the layout the
-pagination produced, and writes nothing (`PROSE-IO-017`).
+pagination produced, and writes nothing (`PDF-002`).
 
 **The entry point.** The shared flow draws and assembles the file
 (`ambre-spec-pdf-export.md section 3`). Prose's driver takes the intermediate form and the page

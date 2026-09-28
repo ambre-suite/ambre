@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE CLIPBOARD
 
 **Type:** Horizontal (framework)
+**Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the host path ships for two applications. No tier drives a
 clipboard event, so the host half is held by reading it.
 
@@ -40,7 +41,7 @@ frame later. What a cut deletes, and when, is each application's own policy.
 | `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | none | unheld -- the deferred branch prevents the default and writes no `text/plain`, and nothing asserts that the host obeys it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | none | unheld -- the window is a browser property, so nothing on host can read it. Throwaway Chromium 141 and Firefox 156 runs saw a write from the next frame land; no tier drives one; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-023` | `POST` | Where the browser accepts the `web ` types, the asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | none | unheld -- the asynchronous item now carries the mirror, the prefixed private type and the ownership token, and nothing reads the written item back to check that all three are on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | none | unheld -- a copy reads the selection and writes the clipboard, and no test reads the document back across one. A cut does change it, and it does so through the ordinary delete command afterwards, never as part of the copy; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | Trame `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it asserts the outcome carries no delta | partial -- Toile and Prose copy through paths no test reads the document back across. A cut does change it, through the ordinary delete command afterwards, never as part of the copy; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
 | `UI-THREAD-045` | `FAIL` | A cut whose copy fails MUST delete nothing. | this spec section 2, cut is each application's own policy | none | unheld -- the order is what the two applications share, the copy is asked for first, and neither drives a failing copy to see what the delete does. One of the two deletes right after the copy command, without waiting for an answer; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Paste
@@ -63,10 +64,10 @@ Four rungs of fidelity, in one order. The first that can answer does.
   outside the sealed path of `ambre-spec-zero-knowledge.md` and it is the only outbound
   surface the UI thread has besides the font fetch (`UI-THREAD-004`). Nothing here reaches the
   relay, holds a key or opens a socket.
-* **Verification.** 2 `verified`, 1 `partial`, 0 `failing`, 14 `untested`, 1 `unimplemented`. One
-  row is held in part, by one application's test, and it is the one rule that lives below the seam.
-  Everything above the seam is browser state. No tier drives a `copy` event, an activation window or
-  a second tab. One rule is stated as failing on a reading of the host, and it never goes red.
+* **Verification.** 2 `verified`, 2 `partial`, 13 `untested`, 1 `unimplemented`. One row is held in
+  part, by one application's test, and it is the one rule that lives below the seam. Everything
+  above the seam is browser state. No tier drives a `copy` event, an activation window or a second
+  tab. One rule is stated as failing on a reading of the host, and it never goes red.
 ---
 
 ## 2. MODEL

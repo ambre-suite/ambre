@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE PERSISTED SCHEMA
 
 **Type:** Horizontal (framework)
+**Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the version register ships. Every document carries it from creation,
 every full-state entry point reads it, and each of the three applications carries a migration
 registry. The one-register rule ships in the two applications that store a style register, and
@@ -34,6 +35,8 @@ prefix is `SCHEMA`.
 | `SCHEMA-017` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise the schema version in the same commit as the change. | this spec section 2; `ambre-spec-fixtures.md section 2` | human-review -- in each application that stamps a schema version, the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no frozen shape can show | unheld -- no gate is possible. Prose's `meta/defaults/line_height` holds a multiple of the font size; a build that reads the same `f32` as a point measure writes the same key and the same type, every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 | `SCHEMA-015` | `INV` | An application that stamps a schema version MUST freeze the shape its build writes. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which reads every crate declaring a `SCHEMA_VERSION` and refuses one carrying no frozen shape | none | verified |
 | `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
+| `SCHEMA-018` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | this spec section 2; architecture section 2.D; `ambre-spec-fixtures.md section 2` | Trame `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape`; Toile `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape`; Prose `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
+| `SCHEMA-019` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | this spec section 2; architecture section 2.D | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -58,7 +61,7 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 16 `verified`, 1 `human-review`. A test holds what the register promises: the
+* **Verification.** 18 `verified`, 1 `human-review`. A test holds what the register promises: the
   number carried from creation, the comparison at each full-state entry, and a named case per
   verdict. A layout moved under an unchanged number turns a shape belt red, as would a field with
   its own register. Each style register carries a convergence test. A reviewer reads `SCHEMA-017`.

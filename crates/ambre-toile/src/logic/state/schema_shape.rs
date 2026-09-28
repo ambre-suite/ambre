@@ -1,5 +1,5 @@
 //! The schema shape belt: the key set and the value types a build writes,
-//! frozen per `SCHEMA_VERSION` (`TOILE-028`).
+//! frozen per `SCHEMA_VERSION` (`SCHEMA-018`).
 //!
 //! A shape is the board with every value removed: one line per reachable path,
 //! each naming the type the value under it holds. Adding a key, dropping one,
@@ -574,7 +574,7 @@ fn the_shape_a_build_writes_is_the_shape_frozen_for_its_version() {
         "the shape this build writes is not the shape frozen for \
          SCHEMA_VERSION {SCHEMA_VERSION}. A key, a value type or a `postcard` \
          layout moved, so raise SCHEMA_VERSION and freeze the new shape as its \
-         own section (`TOILE-028`)."
+         own section (`SCHEMA-018`)."
     );
 }
 

@@ -21,7 +21,7 @@
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | implemented | 45 | 15 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | implemented | 33 | 4 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 44 | 8 |
-| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 40 | 8 |
+| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 38 | 8 |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 6 |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 22 | 5 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 | 5 |
@@ -35,7 +35,7 @@
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 5 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 8 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 6 |
-| `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 6 | 5 |
+| `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 4 | 3 |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 13 | 8 |
 | `toile-z-order` | What overlaps what. | implemented | 16 | 9 |
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 | 4 |
@@ -45,4 +45,4 @@
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 36 | 24 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 11 |
 
-**29 features: 23 implemented, 6 partial, 0 design-only. 819 contract rows, 221 loose.**
+**29 features: 23 implemented, 6 partial, 0 design-only. 815 contract rows, 219 loose.**

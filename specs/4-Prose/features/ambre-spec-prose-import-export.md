@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Large-file import" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
+| `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
 
 ### 1.4 Save a native file
 

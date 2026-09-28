@@ -59,7 +59,7 @@ pub mod fixtures;
 #[cfg(test)]
 mod convergence_tests;
 
-/// The schema shape belt (`PROSE-029`): the key set and the value types a
+/// The schema shape belt (`SCHEMA-018`): the key set and the value types a
 /// build writes, frozen per `SCHEMA_VERSION`. Test-only, so no client build
 /// carries it.
 #[cfg(test)]
@@ -726,7 +726,7 @@ impl ProseState {
     /// The confirmed-change event carries the payload that arrived, never a
     /// re-export of the current state (`PROSE-048`). A re-export after a local
     /// edit is a different set of operations from the one that came in. Nothing
-    /// is re-broadcast (`PROSE-049`): the method answers display events alone.
+    /// is re-broadcast (`SYNC-101`): the method answers display events alone.
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
         let known = self.doc.oplog_vv();
         if let Err(e) = self.doc.import(payload) {

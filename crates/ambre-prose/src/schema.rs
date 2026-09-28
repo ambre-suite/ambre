@@ -28,7 +28,7 @@ use ambre_core::schema::{
 ///
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
-/// existing document across it (`PROSE-029`, `SCHEMA-009`).
+/// existing document across it (`SCHEMA-018`, `SCHEMA-009`).
 pub const SCHEMA_VERSION: u32 = 9;
 
 /// Write the current version into a document's `meta` register.

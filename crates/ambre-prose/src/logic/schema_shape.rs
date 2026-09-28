@@ -1,5 +1,5 @@
 //! The schema shape belt: the key set and the value types a build writes,
-//! frozen per `SCHEMA_VERSION` (`PROSE-029`).
+//! frozen per `SCHEMA_VERSION` (`SCHEMA-018`).
 //!
 //! A shape is the document with every value removed: one line per reachable
 //! path, each naming the type the value under it holds. Adding a key, dropping
@@ -555,7 +555,7 @@ fn the_shape_a_build_writes_is_the_shape_frozen_for_its_version() {
         "the shape this build writes is not the shape frozen for \
          SCHEMA_VERSION {SCHEMA_VERSION}. A key or a value type moved, so raise \
          SCHEMA_VERSION and freeze the new shape as its own section \
-         (`PROSE-029`)."
+         (`SCHEMA-018`)."
     );
 }
 

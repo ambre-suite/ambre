@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 10 | 6 |
 | `trame-context-menu` | A user right-clicks. | implemented | 10 | 6 |
-| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 17 | 3 |
+| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 16 | 3 |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 | 2 |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 | 5 |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 | 7 |
@@ -29,7 +29,7 @@
 | `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 | 12 |
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 12 | 8 |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 22 | 12 |
-| `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 10 | 5 |
+| `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 | 5 |
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | partial | 39 | 8 |
 | `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 | 10 |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 | 10 |
@@ -39,6 +39,6 @@
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 11 | 2 |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 | 9 |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 10 |
-| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 8 |  |
+| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 10 implemented, 15 partial, 0 design-only. 464 contract rows, 184 loose.**
+**25 features: 10 implemented, 15 partial, 0 design-only. 460 contract rows, 184 loose.**

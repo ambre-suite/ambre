@@ -24,7 +24,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-059` | `POST` | A copy MUST cover the whole selection, never only the cells the viewport holds. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it spans five hundred rows and asserts the far cell is in the payload | none | verified |
-| `TRAME-UI-060` | `FRAME` | A copy MUST NOT change the document. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it asserts the outcome carries no delta; type-level -- `copy_range` takes `&self` and returns `TrameOutcome::display_only` (`logic/clipboard.rs`) | none | verified |
+
+**Frame:** `UI-THREAD-044`
 
 ### 1.3 Cut the selection
 
@@ -48,12 +49,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 3 `verified`, 1 `partial`, 4 `untested`, 1 `qa-manual`, 1 `unimplemented`.
-  What holds is the three rules that
-  live in the Logic thread, where a test can reach them. The copy that writes no delta is among
-  them. What is loose is everything above the seam -- the ownership token and the cut -- browser
-  state, the gap the edit session has. The cut is worse: the source clear is sent
-  whether or not the paste was, against section 5, and it loses data outright.
+* **Verification.** 2 `verified`, 1 `partial`, 4 `untested`, 1 `qa-manual`, 1 `unimplemented`. What
+  holds is the three rules that live in the Logic thread, where a test can reach them. The copy that
+  writes no delta is among them. What is loose is everything above the seam -- the ownership token
+  and the cut -- browser state, the gap the edit session has. The cut is worse: the source clear is
+  sent whether or not the paste was, against section 5, and it loses data outright.
 
 ---
 

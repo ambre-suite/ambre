@@ -33,7 +33,6 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | `ambre_prose::logic::presence::tests::a_caret_resolves_to_the_same_place_on_both_peers` | none | verified |
 | `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | none | verified |
 | `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | structural -- `ambre_prose::ui::ProseUiState` declares no document container and no block content: every field is view state or an event's payload | none | verified |
-| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::ui::send_command` and `ambre_prose::ui::send_edit` are the two paths out, and both end in `try_send`; `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame`; `::a_full_channel_holds_an_edit_rather_than_the_frame` | none | verified |
 | `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | structural -- the viewport and the caret are fields of `ambre_prose::ui::ProseUiState`, and no variant of `ProseCommand` carries either; `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 | `PROSE-UI-015` | `INV` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `#![forbid(unsafe_code)]` on `crates/ambre-prose/src/lib.rs` covers every module of the crate | none | verified |
 
@@ -53,8 +52,9 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
-| `PROSE-049` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `ambre_prose::logic::ProseState::apply_remote` answers display events and no outcome, so it has no field a delta could leave by; `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast` | none | verified |
 | `PROSE-126` | `POST` | A remote change that brings no operation the document lacks, its own change echoed by the relay among them, MUST answer no event. | this spec section 3 | `ambre_prose::logic::convergence_tests::an_echo_of_this_peers_own_change_answers_nothing` | none | verified |
+
+**Frame:** `SYNC-101`
 
 ### 1.4 Hand a change to the Sync worker
 
@@ -115,7 +115,7 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 43 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+* **Verification.** 41 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
   lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
   yet: the image block, and the block under a table cell. Each is read through the format rather
   than through a gesture. The fan-out is driven across the real dispatcher.

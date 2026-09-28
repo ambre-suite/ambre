@@ -719,5 +719,44 @@ class SplitCandidates(unittest.TestCase):
         self.assertIn(WHERE, lines[2])
 
 
+class Twins(unittest.TestCase):
+    """A rule stated word for word in two rows is refused, whatever they cite."""
+
+    def test_a_copy_is_refused_on_both_rows(self):
+        rows = [("a.md:1 A-001", "A-001", "`Ctrl+Z` MUST undo.", "section 4"),
+                ("b.md:1 B-001", "B-001", "`Ctrl+Z`  MUST undo.", "section 4")]
+        self.assertEqual(len(contracts.twin_defects(rows)), 2)
+
+    def test_a_copy_that_cites_its_twin_is_still_refused(self):
+        rows = [("a.md:1 A-001", "A-001", "`Ctrl+Z` MUST undo.", "section 4"),
+                ("b.md:1 B-001", "B-001", "`Ctrl+Z` MUST undo.", "section 4; `A-001`")]
+        self.assertEqual(len(contracts.twin_defects(rows)), 2)
+
+    def test_a_near_copy_passes(self):
+        rows = [("a.md:1 A-001", "A-001", "X MUST hold.", "section 1"),
+                ("b.md:1 B-001", "B-001", "Y MUST hold.", "section 1")]
+        self.assertEqual(contracts.twin_defects(rows), [])
+
+
+class FrameLine(unittest.TestCase):
+    """A `**Frame:**` line answers an operation's frame with a shared row."""
+
+    POST = [(10, "A-001", "POST")]
+
+    def test_a_post_with_a_frame_line_passes(self):
+        self.assertEqual(contracts.table_defects("a.md", self.POST, ["B-001"]), [])
+
+    def test_a_post_without_frame_is_refused(self):
+        self.assertEqual(len(contracts.table_defects("a.md", self.POST)), 1)
+
+    def test_a_frame_line_under_a_table_without_post_is_refused(self):
+        found = contracts.table_defects("a.md", [(10, "A-001", "FAIL")], ["B-001"])
+        self.assertIn("no `POST`", found[0])
+
+    def test_the_line_parses_every_cited_id(self):
+        m = contracts.FRAME_LINE.match("**Frame:** `UI-THREAD-044`, `SYNC-101`")
+        self.assertEqual(contracts.FRAME_ID.findall(m["ids"]), ["UI-THREAD-044", "SYNC-101"])
+
+
 if __name__ == "__main__":
     unittest.main()

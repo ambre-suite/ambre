@@ -6,7 +6,7 @@
 //! neither enters the document, so two collaborators scroll independently and
 //! read the same document (`PROSE-UI-010`).
 //!
-//! **It never blocks on the Logic channel** (`PROSE-UI-003`). Every send is a
+//! **It never blocks on the Logic channel** (`UI-THREAD-002`). Every send is a
 //! `try_send`. An edit goes through the lossless outbox of
 //! `ambre-spec-message-bus.md`, which holds it on a full channel (`BUS-011`,
 //! `PROSE-UI-149`). Any other command is dropped and asked again later.
@@ -483,7 +483,7 @@ impl SendResult {
 /// Send one command to the Logic thread (`PROSE-UI-002`).
 ///
 /// Every mutation leaves this thread this way, and no other. The send never
-/// blocks (`PROSE-UI-003`), and the draft echo the view painted stays here
+/// blocks (`UI-THREAD-002`), and the draft echo the view painted stays here
 /// (`PROSE-UI-150`): what crosses is the typed command alone.
 pub fn send_command(
     to_logic: &ambre_bus::conduit::Sender<LogicCommand>,

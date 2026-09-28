@@ -707,7 +707,7 @@ const DEFAULT_MARGIN_MM: f32 = 20.0;
 ///
 /// The family is a value, not a key. It lives in `DocDefaults::default` alone,
 /// because a string constant in this module is read as a schema key
-/// (`PROSE-029`).
+/// (`SCHEMA-018`).
 const DEFAULT_FONT_SIZE_PT: f32 = 11.0;
 const DEFAULT_LINE_HEIGHT: f32 = 1.5;
 

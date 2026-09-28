@@ -264,7 +264,7 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
         }
     }
     // Stamp the new version inside the same commit as the shape change
-    // (`TRAME-026`).
+    // (`SCHEMA-018`).
     stamp(doc);
     doc.commit();
     Ok(())

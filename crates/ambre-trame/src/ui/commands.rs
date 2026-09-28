@@ -348,7 +348,7 @@ mod tests {
     }
 
     /// Undo takes one chord and Redo takes two, Ctrl+Shift+Z and Ctrl+Y
-    /// (`TRAME-121`). The test resolves them through the keymap the launcher
+    /// (`UNDO-011`). The test resolves them through the keymap the launcher
     /// builds, so a chord dropped from the table fails here.
     #[test]
     fn the_keymap_binds_both_redo_chords() {

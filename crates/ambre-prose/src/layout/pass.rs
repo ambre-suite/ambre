@@ -30,7 +30,7 @@ const RULE_HEIGHT_PX: f32 = 1.0;
 ///
 /// The schema declares them (`ambre-spec-prose-schema.md section 3`), and no
 /// command writes them yet. So they carry no constant in `doc.rs`: a key
-/// declared there must appear in the frozen shape (`PROSE-029`). They move
+/// declared there must appear in the frozen shape (`SCHEMA-018`). They move
 /// there with the images Story (`ambre-roadmap.md` E5).
 const A_IMAGE_HEIGHT: &str = "h";
 const A_IMAGE_CAPTION: &str = "caption";

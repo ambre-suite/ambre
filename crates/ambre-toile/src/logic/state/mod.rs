@@ -52,7 +52,7 @@ mod presence;
 pub use presence::PRESENCE_TTL_MS;
 pub(crate) mod presentation;
 mod reactions;
-/// The schema shape belt (`TOILE-028`): the key set, the value types and the
+/// The schema shape belt (`SCHEMA-018`): the key set, the value types and the
 /// `postcard` layouts a build writes, frozen per `SCHEMA_VERSION`. Test-only,
 /// so no client build carries it.
 #[cfg(test)]

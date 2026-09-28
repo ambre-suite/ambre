@@ -32,7 +32,6 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe` today, but its root carries no `#![forbid(unsafe_code)]`, so nothing refuses the next one (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
 | `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic channel, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
-| `TOILE-UI-311` | `INV` | The UI thread MUST NOT block on the Logic channel. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the three senders are `try_send` and no path awaits capacity, and the absence is the proof | none | verified |
 | `TOILE-UI-101` | `INV` | The canvas dispatch over the display events MUST be exhaustive -- no wildcard arm -- so a new event is a compile error and never a silent drop. | this spec section 4 | exhaustive-match -- the dispatch of `ui/view.rs` carries **no `_` arm**, so adding an event fails the build | none | verified |
 
 ### 1.2 Do one thing to the board
@@ -53,7 +52,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
-| `TOILE-216` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the remote path returns `Vec<ToileEvent>` and not an outcome, so it has nowhere to put a delta | none | verified |
+
+**Frame:** `SYNC-101`
 
 ### 1.4 Hand a change to the Sync worker
 
@@ -104,10 +104,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 32 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other application
-  holds: the index equivalence and the convergence of every derived cache. Both under one property test,
-  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and
-  `TOILE-023`, a measurement; ten verified rows are structural.
+* **Verification.** 30 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other
+  application holds: the index equivalence and the convergence of every derived cache. Both under
+  one property test, neither at a culling camera (`TOILE-206`). What is loose is four rules nothing
+  exercises and `TOILE-023`, a measurement; ten verified rows are structural.
 
 ---
 

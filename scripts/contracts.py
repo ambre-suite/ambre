@@ -136,6 +136,24 @@ APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 # the same document already states it, which is the only other entry this
 # register takes.
 RETIRED = {
+    # Withdrawn into the shared row that states the same rule word for word,
+    # found by `twin_defects`: each application held a copy of it.
+    "TRAME-026": "SCHEMA-018",
+    "TOILE-028": "SCHEMA-018",
+    "PROSE-029": "SCHEMA-018",
+    "TRAME-225": "SCHEMA-019",
+    "TOILE-258": "SCHEMA-019",
+    "PROSE-103": "SCHEMA-019",
+    "TRAME-UI-003": "UI-THREAD-002",
+    "TOILE-UI-311": "UI-THREAD-002",
+    "PROSE-UI-003": "UI-THREAD-002",
+    "TRAME-152": "UNDO-010",
+    "TOILE-095": "UNDO-010",
+    "TRAME-121": "UNDO-011",
+    "TOILE-096": "UNDO-011",
+    "TRAME-UI-060": "UI-THREAD-044",
+    "TOILE-216": "SYNC-101",
+    "PROSE-049": "SYNC-101",
     "PROSE-020": "PRESENCE-003",
     "PROSE-021": "PRESENCE-004",
     "PROSE-UI-011": "PRESENCE-001, PRESENCE-003, PRESENCE-005",
@@ -237,6 +255,11 @@ ROW = re.compile(
 # mechanism leaves open are two columns, and a header that merges them back into
 # one is refused (`ambre-spec-template.md section 1.B`).
 TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
+# `**Frame:** `UI-THREAD-044`` on the line that closes an operation table: the
+# operation leaves alone what a shared `FRAME` row states, so it cites that row
+# instead of copying its statement under a second id.
+FRAME_LINE = re.compile(r"^\*\*Frame:\*\*\s*(?P<ids>.+)$")
+FRAME_ID = re.compile(r"`([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+)`")
 
 
 def header_cells(header: str) -> list[str]:
@@ -1017,7 +1040,9 @@ def stated_counts(text: str) -> dict[str, int]:
     return counts
 
 
-def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
+def table_defects(
+    spec: str, table: list[tuple[int, str, str]], frame: list[str] | None = None
+) -> list[str]:
     """Whether one table that declares `Kind` obeys the grammar of section 1.C.
 
     Two rules about the table as a whole; the cells of one row are
@@ -1032,6 +1057,10 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     refusal the operation performs. Writing both for one condition states one
     guard twice, and doubles one test into two `verified` rows. The template
     carries the test that separates them; a reader applies it.
+
+    `frame` holds the ids a `**Frame:**` line under the table cites. A cited
+    shared `FRAME` answers the completeness rule as a local one does; `main`
+    checks, once the corpus is read, that each id is a `FRAME` row.
     """
     defects = []
     # An unknown kind is reported once, by `row_defects`, which reads the cell
@@ -1048,7 +1077,13 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
             f"{sorted(state)} and the operation kinds {sorted(operation)} -- an "
             f"operation carries a table of its own, under its own heading"
         )
-    if "POST" in kinds and "FRAME" not in kinds:
+    if frame is not None and "POST" not in kinds:
+        defects.append(
+            f"{spec}:{lineno}: a `**Frame:**` line closes a table that declares "
+            f"no `POST` -- the line answers an operation's frame, and this table "
+            f"states none"
+        )
+    if "POST" in kinds and "FRAME" not in kinds and not frame:
         defects.append(
             f"{spec}:{lineno}: this operation declares a `POST` and no `FRAME` "
             f"-- state what it MUST NOT touch, `untested` when nothing "
@@ -1308,6 +1343,36 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
     return "\n".join(lines)
 
 
+def twin_defects(rows: list[tuple[str, str, str, str]]) -> list[str]:
+    """Every row stating a rule another row states word for word.
+
+    `rows` holds (where, id, statement, sources). A rule copied into a second
+    spec drifts: the copy is edited, the original is not, and two ids claim one
+    rule with two statuses. A copy that cites its twin is a deliberate instance
+    of it, which a reader can follow; a copy that cites nothing is the drift
+    waiting. Only the exact statement is compared, so a near copy passes:
+    similarity would flag rules that share a verb and nothing else.
+    """
+    by_text: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    for where, rid, statement, sources in rows:
+        text = " ".join(statement.split()).lower()
+        if text:
+            by_text[text].append((where, rid, sources))
+    defects = []
+    for twins in by_text.values():
+        if len(twins) < 2:
+            continue
+        ids = {rid for _, rid, _ in twins}
+        for where, rid, _ in twins:
+            others = ", ".join(sorted(ids - {rid}))
+            defects.append(
+                f"{where}: states word for word the rule of {others} -- keep one "
+                f"row, retire the other, and cite the kept `FRAME` on a "
+                f"`**Frame:**` line"
+            )
+    return defects
+
+
 def main() -> int:
     per_spec: dict[str, Counter] = {}
     reviewed: list[tuple[str, str, str]] = []
@@ -1325,6 +1390,11 @@ def main() -> int:
     # declared further down the corpus, so resolving one during the pass would
     # answer on the half read so far.
     cited_sources: list[tuple[str, str]] = []
+    # Every row's statement, for `twin_defects` once the corpus is read.
+    statements: list[tuple[str, str, str, str]] = []
+    # Each id's kind, and the `**Frame:**` citations checked against it at the end.
+    kind_of: dict[str, str] = {}
+    frame_refs: list[tuple[str, str]] = []
     # The rows `split_report` prints: a second keyword the refusal does not reach.
     split_candidates: list[tuple[str, str]] = []
 
@@ -1355,9 +1425,22 @@ def main() -> int:
             # A blank line does not close a table: an author who breaks a long
             # operation table over one still writes one operation, and treating
             # the halves as two tables checked each half against nothing.
+            framed = FRAME_LINE.match(stripped)
+            frame = FRAME_ID.findall(framed["ids"]) if framed else None
+            if framed:
+                for ref in frame:
+                    frame_refs.append((f"{rel}:{lineno}", ref))
+                if not frame:
+                    errors.append(f"{rel}:{lineno}: a `**Frame:**` line cites no id")
+                elif columns is None or not table:
+                    errors.append(
+                        f"{rel}:{lineno}: a `**Frame:**` line that closes no "
+                        f"contract table -- it goes on the line under the "
+                        f"operation it frames"
+                    )
             if head or (stripped and not stripped.startswith("|")):
                 if columns is not None and table:
-                    errors += table_defects(rel, table)
+                    errors += table_defects(rel, table, frame)
                 table = []
                 columns = header_cells(line) if head else None
                 if columns is not None and KIND not in columns:
@@ -1406,6 +1489,7 @@ def main() -> int:
                 statement = cell.get(STATEMENT, "")
                 errors += row_defects(where, kind_cell, statement, cell.get(SOURCES, ""))
                 cited_sources.append((where, cell.get(SOURCES, "")))
+                statements.append((where, rid, statement, cell.get(SOURCES, "")))
                 # Both grammars need the two cells apart. A header that declares
                 # no `Gap` states the mechanism and the argument about it in one
                 # cell, which is the shape neither grammar can read.
@@ -1422,6 +1506,7 @@ def main() -> int:
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
                     errors += per_application_defects(where, mechanism, status, apps)
                 kind = kind_cell.strip("`")
+                kind_of[rid] = kind
                 table.append((lineno, rid, kind))
                 if (
                     kind not in BUNDLING_KINDS
@@ -1494,6 +1579,14 @@ def main() -> int:
     errors += audit_coverage_defects(findings, cited_audit)
     for where, sources in cited_sources:
         errors += source_defects(where, sources, seen)
+    errors += twin_defects(statements)
+    for where, ref in frame_refs:
+        if kind_of.get(ref) != "FRAME":
+            what = f"a `{kind_of[ref]}` row" if ref in kind_of else "no row"
+            errors.append(
+                f"{where}: `**Frame:**` cites `{ref}`, which is {what} -- the "
+                f"line cites a `FRAME` row"
+            )
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)

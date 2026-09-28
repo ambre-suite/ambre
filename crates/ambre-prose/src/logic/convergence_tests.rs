@@ -282,7 +282,7 @@ fn a_remote_change_is_never_re_broadcast() {
         .update
         .expect("a delta");
     // Applying it answers display events alone: nothing here can reach Sync
-    // (`PROSE-049`).
+    // (`SYNC-101`).
     let events = bob.apply_remote(&from_alice);
     assert!(matches!(
         events.first(),

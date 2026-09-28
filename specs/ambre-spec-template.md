@@ -279,6 +279,12 @@ every row of it is an `INV`.
 which fixes its target and corrupts a neighbour. It is legitimately `untested`: naming what an
 operation leaves alone costs a row, and proving it costs an isolation assertion.
 
+A frame another document already states is cited, not copied. The line under the operation table
+reads ``**Frame:** `UI-THREAD-044` ``. It names the shared `FRAME` rows the operation obeys, and
+answers the completeness rule as a local row does. A copy under a second id drifts from its
+original, so `contracts.py` refuses two rows whose statements match word for word, whatever they
+cite.
+
 **Four rules a script cannot hold**, and they are what keeps two kinds from becoming one:
 
 * **One guard, one row: `PRE` when nothing checks it, `FAIL` when something does.** The test is
@@ -405,7 +411,7 @@ itself is stated in the section that owns it, never here.
 | The header says what the reader is holding | `spec_shape.py` -- a missing field, or `Implementation` outside the three values. `feature_inventory.py`, **asymmetric** -- `implemented` beside an unbuilt row; claiming less than the rows show passes | whether the clause after the value is true |
 | A vocabulary is declared once, here | `template_vocabulary.py` -- a table of this file reworded, duplicated, or carrying a row count its heading does not state. It raises at import, so every gate that reads a vocabulary goes red | a count opening a bullet list, which no table check reads: moving one bullet between sections leaves it stating a number nothing holds |
 | A rule says what it binds | `contracts.py` -- a `Kind` cell outside the eight, and a table mixing a state kind with an operation kind | whether the kind is the right one of the eight, per section 1.C |
-| An operation declares its frame | `contracts.py` -- an operation table with a `POST` and no `FRAME` | whether the frame names the right state |
+| An operation declares its frame | `contracts.py` -- an operation table with a `POST`, no `FRAME` and no `**Frame:**` line; a `**Frame:**` line citing no `FRAME` row; two rows stating one rule word for word | whether the frame names the right state |
 | One row, one rule | `contracts.py` -- a second MUST after an `and`, outside `FAIL` and `FRAME`. It **reports** the ones carrying a subject between the two, and fails on the rest | whether a reported row is a convergence rule, which states one thing from both ends |
 | One assertion is not two guarantees | `contracts.py` **reports** a test backing two `verified` rows, and fails on none | whether each row has its own assertion |
 | Every claim carries its status | `contracts.py` -- a missing or unknown `Status`. `feature_inventory.py` -- a feature document declaring no contract table | -- |
