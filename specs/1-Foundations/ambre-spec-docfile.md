@@ -43,7 +43,7 @@ migrates or refuses before an application sees a payload.
 | `DOCFILE-012` | `FRAME` | A reader MUST NOT consult the file's name or extension. | this spec section 3 | type-level -- both entry points take a byte slice, so there is no path, no name and no extension in scope to branch on | none | verified |
 | `DOCFILE-004` | `FRAME` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | none | verified |
 | `DOCFILE-013` | `FAIL` | A version newer than the binary's MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`; `::migrating_from_a_newer_version_is_refused` | none | verified |
-| `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`; `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | none | verified |
+| `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`; `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/docfile.rs`, run by the CI `fuzz` job | none | verified |
 
 ### 1.3 Seal a `.ambre` file, and open one back
 
@@ -464,8 +464,6 @@ plaintext path above. So a sealed file whose *inner* container is older migrates
   sealed lineage seals what the plaintext lineage wrote, unchanged.
 * **Nothing rules on a file larger than memory.** Both entry points take and return a `Vec<u8>`, so
   a document is read whole. No row bounds the size a reader accepts, and no budget names one.
-* **Nothing fuzzes the header.** It is a parser on untrusted input and it has no fuzz target
-  (`ambre-spec-testing.md section 8`); the belt is a corpus of malformed inputs as unit tests.
 
 ---
 

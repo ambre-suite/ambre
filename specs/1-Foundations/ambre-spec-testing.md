@@ -219,7 +219,7 @@ than an omission, and none blocks the current MVP. Epic `E9` of `ambre-roadmap.m
 | `[workspace.lints]` | absent | clippy runs the default set with `-D warnings`. No `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
-| `cargo-fuzz` | absent | no target on postcard decode, the `.ambre` container, or the formula parser -- each fed from an untrusted relay or from a user file |
+| `cargo-fuzz` | wired | four targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser and the Markdown reader, one minute each in the CI `fuzz` job. The sealed open path and the Trame and Toile file readers have none |
 | `cargo-mutants` | absent | about 1 170 test functions, largely generated, never adversarially checked |
 | `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
 | `criterion` | 1 bench, in `ambre-crypto` | `architecture section 5` budgets about ten operations, and no CI threshold job exists, so a regression cannot fail a build. **The desktop measurement exists; the mobile one the targets are written against has never been taken** |

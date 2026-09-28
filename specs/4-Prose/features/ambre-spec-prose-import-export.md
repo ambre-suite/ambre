@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
-| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed`; `ambre_prose::interop::markdown_read::tests::a_hostile_nesting_is_capped` | partial -- no `cargo-fuzz` target yet; lands with the "Fuzzing the untrusted readers" Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed`; `ambre_prose::interop::markdown_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job | none | verified |
 
 ### 1.3 Take the document out as a file
 
@@ -119,7 +119,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 28 `verified`, 2 `untested`, 19 `unimplemented`. The native file and the
+* **Verification.** 29 `verified`, 1 `untested`, 19 `unimplemented`. The native file and the
   Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
 
 ---
@@ -640,8 +640,6 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   the nesting depth (`TOILE-IO-002`); Prose bounds nothing. A file with a million blocks, or a list
   nested ten thousand deep, has no stated refusal. The atomicity rule means the whole batch is
   held in memory before any of it is applied.
-* **No reader has a fuzz target.** They are fed by files the user did not write, and
-  `ambre-spec-testing.md` names them as the first targets. None exists, and neither does the crate.
 * **Three applications now import and export, and the vocabulary is theirs alone.** Trame reports
   an import through one type and one event name, Toile through another, and Prose through a third.
   The report, the progress event and the completion event differ in shape and in spelling for one

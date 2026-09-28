@@ -1,0 +1,48 @@
+# The fuzz targets on the untrusted readers (`ambre-spec-testing.md section 2`).
+# A workspace of its own: `cargo-fuzz` builds it on nightly with sanitizer
+# flags, which the main workspace must never inherit.
+[package]
+name = "ambre-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ambre-core = { path = "../crates/ambre-core" }
+ambre-protocol = { path = "../crates/ambre-protocol" }
+ambre-trame = { path = "../crates/ambre-trame" }
+ambre-prose = { path = "../crates/ambre-prose" }
+
+[[bin]]
+name = "wire_decode"
+path = "fuzz_targets/wire_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docfile"
+path = "fuzz_targets/docfile.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "formula"
+path = "fuzz_targets/formula.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false

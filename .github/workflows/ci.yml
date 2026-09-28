@@ -110,6 +110,35 @@ jobs:
       - run: just deny
 
   # ---------------------------------------------------------------------------
+  # fuzz -- one minute of libFuzzer on each untrusted reader: the wire decode,
+  # the `.ambre` container, the formula parser and the Markdown reader
+  # (`ambre-spec-testing.md section 2`). A crash fails the job and uploads the
+  # input that caused it.
+  # ---------------------------------------------------------------------------
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz
+          workspaces: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: just fuzz 60
+      - name: Upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+
+  # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"
   # tier): the whole workspace, the server and the feature-gated belts included,
   # zero external dependency.

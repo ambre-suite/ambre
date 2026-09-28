@@ -32,7 +32,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 4 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 16 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 17 | 9 |
-| `server` | The one process every client talks to. | implemented | 22 | 11 |
+| `server` | The one process every client talks to. | implemented | 23 | 11 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 16 | 9 |
 | `sync` | The one part of the client that talks to the network. | implemented | 25 | 22 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 23 implemented, 15 partial, 2 design-only. 625 contract rows, 320 loose.**
+**40 features: 23 implemented, 15 partial, 2 design-only. 626 contract rows, 320 loose.**

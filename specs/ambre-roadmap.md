@@ -306,7 +306,7 @@ owns the subsystem.
 | `[ ]` The Trame belts | -- | the same debt across the grid viewport, the cell surface, the number formats and the data tools |
 | `[ ]` The Toile belts | -- | the same debt across the board surface, the connectors, the presentation and the interop converters |
 | `[x]` The container and schema belts | -- | the shipped rows no test would fail on across the `.ambre` container, the schema register and the fixture corpora: the header a wire payload must never carry, the bump obligation a reviewer holds today, and the writers a version freeze binds |
-| `[ ]` Fuzzing the untrusted readers | MVP | a `cargo-fuzz` target on the wire decode, the `.ambre` container, the formula parser and the Markdown reader, each of which is fed by a relay or by a user's file. A panic in the wire decode is a crash any peer of a shared document can cause remotely |
+| `[x]` Fuzzing the untrusted readers | MVP | a `cargo-fuzz` target on the wire decode, the `.ambre` container, the formula parser and the Markdown reader, each of which is fed by a relay or by a user's file. A panic in the wire decode is a crash any peer of a shared document can cause remotely |
 | `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
 | `[ ]` The workspace lints | -- | `forbid(unsafe_code)` in every crate instead of two, and a workspace lint table in place of the default clippy set |
 | `[ ]` Snapshot tests of the wire and the surfaces | -- | `insta` over the recording surface's operation sequences, the wire encodings and the PDF primitives |
