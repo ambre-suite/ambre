@@ -110,10 +110,10 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
   `SRV-001` keeps the frame out of the logs.
-* **Verification.** 5 `verified`, 2 `partial`, 3 `failing`, 8 `untested`, 1 `unimplemented`. What holds is the
-  ordering itself. The accepted and refused cases of the script, the rebuild after a reset, the
-  drain lock and both halves of the trim. What is loose is every recovery path and every refusal the
-  replay performs.
+* **Verification.** 5 `verified`, 2 `partial`, 3 `failing`, 8 `untested`, 28 `unimplemented`. What
+  holds is the ordering itself. The accepted and refused cases of the script, the rebuild after a
+  reset, the drain lock and both halves of the trim. What is loose is every recovery path and every
+  refusal the replay performs.
 ---
 
 ## 2. WHAT EACH USER SEES

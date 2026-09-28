@@ -69,8 +69,8 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | `SRV-047` | `FAIL` | A subscription to a document of a channel MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5). The channel plane of the code holds nothing back: a subscribe is accepted from anyone the socket already authenticated | unimplemented |
 | `SRV-048` | `POST` | A frame on a document of a channel MUST pass the gates of any document frame before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel frame either | unimplemented |
-| `SRV-100` | `POST` | A frame on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-101` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-161` | `POST` | A frame on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-162` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the live receive and broadcast of `ambre-spec-budgets.md section 3` and the presence
   write of the same table, all three reading **none exists**. The relay's memory per open document
@@ -97,7 +97,7 @@ Two peers with one document open, over two connections that may be served by two
 | removes Bob, then re-keys | keeps typing | one member row | Bob's writes stop within thirty seconds, not at his next reload (`SRV-043`) | none -- section 6 |
 | pastes a picture inline instead of on the media path | watches | nothing | Alice is told the frame is too large, and the document is unchanged (`SRV-010`) | `ws::handler::message::delta_size_cap_tests::oversized_delta_writes_no_pending` |
 | writes in a channel | is subscribed to it | one numbered delta on the active segment of the channel | Bob's screen changes within the round trip (`SRV-048`) | none, and it is unbuilt -- section 6 |
-| replies in a thread Bob has not opened | watches the channel | one numbered delta on the thread document, and one activity signal | the reply count on the root moves (`SRV-100`) | none, and it is unbuilt -- section 6 |
+| replies in a thread Bob has not opened | watches the channel | one numbered delta on the thread document, and one activity signal | the reply count on the root moves (`SRV-161`) | none, and it is unbuilt -- section 6 |
 
 ---
 
@@ -143,7 +143,7 @@ bound.
 |---|---|---|
 | per document | a delta, a presence blob, a snapshot availability, a re-key notice | every connection subscribed to that document, the sender included |
 | per person | a document shared, a document revoked | that person's connections, whatever they have open |
-| per channel | the activity signal of a thread document (`SRV-100`) | every connection subscribed to a document of that channel |
+| per channel | the activity signal of a thread document (`SRV-161`) | every connection subscribed to a document of that channel |
 
 **Why a person needs a topic of their own.** An invitation has to reach someone who does not yet
 know the document exists, so it cannot travel on the document's own topic. A removal is targeted
@@ -170,7 +170,7 @@ copies each arriving message to every interested outbound queue in the process (
 of each one (`ZK-015`). A subscription to the channel is a subscription to its `meta` document and
 its live segments, each gated by the membership of the channel (`SRV-047`). Every frame on them is
 an ordinary document frame (`SRV-048`). A thread document is subscribed while a client has it open.
-Otherwise a frame on it publishes one activity signal on the topic of the channel (`SRV-100`).
+Otherwise a frame on it publishes one activity signal on the topic of the channel (`SRV-161`).
 
 **Presence.** The relay stores the sealed blob under the author's key and gives that one entry a
 fifteen-second life of its own (`SRV-050`). A person who disappears without a clean exit therefore

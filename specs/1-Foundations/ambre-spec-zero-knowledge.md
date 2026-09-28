@@ -42,9 +42,9 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 6 `verified`, 2 `partial`, 5 `untested`, 1 `human-review`. Every row is an `INV`. This
-  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
-  every instant.
+* **Verification.** 6 `verified`, 2 `partial`, 5 `untested`, 1 `human-review`, 2 `unimplemented`.
+  Every row is an `INV`. This document owns no gesture, so it declares no operation table, and each
+  rule binds the boundary at every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
   them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
@@ -98,7 +98,7 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   * The inviter column tells the relay who invited whom. The unwrap needs the inviter's exchange
     key, so that edge of the graph is accepted too.
   * The signed membership log repeats that graph with a signature on each act, so a client can check
-    it (`SYNC-101`). It teaches the relay nothing it did not hold.
+    it (`SYNC-132`). It teaches the relay nothing it did not hold.
 * **Accepted, for a Murmure channel only:** the grouping of its documents and the few facts the
   relay needs to finalize and to expire them (`ZK-015`). The relay never learns the kind of an
   update: the activity summary is sealed (`SYNC-113`).

@@ -76,7 +76,7 @@ pub struct ChannelState {
 }
 ```
 
-**The command surface.** One content-plane variant, addressed to a channel (`BUS-025`).
+**The command surface.** One content-plane variant, addressed to a channel (`BUS-027`).
 
 ```rust
 pub enum MurmureCommand {

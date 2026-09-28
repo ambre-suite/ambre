@@ -70,9 +70,10 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name, a size and a media type. A picture's name is a hash of its plaintext, outside
   what `ZK-007` allows and what `SRV-059` states; the bytes never enter this process.
-* **Verification.** 3 `verified`, 1 `partial`, 3 `failing`, 5 `untested`. What holds is the name: the scoping,
-  the shapes refused, and the size bound into an upload link. What is loose is a link's lifetime and
-  who may hold one -- neither the membership half of `SRV-002` nor the expiry has a test.
+* **Verification.** 3 `verified`, 1 `partial`, 3 `failing`, 5 `untested`, 6 `unimplemented`. What
+  holds is the name: the scoping, the shapes refused, and the size bound into an upload link. What
+  is loose is a link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor
+  the expiry has a test.
 
   Three rules are stated as failing, and one of the three is a zero-knowledge leak the relay shares
 ---

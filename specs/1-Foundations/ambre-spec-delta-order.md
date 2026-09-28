@@ -76,10 +76,11 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`. What holds is the
-  quarantine itself. An update ahead of its snapshot waits, one whose base is known is delivered,
-  the release runs in clock order, and the overflow warns once. What is loose is everything about
-  the clock and the socket, both needing a driven transport the host tier does not have.
+* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`, 1 `unimplemented`. What
+  holds is the quarantine itself. An update ahead of its snapshot waits, one whose base is known is
+  delivered, the release runs in clock order, and the overflow warns once. What is loose is
+  everything about the clock and the socket, both needing a driven transport the host tier does not
+  have.
 
 ---
 

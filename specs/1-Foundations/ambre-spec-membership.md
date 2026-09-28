@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-039` | `INV` | No key material MUST cross to the Logic thread on a member row. | `ambre-spec-zero-knowledge.md`, `ZK-002` | type-level -- the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | none | verified |
 | `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | none | unheld -- one request returns all three and the open reads them together, so the rule is held by the request having been written that way. Nothing refuses a second fetch, and a second fetch is exactly how the three drift: a role read after a revocation no longer matches the directory the presence layer resolves against; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-101` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-132` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -86,7 +86,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 12 `verified`, 1 `partial`, 2 `failing`, 2 `untested`, 0 `unimplemented`. What
+* **Verification.** 12 `verified`, 1 `partial`, 2 `failing`, 2 `untested`, 13 `unimplemented`. What
   holds is every pure transform, extracted out of the browser and covered. Those are the wrap, the
   identity pair it binds, the refusal of a weak key, the pin comparison, the directory build and the
   role. What is loose is the branches that only run against a live relay.
@@ -162,7 +162,7 @@ trusted-key store's job (`ambre-spec-key-verification.md`), and presence does no
 client check what the relay serves.
 
 - An invite, a revoke and a role change each add one entry, signed by the member who acts
-  (`SYNC-101`).
+  (`SYNC-132`).
 - An entry names the document, the member, the act, the role and the digest of the entry before it
   (`SYNC-102`). The first entry is the creation, signed by the creator.
 - A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
@@ -262,7 +262,7 @@ authority: the role here hides what the relay would refuse anyway.
 * **No test drives an open.** The whole open path runs in a browser: the members request, the
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **The signed membership log is unbuilt.** No entry is signed today, and every member row is taken
-  on the relay's word (`SYNC-101` to `SYNC-111`).
+  on the relay's word (`SYNC-132`, `SYNC-102` to `SYNC-111`).
 * **A relay can withhold the latest entries.** Nothing tells a client that its list is late. A
   signed head of the log, pinned by each member, would make the gap visible, and no rule states it.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no

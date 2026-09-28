@@ -35,8 +35,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-111` | `POST` | A client MUST reload the head of a thread when the relay signals activity on it and its root is on screen. | this spec section 3; `SRV-100` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-260` | `POST` | An activity signal on a thread MUST make the client fetch the summaries of its new deltas, with no document loaded. | this spec section 3; `RESID-014`, `SRV-100` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-111` | `POST` | A client MUST reload the head of a thread when the relay signals activity on it and its root is on screen. | this spec section 3; `SRV-161` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-260` | `POST` | An activity signal on a thread MUST make the client fetch the summaries of its new deltas, with no document loaded. | this spec section 3; `RESID-014`, `SRV-161` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-112` | `FRAME` | An activity signal MUST NOT load a thread whose root is off screen. | this spec section 3; `RESID-016` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Follow a thread
@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a thread head is a small read per visible root, inside the memory rows of
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
-  learns that a document is a thread of the channel, and when it changes (`ZK-015`, `SRV-101`).
+  learns that a document is a thread of the channel, and when it changes (`ZK-015`, `SRV-162`).
 * **Verification.** 17 `unimplemented`: no thread exists in the code.
 
 ---

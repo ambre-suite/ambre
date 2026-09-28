@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none | unheld -- every store is external and the one process-wide object is the fan-out hub, which holds no request, and nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none | unheld -- the relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap, and nothing in continuous integration reads them back; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-101` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-132` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A request is classified and limited
 
@@ -116,10 +116,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 12 `verified`, 2 `partial`, 3 `failing`, 6 `untested`, 1 `human-review`. What
-  holds is what a request test can drive: the roles, the rank clamps, the signature gate, the error
-  mapping and the origin list. What is loose is every rule about the process or the deployment, and
-  the three failures sit in the limiter and its bucketing.
+* **Verification.** 12 `verified`, 2 `partial`, 3 `failing`, 6 `untested`, 1 `human-review`, 25
+  `unimplemented`. What holds is what a request test can drive: the roles, the rank clamps, the
+  signature gate, the error mapping and the origin list. What is loose is every rule about the
+  process or the deployment, and the three failures sit in the limiter and its bucketing.
 ---
 
 ## 2. WHAT EACH USER SEES
