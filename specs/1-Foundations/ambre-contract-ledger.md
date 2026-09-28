@@ -19,13 +19,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2646 rows: 2399 shipped, of which 784 loose. 247 unbuilt.**
+**2649 rows: 2402 shipped, of which 787 loose. 247 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 251 | 221 | 542 | 601 | 1615 |
 | `failing` | 39 | 46 | 22 |  | 107 |
-| `untested` | 268 | 144 | 237 | 4 | 653 |
+| `untested` | 271 | 144 | 237 | 4 | 656 |
 | `human-review` | 8 | 1 | 1 | 1 | 11 |
 | `qa-manual` | 5 | 4 | 4 |  | 13 |
 | `unimplemented` | 55 | 57 | 24 | 111 | 247 |
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 27 | 27 | 13 | 14 |  |
+| `ambre-spec-architecture.md` | 29 | 29 | 13 | 16 |  |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 15 | 1 |
@@ -66,7 +66,7 @@
 | `ambre-spec-schema-version.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
 | `ambre-spec-sequencer.md` | 19 | 18 | 5 | 13 | 1 |
-| `ambre-spec-server.md` | 23 | 23 | 12 | 11 |  |
+| `ambre-spec-server.md` | 24 | 24 | 12 | 12 |  |
 | `ambre-spec-session.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-sync.md` | 25 | 25 | 3 | 22 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 7 | 2 |
@@ -166,7 +166,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..027 |
+| `ambre-spec-architecture.md` | ARCH-001..029 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..092 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |
@@ -224,7 +224,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..016 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |

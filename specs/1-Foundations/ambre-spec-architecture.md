@@ -38,6 +38,7 @@ prefix is `ARCH`.
 | `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot` | none | verified |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a channel it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the channel crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the channels | none | verified |
 | `ARCH-021` | `INV` | A channel end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
+| `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | none | unheld -- about 330 sites across the workspace, most of them indexing in Trame, Toile and the canvas, and no lint refuses a new one; lands with the `No panic path outside the tests` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A thread fails
@@ -49,6 +50,7 @@ that and a page that looks alive and answers nothing.
 |---|---|---|---|---|---|---|
 | `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none | unheld -- each view latches an inert state when it receives one, and nothing drives the path; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none | unheld -- the panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it, and no test drives either; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-029` | `FAIL` | A reader fed by the relay or by a user's file MUST refuse a malformed input as a typed error, never a panic. | this spec section 2; `SRV-100` | cargo-fuzz -- the four targets under `fuzz/fuzz_targets/`, run by the CI `fuzz` job | partial -- the sealed path and the Trame and Toile readers have no target; lands with the `Fuzzing the remaining readers` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 A message crosses a channel
@@ -77,7 +79,7 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 13 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
+* **Verification.** 13 `verified`, 1 `failing`, 15 `untested`. What holds is what the build can
   refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
   a lock on a client channel. Host tests hold the Logic loop's one answer per pass, and the
   wake, the full channel and the disconnection of each channel.

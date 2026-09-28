@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 27 | 14 |
+| `architecture` | How the client is split, and why. | implemented | 29 | 16 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 4 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 18 | 12 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
@@ -32,7 +32,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 4 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 16 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 17 | 9 |
-| `server` | The one process every client talks to. | implemented | 23 | 11 |
+| `server` | The one process every client talks to. | implemented | 24 | 12 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 16 | 9 |
 | `sync` | The one part of the client that talks to the network. | implemented | 25 | 22 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 23 implemented, 15 partial, 2 design-only. 626 contract rows, 320 loose.**
+**40 features: 23 implemented, 15 partial, 2 design-only. 629 contract rows, 323 loose.**
