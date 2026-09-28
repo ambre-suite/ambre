@@ -26,7 +26,7 @@ that component's prefix instead.
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | unheld -- no check reads a log line back, so the guarantee is worth what the review is worth | human-review |
-| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, key_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | none | unheld -- no test asserts that a non-member asking for a URL is refused one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` -- the derivation is deterministic and the two domains are independent | partial -- it pins no vector, so a renamed domain keeps the test green and gives every existing account a different key pair; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
@@ -34,15 +34,17 @@ that component's prefix instead.
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | none | unheld -- neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | none | unheld -- `ambre_server::ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence` holds the author binding, not the field set, and nothing compares what the frame carries to the three fields named here; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | none | unheld -- the lifetime is one operational figure with a 900 s default, and no upper bound is enforced anywhere; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 6 `verified`, 2 `partial`, 5 `untested`, 1 `human-review`. Every row is an `INV`. This
-  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
-  every instant.
+* **Verification.** 6 `verified`, 2 `partial`, 5 `untested`, 1 `human-review`, 2 `unimplemented`.
+  Every row is an `INV`. This document owns no gesture, so it declares no operation table, and each
+  rule binds the boundary at every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
   them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
@@ -67,7 +69,7 @@ that component's prefix instead.
 
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
-| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
+| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.
@@ -95,8 +97,18 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
     role, the wrapped document key and the inviter whose exchange key wrapped it.
   * The inviter column tells the relay who invited whom. The unwrap needs the inviter's exchange
     key, so that edge of the graph is accepted too.
+  * The signed membership log repeats that graph with a signature on each act, so a client can check
+    it (`SYNC-132`). It teaches the relay nothing it did not hold.
+* **Accepted, for a Murmure channel only:** the grouping of its documents and the few facts the
+  relay needs to finalize and to expire them (`ZK-015`). The relay never learns the kind of an
+  update: the activity summary is sealed (`SYNC-113`).
+* **Accepted, for a push notification only:** the level of each member per channel, and who a
+  message names. Web Push requires a visible notification for every push, so the relay must choose
+  who to wake (`ZK-016`).
 * **Not accepted, and stated as a defect:** a media blob's address, which is a hash of its
   plaintext, and its media type (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
+* **Accepted, and not a leak:** a key identifier. It is a hash of a random 256-bit key. It tells the
+  relay when a document rotated, which it already knows, and nothing of the key (`SYNC-115`).
 
 **Static verification, mechanised in `deny.toml`.** `ambre-server` imports no type from
 `ambre-trame`, `ambre-bus` or `ambre-crypto`; it imports `ed25519-dalek` directly. Every
@@ -184,6 +196,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
+| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse a frame under a stale key nor keep the links of a key chain in order |
 
 ---
 

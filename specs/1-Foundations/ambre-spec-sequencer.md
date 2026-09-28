@@ -24,6 +24,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-006` | `INV` | Per document and per author the accepted clock MUST increase by exactly one. | this spec section 3; `ambre-spec-delta-order.md`, `SYNC-024` | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds` -- an accepted value; `::first_update_succeeds` -- the first one; `::duplicate_clock_rejected` -- the replayed refusal; `::clock_mismatch_rejected` -- the out-of-step refusal; `::independent_clients_have_independent_clocks` -- one author's clock does not move another's, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-150` | `INV` | The deltas a document holds inline MUST stay within the inline cap of the budget register. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-132` | `INV` | The deltas a document keeps past its latest confirmed snapshot MUST stop growing while a single author writes. | this spec section 3; `SRV-130` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.2 A delta is numbered
 
@@ -46,9 +48,14 @@ sequence has already moved.
 |---|---|---|---|---|---|---|
 | `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` -- the second acquirer is refused while the first holds it, on the database tier | none | verified |
 | `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | none | unheld -- no test drives an index failure: it needs a register that refuses one statement and accepts the next (`ambre-spec-testing.md section 9`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-034` | `POST` | A delta given a number MUST reach object storage. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained | partial -- nothing drives a failing append; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
+| `SRV-034` | `POST` | A delta given a number MUST reach durable storage: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained | partial -- nothing drives a failing append; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-082` | `POST` | A durable write that failed MUST leave the whole frame where an operator can replay it. | audit `H1`; this spec section 3 | none | unheld -- the recovery is nominal: the failing path pushes to a dead-letter list, and nothing drains it, counts it or exposes it over any route, section 6. The rule is held by a list nobody reads; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | none | unheld -- the drain advances one front counter over the entries it finished with, stored or permanently unreadable, stops at the first retryable failure and trims to that counter; the ordering is stated in the source and no test drives a partial batch; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-148` | `POST` | A delta under the inline size MUST be stored in its index row, in the same write as the row. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-149` | `POST` | A delta over the inline size MUST be stored as an object of its own, which its index row names. | this spec section 3; `ambre-spec-object-store.md` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-151` | `POST` | Past the inline cap, the relay MUST move the oldest inline deltas of the document into one batch object, and point their rows at it. | this spec section 3; `SRV-150` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-152` | `POST` | A document with no write for the idle delay MUST have its inline deltas moved into one batch object. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.4 A history is folded and trimmed
 
@@ -56,7 +63,17 @@ sequence has already moved.
 |---|---|---|---|---|---|---|
 | `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` -- ten deltas and a snapshot covering six leave exactly the uncovered tail, correct and unreachable while `SRV-038` is unbuilt, since with no snapshot there is no horizon | none | verified |
 | `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records | none | verified |
+| `SRV-154` | `FRAME` | A trim MUST NOT drop a batch object that still holds a delta no retained snapshot covers. | this spec section 3; `SRV-083` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7). The request exists in the protocol and the client acts on it, and the relay sends it from nowhere, so no document is ever compacted, section 6 | unimplemented |
+| `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-127` | `FRAME` | A trim MUST NOT count a pending snapshot. | this spec section 3; `SRV-083` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-128` | `POST` | A cold open MUST be served the latest confirmed snapshot. | this spec section 3; `AUTHOR-015` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-130` | `FRAME` | A trim after a confirmation by the author MUST NOT drop a delta another user signed past the reference snapshot. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-133` | `POST` | A mismatch report MUST drop the pending snapshot it names. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-134` | `POST` | After a drop, the relay MUST ask a member client other than the author of the dropped snapshot for the next one. | this spec section 3; `SRV-038` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.5 A client asks for what it missed
 
@@ -65,9 +82,27 @@ sequence has already moved.
 | `SRV-040` | `POST` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` -- a document with no rows still emits one `MissingUpdates`, which is what releases the client's loading overlay | partial -- an index read that fails mid-replay still returns without answering; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-041` | `POST` | A replay MUST deliver every delta the caller asked for. | this spec section 3 | none | fails -- a delta the relay cannot locate in object storage or in the pending map is logged and skipped, so a page can be short and the caller cannot tell, section 6; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
 | `SRV-084` | `POST` | A replay MUST deliver its deltas in the order of their numbers. | this spec section 3 | none | unheld -- the index is paged in order and each page is re-sorted by number after its concurrent fetch, so the ordering is held by the sort being written; no test drives a page whose fetches complete out of order; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-155` | `POST` | A replay MUST read the inline deltas from the index, and fetch each batch object it needs once. | this spec section 3; `SRV-148`, `SRV-151` | not built | unbuilt -- lands with the `The hot tail of deltas lives in the index` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-075` | `FRAME` | A page of the delta index served over a request MUST NOT exceed the cap the relay declares. | audit `M16`; this spec section 3 | none | unheld -- `routes::sync` clamps the caller's `limit` to 1..=1000, and no test asks for more. The cap binds that route alone: the socket replay pages the whole history and bounds only each page; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-085` | `FAIL` | A replay MUST be refused, and answered with nothing, when the caller's membership no longer holds. | this spec section 3; `ambre-spec-membership.md` | none | unheld -- the handler re-checks membership on a short cache before it reads the index; no test revokes a membership mid-session and asks again, which is the one path that keeps a revoked member from pulling the whole history down; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | none | unheld -- the handler records the instant of each served replay and drops a call that arrives inside the interval; no test calls twice; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+
+### 1.6 A segment is finalized
+
+A Murmure segment is a document the relay closes to deltas for good. The client writes the final
+snapshot, and the relay arbitrates who writes it.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
@@ -75,10 +110,10 @@ sequence has already moved.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
   `SRV-001` keeps the frame out of the logs.
-* **Verification.** 5 `verified`, 2 `partial`, 3 `failing`, 8 `untested`, 1 `unimplemented`. What holds is the
-  ordering itself. The accepted and refused cases of the script, the rebuild after a reset, the
-  drain lock and both halves of the trim. What is loose is every recovery path and every refusal the
-  replay performs.
+* **Verification.** 5 `verified`, 2 `partial`, 3 `failing`, 8 `untested`, 28 `unimplemented`. What
+  holds is the ordering itself. The accepted and refused cases of the script, the rebuild after a
+  reset, the drain lock and both halves of the trim. What is loose is every recovery path and every
+  refusal the replay performs.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -130,6 +165,17 @@ them un-assigns the number.
 | the frame is queued for object storage, and the document marked unflushed | the same dead-letter list (`SRV-034`, `SRV-082`) |
 | the frame is fanned out live | logged; a reconnecting client replays it from the index (`ambre-spec-broadcast.md`) |
 
+**Where a delta lives.** A delta is a few hundred bytes, so one object per delta costs a request for
+almost nothing. A delta under the inline size lives in its index row (`SRV-148`), and a replay
+reads a page of rows in one query (`SRV-155`). An oversized delta keeps an object of its own
+(`SRV-149`).
+
+**Postgres keeps the hot tail alone.** A document holds at most the inline cap in its rows
+(`SRV-150`). Past it, the oldest deltas move into one batch object (`SRV-151`), and so does the
+whole tail of a document idle for a day (`SRV-152`). Compaction trims the rest. So the inline bytes
+stay bounded by the documents in use at once, never by every document ever written. A batch
+object is dropped only once a retained snapshot covers every delta in it (`SRV-154`).
+
 **The flush.** One task per instance, every fifteen seconds, over the documents marked unflushed
 rather than over the whole keyspace. Each document is drained under a lock of its own (`SRV-036`).
 The drain advances a single front counter over every entry it has finished with, stored or
@@ -143,9 +189,34 @@ for ever.
 
 **A snapshot, and the horizon it moves.** A client seals its whole state and puts it in object
 storage. It records it against the document with the highest delta number it had folded in, and
-that number is the horizon. The trim removes every delta at or below the lowest horizon of the
-snapshots the document still keeps (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
+that number is the horizon.
+
+A snapshot is pending until it is confirmed (`SRV-126`). The relay offers it at once to a member who
+has the document open (`SRV-129`), so two active members confirm within seconds. An author may
+confirm its own snapshot. The relay then keeps the reference snapshot (`SRV-131`) and every delta
+another user signed past it (`SRV-130`), and drops the author's own. So the deltas kept stop
+growing while one author writes alone (`SRV-132`).
+
+Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). A mismatch report drops
+the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snapshot comes from
+another member (`SRV-134`). The trim
+removes every delta at or below the lowest horizon of the snapshots the document still keeps
+(`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent. **Nothing triggers any of it** (`SRV-038`).
+
+**A finalization.** A Murmure segment ends as one immutable snapshot
+(`5-Murmure/ambre-spec-murmure-schema.md`).
+
+1. A member client asks for the finalize lease of the segment. The relay grants it to one client
+   (`SRV-113`) and locks the segment for good (`SRV-114`). A later delta is refused with an answer
+   that names the lock, so the client rewrites the edit as an amendment (`SRV-115`).
+2. The client uploads the final snapshot and commits it with its horizon, a `Seq`. The relay refuses a
+   commit without the live lease (`SRV-116`), and records the finalization time (`SRV-117`).
+3. The deltas stay until another member client confirms the snapshot against them (`SRV-118`).
+   A false snapshot therefore loses nothing, however long the confirmation takes.
+
+The lease names the segment by its `DocumentId`, and the commit carries its `SnapshotId` and its
+horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
 
 **A replay.** A client asks for everything after a number it names.
 
@@ -153,8 +224,9 @@ recent. **Nothing triggers any of it** (`SRV-038`).
    (`SRV-086`), or a membership that no longer holds (`SRV-085`);
 2. load the still-queued deltas once, as a map from number to frame;
 3. read the index in pages, in order;
-4. fetch each page's frames from object storage together, falling back to the map for what has not
-   flushed yet, and re-sort the page by number;
+4. take each page's inline frames from its rows, and fetch once each batch object and oversized
+   delta it names (`SRV-155`). Fall back to the map for what has not flushed yet, and re-sort the
+   page by number;
 5. send one answer per page, and one empty answer when the first page is empty (`SRV-040`).
 
 **Why the first empty page still answers.** A client treats the arrival of a replay as the end of
@@ -202,6 +274,13 @@ sees is how long a document takes to open.
 | The replay is paged, and each page is fetched together | one batch with a hard cap | it silently truncated any client further behind than the cap: it applied the batch, declared itself hydrated and never asked again |
 | The replay is paged, and each page is fetched together | one object fetch at a time | the serial round trip dominated a cold open. Fetching a page's objects together removes it |
 | A replay is throttled per document | no throttle | it makes the cheapest frame the most expensive request: a request for everything since the first delta is one small frame that costs the relay the whole history from object storage. One replay per reconnect is the real need, and a second within the same second is not one |
+| A pending snapshot moves no trim | trimming as soon as a snapshot lands | a false snapshot would replace the signed deltas that could prove it false |
+| The deltas of a final segment wait for a confirmation | purging them after a delay | a false snapshot nobody checked in time would become the only record, and every cold open would trust it |
+| The relay offers a snapshot for confirmation | waiting for the next cold open | a document whose other members keep it open would never be confirmed, and its deltas would pile up |
+| A report drops the snapshot at once | the relay weighing the report against the snapshot | the relay reads neither, and the deltas it keeps settle the question at the next snapshot |
+| A small delta lives in its index row | one object per delta | a replay of 250 deltas costs 250 object requests for a few hundred bytes each |
+| A small delta lives in its index row | batch objects for every delta | a partly trimmed batch must stay, and a live document rewrites its batch at every flush |
+| The hot tail is capped, and an idle one moves out | every delta inline, trimmed by compaction alone | a document shared and then left pending would keep its whole tail in the register |
 
 ---
 
@@ -227,6 +306,8 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
+* **Finalization is unbuilt.** No segment exists, and no lease, lock or purge after confirmation
+  (`SRV-113` to `SRV-120`).
 * **No test drives a failing store.** Every recovery path here is reached only when the index, the
   queue or object storage refuses a single operation. The suite has no way to make one refuse
   (`ambre-spec-testing.md section 9`).

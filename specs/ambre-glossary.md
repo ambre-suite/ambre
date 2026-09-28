@@ -53,11 +53,24 @@
 | clock | the per-author counter carried by a delta | | `1-Foundations/ambre-spec-delta-order.md` |
 | quarantine | the hold for a delta that cannot apply yet | | `1-Foundations/ambre-spec-delta-order.md` |
 | snapshot | a full document state, encrypted and signed | | `1-Foundations/ambre-spec-delta-order.md` |
+| reference snapshot | the latest snapshot a member other than its author confirmed | | `1-Foundations/ambre-spec-sequencer.md` |
 | sync | the thread owning the network and the crypto | | `1-Foundations/ambre-spec-sync.md` |
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
-| channel | a Murmure conversation: public, private or direct | | `Todo/ambre-murmure.md` |
+| channel | a Murmure conversation: public, private or direct | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
+| forum | a Murmure channel of titled, tagged posts, each with its thread | | `5-Murmure/features/ambre-spec-murmure-forums.md` |
+| space | a group of Murmure channels, itself a document | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| catalogue | the sealed list of the public channels of a space | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| segment | one time slice of a Murmure channel, held as one document | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| finalize | close a segment for good, as one immutable snapshot | | `5-Murmure/features/ambre-spec-murmure-segments.md` |
+| amendment | a late edit or delete of a final segment | | `5-Murmure/ambre-spec-murmure-schema.md` |
+| history boundary | a key rotation with no link, which later members cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
+| membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
+| residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
+| user settings | one user's own choices, kept in one sealed document that follows them | | `1-Foundations/ambre-spec-user-settings.md` |
+| activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |
+| light subscription | what a document not held in memory still costs | | `1-Foundations/ambre-spec-residency.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |
 | PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
@@ -90,6 +103,8 @@
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
+| key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |
+| key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
 | machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |

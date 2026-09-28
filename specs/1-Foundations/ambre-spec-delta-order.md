@@ -53,6 +53,7 @@ The client asks for a document it may hold nothing of, part of, or all of.
 | `SYNC-028` | `POST` | The post-open replay MUST start after the last delta the downloaded snapshot already contains. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_gates_request_missing_on_covered_seq`; `::open_document_ready_without_snapshot_requests_full_history` | none | verified |
 | `SYNC-029` | `POST` | A document MUST be reported ready once per open, after its first replay has landed. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_deferred_to_initial_replay`; `::open_document_ready_immediate_without_replay`; `::document_ready_carries_the_role_on_both_paths` | none | verified |
 | `SYNC-027` | `POST` | A history replay MUST reach the Logic thread as one batch, never as one event per delta. | this spec section 3 | none | unheld -- the replay collects every opened payload and sends one batch event, and no test counts the events a replay of several deltas produces; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-131` | `POST` | The Logic thread MUST import a history replay in slices that each fit the frame budget, and yield between them. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-031` | `POST` | The quarantine MUST ask the relay for the missing history once per gap, not once per arrival. | this spec section 3 | none | fails -- the soft threshold is re-tested on every quarantined arrival, so past nine hundred held updates every further one sends another request. The relay rate-limits the socket, which is what the reconnect backoff exists to avoid (`SYNC-064`); lands with the `The quarantine asks once per gap` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-085` | `FRAME` | Opening a document MUST NOT emit an update. | this spec section 3; derived | none | unheld -- an open reads and requests, and the only thing it sends is a history request. Nothing refuses an open that flushed pending local state, which would give the document a delta nobody typed; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -75,10 +76,11 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`. What holds is the
-  quarantine itself. An update ahead of its snapshot waits, one whose base is known is delivered,
-  the release runs in clock order, and the overflow warns once. What is loose is everything about
-  the clock and the socket, both needing a driven transport the host tier does not have.
+* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`, 1 `unimplemented`. What
+  holds is the quarantine itself. An update ahead of its snapshot waits, one whose base is known is
+  delivered, the release runs in clock order, and the overflow warns once. What is loose is
+  everything about the clock and the socket, both needing a driven transport the host tier does not
+  have.
 
 ---
 
@@ -135,6 +137,10 @@ document identity alone, so the earliest deltas are releasable across a reload a
 
 **A release.** When a parent becomes known, everything held under it is sorted by clock and opened
 in that order, then delivered. Nothing cascades: a release makes one parent known, never two.
+
+**A replay is imported in slices** (`SYNC-131`). One import of a long tail blocks the Logic thread
+for as long as it runs. Importing delta by delta costs no more than one batch, so the thread yields
+between slices, and the view shows the messages as they land.
 
 **An open, and why ready is not immediate.** A document is hydrated when its snapshot and every
 delta the relay already holds have arrived, not when the socket answers. So the ready signal waits

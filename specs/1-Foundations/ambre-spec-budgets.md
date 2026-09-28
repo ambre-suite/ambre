@@ -18,7 +18,7 @@
 
 | Operation | Target (P95 mobile) | Ceiling | Thread | Method |
 |-----------|-------------------|---------|--------|---------|
-| channel send/receive UI <-> Logic (`ambre_bus::conduit`, shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
+| queue send/receive UI <-> Logic (`ambre_bus::conduit`, shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
 | Logic <-> Sync `postMessage` (postcard encode + structured clone / transfer) | < 1 ms | -- | Main <-> Sync | benchmark |
 | Scroll round-trip UI -> Logic -> UI (P1) | < 2 ms | -- | UI <-> Logic | benchmark e2e |
 | Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
@@ -28,6 +28,10 @@
 | Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
 | `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
+| Murmure authorship check, one received delta read as a Loro JSON update | < 50 us | -- | Logic | criterion `ambre-murmure` `segment_json_check` -- 2.3 us on a desktop in native code, whatever the size of the segment. The fork it replaced measured 3.5 ms at 500 messages and 51.6 ms at 5000 (`segment_fork_check`). The phone figure assumes a phone about 7 times slower than the desktop: the ratio of the inbound open budget (350 us) to its desktop measure (50 us). The `Murmure measured on a phone` Story (`ambre-roadmap.md` E5) replaces that ratio with a measure |
+| Murmure space leave, the rotation of the space key and of every public channel key | < 2 s, for 50 public channels and 200 members, to measure on a phone | -- | Sync | **none exists** -- one wrap per remaining member for each key, so about 10 000 key exchanges at that size. A measure past the target brings back one key for every public channel (`features/ambre-spec-murmure-spaces.md`) |
+| Murmure segment, Loro import of its snapshot, 5000 messages | < 10 ms | -- | Logic | criterion `ambre-murmure` `segment_snapshot` -- 3.0 ms on a desktop in native code |
+| Murmure segment, Loro replay of one delta past its snapshot | < 250 us | -- | Logic | criterion `ambre-murmure` `segment_replay_one_by_one` -- about 35 us on a desktop in native code: 220 ms for the 6250 deltas of a segment at its close |
 | Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark -- **none exists** |
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
@@ -57,7 +61,7 @@
 | Prose pagination, partial reflow of 10 pages or fewer | < 3 ms | -- | Logic | the early exit converges inside the frame; an edit whose reflow does not converge is charged to the row above -- **none exists**, and no code either |
 | Prose cold shape, 10 dirty blocks | < 5 ms | -- | Logic | a glyph-level pass, an order of magnitude over placement -- **none exists**, and no code either |
 | Prose cold shape at document open, about 300 blocks | < 150 ms | -- | Logic | one-shot, off the interactive path -- **none exists**, and no code either |
-| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on an `ambre_bus::conduit` channel, no serialization -- **none exists**, and no code either |
+| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on an `ambre_bus::conduit` queue, no serialization -- **none exists**, and no code either |
 | Prose `export_snapshot()`, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose table-of-contents build, 50 headings | < 1 ms | -- | Logic | **none exists**, and no code either |
 | Prose list ordinals, 100 items | < 500 us | -- | Logic | derived at read time, never stored (`PROSE-FEAT-002`) -- **none exists**, and no code either |
@@ -108,7 +112,7 @@
 | Phase | Budget | Thread | Notes |
 |:---|:---|:---|:---|
 | Keypress -> `beforeinput` -> dispatch | ~0.1 ms | UI | Negligible |
-| `AppView::update` (drain the `UiEvent` channel) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
+| `AppView::update` (drain the `UiEvent` queue) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
 | Content hit-test and input dispatch (in view) | < 0.2 ms | UI | `AppView::handle_input`, pointer and keyboard on the canvas area |
 | View state update | < 0.5 ms | UI | Internal state mutations, transition logic |
 | `LoroText::insert` | < 0.1 ms | Logic | Sequential insert, off the render frame |
@@ -127,7 +131,7 @@
 | `TextCache`, 100 distinct layouts, cold cache | < 1 ms | UI | Not a frame phase: the shape budget of the cache itself, off the critical path once warm |
 
 * **The scroll round-trip holds because the frame is a fifth of it.** Section 1 budgets the P1 scroll
-  round-trip at < 15 ms. Rendering consumes < 5 ms. Channel transport is negligible: < 1 us per
+  round-trip at < 15 ms. Rendering consumes < 5 ms. Queue transport is negligible: < 1 us per
   hop, no serialization, no boundary memcpy. Most of the budget is left to the Logic thread.
 * **Threats to the frame, and the countermeasure each takes.**
   1. **Parley has no incremental layout** -> atomicity at the **paragraph**, one `Layout` per
@@ -257,6 +261,19 @@
 | Trame DAG plus cache | < 50 MB, per 100k formula cells | |
 | Toile board plus index, 50 000 elements | proportional to the element count, inside the < 100 MB total | The R-tree adds a small multiple of its leaf count over the bounds map it mirrors |
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
+| Server, inline delta size | < 64 KB | A delta past it keeps an object of its own (`SRV-149`) |
+| Server, inline deltas per document | 256 deltas or 256 KB, whichever comes first | Past it, the oldest move into one batch object (`SRV-150`, `SRV-151`). Bounds the register at the documents in use times this figure |
+| Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
+| Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
+| Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. Measured with chat-length bodies: 5000 messages make a snapshot of 879 KB, 581 KB shallow, so the message count binds first |
+| Murmure members before an `@channel` asks for confirmation | 10 | Past it, one `@channel` notifies enough people to warrant a second thought. A first estimate, to measure against use (`MURMURE-231`) |
+| Murmure members past which a channel defaults to the mentions level | 30 | A busy room would otherwise wake every member for every line. A first estimate (`MURMURE-267`) |
+| Murmure pins per channel | 50 | A pinned list longer than a screen stops being a list of what matters (`MURMURE-339`) |
+| Murmure custom emoji, per space | 500, of 128 KB each at most | Every member loads the images the channel shows, so the cap bounds the space document and the images drawn |
+| Murmure active segment, deltas past its latest snapshot | < 250, to measure on a phone | A cold open pays one inbound open (section 1, < 350 us) and one replay (section 1, < 250 us) for each. 250 of them cost about 150 ms of a phone cold open. Without a snapshot, a segment at its close replays 6250 deltas, fetched as 6250 objects. The relay asks for the snapshot (`SRV-038`). The phone figure assumes a phone about 7 times slower than the desktop: the ratio of the inbound open budget (350 us) to its desktop measure (50 us). The `Murmure measured on a phone` Story (`ambre-roadmap.md` E5) replaces that ratio with a measure |
+| Light subscription, per document not held | < 1 KB | The key, the counters and the cursor (`RESID-004`) |
+| User settings document | < 256 KB, to measure | Pinned while the user is signed in (`SETTINGS-005`), and counted in the documents held in memory |
+| Color emoji font | loaded on first use, size to measure | Charged to the fonts row above. A full color emoji font weighs about 10 MB, so its size decides whether the fonts row still holds |
 
 ---
 
@@ -267,3 +284,17 @@
 | `just fixtures` | ~30 s | A slow corpus is a corpus developers stop regenerating |
 | `just fixtures-check` in CI | ~10 s | Holds only because the frozen set is capped at three per `doc_type`, and the check loads and migrates every one |
 | Committed fixture artifact | 256 KB each, ~5 MB total | Indicative cap over `fixtures/current/` and `fixtures/frozen/`. The scale corpora are git-ignored and produced on demand (`ambre-spec-fixtures.md section 2`) |
+
+---
+
+## 8. POLICY DURATIONS
+
+A duration a rule waits on before it acts. Each figure is a first estimate, to measure.
+
+| Duration | Target | Why this order of size | Method |
+|---|---|---|---|
+| Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
+| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
+| Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
+| Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | **none exists** |
+| Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |

@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
 | `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | none | fails -- the document name and every media blob take the bare cipher with no signature and no tag, so the relay can substitute one for another inside a document nobody has to be a member of (`SYNC-068`, `SYNC-051`); lands with the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-125` | `INV` | Every sealed payload MUST name, in its public metadata, the identifier of the key that sealed it. | this spec section 2; `SYNC-115` | not built | unbuilt -- lands with the `Every sealed object names its key` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.2 A payload is sealed
 
@@ -37,6 +38,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-021` | `POST` | A payload at or below the compression threshold MUST NOT be compressed. | this spec section 2 | `ambre_sync::pipeline::tests::compression_threshold` -- a payload exactly at the threshold comes back marked raw, and one byte over comes back compressed and round-trips | none | verified |
 | `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | none | unheld -- sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), and nonce freshness is asserted nowhere: no test seals the same payload twice and compares the two nonces; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | none | unheld -- `ambre_sync::pipeline::tests::roundtrip_snapshot_large_compresses` and `::roundtrip_update_small` recover the version through the seal, which shows where it is today; nothing refuses a version byte moved into the public metadata, and a byte there tells the relay how compressible a document is; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 An inbound frame is opened
@@ -52,6 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | none | unheld -- the client verifier and the relay one both call the strict form, which refuses a non-canonical scalar and a small-order key, and no test presents a second valid signature over one message; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-023` | `FRAME` | A frame that fails any check MUST NOT be applied in part. | this spec section 2 | none | unheld -- each refusal returns before the payload reaches the engine, so the whole-frame drop is held by the checks running ahead of the apply; no test asserts the document is unchanged after a refused frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce and its activity summary beside the delta. | this spec section 2 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`. The outbound seal of 1 KB is under
   200 us, the inbound open under 350 us, and the round trip under 600 us. A 100 KB snapshot
@@ -60,10 +64,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`. What holds is refusal: a tampered byte,
-  a wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
-  decompression bomb and an unknown codec. What is loose is every rule stated as an absence. No unsealed
-  send is forbidden, no nonce asserted fresh, no order established.
+* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`, 4 `unimplemented`. What holds is
+  refusal: a tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a
+  replayed counter, a decompression bomb and an unknown codec. What is loose is every rule stated as
+  an absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.
 ---
 
 ## 2. MODEL
@@ -75,16 +79,17 @@ metadata and by their transport. The seal and the open are the same code for all
 
 | Message | Carries | Travels by | Metadata the relay reads |
 |---|---|---|---|
-| an update | one CRDT delta | the socket | the document, the author key, the parent snapshot, the clock |
+| an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock |
 | a snapshot | a full CRDT state | a presigned upload, straight to object storage | the same, plus the parent proof |
-| an ephemeral frame | a presence sample | the socket | the document, the author key, the counter |
+| an ephemeral frame | a presence sample | the socket | the document, the author key, the key identifier, the counter |
 
 **The seal, in steps.** The output is one message of the three shapes above.
 
 1. compress the payload when it is over the threshold, and record which of the two ways in one
    version byte (`SYNC-021`);
 2. form the plaintext as the version byte followed by the body, so the version is sealed with it
-   (`SYNC-020`);
+   (`SYNC-020`). The body of an update holds the session nonce of its author (`SYNC-112`). It holds
+   the activity summary when the application writes one (`SYNC-113`), and then the delta;
 3. encrypt with XChaCha20-Poly1305 under the document key, with a fresh 192-bit nonce
    (`SYNC-003`). The public metadata is the additional data that binds the ciphertext to it;
 4. commit the key: an HMAC-SHA256 over the nonce, the ciphertext and the metadata bytes
@@ -99,9 +104,24 @@ signature says who wrote the frame, the tag says under which key, and only then 
 | Step | Refuses | On failure |
 |---|---|---|
 | 1. verify the signature against the author key the metadata names | a forged author | drop, and warn |
-| 2. verify the commitment tag against the document key | a frame moved from another document, or a wrong key | drop, and warn |
+| 2. verify the commitment tag against the key the frame names (`SYNC-125`) | a frame moved from another document, or a wrong key | drop, and warn |
 | 3. open the cipher, with the metadata as the additional data | a mutated byte anywhere | drop, and warn |
 | 4. read the version byte and decompress under the ceiling | an unknown version, and a bomb | drop, and warn |
+| 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |
+
+```rust
+pub struct UpdateBody {
+    pub nonce: SessionNonce,                 // ambre-spec-op-authorship.md
+    pub summary: Option<ActivitySummary>,    // ambre-spec-residency.md
+    pub delta: CrdtDelta,
+}
+pub struct CrdtDelta(Vec<u8>);               // a Loro update, opaque to the envelope
+```
+
+**Why the nonce and the summary ride inside.** The session nonce binds each operation to its signer
+(`ambre-spec-op-authorship.md`). The activity summary tells a client what an update holds with no
+document loaded (`ambre-spec-residency.md`). Either one outside the ciphertext would tell the relay
+when a session starts, or what kind of change a member made.
 
 **Why the commitment tag exists.** XChaCha20-Poly1305 is not key-committing: one ciphertext can in
 theory open under two keys. The HMAC binds the frame to one key, which is what stops a compromised
@@ -149,6 +169,7 @@ say which of the four refusals fired.
 | The version byte is sealed, not public | a version byte in the public metadata | it would let a relay reject an unknown version early, and it would let it read whether the payload compressed -- a property of the content. That tells a relay whether a delta was above or below the threshold, for every delta, which is a channel `ZK-007` does not allow |
 | The ceiling is derived per message, with a floor and a cap | one absolute limit for every message | it is either too low for a large legitimate snapshot or too high to bound a small hostile frame. Three numbers hold both ends and the pillar figure |
 | Making an unsealed payload unrepresentable is a type change, not a test | a test that walks every send site | it passes until the next send site is added. `SYNC-001` is the rule the product rests on and it has no test shape: any test asserts a path was taken, and the rule is that no other path exists. A private field with one constructor puts the compiler on it, permanently, which is the top of the ladder in `ambre-spec-testing.md section 2` |
+| The key identifier is public metadata | the identifier inside the ciphertext | the relay could not refuse a frame under a key a removal left behind (`SRV-123`), and a client would try every key before it knew which one to open with |
 
 ---
 
@@ -184,5 +205,7 @@ say which of the four refusals fired.
 | Which user is behind an author key | `ambre-spec-membership.md`, `SYNC-014` |
 | What a rotation does to a frame sealed under an older key | `ambre-spec-key-rotation.md` |
 | How a media blob is addressed and transferred | `ambre-spec-media.md` |
+| What the session nonce binds | `ambre-spec-op-authorship.md` |
+| What an activity summary holds, and who reads it | `ambre-spec-residency.md` |
 | What the relay does with a frame it cannot open | `ambre-spec-sequencer.md`, `ambre-spec-broadcast.md` |
 | What a presence payload holds, and what it paints | `ambre-spec-presence.md` |

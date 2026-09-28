@@ -127,22 +127,25 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
 | `[ ]` Operations bound to their signer | MVP | every Loro operation of every application traced to the key that signed its delta |
 | `[ ]` Signed membership log | MVP | every invite, revoke and role change signed by its author, so a client checks the member list the relay serves, for documents and channels alike |
+| `[ ]` The key chain | MVP | every older document key reached from the current one through signed links, so a reload, a new member, a self-join or an eleventh rotation still opens the history |
 | `[ ]` Document residency | MVP | a bounded cache of the documents in memory and on disk, and a light subscription that keeps activity counters for documents not loaded |
 | `[ ]` `ARCH P7` -- the Murmure engine core | MVP | the message model, and a typed command surface in place of the opaque byte payload of the channel plane |
 | `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
 | `[ ]` Private channels and direct messages | MVP | invite-only channels, and direct messages between two or more members with an optional name |
-| `[ ]` Channel segments and sealing | MVP | the chain of segments, closing and sealing through a relay lease, and the second client that confirms a seal before the deltas go |
+| `[ ]` Channel segments and finalization | MVP | the chain of segments, closing and finalizing through a relay lease, and the second client that confirms a seal before the deltas go |
 | `[ ]` Message authorship | MVP | an edit, a delete or a reaction takes effect only from the member entitled to it |
-| `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a sealed segment, and the re-seal that turns a delete into an erasure |
+| `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a final segment, and the re-finalization that turns a delete into an erasure |
 | `[ ]` Reactions, mentions and threads | MVP | emoji reactions, `@` mentions, and reply chains with a reply count on the root |
-| `[ ]` Typing and presence in a channel | MVP | typing indicators and presence on the channel plane |
+| `[ ]` Typing and presence in a channel | MVP | typing indicators and presence, sealed ephemeral frames on the documents of a channel |
+| `[ ]` The Murmure layout and keyboard | MVP | three columns on a desktop, one view at a time on a phone, channels first in the palette, and the Murmure shortcuts |
 | `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor |
 | `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
-| `[ ]` Search in loaded segments | MVP | local search over the active segment and the sealed segments already fetched |
+| `[ ]` Search in loaded segments | MVP | local search over the active segment and the final segments already fetched |
 | `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[ ]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
+| `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point. It also measures a cold open end to end, relay read included, against the cold start row |
 | `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Custom emoji | V1 | emoji a space admin adds for the members of that space |
 | `[ ]` Presence settings | V1 | turning off the presence and typing indicators, kept in the user settings |
@@ -150,11 +153,15 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
 | `[ ]` Followed threads | V1 | one view of every followed thread with unread replies, and marking a thread as read |
-| `[ ]` Search on a new device | V1 | a signed index per sealed segment, queried before its segment is fetched |
+| `[ ]` Search on a new device | V1 | a signed index per final segment, queried before its segment is fetched |
 | `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start |
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
 | `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space |
+| `[ ]` Two channels side by side | V1 | a split view that pins and shows two channels at once, each with its own list and composer |
+| `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
+| `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
+| `[ ]` Archived channels | V1 | a channel kept readable and closed to writes |
 
 ---
 
@@ -233,16 +240,18 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
-| `[x]` A lost edit is never shown as applied | MVP | a full command channel drops a lossless command in both applications: Toile logs a warning inside its edit send, and Trame returns the error to a call site that logs it and then writes the same text into its own view state, so the user reads an edit the document never received. The undo group boundary is dropped outright beside it (`BUS-011`) |
+| `[x]` A lost edit is never shown as applied | MVP | a full command queue drops a lossless command in both applications: Toile logs a warning inside its edit send, and Trame returns the error to a call site that logs it and then writes the same text into its own view state, so the user reads an edit the document never received. The undo group boundary is dropped outright beside it (`BUS-011`) |
 | `[x]` A dropped lossy request does not leave a stale screen | MVP | the lossless class now holds its commands, and the lossy one still drops silently into a screen that already moved: a column resize writes the local width and sends on the lossy class, whose send returns nothing, so the grid keeps a width the document never took; a status-band refresh drops the same way and leaves the totals of the previous selection on screen; and a row or column insert is the one document mutation sent lossy, so the active cell moves and nothing is inserted (`TRAME-UI-127`, `TRAME-UI-136`, `TRAME-UI-048`) |
 | `[x]` One clipboard host | MVP | the asynchronous write replaces the ownership token the copy event wrote, so a same-tab paste reaches the worst rung of the fidelity ladder; and the toolbar Paste button is a second path that skips the ladder and names one application inside the launcher |
 | `[ ]` `SYNC P4` hardening | -- | backpressure on the socket, which the two-instance split made unreachable rather than unbuilt; the access token that rides the socket address into the console; the snapshot adopted as a parent before it is downloaded; and the two tokens a sign-out drops without wiping |
 | `[ ]` The production sign-in path | V1 | the two provider routes are registered under a fixed provider name while their handlers read one from the path, so every call answers an internal error and the only sign-in a deployment offers has never run; and the rate limiter sits inside the nested router, which strips the prefix its classifier matches on, so no request is ever counted against the brute-force tier |
-| `[ ]` A document is compacted as its history grows | V1 | the relay never asks anyone for a snapshot, and that request is the only trigger of the client's whole compaction path. So no document is ever compacted: every cold open replays from the first delta, the delta index is never trimmed, and the cold-start budget is unreachable. The same pass removes for good a Prose block a deletion hid, once the session that hid it has ended (`PROSE-121`); a peer offline but still open may then undo into nothing, the loss a deletion caused before |
-| `[ ]` A deleted document leaves nothing | V1 | deleting a document removes its rows and neither its sealed objects nor its ordering state, so every snapshot, delta and picture stays in storage for ever and the sequence counters stay in the ephemeral store with no expiry |
-| `[ ]` A revoke either completes or changes nothing | V1 | the removal is posted first and the rotation can fail after it, so the member is out of the list and their key still opens new content. A member whose exchange key does not parse is skipped and loses the document in silence |
-| `[ ]` The rotation re-keys the whole document | V1 | the document name and every media blob stay sealed under the previous key, so the first revoke blanks the name and every picture for everyone who stayed; and no snapshot seals the state after the rotation |
-| `[ ]` The media address is not the plaintext | V1 | a blob is addressed by the hash of its plaintext and the relay stores it, so the relay can confirm that a document holds a file it already knows. The media type travels beside it, and a blob is bound to neither its document nor its address |
+| `[ ]` A document is compacted as its history grows | MVP | the relay never asks anyone for a snapshot, and that request is the only trigger of the client's whole compaction path. So no document is ever compacted: every cold open replays from the first delta, the delta index is never trimmed, and the cold-start budget is unreachable. The same pass removes for good a Prose block a deletion hid, once the session that hid it has ended (`PROSE-121`); a peer offline but still open may then undo into nothing, the loss a deletion caused before. Murmure needs it first: an active segment holds a bounded tail of deltas past its snapshot (`MURMURE-222`) |
+| `[ ]` A deleted document leaves nothing | MVP | deleting a document removes its rows and neither its sealed objects nor its ordering state, so every snapshot, delta and picture stays in storage for ever and the sequence counters stay in the ephemeral store with no expiry. A Murmure channel or space delete needs it first (`MURMURE-243`) |
+| `[ ]` The hot tail of deltas lives in the index | MVP | one object per delta costs an object request for a few hundred bytes, so a replay of 250 deltas makes 250 requests. A small delta moves into its index row, a capped hot tail stays in the register, and the rest goes to batch objects |
+| `[ ]` A revoke either completes or changes nothing | MVP | the removal is posted first and the rotation can fail after it, so the member is out of the list and their key still opens new content. A member whose exchange key does not parse is skipped and loses the document in silence. A member who leaves posts the removal alone, and the relay refuses the old key until someone rotates |
+| `[ ]` Every sealed object names its key | MVP | the document name and every media blob stay sealed under a key nothing names, so the first revoke blanks the name and every picture for everyone who stayed. Once each names its key, the key chain opens it |
+| `[ ]` A snapshot follows each rotation | V1 | no snapshot seals the state after a rotation, so the history of a document stays a chain of deltas across the key change |
+| `[ ]` The media address is not the plaintext | MVP | a blob is addressed by the hash of its plaintext and the relay stores it, so the relay can confirm that a document holds a file it already knows. The media type travels beside it, and a blob is bound to neither its document nor its address. Murmure attachments need it first (`MURMURE-129`) |
 | `[ ]` The document name is sealed like every other payload | V1 | the sealed name takes the bare cipher, with no author signature and no commitment tag, under one constant string as additional data. So the name of one document opens under any other holding the same key, and nothing says who wrote it (`SYNC-018`, `SYNC-068`) |
 | `[ ]` The relay survives a panic | V1 | a panic in one handler or one socket task has no catch layer, and a lock it poisons stays poisoned for every later request. One request fails, and a test that forces the panic shows the relay still answering (`SRV-101`) |
 | `[ ]` A revoked key opens nothing | V1 | an inbound frame is opened by trying the current key, then every cached key, then the current key again. A frame sealed under a revoked key still opens, and a frame nobody can open costs eleven attempts (`SYNC-045`) |
@@ -269,7 +278,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A marquee takes what it was drawn around | MVP | the marquee returns raw members without climbing the group chain, so it selects the parts a click would have selected the group of; and containment is read on the upright box, so a tilted shape is taken by a rectangle that does not cover it (`TOILE-UI-236`, `TOILE-UI-237`) |
 | `[x]` A Toile command that names nothing answers an error | MVP | the move, the restyle and the delete skip an id the board does not hold and answer as though it had; the menu resolver falls through to the empty command list a handled intent returns; a group of one and an ungroup of a non-group refuse in silence; and a reaction names a target the board no longer holds with nothing to check it (`TOILE-194`, `TOILE-201`, `TOILE-UI-152`, `TOILE-055`, `TOILE-159`, `TOILE-FEAT-060`) |
 | `[x]` A remote change the board cannot apply is announced | MVP | the failure is reported as an error carrying an empty element id and the canvas logs it without surfacing it; in a batch the others keep merging and the import reports success, so a board silently stops receiving a collaborator's work (`TOILE-214`, `TOILE-215`) |
-| `[x]` A dropped display request leaves a trace | MVP | Toile's lossy send matches a disconnected channel alone, so a full one drops a camera request with no log; the cull request goes the same way while the dirty flag is cleared in the same frame, and the board paints the previous set until the camera moves again (`TOILE-UI-313`, `TOILE-UI-275`) |
+| `[x]` A dropped display request leaves a trace | MVP | Toile's lossy send matches a disconnected queue alone, so a full one drops a camera request with no log; the cull request goes the same way while the dirty flag is cleared in the same frame, and the board paints the previous set until the camera moves again (`TOILE-UI-313`, `TOILE-UI-275`) |
 | `[x]` The board tools let go | MVP | the pan flag is raised on `Space` and lowered by nothing, so one press turns every later drag into a pan for the rest of the session; and a press on a transform handle emits a resize or a rotate whatever the pointer did, costing a delta and an undo item for a geometry nobody changed (`TOILE-UI-256`, `TOILE-UI-252`) |
 | `[x]` The deck is one list for every peer | MVP | the presentation order and configuration are created by the first write rather than with their parent, so two peers building the deck at the same moment mint rival lists and one is kept (`TOILE-029`) |
 | `[x]` Presentation mode holds the screen it promises | MVP | the overlay pass is never told the mode, so the selection box, the handles, the find hits and the presence cursors paint over the slide; the follow affordance names a presenter and is cleared by nothing; a co-author's note edit stays invisible until the slide changes; a fade-out stops when the gliding camera culls its element; and the transition eases over a constant instead of the deck's own configuration (`TOILE-UI-083`, `TOILE-UI-315`, `TOILE-UI-316`, `TOILE-UI-085`, `TOILE-FEAT-028`) |
@@ -360,8 +369,10 @@ owns the subsystem.
 | Story | Touches |
 | :--- | :--- |
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
-| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own |
+| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own, and a call started from a Murmure channel |
 | `[ ]` Murmure bots and webhooks | bots holding their own keys, slash commands, interactive messages, and inbound webhooks through an encrypting bridge |
+| `[ ]` Link previews | a preview of a web page fetched once by the sender and sealed in the message, and the name of a linked Ambre document for its members |
+| `[ ]` Murmure export | a channel written to one `.ambre` file, through a container version that holds several documents |
 | `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
 | `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
 | `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |

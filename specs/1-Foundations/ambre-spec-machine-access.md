@@ -287,5 +287,5 @@ document never holds it. The oplog is sealed under the document key, which the m
 | What the relay may learn | `ambre-spec-zero-knowledge.md` |
 | How the relay limits the request rate | `ambre-spec-server.md` |
 | The figure for any rate or cost | `ambre-spec-budgets.md` |
-| How a bot shows in a Murmure conversation | the Murmure sketch, `Todo/ambre-murmure.md` |
+| How a bot shows in a Murmure conversation | `5-Murmure/features/ambre-spec-murmure-bots.md` |
 | What a post becomes in a sheet, a board or a text | each application's own feature document |

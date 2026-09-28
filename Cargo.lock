@@ -212,8 +212,10 @@ dependencies = [
  "ambre-bus",
  "ambre-core",
  "ambre-draw",
+ "criterion",
  "loro",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tracing",
 ]

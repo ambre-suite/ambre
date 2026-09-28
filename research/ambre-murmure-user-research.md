@@ -1,13 +1,13 @@
 # AMBRE -- MURMURE: USER RESEARCH ON TEAMS, SLACK AND DISCORD
 
-**Type:** Working note (evidence for the Murmure sketch)
+**Type:** Working note (evidence for the Murmure specs)
 **Implementation:** design-only
 
 > A working note, and not a specification. It records what users like and dislike in the
 > messaging part of Microsoft Teams, Slack and Discord. A second pass adds Zulip for threads and
 > Element for end-to-end encrypted (E2EE) messaging. A third pass compares the bot systems and
-> their E2EE stakes. Video, calls and file storage are out of scope. It declares no contract row. `ambre-murmure.md` stays the sketch; this note is the
-> evidence that the sketch cites.
+> their E2EE stakes. Video, calls and file storage are out of scope. It declares no contract row.
+> The Murmure specs in `specs/5-Murmure/` apply it; this note is the evidence behind them.
 
 ## 1. METHOD AND LIMITS
 
@@ -111,10 +111,10 @@
 | 17 | Show why a message cannot be decrypted, and what fixes it. | Show a bare "unable to decrypt". | 7 |
 | 18 | Give the relay the routing data that a notification level needs. | Rely on a silent push that the client filters. | 7 |
 
-## 5. WHAT THIS RESEARCH CHALLENGES IN THE SKETCH
+## 5. WHAT THIS RESEARCH CHALLENGES IN THE SPECS
 
-* **Local search on a new device.** `ambre-murmure.md` section 5 indexes decrypted content on the
-  client. A new device holds only the active segment. So search is partial until the client
+* **Local search on a new device.** `ambre-spec-murmure-search.md` indexes decrypted content on
+  the client. A new device holds only the active segment. So search is partial until the client
   fetches and decrypts every sealed segment. Row 2 above is the minimum answer.
 * **Pins.** Section 2.B stores pins in local storage, but the `meta` document holds a shared
   `pinned` array. Users expect a pin to be shared with the channel. A personal bookmark is a
@@ -141,7 +141,7 @@
 ## 6. BOTS AND INTEGRATIONS
 
 Third pass, read on 2026-09-24. It compares how each product lets a program read and post
-messages. Section 7 of `ambre-murmure.md` is the sketch that this pass challenges.
+messages. `ambre-spec-murmure-bots.md` is the spec that this pass challenges.
 
 ### A. Comparison
 
@@ -228,7 +228,22 @@ A key rotation creates a new Document Key, so each member derives a new bot key.
 * **Section 7.D, trust indicator.** The badge certifies a key. It must also show where the bot
   runs (row B4).
 
-## 7. SOURCES
+## 7. WHAT MURMURE REJECTS FROM THIS RESEARCH
+
+The product choices this note rules out. Several hold for the MVP; the Murmure specs apply them.
+
+| Alternative | Rejected because |
+| :--- | :--- |
+| **Several message models** (flat chat, threaded posts) | Teams users do not know which one to use. Teams added a third model, a threads layout, in August 2025. |
+| **A new post hides older threads** | Teams users lose threads they did not close. |
+| **Auto-archive of a thread on a fixed delay** | Discord users find the delay too short. |
+| **Unread cleared only when the user opens the conversation** | Users of all three products want to control their read state. |
+| **A permanent navigation bar that the user cannot hide** | The 2023 Slack redesign caused a backlash from users of basic messaging. |
+| **History deletion to sell a plan** | Slack deleted free history older than one year from 2024-08-26. Users read it as a hostage. |
+| **Any server-side processing of content** (model training, analysis) | The 2024 Slack backlash over training on messages. It also breaks the zero-knowledge pillar. |
+| **Identity documents to use the product** | The 2026 Discord backlash over age verification by ID or face scan. |
+
+## 8. SOURCES
 
 Read on 2026-09-24.
 

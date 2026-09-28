@@ -93,10 +93,11 @@ ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
 RULES = ROOT / "ai"
+RESEARCH = ROOT / "research"
 
-# The three applications. A document of an application is named
+# The four applications. A document of an application is named
 # `ambre-spec-<app>-<rest>.md`; a citation may drop the fixed halves.
-APPS = ("trame", "toile", "prose")
+APPS = ("trame", "toile", "prose", "murmure")
 
 # A backticked name candidate. It ends at a backtick (`` `trame-logic` ``) or at a
 # space, which is the form that carries the coordinate in the same span
@@ -252,11 +253,15 @@ def corpus_files() -> list[Path]:
     """Every file `documents` reads, before the file name becomes the key.
 
     `specs/` is the corpus. `ai/` holds the rules a spec legitimately cites --
-    `ambre-spec-template.md` names the writing style -- so those files are
-    resolved as targets. They are not `sources()`: nothing checks a citation
-    they carry.
+    `ambre-spec-template.md` names the writing style -- and `research/` the
+    evidence a design decision rests on, so those files are resolved as
+    targets. They are not `sources()`: nothing checks a citation they carry.
     """
-    return sorted(SPECS.rglob("*.md")) + sorted(RULES.glob("*.md"))
+    return (
+        sorted(SPECS.rglob("*.md"))
+        + sorted(RULES.glob("*.md"))
+        + sorted(RESEARCH.glob("*.md"))
+    )
 
 
 def documents() -> dict[str, Path]:

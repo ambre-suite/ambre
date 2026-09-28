@@ -87,6 +87,7 @@ section 4.
 | **OnlyOffice** | No native E2EE. Server-centric architecture, incompatible with the blind relay model. |
 | **CryptPad** | JavaScript stack, OT instead of CRDT, DOM rendering. Fails the Rust-first and Performance pillars. |
 | **Electron / Tauri** | AMBRE is a web application (browser PWA). No native desktop client: one codebase, one deployment. |
+| **Matrix / XMPP for Murmure** | Murmure rides the Ambre sync pipeline, so one model, one key hierarchy and one relay serve every application of the suite. |
 
 ## Project Structure
 
@@ -122,9 +123,10 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 | [`specs/ambre-roadmap-journal.md`](specs/ambre-roadmap-journal.md) | Closed epics, cut here verbatim the day they closed. What shipped, and under which epic. |
 | [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | The contract every spec follows: the header fields, the contract table, the rule that keeps implementation out, and the section order of the two document kinds. |
 | `specs/1-Foundations/` | Horizontal specs: the three-thread stack, the message bus, the zero-knowledge boundary, the persisted schema and testing, then one document per shared subsystem -- client side, the Sync worker, the sealed envelope, delta order, membership, key rotation, the media transfer; relay side, the blind relay, the session, the sequencer, the broadcast, the blob store, organizations -- and one per shared feature: the UI thread, the frame, the render assets, the drawing surface, the inline text editor, high density, the chrome shell, the text input pipe, accessibility, the adaptive layout, the launcher, key verification, the command model, the design tokens, the clipboard, presence, the native file, the fixtures. It also holds four things that are not specs: the budget register, the generated inventory of the layer, the generated contract ledger and the generated pair the ledger cannot answer for -- one record per contract row, and one edge per citation those rows make. |
-| `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/` | Vertical specs, one directory per application. |
+| `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/`, `specs/5-Murmure/` | Vertical specs, one directory per application. |
 | `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
-| `specs/Todo/` | Applications not started: Murmure, Rendez-Vous. |
+| `specs/Todo/` | Sketches of what has no spec yet: Rendez-Vous. |
+| `research/` | Working notes that are not specs: the evidence a design decision rests on, such as the Murmure user research. |
 | [`specs/audits/security-audit.md`](specs/audits/security-audit.md) | Numbered audit findings. A contract row that closes a finding cites it. |
 
 An application directory holds a schema document, a generated inventory and one document per

@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`.
   and opens no socket (`PROSE-UI-002`).
 * **Verification.** 7 `verified`, 1 `partial`, 0 `untested`. Host tests hold every row on the view's state:
   a drag of any length yields one command on release, and the motion writes nothing. The element
-  has no command channel, so it cannot write during the gesture. `PROSE-UI-065` stays open in CSS
+  has no command queue, so it cannot write during the gesture. `PROSE-UI-065` stays open in CSS
   pixels, a placement under a live zoom that lands in the wasm tier
   (`ambre-spec-testing.md section 6`).
 
@@ -99,7 +99,7 @@ pixel crosses back.
 **Steps, for one drag:**
 
 1. a press on a handle records which one, and the element paints it at the pointer. The element
-   holds no channel, so the document is untouched (`PROSE-UI-076`);
+   holds no queue, so the document is untouched (`PROSE-UI-076`);
 2. the release converts the handle's position into whole points, against the content column, kept
    inside it and short of the other handle (`PROSE-UI-065`, `PROSE-UI-228`, `PROSE-UI-229`);
 3. the view sends one `SetParagraphStyle` carrying the one property that moved, or nothing when it

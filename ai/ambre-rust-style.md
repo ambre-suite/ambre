@@ -5,6 +5,11 @@
 * **Idiomatic.** Prefer iterators and combinators over manual loops.
 * **Data-oriented design, no Java-like OOP.** A closed `enum` plus a `match` beats a trait object:
   the compiler proves the dispatch is exhaustive.
+* **A newtype for every domain value.** An identifier, a quantity with a unit, a secret and a
+  validated value each get their own type, for example `MessageId(Uuid)`, `Timestamp(u64)` or
+  `Emoji(String)`. A closed set of values is an `enum`, never a `String`. A bare `String`, `Uuid`,
+  integer or `Vec<u8>` is allowed for free text with no rule, and inside the newtype that wraps it.
+  The compiler then refuses a message id passed as a document id (`ambre-spec-testing.md section 2`).
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. A crate that carries no `unsafe` declares `#![forbid(unsafe_code)]`.
