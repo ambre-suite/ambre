@@ -399,6 +399,22 @@ class Counts(unittest.TestCase):
             contracts.stated_counts("1 `verified`, 1 `untested`."),
         )
 
+    def test_the_counts_are_written_from_the_table(self):
+        self.assertEqual(
+            "2 `verified`, 1 `failing`",
+            contracts.render_counts(Counter({"failing": 1, "verified": 2})),
+        )
+
+    def test_a_rewrite_replaces_the_counts_and_keeps_the_prose(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            spec = Path(tmp) / "spec.md"
+            spec.write_text("x\n* **Verification.** 9 `verified`, 1\n  `untested`. The gap is X.\n* next\n")
+            self.assertTrue(contracts.rewrite_answer(spec, 2, Counter({"verified": 3})))
+            self.assertEqual(
+                "x\n* **Verification.** 3 `verified`. The gap is X.\n* next\n", spec.read_text()
+            )
+
     def test_an_answer_opening_on_no_count_is_refused(self):
         found = contracts.answer_defects("spec.md", (9, "The belt holds it."), Counter({"verified": 1}))
         self.assertIn("states no count", found[0])
@@ -409,7 +425,7 @@ class Counts(unittest.TestCase):
 
     def test_an_answer_counting_a_status_off_the_six_is_refused(self):
         found = contracts.answer_defects("spec.md", (9, "2 `unverified`."), Counter({"verified": 2}))
-        self.assertIn("no status of the six", found[0])
+        self.assertIn("no status of the seven", found[0])
 
     def test_a_missing_answer_belongs_to_the_other_gate(self):
         """One rule, one home: `spec_shape.py` holds whether the label exists."""

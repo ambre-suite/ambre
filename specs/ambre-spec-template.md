@@ -364,7 +364,7 @@ directly under the table in every document that carries one.
 | :--- | :--- | :--- |
 | `Budget` | what this costs, and where the figure lives | a row of `ambre-spec-budgets.md`, cited; or `none`, and why |
 | `Boundary` | whether anything here reaches the relay, holds a key or opens a socket | the rule that seals it; or `none`, and why |
-| `Verification` | how much of the table is held, and by what | the counts per status, and the rows that are the gaps |
+| `Verification` | how much of the table is held, and by what | the counts per status, written by `just contracts-write`, then the rows that are the gaps |
 
 **The three answers together are one paragraph, and one paragraph is six sentences.** That is
 `prose.py`'s cap, and a reader sees the three bullets as one block. Six sentences under the 25-word
