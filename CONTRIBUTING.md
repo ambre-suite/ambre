@@ -67,6 +67,7 @@ The table holds what no gate sees. Read it before you commit.
 | Every committed fixture comes from a generator run from a seed, and never from a real document (`FIXTURE-005`) | a real document and a generated one are both Loro bytes, so no check tells them apart. A real document places plaintext user content in a public repository, permanently |
 | A commit that refreshes a golden artifact moves `generator_version` in the same commit | the gate compares the corpus against the code, never against the history of the corpus, so a regenerate-and-commit always passes |
 | You read a snapshot diff before you accept it | `cargo insta accept` accepts blindly |
+| A `fn` your change edits carries no line of `scripts/spec_code_citations.allow`: fix that defect in the same commit and delete its line. A line on a `fn` you did not edit stays | the gate refuses a new defect and a stale line, never an old one, so a listed defect lives until someone edits its `fn`. The scope is the `fn`, not the file, so a three-line change never carries a file-wide cleanup |
 | Every mermaid block you touched renders locally first | `just spec-code` checks the fence tag, not the diagram. A broken diagram fails on the forge |
 | A benchmark figure names what it measures, and never a frame rate (`FIXTURE-024`) | the claim is made in a pull request, not in a test |
 
