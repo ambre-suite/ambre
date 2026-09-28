@@ -117,7 +117,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
 | `[x]` A Prose fixture corpus | MVP | Trame and Toile each carry a fixture generator and Prose carries none, so `fixtures/` holds no Prose document and the schema has reached version 9 with no artifact frozen at any version. Each migration is held by one hand-built document in a unit test, never by a real file. A seeded generator writing a document with styled text, a table, a band, a footnote and a comment gives the current corpus, and the next schema bump its first frozen artifact (`ambre-spec-fixtures.md`) |
 | `[x]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
-| `[ ]` An import lands whole or not at all | MVP | an import writes block by block into one pending transaction, and a write the engine refuses midway leaves the earlier ones pending for the next commit to take (`PROSE-IO-011`). Apply on a fork and merge on success, or validate every operation before the first write |
+| `[x]` An import lands whole or not at all | MVP | an import writes block by block into one pending transaction, and a write the engine refuses midway leaves the earlier ones pending for the next commit to take (`PROSE-IO-011`). Apply on a fork and merge on success, or validate every operation before the first write |
 | `[ ]` HTML interop | V1 | HTML import and export of whole documents, beside the clipboard reader |
 | `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
 | `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |

@@ -5546,7 +5546,7 @@
   {"edge": "cites-section", "from": "PROSE-IO-055", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
   {"edge": "cites-section", "from": "PROSE-IO-011", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
   {"edge": "verified-by", "from": "PROSE-IO-011", "to": "ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing"},
-  {"edge": "lands-with", "from": "PROSE-IO-011", "to": "An import lands whole or not at all"},
+  {"edge": "verified-by", "from": "PROSE-IO-011", "to": "ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit"},
   {"edge": "cites-section", "from": "PROSE-IO-010", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
   {"edge": "cites-document", "from": "PROSE-IO-010", "to": "ambre-spec-testing.md"},
   {"edge": "verified-by", "from": "PROSE-IO-010", "to": "ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed"},

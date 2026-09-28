@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
-| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | partial -- a write the engine refuses midway leaves the earlier writes pending, and the next commit takes them; lands with the "An import lands whole or not at all" Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
 | `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed`; `ambre_prose::interop::markdown_read::tests::a_hostile_nesting_is_capped` | partial -- no `cargo-fuzz` target yet; lands with the "Fuzzing the untrusted readers" Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Take the document out as a file
@@ -119,7 +119,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 27 `verified`, 3 `untested`, 19 `unimplemented`. The native file and the
+* **Verification.** 28 `verified`, 2 `untested`, 19 `unimplemented`. The native file and the
   Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
 
 ---
@@ -387,12 +387,19 @@ other is a file it could not open.
 2. lift every block the tree refuses to the nearest place it allows, and record each lift
    (`PROSE-IO-026`);
 3. build the typed operation list, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
-4. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
-5. hand the report to the view (`PROSE-IO-053`).
+4. write them first into a scratch document, and drop it: a refusal there answers the import and
+   writes nothing (`PROSE-IO-011`);
+5. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
+6. hand the report to the view (`PROSE-IO-053`).
 
 Step 2 is a separate pass on purpose. The tree's nesting rule is one predicate
 (`ambre-spec-prose-schema.md section 4`), and a reader that applied it inline would need a copy of
 it per format.
+
+Step 4 exists because the engine takes no write back once made. A write refused midway would
+leave the earlier ones for the next commit. The scratch document holds only the new blocks, so the
+rehearsal costs the size of the file, not of the document. The one step that reads the real
+document is where the first block lands, and it refuses before anything is written.
 
 **Steps, on an export:** walk the document once into the intermediate form, then hand that form to
 the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
@@ -608,7 +615,7 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
-  `TOILE-IO-023` and Prose states nothing, so the batch of step 4 has no defined destination.
+  `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
 * **A failed conversion has no way back to the user.** `PROSE-IO-047` makes the report and the
   error two answers, and the bus carries one of them. `ImportCompleted` holds a report, and no
   event holds an `InteropError`. A file that does not open therefore has a typed refusal and no

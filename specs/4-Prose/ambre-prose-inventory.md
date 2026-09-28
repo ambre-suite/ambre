@@ -31,7 +31,7 @@
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 13 |  |
 | `prose-clipboard` | Copy, cut and paste. | partial | 23 |  |
-| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 49 | 3 |
+| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 49 | 2 |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 27 | 1 |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 23 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 51 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 15 implemented, 9 partial, 4 design-only. 688 contract rows, 6 loose.**
+**28 features: 15 implemented, 9 partial, 4 design-only. 688 contract rows, 5 loose.**

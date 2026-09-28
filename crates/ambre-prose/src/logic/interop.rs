@@ -8,9 +8,10 @@
 //! (`PROSE-IO-026`).
 //!
 //! The builder reads no document and writes none
-//! (`PROSE-IO-055`). Only [`ProseState::apply_import`] writes. It writes the
-//! whole list in one commit, so one undo takes the file back
-//! (`PROSE-IO-051`). Everything runs on the Logic thread, which holds the
+//! (`PROSE-IO-055`). Only [`ProseState::apply_import`] writes. It first
+//! rehearses the list on a scratch document, so a refusal writes nothing
+//! (`PROSE-IO-011`). Then it writes the list in one commit, so one undo takes
+//! the file back (`PROSE-IO-051`). Everything runs on the Logic thread, which holds the
 //! document (`PROSE-IO-001`), and nothing reaches the relay but the one
 //! encrypted delta the commit produces (`PROSE-IO-043`).
 
@@ -476,11 +477,34 @@ impl ProseState {
 
     /// Write the operations in one commit. The document's lone empty
     /// paragraph, the one a new document holds, gives way to the file.
+    ///
+    /// The engine takes no write back once made, and a refusal midway would
+    /// leave the earlier writes for the next commit (`PROSE-IO-011`). So the
+    /// list is first written into a scratch document and dropped. A refusal
+    /// there costs nothing. Past it, the only step that reads this document
+    /// is where the first operation lands, and it refuses before writing.
     pub(super) fn apply_import(&mut self, ops: &[ImportOp], warnings: Warnings) -> ProseOutcome {
         let report = warnings.report();
         if ops.is_empty() {
             return ProseOutcome::display_only(vec![ProseEvent::ImportCompleted { report }]);
         }
+        let Some(mut rehearsal) = Self::new() else {
+            return Self::err_write("the scratch document for the import was not built");
+        };
+        if let Err(refused) = rehearsal.write_import(ops) {
+            return refused;
+        }
+        if let Err(refused) = self.write_import(ops) {
+            return refused;
+        }
+        self.commit_with(vec![ProseEvent::ImportCompleted { report }])
+    }
+
+    /// Write the operations, uncommitted, after the last block.
+    ///
+    /// # Errors
+    /// The refusal to answer with. Writes made before it stay pending.
+    fn write_import(&mut self, ops: &[ImportOp]) -> Result<(), ProseOutcome> {
         let tree = doc::blocks(&self.doc);
         let roots = doc::roots(&tree);
         let blank = match roots.as_slice() {
@@ -533,7 +557,7 @@ impl ProseState {
                     .copied()
             {
                 if let Err(e) = write_runs(&doc::get_block_text(&self.doc, &first), 0, runs) {
-                    return Self::err_write(&e);
+                    return Err(Self::err_write(&e));
                 }
                 last.insert(parent, first);
                 minted.push(Some(first));
@@ -542,27 +566,21 @@ impl ProseState {
             let after = last.get(&parent).copied();
             let id = match op {
                 ImportOp::Block { init, runs, .. } => {
-                    let id = match self.mint_placed(parent_id, after, init.block_type()) {
-                        Ok(id) => id,
-                        Err(refused) => return refused,
-                    };
+                    let id = self.mint_placed(parent_id, after, init.block_type())?;
                     if let Err(e) = self.write_init(&id, init) {
-                        return Self::err_write(&e);
+                        return Err(Self::err_write(&e));
                     }
                     if init.block_type().has_body()
                         && let Err(e) = write_runs(&doc::get_block_text(&self.doc, &id), 0, runs)
                     {
-                        return Self::err_write(&e);
+                        return Err(Self::err_write(&e));
                     }
                     id
                 }
                 ImportOp::Table { rows, cols, .. } => {
                     let rows = u32::try_from(*rows).unwrap_or(u32::MAX);
                     let cols = u32::try_from(*cols).unwrap_or(u32::MAX);
-                    let id = match self.mint_table(parent_id, after, rows, cols) {
-                        Ok(id) => id,
-                        Err(refused) => return refused,
-                    };
+                    let id = self.mint_table(parent_id, after, rows, cols)?;
                     if let Some(grid) = Grid::read(&doc::blocks(&self.doc), &id) {
                         grids.insert(minted.len(), grid);
                     }
@@ -575,9 +593,9 @@ impl ProseState {
         if let Some(blank) = blank
             && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
         {
-            return Self::err_write(&e);
+            return Err(Self::err_write(&e));
         }
-        self.commit_with(vec![ProseEvent::ImportCompleted { report }])
+        Ok(())
     }
 }
 
@@ -732,6 +750,36 @@ mod tests {
                 if matches!(error.reason, ProseRefusal::Interop(InteropError::ParseFailed(_)))
         ));
         assert_eq!(state.doc.oplog_vv(), before);
+    }
+
+    /// `PROSE-IO-011`: an operation the tree refuses after others have
+    /// written leaves nothing behind. The builder never emits a paragraph
+    /// under a paragraph, so the list is written by hand.
+    #[test]
+    fn a_refusal_midway_leaves_nothing_for_the_next_commit() {
+        let mut state = document();
+        let before = texts(&state);
+        let paragraph = |parent, text: &str| ImportOp::Block {
+            parent,
+            init: BlockInit::Paragraph,
+            runs: vec![MarkedRun {
+                text: text.to_owned(),
+                marks: Vec::new(),
+            }],
+        };
+        let ops = [
+            paragraph(Parent::Root, "first"),
+            paragraph(Parent::Root, "second"),
+            paragraph(Parent::Op(1), "refused"),
+        ];
+        let warnings = Warnings::new(ambre_bus::app::prose::ConversionFormat::Markdown);
+        let outcome = state.apply_import(&ops, warnings);
+        assert!(outcome.update.is_none());
+        assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
+        let vv = state.doc.oplog_vv();
+        state.doc.commit();
+        assert_eq!(state.doc.oplog_vv(), vv, "no write was left pending");
+        assert_eq!(texts(&state), before);
     }
 
     /// `PROSE-IO-026`, `PROSE-IO-052`: a code block inside a list item, which
