@@ -31,7 +31,7 @@ const TEXT_PAD: f64 = 4.0;
 pub enum EditTarget {
     Element(ElementId),
     ConnectorLabel(ConnectorId),
-    /// A frame's title, edited on the board itself (`TOILE-257`). Distinct from
+    /// A frame's title, edited on the board itself (`TOILE-261`). Distinct from
     /// `Element`: a frame has no body, and what commits is a rename.
     FrameTitle(ElementId),
 }
@@ -131,7 +131,7 @@ impl InlineEditor {
         }
     }
 
-    /// Open the editor on a frame's title (`TOILE-257`). `base_size` is world
+    /// Open the editor on a frame's title (`TOILE-261`). `base_size` is world
     /// units and the paint applies the zoom, so the caller hands the size the
     /// band reads at the current camera.
     pub fn open_frame_title(id: ElementId, title: &str, base_size: f32, palette: &Palette) -> Self {
@@ -249,7 +249,7 @@ mod tests {
         Theme::Light.palette()
     }
 
-    /// `TOILE-257`: the editor opens on a frame's title, carrying the title it
+    /// `TOILE-261`: the editor opens on a frame's title, carrying the title it
     /// is about to replace. The frame is not an element under edit, because its
     /// body is not what is being typed. The content pass skips the band alone.
     #[test]
@@ -262,6 +262,15 @@ mod tests {
         assert_eq!(editor.style().base_size, 14.0);
         // Nothing to commit until the user types: an edit that leaves the title
         // as it was writes no rename (`TOILE-250`).
+        assert_eq!(editor.committed_text(), None);
+    }
+
+    /// `TOILE-262`: a frame nobody named opens on an empty title, never on the
+    /// placeholder the band paints. An edit that types nothing commits nothing,
+    /// so the placeholder never reaches the document.
+    #[test]
+    fn an_untouched_placeholder_commits_nothing() {
+        let editor = InlineEditor::open_frame_title(ElementId("f".to_owned()), "", 14.0, palette());
         assert_eq!(editor.committed_text(), None);
     }
 

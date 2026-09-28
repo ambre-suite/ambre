@@ -27,7 +27,7 @@
 //! as a `const` or as a literal handed to `insert`, must carry a line.
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
-//! and an unchanged type leaves the shape identical (`TOILE-257`). A `LoroText`
+//! and an unchanged type leaves the shape identical (`SCHEMA-017`). A `LoroText`
 //! reads as `string`, like a plain register would, so a body demoted from a
 //! text container to a register is the same line. Both halves stay with the
 //! reviewer.

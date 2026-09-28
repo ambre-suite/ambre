@@ -56,12 +56,19 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-254` | `POST` | A press on a frame's title MUST select that frame. | this spec section 4 | `ambre_toile::ui::tool::tests::a_press_on_a_frames_title_selects_the_frame` -- the board holding nothing under that point, and the press selecting the frame anyway; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the same press over a placeholder | none | verified |
 | `TOILE-256` | `FRAME` | Selecting a frame by its title MUST NOT change the board: it MUST write nothing. | this spec section 4 | structural -- the press answers a selection change and the title branch reaches no command sink, so no write can leave it | none | verified |
 
+### 1.5 Rename a frame in place
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-261` | `POST` | A double-click on a frame's title MUST open the editor on that title, carrying the title it replaces. | this spec section 4 | `ambre_toile::ui::edit::tests::the_editor_opens_on_a_frames_title` -- the editor half: it targets the title, not the frame's body | partial -- the double-click routed to the title band by `hit::frame_title_at` in the view is driven by no test, the view being built in a browser alone; lands with the `The Trame and Toile views built off the browser` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-262` | `FRAME` | An edit that types nothing over a frame nobody named MUST rename nothing: the placeholder is never written. | this spec section 4 | `ambre_toile::ui::edit::tests::an_untouched_placeholder_commits_nothing` | none | verified |
+
 * **Budget.** the membership change under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. The clamp re-materializes the whole paint order per moved
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 14 `verified`, 1 `partial`, 1 `failing`, 4 `untested`. What holds is membership
+* **Verification.** 15 `verified`, 2 `partial`, 1 `failing`, 4 `untested`. What holds is membership
   as data, the title beside it, and what a press on that title does. An element joins one frame,
   detaches from its group and paints after it, and both the notes and the name converge. What is
   loose is what the membership gesture refuses or skips, and the title's glyphs, which a host with
@@ -144,7 +151,7 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 |---|---|
 | the frame tool, dragged on the board | `CreateElement` with the frame kind (`features/ambre-spec-toile-tools.md`) |
 | a press on a frame's title | nothing: the selection is the view's own (`TOILE-254`, `TOILE-256`) |
-| a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-257`, `TOILE-258`) |
+| a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-261`, `TOILE-262`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
 | typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
 
@@ -152,14 +159,14 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 so it reads as a background rather than a box drawn over them. Its title sits above its top-left
 corner, outside the box, in screen space so it keeps one size through the zoom (`TOILE-253`). A
 press on it selects the frame, so a user grabs one without clicking through what is inside
-(`TOILE-254`). A double-click renames it in place (`TOILE-257`), and a presentation drops the titles
+(`TOILE-254`). A double-click renames it in place (`TOILE-261`), and a presentation drops the titles
 with the grid (`TOILE-255`).
 
 **A frame nobody named reads as a placeholder**, in the secondary ink, so every frame has something
 to read and something to double-click (`TOILE-253`). The placeholder names no rank. The deck panel
 numbers a frame by its place in the deck, and a second numbering here would call one frame two
 different things. It is never written to the document, and an edit that types nothing over it
-renames nothing (`TOILE-258`).
+renames nothing (`TOILE-262`).
 
 **What no surface offers.** Removing an element from a frame, and dropping an element into a frame by
 dragging it there. The context menu's one entry adds; nothing removes, and membership is never

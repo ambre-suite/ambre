@@ -49,7 +49,6 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-027` | `INV` | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version` -- the stamp `schema::stamp` writes inside the scaffolding commit of `from_doc`, alongside the board defaults, so a board carries it before any user edit (the protocol it obeys is `ambre-spec-schema-version.md`) | none | verified |
 | `TOILE-028` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `TOILE-258` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | architecture section 2.D; this spec section 7 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
-| `TOILE-257` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | human-review -- the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no snapshot can show | unheld -- no gate is possible. An element's `x`, `y`, `w` and `h` hold a world AABB. A build that reads the same four `f64` as screen pixels writes the same keys and the same types. Every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 | `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- a frame's `notes`, seeded at frame birth so two concurrent first edits both survive; `ambre_toile::logic::convergence_tests::concurrent_first_decks_converge_on_one_list` -- the deck, where two peers writing a first slide order keep both slides; `ambre_toile::logic::schema::tests::a_board_whose_deck_sits_in_the_presentation_map_keeps_it` -- the step that carries an older board into the root containers | none | verified |
 | `TOILE-030` | `CONC` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none | fails -- for a sticky and a text element, the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message. It lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | failing |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
@@ -57,11 +56,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 10 `verified`, 1 `failing`, 1 `untested`, 1 `human-review`. What holds is
-  the table's shape: the container per subject, and the composite key re-read as its pair.
-  The key set a build writes is held too, append-only, by a CI gate. What is loose is the
-  move-invariance two paste tests never walk. The one failure names the code that breaks it
-  (`TOILE-030`).
+* **Verification.** 10 `verified`, 1 `failing`, 1 `untested`. What holds is the table's shape: the
+  container per subject, and the composite key re-read as its pair. The key set a build writes is
+  held too, append-only, by a CI gate. What is loose is the move-invariance two paste tests never
+  walk. The one failure names the code that breaks it (`TOILE-030`).
 
 ---
 
@@ -244,7 +242,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
 | Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. `1 -> 2` puts the layout version in front of every `style` register, `2 -> 3` carries the deck out of the `presentation` map into two root containers | architecture section 2.D; `SCHEMA-010` |
-| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `TOILE-028`; `TOILE-257`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `TOILE-028`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |
 | Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |

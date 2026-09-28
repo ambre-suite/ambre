@@ -394,6 +394,7 @@ class Counts(unittest.TestCase):
         self.assertTrue(contracts.continues_bullet("  `untested`."))
         self.assertFalse(contracts.continues_bullet("   "))
         self.assertFalse(contracts.continues_bullet("* next"))
+        self.assertFalse(contracts.continues_bullet("  * a nested bullet"))
         self.assertEqual(
             {"verified": 1, "untested": 1},
             contracts.stated_counts("1 `verified`, 1 `untested`."),

@@ -46,17 +46,15 @@ what two peers reach, not what one holds. Grammar and status values are normativ
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
 | `TRAME-026` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `TRAME-225` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | architecture section 2.D; this spec section 7 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
-| `TRAME-224` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | human-review -- the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no snapshot can show | unheld -- no gate is possible. `col_widths_{sheet}` holds a width in pixels. A build that reads the same `f64` as a count of characters writes the same key and the same type. Every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 7 `verified`, 1 `partial`, 0 `untested`, 1 `human-review`. What holds is the shape a
-  merge reads back. The identity a cell keeps, and the single register a style lives in. The
-  key set a build writes, which a CI gate now holds append-only. What is loose is `TRAME-010`,
-  narrower than it reads: only a computed value stored **beside** the raw text escapes
-  (`ambre-spec-testing.md section 7`).
+* **Verification.** 7 `verified`, 1 `partial`. What holds is the shape a merge reads back. The
+  identity a cell keeps, and the single register a style lives in. The key set a build writes, which
+  a CI gate now holds append-only. What is loose is `TRAME-010`, narrower than it reads: only a
+  computed value stored **beside** the raw text escapes (`ambre-spec-testing.md section 7`).
 
 ---
 
@@ -195,7 +193,7 @@ stops the eventual container being keyed positionally by whoever writes it first
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
 | Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics | architecture section 2.D; `SCHEMA-010` |
-| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `TRAME-026`; `TRAME-224`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `TRAME-026`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
 | Size, keys | a cell key is 51 bytes, a uid 25; a 100 000-row axis is 2.5 MB of element values alone | this spec section 2 |

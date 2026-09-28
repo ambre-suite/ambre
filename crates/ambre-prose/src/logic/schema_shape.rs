@@ -16,7 +16,7 @@
 //! there rather than passing silently.
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
-//! and an unchanged type leaves the shape identical (`PROSE-102`). That half
+//! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
 //! stays with the reviewer.
 
 use std::collections::BTreeSet;

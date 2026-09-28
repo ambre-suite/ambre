@@ -30,7 +30,7 @@
 | `message-bus` | The contract the three threads talk over. | implemented | 26 | 11 |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | implemented | 12 | 8 |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
-| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 16 |  |
+| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 17 | 1 |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 17 | 9 |
 | `server` | The one process every client talks to. | implemented | 24 | 10 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 16 | 8 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 23 implemented, 15 partial, 2 design-only. 629 contract rows, 286 loose.**
+**40 features: 23 implemented, 15 partial, 2 design-only. 630 contract rows, 287 loose.**

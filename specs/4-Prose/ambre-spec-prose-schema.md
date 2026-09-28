@@ -68,19 +68,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-097` | `INV` | A document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_prose::logic::tests::a_document_a_newer_client_wrote_leaves_this_one_untouched` | none | verified |
 | `PROSE-029` | `INV` | The key set a build writes, and the type each key's value holds, MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `PROSE-103` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | architecture section 2.D; this spec section 7 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
-| `PROSE-102` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | human-review -- the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no snapshot can show | unheld -- no gate is possible. `meta/defaults/line_height` holds a multiple of the font size. A build that reads the same `f32` as a point measure writes the same key and the same type. Every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
   document costs is a row of `ambre-spec-budgets.md`, cited by the document that owns it.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 27 `verified`, 1 `human-review`, 1 `unimplemented`. The bump obligation
-  splits in two. A key or a type moving is red against the frozen shape, which a CI gate holds
-  append-only. A meaning moving under an unchanged key stays a human read. The four convergence
-  rows each run a two-peer test.
+* **Verification.** 27 `verified`, 1 `unimplemented`. The bump obligation splits in two. A key or a
+  type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
+  under an unchanged key stays a human read (`SCHEMA-017`). The four convergence rows each run a
+  two-peer test.
   * The two annotation rows are held by the footnote, the first entry a command writes.
-  * The `human-review` row binds a code change to a constant, which no test can read.
 
 ---
 
@@ -311,7 +309,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `PROSE-028` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
 | Migration | the chain lives in `ambre-prose`; the foundation owns the protocol, never the semantics | architecture section 2.D |
-| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `PROSE-029`; `PROSE-102`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `PROSE-029`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | a map key no build knows is ignored on read, so a forward-written key is dropped rather than refused; the `ref` mark is the exception, a postcard record that tolerates none, and `PROSE-028` is what stops a stale build reading it | architecture section 2.D |
 | Size, ids | a body key is the tag, a separator and a `TreeID`; a document of 300 blocks carries 300 root containers keyed that way | this spec section 2 |
 | Size, blobs | an image node holds a hash and a display size; the document never holds pixels | `features/ambre-spec-prose-images.md` |

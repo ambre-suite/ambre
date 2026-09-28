@@ -202,6 +202,9 @@ RETIRED = {
     "TRAME-IO-032": "PDF-001",
     "PROSE-IO-034": "PDF-006",
     "PROSE-IO-036": "CANVAS-028",
+    "PROSE-102": "SCHEMA-017",
+    "TRAME-224": "SCHEMA-017",
+    "TOILE-257": "SCHEMA-017",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to
@@ -988,8 +991,10 @@ COUNT_SEP = re.compile(r",\s+(?:and\s+)?")
 
 
 def continues_bullet(line: str) -> bool:
-    """Whether a line carries on the bullet above it: indented, and not blank."""
-    return line[:1] in (" ", "\t") and bool(line.strip())
+    """Whether a line carries on the bullet above it: indented, not blank, and
+    not a nested bullet of its own."""
+    stripped = line.strip()
+    return line[:1] in (" ", "\t") and bool(stripped) and not stripped.startswith(("* ", "- "))
 
 
 def stated_counts(text: str) -> dict[str, int]:

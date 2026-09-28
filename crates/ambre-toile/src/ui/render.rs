@@ -1016,7 +1016,7 @@ fn paint_frame_titles<S: DrawSurface>(
     let editing = editing.and_then(|t| t.frame_title());
     for (e, band, label, named) in frame_bands(&vp.nodes, cam) {
         // The title under edit is painted by the editor overlay instead, as an
-        // element's body is (`TOILE-257`).
+        // element's body is (`TOILE-261`).
         if editing == Some(&e.id) {
             continue;
         }

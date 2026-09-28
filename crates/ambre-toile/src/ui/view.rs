@@ -2439,7 +2439,7 @@ impl ToileView {
         if self.machine.tool() == Tool::Select {
             // A frame's title is the one thing a double-click edits that the
             // board hit test cannot see: the band sits outside the frame
-            // (`TOILE-257`).
+            // (`TOILE-261`).
             if let Some(frame) = super::hit::frame_title_at(&self.display.nodes, screen, &self.cam)
             {
                 self.open_frame_title_editor(frame);
@@ -2784,7 +2784,7 @@ impl ToileView {
             }
             // The title band is screen space, and the editor takes world
             // coordinates, so the band is projected back through the camera
-            // (`TOILE-257`). Padding rides outside it, so the caret sits where
+            // (`TOILE-261`). Padding rides outside it, so the caret sits where
             // the painted glyphs did.
             EditTarget::FrameTitle(id) => {
                 let e = self.find_element(id)?;
@@ -2803,7 +2803,7 @@ impl ToileView {
 
     /// The screen-space band a frame's title occupies, or a band of the same
     /// shape when it carries none. An editor has to open on a frame the user is
-    /// naming for the first time (`TOILE-257`).
+    /// naming for the first time (`TOILE-261`).
     fn frame_title_band(&self, e: &DisplayElement) -> Rect {
         let title = match &e.geom {
             DisplayGeom::Frame(t) => t.as_str(),
@@ -2860,7 +2860,7 @@ impl ToileView {
         self.text_input.focus();
     }
 
-    /// Open the inline editor on a frame's title (`TOILE-257`). No-op for a
+    /// Open the inline editor on a frame's title (`TOILE-261`). No-op for a
     /// frame that has left the culled set.
     fn open_frame_title_editor(&mut self, id: ElementId) {
         let Some(e) = self.find_element(&id) else {
