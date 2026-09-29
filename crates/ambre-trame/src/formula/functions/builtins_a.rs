@@ -33,6 +33,24 @@ pub(crate) fn flatten_numeric_inner(value: &CellValue, out: &mut Vec<f64>) {
     }
 }
 
+/// Flatten the arguments of a total, as `flatten_numeric` does. The first error
+/// met, in a range or as a scalar, is returned instead of the numbers. A total
+/// that skipped it would pass a partial sum off as the sum of the range
+/// (`TRAME-056`).
+pub(crate) fn flatten_total(args: &[CellValue]) -> Result<Vec<f64>, CellValue> {
+    fn first_error(value: &CellValue) -> Option<&CellValue> {
+        match value {
+            CellValue::Error(_) => Some(value),
+            CellValue::Range(r) => r.values.iter().find_map(first_error),
+            _ => None,
+        }
+    }
+    match args.iter().find_map(first_error) {
+        Some(err) => Err(err.clone()),
+        None => Ok(flatten_numeric(args)),
+    }
+}
+
 /// Flatten all arguments into a flat list of values, for the counting functions
 /// such as COUNTA.
 pub(crate) fn flatten_all(args: &[CellValue]) -> Vec<CellValue> {
@@ -60,7 +78,10 @@ pub(crate) fn check_argc(
 }
 
 pub(crate) fn sum(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.is_empty() {
         return CellValue::Number(0.0);
     }
@@ -68,7 +89,10 @@ pub(crate) fn sum(args: &[CellValue]) -> CellValue {
 }
 
 pub(crate) fn average(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.is_empty() {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
@@ -76,7 +100,10 @@ pub(crate) fn average(args: &[CellValue]) -> CellValue {
 }
 
 pub(crate) fn min(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     nums.iter()
         .cloned()
         .fold(f64::NAN, f64::min)
@@ -84,7 +111,10 @@ pub(crate) fn min(args: &[CellValue]) -> CellValue {
 }
 
 pub(crate) fn max(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     nums.iter()
         .cloned()
         .fold(f64::NAN, f64::max)
@@ -228,7 +258,10 @@ pub(crate) fn ceil_floor(args: &[CellValue], up: bool) -> CellValue {
 
 /// PRODUCT(...) -- product of all numeric arguments (empty input -> 0).
 pub(crate) fn product(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.is_empty() {
         return CellValue::Number(0.0);
     }
@@ -259,7 +292,10 @@ pub(crate) fn sumproduct(args: &[CellValue]) -> CellValue {
 /// MEDIAN(...) -- middle value of the numeric arguments (mean of the two
 /// central values for an even count).
 pub(crate) fn median(args: &[CellValue]) -> CellValue {
-    let mut nums = flatten_numeric(args);
+    let mut nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.is_empty() {
         return CellValue::Error(FormulaError::NumError);
     }

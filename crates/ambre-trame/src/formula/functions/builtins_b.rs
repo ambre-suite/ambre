@@ -516,7 +516,10 @@ pub(crate) fn sign(args: &[CellValue]) -> CellValue {
 
 /// SUMSQ(...) -- sum of the squares of all numeric arguments.
 pub(crate) fn sumsq(args: &[CellValue]) -> CellValue {
-    CellValue::Number(flatten_numeric(args).iter().map(|n| n * n).sum())
+    match flatten_total(args) {
+        Ok(nums) => CellValue::Number(nums.iter().map(|n| n * n).sum()),
+        Err(err) => err,
+    }
 }
 
 /// Apply a total `f64 -> f64` function to the single numeric argument.

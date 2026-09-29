@@ -96,13 +96,18 @@ impl DependencyGraph {
         self.clear_incoming(node);
         self.clear_range_deps(formula_cell);
 
+        // A formula reading its own cell is the shortest cycle there is, a
+        // self-loop in `cell_dag`. It is refused before any edge is added. The
+        // formula then depends on nothing, as after the rollback of a longer cycle.
+        if new_cell_deps.contains(&formula_cell) {
+            return Err(CycleError(vec![formula_cell]));
+        }
+
         // Add new cell edges: dep -> formula_cell (dependency points to the
         // formula that depends on it).
         for dep in &new_cell_deps {
-            if *dep != formula_cell {
-                let dep_node = self.get_or_create_node(*dep);
-                self.cell_dag.add_edge(dep_node, node, ());
-            }
+            let dep_node = self.get_or_create_node(*dep);
+            self.cell_dag.add_edge(dep_node, node, ());
         }
 
         // Static cycle detection (before rollback, so we can identify the
@@ -487,9 +492,12 @@ mod tests {
     #[test]
     fn self_reference_rejected() {
         let mut dag = DependencyGraph::new();
-        let result = dag.update(cell(0, 0), vec![], vec![]);
-        assert!(result.is_ok());
-        assert!(!petgraph::algo::is_cyclic_directed(&dag.cell_dag));
+        let err = dag
+            .update(cell(0, 0), vec![cell(0, 1), cell(0, 0)], vec![])
+            .unwrap_err();
+        assert_eq!(err.0, vec![cell(0, 0)]);
+        // The refused formula depends on nothing, so no edge survives.
+        assert_eq!(dag.cell_dag.edge_count(), 0);
     }
 
     #[test]

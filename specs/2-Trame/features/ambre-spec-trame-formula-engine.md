@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
 | `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | none | fails -- `on_cell_changed` calls `invalidate` before it compares anything, so the staleness check `TRAME-011` rests on never sees a hit from the edit path. `::not_stale_no_recompile` holds for the cache unit alone; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
-| `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | none | fails -- the static graph cannot refuse it: `DependencyGraph::update` drops every dependency equal to the formula's own cell before it adds an edge, so no self-loop is ever built and the cycle check has nothing to find. `::self_reference_rejected` names the case and asserts only that a formula with no dependencies is accepted; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | `ambre_trame::formula::dag::tests::self_reference_rejected`; `ambre_trame::formula::engine::tests::self_reference_rejected` | none | verified |
 | `TRAME-035` | `FAIL` | A reference to a sheet that never existed MUST be refused, not evaluated. | this spec section 4 | `ambre_trame::formula::parser::tests::unknown_sheet_name_is_parse_error`; `::unknown_sheet_is_error` | none | verified |
 | `TRAME-039` | `FAIL` | A refused formula MUST replace the cell's previous result, never leave it on screen. | this spec section 3 | `ambre_trame::formula::engine::tests::parse_error_replaces_the_stale_value`; `::cycle_replaces_the_stale_value_with_an_error` | none | verified |
 
@@ -86,11 +86,11 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 30 `verified`, 5 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
+* **Verification.** 31 `verified`, 4 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
   graph and its recompute, the best-covered engine of the workspace. What is loose is weight rather
   than behaviour: nothing measures what a range allocates. The failures are three rules the code
-  contradicts (`TRAME-008`, `TRAME-212`, `TRAME-213`). Beside them is the dynamic half of cycle
-  detection, which nothing drives and which is the only guard left for the third.
+  contradicts (`TRAME-008`, `TRAME-212`). Beside them is the dynamic half of cycle detection, which
+  nothing drives.
 
 ---
 
@@ -283,9 +283,8 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   fill. A user who wants a fixed lookup table has no way to say so, and no rule covers it.
 * **The dynamic cycle guard is driven by nothing** (`TRAME-042`). It is one line in the evaluator.
   The case it exists for is the one no test builds: a loop through a range, a name or another
-  sheet. It also carries a case the static graph was supposed to hold. `update` drops a
-  dependency equal to the formula's own cell before adding an edge, so a direct self-reference
-  reaches the evaluator too (`TRAME-213`).
+  sheet. A direct self-reference never reaches it: `update` refuses it as a cycle of one cell
+  (`TRAME-213`).
 * **The range cap bounds one range, not one pass** (`TRAME-209`, `TRAME-210`). `MAX_RANGE_CELLS`
   refuses a single `EvalRange` over a million cells, on the stated premise of protecting the Logic
   worker from a peer-supplied formula. A hundred formulas each just under the cap clear it, and

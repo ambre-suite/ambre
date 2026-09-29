@@ -305,6 +305,17 @@ mod tests {
     }
 
     #[test]
+    fn self_reference_rejected() {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+
+        engine.on_cell_changed(cell(0, 0), "=A1+1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "#CIRCULAR!");
+    }
+
+    #[test]
     fn plain_cell_keeps_dependents_across_repeated_edits() {
         // A plain literal is not a formula, so it carries no bytecode -- but a
         // formula referencing it owns an edge out of its node. Rewriting the

@@ -30,8 +30,8 @@
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 12 | 8 |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 22 | 12 |
 | `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 | 5 |
-| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | partial | 39 | 8 |
-| `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 | 10 |
+| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | partial | 39 | 7 |
+| `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 | 8 |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 | 10 |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 40 | 12 |
 | `trame-number-formats` | A user picks Percent. | partial | 12 | 6 |
@@ -41,4 +41,4 @@
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 10 |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 10 implemented, 15 partial, 0 design-only. 460 contract rows, 184 loose.**
+**25 features: 10 implemented, 15 partial, 0 design-only. 460 contract rows, 181 loose.**

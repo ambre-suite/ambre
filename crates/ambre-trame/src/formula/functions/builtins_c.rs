@@ -6,7 +6,10 @@ use super::*;
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
 pub(crate) fn variance(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.len() < 2 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
@@ -31,7 +34,10 @@ pub(crate) fn large_small(args: &[CellValue], largest: bool) -> CellValue {
         Ok(n) if n >= 1.0 => n as usize,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let mut nums = flatten_numeric(&args[..args.len() - 1]);
+    let mut nums = match flatten_total(&args[..args.len() - 1]) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if k > nums.len() {
         return CellValue::Error(FormulaError::NumError);
     }
@@ -65,7 +71,10 @@ pub(crate) fn rank(args: &[CellValue]) -> CellValue {
 
 /// MODE(...) -- the most frequently occurring numeric value (first on ties).
 pub(crate) fn mode(args: &[CellValue]) -> CellValue {
-    let nums = flatten_numeric(args);
+    let nums = match flatten_total(args) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if nums.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
@@ -240,7 +249,10 @@ pub(crate) fn npv(args: &[CellValue]) -> CellValue {
     if rate == -1.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    let flows = flatten_numeric(&args[1..]);
+    let flows = match flatten_total(&args[1..]) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     let total = flows
         .iter()
         .enumerate()
@@ -255,7 +267,10 @@ pub(crate) fn irr(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let flows = flatten_numeric(&args[..1]);
+    let flows = match flatten_total(&args[..1]) {
+        Ok(nums) => nums,
+        Err(err) => return err,
+    };
     if flows.len() < 2 {
         return CellValue::Error(FormulaError::NumError);
     }

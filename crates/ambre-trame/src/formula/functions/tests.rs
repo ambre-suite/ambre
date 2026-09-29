@@ -606,3 +606,94 @@ fn datetime_functions() {
     assert_eq!(month(&[num(feb)]).to_display(), "2");
     assert_eq!(day(&[num(feb)]).to_display(), "29");
 }
+
+#[test]
+fn total_propagates_an_error_it_cannot_read() {
+    let with_ref = || {
+        range(
+            3,
+            1,
+            vec![
+                CellValue::Number(1.0),
+                CellValue::Error(FormulaError::BrokenRef),
+                CellValue::Number(2.0),
+            ],
+        )
+    };
+    let totals = [
+        "SUM", "AVERAGE", "MIN", "MAX", "PRODUCT", "SUMSQ", "MEDIAN", "STDEV", "VAR", "MODE",
+    ];
+    for name in totals {
+        assert_eq!(
+            call_builtin(name, &[with_ref()], FnCtx::at_clock(0.0)).to_display(),
+            "#REF!",
+            "{name}"
+        );
+    }
+    // COUNT counts the numbers it finds and skips an error, as the spreadsheets do.
+    assert_eq!(
+        call_builtin("COUNT", &[with_ref()], FnCtx::at_clock(0.0)).to_display(),
+        "2"
+    );
+}
+
+/// The names the `call_builtin` dispatch answers, read from its `match` arms.
+fn dispatched_names() -> std::collections::BTreeSet<String> {
+    let src = include_str!("mod.rs");
+    let body = src
+        .split_once("pub fn call_builtin(")
+        .and_then(|(_, rest)| rest.split_once("        _ =>"))
+        .map(|(body, _)| body)
+        .expect("call_builtin has a fallback arm");
+    body.lines()
+        .filter_map(|line| line.trim_start().strip_prefix('"').map(|_| line))
+        .filter_map(|line| line.split_once("=>").map(|(pattern, _)| pattern))
+        .flat_map(|pattern| pattern.split('|'))
+        .map(|name| name.trim().trim_matches('"').to_string())
+        .collect()
+}
+
+/// The names the catalogue of `ambre-spec-trame-function-library.md` section 3 lists.
+fn catalogued_names() -> std::collections::BTreeSet<String> {
+    let spec =
+        include_str!("../../../../../specs/2-Trame/features/ambre-spec-trame-function-library.md");
+    let table = spec
+        .split_once("**The catalogue**")
+        .and_then(|(_, rest)| rest.split_once("**How a call behaves:**"))
+        .map(|(table, _)| table)
+        .expect("section 3 carries the catalogue");
+    table
+        .lines()
+        .filter_map(|row| row.trim_end_matches('|').rsplit('|').next())
+        .flat_map(|cell| cell.split('`'))
+        .map(str::trim)
+        .filter(|name| {
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn catalogue_lists_every_dispatched_name() {
+    let dispatched = dispatched_names();
+    let catalogued = catalogued_names();
+    assert!(
+        dispatched.len() > 100,
+        "the dispatch parse found {}",
+        dispatched.len()
+    );
+    assert_eq!(
+        dispatched.difference(&catalogued).collect::<Vec<_>>(),
+        Vec::<&String>::new(),
+        "dispatched but not catalogued"
+    );
+    assert_eq!(
+        catalogued.difference(&dispatched).collect::<Vec<_>>(),
+        Vec::<&String>::new(),
+        "catalogued but not dispatched"
+    );
+}
