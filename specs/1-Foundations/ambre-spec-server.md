@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both` -- two instances over one database and one Redis server: a session opened, renewed and ended on either is served by the other | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | qa-manual -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | qa-manual |
-| `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
 | `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-132` | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- each change appends its entry, the members answer serves the log in order, and an entry signed by another key, stale or mismatched is refused | none | verified |
 
 ### 1.2 A request is classified and limited
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
-| `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -91,8 +91,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 A space applies its retention
 
@@ -121,7 +121,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 35 `verified`, 1 `qa-manual`, 18 `unimplemented`. What holds is
+* **Verification.** 36 `verified`, 1 `qa-manual`, 17 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
   and the origin list. The delete holds too, and so does the payload type no log line can name.
   The process rules are loose; a deployment's isolation is read by hand.
@@ -306,11 +306,12 @@ group needs a token.
 | content | the snapshot record, the delta page, and the presigned links | `ambre-spec-sequencer.md`, `ambre-spec-object-store.md` |
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
+| channels | the documents a channel groups, listed to a member alone | this document |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
-**What the surface does not carry.** Meetings have no route at all. The channel routes are
-designed and unbuilt (`SRV-103` to `SRV-112`). They create a channel, join a public channel alone,
-read the activity, and set the retention of a space.
+**What the surface does not carry.** Meetings have no route at all. Of the channel routes, only the
+listing is built. The others are designed and unbuilt (`SRV-105` to `SRV-112`). They create a
+channel, join a public channel alone, read the activity, and set the retention of a space.
 
 ---
 
@@ -336,10 +337,11 @@ read the activity, and set the retention of a space.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The register declares four tables nothing serves.** Channels, their members, their read cursors
-  and meetings exist in the durable schema, and no route and no handler writes any of them
-  (`ambre-spec-broadcast.md`). The design replaces the channel member table: a channel grants
-  access through its documents (`SRV-103`).
+* **Nothing writes a channel.** The relay reads the two channel tables to list and to gate, and no
+  route creates a channel yet. Creation lands with the spaces and private channel Stories
+  (`ambre-roadmap.md` E5).
+* **The register declares meeting tables nothing serves.** Meetings exist in the durable schema,
+  and no route and no handler writes them (`ambre-spec-broadcast.md`).
 * **The declared schema and the migrated schema differ in three places.** The address is unique and
   case-insensitive, and the master material is optional until an account completes its setup. An
   address also carries whether a provider verified it. All three are rules of

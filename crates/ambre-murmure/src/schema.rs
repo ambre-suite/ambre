@@ -212,28 +212,46 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 }
 
 /// Import `payload` into a fresh document and check its header, before the
-/// engine holds it.
-///
-/// The order is the foundation's. The CRDT engine reads the bytes first
-/// (`SCHEMA-014`). The version then decides whether the rest is readable
-/// (`MURMURE-019`). The kind and the channel come last (`MURMURE-027`). The document
-/// is returned only on success, so a refusal leaves the channel as it was.
+/// engine holds it. The one-payload case of [`admit_all`].
 ///
 /// # Errors
-/// [`SchemaError::PayloadRejected`] for bytes Loro refuses, the version
-/// refusals of [`SchemaError`], [`MurmureError::WrongKind`],
-/// [`MurmureError::HeaderMalformed`], and [`MurmureError::ForeignChannel`].
+/// Every refusal of [`admit_all`].
 pub(crate) fn admit(
     payload: &[u8],
     kind: DocumentKind,
     channel_id: ChannelId,
     document_id: DocumentId,
 ) -> Result<LoroDoc, MurmureError> {
+    admit_all(&[payload], kind, channel_id, document_id)
+}
+
+/// Import every payload into a fresh document, in order, and check its header
+/// before the engine holds it.
+///
+/// A document opened over the relay arrives as a snapshot and a replay, so the
+/// check runs once on the whole. The order is the foundation's. The CRDT
+/// engine reads the bytes first (`SCHEMA-014`). The version then decides
+/// whether the rest is readable (`MURMURE-019`). The kind and the channel come
+/// last (`MURMURE-027`). The document is returned only on success, so a
+/// refusal leaves the channel as it was.
+///
+/// # Errors
+/// [`SchemaError::PayloadRejected`] for bytes Loro refuses, the version
+/// refusals of [`SchemaError`], [`MurmureError::WrongKind`],
+/// [`MurmureError::HeaderMalformed`], and [`MurmureError::ForeignChannel`].
+pub(crate) fn admit_all(
+    payloads: &[&[u8]],
+    kind: DocumentKind,
+    channel_id: ChannelId,
+    document_id: DocumentId,
+) -> Result<LoroDoc, MurmureError> {
     let doc = LoroDoc::new();
-    doc.import(payload).map_err(|e| {
-        tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
-        SchemaError::PayloadRejected
-    })?;
+    for payload in payloads {
+        doc.import(payload).map_err(|e| {
+            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
+            SchemaError::PayloadRejected
+        })?;
+    }
     let found = read_version(&doc)?;
     match verdict(found, SCHEMA_VERSION) {
         SchemaVerdict::Current => {}

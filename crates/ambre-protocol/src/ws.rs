@@ -2,14 +2,15 @@
 // WebSocket protocol -- single multiplexed connection per client session.
 //
 // Endpoint: GET /api/ws -> upgrade WebSocket
-// One connection carries messages for ALL open documents + channels.
-// Demux by document_id / channel_id in each message.
+// One connection carries messages for ALL open documents. Demux by
+// document_id in each message. A Murmure channel travels as its documents and
+// has no frame of its own (`SRV-102`).
 // ============================================================================
 
 use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{ChannelId, DocType, DocumentId, KeyId, PublicKey, SnapshotId};
+use ambre_core::{DocType, DocumentId, KeyId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -37,24 +38,6 @@ pub enum WsClientMsg {
     RequestMissing {
         document_id: DocumentId,
         after_seq: Seq,
-    },
-
-    /// Subscribe to a channel (Murmure). Same WS, different subscription set.
-    SubscribeChannel { channel_id: ChannelId },
-
-    /// Unsubscribe from a channel.
-    UnsubscribeChannel { channel_id: ChannelId },
-
-    /// Encrypted channel update. Routed to the active segment by the server.
-    ChannelUpdate {
-        channel_id: ChannelId,
-        update: Update,
-    },
-
-    /// Encrypted channel ephemeral (typing indicator).
-    ChannelEphemeral {
-        channel_id: ChannelId,
-        ephemeral: Ephemeral,
     },
 
     /// The access token, as the first frame of the socket. The socket address
@@ -170,23 +153,7 @@ pub enum WsServerMsg {
         doc_type: DocType,
     },
 
-    /// Channel subscription confirmed.
-    ChannelSubscribed { channel_id: ChannelId },
-
-    /// Channel update with server-assigned seq.
-    ChannelUpdate {
-        channel_id: ChannelId,
-        seq: Seq,
-        update: Update,
-    },
-
-    /// Channel ephemeral.
-    ChannelEphemeral {
-        channel_id: ChannelId,
-        ephemeral: Ephemeral,
-    },
-
-    /// Error (may be global or scoped to a document/channel).
+    /// Error (may be global or scoped to a document).
     Error { code: u16, message: String },
 
     /// A delta refused for its key: the document owes a rotation, and every key

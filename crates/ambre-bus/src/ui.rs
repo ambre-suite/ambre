@@ -104,18 +104,6 @@ pub enum UiEvent {
         event: MurmureEvent,
     },
 
-    /// Inbound ephemeral channel event (typing indicator, presence, ...).
-    ChannelPresenceUpdate {
-        channel_id: ChannelId,
-        payload: Vec<u8>,
-    },
-
-    /// WebSocket connection status for a channel.
-    ChannelConnectionStatus {
-        channel_id: ChannelId,
-        connected: bool,
-    },
-
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// A participant joined the meeting.
     MeetingParticipantJoined {

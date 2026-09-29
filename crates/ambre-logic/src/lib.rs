@@ -652,6 +652,15 @@ struct LogicState {
     /// the document it names (the Murmure engine spec). Removed on `CloseChannel` and
     /// `Logout`.
     channels: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
+    /// Channels on their way to open (the Murmure engine spec). `None` while
+    /// the relay has not listed the documents yet. Moved to `channels` once
+    /// every live document is in, and removed on a failure, `CloseChannel` or
+    /// `Logout`.
+    opening: HashMap<ambre_bus::ChannelId, Option<ambre_murmure::OpeningChannel>>,
+    /// The relay's number of each delta a channel document took in, so its
+    /// snapshot names the last delta it folds in (`SRV-083`). Keyed by
+    /// document, dropped with its channel.
+    channel_ledgers: HashMap<DocumentId, snapshot_check::SeqLedger>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -731,6 +740,8 @@ impl LogicState {
             to_persist,
             docs: HashMap::new(),
             channels: HashMap::new(),
+            opening: HashMap::new(),
+            channel_ledgers: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),

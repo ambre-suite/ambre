@@ -12,7 +12,45 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
+use serde::{Deserialize, Serialize};
+
 use crate::{DocumentId, MessageId, UserId};
+
+/// What a document of a channel is (`ambre-spec-murmure-schema.md`).
+///
+/// The relay stores it beside each document (`ZK-015`), and the listing
+/// answers it, so it crosses the Sync worker's `postMessage` hop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChannelDocumentKind {
+    /// The one `meta` document: the channel's name, type and segment list.
+    Meta,
+    /// One time slice of the channel's messages.
+    Segment,
+    /// The corrections to a final segment.
+    Amendments,
+    /// The replies to one message.
+    Thread,
+}
+
+impl ChannelDocumentKind {
+    /// The kind a stored word names, or `None` for a word no build wrote.
+    pub fn parse(word: &str) -> Option<Self> {
+        match word {
+            "meta" => Some(Self::Meta),
+            "segment" => Some(Self::Segment),
+            "amendments" => Some(Self::Amendments),
+            "thread" => Some(Self::Thread),
+            _ => None,
+        }
+    }
+}
+
+/// One document a channel groups, as the relay lists it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelDocument {
+    pub document_id: DocumentId,
+    pub kind: ChannelDocumentKind,
+}
 
 /// A wall-clock instant in Unix milliseconds.
 ///
@@ -58,16 +96,20 @@ pub enum MurmureCommand {
         /// The instant the author sent it, stamped by the view.
         now: Timestamp,
     },
+    /// Load the final segment listed before `segment`, because the view
+    /// scrolled past the oldest message it holds (`MURMURE-023`).
+    LoadOlder { segment: DocumentId },
 }
 
 impl MurmureCommand {
     /// Whether the command can change a document of the channel.
     ///
     /// The same question [`AppCommand::is_mutating`](crate::AppCommand::is_mutating)
-    /// answers for a document. Every variant built today writes.
+    /// answers for a document. A load reads.
     pub fn is_mutating(&self) -> bool {
         match self {
             Self::SendMessage { .. } => true,
+            Self::LoadOlder { .. } => false,
         }
     }
 }
@@ -97,4 +139,7 @@ pub enum MurmureEvent {
         segment: DocumentId,
         messages: Vec<MessageView>,
     },
+    /// The channel could not open: the relay refused it, or one of its
+    /// documents failed the checks. Nothing of it is held.
+    OpenFailed { message: String },
 }

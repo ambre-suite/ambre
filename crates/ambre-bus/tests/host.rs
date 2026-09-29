@@ -200,10 +200,7 @@ fn sync_command_roundtrips_through_postcard() {
         payload: vec![3, 4],
         nonce: ambre_core::SessionNonce([5; 16]),
     });
-    roundtrip_sync(&SyncCommand::SendChannelEphemeral {
-        channel_id: chan,
-        payload: vec![9, 8, 7],
-    });
+    roundtrip_sync(&SyncCommand::OpenChannel { channel_id: chan });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
 

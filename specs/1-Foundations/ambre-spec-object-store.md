@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | none | verified |
 | `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-014` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- the signer caps any configured lifetime at 900 s, and the test reads the expiry back out of both links | none | verified |
 | `SRV-059` | `INV` | The relay MUST NOT hold an address it could compute from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the relay stores the address the Sync worker names, and the worker names one keyed by the document key, which the relay never holds; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- without that key, the bytes alone do not give it | none | verified |
-| `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | structural -- a channel document is a row of `documents`, so the store keys it as any document | none | verified |
 | `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Issue a presigned link
@@ -70,7 +70,7 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 12 `verified`, 6 `unimplemented`. What holds is the name: the scoping, the
+* **Verification.** 13 `verified`, 5 `unimplemented`. What holds is the name: the scoping, the
   shapes refused, the size bound into an upload link, and who may hold a link. What is loose is a
   link that touches no object, and the cap per blob kind.
 ---

@@ -937,7 +937,14 @@ impl SyncState {
             return;
         }
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            // No session of this document: the update cannot reach the relay,
+            // so the refusal is said aloud (`SYNC-069`).
             tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
+            self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::UpdateRefused,
+                message: "update for a document with no open session".into(),
+            });
             return;
         };
         // An owed rotation is paid before any frame: the edit waits unsealed,
@@ -3284,5 +3291,26 @@ mod tests {
         }
         assert_eq!(payloads, [b"one".to_vec(), b"four".to_vec()]);
         assert_eq!(refused, 2);
+    }
+
+    /// `SYNC-069`: an update for a document with no open session cannot reach
+    /// the relay, so it is refused aloud rather than dropped in silence.
+    #[test]
+    fn an_update_for_a_document_with_no_session_is_refused_aloud() {
+        let (mut state, rx, _doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let unknown = DocumentId::new();
+
+        state.handle_send_update(unknown, b"a channel message".to_vec());
+
+        let events = drain(&rx);
+        assert!(
+            matches!(
+                events.as_slice(),
+                [LogicEvent::SyncWarning { document_id, code: SyncWarningCode::UpdateRefused, .. }]
+                    if *document_id == unknown
+            ),
+            "one refusal naming the document, got {events:?}"
+        );
     }
 }

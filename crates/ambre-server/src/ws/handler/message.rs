@@ -1,6 +1,6 @@
 // ambre-server/src/ws/handler/message.rs
-// Per-message WebSocket handlers (subscribe/update/ephemeral/request-missing +
-// channel variants), access/signature verification, and their unit tests.
+// Per-message WebSocket handlers (subscribe/update/ephemeral/request-missing),
+// access/signature verification, and their unit tests.
 
 use super::*;
 
@@ -774,58 +774,6 @@ pub(crate) async fn handle_request_missing(
     }
 }
 
-// NOTE (Murmure not implemented): the channel handlers below deliberately skip
-// the subscription ACL, signature verification, and clock/seq path that the
-// document handlers enforce. Murmure is unstarted and no channel path is wired
-// to real data. This is intentional, NOT an oversight: do not re-flag it in
-// audits. The MANDATORY hardening before Murmure lands is `SRV-047` and `SRV-048`
-// in `ambre-spec-broadcast.md`. A channel is a set of documents, so its frames take
-// the document gates: the channel_members ACL, the signature check and the clock/seq
-// path. The channel design is in `ambre-spec-murmure-engine.md`.
-pub(crate) async fn handle_subscribe_channel(
-    _state: &Arc<AppState>,
-    conn: &mut WsConnectionState,
-    channel_id: ChannelId,
-    outbound_tx: &mpsc::Sender<Payload>,
-) {
-    // TODO(murmure): enforce the channel_members subscription ACL here, mirroring
-    // `handle_subscribe`/`verify_document_access`. `SRV-047`.
-    conn.channel_subscriptions.insert(channel_id);
-    let ack = Payload::server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
-    let _ = outbound_tx.send(ack).await;
-}
-
-pub(crate) async fn handle_channel_update(
-    state: &Arc<AppState>,
-    channel_id: ChannelId,
-    update: ambre_protocol::Update,
-) {
-    // TODO(murmure): before Murmure lands, gate this on `verify_update_signature`
-    // and the `verify_clock_and_assign_seq` path exactly like `handle_update`, and
-    // persist the delta. Rebroadcasting unsigned, unsequenced updates is only safe
-    // while no channel is wired to real data. `SRV-048`.
-    let broadcast = Payload::server_msg(&WsServerMsg::ChannelUpdate {
-        channel_id,
-        seq: ambre_protocol::messages::Seq(0),
-        update,
-    });
-    let _ = redis_ops::chan_broadcast(&state.redis, &channel_id, &broadcast).await;
-}
-
-pub(crate) async fn handle_channel_ephemeral(
-    state: &Arc<AppState>,
-    channel_id: ChannelId,
-    ephemeral: ambre_protocol::Ephemeral,
-) {
-    // TODO(murmure): signature-check the ephemeral (typing/presence carries the
-    // anti-replay counter) once channel ACLs exist. `SRV-048`.
-    let broadcast = Payload::server_msg(&WsServerMsg::ChannelEphemeral {
-        channel_id,
-        ephemeral,
-    });
-    let _ = redis_ops::chan_broadcast(&state.redis, &channel_id, &broadcast).await;
-}
-
 // -- ACL ----------------------------------------------------------
 
 /// Re-verifies membership using the short [`MEMBERSHIP_RECHECK_TTL`] cache (H8)
@@ -1150,7 +1098,6 @@ mod ephemeral_binding_tests {
             // concern rather than tripping the read-only gate.
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
@@ -1449,7 +1396,6 @@ mod delta_size_cap_tests {
             // concern rather than tripping the read-only gate.
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
@@ -1651,7 +1597,6 @@ mod access_tests {
             doc_access_verified_at: HashMap::from([(doc_id, verified)]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
         }
@@ -2269,7 +2214,6 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
         };
@@ -2382,7 +2326,6 @@ mod hot_tail_tests {
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write_allowed: HashMap::from([(doc_id, true)]),
             last_replay_at: HashMap::new(),
-            channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
         };
@@ -2467,5 +2410,165 @@ mod hot_tail_tests {
             1,
             "the batch is read once for its four deltas"
         );
+    }
+}
+
+// The gates of a channel document are the gates of any document (`SRV-047`,
+// `SRV-048`). The access check resolves a segment to the member rows of its
+// channel's `meta` document, so the handlers need no channel branch.
+#[cfg(test)]
+mod channel_gate_tests {
+    use super::*;
+    use crate::test_helpers::test_app_state;
+    use ambre_core::{ChannelId, DocumentId, PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use rustis::commands::{GenericCommands, ListCommands};
+
+    fn uuid_of(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.into().as_bytes())
+    }
+
+    fn conn_of(user_id: UserId, session_key: PublicKey) -> WsConnectionState {
+        WsConnectionState {
+            user_id,
+            signing_pubkey: session_key,
+            doc_subscriptions: HashSet::new(),
+            doc_access_verified_at: HashMap::new(),
+            doc_write_allowed: HashMap::new(),
+            last_replay_at: HashMap::new(),
+            msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
+        }
+    }
+
+    /// A channel of `owner` with its `meta` and one segment, and `member`
+    /// granted `role` on `meta`. Returns the segment.
+    async fn segment_of_channel(
+        pool: &sqlx::PgPool,
+        owner: UserId,
+        member: Option<(UserId, &str)>,
+    ) -> DocumentId {
+        let channel = ChannelId::new();
+        sqlx::query("INSERT INTO channels (id) VALUES ($1)")
+            .bind(uuid_of(channel))
+            .execute(pool)
+            .await
+            .expect("channel");
+        let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
+        let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
+        for (document, kind) in [(meta, "meta"), (segment, "segment")] {
+            sqlx::query(
+                "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
+            )
+            .bind(uuid_of(document))
+            .bind(uuid_of(channel))
+            .bind(kind)
+            .execute(pool)
+            .await
+            .expect("group");
+        }
+        if let Some((member, role)) = member {
+            db::add_document_member(pool, &meta, &member, role, &[6u8; 32], &owner)
+                .await
+                .expect("member");
+        }
+        segment
+    }
+
+    fn update_on(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+        Update {
+            ciphertext: Ciphertext(vec![0u8; 16]),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: doc_id,
+                pub_key,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                clock: Clock(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    fn error_code(frame: &Payload) -> Option<u16> {
+        match ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).ok()? {
+            WsServerMsg::Error { code, .. } => Some(code),
+            _ => None,
+        }
+    }
+
+    /// `SRV-047`: a caller who is no member of the channel is refused a
+    /// subscription to its segment, and holds none.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_segment_refuses_a_caller_outside_its_channel(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let eve = crate::test_helpers::create_test_user(&pool, "eve@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, None).await;
+        let state = test_app_state(pool).await;
+        let mut conn = conn_of(eve, PublicKey::from_array([2u8; 32]));
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+
+        assert_eq!(error_code(&rx.try_recv().expect("a reply")), Some(403));
+        assert!(!conn.doc_subscriptions.contains(&segment));
+    }
+
+    /// `SRV-047`: a member of the channel subscribes to its segment through
+    /// the member row of `meta`, with the write capability of that row.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_member_of_the_channel_subscribes_to_its_segment(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, "editor"))).await;
+        let state = test_app_state(pool).await;
+        let mut conn = conn_of(bob, PublicKey::from_array([3u8; 32]));
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+
+        let reply = rx.try_recv().expect("a reply");
+        let ack = ambre_protocol::ws::decode_server_msg(reply.expose_bytes());
+        assert!(
+            matches!(ack, Ok(WsServerMsg::Subscribed { document_id }) if document_id == segment)
+        );
+        assert_eq!(conn.doc_write_allowed.get(&segment), Some(&true));
+    }
+
+    /// `SRV-048`: a frame on a segment passes the write gate of any document.
+    /// A viewer of the channel is refused a delta before any durable write.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_viewer_of_the_channel_writes_no_delta_on_its_segment(pool: sqlx::PgPool) {
+        let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
+        let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, "viewer"))).await;
+        let state = test_app_state(pool).await;
+        let session_key = PublicKey::from_array([4u8; 32]);
+        let mut conn = conn_of(bob, session_key.clone());
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
+        handle_subscribe(&state, &mut conn, segment, &tx).await;
+        let _ = rx.try_recv();
+        let pending_key = format!("doc:{segment}:pending");
+
+        handle_update(&state, &mut conn, update_on(session_key, segment), &tx).await;
+
+        assert_eq!(error_code(&rx.try_recv().expect("a reply")), Some(403));
+        let pending: usize = state.redis.llen(&pending_key).await.expect("llen");
+        assert_eq!(pending, 0, "a viewer's delta must not be pushed");
+        let _ = state.redis.del([&pending_key]).await;
     }
 }

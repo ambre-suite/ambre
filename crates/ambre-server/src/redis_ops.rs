@@ -615,20 +615,6 @@ pub async fn user_broadcast(
     Ok(())
 }
 
-/// Publishes a message to the Redis PubSub topic for the given channel.
-pub async fn chan_broadcast(
-    redis: &Client,
-    channel_id: &ambre_core::ChannelId,
-    payload: &Payload,
-) -> Result<(), AppError> {
-    let chan = format!("chan:{channel_id}");
-    redis
-        .publish(&chan, RefBulkString::new(payload.expose_bytes()))
-        .await
-        .map_err(|e| AppError::Redis(format!("channel broadcast: {e}")))?;
-    Ok(())
-}
-
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never

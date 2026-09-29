@@ -17,37 +17,37 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-113` | `INV` | The unread count of a channel MUST count new messages alone, never reactions and never edits. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-114` | `INV` | The read cursor of a user MUST be the same on every device of that user. | this spec section 3; `ambre-spec-server.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-113` | `INV` | The unread count of a channel MUST count new messages alone, never reactions and never edits. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-114` | `INV` | The read cursor of a user MUST be the same on every device of that user. | this spec section 3; `ambre-spec-server.md` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Read a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Mark a message unread
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-117` | `POST` | Marking a message unread MUST move the cursor to just before it. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-154` | `FRAME` | Marking a message unread MUST NOT move the cursor of another channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-117` | `POST` | Marking a message unread MUST move the cursor to just before it. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-154` | `FRAME` | Marking a message unread MUST NOT move the cursor of another channel. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Mark everything read
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-118` | `POST` | One command MUST move the cursor of every channel to its last number. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-155` | `FRAME` | Marking everything read MUST NOT move the cursor of another member. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-118` | `POST` | One command MUST move the cursor of every channel to its last number. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-155` | `FRAME` | Marking everything read MUST NOT move the cursor of another member. | this spec section 3 | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Show activity at start
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `SRV-109` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-120` | `POST` | A count MUST replace the activity mark once the summaries or the document give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `SRV-109` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-120` | `POST` | A count MUST replace the activity mark once the summaries or the document give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the counters cost a light subscription per channel not held
   (`ambre-spec-budgets.md section 6`).

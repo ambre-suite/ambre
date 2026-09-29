@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE LIVE SOCKET AND THE FAN-OUT
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the document plane ships whole. The channel plane of the code relays
-whatever it is given, and the design retires it. Meetings have no endpoint at all.
+**Implementation:** partial -- the document plane ships whole, and a channel travels as its
+documents through it. Meetings have no endpoint at all.
 
 > One connection per person, carrying every document they have open. A change reaches every other
 > screen in the same instant, and the relay forwards bytes it cannot read.
@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- three sockets on one document across two instances count two Redis subscribers on its topic, one per process, database tier | none | verified |
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_presence_entry_is_the_ciphertext_as_received` -- the stored entry decodes to exactly the bytes the frame sealed, so the relay neither reads nor rewrites them | none | verified |
-| `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | type-level -- `WsClientMsg` and `WsServerMsg` carry no channel variant | none | verified |
 | `SRV-166` | `INV` | A change to the shape of any frame MUST change the version byte every frame opens on. | this spec section 3; `ambre-spec-sync.md`, `SYNC-137` | `ambre_protocol::tests::the_wire_layout_is_frozen_under_its_version` -- a digest of one frame per message variant, frozen under the version byte, where the decoder counts the variants so that one with no sample fails | none | verified |
 
 ### 1.2 A connection opens, and closes
@@ -67,8 +67,8 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-047` | `FAIL` | A subscription to a document of a channel MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5). The channel plane of the code holds nothing back: a subscribe is accepted from anyone the socket already authenticated | unimplemented |
-| `SRV-048` | `POST` | A frame on a document of a channel MUST pass the gates of any document frame before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-047` | `FAIL` | A subscription to a document of a channel MUST be refused to a caller who is not a member of that channel. | this spec section 3 | `ambre_server::ws::handler::message::channel_gate_tests::a_segment_refuses_a_caller_outside_its_channel` -- the refusal, database tier; `::a_member_of_the_channel_subscribes_to_its_segment` -- a member still subscribes | none | verified |
+| `SRV-048` | `POST` | A frame on a document of a channel MUST pass the gates of any document frame before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | `ambre_server::ws::handler::message::channel_gate_tests::a_viewer_of_the_channel_writes_no_delta_on_its_segment` -- the write gate, database tier; structural -- the handlers hold no channel branch, so a segment frame takes the path of any document frame | none | verified |
 | `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel frame either | unimplemented |
 | `SRV-161` | `POST` | A frame on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-162` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -79,10 +79,10 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 18 `verified`, 6 `unimplemented`. What holds is what a handler test drives: the
-  two caps, the rate bucket, the presence expiry and its removal. What is loose is everything about
-  the connection rather than the message. Each needs a live socket, and two tests alone open one,
-  each to see it refused (`ambre-spec-testing.md section 9`).
+* **Verification.** 19 `verified`, 5 `unimplemented`. What holds is what a handler test drives: the
+  two caps, the rate bucket, the presence expiry and its removal, and the channel gates. What is
+  loose is everything about the connection rather than the message. Each needs a live socket, and
+  two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -97,7 +97,7 @@ Two peers with one document open, over two connections that may be served by two
 | removes Bob | has the document open | one member row | Bob's document closes; nobody else is told he was the one removed | none -- section 6 |
 | removes Bob, then re-keys | keeps typing | one member row | Bob's writes stop within thirty seconds, not at his next reload (`SRV-043`) | none -- section 6 |
 | pastes a picture inline instead of on the media path | watches | nothing | Alice is told the frame is too large, and the document is unchanged (`SRV-010`) | `ws::handler::message::delta_size_cap_tests::oversized_delta_writes_no_pending` |
-| writes in a channel | is subscribed to it | one numbered delta on the active segment of the channel | Bob's screen changes within the round trip (`SRV-048`) | none, and it is unbuilt -- section 6 |
+| writes in a channel | is subscribed to it | one numbered delta on the active segment of the channel | Bob's screen changes within the round trip (`SRV-048`) | none -- the gates hold, and no view draws a channel yet |
 | replies in a thread Bob has not opened | watches the channel | one numbered delta on the thread document, and one activity signal | the reply count on the root moves (`SRV-161`) | none, and it is unbuilt -- section 6 |
 
 ---
@@ -132,7 +132,7 @@ is acted on. A channel adds no frame of its own (`SRV-102`).
 | a sealed delta | subscribed, sized, well-formed, still a member, allowed to write, own key, signed, then numbered unless a rotation is owed; that refusal names the key and the clock, to the author alone (`SRV-123`) |
 | a sealed presence blob | the same, minus the write role and the numbering; every refusal is silent, an owed rotation included |
 | ask for what was missed | subscribed, not too soon, still a member |
-| subscribe to a channel | the membership of the channel, which opens each of its live documents (`SRV-047`) |
+| subscribe to a document of a channel | the membership of the channel, read on its `meta` document (`SRV-047`) |
 
 **The version byte.** Every frame opens on it, before the compact encoding. A frame of another
 version is refused whole. The encoding names no field, so a shape that moves under the same byte
@@ -220,7 +220,6 @@ The socket has no surface of its own. What a person meets of it is four things.
 | A refused upgrade gets a code of its own | one close for every refusal, and a backoff over all of them | when a token expires or the relay rotates its signing key every token is invalid at once, so a plain backoff never recovers -- each new connection is refused too. A distinct code lets the client renew and reconnect with no action (`SRV-046`). |
 | A setup still owed gets a code of its own | the authentication code for both refusals | a renewal cannot cure it. The renewed session has no keys either, so the client renews and reconnects until the setup, and each attempt is refused (`SRV-164`). |
 | A channel travels as its documents | a channel plane with frames, numbering and storage of its own | a second pipeline to gate, number and store beside the document one. The gates the plane owed become the document gates (`SRV-047`, `SRV-048`) |
-| The channel plane of the code is written down as unchecked | leaving the channel handlers looking like the document ones | no channel is wired to real data, so the gap is reachable by nobody, and stating it stops a later reader from reading the asymmetry as a subtlety |
 | The socket is bidirectional, and its frames are binary | a server-sent event stream | the client sends as much as it receives, so a server-to-client stream carries half the traffic and needs a second connection for the other half. |
 | The socket is bidirectional, and its frames are binary | a textual encoding on the socket | a frame per keystroke burst is what the format has to be affordable for, and a textual body inflates every one of them. The frames are a version byte and a compact encoding instead. |
 | The frame shapes live in one crate | declaring the shapes again inside the relay, beside the handlers that read them | two definitions of one wire shape diverge silently, and the first divergence found was a key declared as a bounded array on one side and an unbounded one on the other. One crate is the definition and both ends depend on it. |
@@ -231,11 +230,6 @@ The socket has no surface of its own. What a person meets of it is four things.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The channel plane of the code is joinable and writable by anyone.** The subscription reads no
-  membership. A channel delta or presence blob is forwarded with no signature check, no numbering
-  and no durable write. Nothing reaches it, because the client drops both its send paths
-  (`ambre-spec-sync.md`, `SYNC-069`). The design retires the plane (`SRV-102`), and the document
-  gates replace it (`SRV-047`, `SRV-048`).
 * **Meetings have no endpoint, and no frame.** The route the design names is registered nowhere.
   The protocol carries no signalling frame at all, so the whole plane is a set of tables in the
   register (`SRV-049`).

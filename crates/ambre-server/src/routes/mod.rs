@@ -1,4 +1,5 @@
 mod auth;
+mod channels;
 mod documents;
 mod keys;
 mod media;
@@ -10,6 +11,7 @@ mod sync;
 mod tests;
 
 pub use auth::*;
+pub use channels::*;
 pub use documents::*;
 pub use keys::*;
 pub use media::*;
@@ -119,6 +121,10 @@ pub fn api_router(
         .route(
             "/documents/{id}/media",
             axum::routing::post(media_confirm_upload),
+        )
+        .route(
+            "/channels/{id}/documents",
+            axum::routing::get(list_channel_documents),
         )
         .route(
             "/organizations",

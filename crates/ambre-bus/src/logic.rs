@@ -127,10 +127,12 @@ pub enum LogicCommand {
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
     CloseDocument { document_id: DocumentId },
 
-    /// Open a real-time sync session for a channel (subscribe to messages).
+    /// Open a channel: its `meta` document, then its live segments, each an
+    /// ordinary document session (the Murmure engine spec).
     OpenChannel { channel_id: ChannelId },
 
-    /// Close the real-time sync session for a channel.
+    /// Close a channel: the Logic thread drops its state and closes each of
+    /// its documents.
     CloseChannel { channel_id: ChannelId },
 
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------

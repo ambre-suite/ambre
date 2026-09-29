@@ -70,7 +70,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | `ambre_sync::documents::tests::a_document_name_reaches_the_relay_sealed_under_the_document_key` -- the one seal create and rename send carries no plaintext, names the document key, and opens under it alone. `CHROME-036` holds what a card shows | none | verified |
 | `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | `ambre_sync::pipeline::tests::a_name_opens_under_its_own_document_only` -- a name sealed for one document refuses to open under another holding the same key, because its additional data holds the document id | none | verified |
 | `SYNC-136` | `FAIL` | A create whose answer names another document than the one the client minted MUST fail. | this spec section 2; `SYNC-068` | `ambre_sync::documents::tests::a_create_fails_on_a_foreign_answer` -- a foreign id and a malformed one each answer an error, and only the minted id is reported | none | verified |
-| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | `ambre_sync::channels::tests::a_channel_message_is_refused_not_dropped` -- both send paths answer the caller with a refusal until the relay carries channels | none | verified |
+| `SYNC-069` | `FAIL` | A channel message sent with no open session of its document MUST be refused aloud, never dropped in silence. | this spec section 2 | `ambre_sync::updates::tests::an_update_for_a_document_with_no_session_is_refused_aloud` -- the update answers the Logic thread with an `UpdateRefused` warning, and reaches no socket | none | verified |
+| `SYNC-149` | `FAIL` | A channel message sent while the socket is down MUST reach the relay once it is back, or be refused aloud. | this spec section 2; `SYNC-069` | not built | unbuilt -- lands with the `ARCH P4` -- offline durability Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.6 The session ends
 
@@ -85,10 +86,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 29 `verified`. The crate graph holds the keys and the CRDT apart. Unit tests
-  hold the token redaction and wipe, the refused channel send and the name bound to its document. A
-  gate refuses browser storage in the worker. Each gap left is a browser property the wasm tier
-  cannot boot, `ambre-spec-testing.md section 9`.
+* **Verification.** 29 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+  apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
+  to its document. A gate refuses browser storage in the worker. Each gap left is a browser
+  property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL
@@ -184,7 +185,7 @@ the name is bound to it before the relay sees either.
 * `crates/ambre-sync/src/auth.rs` -- sign-in, sign-out and the derived keys;
 * `crates/ambre-sync/src/http.rs` -- the request helpers, and the renew-and-replay;
 * `crates/ambre-sync/src/documents.rs` -- the register, and the sealed name;
-* `crates/ambre-sync/src/channels.rs` -- the channel subscription, and the two dropped sends;
+* `crates/ambre-sync/src/channels.rs` -- the channel listing, which names the documents to open;
 * `crates/ambre-app/src/platform.rs` -- the Main side of the pair, and the readiness gate.
 
 ---
@@ -231,9 +232,8 @@ The worker has no surface of its own. What a user sees of it is five things.
 * **A rotation leaves the name unreadable.** Nothing re-seals it, so the first revoke on a document
   makes its name unopenable for every member who stayed
   (`ambre-spec-key-rotation.md`, `SYNC-042`).
-* **A channel message is refused, never carried.** The subscribe and unsubscribe reach the relay.
-  Both send paths answer the caller with a refusal until the relay carries channel messages, and
-  both inbound channel frames are dropped (`SYNC-069`).
+* **An update sent while the socket is down is dropped.** It is logged, and nothing tells the view.
+  A channel message shares the fate of any document update (`SYNC-149`).
 * **Meetings are a log line each.** Four commands reach this worker and none does anything.
 * **A pending reconnect timer is not cancelled.** A second disconnect replaces the callback the
   timer will call, and the timer itself is not cleared. The first one then fires against a callback

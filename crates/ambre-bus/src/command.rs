@@ -116,16 +116,14 @@ pub enum SyncCommand {
         document_id: DocumentId,
     },
 
-    // -- Channel sync session (control) ----------------------------------------
+    // -- Channel (control) -----------------------------------------------------
+    /// List the documents a channel groups. Answered by
+    /// [`crate::LogicEvent::ChannelDocuments`], or by
+    /// [`crate::LogicEvent::ChannelOpenFailed`]. Each document then opens
+    /// through [`SyncCommand::OpenDocument`]: a channel has no session of its
+    /// own (`SRV-102`).
     OpenChannel {
         channel_id: ChannelId,
-    },
-    CloseChannel {
-        channel_id: ChannelId,
-    },
-    SendChannelEphemeral {
-        channel_id: ChannelId,
-        payload: Vec<u8>,
     },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------

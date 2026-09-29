@@ -295,6 +295,12 @@ enum SyncEvent {
         /// Empty for a local-only open.
         links: Vec<ambre_protocol::KeyLink>,
     },
+    /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
+    /// documents, or why the relay refused it.
+    ChannelListed {
+        channel_id: ChannelId,
+        result: Result<Vec<ambre_bus::ChannelDocument>, String>,
+    },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
     /// genuine authorization failure). Surfaced as an `AuthError` instead of
@@ -1207,13 +1213,6 @@ impl SyncState {
 
             // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
-            SyncCommand::CloseChannel { channel_id } => self.handle_close_channel(channel_id),
-            SyncCommand::SendChannelEphemeral {
-                channel_id,
-                payload,
-            } => {
-                self.handle_send_channel_ephemeral(channel_id, payload);
-            }
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),
@@ -1331,35 +1330,7 @@ impl SyncState {
                 self.handle_download_media(id, document_id, content_hash);
             }
 
-            // -- Channels (CRUD & sharing) -------------------------------------
-            RestCommand::ListChannels => tracing::info!("Sync: ListChannels"),
-            RestCommand::CreateChannel { name } => tracing::info!("Sync: CreateChannel '{name}'"),
-            RestCommand::DeleteChannel { channel_id } => {
-                tracing::info!("Sync: DeleteChannel {channel_id:?}");
-            }
-            RestCommand::InviteToChannel {
-                channel_id,
-                invitee_email,
-                role,
-            } => {
-                tracing::info!("Sync: InviteToChannel {channel_id:?} {invitee_email} {role:?}");
-            }
-            RestCommand::RevokeFromChannel {
-                channel_id,
-                user_id,
-            } => {
-                tracing::info!("Sync: RevokeFromChannel {channel_id:?} {user_id:?}");
-            }
-            RestCommand::ListChannelMembers { channel_id } => {
-                tracing::info!("Sync: ListChannelMembers {channel_id:?}");
-            }
-            RestCommand::UpdateChannelMemberRole {
-                channel_id,
-                user_id,
-                role,
-            } => {
-                tracing::info!("Sync: UpdateChannelMemberRole {channel_id:?} {user_id:?} {role:?}");
-            }
+            // -- Channels (read cursors) -----------------------------------------
             RestCommand::UpdateReadCursor {
                 channel_id,
                 last_seq,

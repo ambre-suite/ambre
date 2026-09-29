@@ -2,7 +2,8 @@
 // Multiplexed WebSocket handler -- ONE connection per client session.
 //
 // Endpoint: GET /api/ws -> upgrade WebSocket.
-// Each connection maintains a set of subscribed document and channel IDs.
+// Each connection maintains a set of subscribed document IDs. A Murmure
+// channel travels as its documents, so it has no subscription of its own.
 // Subscribe/Unsubscribe messages dynamically add or remove subscriptions.
 // Updates are validated (Ed25519 signature + clock monotonicity via Lua),
 // assigned a global seq, stored in Postgres, and broadcast via Redis PubSub.
@@ -19,7 +20,7 @@ use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
-use ambre_core::{ChannelId, DocumentId, UserId};
+use ambre_core::{DocumentId, UserId};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
@@ -33,11 +34,6 @@ use crate::state::AppState;
 /// Redis PubSub topic name for a document's live broadcasts.
 fn doc_pubsub_channel(document_id: &DocumentId) -> String {
     format!("doc:{document_id}")
-}
-
-/// Redis PubSub topic name for a Murmure channel's live broadcasts.
-fn chan_pubsub_channel(channel_id: &ChannelId) -> String {
-    format!("chan:{channel_id}")
 }
 
 /// Redis PubSub topic name for a user's personal events (for example a document was
@@ -101,8 +97,8 @@ const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 /// this cooldown bounds the abuse without touching that path.
 const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
 
-/// Per-connection state tracking which documents and channels this client
-/// is currently subscribed to.
+/// Per-connection state tracking which documents this client is currently
+/// subscribed to.
 struct WsConnectionState {
     user_id: UserId,
     /// Ed25519 signing key bound to this session (from the access token's `spk`
@@ -124,7 +120,6 @@ struct WsConnectionState {
     /// Last instant a `RequestMissing` replay was served per document, enforcing
     /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
     last_replay_at: HashMap<DocumentId, Instant>,
-    channel_subscriptions: HashSet<ChannelId>,
     /// Per-connection inbound-message rate limiter. The WS upgrade is rate-limited
     /// once, but a long-lived socket is otherwise unbounded. Each `Update` drives
     /// a Postgres + Redis + S3 write and a fan-out, so an authorized flooder is a
@@ -146,10 +141,10 @@ const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
 /// Mirrors the HTTP 403 of `SETUP_REQUIRED`.
 const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
 
-/// A channel whose unsubscribe makes the socket loop panic, so a test can force
-/// the failure `SRV-101` is about.
+/// A document whose unsubscribe makes the socket loop panic, so a test can
+/// force the failure `SRV-101` is about.
 #[cfg(test)]
-pub(crate) const PANIC_CHANNEL: ChannelId = ChannelId::from_bytes([0xff; 16]);
+pub(crate) const PANIC_DOCUMENT: DocumentId = DocumentId::from_bytes([0xff; 16]);
 
 /// The close code and reason a refused upgrade sends for `error`.
 fn refusal_close(error: &AppError) -> (u16, &'static str) {
@@ -196,7 +191,6 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         doc_access_verified_at: HashMap::new(),
         doc_write_allowed: HashMap::new(),
         last_replay_at: HashMap::new(),
-        channel_subscriptions: HashSet::new(),
         msg_bucket: TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec),
         clock_fences: ClockFences::default(),
     };
@@ -271,7 +265,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             #[cfg(test)]
             if matches!(
                 client_msg,
-                WsClientMsg::UnsubscribeChannel { channel_id } if channel_id == PANIC_CHANNEL
+                WsClientMsg::Unsubscribe { document_id } if document_id == PANIC_DOCUMENT
             ) {
                 panic!("forced by a test");
             }
@@ -329,47 +323,6 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     handle_request_missing(&state, &mut conn, document_id, after_seq, &outbound_tx)
                         .await;
                 }
-                WsClientMsg::SubscribeChannel { channel_id } => {
-                    handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
-                    if conn.channel_subscriptions.contains(&channel_id)
-                        && pubsub
-                            .subscribe(
-                                chan_pubsub_channel(&channel_id),
-                                connection_id.clone(),
-                                outbound_tx.clone(),
-                            )
-                            .await
-                            .is_err()
-                    {
-                        break;
-                    }
-                }
-                WsClientMsg::UnsubscribeChannel { channel_id } => {
-                    conn.channel_subscriptions.remove(&channel_id);
-                    pubsub
-                        .unsubscribe(chan_pubsub_channel(&channel_id), connection_id.clone())
-                        .await;
-                }
-                WsClientMsg::ChannelUpdate { channel_id, update } => {
-                    if !conn.channel_subscriptions.contains(&channel_id) {
-                        let err = Payload::server_msg(&WsServerMsg::Error {
-                            code: 403,
-                            message: "not subscribed to this channel".into(),
-                        });
-                        let _ = outbound_tx.send(err).await;
-                        continue;
-                    }
-                    handle_channel_update(&state, channel_id, update).await;
-                }
-                WsClientMsg::ChannelEphemeral {
-                    channel_id,
-                    ephemeral,
-                } => {
-                    if !conn.channel_subscriptions.contains(&channel_id) {
-                        continue;
-                    }
-                    handle_channel_ephemeral(&state, channel_id, ephemeral).await;
-                }
                 // The session is bound once, by the first frame. A later token
                 // changes nothing on this connection.
                 WsClientMsg::Authenticate { .. } => {}
@@ -387,11 +340,6 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         announce_departure(&state, doc_id, &conn.signing_pubkey).await;
         pubsub
             .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
-            .await;
-    }
-    for channel_id in &conn.channel_subscriptions {
-        pubsub
-            .unsubscribe(chan_pubsub_channel(channel_id), connection_id.clone())
             .await;
     }
     pubsub

@@ -4,12 +4,14 @@ use sqlx::{PgPool, Row};
 // Query functions are split by domain into sibling modules; each reaches the
 // shared imports and the private uuid bridges below via `use super::*`. All
 // items are re-globbed so every `db::*` path stays valid.
+mod channels;
 mod content;
 mod documents;
 mod members;
 mod orgs;
 mod users;
 
+pub use channels::*;
 pub use content::*;
 pub use documents::*;
 pub use members::*;

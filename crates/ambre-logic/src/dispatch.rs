@@ -100,6 +100,8 @@ impl LogicState {
                         self.evicted.clear();
                         self.store_full.clear();
                         self.channels.clear();
+                        self.channel_ledgers.clear();
+                        self.opening.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -150,13 +152,8 @@ impl LogicState {
                 // leaves memory, and Sync keeps it light (`RESID-001`).
                 self.evict(document_id);
             }
-            LogicCommand::OpenChannel { channel_id } => {
-                self.send_to_sync(SyncCommand::OpenChannel { channel_id });
-            }
-            LogicCommand::CloseChannel { channel_id } => {
-                self.channels.remove(&channel_id);
-                self.send_to_sync(SyncCommand::CloseChannel { channel_id });
-            }
+            LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
+            LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             // -- Content plane: a Murmure command, addressed to its channel ---
             LogicCommand::Channel {
                 channel_id,
@@ -307,7 +304,10 @@ impl LogicState {
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {
-                if let Some((payload, covered_seq)) = self.export_covered_snapshot(document_id) {
+                let covered = self
+                    .export_covered_snapshot(document_id)
+                    .or_else(|| self.channel_snapshot(document_id));
+                if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
                         payload,
@@ -356,6 +356,10 @@ impl LogicState {
                 if let Some(doc) = self.docs.get_mut(&document_id) {
                     doc.role = role;
                     doc.ready = true;
+                } else if self.channel_document_ready(document_id) {
+                    // A channel document is no document of the view: the
+                    // channel answers for it once it is open.
+                    return;
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
                 // The other sessions learn this one is open, though its caret
@@ -402,27 +406,18 @@ impl LogicState {
                 });
             }
 
-            // -- Channels (server push) ----------------------------------------
-            LogicEvent::ChannelRemoteEphemeral {
+            // -- Channels (Murmure) --------------------------------------------
+            LogicEvent::ChannelDocuments {
                 channel_id,
-                payload,
-            } => {
-                self.send_to_ui(UiEvent::ChannelPresenceUpdate {
-                    channel_id,
-                    payload,
-                });
-            }
-            LogicEvent::ChannelConnectionStatus {
+                documents,
+            } => self.channel_listed(channel_id, &documents),
+            LogicEvent::ChannelOpenFailed {
                 channel_id,
-                connected,
+                message,
             } => {
-                self.send_to_ui(UiEvent::ChannelConnectionStatus {
-                    channel_id,
-                    connected,
-                });
-            }
-            LogicEvent::ChannelSnapshotNeeded { channel_id: _ } => {
-                tracing::warn!("Logic: ChannelSnapshotNeeded is not yet implemented");
+                if self.opening.remove(&channel_id).is_some() {
+                    self.channel_open_failed(channel_id, message);
+                }
             }
 
             // -- Meetings (participant push) -----------------------------------
@@ -446,6 +441,14 @@ impl LogicState {
             }
 
             // -- Errors --------------------------------------------------------
+            LogicEvent::DocumentOpenFailed {
+                document_id,
+                message,
+            } => {
+                if !self.channel_document_failed(document_id, &message) {
+                    self.send_to_ui(UiEvent::AuthError { message });
+                }
+            }
             LogicEvent::AuthError { message } => {
                 self.send_to_ui(UiEvent::AuthError { message });
             }

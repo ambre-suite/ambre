@@ -32,4 +32,8 @@ pub enum SyncWarningCode {
     /// not acknowledged. Editing pauses until the change is stored or the
     /// relay holds it (`ambre-spec-residency.md`, `RESID-018`).
     LocalStoreFull = 4,
+
+    /// A local update named a document with no open session, so it never left
+    /// for the relay. Said aloud rather than dropped in silence (`SYNC-069`).
+    UpdateRefused = 5,
 }

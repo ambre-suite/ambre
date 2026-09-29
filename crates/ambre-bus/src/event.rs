@@ -15,7 +15,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, SnapshotId, UserId};
+use crate::{
+    ChannelDocument, ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, SnapshotId, UserId,
+};
 use ambre_core::SessionNonce;
 
 // -----------------------------------------------------------------------------
@@ -28,10 +30,7 @@ use ambre_core::SessionNonce;
 pub enum LogicEvent {
     // -- Service plane (relayed request/response) ------------------------------
     /// A [`RestEvent`] service response echoing the originating [`RequestId`].
-    Rest {
-        id: RequestId,
-        evt: RestEvent,
-    },
+    Rest { id: RequestId, evt: RestEvent },
 
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
@@ -155,9 +154,7 @@ pub enum LogicEvent {
     /// The server requests a snapshot (too many accumulated deltas).
     /// The Logic thread must produce `LoroDoc::export_snapshot()` and respond
     /// with `SyncCommand::SendSnapshot { document_id, payload }`.
-    SnapshotNeeded {
-        document_id: DocumentId,
-    },
+    SnapshotNeeded { document_id: DocumentId },
 
     /// A member has been revoked and consolidation is complete.
     /// Translated from `WsServerMsg::KeyRotationRequired` by the Sync thread
@@ -176,17 +173,17 @@ pub enum LogicEvent {
         doc_type: DocType,
     },
 
-    // -- Channels (Murmure) -- real-time (server push) --------------------------
-    ChannelRemoteEphemeral {
+    // -- Channels (Murmure) -----------------------------------------------------
+    /// The documents a channel groups, answering
+    /// [`SyncCommand::OpenChannel`](crate::SyncCommand::OpenChannel).
+    ChannelDocuments {
         channel_id: ChannelId,
-        payload: Vec<u8>,
+        documents: Vec<ChannelDocument>,
     },
-    ChannelConnectionStatus {
+    /// The relay refused the listing, or it could not be read.
+    ChannelOpenFailed {
         channel_id: ChannelId,
-        connected: bool,
-    },
-    ChannelSnapshotNeeded {
-        channel_id: ChannelId,
+        message: String,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
@@ -202,10 +199,15 @@ pub enum LogicEvent {
     },
 
     // -- Errors ----------------------------------------------------------------
-    /// Authentication error (incorrect passphrase, corrupted data, network).
-    AuthError {
+    /// A document could not open: its wrapped key did not unwrap, or the
+    /// session was not ready. Nothing of it is held. The Logic thread ends
+    /// the channel opening that asked for it, or reports an `AuthError`.
+    DocumentOpenFailed {
+        document_id: DocumentId,
         message: String,
     },
+    /// Authentication error (incorrect passphrase, corrupted data, network).
+    AuthError { message: String },
 
     /// Generic error for any REST/WS operation. `request` identifies the source command
     /// (for example, "ListDocuments").

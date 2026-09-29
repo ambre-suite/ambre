@@ -667,6 +667,19 @@ pub(crate) struct AuthMeResponse {
     pub email: String,
 }
 
+/// `GET /api/channels/{id}/documents`: the documents a channel groups.
+#[derive(Deserialize)]
+pub(crate) struct ChannelDocumentsResponse {
+    pub documents: Vec<ChannelDocumentEntry>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ChannelDocumentEntry {
+    pub document_id: String,
+    /// `meta`, `segment`, `amendments` or `thread`.
+    pub kind: String,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct DocumentListResponse {
     pub documents: Vec<DocumentEntry>,

@@ -50,6 +50,26 @@ pub struct LogEntry {
     pub bytes: Vec<u8>,
 }
 
+/// The document whose member rows decide access to `$1` (`SRV-103`).
+///
+/// A document of a channel resolves to the channel's `meta` document, so
+/// membership of the channel reaches every document it groups. A member row on
+/// the channel document itself grants nothing. Any other document resolves to
+/// itself. A channel document whose channel has no `meta` resolves to `NULL`,
+/// which matches no row.
+///
+/// A macro rather than a `const`, so `concat!` keeps each query `&'static`.
+macro_rules! access_document {
+    () => {
+        "(SELECT CASE \
+         WHEN EXISTS (SELECT 1 FROM channel_documents WHERE document_id = $1) \
+         THEN (SELECT m.document_id FROM channel_documents c \
+               JOIN channel_documents m ON m.channel_id = c.channel_id AND m.kind = 'meta' \
+               WHERE c.document_id = $1) \
+         ELSE $1 END)"
+    };
+}
+
 /// Adds (or updates) a user to a document's membership with a role and encrypted document key.
 ///
 /// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it enforces the
@@ -242,7 +262,10 @@ async fn ensure_not_last_owner(
     Ok(())
 }
 
-/// Fetches a single document membership row.
+/// Fetches the membership row that decides access to a document.
+///
+/// For a document of a channel, the row is the caller's on the channel's
+/// `meta` document (`access_document!`).
 pub async fn get_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -250,9 +273,12 @@ pub async fn get_document_member(
 ) -> Result<Option<MemberRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
-    let row = sqlx::query(
-        "SELECT document_id, user_id, role, doc_key_enc, invited_by FROM document_members WHERE document_id = $1 AND user_id = $2"
-    )
+    let row = sqlx::query(concat!(
+        "SELECT document_id, user_id, role, doc_key_enc, invited_by FROM document_members \
+         WHERE document_id = ",
+        access_document!(),
+        " AND user_id = $2"
+    ))
     .bind(did)
     .bind(uid)
     .fetch_optional(pool)
@@ -270,7 +296,10 @@ pub async fn get_document_member(
     }
 }
 
-/// Lists all members of a document with user details.
+/// Lists the members who hold access to a document, with user details.
+///
+/// For a document of a channel, they are the members of the channel's `meta`
+/// document, each with the channel key sealed for them (`access_document!`).
 ///
 /// A member whose account holds no keys is left out. No wrap can address it,
 /// so a key rotation that rewraps the listed members drops it (`SRV-163`).
@@ -280,9 +309,11 @@ pub async fn list_document_members(
     document_id: &ambre_core::DocumentId,
 ) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
-    let rows = sqlx::query(
-        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1 AND u.signing_pubkey IS NOT NULL"
-    )
+    let rows = sqlx::query(concat!(
+        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by \
+         WHERE u.signing_pubkey IS NOT NULL AND dm.document_id = ",
+        access_document!()
+    ))
     .bind(did)
     .fetch_all(pool)
     .await?;

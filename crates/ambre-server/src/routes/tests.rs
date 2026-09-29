@@ -1866,8 +1866,8 @@ mod handler_tests {
         let mut victim = subscribed_socket(&url, &owner, document_id).await;
         let mut watcher = subscribed_socket(&url, &peer, document_id).await;
 
-        let panic_frame = WsClientMsg::UnsubscribeChannel {
-            channel_id: crate::ws::PANIC_CHANNEL,
+        let panic_frame = WsClientMsg::Unsubscribe {
+            document_id: crate::ws::PANIC_DOCUMENT,
         };
         victim
             .send(Message::Binary(encode_client_msg(&panic_frame).into()))

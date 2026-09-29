@@ -1,7 +1,7 @@
 //! The engine core against its contract rows: the documents a channel holds,
 //! the header check, the routing of a remote delta, and the send.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{MentionTarget, MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
@@ -13,7 +13,7 @@ use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, DocumentKind, HEADER, HEADER_CHANNEL, HEADER_KIND,
     MESSAGE_CONTENT, MESSAGES, SEGMENTS, SegmentState,
 };
-use crate::{ChannelState, ChannelType, MurmureError, SCHEMA_VERSION};
+use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, SCHEMA_VERSION};
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -420,7 +420,9 @@ fn a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author() {
     assert_eq!(messages[0].author, alice);
     assert_eq!(messages[0].text, "hello");
     assert_eq!(messages[0].ts, NOW);
-    let MurmureEvent::Messages { messages: sent, .. } = &second.event;
+    let MurmureEvent::Messages { messages: sent, .. } = &second.event else {
+        panic!("a send answers its messages");
+    };
     assert_eq!(sent.as_slice(), &messages[1..]);
 }
 
@@ -607,4 +609,142 @@ fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
     let messages = state.messages(state.active_id()).expect("messages");
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].text, "fine");
+}
+
+// --- MURMURE-025: the staged open over the relay ---
+
+/// `meta` first, then the live segments it names, each as a snapshot and a
+/// replay, the way the relay serves a document.
+#[test]
+fn opening_takes_meta_then_its_live_segments_and_never_a_final_one() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    assert!(opening.receive(stored.meta_id, &stored.meta));
+
+    let Ok(Opening::OpenSegments(asked)) = opening.ready(stored.meta_id) else {
+        panic!("meta names the live segments");
+    };
+    let asked: HashSet<DocumentId> = asked.into_iter().collect();
+    assert_eq!(
+        asked,
+        HashSet::from([stored.closing_id, stored.active_id]),
+        "the live segments and no final one"
+    );
+    assert!(!opening.expects(stored.final_id));
+
+    for id in [stored.closing_id, stored.active_id] {
+        assert!(opening.receive(id, &stored.segments[&id]));
+    }
+    assert!(matches!(
+        opening.ready(stored.closing_id),
+        Ok(Opening::Waiting)
+    ));
+    let Ok(Opening::Open(state)) = opening.ready(stored.active_id) else {
+        panic!("the last live segment opens the channel");
+    };
+    assert_eq!(state.active_id(), stored.active_id);
+    assert_eq!(state.closing_id(), Some(stored.closing_id));
+    assert!(!state.holds(stored.final_id));
+}
+
+/// A delta on `meta` that lands between its ready and the channel's open is
+/// kept, not dropped.
+#[test]
+fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    opening.receive(stored.meta_id, &stored.meta);
+    let _ = opening.ready(stored.meta_id).expect("meta");
+
+    let editor = LoroDoc::new();
+    editor.import(&stored.meta).expect("import");
+    let before = editor.oplog_vv();
+    editor
+        .get_map(CHANNEL)
+        .insert(CHANNEL_NAME, "renamed")
+        .expect("rename");
+    editor.commit();
+    let delta = editor.export(ExportMode::updates(&before)).expect("delta");
+    assert!(opening.receive(stored.meta_id, &delta));
+
+    opening.receive(stored.closing_id, &stored.segments[&stored.closing_id]);
+    opening.receive(stored.active_id, &stored.segments[&stored.active_id]);
+    let _ = opening.ready(stored.closing_id).expect("closing");
+    let Ok(Opening::Open(state)) = opening.ready(stored.active_id) else {
+        panic!("the last live segment opens the channel");
+    };
+    let meta = state.doc(stored.meta_id).expect("meta");
+    assert_eq!(
+        schema::string(&meta.get_map(CHANNEL), CHANNEL_NAME).as_deref(),
+        Some("renamed")
+    );
+}
+
+#[test]
+fn a_meta_of_another_channel_ends_the_opening() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(ChannelId::new(), stored.meta_id);
+    opening.receive(stored.meta_id, &stored.meta);
+    assert!(matches!(
+        opening.ready(stored.meta_id),
+        Err(MurmureError::ForeignChannel { .. })
+    ));
+}
+
+#[test]
+fn an_opening_refuses_a_document_it_did_not_ask_for() {
+    let stored = stored_channel();
+    let mut opening = OpeningChannel::new(stored.channel, stored.meta_id);
+    assert!(!opening.receive(stored.active_id, &stored.segments[&stored.active_id]));
+    assert_eq!(
+        opening.ready(stored.active_id).err(),
+        Some(MurmureError::NotHeld(stored.active_id))
+    );
+}
+
+// --- MURMURE-023: an older segment over the relay ---
+
+#[test]
+fn an_older_segment_asked_for_arrives_then_loads() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(state.request_older(stored.active_id), Some(stored.final_id));
+    assert_eq!(
+        state.request_older(stored.active_id),
+        None,
+        "a segment on its way is asked for once"
+    );
+    assert!(state.holds(stored.final_id) && state.is_pending(stored.final_id));
+    let produced = state
+        .apply_remote(stored.final_id, &stored.segments[&stored.final_id])
+        .expect("kept");
+    assert!(
+        produced.is_empty(),
+        "nothing reads a segment still arriving"
+    );
+
+    let event = state.older_ready(stored.final_id).expect("load");
+    assert_eq!(
+        event,
+        MurmureEvent::Messages {
+            segment: stored.final_id,
+            messages: Vec::new()
+        }
+    );
+    assert!(!state.is_pending(stored.final_id));
+    assert_eq!(
+        state.request_older(stored.active_id),
+        None,
+        "already loaded"
+    );
+}
+
+#[test]
+fn an_older_segment_nobody_asked_for_is_not_ready() {
+    let stored = stored_channel();
+    let mut state = open(&stored);
+    assert_eq!(
+        state.older_ready(stored.final_id).err(),
+        Some(MurmureError::NotHeld(stored.final_id))
+    );
 }

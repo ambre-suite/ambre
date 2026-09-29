@@ -228,15 +228,6 @@ pub struct UserInfo {
     pub email: String,
 }
 
-/// Summary of a Murmure channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChannelSummary {
-    pub channel_id: ChannelId,
-    /// Decrypted from `name_enc`.
-    pub name: Option<String>,
-    pub role: Role,
-}
-
 /// Unread message count per channel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnreadCount {
@@ -386,32 +377,7 @@ pub enum RestCommand {
         passphrase: SecretBytes,
     },
 
-    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
-    /// List channels. -> `ChannelList`.
-    ListChannels,
-    /// Create a channel. -> `ChannelCreated`.
-    CreateChannel { name: String },
-    /// Delete a channel. -> `ChannelDeleted`.
-    DeleteChannel { channel_id: ChannelId },
-    /// Invite a user to a channel. -> `ChannelInviteSent`.
-    InviteToChannel {
-        channel_id: ChannelId,
-        invitee_email: String,
-        role: Role,
-    },
-    /// Revoke a channel member. -> `ChannelRevocationComplete`.
-    RevokeFromChannel {
-        channel_id: ChannelId,
-        user_id: UserId,
-    },
-    /// List channel members. -> `ChannelMembers`.
-    ListChannelMembers { channel_id: ChannelId },
-    /// Update a channel member's role. -> `ChannelMemberRoleUpdated`.
-    UpdateChannelMemberRole {
-        channel_id: ChannelId,
-        user_id: UserId,
-        role: Role,
-    },
+    // -- Channels (Murmure) -- read cursors --------------------------------------
     /// Advance the read cursor for unread tracking. (Acknowledged implicitly.)
     UpdateReadCursor {
         channel_id: ChannelId,
@@ -563,32 +529,7 @@ pub enum RestEvent {
     /// would be a guess. The surface says both (`DOCFILE-016`).
     DocFileOpenFailed,
 
-    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
-    ChannelList {
-        channels: Vec<ChannelSummary>,
-    },
-    ChannelCreated {
-        channel_id: ChannelId,
-    },
-    ChannelDeleted {
-        channel_id: ChannelId,
-    },
-    ChannelInviteSent {
-        channel_id: ChannelId,
-        user_id: UserId,
-    },
-    ChannelRevocationComplete {
-        channel_id: ChannelId,
-    },
-    ChannelMembers {
-        channel_id: ChannelId,
-        members: Vec<MemberInfo>,
-    },
-    ChannelMemberRoleUpdated {
-        channel_id: ChannelId,
-        user_id: UserId,
-        role: Role,
-    },
+    // -- Channels (Murmure) -- read cursors --------------------------------------
     UnreadCounts {
         counts: Vec<UnreadCount>,
     },

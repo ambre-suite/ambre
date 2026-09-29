@@ -56,6 +56,9 @@ pub struct ChannelState {
     closing: Option<Held>,
     /// Final segments, loaded only on the view's demand (`MURMURE-023`).
     loaded: HashMap<DocumentId, LoroDoc>,
+    /// Final segments the view asked for, whose bytes are still arriving.
+    /// Nothing reads them until [`ChannelState::older_ready`] admits them.
+    pending: HashMap<DocumentId, Vec<Vec<u8>>>,
 }
 
 impl ChannelState {
@@ -89,13 +92,19 @@ impl ChannelState {
         meta.doc.commit();
         schema::write_header(&active.doc, DocumentKind::Segment, channel_id, now.0)?;
         active.doc.commit();
-        Ok(Self {
+        Ok(Self::assemble(channel_id, meta, active, None))
+    }
+
+    /// A channel of these documents, each already admitted.
+    fn assemble(channel_id: ChannelId, meta: Held, active: Held, closing: Option<Held>) -> Self {
+        Self {
             channel_id,
             meta,
             active,
-            closing: None,
+            closing,
             loaded: HashMap::new(),
-        })
+            pending: HashMap::new(),
+        }
     }
 
     /// Open a channel from stored bytes: its `meta` document, then the live
@@ -118,32 +127,45 @@ impl ChannelState {
             id: meta_id,
             doc: schema::admit(meta_bytes, DocumentKind::Meta, channel_id, meta_id)?,
         };
-        let mut active = None;
-        let mut closing = None;
-        for (id, state) in segment_entries(&meta.doc) {
-            let slot = match state {
-                SegmentState::Active => &mut active,
-                SegmentState::Closing => &mut closing,
-                SegmentState::Final => continue,
-            };
-            if slot.is_some() {
-                // Two live segments of one state is the fork `MURMURE-010`
-                // forbids. The first in list order wins, the same on every
-                // peer, and the warn keeps the fork visible.
-                tracing::warn!("[Murmure] channel {channel_id} lists a second {state:?} segment");
-                continue;
-            }
+        let live = live_segments(&meta.doc, channel_id)?;
+        let admit_live = |id: DocumentId| -> Result<Held, MurmureError> {
             let bytes = segments.get(&id).ok_or(MurmureError::SegmentMissing(id))?;
             let doc = schema::admit(bytes, DocumentKind::Segment, channel_id, id)?;
-            *slot = Some(Held { id, doc });
-        }
-        Ok(Self {
-            channel_id,
-            meta,
-            active: active.ok_or(MurmureError::NoActiveSegment(channel_id))?,
-            closing,
-            loaded: HashMap::new(),
-        })
+            Ok(Held { id, doc })
+        };
+        let active = admit_live(live.active)?;
+        let closing = live.closing.map(admit_live).transpose()?;
+        Ok(Self::assemble(channel_id, meta, active, closing))
+    }
+
+    /// Open a channel from documents whose bytes arrived as several payloads
+    /// each: a snapshot, then a replay (`MURMURE-022`).
+    ///
+    /// `segments` holds the live segments `meta` lists, and the same checks
+    /// as [`ChannelState::open`] run on each.
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::open`].
+    pub(crate) fn open_from_payloads(
+        channel_id: ChannelId,
+        meta: (DocumentId, LoroDoc),
+        segments: &HashMap<DocumentId, Vec<Vec<u8>>>,
+    ) -> Result<Self, MurmureError> {
+        let (meta_id, meta_doc) = meta;
+        let live = live_segments(&meta_doc, channel_id)?;
+        let admit_live = |id: DocumentId| -> Result<Held, MurmureError> {
+            let payloads = segments.get(&id).ok_or(MurmureError::SegmentMissing(id))?;
+            let doc =
+                schema::admit_all(&borrowed(payloads), DocumentKind::Segment, channel_id, id)?;
+            Ok(Held { id, doc })
+        };
+        let active = admit_live(live.active)?;
+        let closing = live.closing.map(admit_live).transpose()?;
+        let meta = Held {
+            id: meta_id,
+            doc: meta_doc,
+        };
+        Ok(Self::assemble(channel_id, meta, active, closing))
     }
 
     /// The channel this state holds.
@@ -166,9 +188,21 @@ impl ChannelState {
         self.closing.as_ref().map(|held| held.id)
     }
 
-    /// Whether the channel holds the document of that identifier in memory.
+    /// Whether the channel holds the document of that identifier in memory,
+    /// or is loading it on the view's demand.
     pub fn holds(&self, document_id: DocumentId) -> bool {
-        self.doc(document_id).is_some()
+        self.doc(document_id).is_some() || self.pending.contains_key(&document_id)
+    }
+
+    /// Every document the channel holds or is loading, so a close can end
+    /// the session of each.
+    pub fn document_ids(&self) -> Vec<DocumentId> {
+        [Some(self.meta.id), Some(self.active.id), self.closing_id()]
+            .into_iter()
+            .flatten()
+            .chain(self.loaded.keys().copied())
+            .chain(self.pending.keys().copied())
+            .collect()
     }
 
     /// The document of that identifier, among every one the channel holds.
@@ -258,6 +292,11 @@ impl ChannelState {
         document_id: DocumentId,
         payload: &[u8],
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
+        // An older segment still arriving keeps its bytes until it is ready.
+        if let Some(payloads) = self.pending.get_mut(&document_id) {
+            payloads.push(payload.to_vec());
+            return Ok(Vec::new());
+        }
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
@@ -284,6 +323,48 @@ impl ChannelState {
             .map(|(id, _)| *id)
     }
 
+    /// Ask for the final segment listed before `segment`, the one a scroll
+    /// past the oldest loaded message needs (`MURMURE-023`).
+    ///
+    /// Returns the document to open, or `None` when there is no older segment,
+    /// or when it is already loaded or on its way. Its bytes then go to
+    /// [`ChannelState::apply_remote`], and [`ChannelState::older_ready`] reads
+    /// them once they are all in.
+    pub fn request_older(&mut self, segment: DocumentId) -> Option<DocumentId> {
+        let older = self.older_than(segment)?;
+        if self.loaded.contains_key(&older) || self.pending.contains_key(&older) {
+            return None;
+        }
+        self.pending.insert(older, Vec::new());
+        Some(older)
+    }
+
+    /// Whether `document_id` is an older segment still arriving.
+    pub fn is_pending(&self, document_id: DocumentId) -> bool {
+        self.pending.contains_key(&document_id)
+    }
+
+    /// Give up an older segment that could not open, so the view can ask
+    /// again. Returns `false` when none of that identifier was asked for.
+    pub fn cancel_older(&mut self, document_id: DocumentId) -> bool {
+        self.pending.remove(&document_id).is_some()
+    }
+
+    /// The older segment `document_id` has all its bytes: check it and hold
+    /// it (`MURMURE-023`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] when no older segment of that identifier was
+    /// asked for, and every refusal of [`ChannelState::load_older`]. A refused
+    /// segment is dropped, so the view can ask again.
+    pub fn older_ready(&mut self, document_id: DocumentId) -> Result<MurmureEvent, MurmureError> {
+        let payloads = self
+            .pending
+            .remove(&document_id)
+            .ok_or(MurmureError::NotHeld(document_id))?;
+        self.load_older_from(document_id, &borrowed(&payloads))
+    }
+
     /// Load an older segment the view asked for (`MURMURE-023`).
     ///
     /// # Errors
@@ -294,13 +375,26 @@ impl ChannelState {
         document_id: DocumentId,
         payload: &[u8],
     ) -> Result<MurmureEvent, MurmureError> {
+        self.load_older_from(document_id, &[payload])
+    }
+
+    fn load_older_from(
+        &mut self,
+        document_id: DocumentId,
+        payloads: &[&[u8]],
+    ) -> Result<MurmureEvent, MurmureError> {
         let listed = segment_entries(&self.meta.doc)
             .into_iter()
             .any(|(id, state)| id == document_id && state == SegmentState::Final);
         if !listed {
             return Err(MurmureError::NotOlder(document_id));
         }
-        let doc = schema::admit(payload, DocumentKind::Segment, self.channel_id, document_id)?;
+        let doc = schema::admit_all(
+            payloads,
+            DocumentKind::Segment,
+            self.channel_id,
+            document_id,
+        )?;
         let messages = read_messages(&doc);
         self.loaded.insert(document_id, doc);
         Ok(MurmureEvent::Messages {
@@ -308,6 +402,49 @@ impl ChannelState {
             messages,
         })
     }
+}
+
+/// The payloads of one document, borrowed for [`schema::admit_all`].
+fn borrowed(payloads: &[Vec<u8>]) -> Vec<&[u8]> {
+    payloads.iter().map(Vec::as_slice).collect()
+}
+
+/// The live segments `meta` lists: the active one, and the one being closed.
+pub(crate) struct LiveSegments {
+    pub(crate) active: DocumentId,
+    pub(crate) closing: Option<DocumentId>,
+}
+
+/// The live segments a `meta` document lists (`MURMURE-022`). A final
+/// segment is never among them (`MURMURE-028`).
+///
+/// # Errors
+/// [`MurmureError::NoActiveSegment`] when `meta` lists no active segment.
+pub(crate) fn live_segments(
+    meta: &LoroDoc,
+    channel_id: ChannelId,
+) -> Result<LiveSegments, MurmureError> {
+    let mut active = None;
+    let mut closing = None;
+    for (id, state) in segment_entries(meta) {
+        let slot = match state {
+            SegmentState::Active => &mut active,
+            SegmentState::Closing => &mut closing,
+            SegmentState::Final => continue,
+        };
+        if slot.is_some() {
+            // Two live segments of one state is the fork `MURMURE-010`
+            // forbids. The first in list order wins, the same on every
+            // peer, and the warn keeps the fork visible.
+            tracing::warn!("[Murmure] channel {channel_id} lists a second {state:?} segment");
+            continue;
+        }
+        *slot = Some(id);
+    }
+    Ok(LiveSegments {
+        active: active.ok_or(MurmureError::NoActiveSegment(channel_id))?,
+        closing,
+    })
 }
 
 /// Append one entry to `meta.segments`.

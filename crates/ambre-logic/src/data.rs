@@ -759,6 +759,8 @@ impl LogicState {
             if let Some(payload) = payload {
                 doc.relay_saw(payload);
             }
+        } else {
+            self.record_channel_seq(document_id, seq, payload.map(Vec::as_slice));
         }
     }
 

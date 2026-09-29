@@ -35,7 +35,7 @@ that component's prefix instead.
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a serialized struct of the worker crates that names a passphrase field or carries a `Secret` type | none | verified |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
-| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
@@ -43,7 +43,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 15 `verified`, 2 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 16 `verified`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 

@@ -140,7 +140,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Document residency | MVP | memory holds the documents a view shows. A closed one reaches the local store and keeps a light subscription that counts its activity from sealed summaries, and a reopen resumes from the local copy |
 | `[x]` The local store within its budget | MVP | the local store keeps every copy until its document is deleted. It evicts the copies no view shows within a byte budget, immutable ones first then the least recently viewed. It meets a refused write and asks for persistent storage (`RESID-002`, `RESID-007`, `RESID-008`, `RESID-017` to `RESID-020`). A reopen that replays a long history yields between slices (`SYNC-131`) |
 | `[x]` `ARCH P7` -- the Murmure engine core | MVP | the message model, and a typed command surface in place of the opaque byte payload of the channel plane |
-| `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
+| `[x]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history |
+| `[ ]` Read cursors and unread | MVP | a read cursor per member and channel, the activity answer of the relay, and the unread counts of the sidebar |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
 | `[ ]` Private channels and direct messages | MVP | invite-only channels, and direct messages between two or more members with an optional name |
 | `[ ]` Channel segments and finalization | MVP | the chain of segments, closing and finalizing through a relay lease, and the second client that confirms a seal before the deltas go |

@@ -13,6 +13,7 @@
 
 mod channel;
 mod error;
+mod opening;
 pub mod schema;
 
 #[cfg(test)]
@@ -22,4 +23,5 @@ mod schema_shape;
 
 pub use channel::{ChannelState, Sent};
 pub use error::MurmureError;
+pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};

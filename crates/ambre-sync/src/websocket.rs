@@ -621,7 +621,13 @@ impl SyncState {
                 message,
             } => {
                 tracing::error!("Sync: open document {document_id:?} failed: {message}");
-                self.send_to_logic(LogicEvent::AuthError { message });
+                self.send_to_logic(LogicEvent::DocumentOpenFailed {
+                    document_id,
+                    message,
+                });
+            }
+            SyncEvent::ChannelListed { channel_id, result } => {
+                self.channel_listed(channel_id, result);
             }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
@@ -1047,28 +1053,6 @@ impl SyncState {
                     document_id,
                     doc_type,
                 });
-            }
-
-            WsServerMsg::ChannelSubscribed { channel_id } => {
-                self.send_to_logic(LogicEvent::ChannelConnectionStatus {
-                    channel_id,
-                    connected: true,
-                });
-            }
-
-            WsServerMsg::ChannelUpdate {
-                channel_id,
-                seq: _,
-                update,
-            } => {
-                let _ = (channel_id, update);
-            }
-
-            WsServerMsg::ChannelEphemeral {
-                channel_id,
-                ephemeral,
-            } => {
-                let _ = (channel_id, ephemeral);
             }
 
             WsServerMsg::Error { code, message } => {
