@@ -23,8 +23,8 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChannelId, DocType, DocumentId, RequestId, RestCommand, SnapshotId, SnapshotPurpose,
-    SnapshotVerdict,
+    ActivitySummary, ChannelId, DocType, DocumentId, RequestId, RestCommand, SnapshotId,
+    SnapshotPurpose, SnapshotVerdict,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -69,6 +69,11 @@ pub enum SyncCommand {
     SendUpdate {
         document_id: DocumentId,
         payload: Vec<u8>,
+        /// What the delta holds, when the application wrote a summary
+        /// (`ambre-spec-residency.md`). A Murmure message carries one
+        /// (the Murmure messages spec). The Sync worker seals it inside the ciphertext
+        /// (`SYNC-113`), or drops it while that seal is not built.
+        summary: Option<ActivitySummary>,
     },
 
     /// The operations an earlier session of this user wrote and never sent.
@@ -117,12 +122,6 @@ pub enum SyncCommand {
     },
     CloseChannel {
         channel_id: ChannelId,
-    },
-    /// The Sync thread manages segments internally (creation, sealing, routing);
-    /// the Logic thread sends a raw payload routed into the active segment.
-    SendChannelUpdate {
-        channel_id: ChannelId,
-        payload: Vec<u8>,
     },
     SendChannelEphemeral {
         channel_id: ChannelId,

@@ -1,0 +1,72 @@
+//! Why the engine refused a document, a delta or a command.
+
+use ambre_core::schema::SchemaError;
+use ambre_core::{ChannelId, DocumentId};
+use thiserror::Error;
+
+/// Every refusal of the engine. None of them changes a document the channel
+/// already holds: each check runs before the engine keeps what it read.
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum MurmureError {
+    /// The bytes or the version refused the read (`MURMURE-019`).
+    #[error(transparent)]
+    Schema(#[from] SchemaError),
+
+    /// The header names another channel (`MURMURE-027`).
+    #[error("document {document_id} names channel {found}, not {expected}")]
+    ForeignChannel {
+        document_id: DocumentId,
+        expected: ChannelId,
+        found: ChannelId,
+    },
+
+    /// The header names another kind of document.
+    #[error("document {document_id} is a {found}, where a {expected} was expected")]
+    WrongKind {
+        document_id: DocumentId,
+        expected: &'static str,
+        found: String,
+    },
+
+    /// A header key is absent or holds a value this build cannot read.
+    #[error("the header of document {document_id} has no readable `{key}`")]
+    HeaderMalformed {
+        document_id: DocumentId,
+        key: &'static str,
+    },
+
+    /// The `meta` document lists no active segment, so no message can go
+    /// anywhere.
+    #[error("the meta document of channel {0} lists no active segment")]
+    NoActiveSegment(ChannelId),
+
+    /// The `meta` document lists a live segment whose bytes the caller did not
+    /// supply (`MURMURE-022`).
+    #[error("segment {0} is live but its bytes were not supplied")]
+    SegmentMissing(DocumentId),
+
+    /// The channel holds no document of that identifier (`MURMURE-024`).
+    #[error("document {0} is not held by this channel")]
+    NotHeld(DocumentId),
+
+    /// The document is not a final segment the `meta` document lists.
+    #[error("document {0} is not an older segment of this channel")]
+    NotOlder(DocumentId),
+
+    /// Loro refused a write or an export. Carries its message, because the
+    /// Loro error types are not `Eq`.
+    #[error("the CRDT engine refused the operation: {0}")]
+    Crdt(String),
+}
+
+impl From<loro::LoroError> for MurmureError {
+    fn from(e: loro::LoroError) -> Self {
+        Self::Crdt(e.to_string())
+    }
+}
+
+impl From<loro::LoroEncodeError> for MurmureError {
+    fn from(e: loro::LoroEncodeError) -> Self {
+        Self::Crdt(e.to_string())
+    }
+}

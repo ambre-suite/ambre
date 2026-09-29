@@ -21,11 +21,13 @@
 //! one `RestEvent` variant, edited in one place.
 //!
 //! # What is *not* here
-//! - **Content plane** (`AppCommand` / `AppEvent`): document edits and viewport
-//!   data, routed by `DocumentId` inside the Logic thread -- see [`crate::logic`].
-//! - **Control & content-send** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
-//!   `CloseChannel`, `SendChannelMessage`): fire-and-forget, no single response
-//!   to correlate -- kept as explicit envelope variants.
+//! - **Content plane** (`AppCommand` / `AppEvent`, `MurmureCommand` /
+//!   `MurmureEvent`): document edits and viewport data, routed by `DocumentId`.
+//!   Channel commands are routed by `ChannelId` inside the Logic thread. See
+//!   [`crate::logic`].
+//! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
+//!   `CloseChannel`): fire-and-forget, no single response to correlate -- kept
+//!   as explicit envelope variants.
 //! - **Server push** (`Remote*`, `ConnectionStatus`, `SyncWarning`,
 //!   `MemberRevoked`, `*ParticipantJoined/Left`): unsolicited, no originating
 //!   request -- kept explicit.

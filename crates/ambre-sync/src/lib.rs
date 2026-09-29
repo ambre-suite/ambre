@@ -1163,6 +1163,9 @@ impl SyncState {
             SyncCommand::SendUpdate {
                 document_id,
                 payload,
+                // The summary rides sealed beside the delta once `SYNC-113`
+                // lands. Until then the worker drops it (the Murmure messages spec).
+                summary: _,
             } => {
                 tracing::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
@@ -1205,12 +1208,6 @@ impl SyncState {
             // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
             SyncCommand::CloseChannel { channel_id } => self.handle_close_channel(channel_id),
-            SyncCommand::SendChannelUpdate {
-                channel_id,
-                payload,
-            } => {
-                self.handle_send_channel_update(channel_id, payload);
-            }
             SyncCommand::SendChannelEphemeral {
                 channel_id,
                 payload,
@@ -1670,6 +1667,7 @@ mod seal_tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
             payload: typed.clone(),
+            summary: None,
         });
         state.handle_command(SyncCommand::SendEphemeral {
             document_id: id,

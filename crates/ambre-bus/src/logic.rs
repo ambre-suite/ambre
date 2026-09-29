@@ -11,17 +11,19 @@
 //! [`crate::ui`].
 //!
 //! # Three planes, one envelope
-//! - **Content** ([`LogicCommand::App`]): document edits / viewport requests,
-//!   routed by `DocumentId` inside the Logic thread. [`AppCommand`] is a closed
-//!   sum: adding a document type is adding a variant. No trait object, no `Any`,
-//!   no crate cycle -- this module depends only on `ambre-core`.
+//! - **Content** ([`LogicCommand::App`], [`LogicCommand::Channel`]): document
+//!   edits / viewport requests, routed by `DocumentId` inside the Logic thread,
+//!   and channel commands, routed by `ChannelId`. [`AppCommand`] and
+//!   [`MurmureCommand`] are closed sums: adding a document type is adding a
+//!   variant. No trait object, no `Any`, no crate cycle -- this module depends
+//!   only on `ambre-core`.
 //! - **Service** ([`LogicCommand::Rest`]): the correlatable request/response
 //!   family, defined once in [`crate::rest`] and forwarded verbatim to Sync.
-//! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`, `CloseChannel`,
-//!   `SendChannelMessage`): fire-and-forget session/content-send commands with
-//!   no single response to correlate -- kept explicit.
+//! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`, `CloseChannel`):
+//!   fire-and-forget session commands with no single response to correlate --
+//!   kept explicit.
 
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
+use crate::{ChannelId, DocType, DocumentId, MurmureCommand, RequestId, RestCommand};
 use ambre_core::SessionNonce;
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
@@ -57,6 +59,17 @@ pub enum LogicCommand {
         document_id: DocumentId,
         /// Typed application command (schema owned by [`crate::logic`]).
         command: AppCommand,
+    },
+
+    /// Command for an open Murmure channel (`BUS-027`).
+    ///
+    /// Addressed to the channel, never to a document. A channel is a set of
+    /// documents (the Murmure engine spec), and the engine picks the one a
+    /// command writes. A typed variant in place of an opaque payload, so no envelope
+    /// carries a channel message as bytes (`BUS-028`).
+    Channel {
+        channel_id: ChannelId,
+        command: MurmureCommand,
     },
 
     /// Restore a document's CRDT state from a locally persisted snapshot
@@ -119,19 +132,6 @@ pub enum LogicCommand {
 
     /// Close the real-time sync session for a channel.
     CloseChannel { channel_id: ChannelId },
-
-    /// Send a message to a channel.
-    ///
-    /// `payload` is an opaque application byte blob (schema owned by
-    /// `ambre-murmure`); the Sync thread routes it into the active segment.
-    ///
-    /// TODO: migrate the Murmure channel surface to a typed `AppCommand::Murmure(...)`
-    /// like the document surface (Murmure is currently a stub).
-    SendChannelMessage {
-        channel_id: ChannelId,
-        /// Opaque application byte blob (schema owned by `ambre-murmure`).
-        payload: Vec<u8>,
-    },
 
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
     /// Hand the Logic thread font faces the UI thread has fetched

@@ -25,9 +25,9 @@ prefix is `BUS`.
 | `BUS-002` | `INV` | A document command MUST reach the Logic thread as a variant of a closed sum, never as an opaque payload. | this spec section 2 | exhaustive-match -- `AppCommand` and `AppEvent` are closed enums, so a missing document type fails the exhaustive `match` in `ambre_logic::data::handle_app_command` | none | verified |
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand`, `UiEvent` and the app envelopes implement no `Serialize` | none | verified |
-| `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
-| `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
 | `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | ci-gate -- `scripts/crate_boundaries.py` refuses an `id`, `*_id` or `*_ids` field of a bare primitive type in `ambre-bus` above its tests; type-level -- the sheet, filter view, conditional format and paragraph style ids each carry a newtype, so a swapped name and id fail to compile | none | verified |
+| `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | exhaustive-match -- `LogicCommand::Channel` carries a `MurmureCommand`, a closed enum matched in `ambre_logic::channels::handle_channel_command`, so a new command does not build until its arm is written; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` | none | verified |
+| `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | type-level -- `LogicCommand::Channel` and `UiEvent::Channel` hold a typed `MurmureCommand` and `MurmureEvent`, and no `SyncCommand` or `LogicEvent` variant names a channel message: a channel delta is the `SendUpdate` of its document | none | verified |
 
 ### 1.2 The interface sends a command
 
@@ -73,18 +73,17 @@ is what a full queue means.
 | `BUS-003` | `POST` | The Logic to Sync hop MUST return every field it was given: the encode and the decode MUST agree. | this spec section 2 | `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- every `SyncCommand` and `LogicEvent` variant, named by an exhaustive match; `::sync_command_roundtrips_through_postcard`; `::logic_event_roundtrips_through_postcard` | none | verified |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
 | `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full queue. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
-| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta and a channel message MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests; cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
+| `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests; cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
 
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 27 `verified`, 2 `unimplemented`. Host tests drive the Logic dispatcher: an
-  unknown document, a viewer's edit, a child's role. They also drive a service round trip, a late
-  response, the lossy gate and a full queue. Native views drive the input gate, the re-offer and the
-  refused commit. A gate refuses a handler that sends on a queue, and the browser tier reads the
-  busy notice.
+* **Verification.** 29 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
+  viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
+  gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
+  gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
 ---
 
 ## 2. MODEL
@@ -96,7 +95,7 @@ thread.
 
 | Plane | Carried by | Payload | Logic routing |
 |---|---|---|---|
-| **Content** | `LogicCommand::App` / `UiEvent::{Viewport,Presence}` | `AppCommand` / `AppEvent`, typed and closed | by document identity, to that document's state |
+| **Content** | `LogicCommand::App` / `LogicCommand::Channel` / `UiEvent::{Viewport,Presence,Channel}` | `AppCommand` / `AppEvent`, and `MurmureCommand` / `MurmureEvent`, typed and closed | by document identity, or by channel identity to that channel's documents |
 | **Service** | the `Rest { id, .. }` variant of all four envelopes | `RestCommand` / `RestEvent`, defined once | relayed verbatim, plus a state hook for the few that change the registry. Two are served inside Sync and reach no relay: the seal and the open of a file (`DOCFILE-014`) |
 | **Network** | `SyncCommand::Send*` / `LogicEvent::Remote*` and the pushes | opaque bytes: CRDT deltas | applied to the document, or forwarded |
 
@@ -107,19 +106,20 @@ travels towards the downstream worker and an `Event` always flows back.
 |---|---|---|---|
 | UI to Logic | `LogicCommand` | `logic.rs` | 9 |
 | Logic to UI | `UiEvent` | `ui.rs` | 16 |
-| Logic to Sync | `SyncCommand` | `command.rs` | 12 |
-| Sync to Logic | `LogicEvent` | `event.rs` | 19 |
+| Logic to Sync | `SyncCommand` | `command.rs` | 11 |
+| Sync to Logic | `LogicEvent` | `event.rs` | 18 |
 | shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 33 / 34 |
 
 ```rust
 pub enum LogicCommand {
     App { document_id: DocumentId, command: AppCommand },   // content
+    Channel { channel_id: ChannelId, command: MurmureCommand }, // content, a channel
     Rest { id: RequestId, cmd: RestCommand },               // service, relayed
     OpenDocument { document_id: DocumentId, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
 }
-pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand) } // Murmure(MurmureCommand) is designed
-pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent) }       // Murmure(MurmureEvent) is designed
+pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand), Prose(ProseCommand) }
+pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent), Prose(ProseEvent) }
 pub struct RequestId(pub u64);
 ```
 
@@ -224,9 +224,9 @@ The bus has no control of its own. What a user meets is what it does under load.
 * **The hold queue has a bound, and past it the command is refused.** Sixty-four commands, after
   which the outbox reports a refusal rather than growing without limit. The input gate closes on the
   first held command, so reaching the bound takes a saturation no test has produced.
-* **The channel variants of the code carry opaque bytes.** Both envelopes still hold them. The design
-  moves a channel onto the content plane (`BUS-027`, `BUS-028`). That is the
-  `ARCH P7` Story (`ambre-roadmap.md` E5).
+* **A channel is not a document, so it has its own content variant.** `AppCommand` is addressed to
+  one document, and a channel is several (`MURMURE-021`). `LogicCommand::Channel` carries its
+  commands, and a channel delta leaves as the `SendUpdate` of the document it names.
 * **Nothing bounds how long a service request may stay outstanding.** A request whose answer never
   arrives leaves its route recorded, and nothing times it out.
 

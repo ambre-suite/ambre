@@ -22,6 +22,7 @@
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded
 //! on that hop.
 
+pub mod activity;
 pub mod app;
 pub mod command;
 pub mod conduit;
@@ -36,6 +37,11 @@ pub mod sync_warning;
 pub mod ui;
 
 // Re-export the main types for convenient use.
+pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
+// The Murmure data plane, addressed to a channel rather than a document.
+pub use app::murmure::{
+    MentionTarget, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Timestamp,
+};
 pub use command::SyncCommand;
 pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
 // Trame data plane (command + event + value types) lives under `app::trame`;
@@ -134,7 +140,7 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,
+    ChannelId, DocType, DocumentId, MeetingId, MessageId, PublicKey, Role, SnapshotId, UserId, Uuid,
 };
 
 #[cfg(test)]

@@ -1376,6 +1376,7 @@ mod tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
             payload: b"typed during the hold".to_vec(),
+            summary: None,
         });
         assert_eq!(state.held_outbox.borrow().len(), 1, "the edit is kept");
 

@@ -377,6 +377,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
         payload: b"hello world".to_vec(),
+        summary: None,
     });
 
     let msgs = mock.drain_client_msgs();
@@ -460,6 +461,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
         payload: b"data".to_vec(),
+        summary: None,
     });
     let update_msgs = mock.drain_client_msgs();
     assert_eq!(update_msgs.len(), 1, "SendUpdate should send one Update");

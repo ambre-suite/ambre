@@ -21,7 +21,9 @@
 //!   `UpdateRequired`): unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, Role, UserId};
+use crate::{
+    ChannelId, DocType, DocumentId, MeetingId, MurmureEvent, RequestId, RestEvent, Role, UserId,
+};
 
 // -----------------------------------------------------------------------------
 // UiEvent -- Logic thread -> UI Thread
@@ -95,13 +97,11 @@ pub enum UiEvent {
     },
 
     // -- Channels (Murmure) -- real-time push -----------------------------------
-    /// Inbound channel message (decrypted by the Sync thread).
-    ///
-    /// `payload` is an opaque application byte blob (schema owned by
-    /// `ambre-murmure`).
-    ChannelMessage {
+    /// What an open channel's engine tells its view (`BUS-027`): typed, never
+    /// an opaque payload (`BUS-028`).
+    Channel {
         channel_id: ChannelId,
-        payload: Vec<u8>,
+        event: MurmureEvent,
     },
 
     /// Inbound ephemeral channel event (typing indicator, presence, ...).

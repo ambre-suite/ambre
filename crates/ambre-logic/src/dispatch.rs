@@ -99,6 +99,7 @@ impl LogicState {
                         self.docs.clear();
                         self.evicted.clear();
                         self.store_full.clear();
+                        self.channels.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -153,17 +154,14 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::OpenChannel { channel_id });
             }
             LogicCommand::CloseChannel { channel_id } => {
+                self.channels.remove(&channel_id);
                 self.send_to_sync(SyncCommand::CloseChannel { channel_id });
             }
-            LogicCommand::SendChannelMessage {
+            // -- Content plane: a Murmure command, addressed to its channel ---
+            LogicCommand::Channel {
                 channel_id,
-                payload,
-            } => {
-                self.send_to_sync(SyncCommand::SendChannelUpdate {
-                    channel_id,
-                    payload,
-                });
-            }
+                command,
+            } => self.handle_channel_command(channel_id, command),
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
@@ -405,15 +403,6 @@ impl LogicState {
             }
 
             // -- Channels (server push) ----------------------------------------
-            LogicEvent::ChannelRemoteUpdate {
-                channel_id,
-                payload,
-            } => {
-                self.send_to_ui(UiEvent::ChannelMessage {
-                    channel_id,
-                    payload,
-                });
-            }
             LogicEvent::ChannelRemoteEphemeral {
                 channel_id,
                 payload,
@@ -630,6 +619,7 @@ mod tests {
                 SyncCommand::SendUpdate {
                     document_id: id,
                     payload,
+                    ..
                 } if id == document_id => Some(payload),
                 _ => None,
             })
@@ -1305,6 +1295,7 @@ mod tests {
         let forwarded = SyncCommand::SendUpdate {
             document_id: doc_id,
             payload: file.clone(),
+            summary: None,
         };
         assert!(
             format!("{forwarded:?}").contains(run),

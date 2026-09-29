@@ -3044,6 +3044,7 @@ mod tests {
         state.handle_command(SyncCommand::SendUpdate {
             document_id: doc,
             payload: b"next".to_vec(),
+            summary: None,
         });
         let clocks: Vec<u64> = drain_ws(&ws_rx)
             .into_iter()

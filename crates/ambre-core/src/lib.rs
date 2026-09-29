@@ -57,7 +57,7 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
-pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
+pub use id::{ChannelId, DocumentId, MeetingId, MessageId, SnapshotId, UserId};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use public_key::PublicKey;
 pub use role::Role;

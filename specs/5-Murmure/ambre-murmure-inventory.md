@@ -15,13 +15,14 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | partial | 10 |  |
+| `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 38 |  |
 | `murmure-composer` | The field where a member writes. | design-only | 25 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 13 |  |
-| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 11 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
@@ -30,7 +31,6 @@
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 31 |  |
-| `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 22 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | design-only | 15 |  |
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
@@ -43,4 +43,4 @@
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**27 features: 0 implemented, 0 partial, 27 design-only. 417 contract rows, 0 loose.**
+**27 features: 0 implemented, 2 partial, 25 design-only. 417 contract rows, 0 loose.**

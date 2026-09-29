@@ -21,9 +21,9 @@
 
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    AppCommand, CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId,
-    LogicEvent, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
-    UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, RequestId, RestCommand,
+    RestEvent, Role, SelectionKind, SyncCommand, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -183,6 +183,17 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::SendUpdate {
         document_id: doc,
         payload: vec![0, 1, 2, 250, 255],
+        summary: None,
+    });
+    roundtrip_sync(&SyncCommand::SendUpdate {
+        document_id: doc,
+        payload: vec![7],
+        summary: Some(ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: vec![UserId::new()],
+            mentions_all: true,
+            anchor: Some(ActivityAnchor(vec![1, 2])),
+        }),
     });
     roundtrip_sync(&SyncCommand::SendUnsent {
         document_id: doc,
@@ -250,7 +261,6 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::Reconnect { .. } => "Reconnect",
         SyncCommand::OpenChannel { .. } => "OpenChannel",
         SyncCommand::CloseChannel { .. } => "CloseChannel",
-        SyncCommand::SendChannelUpdate { .. } => "SendChannelUpdate",
         SyncCommand::SendChannelEphemeral { .. } => "SendChannelEphemeral",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
@@ -277,7 +287,6 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
         LogicEvent::MemberRevoked { .. } => "MemberRevoked",
         LogicEvent::DocumentShared { .. } => "DocumentShared",
-        LogicEvent::ChannelRemoteUpdate { .. } => "ChannelRemoteUpdate",
         LogicEvent::ChannelRemoteEphemeral { .. } => "ChannelRemoteEphemeral",
         LogicEvent::ChannelConnectionStatus { .. } => "ChannelConnectionStatus",
         LogicEvent::ChannelSnapshotNeeded { .. } => "ChannelSnapshotNeeded",
@@ -291,8 +300,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 17;
-const EVENT_VARIANTS: usize = 26;
+const SYNC_VARIANTS: usize = 16;
+const EVENT_VARIANTS: usize = 25;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -334,6 +343,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendUpdate {
             document_id: doc,
             payload: vec![0, 7],
+            summary: Some(ActivitySummary {
+                kind: ActivityKind::Content,
+                mentions: vec![user],
+                mentions_all: false,
+                anchor: Some(ActivityAnchor(vec![3])),
+            }),
         },
         SyncCommand::SendUnsent {
             document_id: doc,
@@ -360,10 +375,6 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::Reconnect { document_id: doc },
         SyncCommand::OpenChannel { channel_id: chan },
         SyncCommand::CloseChannel { channel_id: chan },
-        SyncCommand::SendChannelUpdate {
-            channel_id: chan,
-            payload: vec![6, 6],
-        },
         SyncCommand::SendChannelEphemeral {
             channel_id: chan,
             payload: vec![7],
@@ -445,10 +456,6 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::DocumentShared {
             document_id: doc,
             doc_type: DocType::Trame,
-        },
-        LogicEvent::ChannelRemoteUpdate {
-            channel_id: chan,
-            payload: vec![1],
         },
         LogicEvent::ChannelRemoteEphemeral {
             channel_id: chan,

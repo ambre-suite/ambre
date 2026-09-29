@@ -32,6 +32,8 @@ pub mod persistence;
 // The `impl LogicState` block is spread across sibling modules:
 //   - `data`:     application data plane (app commands, remote deltas, snapshots)
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
+//   - `channels`: Murmure channels, each a set of documents (the Murmure engine spec)
+mod channels;
 mod data;
 mod dispatch;
 /// A history replay imported in slices (`SYNC-131`).
@@ -645,6 +647,11 @@ struct LogicState {
     /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
     docs: HashMap<DocumentId, LiveDoc>,
+    /// Open Murmure channels, keyed by `channel_id`. Apart from `docs`: a
+    /// channel is several documents, and a remote delta finds its channel by
+    /// the document it names (the Murmure engine spec). Removed on `CloseChannel` and
+    /// `Logout`.
+    channels: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -723,6 +730,7 @@ impl LogicState {
             to_sync,
             to_persist,
             docs: HashMap::new(),
+            channels: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),

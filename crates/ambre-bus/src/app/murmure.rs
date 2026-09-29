@@ -1,0 +1,100 @@
+//! Murmure data plane: the command a view sends to a channel, the event the
+//! engine answers with, and the value types both carry
+//! (`features/ambre-spec-murmure-engine.md section 3`).
+//!
+//! Pure data, like every module of [`crate::app`]: no Loro type crosses the
+//! bus (`SYNC-011`). The engine that reads and writes the documents lives in
+//! `ambre-murmure`.
+//!
+//! A channel is a set of documents, never one document (`MURMURE-021`). So the
+//! command is addressed to a [`ChannelId`](crate::ChannelId), carried by
+//! [`LogicCommand::Channel`](crate::LogicCommand::Channel), and never by
+//! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
+//! document (`BUS-027`).
+
+use crate::{DocumentId, MessageId, UserId};
+
+/// A wall-clock instant in Unix milliseconds.
+///
+/// Display only: a peer's clock is untrusted, so no rule orders or refuses a
+/// message on it (`ambre-spec-murmure-schema.md section 2`). The view stamps
+/// it, because the Logic thread reads no clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(pub u64);
+
+/// What a mention names: one member, or every member of the channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MentionTarget {
+    /// One member, by user identifier.
+    User(UserId),
+    /// The channel itself, an `@channel`.
+    Channel,
+}
+
+/// A message the view hands the engine to send.
+///
+/// The text is plain. The `mention` marks over it are written by the mentions
+/// feature. Until then the mentions reach the activity summary alone
+/// (`MURMURE-081`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageDraft {
+    /// The body, as the author typed it.
+    pub text: String,
+    /// Who the body names, in the order the author typed them.
+    pub mentions: Vec<MentionTarget>,
+}
+
+/// A command for an open channel, UI thread -> Logic thread.
+///
+/// Carried by [`LogicCommand::Channel`](crate::LogicCommand::Channel). The
+/// variants are the ones the engine builds today. The spec lists the others,
+/// each with the Story that brings it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MurmureCommand {
+    /// Append a message to the active segment, under this session's user
+    /// (`MURMURE-080`).
+    SendMessage {
+        draft: MessageDraft,
+        /// The instant the author sent it, stamped by the view.
+        now: Timestamp,
+    },
+}
+
+impl MurmureCommand {
+    /// Whether the command can change a document of the channel.
+    ///
+    /// The same question [`AppCommand::is_mutating`](crate::AppCommand::is_mutating)
+    /// answers for a document. Every variant built today writes.
+    pub fn is_mutating(&self) -> bool {
+        match self {
+            Self::SendMessage { .. } => true,
+        }
+    }
+}
+
+/// One message as the view draws it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageView {
+    /// The identity the author's peer minted (`MURMURE-002`).
+    pub id: MessageId,
+    /// The user who wrote the message (`MURMURE-003`).
+    pub author: UserId,
+    /// The instant the author's peer stamped.
+    pub ts: Timestamp,
+    /// The body, as plain text.
+    pub text: String,
+}
+
+/// An event from an open channel, Logic thread -> UI thread.
+///
+/// Carried by [`UiEvent::Channel`](crate::UiEvent::Channel).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MurmureEvent {
+    /// These messages of `segment` are new or changed. The view keys them by
+    /// [`MessageId`], so a message it already holds is replaced, never
+    /// duplicated. `messages` keeps the order of the segment.
+    Messages {
+        segment: DocumentId,
+        messages: Vec<MessageView>,
+    },
+}

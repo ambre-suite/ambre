@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: THE MURMURE ENGINE
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the channel state, the send and the remote delta are built
 
 > A channel opens, shows its latest messages, and carries what the user writes to every member.
 > The engine holds the documents of a channel on the Logic thread and speaks to the interface in
@@ -18,10 +18,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-021` | `INV` | A channel MUST be held on the Logic thread as the set of its documents, never merged into one document. | this spec section 3; `ambre-spec-murmure-schema.md section 2` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-022` | `INV` | An open channel MUST hold its `meta` document, its active segment and its closing segment. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-023` | `INV` | An older segment MUST be loaded only when the view asks for a message it holds. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-024` | `INV` | A remote delta MUST reach the document its `document_id` names, and no other. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-021` | `INV` | A channel MUST be held on the Logic thread as the set of its documents, never merged into one document. | this spec section 3; `ambre-spec-murmure-schema.md section 2` | `ambre_murmure::channel_tests::a_channel_is_held_as_its_documents_apart` -- the `meta` document and the segment carry distinct identifiers and disjoint roots; structural -- `ChannelState` holds one `LoroDoc` per document, and `LogicState` keeps channels in a registry apart from `docs` | none | verified |
+| `MURMURE-022` | `INV` | An open channel MUST hold its `meta` document, its active segment and its closing segment. | this spec section 3 | `ambre_murmure::channel_tests::an_open_channel_holds_meta_the_active_and_the_closing_segment`; `ambre_murmure::channel_tests::a_live_segment_with_no_bytes_refuses_the_open` -- a live segment the caller cannot supply refuses the open rather than opening short | none | verified |
+| `MURMURE-023` | `INV` | An older segment MUST be loaded only when the view asks for a message it holds. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_murmure::channel_tests::an_older_segment_loads_only_when_the_view_asks`; `ambre_murmure::channel_tests::a_live_segment_is_not_an_older_one` | partial -- the engine loads a final segment on demand only, and no command carries that demand yet: the fetch it needs lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | partial |
+| `MURMURE-024` | `INV` | A remote delta MUST reach the document its `document_id` names, and no other. | this spec section 3 | `ambre_murmure::channel_tests::a_remote_delta_reaches_the_document_it_names_and_no_other` -- the other held documents compare equal before and after; `ambre_murmure::channel_tests::a_delta_for_a_document_the_channel_does_not_hold_is_refused`; `ambre_logic::channels::tests::a_remote_delta_reaches_the_channel_that_holds_its_document` -- through the Logic dispatcher | none | verified |
 
 ### 1.2 Open a channel
 
@@ -29,8 +29,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-025` | `POST` | Opening a channel MUST subscribe to its `meta` document and to its live segments. | this spec section 3; `SRV-047` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-026` | `POST` | Opening a channel MUST pin the documents the view shows. | this spec section 3; `RESID-003` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-027` | `FAIL` | Given a document whose header names another channel, the engine MUST refuse it and warn. | this spec section 3; `MURMURE-001` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-028` | `FRAME` | Opening a channel MUST NOT load a final segment. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-027` | `FAIL` | Given a document whose header names another channel, the engine MUST refuse it and warn. | this spec section 3; `MURMURE-001` | `ambre_murmure::channel_tests::a_document_naming_another_channel_is_refused`; `ambre_murmure::channel_tests::a_meta_document_of_another_channel_is_refused`; `ambre_murmure::channel_tests::a_segment_in_the_place_of_meta_is_refused`; structural -- the one branch of `schema::admit` that returns `ForeignChannel` emits the `tracing::warn!` first | none | verified |
+| `MURMURE-028` | `FRAME` | Opening a channel MUST NOT load a final segment. | this spec section 3 | `ambre_murmure::channel_tests::opening_a_channel_never_loads_a_final_segment` -- the final segment's bytes are handed to the open, and it still holds none of it | none | verified |
 
 ### 1.3 Apply a remote delta
 
@@ -44,7 +44,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   fork row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** every document here travels sealed through the document pipeline (`ZK-001`). What
   the relay learns of the grouping is `ZK-015`.
-* **Verification.** 10 `unimplemented`: `crates/ambre-murmure` is a `lib.rs`.
+* **Verification.** 5 `verified`, 4 `unimplemented`. Nothing opens a channel in production yet: its
+  documents reach the Logic thread with the channel subscription.
 
 ---
 
@@ -63,33 +64,31 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** the five kinds of `ambre-spec-murmure-schema.md section 3`, one Loro document
 each.
 
-**The state of an open channel.**
+**The state of an open channel.** Private fields, read through methods.
 
 ```rust
 pub struct ChannelState {
-    pub channel_id: ChannelId,
-    pub meta: LoroDoc,
-    pub active: LoroDoc,
-    pub closing: Option<LoroDoc>,
-    pub loaded: BTreeMap<DocumentId, LoroDoc>,   // older segments, on demand
-    pub threads: BTreeMap<DocumentId, LoroDoc>,  // the threads the view opened
+    channel_id: ChannelId,
+    meta: Held,                          // a DocumentId and its LoroDoc
+    active: Held,
+    closing: Option<Held>,
+    loaded: HashMap<DocumentId, LoroDoc>, // final segments, on demand
 }
 ```
 
-**The command surface.** One content-plane variant, addressed to a channel (`BUS-027`).
+Threads join the state with the threads Story.
+
+**The command surface.** One content-plane variant, `LogicCommand::Channel`, addressed to a channel
+(`BUS-027`). Each command arrives with the Story that builds it.
 
 ```rust
 pub enum MurmureCommand {
-    SendMessage { draft: MessageDraft },
-    EditMessage { segment: DocumentId, message: MessageId, content: TextDelta },
-    DeleteMessage { segment: DocumentId, message: MessageId },
-    React { segment: DocumentId, message: MessageId, emoji: Emoji },
-    Unreact { segment: DocumentId, message: MessageId, emoji: Emoji },
-    OpenThread { root: MessageRef },
-    LoadOlder { before: DocumentId },
-    MarkRead { document: DocumentId, seq: Seq },
+    SendMessage { draft: MessageDraft, now: Timestamp },
 }
 ```
+
+The view stamps `now`, because the Logic thread reads no clock. A send hands the Sync worker the
+delta and its activity summary, and the view a `MurmureEvent::Messages`.
 
 **A remote delta, in steps.**
 
@@ -98,7 +97,8 @@ pub enum MurmureCommand {
 3. The authorship check of the messages feature runs on a fork (`MURMURE-029`).
 4. The delta is imported, and the view is told which messages changed.
 
-**Code.** not built. `crates/ambre-murmure/src/lib.rs` is a stub.
+**Code.** `crates/ambre-murmure/src/channel.rs`, `crates/ambre-murmure/src/schema.rs`,
+`crates/ambre-bus/src/app/murmure.rs`, `crates/ambre-logic/src/channels.rs`.
 
 ---
 
@@ -126,6 +126,8 @@ The engine has no control of its own. It answers the commands the views send.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** The crate is a stub, and the protocol still carries the channel plane.
+* **Nothing opens a channel.** The registry of open channels is empty in production until the
+  channel subscription delivers its documents. Tests seed it.
+* **A channel is not persisted locally.** Its documents take residency, a later Story.
 * **Two channels side by side** are in `features/ambre-spec-murmure-layout.md`: each pane keeps its
   channel in view, and residency bounds the rest by bytes.

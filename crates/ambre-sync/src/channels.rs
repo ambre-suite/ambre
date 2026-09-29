@@ -17,13 +17,8 @@ impl SyncState {
         tracing::info!("Sync: CloseChannel {channel_id:?}");
     }
 
-    /// A channel message has no path to the relay yet: it is refused, and the
-    /// Logic thread is told, never dropped in silence (`SYNC-069`).
-    pub(crate) fn handle_send_channel_update(&self, channel_id: ChannelId, payload: Vec<u8>) {
-        self.refuse_channel_send(channel_id, "update", payload.len());
-    }
-
-    /// See [`handle_send_channel_update`](Self::handle_send_channel_update).
+    /// A channel ephemeral has no path to the relay yet: it is refused, and
+    /// the Logic thread is told, never dropped in silence (`SYNC-069`).
     pub(crate) fn handle_send_channel_ephemeral(&self, channel_id: ChannelId, payload: Vec<u8>) {
         self.refuse_channel_send(channel_id, "ephemeral", payload.len());
     }
@@ -49,14 +44,13 @@ const CHANNEL_SEND_UNAVAILABLE: u16 = 501;
 mod tests {
     use super::*;
 
-    /// A channel message is refused and said, never dropped in silence
-    /// (`SYNC-069`), on both send paths.
+    /// A channel ephemeral is refused and said, never dropped in silence
+    /// (`SYNC-069`).
     #[test]
     fn a_channel_message_is_refused_not_dropped() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, String::new(), None);
         let channel = ChannelId::new();
-        state.handle_send_channel_update(channel, b"hello".to_vec());
         state.handle_send_channel_ephemeral(channel, b"typing".to_vec());
         let refusals = rx
             .try_iter()
@@ -70,6 +64,6 @@ mod tests {
                 )
             })
             .count();
-        assert_eq!(refusals, 2);
+        assert_eq!(refusals, 1);
     }
 }

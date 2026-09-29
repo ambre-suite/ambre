@@ -1,6 +1,25 @@
-//! Secure messaging application for Ambre.
+//! Murmure, the messaging application of Ambre: the engine core
+//! (`specs/5-Murmure/features/ambre-spec-murmure-engine.md`).
 //!
-//! Will provide `MurmureState` (the per-document model driven by the Logic
-//! thread), E2EE channels with segment-based history, read-cursor tracking, and
-//! real-time presence. Its IPC message types (`MurmureCommand` /
-//! `MurmureEvent`) will live in `ambre-bus` alongside the other document types.
+//! The Logic thread holds one [`ChannelState`] per open channel. A channel is a
+//! set of Loro documents, never one (`MURMURE-021`). The engine reads no clock
+//! and no key: the view stamps the time, and the Sync worker seals and routes
+//! the deltas this crate exports.
+//!
+//! The commands and events the engine answers live in `ambre_bus::app::murmure`,
+//! as pure data (`BUS-027`).
+
+#![forbid(unsafe_code)]
+
+mod channel;
+mod error;
+pub mod schema;
+
+#[cfg(test)]
+mod channel_tests;
+#[cfg(test)]
+mod schema_shape;
+
+pub use channel::{ChannelState, Sent};
+pub use error::MurmureError;
+pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};

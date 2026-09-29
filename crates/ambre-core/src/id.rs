@@ -111,6 +111,13 @@ define_id! {
 }
 
 define_id! {
+    /// Identifies a Murmure message, minted by the peer that creates it
+    /// (the Murmure schema). A position in a list moves with every concurrent
+    /// append, so a pin or a reply names the message by this value instead.
+    MessageId
+}
+
+define_id! {
     /// Identifies a Rendez-Vous meeting room.
     MeetingId
 }

@@ -177,10 +177,6 @@ pub enum LogicEvent {
     },
 
     // -- Channels (Murmure) -- real-time (server push) --------------------------
-    ChannelRemoteUpdate {
-        channel_id: ChannelId,
-        payload: Vec<u8>,
-    },
     ChannelRemoteEphemeral {
         channel_id: ChannelId,
         payload: Vec<u8>,

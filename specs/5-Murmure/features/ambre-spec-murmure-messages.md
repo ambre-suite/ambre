@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the send is built; the edit, the delete and the authorship check are not
 
 > A member writes a message, edits it, or deletes it. Nobody else can change it: every client
 > refuses a change that does not come from its author.
@@ -26,11 +26,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-080` | `POST` | A sent message MUST be appended to the active segment with a fresh `MessageId` and its author. | this spec section 3; `MURMURE-002` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-080` | `POST` | A sent message MUST be appended to the active segment with a fresh `MessageId` and its author. | this spec section 3; `MURMURE-002` | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author`; `ambre_murmure::channel_tests::a_sent_delta_brings_a_peer_to_the_same_messages`; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` -- the author is the session's user | none | verified |
 | `MURMURE-256` | `POST` | A sent message MUST create its `reactions` map, empty. | this spec section 3; `MURMURE-006` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-081` | `POST` | A sent message MUST carry an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-081` | `POST` | A sent message MUST carry an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | `ambre_murmure::channel_tests::a_sent_message_carries_a_content_summary_with_its_mentions`; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` -- the summary leaves with the delta | partial -- the update the Logic thread hands the Sync worker carries the summary, and the worker drops it until `SYNC-113` seals it; lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | partial |
 | `MURMURE-082` | `FAIL` | Given a delta that creates a message under another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | `ambre_murmure::channel_tests::sending_a_message_changes_no_other_message` -- the deep value of every earlier message compares equal across the send | none | verified |
 
 ### 1.3 Edit a message
 
@@ -64,7 +64,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a frame is a message, an edit or a delete.
-* **Verification.** 22 `unimplemented`: no message exists in the code.
+* **Verification.** 2 `verified`, 19 `unimplemented`: the send is built, and no edit, delete or
+  authorship check exists.
 
 ---
 
@@ -117,7 +118,7 @@ check on the same delta, so every client reaches the same verdict (`MURMURE-079`
 **Moderation is the one exception.** Only the author changes a message, except a removal by a
 moderator whose standing the membership log proves (`features/ambre-spec-murmure-moderation.md`).
 
-**Code.** not built.
+**Code.** the send is `ChannelState::send`, in `crates/ambre-murmure/src/channel.rs`.
 
 ---
 
@@ -151,6 +152,7 @@ moderator whose standing the membership log proves (`features/ambre-spec-murmure
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No message, and no authorship check, exists.
+* **Only the send is built.** No edit, no delete, and no authorship check exist.
+* **A delta travels binary today.** The JSON form of `MURMURE-223` lands with the authorship check.
 * **The JSON form costs bytes.** A message delta weighs 346 bytes compressed, against 214 for the
   binary form. The figure comes from zlib, and the envelope compresses with zstd.
