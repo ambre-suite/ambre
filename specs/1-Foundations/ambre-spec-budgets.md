@@ -278,6 +278,7 @@
 | Murmure custom emoji, per space | 500, of 128 KB each at most | Every member loads the images the channel shows, so the cap bounds the space document and the images drawn |
 | Murmure active segment, deltas past its latest snapshot | < 250, to measure on a phone | A cold open pays one inbound open (section 1, < 350 us) and one replay (section 1, < 250 us) for each. 250 of them cost about 150 ms of a phone cold open. Without a snapshot, a segment at its close replays 6250 deltas, fetched as 6250 objects. The relay asks for the snapshot (`SRV-038`). The phone figure assumes a phone about 7 times slower than the desktop: the ratio of the inbound open budget (350 us) to its desktop measure (50 us). The `Murmure measured on a phone` Story (`ambre-roadmap.md` E5) replaces that ratio with a measure |
 | Light subscription, per document not held | < 1 KB | The key, the counters and the cursor (`RESID-004`) |
+| Avatar picture | 256 x 256 pixels, < 48 KB | A member list draws one per member, so the cap bounds the list of a large space (`PROFILE-005`) |
 | User settings document | < 256 KB, to measure | Pinned while the user is signed in (`SETTINGS-005`), and counted in the documents held in memory |
 | Color emoji font | loaded on first use, size to measure | Charged to the fonts row above. A full color emoji font weighs about 10 MB, so its size decides whether the fonts row still holds |
 
@@ -301,6 +302,8 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
+| Refresh period of the presence in a space | 60 s | a member list needs a state per minute, and the relay then writes one entry per member per minute (`MURMURE-445`) | **none exists** |
+| Idle delay before a member shows as away | 10 min | a short break keeps a member online, and a meeting marks them away | **none exists** |
 | Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
 | Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | `IDLE_SECS` in `ambre_server::hot_tail`, the delay the compaction pass reads (`SRV-152`) |
 | Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |

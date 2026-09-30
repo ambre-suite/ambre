@@ -76,6 +76,7 @@
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
 | peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
+| avatar | the picture or the initials that stand for a user | profile picture | `1-Foundations/ambre-spec-profile.md` |
 | ephemeral | a message kept by nothing after delivery | | `1-Foundations/ambre-spec-broadcast.md` |
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
 | sequencer | the relay half that numbers deltas | | `1-Foundations/ambre-spec-sequencer.md` |

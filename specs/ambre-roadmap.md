@@ -144,6 +144,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Read cursors and activity | MVP | a read cursor per member and channel, the activity answer of the relay, and marking a channel or everything read. Done when `SRV-109`, `SRV-110`, `SRV-137`, `MURMURE-114`, `MURMURE-116`, `MURMURE-118`, `MURMURE-155` and `MURMURE-156` read `verified` |
 | `[ ]` Unread counts and mark unread | MVP | a sequence number per message the client can read, the unread count of a channel from the summaries and the loaded document, and marking a message unread. Done when `MURMURE-113`, `MURMURE-117`, `MURMURE-120` and `MURMURE-154` read `verified` |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
+| `[ ]` The members of a space | MVP | the member list of a space with each name and avatar, an online or offline mark, the member search in the palette and in the list, and a direct message opened from a member. The avatar is the initials on the identity colour until the `Avatars` Story (`ambre-roadmap.md` E6). Needs the space document and direct messages. Done when `MURMURE-440` to `MURMURE-446`, `MURMURE-448` to `MURMURE-455` and `PROFILE-002` read `verified` |
 | `[ ]` Private channels and direct messages | MVP | invite-only channels, and direct messages between two or more members with an optional name |
 | `[ ]` Channel segments and finalization | MVP | the chain of segments, closing and finalizing through a relay lease, and the second client that confirms a seal before the deltas go |
 | `[ ]` Message authorship | MVP | an edit, a delete or a reaction takes effect only from the member entitled to it |
@@ -161,6 +162,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Custom emoji | V1 | emoji a space admin adds for the members of that space |
 | `[ ]` Presence settings | V1 | turning off the presence and typing indicators, kept in the user settings |
+| `[ ]` Presence states | V1 | away after an idle delay and busy set by the member, each with its own mark in the member list, and a status that follows the member to every device. Done when `MURMURE-447`, `MURMURE-456` to `MURMURE-458` and `MURMURE-459` read `verified` |
 | `[ ]` Push notifications | V1 | a notification with every tab closed, a level per channel, and mentions routed by the relay |
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
@@ -202,6 +204,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` The stylesheet reads the tokens | MVP | fifty literal colours in the shell stylesheet bypass the one token source, so a theme switch moves everything except them. Done when `UI-THREAD-029` reads `verified` |
 | `[ ]` A provider account is unlocked or set up | V1 | the home screen has no passphrase field and no setup, so an account that holds its keys cannot open them and one that owes them is never asked. The setup refusal reaches a screen that ignores it. Needs `The provider sign-in reaches the client` first. Done when `CHROME-097` to `CHROME-100` read `verified` |
 | `[ ]` User settings | V1 | a sealed store of one user's settings that follows them across devices: Murmure mute and layout first, then macro approvals and secret values |
+| `[ ]` Avatars | V1 | a picture per user, drawn in every application, held in the clear by the relay and served only to the users who share a document with its owner. Done when `PROFILE-001` and `PROFILE-003` to `PROFILE-009` read `verified`, and `ZK-018` reads `verified` |
 | `[ ]` The PDF writer is fetched on demand | V1 | `krilla` sits behind a Cargo feature the launcher enables, so every user downloads the writer whether or not they ever export. A feature cannot defer it: the build emits one wasm artifact per instance, so the writer needs a second artifact fetched on the first export, as the budget already prescribes for Prose's interop |
 
 ### Trame
@@ -499,6 +502,7 @@ owns the subsystem.
 | `[ ]` Macro marketplace | a publisher signs a macro package, an editor installs it into a document, and an update waits for a new installation |
 | `[ ]` Organization trust anchor | an organization signing key held by its owners, admin certificates it signs, and a fingerprint members verify |
 | `[ ]` Organization macro catalog | a catalog document of macros an organization approves, and the policy its members' clients apply. Needs the trust anchor |
+| `[ ]` Sealed profiles | the display name and the avatar sealed under a profile key wrapped for each contact, so the relay learns neither |
 
 ### Prose
 

@@ -37,13 +37,14 @@ that component's prefix instead.
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-018` | `INV` | What the relay learns of a user in the clear MUST be limited to `{the address and whether a provider verified it, the display name, the avatar picture, the provider and its subject, the two public keys}`. | this spec section 2; `ambre-spec-session.md section 3`; `ambre-spec-profile.md section 3` | none | unheld -- the account table holds these fields beside the sealed master material, and no test reads its columns as `ZK-015` reads the channel tables; lands with the `Avatars` Story (`ambre-roadmap.md` E6) | untested |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 16 `verified`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 16 `verified`, 1 `untested`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -107,6 +108,9 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 * **Accepted, for a Murmure channel only:** the grouping of its documents and the few facts the
   relay needs to finalize and to expire them (`ZK-015`). The relay never learns the kind of an
   update: the activity summary is sealed (`SYNC-113`).
+* **Accepted, for an account:** the address, the display name and the avatar picture, in the clear
+  (`ZK-018`). The relay shows a member list to its members, and the picture is one the user chose
+  to show. It serves a picture only to a user who shares a document with its owner (`PROFILE-009`).
 * **Accepted, for a push notification only:** the level of each member per channel, and who a
   message names. Web Push requires a visible notification for every push, so the relay must choose
   who to wake (`ZK-016`).

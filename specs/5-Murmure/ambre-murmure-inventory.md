@@ -29,6 +29,7 @@
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 19 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
+| `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | design-only | 20 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 31 |  |
@@ -43,4 +44,4 @@
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 
-**27 features: 0 implemented, 3 partial, 24 design-only. 417 contract rows, 0 loose.**
+**28 features: 0 implemented, 3 partial, 25 design-only. 437 contract rows, 0 loose.**
