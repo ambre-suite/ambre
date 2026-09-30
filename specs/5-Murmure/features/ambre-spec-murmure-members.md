@@ -141,8 +141,8 @@ the member reads it (`ambre-spec-user-settings.md`). A connection copies it into
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No space document exists before the
-  `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5).
+* **Nothing is built.** The space document exists, and its member list waits on the
+  `The members of a space` Story (`ambre-roadmap.md` E5).
 * **Do not disturb is not ruled.** It changes who a notification wakes, so it waits on the
   notification design (`ambre-spec-murmure-notifications.md`).
 * **A space of thousands of members is not ruled.** The list and the presence scale with the
