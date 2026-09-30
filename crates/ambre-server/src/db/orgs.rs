@@ -22,7 +22,8 @@ pub struct OrgMemberRow {
     pub user_id: uuid::Uuid,
     pub email: String,
     pub display_name: String,
-    pub role: String,
+    #[sqlx(try_from = "String")]
+    pub role: ambre_core::Role,
     pub shamir_share_enc: Option<Vec<u8>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -158,7 +159,7 @@ pub async fn add_org_member(
     pool: &PgPool,
     org_id: uuid::Uuid,
     user_id: uuid::Uuid,
-    role: &str,
+    role: ambre_core::Role,
     shamir_share_enc: Option<&[u8]>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
@@ -170,8 +171,9 @@ pub async fn add_org_member(
     .bind(user_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
@@ -182,7 +184,7 @@ pub async fn add_org_member(
     )
     .bind(org_id)
     .bind(user_id)
-    .bind(role)
+    .bind(role.as_str())
     .bind(shamir_share_enc)
     .execute(&mut *tx)
     .await
@@ -257,7 +259,8 @@ pub struct OrgMembershipRow {
     pub org_id: uuid::Uuid,
     #[allow(dead_code)]
     pub user_id: uuid::Uuid,
-    pub role: String,
+    #[sqlx(try_from = "String")]
+    pub role: ambre_core::Role,
     #[allow(dead_code)]
     pub shamir_share_enc: Option<Vec<u8>>,
     #[allow(dead_code)]
@@ -284,11 +287,12 @@ pub async fn remove_org_member(
     .bind(user_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
     let Some(current_role) = current_role else {
         return Ok(false);
     };
-    if current_role == "owner" {
+    if current_role == ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
@@ -311,7 +315,7 @@ pub async fn update_org_member_role(
     pool: &PgPool,
     org_id: uuid::Uuid,
     user_id: uuid::Uuid,
-    role: &str,
+    role: ambre_core::Role,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
 
@@ -322,15 +326,16 @@ pub async fn update_org_member_role(
     .bind(user_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, org_id).await?;
     }
 
     sqlx::query("UPDATE organization_members SET role = $3 WHERE org_id = $1 AND user_id = $2")
         .bind(org_id)
         .bind(user_id)
-        .bind(role)
+        .bind(role.as_str())
         .execute(&mut *tx)
         .await?;
 

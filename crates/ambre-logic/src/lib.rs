@@ -47,6 +47,7 @@ mod snapshot_check;
 pub mod store_ledger;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
+mod spaces;
 
 /// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
@@ -661,6 +662,20 @@ struct LogicState {
     /// snapshot names the last delta it folds in (`SRV-083`). Keyed by
     /// document, dropped with its channel.
     channel_ledgers: HashMap<DocumentId, snapshot_check::SeqLedger>,
+    /// Open Murmure spaces, keyed by `space_id`: one document each, apart
+    /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
+    /// `Logout`.
+    spaces: HashMap<ambre_bus::SpaceId, spaces::OpenSpace>,
+    /// Spaces on their way to open, with the payloads that arrived before
+    /// their document was ready.
+    space_opening: HashMap<ambre_bus::SpaceId, Vec<Vec<u8>>>,
+    /// Public channels the relay is creating, until it answers.
+    creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
+    /// Self-joins the relay has not answered yet, with their space.
+    joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// The whole content of a document this client created, sent as its first
+    /// update once the Sync worker holds its session.
+    unsent: HashMap<DocumentId, Vec<u8>>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -742,6 +757,11 @@ impl LogicState {
             channels: HashMap::new(),
             opening: HashMap::new(),
             channel_ledgers: HashMap::new(),
+            spaces: HashMap::new(),
+            space_opening: HashMap::new(),
+            creating: HashMap::new(),
+            joining: HashMap::new(),
+            unsent: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),

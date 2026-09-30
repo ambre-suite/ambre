@@ -23,7 +23,10 @@
 //!   fire-and-forget session commands with no single response to correlate --
 //!   kept explicit.
 
-use crate::{ChannelId, DocType, DocumentId, MurmureCommand, RequestId, RestCommand};
+use crate::{
+    ChannelId, DocType, DocumentId, MurmureCommand, RequestId, RestCommand, SpaceCommand, SpaceId,
+    Timestamp,
+};
 use ambre_core::SessionNonce;
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
@@ -70,6 +73,13 @@ pub enum LogicCommand {
     Channel {
         channel_id: ChannelId,
         command: MurmureCommand,
+    },
+
+    /// Command for an open Murmure space: its catalogue, and the public
+    /// channels it lists. Addressed to the space, which is one document.
+    Space {
+        space_id: SpaceId,
+        command: SpaceCommand,
     },
 
     /// Restore a document's CRDT state from a locally persisted snapshot
@@ -134,6 +144,22 @@ pub enum LogicCommand {
     /// Close a channel: the Logic thread drops its state and closes each of
     /// its documents.
     CloseChannel { channel_id: ChannelId },
+
+    /// Create a space: a new space document, with the user as its owner and
+    /// only member (the Murmure spaces spec). The space opens at once.
+    CreateSpace {
+        space_id: SpaceId,
+        name: String,
+        /// The instant of the creation, stamped by the view.
+        now: Timestamp,
+    },
+
+    /// Open a space: its document, then its catalogue as a
+    /// [`crate::SpaceEvent::Catalogue`].
+    OpenSpace { space_id: SpaceId },
+
+    /// Close a space and the session of its document.
+    CloseSpace { space_id: SpaceId },
 
     /// Ask which channels hold something new, for the sidebar at start
     /// (the Murmure unread spec). Loads no document: answered by

@@ -571,3 +571,32 @@ fn the_sealed_header_widths_match_the_primitives() {
         "Argon2id requires at least 8 bytes of salt; the header carries 16"
     );
 }
+
+#[test]
+fn a_document_key_sealed_under_another_opens_to_the_same_key() {
+    let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
+    let (nonce, sealed) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
+    let opened = aead::open_document_key(&nonce, &sealed, b"channel-1", &outer).unwrap();
+    // The opened key reads what the original sealed.
+    let (n, ct) = aead::seal(b"a message", b"", &inner).unwrap();
+    assert_eq!(aead::open(&n, &ct, b"", &opened).unwrap(), b"a message");
+}
+
+#[test]
+fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
+    let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
+    let (nonce, sealed) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
+    let wrong_key = aead::open_document_key(&nonce, &sealed, b"channel-1", &inner);
+    assert_eq!(wrong_key.err(), Some(CryptoError::AeadFailed));
+    // The aad binds the sealed key to one channel: moved to another, it fails.
+    let moved = aead::open_document_key(&nonce, &sealed, b"channel-2", &outer);
+    assert_eq!(moved.err(), Some(CryptoError::AeadFailed));
+}
+
+#[test]
+fn a_sealed_value_that_is_no_key_is_refused() {
+    let outer = DocumentKey::generate();
+    let (nonce, sealed) = aead::seal(&[7; 16], b"channel-1", &outer).unwrap();
+    let short = aead::open_document_key(&nonce, &sealed, b"channel-1", &outer);
+    assert_eq!(short.err(), Some(CryptoError::InvalidKeyLength));
+}

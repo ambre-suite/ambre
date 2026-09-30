@@ -48,13 +48,13 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-011` | `CONC` | Two peers closing the active segment at once MUST converge on one successor segment. | this spec section 5; this spec section 6 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-012` | `INV` | A final segment document MUST hold no operation later than its finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-013` | `INV` | An amendments document MUST hold entries only for messages of its own segment. | this spec section 2 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-014` | `INV` | The catalogue MUST list public channels only. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-014` | `INV` | The catalogue MUST list public channels only. | this spec section 3 | `ambre_murmure::space_tests::the_catalogue_refuses_a_private_channel_and_a_direct_message` -- the refusal writes nothing; `ambre_server::routes::channels::tests::an_editor_of_the_space_registers_a_public_channel` -- database tier, the relay holds the channel public in its space | none | verified |
 | `MURMURE-015` | `INV` | The `meta` document MUST NOT hold a member list. | this spec section 5; `ambre-spec-membership.md` | `ambre_murmure::channel_tests::meta_holds_no_member_list`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a member list is a root the frozen shape does not carry | none | verified |
 | `MURMURE-016` | `INV` | An unnamed direct message MUST hold no `name` key: a name composed from its members MUST NOT be stored. | this spec section 3; `CHROME-080` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-017` | `INV` | A message MUST hold an attachment by its media reference; no attachment byte MUST enter a document. | this spec section 3; `ambre-spec-media.md` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-018` | `INV` | An unset property of a Murmure document MUST be the absence of its key, never a "cleared" marker. | this spec section 3 | `ambre_murmure::channel_tests::an_unset_property_is_an_absent_key` -- an unnamed channel writes no `name` key | none | verified |
 | `MURMURE-019` | `INV` | A Murmure document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | this spec section 7; `ambre-spec-schema-version.md` | `ambre_murmure::channel_tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_murmure::channel_tests::a_document_with_no_version_finds_no_migration_and_is_refused` -- the refusal comes from `ambre_core::schema::verdict`, called first at every open | none | verified |
-| `MURMURE-157` | `INV` | The catalogue MUST hold each channel key sealed under the key of the space, so that no key material reaches the Logic thread. | this spec section 5; `SYNC-039`; `ambre-spec-zero-knowledge.md section 2` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-157` | `INV` | The catalogue MUST hold each channel key sealed under the key of the space, so that no key material reaches the Logic thread. | this spec section 5; `SYNC-039`; `ambre-spec-zero-knowledge.md section 2` | `ambre_murmure::space_tests::a_listed_channel_carries_its_name_topic_category_position_and_key` -- stored and answered unopened; `ambre_logic::spaces::tests::a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue`; type-level -- `SealedChannelKey` exposes its bytes and no opening | none | verified |
 | `MURMURE-020` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit. | this spec section 7; `ambre-spec-fixtures.md section 2` | `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- the build's shape is compared against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key or value type is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only | none | verified |
 | `MURMURE-437` | `INV` | The shape each Murmure `SCHEMA_VERSION` writes MUST be frozen in the shapes file of `ambre-murmure`, under the freeze gate. | this spec section 7; `SCHEMA-015`; `SCHEMA-018` | `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_murmure::schema_shape::every_declared_key_appears_in_the_shape`; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a crate stamping a `SCHEMA_VERSION` with no frozen shape | none | verified |
 
@@ -62,8 +62,9 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 10 `verified`, 12 `unimplemented`. The engine tests and the shape belt of
-  `crates/ambre-murmure` hold the header, the message map, the text body and the version gate.
+* **Verification.** 12 `verified`, 10 `unimplemented`. The engine tests and the shape belt of
+  `crates/ambre-murmure` hold the header, the message map, the text body, the catalogue and the
+  version gate.
 
 ---
 
@@ -124,7 +125,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | built |
 | `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amended: bool}` | the field | segments | built |
-| `meta` | `pinned` | Map | a `MessageId` | `{segment: DocumentId, pinned_at: Timestamp}` | the entry | pins | design |
+| `meta` | `pinned` | Map | a `MessageId` | `{segment: SegmentId, pinned_at: Timestamp}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
@@ -140,7 +141,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | a `ChannelId` | `NotifyLevel` | the entry | notifications | design |
-| settings | `murmure/bookmarks` | Map | a `MessageId` | `{channel: ChannelId, segment: DocumentId, added: Timestamp}` | the entry | sidebar | design |
+| settings | `murmure/bookmarks` | Map | a `MessageId` | `{channel: ChannelId, segment: SegmentId, added: Timestamp}` | the entry | sidebar | design |
 | settings | `murmure/followed` | Map | a `DocumentId`, the thread | `{channel: ChannelId, since: Timestamp}` | the entry | threads | design |
 | settings | `murmure/presence` | Map | `indicators` | bool | the key | typing-presence | design |
 

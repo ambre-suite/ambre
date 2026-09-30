@@ -2,6 +2,8 @@ use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::Role;
+
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
@@ -43,6 +45,7 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
 #[derive(serde::Deserialize)]
 pub struct AddMemberRequest {
     pub user_id: String,
+    /// A role word, parsed by the handler: an unknown word answers 409.
     pub role: String,
     /// Encrypted Shamir share for this member (base64 or hex).
     pub shamir_share_enc: Option<String>,
@@ -51,6 +54,7 @@ pub struct AddMemberRequest {
 /// Request body for updating a member's role.
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
+    /// A role word, parsed by the handler: an unknown word answers 409.
     pub role: String,
 }
 
@@ -59,7 +63,8 @@ pub struct OrgMemberResponse {
     pub user_id: String,
     pub email: String,
     pub display_name: String,
-    pub role: String,
+    /// Serialized as its lowercase word.
+    pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_shamir_share: Option<bool>,
 }
@@ -69,7 +74,7 @@ fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
         user_id: m.user_id.to_string(),
         email: m.email.clone(),
         display_name: m.display_name.clone(),
-        role: m.role.clone(),
+        role: m.role,
         has_shamir_share: Some(m.shamir_share_enc.is_some()),
     }
 }
@@ -81,15 +86,27 @@ pub struct UpdateOrgRequest {
 }
 
 /// Privilege rank of an organization role. Higher binds more capability.
-/// `owner` (2) > `admin` (1) > `member` (0). An unknown role ranks below
-/// everything so it can never be granted.
-fn org_role_rank(role: &str) -> Option<u8> {
+/// `owner` (2) > `admin` (1) > `member` (0). A role no organization holds
+/// ranks below everything so it can never be granted.
+fn org_role_rank(role: Role) -> Option<u8> {
     match role {
-        "member" => Some(0),
-        "admin" => Some(1),
-        "owner" => Some(2),
-        _ => None,
+        Role::Member => Some(0),
+        Role::Admin => Some(1),
+        Role::Owner => Some(2),
+        Role::Editor | Role::Viewer => None,
     }
+}
+
+/// The organization role a request body names, or a 409 for a word that
+/// names none. Checked before the database, so the `role IN (...)` check
+/// constraint never surfaces as a raw 500.
+fn org_role_of(word: &str) -> Result<Role, AppError> {
+    word.parse()
+        .ok()
+        .filter(|role: &Role| role.is_valid_for_organization())
+        .ok_or(AppError::Conflict {
+            detail: "invalid role".into(),
+        })
 }
 
 fn parse_org_id(s: &str) -> Result<uuid::Uuid, AppError> {
@@ -130,12 +147,12 @@ async fn require_org_role(
     pool: &sqlx::PgPool,
     org_id: uuid::Uuid,
     user_id: uuid::Uuid,
-    allowed_roles: &[&str],
+    allowed_roles: &[Role],
 ) -> Result<db::OrgMembershipRow, AppError> {
     let m = db::get_org_member(pool, org_id, user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !allowed_roles.contains(&m.role.as_str()) {
+    if !allowed_roles.contains(&m.role) {
         return Err(AppError::Forbidden);
     }
     Ok(m)
@@ -211,7 +228,13 @@ pub async fn get_org(
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
     // Must be a member to view.
-    require_org_role(&state.db, org_id, uid, &["owner", "admin", "member"]).await?;
+    require_org_role(
+        &state.db,
+        org_id,
+        uid,
+        &[Role::Owner, Role::Admin, Role::Member],
+    )
+    .await?;
 
     let org = db::get_organization(&state.db, org_id)
         .await?
@@ -232,7 +255,7 @@ pub async fn update_org(
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
-    require_org_role(&state.db, org_id, uid, &["owner"]).await?;
+    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
 
     let org = db::update_organization(&state.db, org_id, &req.name)
         .await?
@@ -252,7 +275,7 @@ pub async fn delete_org(
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
-    require_org_role(&state.db, org_id, uid, &["owner"]).await?;
+    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
 
     let deleted = db::delete_organization(&state.db, org_id).await?;
     if !deleted {
@@ -274,7 +297,7 @@ pub async fn add_member(
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
-    let caller = require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
+    let caller = require_org_role(&state.db, org_id, uid, &[Role::Owner, Role::Admin]).await?;
 
     let member_user_id = parse_user_id_str(&req.user_id)?;
 
@@ -285,15 +308,14 @@ pub async fn add_member(
     //      can never mint (or self-promote to) an owner.
     //   2. A caller may only touch a member currently at or below their own rank.
     //      An admin can never demote or lock out an owner via the upsert.
-    let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
-    let granted_rank = org_role_rank(&req.role).ok_or(AppError::Conflict {
-        detail: "invalid role".into(),
-    })?;
+    let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
+    let role = org_role_of(&req.role)?;
+    let granted_rank = org_role_rank(role).ok_or(AppError::Forbidden)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
     if let Some(existing) = db::get_org_member(&state.db, org_id, member_user_id).await? {
-        let target_rank = org_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -312,7 +334,7 @@ pub async fn add_member(
         &state.db,
         org_id,
         member_user_id,
-        &req.role,
+        role,
         share_enc.as_deref(),
     )
     .await?;
@@ -333,7 +355,13 @@ pub async fn list_members(
     let org_id = parse_org_id(&org_id)?;
     let uid = parse_user_id_str(&session.user_id.to_string())?;
 
-    require_org_role(&state.db, org_id, uid, &["owner", "admin", "member"]).await?;
+    require_org_role(
+        &state.db,
+        org_id,
+        uid,
+        &[Role::Owner, Role::Admin, Role::Member],
+    )
+    .await?;
 
     let members = db::list_org_members(&state.db, org_id).await?;
     let resp: Vec<OrgMemberResponse> = members.iter().map(member_to_response).collect();
@@ -352,13 +380,13 @@ pub async fn remove_member(
     let target_uid = parse_user_id_str(&target_uid)?;
 
     // Owner or admin can remove. Members cannot remove others.
-    let caller = require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
+    let caller = require_org_role(&state.db, org_id, uid, &[Role::Owner, Role::Admin]).await?;
 
     // Same rank clamp as `add_member`. A caller may only remove a member at or
     // below their own rank, so an admin can never remove (or lock out) the owner.
-    let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
+    let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
     if let Some(existing) = db::get_org_member(&state.db, org_id, target_uid).await? {
-        let target_rank = org_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -385,16 +413,14 @@ pub async fn update_member_role(
     let uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;
 
-    require_org_role(&state.db, org_id, uid, &["owner"]).await?;
+    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
 
     // Validate the role before hitting the DB. An unknown value then returns a
     // clean 409, instead of surfacing the `role IN (...)` CHECK violation as a
     // raw 500.
-    org_role_rank(&req.role).ok_or(AppError::Conflict {
-        detail: "invalid role".into(),
-    })?;
+    let role = org_role_of(&req.role)?;
 
-    db::update_org_member_role(&state.db, org_id, target_uid, &req.role).await?;
+    db::update_org_member_role(&state.db, org_id, target_uid, role).await?;
     Ok(axum::Json(serde_json::json!({ "status": "updated" })))
 }
 
@@ -422,7 +448,7 @@ pub async fn recover_master_key(
     let caller_uid = parse_user_id_str(&session.user_id.to_string())?;
     let target_uid = parse_user_id_str(&target_uid)?;
 
-    require_org_role(&state.db, org_id, caller_uid, &["owner"]).await?;
+    require_org_role(&state.db, org_id, caller_uid, &[Role::Owner]).await?;
 
     // Verify target user is a member of this org.
     db::get_org_member(&state.db, org_id, target_uid)
@@ -457,19 +483,24 @@ mod tests {
 
     #[test]
     fn org_role_rank_ordering() {
-        assert!(org_role_rank("owner") > org_role_rank("admin"));
-        assert!(org_role_rank("admin") > org_role_rank("member"));
-        assert_eq!(org_role_rank("nonsense"), None);
+        assert!(org_role_rank(Role::Owner) > org_role_rank(Role::Admin));
+        assert!(org_role_rank(Role::Admin) > org_role_rank(Role::Member));
+        assert_eq!(org_role_rank(Role::Editor), None);
+        assert!(org_role_of("nonsense").is_err());
+        assert!(
+            org_role_of("viewer").is_err(),
+            "a document role names no org role"
+        );
     }
 
     /// An admin may grant admin/member but never owner, and the grant clamp
     /// rejects any role above the caller's own rank.
     #[test]
     fn admin_cannot_grant_owner() {
-        let caller = org_role_rank("admin").unwrap();
-        assert!(org_role_rank("owner").unwrap() > caller); // owner grant blocked
-        assert!(org_role_rank("admin").unwrap() <= caller);
-        assert!(org_role_rank("member").unwrap() <= caller);
+        let caller = org_role_rank(Role::Admin).unwrap();
+        assert!(org_role_rank(Role::Owner).unwrap() > caller); // owner grant blocked
+        assert!(org_role_rank(Role::Admin).unwrap() <= caller);
+        assert!(org_role_rank(Role::Member).unwrap() <= caller);
     }
 
     // -- Shamir validation (N1) ---------------------------------------------
@@ -543,7 +574,7 @@ mod tests {
             user_id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             email: "user@test.com".into(),
             display_name: "Test User".into(),
-            role: "admin".into(),
+            role: Role::Admin,
             shamir_share_enc: Some(vec![1, 2, 3]),
             created_at: chrono::Utc::now(),
         };
@@ -551,7 +582,7 @@ mod tests {
         assert_eq!(resp.user_id, "00000000-0000-0000-0000-000000000001");
         assert_eq!(resp.email, "user@test.com");
         assert_eq!(resp.display_name, "Test User");
-        assert_eq!(resp.role, "admin");
+        assert_eq!(resp.role, Role::Admin);
         assert_eq!(resp.has_shamir_share, Some(true));
     }
 
@@ -561,12 +592,12 @@ mod tests {
             user_id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
             email: "other@test.com".into(),
             display_name: "Other User".into(),
-            role: "member".into(),
+            role: Role::Member,
             shamir_share_enc: None,
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
-        assert_eq!(resp.role, "member");
+        assert_eq!(resp.role, Role::Member);
         assert_eq!(resp.has_shamir_share, Some(false));
     }
 

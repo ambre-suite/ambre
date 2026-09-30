@@ -111,6 +111,66 @@ define_id! {
 }
 
 define_id! {
+    /// Identifies a Murmure space. A space is a document, so its identifier
+    /// is the identifier of that document (the Murmure spaces spec).
+    SpaceId
+}
+
+impl SpaceId {
+    /// The space document this space is.
+    pub const fn document_id(&self) -> DocumentId {
+        DocumentId::from_uuid(self.0)
+    }
+
+    /// The space a space document is.
+    pub const fn from_document(document_id: DocumentId) -> Self {
+        Self(*document_id.as_uuid())
+    }
+}
+
+define_id! {
+    /// Identifies the `meta` document of a Murmure channel. A distinct type,
+    /// so a segment id never takes its place: access to a channel resolves
+    /// through the member rows of this one document.
+    MetaId
+}
+
+impl MetaId {
+    /// The document this `meta` is.
+    pub const fn document_id(&self) -> DocumentId {
+        DocumentId::from_uuid(self.0)
+    }
+
+    /// The `meta` a document is, for a caller that knows its kind.
+    pub const fn from_document(document_id: DocumentId) -> Self {
+        Self(*document_id.as_uuid())
+    }
+}
+
+define_id! {
+    /// Identifies a segment of a Murmure channel: one document of its message
+    /// log. A distinct type, so a segment id never takes the place of `meta`.
+    SegmentId
+}
+
+impl SegmentId {
+    /// The document this segment is.
+    pub const fn document_id(&self) -> DocumentId {
+        DocumentId::from_uuid(self.0)
+    }
+
+    /// The segment a document is, for a caller that knows its kind.
+    pub const fn from_document(document_id: DocumentId) -> Self {
+        Self(*document_id.as_uuid())
+    }
+}
+
+define_id! {
+    /// Identifies a category of a Murmure space, minted by the admin's client.
+    CategoryId
+}
+
+define_id! {
     /// Identifies a Murmure message, minted by the peer that creates it
     /// (the Murmure schema). A position in a list moves with every concurrent
     /// append, so a pin or a reply names the message by this value instead.

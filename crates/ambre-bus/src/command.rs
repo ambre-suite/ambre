@@ -23,8 +23,8 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivitySummary, ChannelId, DocType, DocumentId, RequestId, RestCommand, SnapshotId,
-    SnapshotPurpose, SnapshotVerdict,
+    ActivitySummary, ChannelId, DocType, DocumentId, MetaId, RequestId, RestCommand,
+    SealedChannelKey, SegmentId, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -125,6 +125,27 @@ pub enum SyncCommand {
     OpenChannel {
         channel_id: ChannelId,
     },
+    /// Create a public channel of a space on the relay: one channel key,
+    /// its `meta` and first segment documents under it, and the channel
+    /// record. Answered by [`crate::LogicEvent::ChannelCreated`], carrying the
+    /// key sealed under the key of the space, or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`]. The space document must
+    /// have an open session, which holds the space key.
+    CreatePublicChannel {
+        channel_id: ChannelId,
+        space_id: SpaceId,
+        meta: MetaId,
+        segment: SegmentId,
+    },
+    /// Join a public channel alone. The Sync worker unseals `key` with the
+    /// space key, wraps it for this user alone, and asks for the member row.
+    /// Answered by [`crate::LogicEvent::ChannelJoined`] or
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    JoinChannel {
+        channel_id: ChannelId,
+        space_id: SpaceId,
+        key: SealedChannelKey,
+    },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket
@@ -140,8 +161,8 @@ pub enum SyncCommand {
     /// unread. Each `finals` segment no longer changes, so the relay moves it
     /// to its own last number.
     MarkRead {
-        live: Vec<DocumentId>,
-        finals: Vec<DocumentId>,
+        live: Vec<SegmentId>,
+        finals: Vec<SegmentId>,
     },
     /// Move every read cursor of the user to its document's last number
     /// (the Murmure unread spec), then answer with a fresh

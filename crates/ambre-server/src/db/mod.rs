@@ -20,6 +20,20 @@ pub use orgs::*;
 pub use read_cursors::*;
 pub use users::*;
 
+/// A stored role word, as a [`Role`](ambre_core::Role).
+///
+/// A word no build wrote is a decode error: the column's check constraint
+/// admits none, so it can only mean a corrupt row.
+fn decode_role(word: &str) -> Result<ambre_core::Role, sqlx::Error> {
+    word.parse()
+        .map_err(|e: ambre_core::error::RoleError| sqlx::Error::Decode(Box::new(e)))
+}
+
+/// A stored role column that may hold no row, as a [`Role`](ambre_core::Role).
+fn decode_role_opt(word: Option<String>) -> Result<Option<ambre_core::Role>, sqlx::Error> {
+    word.as_deref().map(decode_role).transpose()
+}
+
 #[allow(dead_code)]
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())

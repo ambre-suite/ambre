@@ -97,7 +97,7 @@ Threads join the state with the threads Story.
 ```rust
 pub enum MurmureCommand {
     SendMessage { draft: MessageDraft, now: Timestamp },
-    LoadOlder { segment: DocumentId },
+    LoadOlder { segment: SegmentId },
 }
 ```
 

@@ -1,9 +1,10 @@
 //! The schema shape belt: the key set and the value types a build writes,
 //! frozen per `SCHEMA_VERSION` (`MURMURE-437`, `SCHEMA-018`).
 //!
-//! A shape is a channel with every value removed: one line per reachable path,
-//! each naming the type under it. A line starts with the document kind, since
-//! a channel is several documents (`MURMURE-021`). `*` stands for a list index.
+//! A shape is a channel and a space with every value removed: one line per
+//! reachable path, each naming the type under it. A line starts with the
+//! document kind, since a channel is several documents (`MURMURE-021`). `*`
+//! stands for a list index, and `{id}` for the identifier keying a map entry.
 //!
 //! The walk reads containers, not the deep value. A deep value turns a
 //! `LoroText` into a string. A body stored as a plain string is the drift
@@ -15,12 +16,12 @@
 
 use std::collections::BTreeSet;
 
-use ambre_bus::{MentionTarget, MessageDraft, Timestamp};
-use ambre_core::{ChannelId, UserId};
+use ambre_bus::{MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
+use ambre_core::{CategoryId, ChannelId, SpaceId, UserId};
 use loro::{Container, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::schema::{DocumentKind, SCHEMA_VERSION};
-use crate::{ChannelState, ChannelType};
+use crate::{ChannelState, ChannelType, Listing, SpaceState};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/shapes.txt");
@@ -30,6 +31,12 @@ const SCHEMA_SOURCE: &str = include_str!("schema.rs");
 
 /// The segment a list index collapses to.
 const ANY: &str = "*";
+
+/// The segment an identifier key collapses to.
+const ID: &str = "{id}";
+
+/// The maps keyed by an identifier, whose keys are values and not schema.
+const KEYED_BY_ID: [&str; 2] = ["space:categories", "space:channels"];
 
 /// The declared `&str` constants that are stored values, not keys.
 const NOT_SCHEMA_KEYS: [&str; 0] = [];
@@ -65,9 +72,14 @@ impl Shape {
             }
             ValueOrContainer::Container(Container::Map(map)) => {
                 self.lines.insert(format!("{path}: map"));
+                let by_id = KEYED_BY_ID.contains(&path);
                 map.for_each(|key, child| {
-                    self.keys.insert(key.to_owned());
-                    self.walk(&format!("{path}/{key}"), child);
+                    if by_id {
+                        self.walk(&format!("{path}/{ID}"), child);
+                    } else {
+                        self.keys.insert(key.to_owned());
+                        self.walk(&format!("{path}/{key}"), child);
+                    }
                 });
             }
             ValueOrContainer::Container(Container::List(list)) => {
@@ -129,14 +141,37 @@ fn channel_of_every_key() -> ChannelState {
     state
 }
 
+/// A space that reaches every key the schema declares: a name, a category,
+/// and a listed channel with a topic and a category.
+fn space_of_every_key(channel: &ChannelState) -> SpaceState {
+    let mut space =
+        SpaceState::create(SpaceId::new(), "Acme", Timestamp(1_700_000_000_000)).expect("create");
+    let category = CategoryId::new();
+    space.put_category(category, "Teams", 0).expect("category");
+    let topic = Topic::new("everything").expect("a topic");
+    space
+        .list_channel(
+            channel,
+            &Listing {
+                topic: Some(&topic),
+                category: Some(category),
+                position: 0,
+                key: SealedChannelKey::from_bytes(vec![1; 72]),
+            },
+        )
+        .expect("list");
+    space
+}
+
 fn shape_of(state: &ChannelState) -> Shape {
     let mut shape = Shape::default();
     for (kind, id) in [
-        (DocumentKind::Meta, state.meta_id()),
-        (DocumentKind::Segment, state.active_id()),
+        (DocumentKind::Meta, state.meta_id().document_id()),
+        (DocumentKind::Segment, state.active_id().document_id()),
     ] {
         shape.walk_doc(kind, state.doc(id).expect("held"));
     }
+    shape.walk_doc(DocumentKind::Space, space_of_every_key(state).doc());
     shape
 }
 
@@ -225,7 +260,7 @@ fn every_declared_key_appears_in_the_shape() {
 fn a_body_stored_as_a_string_moves_the_shape() {
     let state = channel_of_every_key();
     let before = render(&shape_of(&state));
-    let doc = state.doc(state.active_id()).expect("active");
+    let doc = state.doc(state.active_id().document_id()).expect("active");
     let Some(ValueOrContainer::Container(Container::Map(message))) =
         doc.get_list(crate::schema::MESSAGES).get(0)
     else {

@@ -7,7 +7,7 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity,
+    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity, MetaId,
     MurmureCommand, MurmureEvent,
 };
 #[cfg(test)]
@@ -57,7 +57,10 @@ impl LogicState {
             self.channel_open_failed(channel_id, "the channel has no meta document".into());
             return;
         };
-        *slot = Some(OpeningChannel::new(channel_id, meta.document_id));
+        *slot = Some(OpeningChannel::new(
+            channel_id,
+            MetaId::from_document(meta.document_id),
+        ));
         self.send_to_sync(SyncCommand::OpenDocument {
             document_id: meta.document_id,
             doc_type: DocType::Murmure,
@@ -102,9 +105,9 @@ impl LogicState {
         match opening.ready(document_id) {
             Ok(Opening::Waiting) => {}
             Ok(Opening::OpenSegments(segments)) => {
-                for document_id in segments {
+                for segment in segments {
                     self.send_to_sync(SyncCommand::OpenDocument {
-                        document_id,
+                        document_id: segment.document_id(),
                         doc_type: DocType::Murmure,
                     });
                 }
@@ -183,16 +186,19 @@ impl LogicState {
         Some((payload, covered))
     }
 
-    /// Note the relay's number of a delta for a channel document, open or
-    /// opening. A document no channel holds is not noted.
+    /// Note the relay's number of a delta for a channel or a space document,
+    /// open or opening. A document neither holds is not noted.
     pub(crate) fn record_channel_seq(
         &mut self,
         document_id: DocumentId,
         seq: u64,
         payload: Option<&[u8]>,
     ) {
+        let space = ambre_bus::SpaceId::from_document(document_id);
         let held = self.channels.values().any(|c| c.holds(document_id))
-            || self.opening.values().flatten().any(|o| o.expects(document_id));
+            || self.opening.values().flatten().any(|o| o.expects(document_id))
+            || self.spaces.contains_key(&space)
+            || self.space_opening.contains_key(&space);
         if held {
             self.channel_ledgers
                 .entry(document_id)
@@ -229,7 +235,7 @@ impl LogicState {
                 match channel.send(&draft, author, now) {
                     Ok(sent) => {
                         self.send_to_sync(SyncCommand::SendUpdate {
-                            document_id: sent.segment,
+                            document_id: sent.segment.document_id(),
                             payload: sent.delta,
                             summary: Some(sent.summary),
                         });
@@ -246,9 +252,9 @@ impl LogicState {
             MurmureCommand::LoadOlder { segment } => {
                 // Nothing to ask for when the segment is the oldest, or the
                 // one before it is loaded or on its way.
-                if let Some(document_id) = channel.request_older(segment) {
+                if let Some(older) = channel.request_older(segment) {
                     self.send_to_sync(SyncCommand::OpenDocument {
-                        document_id,
+                        document_id: older.document_id(),
                         doc_type: DocType::Murmure,
                     });
                 }
@@ -357,7 +363,7 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, MentionTarget, MessageDraft, MurmureEvent, RestEvent, Timestamp,
+        ActivityKind, MentionTarget, MessageDraft, MurmureEvent, RestEvent, SegmentId, Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -382,7 +388,7 @@ mod tests {
         });
     }
 
-    fn open_channel(state: &mut LogicState) -> (ChannelId, DocumentId) {
+    fn open_channel(state: &mut LogicState) -> (ChannelId, SegmentId) {
         let channel_id = ChannelId::new();
         let channel =
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
@@ -426,7 +432,7 @@ mod tests {
         else {
             panic!("one update with a summary, got {sent:?}");
         };
-        assert_eq!(*document_id, active);
+        assert_eq!(*document_id, active.document_id());
         assert!(!payload.is_empty());
         assert_eq!(summary.kind, ActivityKind::Content);
         assert_eq!(summary.mentions, [bob]);
@@ -468,9 +474,13 @@ mod tests {
         let original =
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
         let active = original.active_id();
-        let segments =
-            std::collections::HashMap::from([(active, original.snapshot(active).expect("active"))]);
-        let meta = original.snapshot(original.meta_id()).expect("meta");
+        let segments = std::collections::HashMap::from([(
+            active,
+            original.snapshot(active.document_id()).expect("active"),
+        )]);
+        let meta = original
+            .snapshot(original.meta_id().document_id())
+            .expect("meta");
         let copy =
             ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
         alice.hold_channel(original);
@@ -524,9 +534,9 @@ mod tests {
         let (channel_id, active) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         assert!(state.channels.is_empty());
-        assert!(!state.apply_channel_remote(active, &[&[]]));
+        assert!(!state.apply_channel_remote(active.document_id(), &[&[]]));
         let closed = sent(&sync);
-        assert!(closed.contains(&Sent::Close(active)));
+        assert!(closed.contains(&Sent::Close(active.document_id())));
         assert!(closed.iter().all(|c| matches!(c, Sent::Close(_))));
     }
 
@@ -557,11 +567,11 @@ mod tests {
     fn listing(channel: &ChannelState) -> Vec<ChannelDocument> {
         vec![
             ChannelDocument {
-                document_id: channel.meta_id(),
+                document_id: channel.meta_id().document_id(),
                 kind: ChannelDocumentKind::Meta,
             },
             ChannelDocument {
-                document_id: channel.active_id(),
+                document_id: channel.active_id().document_id(),
                 kind: ChannelDocumentKind::Segment,
             },
         ]
@@ -616,13 +626,17 @@ mod tests {
             channel_id,
             documents: listing(&stored),
         });
-        assert_eq!(sent(&sync), [Sent::Open(stored.meta_id())], "meta first");
+        assert_eq!(
+            sent(&sync),
+            [Sent::Open(stored.meta_id().document_id())],
+            "meta first"
+        );
 
-        serve(&mut state, &stored, stored.meta_id());
-        assert_eq!(sent(&sync), [Sent::Open(stored.active_id())]);
+        serve(&mut state, &stored, stored.meta_id().document_id());
+        assert_eq!(sent(&sync), [Sent::Open(stored.active_id().document_id())]);
         assert!(drain(&ui).is_empty(), "nothing of the channel shows yet");
 
-        serve(&mut state, &stored, stored.active_id());
+        serve(&mut state, &stored, stored.active_id().document_id());
         let shown = drain(&ui);
         let [
             UiEvent::Channel {
@@ -671,10 +685,10 @@ mod tests {
         let _ = drain(&sync);
 
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
-            document_id: stored.meta_id(),
+            document_id: stored.meta_id().document_id(),
             message: "cannot unwrap document key".to_owned(),
         });
-        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id())]);
+        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
         assert!(
             matches!(
                 drain(&ui).as_slice(),
@@ -699,8 +713,8 @@ mod tests {
             documents: listing(&stored),
         });
         let _ = drain(&sync);
-        serve(&mut state, &stored, stored.meta_id());
-        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id())]);
+        serve(&mut state, &stored, stored.meta_id().document_id());
+        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
         assert!(matches!(
             drain(&ui).as_slice(),
             [UiEvent::Channel {
@@ -722,7 +736,7 @@ mod tests {
         });
         let _ = drain(&sync);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id())]);
+        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
         // A listing that lands after the close is stale.
         state.handle_logic_event(LogicEvent::ChannelDocuments {
             channel_id,

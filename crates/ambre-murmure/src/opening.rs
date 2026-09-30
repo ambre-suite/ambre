@@ -9,7 +9,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{ChannelId, DocumentId};
+use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
@@ -22,7 +22,7 @@ pub enum Opening {
     /// Still waiting for a segment already asked for.
     Waiting,
     /// `meta` is in and names these live segments: open each.
-    OpenSegments(Vec<DocumentId>),
+    OpenSegments(Vec<SegmentId>),
     /// Every document is in, and the channel is open.
     Open(Box<ChannelState>),
 }
@@ -42,7 +42,8 @@ pub struct OpeningChannel {
 
 impl OpeningChannel {
     /// Begin opening `channel_id`, whose `meta` document the relay named.
-    pub fn new(channel_id: ChannelId, meta_id: DocumentId) -> Self {
+    pub fn new(channel_id: ChannelId, meta_id: MetaId) -> Self {
+        let meta_id = meta_id.document_id();
         Self {
             channel_id,
             meta_id,
@@ -58,8 +59,8 @@ impl OpeningChannel {
     }
 
     /// The `meta` document of the channel.
-    pub fn meta_id(&self) -> DocumentId {
-        self.meta_id
+    pub fn meta_id(&self) -> MetaId {
+        MetaId::from_document(self.meta_id)
     }
 
     /// Whether the bytes of `document_id` belong to this opening.
@@ -138,13 +139,13 @@ impl OpeningChannel {
             .collect();
         let meta = schema::admit_all(&payloads, DocumentKind::Meta, self.channel_id, self.meta_id)?;
         let live = live_segments(&meta, self.channel_id)?;
-        let segments: Vec<DocumentId> = [Some(live.active), live.closing]
+        let segments: Vec<SegmentId> = [Some(live.active), live.closing]
             .into_iter()
             .flatten()
             .collect();
-        for id in &segments {
-            self.payloads.insert(*id, Vec::new());
-            self.awaiting.insert(*id);
+        for segment in &segments {
+            self.payloads.insert(segment.document_id(), Vec::new());
+            self.awaiting.insert(segment.document_id());
         }
         self.meta = Some(meta);
         // The entry of `meta` stays, emptied, so `expects` still names it.

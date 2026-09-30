@@ -796,7 +796,8 @@ impl LogicState {
         self.settle_import(document_id);
         // A document no entry of `docs` names may belong to an open channel.
         if !self.docs.contains_key(&document_id)
-            && self.apply_channel_remote(document_id, &[payload])
+            && (self.apply_channel_remote(document_id, &[payload])
+                || self.apply_space_remote(document_id, &[payload]))
         {
             return;
         }
@@ -847,7 +848,9 @@ impl LogicState {
         self.settle_board_import(document_id);
         if !self.docs.contains_key(&document_id) {
             let borrowed: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
-            if self.apply_channel_remote(document_id, &borrowed) {
+            if self.apply_channel_remote(document_id, &borrowed)
+                || self.apply_space_remote(document_id, &borrowed)
+            {
                 return;
             }
         }

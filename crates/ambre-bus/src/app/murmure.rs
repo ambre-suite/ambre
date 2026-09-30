@@ -14,36 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ChannelId, DocumentId, MessageId, UserId};
-
-/// What a document of a channel is (`ambre-spec-murmure-schema.md`).
-///
-/// The relay stores it beside each document (`ZK-015`), and the listing
-/// answers it, so it crosses the Sync worker's `postMessage` hop.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ChannelDocumentKind {
-    /// The one `meta` document: the channel's name, type and segment list.
-    Meta,
-    /// One time slice of the channel's messages.
-    Segment,
-    /// The corrections to a final segment.
-    Amendments,
-    /// The replies to one message.
-    Thread,
-}
-
-impl ChannelDocumentKind {
-    /// The kind a stored word names, or `None` for a word no build wrote.
-    pub fn parse(word: &str) -> Option<Self> {
-        match word {
-            "meta" => Some(Self::Meta),
-            "segment" => Some(Self::Segment),
-            "amendments" => Some(Self::Amendments),
-            "thread" => Some(Self::Thread),
-            _ => None,
-        }
-    }
-}
+use crate::{CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, UserId};
 
 /// One document a channel groups, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +86,7 @@ pub enum MurmureCommand {
     },
     /// Load the final segment listed before `segment`, because the view
     /// scrolled past the oldest message it holds (`MURMURE-023`).
-    LoadOlder { segment: DocumentId },
+    LoadOlder { segment: SegmentId },
     /// The view shows the latest message of the channel: move the read
     /// cursor to it (`MURMURE-115`). A relay record, never a document write.
     MarkRead,
@@ -156,10 +127,178 @@ pub enum MurmureEvent {
     /// [`MessageId`], so a message it already holds is replaced, never
     /// duplicated. `messages` keeps the order of the segment.
     Messages {
-        segment: DocumentId,
+        segment: SegmentId,
         messages: Vec<MessageView>,
     },
     /// The channel could not open: the relay refused it, or one of its
     /// documents failed the checks. Nothing of it is held.
     OpenFailed { message: String },
+}
+
+/// A channel key sealed under the key of its space (`MURMURE-157`).
+///
+/// The Logic thread holds it and never opens it: the space document lives
+/// there, and no key material may reach it (`SYNC-039`). Only the Sync
+/// worker, which holds the space key, seals and unseals it.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SealedChannelKey(Vec<u8>);
+
+impl SealedChannelKey {
+    /// Wrap the sealed bytes the Sync worker produced.
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// The sealed bytes, as the catalogue stores them.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for SealedChannelKey {
+    // The length alone: a log line needs no ciphertext.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SealedChannelKey({} bytes)", self.0.len())
+    }
+}
+
+/// The topic of a channel: a line of text under its name.
+///
+/// Never empty: a channel with no topic holds no topic at all, so the
+/// catalogue stores an absent key rather than an empty string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Topic(String);
+
+impl Topic {
+    /// The topic `text` states, or `None` for an empty text.
+    pub fn new(text: impl Into<String>) -> Option<Self> {
+        let text = text.into();
+        (!text.is_empty()).then_some(Self(text))
+    }
+
+    /// The text of the topic.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for Topic {
+    type Error = &'static str;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        Self::new(text).ok_or("a topic is never empty")
+    }
+}
+
+impl From<Topic> for String {
+    fn from(topic: Topic) -> Self {
+        topic.0
+    }
+}
+
+/// A category of a space, as the view draws it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CategoryView {
+    pub id: CategoryId,
+    pub name: String,
+    /// The rank among the categories: lower first, ties by identifier.
+    pub position: u32,
+}
+
+/// One public channel of the catalogue, as the view draws it.
+///
+/// No key: the view has no use for one, and the sealed key stays in the space
+/// document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogueEntry {
+    pub channel_id: ChannelId,
+    pub name: String,
+    pub topic: Option<Topic>,
+    /// Absent for a channel outside every category.
+    pub category: Option<CategoryId>,
+    /// The rank in the catalogue: lower first, ties by identifier.
+    pub position: u32,
+}
+
+/// A public channel the view asks a space to create and list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicChannelDraft {
+    /// Minted by the view, so it can follow the channel before it exists.
+    pub channel_id: ChannelId,
+    pub name: String,
+    pub topic: Option<Topic>,
+    /// Absent for a channel outside every category.
+    pub category: Option<CategoryId>,
+    /// The rank in the catalogue: lower first, ties by identifier.
+    pub position: u32,
+}
+
+/// A command for an open space, UI thread -> Logic thread.
+///
+/// Carried by [`LogicCommand::Space`](crate::LogicCommand::Space). A space is
+/// one document, and its catalogue lists its public channels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpaceCommand {
+    /// Add a category to the catalogue.
+    AddCategory {
+        category_id: CategoryId,
+        name: String,
+        /// The rank among the categories: lower first, ties by identifier.
+        position: u32,
+    },
+    /// Create a public channel, then list it in the catalogue with its key
+    /// sealed under the space key (`MURMURE-037`).
+    CreatePublicChannel {
+        draft: PublicChannelDraft,
+        /// The instant of the creation, stamped by the view.
+        now: Timestamp,
+    },
+    /// Join a public channel of the catalogue, with no other member online
+    /// (`MURMURE-039`).
+    JoinChannel { channel_id: ChannelId },
+}
+
+/// An event from an open space, Logic thread -> UI thread.
+///
+/// Carried by [`UiEvent::Space`](crate::UiEvent::Space).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpaceEvent {
+    /// The space and its catalogue, whole, after an open or any change.
+    Catalogue {
+        /// Absent when the space has no name.
+        name: Option<String>,
+        categories: Vec<CategoryView>,
+        channels: Vec<CatalogueEntry>,
+    },
+    /// The relay holds the new channel, and the catalogue lists it.
+    ChannelCreated { channel_id: ChannelId },
+    /// The user is now a member of the channel, which the view may open.
+    Joined { channel_id: ChannelId },
+    /// A creation or a join failed. Nothing changed on the relay.
+    ChannelFailed {
+        channel_id: ChannelId,
+        message: String,
+    },
+    /// The space could not open. Nothing of it is held.
+    OpenFailed { message: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Topic;
+
+    /// An empty topic is no topic: it cannot be built, nor decoded from the
+    /// wire, so the catalogue never stores an empty string.
+    #[test]
+    fn a_topic_is_never_empty() {
+        assert_eq!(Topic::new(""), None);
+        let figures = Topic::new("the weekly figures").expect("a topic");
+        assert_eq!(figures.as_str(), "the weekly figures");
+
+        let bytes = postcard::to_allocvec(&figures).expect("encode");
+        assert_eq!(postcard::from_bytes::<Topic>(&bytes), Ok(figures));
+        let empty = postcard::to_allocvec("").expect("encode");
+        assert!(postcard::from_bytes::<Topic>(&empty).is_err());
+    }
 }

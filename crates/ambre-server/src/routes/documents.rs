@@ -3,6 +3,8 @@ use axum::response::IntoResponse;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ambre_core::Role;
+
 use crate::auth::{self};
 use crate::db;
 use crate::error::AppError;
@@ -190,7 +192,8 @@ pub struct DocumentSummaryJson {
     pub owner_id: String,
     pub doc_type: String,
     pub name_enc: Option<String>,
-    pub role: String,
+    /// Serialized as its lowercase word.
+    pub role: Role,
     pub doc_key_enc: String,
     /// Exchange public key (hex) of whoever wrapped `doc_key_enc`. The client
     /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
@@ -329,7 +332,7 @@ pub async fn create_document(
             &state.db,
             &doc_id,
             &s.user_id,
-            "owner",
+            Role::Owner,
             &doc_key_enc,
             &s.user_id,
             entry.as_ref(),
@@ -352,7 +355,8 @@ pub struct GetDocumentResponse {
     pub owner_id: String,
     pub doc_type: String,
     pub name_enc: Option<String>,
-    pub role: Option<String>,
+    /// Serialized as its lowercase word.
+    pub role: Option<Role>,
     pub doc_key_enc: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -390,7 +394,7 @@ pub async fn get_document(
         name_enc: doc
             .name_enc
             .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
-        role: mem.as_ref().map(|m| m.role.clone()),
+        role: mem.as_ref().map(|m| m.role),
         doc_key_enc: mem.map(|m| base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc)),
         created_at: doc.created_at.to_rfc3339(),
         updated_at: doc.updated_at.to_rfc3339(),
@@ -417,7 +421,7 @@ pub async fn rename_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     let name_enc = base64::engine::general_purpose::URL_SAFE
@@ -440,7 +444,7 @@ pub async fn delete_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     // A delete that fails past its mark still completes: the flusher's pass
@@ -541,7 +545,8 @@ pub struct MemberInfoJson {
     /// older clients ignore it.
     pub email_verified: bool,
     pub display_name: String,
-    pub role: String,
+    /// Serialized as its lowercase word.
+    pub role: Role,
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
@@ -603,6 +608,7 @@ pub async fn list_document_members(
 /// Request body for changing a member's role.
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
+    /// A role word, parsed by the handler: an unknown word answers 409.
     pub role: String,
     /// The signed entry that gives the role (`SYNC-132`).
     #[serde(default)]
@@ -621,24 +627,27 @@ pub async fn update_document_member_role(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
-    if !["owner", "editor", "viewer"].contains(&req.role.as_str()) {
-        return Err(AppError::Conflict {
+    let role = req
+        .role
+        .parse()
+        .ok()
+        .filter(|role: &Role| role.is_valid_for_document())
+        .ok_or(AppError::Conflict {
             detail: "invalid role".into(),
-        });
-    }
+        })?;
     let expected = super::share::Expected {
         act: ambre_protocol::MembershipAct::ChangeRole,
         member: target,
-        role: Some(&req.role),
+        role: Some(role.as_str()),
         key: Some(None),
     };
     let entry =
         super::share::checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
-    db::update_document_member_role(&state.db, &doc_id, &target, &req.role, entry.as_ref()).await?;
-    tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
+    db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
+    tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
 }
 

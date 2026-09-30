@@ -301,6 +301,17 @@ enum SyncEvent {
         channel_id: ChannelId,
         result: Result<Vec<ambre_bus::ChannelDocument>, String>,
     },
+    /// The answer to a public channel creation
+    /// (`SyncCommand::CreatePublicChannel`): the sealed key for the catalogue.
+    ChannelCreated {
+        channel_id: ChannelId,
+        result: Result<ambre_bus::SealedChannelKey, String>,
+    },
+    /// The answer to a self-join (`SyncCommand::JoinChannel`).
+    ChannelJoined {
+        channel_id: ChannelId,
+        result: Result<(), String>,
+    },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
@@ -1221,6 +1232,17 @@ impl SyncState {
             SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
+            SyncCommand::CreatePublicChannel {
+                channel_id,
+                space_id,
+                meta,
+                segment,
+            } => self.handle_create_public_channel(channel_id, space_id, meta, segment),
+            SyncCommand::JoinChannel {
+                channel_id,
+                space_id,
+                key,
+            } => self.handle_join_channel(channel_id, space_id, &key),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

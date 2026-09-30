@@ -124,10 +124,12 @@ pub fn api_router(
             "/documents/{id}/media",
             axum::routing::post(media_confirm_upload),
         )
+        .route("/channels", axum::routing::post(create_channel))
         .route(
             "/channels/{id}/documents",
             axum::routing::get(list_channel_documents),
         )
+        .route("/channels/{id}/join", axum::routing::post(join_channel))
         .route(
             "/documents/{id}/read-cursor",
             axum::routing::put(set_read_cursor),

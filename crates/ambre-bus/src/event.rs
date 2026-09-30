@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, RequestId, RestEvent, Role,
-    SnapshotId, UserId,
+    SealedChannelKey, SnapshotId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -192,6 +192,21 @@ pub enum LogicEvent {
     ///
     /// [`SyncCommand::FetchActivity`]: crate::SyncCommand::FetchActivity
     Activity { documents: Vec<DocumentActivity> },
+    /// The relay holds the new public channel, answering
+    /// [`SyncCommand::CreatePublicChannel`](crate::SyncCommand::CreatePublicChannel).
+    /// `key` is the channel key sealed under the space key, for the catalogue.
+    ChannelCreated {
+        channel_id: ChannelId,
+        key: SealedChannelKey,
+    },
+    /// The user is a member of the channel, answering
+    /// [`SyncCommand::JoinChannel`](crate::SyncCommand::JoinChannel).
+    ChannelJoined { channel_id: ChannelId },
+    /// A creation or a join failed, and the relay changed nothing.
+    ChannelRequestFailed {
+        channel_id: ChannelId,
+        message: String,
+    },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// Another participant joined the meeting.

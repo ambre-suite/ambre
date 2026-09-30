@@ -167,7 +167,7 @@ mod tests {
             .await
             .expect("channel");
         let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
-        let mut documents = vec![(meta, "meta")];
+        let mut documents = vec![(meta, ambre_core::ChannelDocumentKind::Meta)];
         let mut segments = Vec::new();
         for &counter in counters {
             let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
@@ -176,7 +176,7 @@ mod tests {
                 .set(format!("doc:{segment}:seq"), counter)
                 .await
                 .expect("counter");
-            documents.push((segment, "segment"));
+            documents.push((segment, ambre_core::ChannelDocumentKind::Segment));
             segments.push(segment);
         }
         for (document, kind) in documents {
@@ -185,15 +185,22 @@ mod tests {
             )
             .bind(uuid_of(document))
             .bind(uuid_of(channel))
-            .bind(kind)
+            .bind(kind.as_str())
             .execute(pool)
             .await
             .expect("group");
         }
         for member in members {
-            db::add_document_member(pool, &meta, member, "viewer", &[6u8; 32], &owner)
-                .await
-                .expect("grant");
+            db::add_document_member(
+                pool,
+                &meta,
+                member,
+                ambre_core::Role::Viewer,
+                &[6u8; 32],
+                &owner,
+            )
+            .await
+            .expect("grant");
         }
         (channel, meta, segments)
     }

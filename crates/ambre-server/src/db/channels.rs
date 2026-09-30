@@ -4,13 +4,13 @@
 // rows of the channel's `meta` document, resolved in `members.rs`.
 
 use super::*;
+use ambre_core::ChannelDocumentKind;
 
 /// One document a channel groups.
 #[derive(Debug)]
 pub struct ChannelDocumentRow {
-    pub document_id: uuid::Uuid,
-    /// `meta`, `segment`, `amendments` or `thread`.
-    pub kind: String,
+    pub document_id: ambre_core::DocumentId,
+    pub kind: ambre_core::ChannelDocumentKind,
 }
 
 /// The documents a channel groups, `meta` first, then by identifier.
@@ -29,12 +29,186 @@ pub async fn list_channel_documents(
     .await?;
     rows.into_iter()
         .map(|r| {
+            let document_id: uuid::Uuid = r.try_get("document_id")?;
+            let kind: String = r.try_get("kind")?;
             Ok(ChannelDocumentRow {
-                document_id: r.try_get("document_id")?,
-                kind: r.try_get("kind")?,
+                document_id: uuid_row_to_id(document_id),
+                kind: decode_kind(&kind)?,
             })
         })
         .collect()
+}
+
+/// A stored kind. A word no build wrote is a decode error: the column's
+/// check constraint admits none.
+fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind, AppError> {
+    ambre_core::ChannelDocumentKind::parse(word).ok_or_else(|| {
+        AppError::Database(sqlx::Error::Decode(
+            format!("unknown channel document kind {word:?}").into(),
+        ))
+    })
+}
+
+/// What the relay holds of a channel: its space and its public flag
+/// (`ZK-015`), and the `meta` document its access resolves to.
+#[derive(Debug)]
+pub struct ChannelRow {
+    /// Absent for a direct message.
+    pub space_id: Option<ambre_core::SpaceId>,
+    pub is_public: bool,
+    /// Absent only for a channel whose `meta` was never registered.
+    pub meta_id: Option<ambre_core::MetaId>,
+}
+
+/// The channel, or `None` when the relay holds no such channel.
+pub async fn get_channel(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+) -> Result<Option<ChannelRow>, AppError> {
+    let row = sqlx::query(
+        "SELECT c.space_id, c.is_public, d.document_id AS meta_id FROM channels c \
+         LEFT JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         WHERE c.id = $1",
+    )
+    .bind(id_to_uuid(*channel_id))
+    .fetch_optional(pool)
+    .await?;
+    row.map(|r| {
+        let space_id: Option<uuid::Uuid> = r.try_get("space_id")?;
+        let meta_id: Option<uuid::Uuid> = r.try_get("meta_id")?;
+        Ok(ChannelRow {
+            space_id: space_id.map(uuid_row_to_id),
+            is_public: r.try_get("is_public")?,
+            meta_id: meta_id.map(uuid_row_to_id),
+        })
+    })
+    .transpose()
+}
+
+/// The channel a document belongs to, or `None` for a document outside
+/// every channel.
+pub async fn channel_of_document(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<ambre_core::ChannelId>, AppError> {
+    let channel: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT channel_id FROM channel_documents WHERE document_id = $1")
+            .bind(id_to_uuid(*document_id))
+            .fetch_optional(pool)
+            .await?;
+    Ok(channel.map(uuid_row_to_id))
+}
+
+/// The role `user_id` holds on a document, or `None` for a stranger to it.
+///
+/// # Errors
+/// A stored role no build wrote is a decode error: the column's check
+/// constraint admits none.
+pub async fn member_role(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+) -> Result<Option<ambre_core::Role>, AppError> {
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2",
+    )
+    .bind(id_to_uuid(*document_id))
+    .bind(id_to_uuid(*user_id))
+    .fetch_optional(pool)
+    .await?;
+    Ok(decode_role_opt(role)?)
+}
+
+/// A channel to register: its space, its flag, and its first two documents.
+#[derive(Debug, Clone, Copy)]
+pub struct NewChannel {
+    pub channel_id: ambre_core::ChannelId,
+    pub space_id: ambre_core::SpaceId,
+    pub is_public: bool,
+    pub meta_id: ambre_core::MetaId,
+    pub segment_id: ambre_core::SegmentId,
+}
+
+/// Register a channel with its `meta` and its first segment, in one
+/// transaction.
+///
+/// A retry of the same registration answers `Ok`, so a client that lost the
+/// answer may send it again. A channel id or a document already registered
+/// otherwise fails with a 409, and nothing is written.
+pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), AppError> {
+    let channel = id_to_uuid(new.channel_id);
+    let space = id_to_uuid(new.space_id);
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO channels (id, space_id, is_public) VALUES ($1, $2, $3) \
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(channel)
+    .bind(space)
+    .bind(new.is_public)
+    .execute(&mut *tx)
+    .await?;
+    let (space_id, is_public): (Option<uuid::Uuid>, bool) =
+        sqlx::query_as("SELECT space_id, is_public FROM channels WHERE id = $1")
+            .bind(channel)
+            .fetch_one(&mut *tx)
+            .await?;
+    let conflict = || AppError::Conflict {
+        detail: "the channel or one of its documents is already registered".into(),
+    };
+    if space_id != Some(space) || is_public != new.is_public {
+        return Err(conflict());
+    }
+    for (document, kind) in [
+        (new.meta_id.document_id(), ChannelDocumentKind::Meta),
+        (new.segment_id.document_id(), ChannelDocumentKind::Segment),
+    ] {
+        let document = id_to_uuid(document);
+        sqlx::query(
+            "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(document)
+        .bind(channel)
+        .bind(kind.as_str())
+        .execute(&mut *tx)
+        .await?;
+        let held: Option<(uuid::Uuid, String)> =
+            sqlx::query_as("SELECT channel_id, kind FROM channel_documents WHERE document_id = $1")
+                .bind(document)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if held.as_ref().map(|(c, k)| (*c, k.as_str())) != Some((channel, kind.as_str())) {
+            return Err(conflict());
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Add `user_id` to the members of a channel's `meta`, unless a row is there.
+///
+/// Answers whether it wrote a row. An existing row is left as it is, so a
+/// self-join never lowers an owner nor swaps the key of a member.
+pub async fn add_channel_member_if_absent(
+    pool: &PgPool,
+    meta_id: &ambre_core::MetaId,
+    user_id: &ambre_core::UserId,
+    role: ambre_core::Role,
+    doc_key_enc: &[u8],
+) -> Result<bool, AppError> {
+    let uid = id_to_uuid(*user_id);
+    let done = sqlx::query(
+        "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) \
+         VALUES ($1, $2, $3, $4, $2) ON CONFLICT (document_id, user_id) DO NOTHING",
+    )
+    .bind(id_to_uuid(*meta_id))
+    .bind(uid)
+    .bind(role.as_str())
+    .bind(doc_key_enc)
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() == 1)
 }
 
 #[cfg(test)]
@@ -61,22 +235,34 @@ mod tests {
         id
     }
 
-    async fn group(pool: &PgPool, channel: ChannelId, document: DocumentId, kind: &str) {
+    async fn group(
+        pool: &PgPool,
+        channel: ChannelId,
+        document: DocumentId,
+        kind: ChannelDocumentKind,
+    ) {
         sqlx::query(
             "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
         )
         .bind(id_to_uuid(document))
         .bind(id_to_uuid(channel))
-        .bind(kind)
+        .bind(kind.as_str())
         .execute(pool)
         .await
         .expect("group document");
     }
 
     async fn grant(pool: &PgPool, document: DocumentId, member: UserId, owner: UserId) {
-        add_document_member(pool, &document, &member, "editor", &[6u8; 32], &owner)
-            .await
-            .expect("add member");
+        add_document_member(
+            pool,
+            &document,
+            &member,
+            ambre_core::Role::Editor,
+            &[6u8; 32],
+            &owner,
+        )
+        .await
+        .expect("add member");
     }
 
     /// A channel of `owner`: its `meta` and one segment.
@@ -84,8 +270,8 @@ mod tests {
         let id = channel(pool).await;
         let meta = document(pool, owner).await;
         let segment = document(pool, owner).await;
-        group(pool, id, meta, "meta").await;
-        group(pool, id, segment, "segment").await;
+        group(pool, id, meta, ChannelDocumentKind::Meta).await;
+        group(pool, id, segment, ChannelDocumentKind::Segment).await;
         (id, meta, segment)
     }
 
@@ -103,7 +289,7 @@ mod tests {
             .await
             .expect("query")
             .expect("a member of the channel reaches its segment");
-        assert_eq!(row.role, "editor");
+        assert_eq!(row.role, ambre_core::Role::Editor);
         assert_eq!(row.doc_key_enc, [6u8; 32], "the key sealed on `meta`");
 
         let listed: Vec<uuid::Uuid> = list_document_members(&pool, &segment)
@@ -173,7 +359,7 @@ mod tests {
         let owner = user(&pool, "owner@test.dev").await;
         let id = channel(&pool).await;
         let segment = document(&pool, owner).await;
-        group(&pool, id, segment, "segment").await;
+        group(&pool, id, segment, ChannelDocumentKind::Segment).await;
         assert!(
             get_document_member(&pool, &segment, &owner)
                 .await
@@ -192,7 +378,7 @@ mod tests {
             .await
             .expect("query")
             .expect("the owner of an ordinary document");
-        assert_eq!(row.role, "owner");
+        assert_eq!(row.role, ambre_core::Role::Owner);
     }
 
     #[sqlx::test]
@@ -201,13 +387,13 @@ mod tests {
         let owner = user(&pool, "owner@test.dev").await;
         let (id, meta, segment) = channel_of(&pool, owner).await;
         let listed = list_channel_documents(&pool, &id).await.expect("query");
-        let got: Vec<(uuid::Uuid, &str)> = listed
-            .iter()
-            .map(|r| (r.document_id, r.kind.as_str()))
-            .collect();
+        let got: Vec<_> = listed.iter().map(|r| (r.document_id, r.kind)).collect();
         assert_eq!(
             got,
-            [(id_to_uuid(meta), "meta"), (id_to_uuid(segment), "segment")]
+            [
+                (meta, ChannelDocumentKind::Meta),
+                (segment, ChannelDocumentKind::Segment)
+            ]
         );
         assert!(
             list_channel_documents(&pool, &ChannelId::new())

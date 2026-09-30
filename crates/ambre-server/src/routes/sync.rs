@@ -203,7 +203,7 @@ pub async fn create_snapshot(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
 
@@ -303,7 +303,7 @@ pub async fn snapshot_upload_url(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !["owner", "editor"].contains(&m.role.as_str()) {
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     // Reject an oversized snapshot before handing out an upload URL. Bind the

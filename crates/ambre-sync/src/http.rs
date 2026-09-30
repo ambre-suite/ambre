@@ -765,6 +765,22 @@ pub(crate) struct CreateDocumentRequest {
     pub entry: Option<String>,
 }
 
+/// `POST /api/channels`: a public channel of a space, with its first two
+/// documents.
+#[derive(Serialize)]
+pub(crate) struct CreateChannelRequest {
+    pub channel_id: String,
+    pub space_id: String,
+    pub meta_id: String,
+    pub segment_id: String,
+}
+
+/// `POST /api/channels/{id}/join`: the channel key, wrapped for the caller.
+#[derive(Serialize)]
+pub(crate) struct JoinChannelRequest {
+    pub doc_key_enc: String,
+}
+
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {

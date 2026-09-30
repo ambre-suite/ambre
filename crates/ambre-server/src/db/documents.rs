@@ -22,7 +22,7 @@ pub struct DocumentSummaryRow {
     pub doc_type: String,
     pub name_enc: Option<Vec<u8>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-    pub role: String,
+    pub role: ambre_core::Role,
     pub doc_key_enc: Vec<u8>,
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
@@ -89,7 +89,7 @@ pub async fn list_documents_for_user(
                 doc_type: r.try_get("doc_type")?,
                 name_enc: r.try_get("name_enc")?,
                 updated_at: r.try_get("updated_at")?,
-                role: r.try_get("role")?,
+                role: decode_role(r.try_get("role")?)?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
                 wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
                 member_count: r.try_get("member_count")?,

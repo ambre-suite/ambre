@@ -15,7 +15,7 @@ use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
     SchemaVerdict, migrate_schema, verdict,
 };
-use ambre_core::{ChannelId, DocumentId};
+use ambre_core::{ChannelId, DocumentId, SpaceId};
 use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -24,13 +24,33 @@ use crate::error::MurmureError;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// The root map every Murmure document carries (`MURMURE-001`).
 pub(crate) const HEADER: &str = "header";
 pub(crate) const HEADER_KIND: &str = "kind";
 pub(crate) const HEADER_CHANNEL: &str = "channel_id";
 pub(crate) const HEADER_CREATED_AT: &str = "created_at";
+/// The key a space document names its space under, in place of a channel.
+pub(crate) const HEADER_SPACE: &str = "space_id";
+
+/// The `space` root of a space document.
+pub(crate) const SPACE: &str = "space";
+pub(crate) const SPACE_NAME: &str = "name";
+
+/// The `categories` root of a space document, one entry per `CategoryId`.
+pub(crate) const CATEGORIES: &str = "categories";
+pub(crate) const CATEGORY_NAME: &str = "name";
+pub(crate) const CATEGORY_POSITION: &str = "position";
+
+/// The `channels` root of a space document, the catalogue: one entry per
+/// public `ChannelId`.
+pub(crate) const CATALOGUE: &str = "channels";
+pub(crate) const ENTRY_NAME: &str = "name";
+pub(crate) const ENTRY_TOPIC: &str = "topic";
+pub(crate) const ENTRY_CATEGORY: &str = "category_id";
+pub(crate) const ENTRY_POSITION: &str = "position";
+pub(crate) const ENTRY_KEY: &str = "key";
 
 /// The `channel` root of a `meta` document.
 pub(crate) const CHANNEL: &str = "channel";
@@ -50,18 +70,36 @@ pub(crate) const MESSAGE_AUTHOR: &str = "author";
 pub(crate) const MESSAGE_TS: &str = "ts";
 pub(crate) const MESSAGE_CONTENT: &str = "content";
 
-/// Murmure's migration registry: empty, because version 1 is the first.
+/// Murmure's migration registry: one row per version bump, appended never
+/// rewritten.
 ///
 /// A document with no version reads as 0 (`SCHEMA-005`). No Murmure document
-/// was ever written without one, so the walk finds no step and refuses it.
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
+/// was ever written without one, so the walk finds no step from 0 and
+/// refuses it.
+///
+/// `1 -> 2` adds the space document. A channel document keeps its layout, so
+/// the step stamps the number and changes nothing else.
+const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: 1,
+    to: 2,
+    apply: stamp_step,
+}];
+
+/// A migration step that only stamps the current version.
+fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+    doc.get_map(SCHEMA_META_MAP)
+        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))
+        .map_err(|e| e.to_string())
+}
 
 /// The document kinds this build writes and reads.
 ///
-/// The spec names five. The space, amendments and thread kinds arrive with the
+/// The spec names five. The amendments and thread kinds arrive with the
 /// Stories that build them; until then a header naming one reads as foreign.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentKind {
+    /// The one document of a space: its name, categories and catalogue.
+    Space,
     /// The one `meta` document of a channel.
     Meta,
     /// One time slice of a channel's messages.
@@ -72,6 +110,7 @@ impl DocumentKind {
     /// The word the `header` stores.
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
+            Self::Space => "space",
             Self::Meta => "meta",
             Self::Segment => "segment",
         }
@@ -96,6 +135,16 @@ impl ChannelType {
             Self::Direct => "direct",
             Self::Private => "private",
             Self::Public => "public",
+        }
+    }
+
+    /// The type a stored word names, or `None` for a word no build wrote.
+    pub(crate) fn parse(word: &str) -> Option<Self> {
+        match word {
+            "direct" => Some(Self::Direct),
+            "private" => Some(Self::Private),
+            "public" => Some(Self::Public),
+            _ => None,
         }
     }
 }
@@ -153,6 +202,25 @@ pub(crate) fn write_header(
     let header = doc.get_map(HEADER);
     header.insert(HEADER_KIND, kind.as_str())?;
     header.insert(HEADER_CHANNEL, channel_id.to_string())?;
+    header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
+    doc.get_map(SCHEMA_META_MAP)
+        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))?;
+    Ok(())
+}
+
+/// Write the `header` of a new space document (`MURMURE-001`), and the
+/// version in the foundation's `meta` map (`MURMURE-020`).
+///
+/// # Errors
+/// [`MurmureError::Crdt`] when Loro refuses a write.
+pub(crate) fn write_space_header(
+    doc: &LoroDoc,
+    space_id: SpaceId,
+    created_at: u64,
+) -> Result<(), MurmureError> {
+    let header = doc.get_map(HEADER);
+    header.insert(HEADER_KIND, DocumentKind::Space.as_str())?;
+    header.insert(HEADER_SPACE, space_id.to_string())?;
     header.insert(HEADER_CREATED_AT, ts_value(created_at))?;
     doc.get_map(SCHEMA_META_MAP)
         .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))?;
@@ -245,37 +313,9 @@ pub(crate) fn admit_all(
     channel_id: ChannelId,
     document_id: DocumentId,
 ) -> Result<LoroDoc, MurmureError> {
-    let doc = LoroDoc::new();
-    for payload in payloads {
-        doc.import(payload).map_err(|e| {
-            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
-            SchemaError::PayloadRejected
-        })?;
-    }
-    let found = read_version(&doc)?;
-    match verdict(found, SCHEMA_VERSION) {
-        SchemaVerdict::Current => {}
-        SchemaVerdict::Newer => {
-            return Err(SchemaError::DocumentTooNew {
-                document: found,
-                binary: SCHEMA_VERSION,
-            }
-            .into());
-        }
-        SchemaVerdict::Older => migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?,
-    }
+    let doc = import_current(payloads, document_id)?;
     let header = doc.get_map(HEADER);
-    let found_kind = string(&header, HEADER_KIND).ok_or(MurmureError::HeaderMalformed {
-        document_id,
-        key: HEADER_KIND,
-    })?;
-    if found_kind != kind.as_str() {
-        return Err(MurmureError::WrongKind {
-            document_id,
-            expected: kind.as_str(),
-            found: found_kind,
-        });
-    }
+    check_kind(&header, kind, document_id)?;
     let found_channel = string(&header, HEADER_CHANNEL)
         .and_then(|s| ChannelId::parse_str(&s).ok())
         .ok_or(MurmureError::HeaderMalformed {
@@ -295,4 +335,74 @@ pub(crate) fn admit_all(
         });
     }
     Ok(doc)
+}
+
+/// Import every payload of a space document, in order, and check its header
+/// before the engine holds it. The same order as [`admit_all`]: the bytes,
+/// the version, the kind, then the space the header names.
+///
+/// # Errors
+/// Every refusal of [`admit_all`], with [`MurmureError::ForeignSpace`] in
+/// place of the foreign channel.
+pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroDoc, MurmureError> {
+    let document_id = space_id.document_id();
+    let doc = import_current(payloads, document_id)?;
+    let header = doc.get_map(HEADER);
+    check_kind(&header, DocumentKind::Space, document_id)?;
+    let found = string(&header, HEADER_SPACE)
+        .and_then(|s| SpaceId::parse_str(&s).ok())
+        .ok_or(MurmureError::HeaderMalformed {
+            document_id,
+            key: HEADER_SPACE,
+        })?;
+    if found != space_id {
+        tracing::warn!("[Murmure] document {document_id} names space {found}; refused");
+        return Err(MurmureError::ForeignSpace { document_id, found });
+    }
+    Ok(doc)
+}
+
+/// Import the payloads into a fresh document, and bring it to the compiled
+/// version or refuse it (`SCHEMA-014`, `MURMURE-019`).
+fn import_current(payloads: &[&[u8]], document_id: DocumentId) -> Result<LoroDoc, MurmureError> {
+    let doc = LoroDoc::new();
+    for payload in payloads {
+        doc.import(payload).map_err(|e| {
+            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
+            SchemaError::PayloadRejected
+        })?;
+    }
+    let found = read_version(&doc)?;
+    match verdict(found, SCHEMA_VERSION) {
+        SchemaVerdict::Current => {}
+        SchemaVerdict::Newer => {
+            return Err(SchemaError::DocumentTooNew {
+                document: found,
+                binary: SCHEMA_VERSION,
+            }
+            .into());
+        }
+        SchemaVerdict::Older => migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?,
+    }
+    Ok(doc)
+}
+
+/// Refuse a header that names another kind, or none.
+fn check_kind(
+    header: &LoroMap,
+    kind: DocumentKind,
+    document_id: DocumentId,
+) -> Result<(), MurmureError> {
+    let found = string(header, HEADER_KIND).ok_or(MurmureError::HeaderMalformed {
+        document_id,
+        key: HEADER_KIND,
+    })?;
+    if found != kind.as_str() {
+        return Err(MurmureError::WrongKind {
+            document_id,
+            expected: kind.as_str(),
+            found,
+        });
+    }
+    Ok(())
 }

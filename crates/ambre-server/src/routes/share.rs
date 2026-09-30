@@ -2,20 +2,22 @@ use axum::extract::{Json, Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::Role;
+
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
 use crate::state::AppState;
 
 /// Privilege rank of a document role. Higher binds more capability.
-/// `owner` (2) > `editor` (1) > `viewer` (0). An unknown role ranks below
-/// everything so it can never be granted.
-fn doc_role_rank(role: &str) -> Option<u8> {
+/// `owner` (2) > `editor` (1) > `viewer` (0). A role no document holds ranks
+/// below everything so it can never be granted.
+fn doc_role_rank(role: Role) -> Option<u8> {
     match role {
-        "viewer" => Some(0),
-        "editor" => Some(1),
-        "owner" => Some(2),
-        _ => None,
+        Role::Viewer => Some(0),
+        Role::Editor => Some(1),
+        Role::Owner => Some(2),
+        Role::Admin | Role::Member => None,
     }
 }
 
@@ -118,6 +120,8 @@ pub(crate) async fn checked_entry(
 #[derive(serde::Deserialize)]
 pub struct InviteRequest {
     pub invitee_email: String,
+    /// A role word, parsed by the handler: an unknown word answers 409, as it
+    /// always has, rather than the extractor's 422.
     pub role: String,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
@@ -155,13 +159,15 @@ pub async fn invite_to_document(
     // at or below their own rank (N2). Without this clamp an `editor` could mint an
     // `owner`, who could then revoke/rotate -- a privilege escalation. Only an owner
     // may grant `owner`.
-    let caller_rank = doc_role_rank(&m.role).ok_or(AppError::Forbidden)?;
-    if doc_role_rank("editor").is_none_or(|editor| caller_rank < editor) {
+    let caller_rank = doc_role_rank(m.role).ok_or(AppError::Forbidden)?;
+    if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
-    let granted_rank = doc_role_rank(&req.role).ok_or(AppError::Conflict {
+    let invalid_role = || AppError::Conflict {
         detail: "invalid role".into(),
-    })?;
+    };
+    let role: Role = req.role.parse().map_err(|_| invalid_role())?;
+    let granted_rank = doc_role_rank(role).ok_or_else(invalid_role)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
@@ -181,7 +187,7 @@ pub async fn invite_to_document(
     // holds the document key, so it could supply a valid wrap. That demotes an
     // owner and overwrites their key entry, despite never being an owner.
     if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
-        let target_rank = doc_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
+        let target_rank = doc_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
@@ -204,7 +210,7 @@ pub async fn invite_to_document(
         &state.db,
         &doc_id,
         &invitee_id,
-        &req.role,
+        role,
         &doc_key_enc,
         &s.user_id,
         &key_id,
@@ -212,7 +218,7 @@ pub async fn invite_to_document(
     )
     .await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
-    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %req.role, by = %s.user_id, "member invited");
+    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %role, by = %s.user_id, "member invited");
 
     // Live push: tell the invitee's connections a document was shared so their
     // list refreshes without a manual reload. Best-effort -- the membership row
@@ -256,7 +262,7 @@ pub async fn revoke_from_document(
         .ok_or(AppError::Forbidden)?;
     // A member may always remove themselves (`SRV-145`). Removing anyone else
     // is the owner's alone (`SRV-015`).
-    if target != s.user_id && m.role != "owner" {
+    if target != s.user_id && m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     let expected = Expected {
@@ -312,7 +318,7 @@ pub async fn revoke_and_rotate(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if m.role != "owner" {
+    if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
     let keys = decode_keys(&req.keys)?;
@@ -490,9 +496,9 @@ pub async fn rotate_document_key(
     // key stale after rotation -> lockout. While a rotation is owed, every
     // frame is refused until one lands. So any member with write access may
     // settle it (`SRV-144`), and that risk is the price of not stalling.
-    let may_rotate = match m.role.as_str() {
-        "owner" => true,
-        "editor" => db::rotation_owed(&state.db, &doc_id).await?,
+    let may_rotate = match m.role {
+        Role::Owner => true,
+        Role::Editor => db::rotation_owed(&state.db, &doc_id).await?,
         _ => false,
     };
     if !may_rotate {
@@ -518,24 +524,25 @@ mod tests {
 
     #[test]
     fn doc_role_rank_ordering() {
-        assert!(doc_role_rank("owner") > doc_role_rank("editor"));
-        assert!(doc_role_rank("editor") > doc_role_rank("viewer"));
-        assert_eq!(doc_role_rank("nonsense"), None);
+        assert!(doc_role_rank(Role::Owner) > doc_role_rank(Role::Editor));
+        assert!(doc_role_rank(Role::Editor) > doc_role_rank(Role::Viewer));
+        assert_eq!(doc_role_rank(Role::Admin), None);
+        assert_eq!(doc_role_rank(Role::Member), None);
     }
 
     /// N2: an editor may grant editor/viewer but never owner.
     #[test]
     fn editor_cannot_grant_owner() {
-        let caller = doc_role_rank("editor").unwrap();
-        assert!(doc_role_rank("owner").unwrap() > caller); // owner grant blocked
-        assert!(doc_role_rank("editor").unwrap() <= caller);
-        assert!(doc_role_rank("viewer").unwrap() <= caller);
+        let caller = doc_role_rank(Role::Editor).unwrap();
+        assert!(doc_role_rank(Role::Owner).unwrap() > caller); // owner grant blocked
+        assert!(doc_role_rank(Role::Editor).unwrap() <= caller);
+        assert!(doc_role_rank(Role::Viewer).unwrap() <= caller);
     }
 
     #[test]
     fn owner_can_grant_any_valid_role() {
-        let caller = doc_role_rank("owner").unwrap();
-        for role in ["owner", "editor", "viewer"] {
+        let caller = doc_role_rank(Role::Owner).unwrap();
+        for role in [Role::Owner, Role::Editor, Role::Viewer] {
             assert!(doc_role_rank(role).unwrap() <= caller);
         }
     }

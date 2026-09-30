@@ -23,7 +23,7 @@
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelActivity, ChannelId, DocType, DocumentId, MeetingId, MurmureEvent, RequestId, RestEvent,
-    Role, UserId,
+    Role, SpaceEvent, SpaceId, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -109,6 +109,13 @@ pub enum UiEvent {
     /// channel just read (the Murmure unread spec). A channel absent here keeps the
     /// mark the view last drew for it.
     Activity { channels: Vec<ChannelActivity> },
+
+    /// What an open space tells its view: its catalogue, and the outcome of
+    /// a creation or a join.
+    Space {
+        space_id: SpaceId,
+        event: SpaceEvent,
+    },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// A participant joined the meeting.

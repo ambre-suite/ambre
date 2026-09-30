@@ -1,7 +1,7 @@
 //! Why the engine refused a document, a delta or a command.
 
 use ambre_core::schema::SchemaError;
-use ambre_core::{ChannelId, DocumentId};
+use ambre_core::{ChannelId, DocumentId, SpaceId};
 use thiserror::Error;
 
 /// Every refusal of the engine. None of them changes a document the channel
@@ -19,6 +19,21 @@ pub enum MurmureError {
         expected: ChannelId,
         found: ChannelId,
     },
+
+    /// The header of a space document names another space.
+    #[error("document {document_id} names space {found}")]
+    ForeignSpace {
+        document_id: DocumentId,
+        found: SpaceId,
+    },
+
+    /// Only a public channel enters the catalogue (`MURMURE-014`).
+    #[error("channel {0} is not public, so the catalogue cannot list it")]
+    NotPublic(ChannelId),
+
+    /// The catalogue lists no channel of that identifier.
+    #[error("the catalogue lists no channel {0}")]
+    NotListed(ChannelId),
 
     /// The header names another kind of document.
     #[error("document {document_id} is a {found}, where a {expected} was expected")]

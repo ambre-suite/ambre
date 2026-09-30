@@ -116,6 +116,15 @@ impl std::convert::TryFrom<u8> for Role {
     }
 }
 
+/// Parses an owned role word, as a database row or a request body holds it.
+impl TryFrom<String> for Role {
+    type Error = RoleError;
+
+    fn try_from(word: String) -> Result<Self, Self::Error> {
+        word.parse()
+    }
+}
+
 /// Parses a role from a string (case-insensitive).
 ///
 /// Returns `RoleError::InvalidString` if the string does not match any known role.

@@ -108,7 +108,7 @@ pub enum MurmurePane {
     Channel(ChannelId),
     Thread { channel: ChannelId, root: MessageRef },
 }
-pub struct MessageRef { pub segment: DocumentId, pub message: MessageId }
+pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
 pub struct SidebarEntry { pub channel: ChannelId, pub group: SidebarGroup, pub activity: Activity }
 pub enum SidebarGroup { Category(CategoryId), Personal(PersonalGroupId), Private, Direct, ToJoin }
 pub enum Activity { None, Some, Count { messages: MessageCount, mentions: MentionCount } }

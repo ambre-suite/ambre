@@ -1,7 +1,8 @@
 //! Fundamental types shared by all Ambre crates.
 //!
 //! - [`Uuid`]: UUIDv7 wrapper (`[u8; 16]`)
-//! - [`DocumentId`], [`UserId`], [`ChannelId`], [`MeetingId`], [`SnapshotId`]:
+//! - [`DocumentId`], [`UserId`], [`ChannelId`], [`SpaceId`], [`MetaId`], [`SegmentId`],
+//!   [`CategoryId`], [`MeetingId`], [`SnapshotId`]:
 //!   strongly-typed identifiers (distinct newtypes over `Uuid`)
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
@@ -22,6 +23,7 @@
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+pub mod channel_kind;
 pub mod doc_type;
 pub mod docfile;
 pub mod error;
@@ -44,6 +46,7 @@ pub mod version;
 
 // Re-export the main types for convenient use.
 pub use authorship::{PeerEntry, SessionNonce};
+pub use channel_kind::ChannelDocumentKind;
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,
@@ -57,7 +60,10 @@ pub use fixtures::{
     FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
     seeded_document_id,
 };
-pub use id::{ChannelId, DocumentId, MeetingId, MessageId, SnapshotId, UserId};
+pub use id::{
+    CategoryId, ChannelId, DocumentId, MeetingId, MessageId, MetaId, SegmentId, SnapshotId,
+    SpaceId, UserId,
+};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use public_key::PublicKey;
 pub use role::Role;

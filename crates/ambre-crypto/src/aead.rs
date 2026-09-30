@@ -80,6 +80,44 @@ pub fn open_file(
     open_under(nonce, ciphertext, aad, key.as_bytes())
 }
 
+/// Seals one document key under another, as a catalogue holds the key of a
+/// public channel under the key of its space.
+///
+/// A pair of its own rather than [`seal`] over the key bytes. Those bytes
+/// stay private to this crate, so no caller holds a key as a plain buffer.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`], which 32 bytes never reach.
+pub fn seal_document_key(
+    inner: &DocumentKey,
+    aad: &[u8],
+    outer: &DocumentKey,
+) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+    seal_under(inner.as_bytes(), aad, outer.as_bytes())
+}
+
+/// Opens a document key sealed by [`seal_document_key`].
+///
+/// # Errors
+///
+/// [`CryptoError::AeadFailed`] for a wrong key, a wrong `aad` or a modified
+/// ciphertext, and [`CryptoError::InvalidKeyLength`] for a plaintext that is
+/// no key.
+pub fn open_document_key(
+    nonce: &[u8; NONCE_LEN],
+    ciphertext: &[u8],
+    aad: &[u8],
+    outer: &DocumentKey,
+) -> Result<DocumentKey, CryptoError> {
+    let mut plain = open_under(nonce, ciphertext, aad, outer.as_bytes())?;
+    let key = <[u8; 32]>::try_from(plain.as_slice())
+        .map(DocumentKey::from_array)
+        .map_err(|_| CryptoError::InvalidKeyLength);
+    zeroize::Zeroize::zeroize(&mut plain);
+    key
+}
+
 /// The cipher itself, over raw key bytes. Private: every caller reaches it
 /// through one of the typed pairs above, so the key type is never erased at a
 /// call site.

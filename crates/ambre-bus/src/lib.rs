@@ -40,8 +40,9 @@ pub mod ui;
 pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    ChannelActivity, ChannelDocument, ChannelDocumentKind, DocumentActivity, MentionTarget,
-    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Timestamp,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, DocumentActivity,
+    MentionTarget, MessageDraft, MessageView, MurmureCommand, MurmureEvent, PublicChannelDraft,
+    SealedChannelKey, SpaceCommand, SpaceEvent, Timestamp, Topic,
 };
 pub use command::SyncCommand;
 pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
@@ -141,7 +142,8 @@ pub enum CopyOutcome {
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 pub use ambre_core::{
-    ChannelId, DocType, DocumentId, MeetingId, MessageId, PublicKey, Role, SnapshotId, UserId, Uuid,
+    CategoryId, ChannelDocumentKind, ChannelId, DocType, DocumentId, MeetingId, MessageId, MetaId,
+    PublicKey, Role, SegmentId, SnapshotId, SpaceId, UserId, Uuid,
 };
 
 #[cfg(test)]

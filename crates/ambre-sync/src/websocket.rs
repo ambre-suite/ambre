@@ -630,6 +630,18 @@ impl SyncState {
                 self.channel_listed(channel_id, result);
             }
             SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
+            SyncEvent::ChannelCreated { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|key| LogicEvent::ChannelCreated { channel_id, key }),
+                );
+            }
+            SyncEvent::ChannelJoined { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|()| LogicEvent::ChannelJoined { channel_id }),
+                );
+            }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {

@@ -10,7 +10,7 @@ pub struct MemberRow {
     pub document_id: uuid::Uuid,
     #[allow(dead_code)]
     pub user_id: uuid::Uuid,
-    pub role: String,
+    pub role: ambre_core::Role,
     pub doc_key_enc: Vec<u8>,
     #[allow(dead_code)]
     pub invited_by: Option<uuid::Uuid>,
@@ -28,7 +28,7 @@ pub struct MemberWithUserRow {
     /// TOFU out-of-band key check.
     pub email_verified: bool,
     pub display_name: String,
-    pub role: String,
+    pub role: ambre_core::Role,
     pub signing_pubkey: Vec<u8>,
     pub exchange_pubkey: Vec<u8>,
     pub doc_key_enc: Vec<u8>,
@@ -81,7 +81,7 @@ pub async fn add_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
-    role: &str,
+    role: ambre_core::Role,
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
     entry: Option<&LogEntry>,
@@ -219,8 +219,9 @@ async fn upsert_member(
     .bind(uid)
     .fetch_optional(&mut **tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(tx, did).await?;
     }
 
@@ -229,7 +230,7 @@ async fn upsert_member(
     )
     .bind(did)
     .bind(uid)
-    .bind(role)
+    .bind(role.as_str())
     .bind(doc_key_enc)
     .bind(inviter)
     .execute(&mut **tx)
@@ -288,7 +289,7 @@ pub async fn get_document_member(
         Some(r) => Ok(Some(MemberRow {
             document_id: r.try_get("document_id")?,
             user_id: r.try_get("user_id")?,
-            role: r.try_get("role")?,
+            role: decode_role(r.try_get("role")?)?,
             doc_key_enc: r.try_get("doc_key_enc")?,
             invited_by: r.try_get("invited_by")?,
         })),
@@ -325,7 +326,7 @@ pub async fn list_document_members(
                 email: r.try_get("email")?,
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
-                role: r.try_get("role")?,
+                role: decode_role(r.try_get("role")?)?,
                 signing_pubkey: r.try_get("signing_pubkey")?,
                 exchange_pubkey: r.try_get("exchange_pubkey")?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
@@ -486,8 +487,9 @@ async fn delete_member(
     .bind(user_id)
     .fetch_optional(&mut **tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") {
+    if current_role == Some(ambre_core::Role::Owner) {
         ensure_not_last_owner(tx, document_id).await?;
     }
 
@@ -508,7 +510,7 @@ pub async fn update_document_member_role(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
-    role: &str,
+    role: ambre_core::Role,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -525,15 +527,16 @@ pub async fn update_document_member_role(
     .bind(uid)
     .fetch_optional(&mut *tx)
     .await?;
+    let current_role = decode_role_opt(current_role)?;
 
-    if current_role.as_deref() == Some("owner") && role != "owner" {
+    if current_role == Some(ambre_core::Role::Owner) && role != ambre_core::Role::Owner {
         ensure_not_last_owner(&mut tx, did).await?;
     }
 
     sqlx::query("UPDATE document_members SET role = $3 WHERE document_id = $1 AND user_id = $2")
         .bind(did)
         .bind(uid)
-        .bind(role)
+        .bind(role.as_str())
         .execute(&mut *tx)
         .await?;
 

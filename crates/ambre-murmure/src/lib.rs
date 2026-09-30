@@ -1,7 +1,8 @@
 //! Murmure, the messaging application of Ambre: the engine core
 //! (`specs/5-Murmure/features/ambre-spec-murmure-engine.md`).
 //!
-//! The Logic thread holds one [`ChannelState`] per open channel. A channel is a
+//! The Logic thread holds one [`ChannelState`] per open channel, and one
+//! [`SpaceState`] per open space. A channel is a
 //! set of Loro documents, never one (`MURMURE-021`). The engine reads no clock
 //! and no key: the view stamps the time, and the Sync worker seals and routes
 //! the deltas this crate exports.
@@ -15,13 +16,17 @@ mod channel;
 mod error;
 mod opening;
 pub mod schema;
+mod space;
 
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]
 mod schema_shape;
+#[cfg(test)]
+mod space_tests;
 
 pub use channel::{ChannelState, Sent};
 pub use error::MurmureError;
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
+pub use space::{Listing, SpaceState};

@@ -102,6 +102,11 @@ impl LogicState {
                         self.channels.clear();
                         self.channel_ledgers.clear();
                         self.opening.clear();
+                        self.spaces.clear();
+                        self.space_opening.clear();
+                        self.creating.clear();
+                        self.joining.clear();
+                        self.unsent.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -156,6 +161,16 @@ impl LogicState {
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
             LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
+            LogicCommand::CreateSpace {
+                space_id,
+                name,
+                now,
+            } => self.create_space(space_id, &name, now),
+            LogicCommand::OpenSpace { space_id } => self.open_space(space_id),
+            LogicCommand::CloseSpace { space_id } => self.close_space(space_id),
+            LogicCommand::Space { space_id, command } => {
+                self.handle_space_command(space_id, command);
+            }
             // -- Content plane: a Murmure command, addressed to its channel ---
             LogicCommand::Channel {
                 channel_id,
@@ -308,7 +323,8 @@ impl LogicState {
             LogicEvent::SnapshotNeeded { document_id } => {
                 let covered = self
                     .export_covered_snapshot(document_id)
-                    .or_else(|| self.channel_snapshot(document_id));
+                    .or_else(|| self.channel_snapshot(document_id))
+                    .or_else(|| self.space_snapshot(document_id));
                 if let Some((payload, covered_seq)) = covered {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
@@ -358,10 +374,16 @@ impl LogicState {
                 if let Some(doc) = self.docs.get_mut(&document_id) {
                     doc.role = role;
                     doc.ready = true;
-                } else if self.channel_document_ready(document_id) {
-                    // A channel document is no document of the view: the
-                    // channel answers for it once it is open.
-                    return;
+                } else {
+                    // A document this client created goes up whole first.
+                    self.flush_unsent(document_id);
+                    if self.channel_document_ready(document_id)
+                        || self.space_document_ready(document_id, role)
+                    {
+                        // A channel or a space document is no document of
+                        // the view: its channel or space answers for it.
+                        return;
+                    }
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
                 // The other sessions learn this one is open, though its caret
@@ -422,6 +444,14 @@ impl LogicState {
                 }
             }
             LogicEvent::Activity { documents } => self.channel_activity(&documents),
+            LogicEvent::ChannelCreated { channel_id, key } => {
+                self.public_channel_created(channel_id, key);
+            }
+            LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
+            LogicEvent::ChannelRequestFailed {
+                channel_id,
+                message,
+            } => self.channel_request_failed(channel_id, message),
 
             // -- Meetings (participant push) -----------------------------------
             LogicEvent::MeetingParticipantJoined {
@@ -448,7 +478,9 @@ impl LogicState {
                 document_id,
                 message,
             } => {
-                if !self.channel_document_failed(document_id, &message) {
+                if !self.channel_document_failed(document_id, &message)
+                    && !self.space_document_failed(document_id, &message)
+                {
                     self.send_to_ui(UiEvent::AuthError { message });
                 }
             }

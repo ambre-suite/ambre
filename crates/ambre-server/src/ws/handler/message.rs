@@ -190,7 +190,7 @@ pub(crate) async fn handle_subscribe(
     // Cache the write capability so `handle_update` can reject a read-only
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write_allowed
-        .insert(document_id, role_can_write(&role));
+        .insert(document_id, role.can_write_document());
     let ack = Payload::server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
@@ -801,7 +801,8 @@ async fn membership_still_valid(
             conn.doc_access_verified_at.insert(doc_id, Instant::now());
             // Refresh the cached write capability too: a mid-session role change
             // (for example editor demoted to viewer) takes effect within the TTL.
-            conn.doc_write_allowed.insert(doc_id, role_can_write(&role));
+            conn.doc_write_allowed
+                .insert(doc_id, role.can_write_document());
             true
         }
         Err(_) => {
@@ -818,19 +819,13 @@ async fn membership_still_valid(
     }
 }
 
-/// Whether a document role may author content. Mirrors the `["owner","editor"]`
-/// gate every REST write path enforces; a `viewer` (or unknown role) is read-only.
-fn role_can_write(role: &str) -> bool {
-    matches!(role, "owner" | "editor")
-}
-
 /// Verifies the caller has a membership row for the document and returns their
 /// role, so callers can gate write operations on it.
 pub(crate) async fn verify_document_access(
     pool: &sqlx::PgPool,
     document_id: DocumentId,
     user_id: UserId,
-) -> Result<String, AppError> {
+) -> Result<ambre_core::Role, AppError> {
     let m = db::get_document_member(pool, &document_id, &user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
@@ -2447,7 +2442,7 @@ mod channel_gate_tests {
     async fn segment_of_channel(
         pool: &sqlx::PgPool,
         owner: UserId,
-        member: Option<(UserId, &str)>,
+        member: Option<(UserId, ambre_core::Role)>,
     ) -> DocumentId {
         let channel = ChannelId::new();
         sqlx::query("INSERT INTO channels (id) VALUES ($1)")
@@ -2457,13 +2452,16 @@ mod channel_gate_tests {
             .expect("channel");
         let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
         let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
-        for (document, kind) in [(meta, "meta"), (segment, "segment")] {
+        for (document, kind) in [
+            (meta, ambre_core::ChannelDocumentKind::Meta),
+            (segment, ambre_core::ChannelDocumentKind::Segment),
+        ] {
             sqlx::query(
                 "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
             )
             .bind(uuid_of(document))
             .bind(uuid_of(channel))
-            .bind(kind)
+            .bind(kind.as_str())
             .execute(pool)
             .await
             .expect("group");
@@ -2530,7 +2528,7 @@ mod channel_gate_tests {
     async fn a_member_of_the_channel_subscribes_to_its_segment(pool: sqlx::PgPool) {
         let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
         let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
-        let segment = segment_of_channel(&pool, owner, Some((bob, "editor"))).await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Editor))).await;
         let state = test_app_state(pool).await;
         let mut conn = conn_of(bob, PublicKey::from_array([3u8; 32]));
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
@@ -2555,7 +2553,7 @@ mod channel_gate_tests {
     async fn a_viewer_of_the_channel_writes_no_delta_on_its_segment(pool: sqlx::PgPool) {
         let owner = crate::test_helpers::create_test_user(&pool, "owner@test.dev").await;
         let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
-        let segment = segment_of_channel(&pool, owner, Some((bob, "viewer"))).await;
+        let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Viewer))).await;
         let state = test_app_state(pool).await;
         let session_key = PublicKey::from_array([4u8; 32]);
         let mut conn = conn_of(bob, session_key.clone());
