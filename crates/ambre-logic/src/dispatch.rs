@@ -154,6 +154,8 @@ impl LogicState {
             }
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
+            LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
+            LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
             // -- Content plane: a Murmure command, addressed to its channel ---
             LogicCommand::Channel {
                 channel_id,
@@ -419,6 +421,7 @@ impl LogicState {
                     self.channel_open_failed(channel_id, message);
                 }
             }
+            LogicEvent::Activity { documents } => self.channel_activity(&documents),
 
             // -- Meetings (participant push) -----------------------------------
             LogicEvent::MeetingParticipantJoined {

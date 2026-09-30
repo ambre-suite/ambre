@@ -323,6 +323,19 @@ impl ChannelState {
             .map(|(id, _)| *id)
     }
 
+    /// Every final segment `meta` lists, in list order, loaded or not.
+    ///
+    /// Reaching the latest message reads them all (`MURMURE-115`). Their
+    /// content no longer moves, so the relay may advance their cursors to
+    /// their last number with no message skipped.
+    pub fn final_segments(&self) -> Vec<DocumentId> {
+        segment_entries(&self.meta.doc)
+            .into_iter()
+            .filter(|(_, state)| *state == SegmentState::Final)
+            .map(|(id, _)| id)
+            .collect()
+    }
+
     /// Ask for the final segment listed before `segment`, the one a scroll
     /// past the oldest loaded message needs (`MURMURE-023`).
     ///

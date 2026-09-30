@@ -42,7 +42,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
 
-use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
+use crate::{DocType, DocumentId, MeetingId, Role, UserId};
 
 // -----------------------------------------------------------------------------
 // Secret-carrying IPC fields (H5)
@@ -228,13 +228,6 @@ pub struct UserInfo {
     pub email: String,
 }
 
-/// Unread message count per channel.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UnreadCount {
-    pub channel_id: ChannelId,
-    pub count: u64,
-}
-
 // -----------------------------------------------------------------------------
 // RestCommand -- relayed service request (UI -> Logic -> Sync)
 // -----------------------------------------------------------------------------
@@ -376,15 +369,6 @@ pub enum RestCommand {
         sealed: Vec<u8>,
         passphrase: SecretBytes,
     },
-
-    // -- Channels (Murmure) -- read cursors --------------------------------------
-    /// Advance the read cursor for unread tracking. (Acknowledged implicitly.)
-    UpdateReadCursor {
-        channel_id: ChannelId,
-        last_seq: u64,
-    },
-    /// Request unread counts for all subscribed channels. -> `UnreadCounts`.
-    GetUnreadCounts,
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
@@ -528,11 +512,6 @@ pub enum RestEvent {
     /// tag cannot tell a wrong passphrase from a modified file, so naming one
     /// would be a guess. The surface says both (`DOCFILE-016`).
     DocFileOpenFailed,
-
-    // -- Channels (Murmure) -- read cursors --------------------------------------
-    UnreadCounts {
-        counts: Vec<UnreadCount>,
-    },
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {

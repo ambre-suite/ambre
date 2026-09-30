@@ -4,6 +4,7 @@ mod documents;
 mod keys;
 mod media;
 mod orgs;
+mod read_cursors;
 mod share;
 mod sync;
 
@@ -16,6 +17,7 @@ pub use documents::*;
 pub use keys::*;
 pub use media::*;
 pub use orgs::*;
+pub use read_cursors::*;
 pub use share::*;
 pub use sync::*;
 
@@ -126,6 +128,12 @@ pub fn api_router(
             "/channels/{id}/documents",
             axum::routing::get(list_channel_documents),
         )
+        .route(
+            "/documents/{id}/read-cursor",
+            axum::routing::put(set_read_cursor),
+        )
+        .route("/activity", axum::routing::get(get_activity))
+        .route("/read-cursors/mark-read", axum::routing::post(mark_read))
         .route(
             "/organizations",
             axum::routing::get(list_orgs).post(create_org),

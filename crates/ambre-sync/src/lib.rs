@@ -301,6 +301,11 @@ enum SyncEvent {
         channel_id: ChannelId,
         result: Result<Vec<ambre_bus::ChannelDocument>, String>,
     },
+    /// The relay's activity answer (`SyncCommand::FetchActivity`,
+    /// `SyncCommand::MarkAllRead`).
+    ActivityFetched {
+        result: Result<Vec<ambre_bus::DocumentActivity>, String>,
+    },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
     /// genuine authorization failure). Surfaced as an `AuthError` instead of
@@ -1213,6 +1218,9 @@ impl SyncState {
 
             // -- Channel sync session (control) --------------------------------
             SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
+            SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
+            SyncCommand::MarkAllRead => self.handle_mark_all_read(),
+            SyncCommand::FetchActivity => self.handle_fetch_activity(),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),
@@ -1329,15 +1337,6 @@ impl SyncState {
             } => {
                 self.handle_download_media(id, document_id, content_hash);
             }
-
-            // -- Channels (read cursors) -----------------------------------------
-            RestCommand::UpdateReadCursor {
-                channel_id,
-                last_seq,
-            } => {
-                tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
-            }
-            RestCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
 
             // -- The native file (`.ambre`) ------------------------------------
             RestCommand::SealDocFile {

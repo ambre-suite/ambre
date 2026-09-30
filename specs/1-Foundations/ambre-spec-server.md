@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
-| `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | `ambre_server::routes::read_cursors::tests::a_removal_deletes_the_read_cursors_of_the_member_removed` -- a removal from the `meta` deletes the cursors on every document of the channel, and another member's cursor stays | none | verified |
 | `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -91,8 +91,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Read cursors and unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- a document past the cursor, one at it, and a `meta` document that never appears | none | verified |
+| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- every entry carries exactly a channel, a document and a yes or no | none | verified |
 
 ### 1.7 A space applies its retention
 
@@ -121,7 +121,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 36 `verified`, 1 `qa-manual`, 17 `unimplemented`. What holds is
+* **Verification.** 39 `verified`, 1 `qa-manual`, 14 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
   and the origin list. The delete holds too, and so does the payload type no log line can name.
   The process rules are loose; a deployment's isolation is read by hand.
@@ -307,11 +307,19 @@ group needs a token.
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
 | channels | the documents a channel groups, listed to a member alone | this document |
+| read cursors | a cursor, the activity answer, marking read | this document, and `ambre-spec-murmure-unread.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
-**What the surface does not carry.** Meetings have no route at all. Of the channel routes, only the
-listing is built. The others are designed and unbuilt (`SRV-105` to `SRV-112`). They create a
-channel, join a public channel alone, read the activity, and set the retention of a space.
+**What the surface does not carry.** Meetings have no route at all. Of the channel routes, the
+listing and the activity answer are built. The others are designed and unbuilt (`SRV-105` to
+`SRV-108`, `SRV-111` and `SRV-112`). They create a channel, join a public channel alone, and set the
+retention of a space.
+
+**The last number of a document.** The activity answer compares the caller's cursor with the
+higher of two numbers. One is the sequence counter in the ephemeral store. The other is the
+register's horizon: the highest flushed delta and the highest snapshot coverage. The counter alone
+is lost with the ephemeral store; the register alone lags the unflushed deltas. Only segments and
+threads appear: `meta` and amendments carry no message a member reads.
 
 ---
 

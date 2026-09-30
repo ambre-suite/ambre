@@ -9,6 +9,7 @@ mod content;
 mod documents;
 mod members;
 mod orgs;
+mod read_cursors;
 mod users;
 
 pub use channels::*;
@@ -16,6 +17,7 @@ pub use content::*;
 pub use documents::*;
 pub use members::*;
 pub use orgs::*;
+pub use read_cursors::*;
 pub use users::*;
 
 #[allow(dead_code)]

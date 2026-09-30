@@ -22,7 +22,8 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelId, DocType, DocumentId, MeetingId, MurmureEvent, RequestId, RestEvent, Role, UserId,
+    ChannelActivity, ChannelId, DocType, DocumentId, MeetingId, MurmureEvent, RequestId, RestEvent,
+    Role, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -103,6 +104,11 @@ pub enum UiEvent {
         channel_id: ChannelId,
         event: MurmureEvent,
     },
+
+    /// Which channels hold something new: the relay's answer at start, or a
+    /// channel just read (the Murmure unread spec). A channel absent here keeps the
+    /// mark the view last drew for it.
+    Activity { channels: Vec<ChannelActivity> },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// A participant joined the meeting.

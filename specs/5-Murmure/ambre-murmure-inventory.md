@@ -17,6 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | partial | 10 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
+| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 11 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
@@ -41,6 +42,5 @@
 | `murmure-spaces` | A team gathers in a space. | design-only | 30 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
-| `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**27 features: 0 implemented, 2 partial, 25 design-only. 417 contract rows, 0 loose.**
+**27 features: 0 implemented, 3 partial, 24 design-only. 417 contract rows, 0 loose.**

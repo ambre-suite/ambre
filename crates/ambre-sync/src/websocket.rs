@@ -629,6 +629,7 @@ impl SyncState {
             SyncEvent::ChannelListed { channel_id, result } => {
                 self.channel_listed(channel_id, result);
             }
+            SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {

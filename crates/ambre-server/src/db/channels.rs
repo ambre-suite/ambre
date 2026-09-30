@@ -218,7 +218,8 @@ mod tests {
     }
 
     /// `ZK-015`: the channel tables hold the channel's space and public flag,
-    /// and each document's channel and kind. Nothing else: no name, no member,
+    /// and each document's channel and kind. The cursor table holds a member,
+    /// a document and a number. Nothing else: no name, no member,
     /// no key and no timestamp. A column added here widens what the relay
     /// learns, so it fails this test before it ships.
     #[sqlx::test]
@@ -226,7 +227,7 @@ mod tests {
     async fn the_channel_tables_hold_only_what_the_relay_may_learn(pool: PgPool) {
         let columns: Vec<(String, String)> = sqlx::query_as(
             "SELECT table_name::text, column_name::text FROM information_schema.columns \
-             WHERE table_schema = current_schema() AND table_name LIKE 'channel%' \
+             WHERE table_schema = current_schema() AND (table_name LIKE 'channel%' OR table_name = 'read_cursors') \
              ORDER BY table_name, column_name",
         )
         .fetch_all(&pool)
@@ -245,6 +246,9 @@ mod tests {
                 ("channels", "id"),
                 ("channels", "is_public"),
                 ("channels", "space_id"),
+                ("read_cursors", "document_id"),
+                ("read_cursors", "seq"),
+                ("read_cursors", "user_id"),
             ]
         );
     }

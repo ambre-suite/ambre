@@ -557,6 +557,24 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
     send_json_auth_via(&Fetch, Method::Delete, url, body, &auth).await
 }
 
+/// HTTP PUT of a JSON body, expecting a success with no body to read.
+pub(crate) async fn put_json_auth<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    send_json_auth_via(&Fetch, Method::Put, url, body, &auth).await
+}
+
+/// HTTP POST of a JSON body, expecting a success with no body to read.
+pub(crate) async fn post_json_auth_ok<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    send_json_auth_via(&Fetch, Method::Post, url, body, &auth).await
+}
+
 pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     let request = Outgoing::new(Method::Get, url);
     let resp = exchange(&Fetch, &request).await?;
@@ -678,6 +696,34 @@ pub(crate) struct ChannelDocumentEntry {
     pub document_id: String,
     /// `meta`, `segment`, `amendments` or `thread`.
     pub kind: String,
+}
+
+/// `GET /api/activity`: per segment and thread of every channel of the
+/// caller, whether it holds something past the caller's cursor.
+#[derive(Deserialize)]
+pub(crate) struct ActivityResponse {
+    pub documents: Vec<ActivityEntry>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ActivityEntry {
+    pub channel_id: String,
+    pub document_id: String,
+    pub active: bool,
+}
+
+/// `PUT /api/documents/{id}/read-cursor`.
+#[derive(Serialize)]
+pub(crate) struct ReadCursorRequest {
+    pub seq: u64,
+}
+
+/// `POST /api/read-cursors/mark-read`: the documents to move to their last
+/// number, or every one when absent.
+#[derive(Serialize)]
+pub(crate) struct MarkReadRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documents: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]

@@ -336,8 +336,9 @@ pub async fn list_document_members(
         .collect()
 }
 
-/// Removes a user from a document's membership, and leaves the document owing
-/// a rotation (`SRV-122`). Every key it held is one the member removed holds.
+/// Removes a user from a document's membership, with the read cursors the
+/// membership held (`SRV-137`), and leaves the document owing a rotation
+/// (`SRV-122`). Every key it held is one the member removed holds.
 ///
 /// Refuses to delete the document's only remaining owner (last-owner lockout):
 /// with no owner left, nobody could manage sharing. The check and the delete
@@ -471,8 +472,8 @@ pub async fn rotation_owed(
     Ok(owed.unwrap_or(false))
 }
 
-/// Deletes one member row, refusing the last owner. The target row is locked
-/// so two concurrent removals cannot both see two owners.
+/// Deletes one member row with its read cursors, refusing the last owner. The
+/// target row is locked so two concurrent removals cannot both see two owners.
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
@@ -495,6 +496,7 @@ async fn delete_member(
         .bind(user_id)
         .execute(&mut **tx)
         .await?;
+    super::read_cursors::delete_read_cursors_of(&mut **tx, document_id, user_id).await?;
     Ok(())
 }
 

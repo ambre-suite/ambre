@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DocumentId, MessageId, UserId};
+use crate::{ChannelId, DocumentId, MessageId, UserId};
 
 /// What a document of a channel is (`ambre-spec-murmure-schema.md`).
 ///
@@ -50,6 +50,23 @@ impl ChannelDocumentKind {
 pub struct ChannelDocument {
     pub document_id: DocumentId,
     pub kind: ChannelDocumentKind,
+}
+
+/// Whether one document of a channel holds something past the caller's
+/// read cursor. The relay answers a yes or no, never a count (`SRV-110`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentActivity {
+    pub channel_id: ChannelId,
+    pub document_id: DocumentId,
+    pub active: bool,
+}
+
+/// Whether a channel holds something new, the mark the sidebar shows before
+/// any count is known (`MURMURE-119`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChannelActivity {
+    pub channel_id: ChannelId,
+    pub active: bool,
 }
 
 /// A wall-clock instant in Unix milliseconds.
@@ -99,6 +116,9 @@ pub enum MurmureCommand {
     /// Load the final segment listed before `segment`, because the view
     /// scrolled past the oldest message it holds (`MURMURE-023`).
     LoadOlder { segment: DocumentId },
+    /// The view shows the latest message of the channel: move the read
+    /// cursor to it (`MURMURE-115`). A relay record, never a document write.
+    MarkRead,
 }
 
 impl MurmureCommand {
@@ -109,7 +129,7 @@ impl MurmureCommand {
     pub fn is_mutating(&self) -> bool {
         match self {
             Self::SendMessage { .. } => true,
-            Self::LoadOlder { .. } => false,
+            Self::LoadOlder { .. } | Self::MarkRead => false,
         }
     }
 }

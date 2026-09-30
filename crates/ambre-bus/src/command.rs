@@ -133,6 +133,24 @@ pub enum SyncCommand {
     /// The path back has room again: reopen the socket and catch up.
     ReleaseInbound,
 
+    // -- Read cursors (Murmure) --------------------------------------------------
+    /// Move the read cursors of one channel to its latest message
+    /// (the Murmure unread spec). Each `live` segment moves to the last sequence number
+    /// this worker delivered, so a message sequenced and not yet shown stays
+    /// unread. Each `finals` segment no longer changes, so the relay moves it
+    /// to its own last number.
+    MarkRead {
+        live: Vec<DocumentId>,
+        finals: Vec<DocumentId>,
+    },
+    /// Move every read cursor of the user to its document's last number
+    /// (the Murmure unread spec), then answer with a fresh
+    /// [`crate::LogicEvent::Activity`].
+    MarkAllRead,
+    /// Ask the relay which channel documents hold something past the user's
+    /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::Activity`].
+    FetchActivity,
+
     // -- Lifecycle -------------------------------------------------------------
     Shutdown,
 }

@@ -216,6 +216,16 @@ fn an_older_segment_loads_only_when_the_view_asks() {
     assert_eq!(state.older_than(stored.final_id), None);
 }
 
+/// Reaching the latest message reads every final segment, loaded or not,
+/// and names no live one.
+#[test]
+fn the_final_segments_are_listed_loaded_or_not() {
+    let stored = stored_channel();
+    let state = open(&stored);
+    assert!(!state.holds(stored.final_id));
+    assert_eq!(state.final_segments(), [stored.final_id]);
+}
+
 #[test]
 fn a_live_segment_is_not_an_older_one() {
     let stored = stored_channel();

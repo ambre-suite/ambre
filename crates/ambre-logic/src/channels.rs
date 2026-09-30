@@ -6,7 +6,10 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelDocument, ChannelDocumentKind, ChannelId, MurmureCommand, MurmureEvent};
+use ambre_bus::{
+    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity,
+    MurmureCommand, MurmureEvent,
+};
 #[cfg(test)]
 use ambre_murmure::ChannelState;
 use ambre_murmure::{Opening, OpeningChannel};
@@ -250,7 +253,52 @@ impl LogicState {
                     });
                 }
             }
+            MurmureCommand::MarkRead => {
+                // The latest message is on screen: every segment before it is
+                // read too, loaded or not (the Murmure unread spec). A relay record, so
+                // a viewer moves its cursor as a writer does.
+                let live = [Some(channel.active_id()), channel.closing_id()]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                let finals = channel.final_segments();
+                self.send_to_sync(SyncCommand::MarkRead { live, finals });
+                self.send_to_ui(UiEvent::Activity {
+                    channels: vec![ChannelActivity {
+                        channel_id,
+                        active: false,
+                    }],
+                });
+            }
         }
+    }
+
+    /// Hand the view the relay's activity answer, one mark per channel: a
+    /// channel is active when any of its documents is (the Murmure
+    /// unread spec).
+    ///
+    /// Opens nothing: the answer is a yes or no per document,
+    /// and a mark needs no more.
+    pub(crate) fn channel_activity(&self, documents: &[DocumentActivity]) {
+        let mut channels: Vec<ChannelActivity> = Vec::new();
+        let mut index: HashMap<ChannelId, usize> = HashMap::new();
+        for document in documents {
+            match index.get(&document.channel_id) {
+                Some(&i) => {
+                    if let Some(channel) = channels.get_mut(i) {
+                        channel.active |= document.active;
+                    }
+                }
+                None => {
+                    index.insert(document.channel_id, channels.len());
+                    channels.push(ChannelActivity {
+                        channel_id: document.channel_id,
+                        active: document.active,
+                    });
+                }
+            }
+        }
+        self.send_to_ui(UiEvent::Activity { channels });
     }
 
     /// Apply remote payloads to the channel that holds `document_id`
@@ -692,5 +740,91 @@ mod tests {
             command: MurmureCommand::LoadOlder { segment: active },
         });
         assert!(drain(&sync).is_empty());
+    }
+
+    #[test]
+    fn marking_a_channel_read_moves_its_live_segments_and_clears_its_mark() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, active) = open_channel(&mut state);
+
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: MurmureCommand::MarkRead,
+        });
+
+        let sent = drain(&sync);
+        let [SyncCommand::MarkRead { live, finals }] = sent.as_slice() else {
+            panic!("one mark read, got {sent:?}");
+        };
+        assert_eq!(*live, [active]);
+        assert!(finals.is_empty());
+        let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        let [UiEvent::Activity { channels }] = shown.as_slice() else {
+            panic!("one activity event, got {shown:?}");
+        };
+        assert_eq!(
+            *channels,
+            [ChannelActivity {
+                channel_id,
+                active: false
+            }]
+        );
+    }
+
+    #[test]
+    fn an_activity_answer_marks_each_channel_once_and_opens_nothing() {
+        let (mut state, ui, sync) = harness();
+        let (quiet, busy) = (ChannelId::new(), ChannelId::new());
+        let entry = |channel_id, active| DocumentActivity {
+            channel_id,
+            document_id: DocumentId::new(),
+            active,
+        };
+
+        state.handle_logic_event(LogicEvent::Activity {
+            documents: vec![
+                entry(busy, false),
+                entry(quiet, false),
+                entry(busy, true),
+                entry(quiet, false),
+            ],
+        });
+
+        let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        let [UiEvent::Activity { channels }] = shown.as_slice() else {
+            panic!("one activity event, got {shown:?}");
+        };
+        assert_eq!(
+            *channels,
+            [
+                ChannelActivity {
+                    channel_id: busy,
+                    active: true
+                },
+                ChannelActivity {
+                    channel_id: quiet,
+                    active: false
+                },
+            ]
+        );
+        assert!(
+            drain(&sync).is_empty(),
+            "an activity answer opens no document"
+        );
+    }
+
+    #[test]
+    fn the_activity_commands_reach_the_sync_worker() {
+        let (mut state, _, sync) = harness();
+        state.handle_logic_command(LogicCommand::FetchActivity);
+        state.handle_logic_command(LogicCommand::MarkAllRead);
+        let sent = drain(&sync);
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [SyncCommand::FetchActivity, SyncCommand::MarkAllRead]
+            ),
+            "got {sent:?}"
+        );
     }
 }

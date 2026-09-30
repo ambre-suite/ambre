@@ -40,8 +40,8 @@ pub mod ui;
 pub use activity::{ActivityAnchor, ActivityKind, ActivitySummary};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    ChannelDocument, ChannelDocumentKind, MentionTarget, MessageDraft, MessageView, MurmureCommand,
-    MurmureEvent, Timestamp,
+    ChannelActivity, ChannelDocument, ChannelDocumentKind, DocumentActivity, MentionTarget,
+    MessageDraft, MessageView, MurmureCommand, MurmureEvent, Timestamp,
 };
 pub use command::SyncCommand;
 pub use event::{LogicEvent, SignedDelta, SnapshotPurpose, SnapshotVerdict};
@@ -60,7 +60,7 @@ pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Outbox, SendOutcome};
 pub use rest::{
     DocumentSummary, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, SecretBytes,
-    SecretString, UnreadCount, UserInfo,
+    SecretString, UserInfo,
 };
 pub use sink::CommandSink;
 pub use ui::{AppEvent, UiEvent};

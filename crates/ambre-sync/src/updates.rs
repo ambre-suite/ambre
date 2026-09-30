@@ -3313,4 +3313,21 @@ mod tests {
             "one refusal naming the document, got {events:?}"
         );
     }
+
+    /// A read reaches the last update delivered to the Logic thread. It stops
+    /// short of an update held in quarantine: past it, the cursor would mark
+    /// read a message never shown (the Murmure unread spec).
+    #[test]
+    fn a_read_reaches_the_last_update_delivered_and_no_further() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        assert_eq!(state.read_up_to(doc), None, "nothing delivered yet");
+        assert_eq!(state.read_up_to(DocumentId::new()), None, "not open");
+
+        state.receive_update(Seq(4), make_update(doc, snap, 1, b"shown", &key, &sk));
+        assert_eq!(state.read_up_to(doc), Some(Seq(4)));
+
+        let held = make_update(doc, SnapshotId::new(), 2, b"held", &key, &sk);
+        state.receive_update(Seq(5), held);
+        assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
+    }
 }

@@ -119,6 +119,26 @@ fn clock_refusal(error: &str, got: u64) -> AppError {
     }
 }
 
+/// The sequence counter of each document, in the order asked. `None` where
+/// the ephemeral store holds no counter: the document was never written, or
+/// the store was reset and nothing wrote since.
+pub async fn document_seqs(
+    redis: &Client,
+    document_ids: &[ambre_core::DocumentId],
+) -> Result<Vec<Option<u64>>, AppError> {
+    if document_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let keys: Vec<String> = document_ids
+        .iter()
+        .map(|id| format!("doc:{id}:seq"))
+        .collect();
+    redis
+        .mget::<Vec<Option<u64>>>(keys)
+        .await
+        .map_err(|e| AppError::Redis(format!("sequence counters: {e}")))
+}
+
 /// Reseeds a cold Redis clock/seq state to the durable high-water marks, using
 /// `MAX` semantics. It can never lower a value a concurrent live update already
 /// raised.

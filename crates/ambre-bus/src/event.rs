@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelDocument, ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, SnapshotId, UserId,
+    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, RequestId, RestEvent, Role,
+    SnapshotId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -185,6 +186,12 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         message: String,
     },
+    /// The relay's activity answer, per segment and thread of every channel
+    /// of the user (`SRV-109`), answering [`SyncCommand::FetchActivity`] and
+    /// [`SyncCommand::MarkAllRead`](crate::SyncCommand::MarkAllRead).
+    ///
+    /// [`SyncCommand::FetchActivity`]: crate::SyncCommand::FetchActivity
+    Activity { documents: Vec<DocumentActivity> },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// Another participant joined the meeting.

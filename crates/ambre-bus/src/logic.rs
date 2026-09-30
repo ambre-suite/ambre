@@ -135,6 +135,14 @@ pub enum LogicCommand {
     /// its documents.
     CloseChannel { channel_id: ChannelId },
 
+    /// Ask which channels hold something new, for the sidebar at start
+    /// (the Murmure unread spec). Loads no document: answered by
+    /// [`crate::UiEvent::Activity`].
+    FetchActivity,
+
+    /// Mark every channel read (the Murmure unread spec).
+    MarkAllRead,
+
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
     /// Hand the Logic thread font faces the UI thread has fetched
     /// (`CANVAS-067`, `CANVAS-068`). It cannot fetch any itself: it blocks on
