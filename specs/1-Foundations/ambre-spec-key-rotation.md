@@ -44,7 +44,7 @@ everyone who stays and posts every copy at once.
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the `A snapshot follows each rotation` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none | fails -- `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone; lands with the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed`; `ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` -- the rotation names each member it could not re-wrap for, and the revoke reports them | none | verified |
 | `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-126` | `POST` | A revoke MUST post the removal, the wrapped copies and the link in one request. | this spec section 3; `SYNC-041` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
 
@@ -87,7 +87,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It also holds each link and each key
   identifier, and opens neither.
-* **Verification.** 2 `verified`, 4 `failing`, 5 `untested`, 14 `unimplemented`. What holds is the
+* **Verification.** 3 `verified`, 3 `failing`, 5 `untested`, 14 `unimplemented`. What holds is the
   relay half and the wipe the key type carries. The client side is loose: the revoke is not atomic,
   the rotation reaches the deltas alone, and the open tries every key.
 
@@ -104,7 +104,7 @@ verification.
 | removes Carol, and the removal fails | -- | nothing new | Alice is told, and Carol stays a member (`SYNC-041`) | `sharing::tests::revoke_delete_failure_emits_500_and_stops` |
 | removes Carol, and the rotation fails | Bob edits | Bob's edit under the previous key | Alice is told the revoke failed, Carol is out of the list, and Carol can still read Bob's edit (`SYNC-041`) | none, and it fails -- section 5 |
 | removes Carol | Bob reopens the document | Alice's content, and a name nobody can open | the document is called nothing, and every picture in it is missing (`SYNC-042`) | none, and it fails -- section 5 |
-| removes Carol, whose row Bob's relay serves malformed | Bob reopens | Alice's content | Bob loses the document with no message (`SYNC-043`) | `sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` |
+| removes Carol, whose row Bob's relay serves malformed | Bob reopens | Alice's content | Alice is told the rotation could not reach Bob, by name (`SYNC-043`) | `sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` |
 | removes Carol while Bob's edit is in flight | Bob's edit arrives sealed under the previous key | Bob's edit | Alice reads it: the previous key is cached (`SYNC-044`) | none -- section 5 |
 
 ---
@@ -234,9 +234,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **Nothing names the key of a name or a blob.** Both stay sealed under the key of their time,
   which is correct once each names its key and the chain opens it. Neither names it today, so
   every revoke leaves the document unnamed and its pictures unreadable (`SYNC-042`, `SYNC-125`).
-* **A member with an unparsable exchange key is skipped.** The rotation proceeds without them, the
-  relay keeps their previous copy, and they lose the document quietly. The skip is deliberate -- it
-  keeps the rest converging -- and nothing reports it (`SYNC-043`).
+* **A member with an unparsable exchange key is reported, and still loses the document.** The
+  rotation proceeds without them so the rest converge, and the user is told who was left out.
+  Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).
 * **The open tries every cached key.** An inbound frame is attempted against the current key, then
   each cached key, then the current key again for its error. So an unopenable frame costs eleven
   attempts. A frame sealed under a key that was rotated away still opens for as long as it is

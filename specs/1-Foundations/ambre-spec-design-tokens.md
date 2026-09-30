@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 |---|---|---|---|---|---|---|
 | `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
-| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none | fails -- five names are read and defined nowhere: the content ground, a danger colour, a foreground, a shadow and a dimmed text. The foreground carries no fallback, so a label on the home screen has no colour of its own; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
+| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_stylesheet_reads_only_declared_tokens` -- every name the shell sheet reads is checked against the names the token source emits and the sheet declares | none | verified |
 | `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Switch the theme
@@ -42,9 +42,10 @@ The user flips the theme control. One act must move both halves, and it must mov
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 1 `verified`, 2 `failing`, 3 `untested`, 0 `unimplemented`. The one held rule is
-  held by the compiler and holds the half that matters: the two sides cannot come from two sources.
-  What nothing holds is whether a value bypassed the source, and both failing rows say it did.
+* **Verification.** 2 `verified`, 1 `failing`, 3 `untested`. The compiler holds the half that
+  matters: the two sides cannot come from two sources. A test holds that the shell sheet reads only
+  declared names. What nothing holds is whether a value bypassed the source, and the failing row
+  says it did.
 
 ---
 
@@ -130,17 +131,9 @@ The user touches one thing: the theme control. Everything else is what they see.
   changes one. Every white on a coloured ground is a literal too, so a light theme cannot lighten
   the ground under it. The file's own header still promises the token sets for later, and the sets
   are there (`UI-THREAD-029`).
-* **Five tokens are read and declared nowhere:** the content ground, a danger colour, a foreground,
-  a shadow and a dimmed text. Four have a fallback and degrade quietly; the foreground has none, so
-  a label on the home screen takes whatever it inherits (`UI-THREAD-031`).
-* **The danger colour is a token that does not exist under a name that does.** The status group
-  declares an error colour, and the sheet asks for a danger one and falls back to a red of its own.
-  Two names, one meaning, and the one the source emits is unused.
-* **Two accent fallbacks contradict the accent.** Where the sheet writes the accent with a
-  fallback, the fallback is a blue and the token is amber. The two disagree about the product's own
-  colour.
-* **No test names the theme.** Neither tier constructs a palette, reads the generated sheet or
-  drives a switch, so every row here except the compiler-held one is checked by reading.
+* **One test reads the sheets, and it reads names only.** It holds that every token the shell sheet
+  reads is declared (`UI-THREAD-031`). Neither tier constructs a palette or drives a switch, so the
+  values are checked by reading.
 * **Nothing rules on contrast.** The two palettes are chosen by eye. No rule states a minimum ratio
   between a text colour and the ground it is drawn on (`ambre-spec-accessibility.md`).
 * **Nothing rules on a third theme, or on the system preference.** The switch has two values and

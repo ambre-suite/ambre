@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none | fails -- a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody, section 6. The presence directory takes the opposite branch and drops the row, which is `SYNC-015`; lands with the `The member list shows no invented identity` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | `ambre_sync::sharing::tests::map_members_parses_roles_and_drops_invented_ids` -- a row whose identifier does not parse is dropped, never given a fresh one | none | verified |
 
 ### 1.2 A document is shared with someone
 
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-016` | `POST` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md`, `BUS-008` | `ambre_sync::sharing::tests::own_role_reads_our_own_row` -- a peer holding owner does not raise ours; `::own_role_reads_writable_roles` -- the writable side; `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` -- both open paths carry it | none | verified |
 | `SYNC-017` | `FAIL` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` -- both unresolvable cases, no session identity yet and no row for us in the answer, answer the viewer role | none | verified |
 | `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`; `::kek_binds_peer_identity` -- the primitive under the rule | partial -- the choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
-| `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none | fails -- a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates, section 6; lands with the `A failed members request is not an absent document` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | `ambre_sync::updates::tests::a_failed_members_request_is_not_an_absent_document` -- a transport failure is classified apart from an absence, and the open reports it instead of making the document local | none | verified |
 | `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none | unheld -- the unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser. A generated key here forks the document in silence, every edit after it unreadable to every other member; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 An ephemeral frame is attributed
@@ -86,10 +86,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 12 `verified`, 1 `partial`, 2 `failing`, 2 `untested`, 13 `unimplemented`. What
-  holds is every pure transform, extracted out of the browser and covered. Those are the wrap, the
-  identity pair it binds, the refusal of a weak key, the pin comparison, the directory build and the
-  role. What is loose is the branches that only run against a live relay.
+* **Verification.** 14 `verified`, 1 `partial`, 2 `untested`, 13 `unimplemented`. What holds is
+  every pure transform, extracted out of the browser and covered. Those are the wrap, the identity
+  pair it binds, the refusal of a weak key, the pin comparison, the directory build and the role.
+  What is loose is the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -103,7 +103,7 @@ Three peers, because sharing needs a third. The last column joins the example to
 | invites Bob as a reader | tries to edit | Alice's content | Bob sees no editing affordance (`SYNC-016`) | `sharing::tests::own_role_reads_our_own_row` |
 | invites Bob, whose row the relay serves malformed | opens the document | Alice's content | Bob's cursor never appears on Alice's screen, rather than appearing as someone else (`SYNC-015`) | `sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` |
 | moves her cursor | watches on two devices | nothing | one Alice, in one colour (`SYNC-014`, `PRESENCE-005`) | `ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key` |
-| opens the document while the network drops the members answer | edits | Bob's edit | Alice gets an empty document she can edit and nobody receives (`SYNC-040`) | none, and it fails -- section 6 |
+| opens the document while the network drops the members answer | edits | Bob's edit | Alice is told the relay could not be reached, and no empty document replaces hers (`SYNC-040`) | `updates::tests::a_failed_members_request_is_not_an_absent_document` |
 
 ---
 
@@ -244,12 +244,6 @@ authority: the role here hides what the relay would refuse anyway.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A transient failure of the members request opens the document as new.** The absence and the
-  failure take one branch, so a network blip yields a fresh key, a local-only document and no
-  hydration. The user edits a document that reaches nobody (`SYNC-040`).
-* **The member list invents an identifier for a row it cannot parse.** The list is display-only.
-  Every action the user takes from it, a revoke or a role change, carries that identifier to the
-  relay, where it matches nobody (`SYNC-038`).
 * **The wrapper-key choice has an untested fallback.** A member row with no wrapper recorded falls
   back to the member's own key, for an older relay. Nothing states how long that fallback lives, and
   no test takes either branch.

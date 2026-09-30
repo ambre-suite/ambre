@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3326 rows: 2391 shipped, of which 100 partial and 647 loose. 935 unbuilt.**
+**3326 rows: 2391 shipped, of which 102 partial and 629 loose. 935 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 250 | 257 | 540 | 597 |  | 1644 |
-| `partial` | 44 | 14 | 40 | 2 |  | 100 |
-| `failing` | 39 | 2 | 22 |  |  | 63 |
-| `untested` | 233 | 131 | 195 | 2 |  | 561 |
+| `verified` | 266 | 257 | 540 | 597 |  | 1660 |
+| `partial` | 46 | 14 | 40 | 2 |  | 102 |
+| `failing` | 22 | 2 | 22 |  |  | 46 |
+| `untested` | 232 | 131 | 195 | 2 |  | 560 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
 | `unimplemented` | 300 | 61 | 24 | 111 | 439 | 935 |
@@ -45,32 +45,32 @@
 | `ambre-spec-chrome.md` | 23 | 20 | 9 | 1 | 10 | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
-| `ambre-spec-delta-order.md` | 20 | 19 | 6 | 1 | 12 | 1 |
-| `ambre-spec-design-tokens.md` | 6 | 6 | 1 |  | 5 |  |
+| `ambre-spec-delta-order.md` | 20 | 19 | 8 | 1 | 10 | 1 |
+| `ambre-spec-design-tokens.md` | 6 | 6 | 2 |  | 4 |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 |  | 1 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 3 |  | 13 | 2 |
 | `ambre-spec-high-density.md` | 9 | 5 | 0 |  | 5 | 4 |
-| `ambre-spec-key-rotation.md` | 25 | 11 | 2 |  | 9 | 14 |
-| `ambre-spec-key-verification.md` | 18 | 18 | 5 | 1 | 12 |  |
+| `ambre-spec-key-rotation.md` | 25 | 11 | 3 |  | 8 | 14 |
+| `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 |  | 2 |  |
 | `ambre-spec-launcher.md` | 17 | 17 | 7 |  | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 |  | 11 |  |
-| `ambre-spec-membership.md` | 30 | 17 | 12 | 1 | 4 | 13 |
+| `ambre-spec-membership.md` | 30 | 17 | 14 | 1 | 2 | 13 |
 | `ambre-spec-message-bus.md` | 28 | 26 | 13 | 2 | 11 | 2 |
-| `ambre-spec-object-store.md` | 18 | 12 | 3 | 1 | 8 | 6 |
+| `ambre-spec-object-store.md` | 18 | 12 | 5 | 1 | 6 | 6 |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 1 | 4 | 1 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-schema-version.md` | 19 | 19 | 18 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 21 | 17 | 8 |  | 9 | 4 |
-| `ambre-spec-sequencer.md` | 46 | 18 | 5 | 2 | 11 | 28 |
-| `ambre-spec-server.md` | 49 | 24 | 12 | 2 | 10 | 25 |
-| `ambre-spec-session.md` | 16 | 16 | 7 | 1 | 8 |  |
-| `ambre-spec-sync.md` | 25 | 25 | 3 |  | 22 |  |
+| `ambre-spec-sequencer.md` | 46 | 18 | 7 | 3 | 8 | 28 |
+| `ambre-spec-server.md` | 49 | 24 | 14 | 2 | 8 | 25 |
+| `ambre-spec-session.md` | 16 | 16 | 7 | 2 | 7 |  |
+| `ambre-spec-sync.md` | 25 | 25 | 6 |  | 19 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 1 | 8 | 6 |

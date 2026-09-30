@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | none | unheld -- the manifest declares neither the canvas nor `wgpu`, and no `deny.toml` entry refuses them here, unlike the CRDT and cryptography bans beside it. The rule is read off a manifest rather than enforced by a job; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | none | unheld -- the crate builds a standalone artifact and is loaded as a dedicated worker, which the build shape makes true, and nothing in continuous integration boots the pair to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | none | unheld -- the store is a field of this worker and the crate opens no storage handle, so the rule holds by absence, and nothing would fail the day a writer appeared; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | none | fails -- the socket carries its token as a query parameter, and the whole address is logged on every connection attempt and on every failure; lands with the `SYNC P4` hardening Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::a_logged_socket_url_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token` -- the socket address and the token pair print with the token redacted, and the raw form is reachable only through `expose` | none | verified |
 | `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | none | unheld -- none is possible on host: the property is about a browser event loop. The loop awaits two channels whose producers both live in this worker, which is what makes the historical freeze unreachable by construction; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -66,14 +66,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | none | unheld -- the name is sealed on create and on rename and opened for the list, and no test seals one: the three legs run in a browser. `CHROME-036` holds the half about what a card shows; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | none | fails -- the name is sealed with one constant string as additional data, no commitment tag and no signature, so the relay can move a sealed name from one document to another and nothing notices, section 5; lands with the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | failing |
-| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | none | fails -- the client subscribes to a channel and both send paths log the payload and drop it, so a message a user writes disappears with no error; lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | failing |
+| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | `ambre_sync::channels::tests::a_channel_message_is_refused_not_dropped` -- both send paths answer the caller with a refusal until the relay carries channels | none | verified |
 
 ### 1.6 The session ends
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | none | unheld -- the keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | none | fails -- the two tokens are plain strings, dropped rather than wiped, so the access token and the refresh token both stay in the worker's linear memory after the session they belong to has ended; lands with the `SYNC P4` hardening Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | `ambre_sync::websocket::tests::session_tokens_wipe_on_drop` -- both tokens are held in a type that wipes itself when dropped, so ending the session clears them | none | verified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
   under 1 ms, and the two per-session holders of `section 6`. The socket carries no budget of its
@@ -81,10 +81,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 3 `verified`, 5 `failing`, 17 `untested`. What holds is what the crate graph refuses: no
-  key crate outside this worker, no CRDT inside it. Every gap is a browser property the wasm tier
-  cannot boot -- a worker start, an event loop, a socket close
-  (`ambre-spec-testing.md section 9`).
+* **Verification.** 6 `verified`, 2 `failing`, 17 `untested`. The crate graph holds the keys and
+  the CRDT apart, and unit tests hold the token redaction and wipe and the refused channel send.
+  Each gap left is a browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL
@@ -206,20 +205,15 @@ The worker has no surface of its own. What a user sees of it is four things.
   backpressure. A posted message returns nothing, so this worker has no way to learn that the queue
   on the other side is full. What happens instead is the inverse: the queue fills and the receiving
   handler blocks on it, on the thread that draws the screen (`SYNC-059`).
-* **The access token is logged.** It rides the socket address as a query parameter. The address is
-  logged on every connection attempt and on every failure, so a session token sits in the browser
-  console (`SYNC-061`).
-* **The two tokens are not wiped.** The keys wipe themselves on drop. The tokens are plain
-  strings, so a sign-out leaves their bytes where the allocator left them (`SYNC-066`).
 * **The document name is bound to nothing.** It is sealed with a constant additional-data string, no
   commitment tag and no signature. That is the same gap a media blob has, and the same repair
   (`SYNC-068`, `SYNC-018`, `ambre-spec-media.md`).
 * **A rotation leaves the name unreadable.** Nothing re-seals it, so the first revoke on a document
   makes its name unopenable for every member who stayed
   (`ambre-spec-key-rotation.md`, `SYNC-042`).
-* **A channel message is dropped.** The subscribe and unsubscribe reach the relay; both send paths
-  log the payload and drop it, and both inbound channel frames are dropped too. So a channel can be
-  joined and never written to, with no error anywhere (`SYNC-069`).
+* **A channel message is refused, never carried.** The subscribe and unsubscribe reach the relay.
+  Both send paths answer the caller with a refusal until the relay carries channel messages, and
+  both inbound channel frames are dropped (`SYNC-069`).
 * **Meetings are a log line each.** Four commands reach this worker and none does anything.
 * **A pending reconnect timer is not cancelled.** A second disconnect replaces the callback the
   timer will call, and the timer itself is not cleared. The first one then fires against a callback

@@ -51,7 +51,7 @@ wraps.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-052` | `POST` | The confirmed key MUST be stored before the invitation is dispatched. | this spec section 3 | none | unheld -- the store write and the dispatch sit in that order in one block, and a reversal leaves a share sent under a key the next comparison does not know; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-074` | `POST` | The confirmed key MUST be stored under the recipient's own identity. | this spec section 3; this spec section 6 | none | fails -- the first phase falls back to a freshly generated identifier when the server's is malformed, and the pin is filed under that. The recipient then looks new on every invitation, so a substituted key reads as a first contact and the whole comparison is dead; lands with the `A verified key is pinned under its owner` Story (`ambre-roadmap.md` E7) | failing |
+| `CHROME-074` | `POST` | The confirmed key MUST be stored under the recipient's own identity. | this spec section 3; this spec section 6 | `ambre_sync::sharing::tests::fetch_invitee_key_refuses_a_malformed_id` -- a malformed identifier fails the first phase, so no pin is filed under an invented one | none | verified |
 | `CHROME-078` | `FRAME` | Confirming a key MUST NOT change any other recipient's pin. | derived | none | unheld -- the write addresses one identity, so the rule holds by the shape of the call. Nothing reads a second pin back across a confirmation, and `CHROME-074` is the reason to care: a wrong identity is already a write landing where it should not; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-047` | `FAIL` | The wrap MUST be refused unless the key still equals the one the user confirmed. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the second phase re-fetches the key and compares it with the confirmed value before building the request, and answers a conflict otherwise. `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` covers the wrap and not the comparison; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -70,10 +70,10 @@ Escape, the backdrop and the refusing action are three routes to one outcome.
 * **Boundary.** this is the boundary. The confirmed key is stored on the client and never sent, and
   the fingerprint is public by construction. The invitation carries the expected key so the wrapping
   thread can refuse. The keys never leave the Sync thread (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 5 `verified`, 1 `partial`, 1 `failing`, 11 `untested`, 0 `unimplemented`. What
-  holds is what a tier reaches without a session: a type-level absence, three assertions over the
-  fingerprint, and a database upgrade. The rest is the flow itself, which needs a server, a second
-  user and a substituted key to observe. The mock relay models no invitation.
+* **Verification.** 6 `verified`, 1 `partial`, 11 `untested`. What holds is what a tier reaches
+  without a session: a type-level absence, three assertions over the fingerprint, and a database
+  upgrade. The rest is the flow itself, which needs a server, a second user and a substituted key to
+  observe. The mock relay models no invitation.
 
 ---
 
@@ -200,11 +200,6 @@ commands and the answer. `crates/ambre-app/src/lib.rs` classifies the state and 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A malformed identity from the server becomes a fresh random one.** The first phase parses the
-  recipient's identifier and falls back to a newly generated value when it cannot. The pin is filed
-  under that value, so it matches nothing on the next invitation. The recipient looks new every
-  time, and a substituted key looks like a first contact. `CHROME-074` states it, and states it as
-  failing: the rule reads as one about identity and the damage it does is to the trust decision.
 * **The fingerprint's construction has one home, and it is section 2 of this document.** Two other
   documents once carried a second one: a 256-bit BLAKE2b digest truncated to twenty bytes. The code
   hashes with the 512-bit variant, which produces a different string for the same key. The frozen

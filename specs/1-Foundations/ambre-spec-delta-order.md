@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-024` | `INV` | An outbound update MUST carry a clock strictly greater than every clock this client has already used for the document. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | none | unheld -- the counter is incremented before each seal, and no test asserts two successive updates carry two different clocks, nor that a reopened document does not restart at one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-030` | `INV` | A snapshot MUST NOT be registered as a known parent before its contents reach the Logic thread. | this spec section 3 | none | fails -- a notification that a peer uploaded a snapshot marks that snapshot known and releases everything waiting on it, without downloading it. The Logic thread then receives deltas whose base it does not hold, section 5; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SYNC-030` | `INV` | A snapshot MUST NOT be registered as a known parent before its contents reach the Logic thread. | this spec section 3 | `ambre_sync::updates::tests::an_announced_snapshot_releases_nothing_until_fetched`; `ambre_sync::updates::tests::a_snapshot_that_does_not_open_stays_unknown` -- an announced snapshot releases no held delta until it is downloaded and opened | none | verified |
 | `SYNC-026` | `CONC` | Every client MUST derive the same parent for a document that has never been snapshotted. | this spec section 3 | none | unheld -- the derivation is a pure function of the document identity in `ambre-core` and nothing tests it, so a change to it would break every peer's quarantine at once and no job would fail; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Receive an update
@@ -54,7 +54,7 @@ The client asks for a document it may hold nothing of, part of, or all of.
 | `SYNC-029` | `POST` | A document MUST be reported ready once per open, after its first replay has landed. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_deferred_to_initial_replay`; `::open_document_ready_immediate_without_replay`; `::document_ready_carries_the_role_on_both_paths` | none | verified |
 | `SYNC-027` | `POST` | A history replay MUST reach the Logic thread as one batch, never as one event per delta. | this spec section 3 | none | unheld -- the replay collects every opened payload and sends one batch event, and no test counts the events a replay of several deltas produces; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-131` | `POST` | The Logic thread MUST import a history replay in slices that each fit the frame budget, and yield between them. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-031` | `POST` | The quarantine MUST ask the relay for the missing history once per gap, not once per arrival. | this spec section 3 | none | fails -- the soft threshold is re-tested on every quarantined arrival, so past nine hundred held updates every further one sends another request. The relay rate-limits the socket, which is what the reconnect backoff exists to avoid (`SYNC-064`); lands with the `The quarantine asks once per gap` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-031` | `POST` | The quarantine MUST ask the relay for the missing history once per gap, not once per arrival. | this spec section 3 | `ambre_sync::updates::tests::the_quarantine_asks_once_per_gap` -- arrivals held behind one gap send a single history request for it | none | verified |
 | `SYNC-085` | `FRAME` | Opening a document MUST NOT emit an update. | this spec section 3; derived | none | unheld -- an open reads and requests, and the only thing it sends is a history request. Nothing refuses an open that flushed pending local state, which would give the document a delta nobody typed; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Reconnect
@@ -76,11 +76,10 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 6 `verified`, 1 `partial`, 2 `failing`, 10 `untested`, 1 `unimplemented`. What
-  holds is the quarantine itself. An update ahead of its snapshot waits, one whose base is known is
-  delivered, the release runs in clock order, and the overflow warns once. What is loose is
-  everything about the clock and the socket, both needing a driven transport the host tier does not
-  have.
+* **Verification.** 8 `verified`, 1 `partial`, 10 `untested`, 1 `unimplemented`. What holds is the
+  quarantine itself. An update ahead of its snapshot waits, one whose base is known is delivered,
+  the release runs in clock order, and the overflow warns once. What is loose is everything about
+  the clock and the socket, both needing a driven transport the host tier does not have.
 
 ---
 
@@ -96,7 +95,7 @@ example to its verification.
 | edits a thousand times while Bob's base is missing | watches | Alice's edits | Bob loses the oldest, and is told (`SYNC-007`) | `updates::tests::quarantine_overflow_drops_oldest_and_warns` |
 | edits a document neither peer has snapshotted | opens it | Alice's edits | Bob sees them: both derived the same parent (`SYNC-026`) | none -- section 5 |
 | edits while Bob is offline | reconnects | Alice's edits | Bob receives them as one repaint, not one per edit (`SYNC-027`) | none -- section 5 |
-| compacts the document | is editing it | the new snapshot | Bob adopts a base he has not loaded (`SYNC-030`) | none, and it fails -- section 5 |
+| compacts the document | is editing it | the new snapshot | Bob keeps his base until the snapshot is downloaded and opened (`SYNC-030`) | `updates::tests::an_announced_snapshot_releases_nothing_until_fetched` |
 | reloads the page and edits | watches | Alice's edit | Alice's edit reaches Bob rather than being refused (`SYNC-025`) | none -- section 5 |
 
 ---
@@ -185,12 +184,6 @@ That is a document that exists on this client alone, or an open with no connecti
   ever, and the cursor of `SYNC-028` never moves off zero. The two rules above about adopting and
   chaining a snapshot describe a path nothing takes today
   (`ambre-spec-sequencer.md`, `SRV-038`).
-* **A snapshot is adopted as a parent before it is downloaded.** The notification that a peer
-  uploaded one marks it known. It makes that snapshot the base of this client's next deltas, and
-  releases everything waiting on it. So the Logic thread receives deltas parented on a state it does
-  not hold. This client's own next edits name a snapshot it has never read (`SYNC-030`).
-* **The missing-history request has no rate.** Past the soft threshold every further quarantined
-  arrival sends another request, and the relay rate-limits the socket (`SYNC-031`).
 * **Reopening a document drops what it was holding.** The open replaces the whole per-document
   state. The quarantine, the cursor and the clock go back to their initial values, while the
   relay's view of the clock does not. The recovery in `SYNC-025` repairs it on the next echo, and

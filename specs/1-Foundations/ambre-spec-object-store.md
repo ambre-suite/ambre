@@ -41,7 +41,7 @@ refusals are the same set whichever way the bytes will travel, so the two share 
 | `SRV-056` | `FAIL` | A read-only member MUST NOT obtain an upload link. | `SRV-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the confirmation, which is the write the link leads to | partial -- the link route gates on the same pair of roles and no test asks it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-054` | `FAIL` | An object name a caller supplies MUST resolve inside the document the caller named. | audit `C4`, `C5`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- a foreign prefix, a traversal, an empty name and a nested one; `::content_hash_validation` -- everything that is not sixty-four lowercase hexadecimal characters | none | verified |
 | `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | none | unheld -- the inline delta half is `SRV-010`. The media and snapshot halves are compared against a figure of the deployment before the link is issued and again on the confirmation, and no test drives either comparison; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | none | fails -- the media link is built from the address the caller supplies without reading the media index, so a member gets a signed link for any well-formed address inside their own document, section 6; lands with the `A download link names an object the document holds` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_download_link_names_an_object_the_document_holds` -- the link is signed only after the media index shows the document holds that address | none | verified |
 
 ### 1.3 Delete a document
 
@@ -50,8 +50,8 @@ happen.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | none | fails -- deleting a document removes its rows and no object, so every snapshot, every delta and every picture it ever held stays in storage with nothing left pointing at it; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
-| `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | none | unheld -- the reason it holds today is that nothing is removed at all. The object layout is keyed by document, so the sweep `SRV-057` is missing has one prefix to walk. A sweep written against the blob address instead would reach a picture two documents share; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete removes every object under the document prefix before the rows go | fails -- a flush in flight while the delete lands can upload a delta after the listing, and nothing fences it; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- the sweep walks the deleted document's own prefix, and an object of a second document survives it. A picture two documents share is stored once under each | none | verified |
 
 ### 1.4 Erase one blob
 
@@ -70,12 +70,14 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name, a size and a media type. A picture's name is a hash of its plaintext, outside
   what `ZK-007` allows and what `SRV-059` states; the bytes never enter this process.
-* **Verification.** 3 `verified`, 1 `partial`, 3 `failing`, 5 `untested`, 6 `unimplemented`. What
+* **Verification.** 5 `verified`, 1 `partial`, 2 `failing`, 4 `untested`, 6 `unimplemented`. What
   holds is the name: the scoping, the shapes refused, and the size bound into an upload link. What
   is loose is a link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor
   the expiry has a test.
 
-  Three rules are stated as failing, and one of the three is a zero-knowledge leak the relay shares
+  Two rules are stated as failing. One is the address derived from the plaintext, a zero-knowledge
+  leak the relay shares with `ambre-spec-media.md` (`SRV-059`). The other is a flush in flight that
+  outlives a delete (`SRV-057`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -88,8 +90,8 @@ Two peers over one document, sharing the address of a blob and never the bytes.
 | adds the same picture twice | watches | one media row | two pictures, one object | `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` |
 | is a reader and tries to add a picture | watches | nothing | Alice is refused before any link is signed (`SRV-056`) | `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` |
 | records a snapshot naming another document's object | opens the document | nothing | Alice's record is refused (`SRV-004`, `SRV-054`) | `s3::tests::snapshot_key_validation_scopes_to_document` |
-| asks for a link to an address her document never held | watches | nothing | Alice gets a signed link that resolves to nothing (`SRV-058`) | none, and it fails -- section 6 |
-| deletes the document | had a picture in it | no row, and every object (`SRV-057`) | both lists lose it, and the bytes stay | none, and it fails -- section 6 |
+| asks for a link to an address her document never held | watches | nothing | Alice is refused, and no link is signed (`SRV-058`) | `handler_tests::a_download_link_names_an_object_the_document_holds` |
+| deletes the document | had a picture in it | no row, and no object (`SRV-057`) | both lists lose it, and the bytes go with it | `handler_tests::a_deleted_document_leaves_nothing` |
 
 ---
 
@@ -148,7 +150,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 |---|---|
 | a snapshot beyond the ten most recent | the hourly pass removes the object, then the row; a failure on the object still removes the row |
 | a delta the trim covers | the row goes and the object stays (`ambre-spec-sequencer.md`, `SRV-039`) |
-| a document deleted | the rows cascade and no object is touched (`SRV-057`) |
+| a document deleted | every object under its prefix goes, then the relay state, then the rows (`SRV-057`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
 
 **What the relay knows about a picture.** Its address, its media type and its size, against the
@@ -196,14 +198,9 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Deleting a document deletes no object.** The rows cascade -- members, snapshots, deltas, media
-  -- and every sealed object they named stays in storage, unreferenced, for ever. The content is
-  unopenable once the member rows are gone, so the harm is not disclosure. It is unbounded growth
-  and a claim of deletion the deployment cannot keep (`SRV-057`).
-* **A media download link is signed for an address the document never held.** The link is built from
-  the caller's own address without reading the media index. It resolves to nothing when the object is
-  absent and to the object when it is present. Combined with the address being a hash of the
-  plaintext, the second case is the same oracle from the other side (`SRV-058`, `SRV-059`).
+* **A flush in flight can outlive a delete.** The delete lists the document's prefix and removes what
+  it finds. A flush already past its checks can upload a delta after the listing, and that object
+  stays, unreferenced (`SRV-057`).
 * **A picture's address is a hash of its plaintext.** The client computes it and the relay stores
   it, so a fingerprint of every file in every document sits in the register
   (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
@@ -212,8 +209,9 @@ The store has no surface of its own: every trigger belongs to the document that 
 * **A delta's object outlives its index row.** The trim removes the row and no pass removes the
   object, so a compacted document keeps every delta object it ever wrote. Today the trim never runs
   at all (`ambre-spec-sequencer.md`, `SRV-038`).
-* **No test performs a round trip against object storage.** The suite signs links offline and
-  asserts their shape, and the continuous integration has no storage service, which
+* **No test performs a round trip against object storage.** The suite signs links offline, and runs
+  the delete against an in-process stub of the listing and the removal. The continuous integration
+  has no storage service, which
   `ambre-spec-testing.md section 9` records as deliberate debt.
 * **Nothing measures a link or a transfer.** Both rows of `ambre-spec-budgets.md section 3`
   that name this path read "none exists".

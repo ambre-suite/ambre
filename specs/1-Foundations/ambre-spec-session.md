@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-029` | `INV` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `N3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`; `::verified_email_cannot_be_squatted_by_setup`; `::oidc_relogin_keeps_its_own_email` | none | verified |
 | `SRV-024` | `INV` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none | unheld -- the signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
-| `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | none | fails -- when the stored signing key does not parse, both sign-in paths fall back to an all-zero key and mint a session under it, so every account in that state shares one identity, section 5; lands with the `No session is minted under a fallback key` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | `ambre_server::routes::auth::tests::a_stored_key_that_does_not_parse_mints_no_session` -- a stored key that does not parse is refused, never replaced by a zero key | fails -- a new provider account is inserted with an all-zero key, and its first session is minted under it. The refresh then keeps that key after the real one is registered; lands with the `No session is minted under a fallback key` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none | unheld -- the rule holds only outside this process: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A request is authenticated
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-091` | `FRAME` | A sign-in MUST NOT carry a passphrase, nor anything the relay could derive a key from. | `ZK-003`; this spec section 3 | cargo-deny -- `argon2` is granted to `ambre-crypto` alone, and `ambre-server` declares neither, so the relay has no way to turn a secret into a key: what it stores is the sealed master material and the sealed salt, and it opens neither | none | verified |
 | `SRV-023` | `FAIL` | The development sign-in MUST be refused unless the deployment enables it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::dev_login_rejected_when_dev_mode_off` -- the refusal; `::dev_login_creates_user_and_returns_token` -- the enabled case still works, so neither end can rot into the other | none | verified |
 | `SRV-030` | `FAIL` | The sealed master material MUST be written once; a later write MUST be refused. | this spec section 3 | `ambre_server::routes::tests::handler_tests::store_master_keys_is_first_time_only` -- the first upload succeeds and the second answers a conflict rather than overwriting, and the re-seal route is the passphrase path and touches neither public key | none | verified |
-| `SRV-022` | `POST` | A sign-in with an identity provider MUST reach that provider. | this spec section 3 | none | fails -- both provider routes are registered under a fixed provider name while their handlers read the provider from the path, so every call fails to extract one and answers an internal error. No test mounts either route, section 5; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SRV-022` | `POST` | A sign-in with an identity provider MUST reach that provider. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_provider_route_reaches_its_provider` -- the shipped router hands the provider in the path to the handler, which names an unconfigured one in its refusal | partial -- no test runs the flow against a configured provider, so the exchange with it is held by nothing; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-074` | `FAIL` | A configured provider the relay cannot reach at startup MUST stop the start, never disable sign-in in silence. | audit `M7`; this spec section 3 | none | unheld -- the start logs the failure and exits when the credentials are configured, and warns and disables provider sign-in when they are absent; no test boots the relay against a provider that does not answer; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 A session ends
@@ -62,10 +62,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The one leak stated here is the
   token in the socket address (`SRV-031`).
-* **Verification.** 7 `verified`, 1 `partial`, 2 `failing`, 6 `untested`. What holds is what a
+* **Verification.** 7 `verified`, 2 `partial`, 1 `failing`, 6 `untested`. What holds is what a
   request test can drive: the token gate, the address namespace, the one-shot key write and the
-  refresh race. What is loose is every rule about a deployment rather than a request. The two
-  failures are the token check's ordering and an over-reaching logout.
+  refresh race. What is loose is every rule about a deployment rather than a request. The one
+  failure is the placeholder key of a new provider account.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -178,18 +178,14 @@ where each of those is drawn.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Neither provider route can run.** The route table registers both under a fixed provider name,
-  and both handlers ask the router for a provider segment that route does not declare. Every call
-  therefore fails to build its arguments and answers an internal error, so the only sign-in a
-  production deployment offers has never worked. Nothing catches it: the request suite mounts its
-  own route table and omits both (`SRV-022`). The repair is the
-  `The production sign-in path` Story (`ambre-roadmap.md` E7).
+* **No test runs a provider exchange.** The provider routes reach their handler, and nothing stands
+  in for a provider, so the exchange itself has never run under a test (`SRV-022`).
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
-  a single provider, and the route table names that provider literally.
-* **A key that does not parse becomes an all-zero key.** Both sign-in paths fall back to it rather
-  than refusing. An account whose stored signing key is malformed gets a session under a constant
-  identity, and every such account shares it. The write path then binds every frame to that constant
-  (`SRV-027`, `SRV-007`).
+  a single provider.
+* **A new provider account signs in under an all-zero key.** The account is inserted with a zero
+  signing key until its setup registers the real one, and its first session is minted under that
+  placeholder. The refresh keeps the key it was minted with, so the session outlives the setup
+  under it. The column is unique, so a second new account collides with the first (`SRV-027`).
 * **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
   deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-008` states for the
   presigned link.
@@ -198,9 +194,6 @@ where each of those is drawn.
   survives it, and nothing lists what a person holds.
 * **The relay never expires an account.** Nothing removes an account, its sealed material or its
   public keys, and no route deletes one.
-* **The two ways in that work bypass the tier meant to protect them.** The rate limiter never
-  classifies a sign-in request as one (`ambre-spec-server.md`, `SRV-013`), so the account setup and
-  the development sign-in are limited as ordinary requests.
 
 ---
 
