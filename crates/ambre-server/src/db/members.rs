@@ -142,13 +142,17 @@ pub async fn get_document_member(
 }
 
 /// Lists all members of a document with user details.
+///
+/// A member whose account holds no keys is left out. No wrap can address it,
+/// so a key rotation that rewraps the listed members drops it (`SRV-163`).
+/// Only a row written before the invite refused such an account can match.
 pub async fn list_document_members(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
 ) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1"
+        "SELECT dm.user_id, u.email, u.email_verified, u.display_name, dm.role, u.signing_pubkey, u.exchange_pubkey, dm.doc_key_enc, dm.invited_by, inv.exchange_pubkey AS wrapper_exchange_pubkey FROM document_members dm INNER JOIN users u ON u.id = dm.user_id LEFT JOIN users inv ON inv.id = dm.invited_by WHERE dm.document_id = $1 AND u.signing_pubkey IS NOT NULL"
     )
     .bind(did)
     .fetch_all(pool)

@@ -92,8 +92,11 @@ pub async fn invite_to_document(
         return Err(AppError::Forbidden);
     }
 
+    // An account without keys cannot hold a wrap. The key lookup and the search
+    // never offer it, and the invite refuses it the same way (`SRV-163`).
     let invitee = db::get_user_by_email(&state.db, &req.invitee_email)
         .await?
+        .filter(|u| u.exchange_pubkey.is_some())
         .ok_or(AppError::NotFound { resource: "user" })?;
     let invitee_id =
         ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*invitee.id.as_bytes()));

@@ -20,11 +20,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3326 rows: 2391 shipped, of which 102 partial and 628 loose. 935 unbuilt.**
+**3327 rows: 2392 shipped, of which 102 partial and 628 loose. 935 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 267 | 257 | 540 | 597 |  | 1661 |
+| `verified` | 268 | 257 | 540 | 597 |  | 1662 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
 | `failing` | 21 | 2 | 22 |  |  | 45 |
 | `untested` | 232 | 131 | 195 | 2 |  | 560 |
@@ -69,7 +69,7 @@
 | `ambre-spec-sealed-envelope.md` | 21 | 17 | 8 |  | 9 | 4 |
 | `ambre-spec-sequencer.md` | 46 | 18 | 7 | 3 | 8 | 28 |
 | `ambre-spec-server.md` | 49 | 24 | 14 | 2 | 8 | 25 |
-| `ambre-spec-session.md` | 16 | 16 | 8 | 2 | 6 |  |
+| `ambre-spec-session.md` | 17 | 17 | 9 | 2 | 6 |  |
 | `ambre-spec-sync.md` | 25 | 25 | 6 |  | 19 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
@@ -259,7 +259,7 @@
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160 |
-| `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092 |
+| `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064 |

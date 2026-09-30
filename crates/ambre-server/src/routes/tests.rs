@@ -929,6 +929,7 @@ mod handler_tests {
         .await
         .unwrap();
         assert!(user.master_key_enc.is_none());
+        assert!(user.signing_pubkey.is_none() && user.exchange_pubkey.is_none());
         let user_id =
             ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
         let tokens = crate::auth::issue_session(&state, user_id, None)
@@ -987,6 +988,112 @@ mod handler_tests {
         let (listed, _) =
             status_and_code(&app, get_with("/api/documents", &format!("Bearer {token}"))).await;
         assert_eq!(listed, StatusCode::OK);
+    }
+
+    /// `SRV-163`: an account without keys is offered to no sharer. The search
+    /// leaves it out, the key lookup and the invite answer as for an unknown
+    /// account. Once its keys are stored, all three find it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_account_without_keys_is_offered_to_no_sharer(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let keyless = crate::db::upsert_user_from_oidc(
+            &state.db,
+            "google",
+            "sub-2",
+            "keyless@example.com",
+            "Keyless",
+        )
+        .await
+        .unwrap();
+
+        let search = || async {
+            let resp = app
+                .clone()
+                .oneshot(get_with("/api/users/search?query=keyless", &auth))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(resp.into_body(), 16384).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            json["users"].as_array().unwrap().len()
+        };
+        let pubkeys = format!("/api/users/{}/pubkeys", keyless.id);
+        let invite = |role: &str| {
+            serde_json::json!({
+                "invitee_email": "keyless@example.com",
+                "role": role,
+                "doc_key_enc": base64_encode(&[9u8; 32]),
+            })
+        };
+        let share = format!("/api/documents/{doc_id}/share");
+
+        assert_eq!(search().await, 0);
+        let (lookup, _) = status_and_code(&app, get_with(&pubkeys, &auth)).await;
+        assert_eq!(lookup, StatusCode::NOT_FOUND);
+        let invited = post_json(&app, &auth, share.clone(), invite("editor")).await;
+        assert_eq!(invited, StatusCode::NOT_FOUND);
+        // A membership written before the invite refused such an account is
+        // left out of the list, so no rotation rewraps to it.
+        sqlx::query(
+            "INSERT INTO document_members (document_id, user_id, role, doc_key_enc) \
+             VALUES ($1, $2, 'viewer', $3)",
+        )
+        .bind(uuid::Uuid::parse_str(&doc_id).unwrap())
+        .bind(keyless.id)
+        .bind(vec![9u8; 32])
+        .execute(&state.db)
+        .await
+        .unwrap();
+        assert_eq!(member_count(&app, &auth, &doc_id).await, 1);
+
+        sqlx::query(
+            "UPDATE users SET master_key_enc = $2, master_key_salt = $3, \
+             signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1",
+        )
+        .bind(keyless.id)
+        .bind(vec![1u8; 56])
+        .bind(vec![2u8; 16])
+        .bind(vec![5u8; 32])
+        .bind(vec![6u8; 32])
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+        assert_eq!(search().await, 1);
+        let (lookup, _) = status_and_code(&app, get_with(&pubkeys, &auth)).await;
+        assert_eq!(lookup, StatusCode::OK);
+        let invited = post_json(&app, &auth, share, invite("editor")).await;
+        assert_eq!(invited, StatusCode::OK);
+        assert_eq!(member_count(&app, &auth, &doc_id).await, 2);
+    }
+
+    async fn member_count(app: &Router, auth: &str, doc_id: &str) -> usize {
+        let uri = format!("/api/documents/{doc_id}/members");
+        let resp = app.clone().oneshot(get_with(&uri, auth)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 16384).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        json["members"].as_array().unwrap().len()
+    }
+
+    /// `SRV-163`: the store refuses an account holding one key without the
+    /// other, since both come from one seed and are written together.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_account_holds_both_keys_or_neither(pool: sqlx::PgPool) {
+        let user = crate::db::upsert_user_from_oidc(&pool, "google", "sub-3", "c@example.com", "C")
+            .await
+            .unwrap();
+        let half = sqlx::query("UPDATE users SET signing_pubkey = $2 WHERE id = $1")
+            .bind(user.id)
+            .bind(vec![5u8; 32])
+            .execute(&pool)
+            .await;
+        assert!(half.is_err(), "a lone signing key must violate the pairing");
     }
 
     /// `SRV-027`: the socket refuses a session minted before the key setup. The

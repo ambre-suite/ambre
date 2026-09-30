@@ -123,8 +123,9 @@ pub async fn get_master_keys(
             .as_ref()
             .map(|v| base64::engine::general_purpose::URL_SAFE.encode(v))
             .unwrap_or_default(),
-        signing_pubkey: hex::encode(&u.signing_pubkey),
-        exchange_pubkey: hex::encode(&u.exchange_pubkey),
+        // Empty until the key setup, like the master material above.
+        signing_pubkey: u.signing_pubkey.map(hex::encode).unwrap_or_default(),
+        exchange_pubkey: u.exchange_pubkey.map(hex::encode).unwrap_or_default(),
     }))
 }
 

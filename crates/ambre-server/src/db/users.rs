@@ -19,8 +19,10 @@ pub struct UserRow {
     pub display_name: String,
     pub master_key_enc: Option<Vec<u8>>,
     pub master_key_salt: Option<Vec<u8>>,
-    pub signing_pubkey: Vec<u8>,
-    pub exchange_pubkey: Vec<u8>,
+    /// `None` until the account registers its keys: a provider login creates
+    /// the account first (`SRV-027`). Both keys are set or neither is.
+    pub signing_pubkey: Option<Vec<u8>>,
+    pub exchange_pubkey: Option<Vec<u8>>,
     #[allow(dead_code)]
     pub org_id: Option<uuid::Uuid>,
 }
@@ -203,14 +205,12 @@ pub async fn upsert_user_from_oidc(
     .await?;
 
     let row = sqlx::query(
-        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, true, $4, $5, $6) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
+        "INSERT INTO users (oidc_provider, oidc_subject, email, email_verified, display_name) VALUES ($1, $2, $3, true, $4) ON CONFLICT (oidc_provider, oidc_subject) DO UPDATE SET email = $3, email_verified = true, display_name = $4 RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey, org_id, (xmax = 0) AS inserted"
     )
     .bind(oidc_provider)
     .bind(oidc_subject)
     .bind(email)
     .bind(display_name)
-    .bind(vec![0u8; 32])
-    .bind(vec![0u8; 32])
     .fetch_one(&mut *tx)
     .await
     .map_err(map_email_conflict)?;
@@ -288,6 +288,9 @@ pub async fn dev_upsert_user(
 }
 
 /// Full-text search over users by email or display name (ILIKE).
+///
+/// An account without keys is left out: nothing can be shared with it until it
+/// registers them (`SRV-163`).
 pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>, AppError> {
     // Escape the LIKE metacharacters (`\ % _`) in the user-supplied query so they
     // match literally. Without this a caller could pass `%` / `_` as wildcards and
@@ -299,7 +302,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
         .replace('_', "\\_");
     let pattern = format!("%{escaped}%");
     let rows = sqlx::query(
-        "SELECT id, email, email_verified, display_name, signing_pubkey, exchange_pubkey FROM users WHERE email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\' LIMIT 20"
+        "SELECT id, email, email_verified, display_name, signing_pubkey, exchange_pubkey FROM users WHERE signing_pubkey IS NOT NULL AND (email ILIKE $1 ESCAPE '\\' OR display_name ILIKE $1 ESCAPE '\\') LIMIT 20"
     )
     .bind(pattern)
     .fetch_all(pool)

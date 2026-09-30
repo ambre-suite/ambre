@@ -504,9 +504,15 @@ pub async fn get_pubkeys(
     let u = db::get_user(&state.db, &uid)
         .await?
         .ok_or(AppError::NotFound { resource: "user" })?;
+    // An account that has not registered its keys has none to share to, and
+    // answers like an unknown one (`SRV-163`).
+    let (Some(signing_pubkey), Some(exchange_pubkey)) = (u.signing_pubkey, u.exchange_pubkey)
+    else {
+        return Err(AppError::NotFound { resource: "user" });
+    };
     Ok(axum::Json(PubkeysResponse {
-        signing_pubkey: hex::encode(&u.signing_pubkey),
-        exchange_pubkey: hex::encode(&u.exchange_pubkey),
+        signing_pubkey: hex::encode(signing_pubkey),
+        exchange_pubkey: hex::encode(exchange_pubkey),
     }))
 }
 
