@@ -25,6 +25,11 @@ pub enum AppError {
     #[error("Forbidden: insufficient role")]
     Forbidden,
 
+    /// The session belongs to an account that has not registered its keys
+    /// yet. Only the key setup routes accept it (`SRV-027`).
+    #[error("Key setup required")]
+    SetupRequired,
+
     #[error("Not found: {resource}")]
     NotFound { resource: &'static str },
 
@@ -77,6 +82,7 @@ impl IntoResponse for AppError {
                 (StatusCode::UNAUTHORIZED, "UNAUTHORIZED")
             }
             AppError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
+            AppError::SetupRequired => (StatusCode::FORBIDDEN, "SETUP_REQUIRED"),
             AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
             AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),

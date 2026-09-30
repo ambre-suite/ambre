@@ -34,8 +34,22 @@ pub fn bearer_token(parts: &Parts) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-/// Verify an access token and resolve the identity it carries.
-pub fn authenticate_token(state: &AppState, token: &str) -> Result<AuthSession, AppError> {
+/// A verified access token, whether or not its account has registered keys.
+///
+/// Only the key setup routes take it: reading and storing the master
+/// material, the caller's own profile and the sign-out. Every other route
+/// takes [`AuthSession`], which refuses a session without a signing key
+/// (`SRV-027`).
+#[derive(Debug, Clone)]
+pub struct AccountSession {
+    /// User the token belongs to.
+    pub user_id: ambre_core::UserId,
+    /// `None` until the account registers its keys.
+    pub signing_pubkey: Option<ambre_core::PublicKey>,
+}
+
+/// Verify an access token and resolve the account it names.
+pub fn authenticate_account(state: &AppState, token: &str) -> Result<AccountSession, AppError> {
     let claims = state
         .jwt
         .verify(token)
@@ -43,12 +57,33 @@ pub fn authenticate_token(state: &AppState, token: &str) -> Result<AuthSession, 
     let user_id = ambre_core::Uuid::parse_str(&claims.sub)
         .map(ambre_core::UserId::from_uuid)
         .map_err(|_| AppError::Unauthorized)?;
-    let signing_pubkey =
-        ambre_core::PublicKey::from_hex(&claims.spk).map_err(|_| AppError::Unauthorized)?;
-    Ok(AuthSession {
+    let signing_pubkey = claims
+        .spk
+        .as_deref()
+        .map(ambre_core::PublicKey::from_hex)
+        .transpose()
+        .map_err(|_| AppError::Unauthorized)?;
+    Ok(AccountSession {
         user_id,
         signing_pubkey,
     })
+}
+
+/// Verify an access token and resolve the identity it carries. A session
+/// without a signing key is refused with [`AppError::SetupRequired`].
+pub fn authenticate_token(state: &AppState, token: &str) -> Result<AuthSession, AppError> {
+    authenticate_account(state, token)?.try_into()
+}
+
+impl TryFrom<AccountSession> for AuthSession {
+    type Error = AppError;
+
+    fn try_from(account: AccountSession) -> Result<Self, AppError> {
+        Ok(AuthSession {
+            user_id: account.user_id,
+            signing_pubkey: account.signing_pubkey.ok_or(AppError::SetupRequired)?,
+        })
+    }
 }
 
 /// Axum extractor: pull `Authorization: Bearer <jwt>` and verify it. Rejects
@@ -65,6 +100,20 @@ impl FromRequestParts<Arc<AppState>> for AuthSession {
     }
 }
 
+/// Axum extractor for the key setup routes: like [`AuthSession`], and also
+/// accepts a session whose account has no keys yet.
+impl FromRequestParts<Arc<AppState>> for AccountSession {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let token = bearer_token(parts).ok_or(AppError::Unauthorized)?;
+        authenticate_account(state, &token)
+    }
+}
+
 /// A freshly minted access + refresh pair, returned to the client in the login
 /// and refresh response bodies (never as cookies).
 pub struct TokenPair {
@@ -77,16 +126,20 @@ pub struct TokenPair {
 /// Mint an access JWT and create a revocable refresh token in Redis for the
 /// given identity. Called by every login path (dev / OIDC / setup) and by the
 /// refresh endpoint.
+///
+/// `signing_pubkey` is `None` for an account that has not registered its keys.
+/// The session then carries no key, and only the setup routes accept it. A
+/// placeholder key is never minted in its place (`SRV-027`).
 pub async fn issue_session(
     state: &AppState,
     user_id: ambre_core::UserId,
-    signing_pubkey: ambre_core::PublicKey,
+    signing_pubkey: Option<ambre_core::PublicKey>,
 ) -> Result<TokenPair, AppError> {
     let now = unix_now();
     let access_ttl = state.config.access_ttl_secs;
     let claims = Claims {
         sub: user_id.to_string(),
-        spk: signing_pubkey.to_hex(),
+        spk: signing_pubkey.as_ref().map(ambre_core::PublicKey::to_hex),
         iat: now,
         exp: now + access_ttl,
     };

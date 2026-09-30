@@ -19,7 +19,7 @@ pub struct StoreMasterKeysRequest {
 
 pub async fn store_master_keys(
     State(state): State<Arc<AppState>>,
-    auth: auth::AuthSession,
+    auth: auth::AccountSession,
     Json(req): Json<StoreMasterKeysRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
@@ -82,7 +82,7 @@ pub async fn store_master_keys(
         ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
-    let tokens = auth::issue_session(&state, s.user_id, new_signing_pubkey).await?;
+    let tokens = auth::issue_session(&state, s.user_id, Some(new_signing_pubkey)).await?;
     tracing::info!(user_id = %s.user_id, "master key stored");
 
     Ok(axum::Json(serde_json::json!({
@@ -105,7 +105,7 @@ pub struct MasterKeysResponse {
 
 pub async fn get_master_keys(
     State(state): State<Arc<AppState>>,
-    auth: auth::AuthSession,
+    auth: auth::AccountSession,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let s = auth;

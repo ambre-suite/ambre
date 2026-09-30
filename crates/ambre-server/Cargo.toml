@@ -55,6 +55,8 @@ url               = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 goose = "0.18"
+# Already in the tree through axum's `ws` feature; drives the upgrade from a test.
+tokio-tungstenite = "0.29"
 
 [lints]
 workspace = true

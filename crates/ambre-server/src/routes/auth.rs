@@ -85,7 +85,7 @@ pub async fn dev_login(
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
     let signing_pubkey = session_signing_key(&user.signing_pubkey)?;
 
-    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
+    let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
 
     Ok(axum::Json(DevLoginResponse {
@@ -104,6 +104,20 @@ pub async fn dev_login(
 fn session_signing_key(stored: &[u8]) -> Result<ambre_core::PublicKey, AppError> {
     ambre_core::PublicKey::from_slice(stored)
         .map_err(|e| AppError::Internal(format!("stored signing key does not parse: {e}")))
+}
+
+/// The signing key a provider sign-in mints its session under.
+///
+/// A provider account is created before its keys exist, and the row holds a
+/// placeholder until the one-shot key write replaces it. That write sets the
+/// master material in the same statement, so the material is what says the
+/// key is real. Until then the session carries no key, and only the setup
+/// routes accept it (`SRV-027`).
+fn provider_session_key(user: &db::UserRow) -> Result<Option<ambre_core::PublicKey>, AppError> {
+    match user.master_key_enc {
+        None => Ok(None),
+        Some(_) => session_signing_key(&user.signing_pubkey).map(Some),
+    }
 }
 
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
@@ -230,7 +244,7 @@ pub async fn oidc_callback(
             .await?;
 
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-    let signing_pubkey = session_signing_key(&user.signing_pubkey)?;
+    let signing_pubkey = provider_session_key(&user)?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
@@ -260,6 +274,36 @@ mod tests {
         assert_eq!(
             session_signing_key(&[3u8; 32]).unwrap(),
             ambre_core::PublicKey::from_array([3u8; 32])
+        );
+    }
+
+    fn provider_row(master_key_enc: Option<Vec<u8>>, signing_pubkey: Vec<u8>) -> db::UserRow {
+        db::UserRow {
+            id: uuid::Uuid::new_v4(),
+            oidc_provider: Some("google".into()),
+            oidc_subject: Some("subject".into()),
+            email: "a@example.com".into(),
+            email_verified: true,
+            display_name: "A".into(),
+            master_key_enc,
+            master_key_salt: None,
+            signing_pubkey,
+            exchange_pubkey: vec![0u8; 32],
+            org_id: None,
+        }
+    }
+
+    /// `SRV-027`: a provider account that has not registered its keys gets a
+    /// session with no key, never one under the placeholder its row holds.
+    #[test]
+    fn a_provider_account_without_keys_gets_no_signing_key() {
+        let fresh = provider_row(None, vec![0u8; 32]);
+        assert_eq!(provider_session_key(&fresh).unwrap(), None);
+
+        let set_up = provider_row(Some(vec![1u8; 56]), vec![3u8; 32]);
+        assert_eq!(
+            provider_session_key(&set_up).unwrap(),
+            Some(ambre_core::PublicKey::from_array([3u8; 32]))
         );
     }
 }

@@ -883,6 +883,149 @@ mod handler_tests {
         assert_eq!(put_master_keys(&app, &auth).await, StatusCode::CONFLICT);
     }
 
+    async fn status_and_code(app: &Router, req: Request<Body>) -> (StatusCode, String) {
+        let resp = app.clone().oneshot(with_peer(req)).await.unwrap();
+        let status = resp.status();
+        let body = axum::body::to_bytes(resp.into_body(), 1 << 16)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+        (
+            status,
+            json["error"].as_str().unwrap_or_default().to_owned(),
+        )
+    }
+
+    /// The served table runs the rate limiter, which reads the peer address.
+    fn with_peer(mut req: Request<Body>) -> Request<Body> {
+        let peer = std::net::SocketAddr::from(([10, 27, 0, 1], 0));
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(peer));
+        req
+    }
+
+    fn get_with(uri: &str, auth: &str) -> Request<Body> {
+        Request::get(uri)
+            .header("authorization", auth)
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    /// `SRV-027`: a provider account created before its keys holds a session
+    /// with no signing key. Only the setup routes take it, and a refresh keeps
+    /// it keyless. Registering the keys returns a session under the real key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_session_before_key_setup_carries_no_key(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = shipped_router(state.clone());
+        let user = crate::db::upsert_user_from_oidc(
+            &state.db,
+            "google",
+            "sub-1",
+            "new@example.com",
+            "New",
+        )
+        .await
+        .unwrap();
+        assert!(user.master_key_enc.is_none());
+        let user_id =
+            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+        let tokens = crate::auth::issue_session(&state, user_id, None)
+            .await
+            .unwrap();
+        let setup = format!("Bearer {}", tokens.access_token);
+
+        let refused = status_and_code(&app, get_with("/api/documents", &setup)).await;
+        assert_eq!(refused, (StatusCode::FORBIDDEN, "SETUP_REQUIRED".into()));
+        assert!(matches!(
+            crate::auth::authenticate_token(&state, &tokens.access_token),
+            Err(crate::error::AppError::SetupRequired)
+        ));
+        let (me, _) = status_and_code(&app, get_with("/api/auth/me", &setup)).await;
+        assert_eq!(me, StatusCode::OK);
+        let (keys, _) = status_and_code(&app, get_with("/api/keys/master", &setup)).await;
+        assert_eq!(keys, StatusCode::OK);
+
+        // The refresh of a keyless session is keyless too.
+        let refreshed = app
+            .clone()
+            .oneshot(with_peer(
+                Request::post("/api/auth/refresh")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "refresh_token": tokens.refresh_token }).to_string(),
+                    ))
+                    .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refreshed.status(), StatusCode::OK);
+        let renewed = format!("Bearer {}", access_token_of(refreshed).await);
+        let still = status_and_code(&app, get_with("/api/documents", &renewed)).await;
+        assert_eq!(still, (StatusCode::FORBIDDEN, "SETUP_REQUIRED".into()));
+
+        // Registering the keys hands back a session under the real key.
+        let stored = app
+            .clone()
+            .oneshot(with_peer(
+                Request::put("/api/keys/master")
+                    .header("content-type", "application/json")
+                    .header("authorization", &renewed)
+                    .body(Body::from(store_master_keys_body().to_string()))
+                    .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(stored.status(), StatusCode::OK);
+        let token = access_token_of(stored).await;
+        let session = crate::auth::authenticate_token(&state, &token).unwrap();
+        assert_eq!(
+            session.signing_pubkey,
+            ambre_core::PublicKey::from_array([3u8; 32])
+        );
+        let (listed, _) =
+            status_and_code(&app, get_with("/api/documents", &format!("Bearer {token}"))).await;
+        assert_eq!(listed, StatusCode::OK);
+    }
+
+    /// `SRV-027`: the socket refuses a session minted before the key setup. The
+    /// upgrade completes, then the server closes before any frame is read.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_socket_refuses_a_session_without_keys(pool: sqlx::PgPool) {
+        use futures_util::StreamExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let user =
+            crate::db::upsert_user_from_oidc(&state.db, "google", "sub-4", "d@example.com", "D")
+                .await
+                .unwrap();
+        let user_id =
+            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+        let tokens = crate::auth::issue_session(&state, user_id, None)
+            .await
+            .unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = build_test_router(state);
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let url = format!("ws://{addr}/api/ws?token={}", tokens.access_token);
+        let (mut socket, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+        let first = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server closes the socket")
+            .expect("a frame before the stream ends")
+            .unwrap();
+        let Message::Close(Some(frame)) = first else {
+            panic!("expected a close frame, got {first:?}");
+        };
+        assert_eq!(u16::from(frame.code), 4401);
+    }
+
     /// Pull the `access_token` out of an auth response body (setup / dev-login
     /// both return `{ access_token, .. }` -- the suite is cookie-less Bearer JWT).
     async fn access_token_of(resp: axum::response::Response) -> String {

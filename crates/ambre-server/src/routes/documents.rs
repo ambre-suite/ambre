@@ -110,7 +110,7 @@ pub async fn setup_account(
             detail: e.to_string(),
         })?;
 
-    let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
+    let tokens = auth::issue_session(&state, user_id, Some(signing_pubkey)).await?;
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
 
     Ok(axum::Json(SetupAccountResponse {
@@ -133,7 +133,7 @@ pub struct MeResponse {
 
 pub async fn me(
     State(state): State<Arc<AppState>>,
-    auth: auth::AuthSession,
+    auth: auth::AccountSession,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let u = db::get_user(&state.db, &s.user_id)
@@ -159,7 +159,7 @@ pub struct LogoutRequest {
 
 pub async fn logout(
     State(state): State<Arc<AppState>>,
-    auth: auth::AuthSession,
+    auth: auth::AccountSession,
     Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Some(token) = req.refresh_token.as_deref() {

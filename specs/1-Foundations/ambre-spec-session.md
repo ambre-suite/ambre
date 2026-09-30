@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-029` | `INV` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `N3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`; `::verified_email_cannot_be_squatted_by_setup`; `::oidc_relogin_keeps_its_own_email` | none | verified |
 | `SRV-024` | `INV` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none | unheld -- the signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
-| `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | `ambre_server::routes::auth::tests::a_stored_key_that_does_not_parse_mints_no_session` -- a stored key that does not parse is refused, never replaced by a zero key | fails -- a new provider account is inserted with an all-zero key, and its first session is minted under it. The refresh then keeps that key after the real one is registered; lands with the `No session is minted under a fallback key` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | `ambre_server::routes::auth::tests::a_provider_account_without_keys_gets_no_signing_key`; `ambre_server::routes::auth::tests::a_stored_key_that_does_not_parse_mints_no_session`; `ambre_server::routes::tests::handler_tests::a_session_before_key_setup_carries_no_key`; `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a provider account without keys gets a session with no key, which only the setup routes take and the refresh keeps keyless. The socket closes on it. A stored key that does not parse is refused | none | verified |
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none | unheld -- the rule holds only outside this process: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A request is authenticated
@@ -62,10 +62,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The one leak stated here is the
   token in the socket address (`SRV-031`).
-* **Verification.** 7 `verified`, 2 `partial`, 1 `failing`, 6 `untested`. What holds is what a
-  request test can drive: the token gate, the address namespace, the one-shot key write and the
-  refresh race. What is loose is every rule about a deployment rather than a request. The one
-  failure is the placeholder key of a new provider account.
+* **Verification.** 8 `verified`, 2 `partial`, 6 `untested`. What holds is what a request test can
+  drive: the token gate, the address namespace, the one-shot key write and the refresh race. What is
+  loose is every rule about a deployment rather than a request.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -109,6 +108,12 @@ not verified is refused after it.
 **Why the access token carries the signing key.** The live write path verifies a signature per
 frame. Reading the key from the token turns that into a local comparison. A lookup per frame would
 instead put a query on the hottest path the relay has (`ambre-spec-broadcast.md`).
+
+**A session before the keys.** A provider account exists before its keys, because the client
+derives them after the provider answers. Until the one-shot key write lands, the session carries
+no signing key. The profile, the master material, the key write and the sign-out accept it. Every
+other route and the socket refuse it as a setup still owed. The key write answers with a new pair
+under the key it stored (`SRV-027`).
 
 **A renewal is a rotation.** The claim of a refresh token is atomic, where read-then-delete would
 let two callers holding one token both mint a session. A stolen token replayed after its owner used
@@ -182,10 +187,12 @@ where each of those is drawn.
   in for a provider, so the exchange itself has never run under a test (`SRV-022`).
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.
-* **A new provider account signs in under an all-zero key.** The account is inserted with a zero
-  signing key until its setup registers the real one, and its first session is minted under that
-  placeholder. The refresh keeps the key it was minted with, so the session outlives the setup
-  under it. The column is unique, so a second new account collides with the first (`SRV-027`).
+* **A new provider account stores zero keys until its setup.** The key columns cannot be empty, so
+  the row holds zeros until the key write. No session carries them (`SRV-027`). The key lookup and
+  the search still serve them, and only the sharer's refusal of a weak exchange key stops a wrap.
+* **The socket refuses a session without keys as it refuses an expired one.** Both close with the
+  same code, and a client answers it with a renewal. The renewal keeps the session keyless, so that
+  client would reconnect until its setup (`SRV-027`). No client holds such a session yet.
 * **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
   deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-008` states for the
   presigned link.

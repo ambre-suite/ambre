@@ -82,7 +82,7 @@ pub async fn ws_upgrade(
     // is routine (client), a server fault (Redis/DB) must be loud.
     if let Err(e) = &session {
         match e {
-            AppError::Unauthorized | AppError::SessionExpired => {
+            AppError::Unauthorized | AppError::SessionExpired | AppError::SetupRequired => {
                 tracing::debug!("WS auth rejected: {e}")
             }
             _ => tracing::error!("WS auth failed (server fault): {e}"),

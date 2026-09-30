@@ -683,8 +683,8 @@ mod tests {
         use base64::Engine as _;
 
         /// Setup an account under `email`/`spk` and return a ready
-        /// `Authorization: Bearer <jwt>` header. Each caller must pass a distinct
-        /// `spk` byte: the `users.signing_pubkey` column is unique.
+        /// `Authorization: Bearer <jwt>` header. Each caller passes a distinct
+        /// `spk` byte, so each account signs under a key of its own.
         async fn setup_org_user(app: &Router, email: &str, spk: u8) -> String {
             let body = serde_json::json!({
                 "email": email,

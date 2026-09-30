@@ -23,10 +23,14 @@ use serde::{Deserialize, Serialize};
 /// Access-token claims. `sub` is the user id, and `spk` the hex Ed25519
 /// signing public key (used server-side to verify WS message signatures
 /// without a DB hit). `iat`/`exp` are standard Unix-seconds timestamps.
+///
+/// `spk` is absent on the session of an account that has not registered its
+/// keys yet. Such a session carries no identity to sign under (`SRV-027`).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
-    pub spk: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spk: Option<String>,
     pub iat: u64,
     pub exp: u64,
 }
@@ -92,7 +96,7 @@ mod tests {
         let iat = now();
         let claims = Claims {
             sub: "11111111-1111-7111-8111-111111111111".into(),
-            spk: "ab".repeat(32),
+            spk: Some("ab".repeat(32)),
             iat,
             exp: iat + 900,
         };
@@ -108,7 +112,7 @@ mod tests {
         let iat = now() - 10_000;
         let claims = Claims {
             sub: "x".into(),
-            spk: "y".into(),
+            spk: Some("y".into()),
             iat,
             exp: iat + 1, // long past
         };
@@ -124,7 +128,7 @@ mod tests {
         let token = a
             .mint(&Claims {
                 sub: "s".into(),
-                spk: "p".into(),
+                spk: Some("p".into()),
                 iat,
                 exp: iat + 900,
             })

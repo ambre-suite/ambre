@@ -374,16 +374,16 @@ pub async fn refresh_get(redis: &Client, token: &str) -> Result<Option<RefreshDa
     }
 
     let user_id = fields.get("user_id").cloned().unwrap_or_default();
-    let signing_pubkey_hex = fields
-        .get("signing_pubkey_hex")
-        .cloned()
-        .unwrap_or_default();
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
         .map(ambre_core::UserId::from_uuid)
         .map_err(|e| AppError::Redis(format!("invalid user_id in refresh: {e}")))?;
 
-    let signing_pubkey = ambre_core::PublicKey::from_hex(&signing_pubkey_hex)
+    // An absent field is a session without keys; a present one must parse.
+    let signing_pubkey = fields
+        .get("signing_pubkey_hex")
+        .map(|hex| ambre_core::PublicKey::from_hex(hex))
+        .transpose()
         .map_err(|e| AppError::Redis(format!("invalid pubkey in refresh: {e}")))?;
 
     Ok(Some(RefreshData {
@@ -401,14 +401,17 @@ pub async fn refresh_create(
 ) -> Result<(), AppError> {
     let key = format!("refresh:{token}");
 
+    let user_id = data.user_id.to_string();
+    let signing_pubkey_hex = data
+        .signing_pubkey
+        .as_ref()
+        .map(ambre_core::PublicKey::to_hex);
+    let mut fields = vec![("user_id", user_id.as_str())];
+    if let Some(hex) = &signing_pubkey_hex {
+        fields.push(("signing_pubkey_hex", hex.as_str()));
+    }
     redis
-        .hset(
-            &key,
-            [
-                ("user_id", data.user_id.to_string().as_str()),
-                ("signing_pubkey_hex", data.signing_pubkey.to_hex().as_str()),
-            ],
-        )
+        .hset(&key, fields)
         .await
         .map_err(|e| AppError::Redis(format!("refresh create hset: {e}")))?;
 
@@ -619,7 +622,8 @@ pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
 #[derive(Debug, Clone)]
 pub struct RefreshData {
     pub user_id: ambre_core::UserId,
-    pub signing_pubkey: ambre_core::PublicKey,
+    /// `None` for an account that has not registered its keys (`SRV-027`).
+    pub signing_pubkey: Option<ambre_core::PublicKey>,
 }
 
 /// Stores OIDC authorization state in Redis with a 10-minute TTL.
@@ -1110,7 +1114,7 @@ mod redis_integration_tests {
         let token = uuid::Uuid::new_v4().to_string();
         let data = RefreshData {
             user_id: ambre_core::UserId::new(),
-            signing_pubkey: ambre_core::PublicKey::from_array([3u8; 32]),
+            signing_pubkey: Some(ambre_core::PublicKey::from_array([3u8; 32])),
         };
         refresh_create(redis, &token, &data, 60)
             .await
