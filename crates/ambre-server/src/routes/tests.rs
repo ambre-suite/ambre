@@ -1101,9 +1101,6 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_socket_refuses_a_session_without_keys(pool: sqlx::PgPool) {
-        use futures_util::StreamExt;
-        use tokio_tungstenite::tungstenite::Message;
-
         let state = test_app_state(pool).await;
         let user =
             crate::db::upsert_user_from_oidc(&state.db, "google", "sub-4", "d@example.com", "D")
@@ -1114,13 +1111,30 @@ mod handler_tests {
         let tokens = crate::auth::issue_session(&state, user_id, None)
             .await
             .unwrap();
+        assert_eq!(first_close_code(state, &tokens.access_token).await, 4401);
+    }
+
+    /// `SRV-046`: an upgrade refused on authentication closes with a code of its
+    /// own. The client reads it as a cue to renew rather than back off.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_refused_token_closes_the_socket_with_its_own_code(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        assert_eq!(first_close_code(state, "not-a-token").await, 4401);
+    }
+
+    /// Serves the router on a loopback port, opens the socket with `token`, and
+    /// returns the code of the close frame the server sends first.
+    async fn first_close_code(state: Arc<AppState>, token: &str) -> u16 {
+        use futures_util::StreamExt;
+        use tokio_tungstenite::tungstenite::Message;
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let app = build_test_router(state);
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
-        let url = format!("ws://{addr}/api/ws?token={}", tokens.access_token);
+        let url = format!("ws://{addr}/api/ws?token={token}");
         let (mut socket, _) = tokio_tungstenite::connect_async(url).await.unwrap();
         let first = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
             .await
@@ -1130,7 +1144,7 @@ mod handler_tests {
         let Message::Close(Some(frame)) = first else {
             panic!("expected a close frame, got {first:?}");
         };
-        assert_eq!(u16::from(frame.code), 4401);
+        u16::from(frame.code)
     }
 
     /// Pull the `access_token` out of an auth response body (setup / dev-login

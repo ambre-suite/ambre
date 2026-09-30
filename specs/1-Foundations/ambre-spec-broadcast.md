@@ -31,7 +31,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | none | unheld -- the upgrade always completes and the handler then closes with the authentication code, so the client can renew instead of backing off; no host test drives a close frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | `ambre_server::routes::tests::handler_tests::a_refused_token_closes_the_socket_with_its_own_code` -- a token that does not verify draws the authentication close code on a live socket, after the upgrade completes | none | verified |
+| `SRV-164` | `FAIL` | An upgrade refused for a key setup still owed MUST close with a code distinct from the authentication one. | `ambre-spec-session.md`, `SRV-027`; `SRV-046` | none | fails -- the socket closes such a session with the authentication code, so the client renews into another session without keys and reconnects until the setup; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | none | unheld -- every watched topic is deregistered and the outbound task is stopped at the end of the connection, and no test closes a socket to observe the hub afterwards; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 A frame arrives on the socket
@@ -78,10 +79,10 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 6 `verified`, 10 `untested`, 6 `unimplemented`. What holds is what a handler
-  test drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
-  everything about the connection rather than the message, each needing a live socket the suite has
-  no way to open (`ambre-spec-testing.md section 9`).
+* **Verification.** 7 `verified`, 1 `failing`, 9 `untested`, 6 `unimplemented`. What holds is what a
+  handler test drives: the two caps, the rate bucket, the presence expiry and its removal. What is
+  loose is everything about the connection rather than the message. Each needs a live socket, and
+  two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -212,6 +213,7 @@ The socket has no surface of its own. What a person meets of it is four things.
 | A presence entry expires by itself, per entry | a periodic sweep over the presence entries | it is what this replaced: a sweep is a timer, a scan and a decision about what is stale, where an expiry per entry is a property of the entry. The entry is also what a person leaves behind when their connection dies, which is the case a sweep exists for. |
 | A presence entry is stored sealed | a readable presence entry | it is what the store held first: the cursor, the colour and the display name as readable values, which is a person's position in a document sitting in the relay's own store. Sealing costs the relay nothing, because it forwards the entry rather than reading it (`SRV-050`, `ZK-005`). |
 | A refused upgrade gets a code of its own | one close for every refusal, and a backoff over all of them | when a token expires or the relay rotates its signing key every token is invalid at once, so a plain backoff never recovers -- each new connection is refused too. A distinct code lets the client renew and reconnect with no action (`SRV-046`). |
+| A setup still owed gets a code of its own | the authentication code for both refusals | a renewal cannot cure it. The renewed session has no keys either, so the client renews and reconnects until the setup, and each attempt is refused (`SRV-164`). |
 | A channel travels as its documents | a channel plane with frames, numbering and storage of its own | a second pipeline to gate, number and store beside the document one. The gates the plane owed become the document gates (`SRV-047`, `SRV-048`) |
 | The channel plane of the code is written down as unchecked | leaving the channel handlers looking like the document ones | no channel is wired to real data, so the gap is reachable by nobody, and stating it stops a later reader from reading the asymmetry as a subtlety |
 | The socket is bidirectional, and its frames are binary | a server-sent event stream | the client sends as much as it receives, so a server-to-client stream carries half the traffic and needs a second connection for the other half. |
@@ -239,9 +241,10 @@ The socket has no surface of its own. What a person meets of it is four things.
   count, no measure, and no rule states how often it is allowed to happen.
 * **The outbound queue has a depth and no policy.** It holds 256 frames per connection, and what
   happens to a connection that stops draining it is whatever the queue does, which no rule states.
-* **No test opens a socket.** The suite drives each handler directly, so the upgrade, the close
-  codes, the fan-out across two connections and the teardown are held by nothing
-  (`ambre-spec-testing.md section 9`).
+* **Two tests open a socket, and only to see it refused.** They hold the close of a token that does
+  not verify and of a session without keys (`SRV-046`, `ambre-spec-session.md`, `SRV-027`). The
+  suite drives every other handler directly, so the fan-out across two connections and the teardown
+  are held by nothing (`ambre-spec-testing.md section 9`).
 
 ---
 

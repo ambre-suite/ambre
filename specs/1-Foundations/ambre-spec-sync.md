@@ -47,6 +47,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-063` | `POST` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-046` | none | unheld -- the refusal has its own close code, and the handler renews on that code alone and backs off on every other. No host test drives a close event; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-133` | `POST` | A socket the relay refuses for a key setup still owed MUST be neither renewed nor retried until the keys are stored. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-164` | none | fails -- the relay closes it with the authentication code, which this worker answers with a renewal and a reconnect; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-134` | `POST` | A key setup still owed MUST reach the rest of the client as a setup to complete, never as a generic error. | this spec section 2; `ambre-spec-session.md`, `SRV-027` | none | fails -- a request refused for it surfaces as a generic error naming the status alone, and a socket refused for it surfaces as nothing; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none | unheld -- the error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | none | unheld -- the delay is doubled on each teardown, and nothing observes it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | none | unheld -- the reset is the first statement of the inbound handler, so a connection that opens and is refused never reaches it, which is the whole point: resetting on the open turns a relay refusing every connection into a client retrying without a backoff at all; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -81,9 +83,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 6 `verified`, 2 `failing`, 17 `untested`. The crate graph holds the keys and
-  the CRDT apart, and unit tests hold the token redaction and wipe and the refused channel send.
-  Each gap left is a browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
+* **Verification.** 6 `verified`, 4 `failing`, 17 `untested`. The crate graph holds the keys and the
+  CRDT apart, and unit tests hold the token redaction and wipe and the refused channel send. Each
+  gap left is a browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL

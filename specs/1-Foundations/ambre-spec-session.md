@@ -191,9 +191,6 @@ where each of those is drawn.
   in for a provider, so the exchange itself has never run under a test (`SRV-022`).
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.
-* **The socket refuses a session without keys as it refuses an expired one.** Both close with the
-  same code, and a client answers it with a renewal. The renewal keeps the session keyless, so that
-  client would reconnect until its setup (`SRV-027`). No client holds such a session yet.
 * **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
   deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-008` states for the
   presigned link.
