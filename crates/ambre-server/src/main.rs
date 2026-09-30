@@ -17,7 +17,6 @@ mod test_helpers;
 
 use axum::Router;
 use axum::http::HeaderValue;
-use axum::middleware as axum_mw;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -233,122 +232,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         dev_mode,
     );
 
-    let api_router = Router::new()
-        .route("/auth/google/login", axum::routing::get(routes::oidc_login))
-        .route(
-            "/auth/google/callback",
-            axum::routing::post(routes::oidc_callback),
-        )
-        .route("/auth/setup", axum::routing::post(routes::setup_account))
-        .route("/auth/dev/login", axum::routing::post(routes::dev_login))
-        .route("/auth/config", axum::routing::get(routes::auth_config))
-        .route("/auth/refresh", axum::routing::post(routes::refresh))
-        .route("/auth/me", axum::routing::get(routes::me))
-        .route("/auth/logout", axum::routing::post(routes::logout))
-        .route(
-            "/keys/master",
-            axum::routing::put(routes::store_master_keys).get(routes::get_master_keys),
-        )
-        .route(
-            "/keys/master/rotate",
-            axum::routing::put(routes::rotate_master_keys),
-        )
-        .route("/users/search", axum::routing::get(routes::search_users))
-        .route(
-            "/users/{id}/pubkeys",
-            axum::routing::get(routes::get_pubkeys),
-        )
-        .route(
-            "/documents",
-            axum::routing::get(routes::list_documents).post(routes::create_document),
-        )
-        .route(
-            "/documents/{id}",
-            axum::routing::get(routes::get_document)
-                .delete(routes::delete_document)
-                .patch(routes::rename_document),
-        )
-        .route(
-            "/documents/{id}/snapshot",
-            axum::routing::get(routes::get_snapshot_metadata).post(routes::create_snapshot),
-        )
-        .route(
-            "/documents/{id}/snapshot/upload-url",
-            axum::routing::post(routes::snapshot_upload_url),
-        )
-        .route(
-            "/documents/{id}/snapshot/download-url",
-            axum::routing::post(routes::snapshot_download_url),
-        )
-        .route(
-            "/documents/{id}/deltas",
-            axum::routing::get(routes::get_deltas),
-        )
-        .route(
-            "/documents/{id}/share",
-            axum::routing::post(routes::invite_to_document),
-        )
-        .route(
-            "/documents/{id}/share/{uid}",
-            axum::routing::delete(routes::revoke_from_document),
-        )
-        .route(
-            "/documents/{id}/members",
-            axum::routing::get(routes::list_document_members),
-        )
-        .route(
-            "/documents/{id}/members/{uid}",
-            axum::routing::patch(routes::update_document_member_role),
-        )
-        .route(
-            "/documents/{id}/rotate-key",
-            axum::routing::post(routes::rotate_document_key),
-        )
-        .route(
-            "/documents/{id}/media/upload-url",
-            axum::routing::post(routes::media_upload_url),
-        )
-        .route(
-            "/documents/{id}/media/download-url",
-            axum::routing::post(routes::media_download_url),
-        )
-        .route(
-            "/documents/{id}/media",
-            axum::routing::post(routes::media_confirm_upload),
-        )
-        .route(
-            "/organizations",
-            axum::routing::get(routes::list_orgs).post(routes::create_org),
-        )
-        .route(
-            "/organizations/{id}",
-            axum::routing::get(routes::get_org)
-                .patch(routes::update_org)
-                .delete(routes::delete_org),
-        )
-        .route(
-            "/organizations/{id}/members",
-            axum::routing::post(routes::add_member).get(routes::list_members),
-        )
-        .route(
-            "/organizations/{id}/members/{uid}",
-            axum::routing::delete(routes::remove_member).patch(routes::update_member_role),
-        )
-        .route(
-            "/organizations/{id}/recover/{uid}",
-            axum::routing::post(routes::recover_master_key),
-        )
-        .route("/ws", axum::routing::get(ws::ws_upgrade))
-        .layer({
-            let state = state.clone();
-            axum_mw::from_fn(move |req: axum::extract::Request, next: axum_mw::Next| {
-                let state = Arc::clone(&state);
-                async move { middleware::rate_limit::rate_limit_inner(state, req, next).await }
-            })
-        });
-
     let app = Router::new()
-        .nest("/api", api_router)
+        .nest("/api", routes::api_router(Arc::clone(&state)))
         .layer(cors)
         // Per-request access log (method, path, status, latency). The span
         // records only the URI *path*, never the query string. The WS upgrade

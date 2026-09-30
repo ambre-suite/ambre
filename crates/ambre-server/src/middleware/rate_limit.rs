@@ -148,7 +148,14 @@ impl RateLimitCategory {
 /// It receives the state directly (not via `State` extractor) so it
 /// can be wrapped in a closure-based middleware.
 pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) -> Response {
-    let path = req.uri().path().to_string();
+    // The limiter runs inside the router nested under `/api`, which has already
+    // stripped that prefix from `req.uri()`. The classifier matches the path the
+    // client sent, so it reads the original URI the nesting preserved (`SRV-093`).
+    let path = req
+        .extensions()
+        .get::<axum::extract::OriginalUri>()
+        .map_or_else(|| req.uri().path(), |original| original.0.path())
+        .to_string();
     let method = req.method().clone();
     let category = RateLimitCategory::classify(&path, &method);
     let (max_req, window_secs) = category.limits();

@@ -23,14 +23,6 @@ pub struct AuthSession {
     pub signing_pubkey: ambre_core::PublicKey,
 }
 
-/// Optional authenticated identity.
-///
-/// Missing `Authorization` is accepted as anonymous access. A present but
-/// invalid bearer token is still rejected, so clients cannot silently downgrade
-/// an expired or forged token to anonymous access.
-#[derive(Debug, Clone)]
-pub struct OptionalAuthSession(pub Option<AuthSession>);
-
 /// Extracts the bearer token from the `Authorization` header, if present.
 pub fn bearer_token(parts: &Parts) -> Option<String> {
     parts
@@ -70,20 +62,6 @@ impl FromRequestParts<Arc<AppState>> for AuthSession {
     ) -> Result<Self, Self::Rejection> {
         let token = bearer_token(parts).ok_or(AppError::Unauthorized)?;
         authenticate_token(state, &token)
-    }
-}
-
-impl FromRequestParts<Arc<AppState>> for OptionalAuthSession {
-    type Rejection = AppError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &Arc<AppState>,
-    ) -> Result<Self, Self::Rejection> {
-        match bearer_token(parts) {
-            Some(token) => authenticate_token(state, &token).map(Some).map(Self),
-            None => Ok(Self(None)),
-        }
     }
 }
 

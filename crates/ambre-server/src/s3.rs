@@ -156,6 +156,65 @@ pub async fn generate_presigned_download_url(
         .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))
 }
 
+/// The prefix every object of one document lives under: its snapshots, its
+/// deltas and its media.
+pub fn format_s3_document_prefix(env_prefix: &str, document_id: &ambre_core::DocumentId) -> String {
+    format!("{env_prefix}/documents/{document_id}/")
+}
+
+/// Deletes every object under `prefix`, a page of at most a thousand keys at a
+/// time. Returns how many it deleted. An object that fails to delete fails the
+/// call, so the caller can refuse to forget the document (`SRV-057`).
+pub async fn delete_prefix(s3: &S3Client, bucket: &str, prefix: &str) -> Result<usize, AppError> {
+    use aws_sdk_s3::types::{Delete, ObjectIdentifier};
+    let mut deleted = 0;
+    let mut token: Option<String> = None;
+    loop {
+        let page = s3
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(prefix)
+            .set_continuation_token(token.take())
+            .send()
+            .await
+            .map_err(|e| AppError::S3(format!("list {prefix}: {e}")))?;
+        let objects = page
+            .contents()
+            .iter()
+            .filter_map(|o| o.key())
+            .map(|key| ObjectIdentifier::builder().key(key).build())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::S3(format!("object identifier: {e}")))?;
+        if !objects.is_empty() {
+            let count = objects.len();
+            let delete = Delete::builder()
+                .set_objects(Some(objects))
+                .quiet(true)
+                .build()
+                .map_err(|e| AppError::S3(format!("delete request: {e}")))?;
+            let out = s3
+                .delete_objects()
+                .bucket(bucket)
+                .delete(delete)
+                .send()
+                .await
+                .map_err(|e| AppError::S3(format!("delete under {prefix}: {e}")))?;
+            if let Some(failed) = out.errors().first() {
+                return Err(AppError::S3(format!(
+                    "delete {}: {}",
+                    failed.key().unwrap_or("?"),
+                    failed.message().unwrap_or("refused")
+                )));
+            }
+            deleted += count;
+        }
+        match page.next_continuation_token() {
+            Some(next) if page.is_truncated() == Some(true) => token = Some(next.to_string()),
+            _ => return Ok(deleted),
+        }
+    }
+}
+
 /// Fetches an object's raw bytes from S3 (used to replay a persisted delta).
 ///
 /// Returns `Ok(None)` when the key does not exist yet, for example a freshly written

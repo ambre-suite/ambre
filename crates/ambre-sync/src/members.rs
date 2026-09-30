@@ -277,13 +277,17 @@ impl SyncState {
                 );
                 match http::get_json_auth::<http::UserSearchResult>(&url, auth).await {
                     Ok(resp) => {
+                        // A result whose id does not parse is left out, never
+                        // given an invented one (`SYNC-038`).
                         let users: Vec<UserInfo> = resp
                             .users
                             .into_iter()
-                            .map(|u| UserInfo {
-                                user_id: UserId::parse_str(&u.id).unwrap_or_else(|_| UserId::new()),
-                                display_name: u.display_name,
-                                email: u.email,
+                            .filter_map(|u| {
+                                Some(UserInfo {
+                                    user_id: UserId::parse_str(&u.id).ok()?,
+                                    display_name: u.display_name,
+                                    email: u.email,
+                                })
                             })
                             .collect();
                         let _ = tx.send(SyncEvent::UserSearchReady { id, users });

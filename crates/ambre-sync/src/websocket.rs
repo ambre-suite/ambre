@@ -1,4 +1,42 @@
 use super::*;
+use zeroize::Zeroizing;
+
+/// The socket address, whose query carries the access token. Its `Display`
+/// and `Debug` print the address without the query, so logging it logs no
+/// token (`SYNC-061`), and the text is wiped when dropped.
+pub(crate) struct SocketUrl(Zeroizing<String>);
+
+impl SocketUrl {
+    /// `{scheme}://{api_base}/api/ws?token={token}`, the token already encoded.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn new(scheme: &str, api_base: &str, token: &str) -> Self {
+        Self(Zeroizing::new(format!(
+            "{scheme}://{api_base}/api/ws?token={token}"
+        )))
+    }
+
+    /// The whole address, for the one call that opens the socket.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SocketUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let address = self
+            .0
+            .split_once('?')
+            .map_or(self.0.as_str(), |(address, _)| address);
+        write!(f, "{address}?token=<redacted>")
+    }
+}
+
+impl std::fmt::Debug for SocketUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
 
 impl SyncState {
     // -- WebSocket lifecycle ---------------------------------------------------
@@ -25,11 +63,13 @@ impl SyncState {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
         };
-        let token = js_sys::encode_uri_component(&access_token)
-            .as_string()
-            .unwrap_or(access_token);
-        let url = format!("{ws_scheme}://{}/api/ws?token={token}", self.api_base);
-        match WebSocket::new(&url) {
+        let token = Zeroizing::new(
+            js_sys::encode_uri_component(access_token.expose())
+                .as_string()
+                .unwrap_or_else(|| access_token.expose().to_owned()),
+        );
+        let url = SocketUrl::new(ws_scheme, &self.api_base, &token);
+        match WebSocket::new(url.expose()) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
                 self.wire_ws_callbacks(&ws);
@@ -374,18 +414,37 @@ impl SyncState {
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.role = role;
-                doc_state.current_snapshot_id = snapshot_id;
-                doc_state.known_snapshots.insert(snapshot_id);
-                // Advance the replay cursor past the history folded into the
-                // downloaded snapshot. The RequestMissing below then fetches
-                // only newer deltas instead of replaying everything since
-                // genesis.
-                doc_state.last_seq = covered_seq;
-                if let Some(payload) = snapshot_payload {
-                    self.send_to_logic(LogicEvent::RemoteSnapshot {
-                        document_id,
-                        payload,
-                    });
+                // The blob object storage holds is the sealed snapshot. It is
+                // opened here, and only a snapshot that opens becomes the known
+                // parent and gates the replay (`SYNC-030`). One that does not
+                // falls back to the full replay from genesis, so no history
+                // is skipped on the strength of a snapshot nobody applied.
+                let opened = snapshot_payload.map(|blob| doc_state.open_snapshot_blob(&blob));
+                match opened {
+                    Some(Ok(payload)) => {
+                        doc_state.current_snapshot_id = snapshot_id;
+                        doc_state.known_snapshots.insert(snapshot_id);
+                        // Advance the replay cursor past the history folded into
+                        // the snapshot. The RequestMissing below then fetches only
+                        // newer deltas instead of replaying everything since
+                        // genesis.
+                        doc_state.last_seq = covered_seq;
+                        self.send_to_logic(LogicEvent::RemoteSnapshot {
+                            document_id,
+                            payload,
+                        });
+                    }
+                    Some(Err(e)) => {
+                        self.send_to_logic(LogicEvent::SyncWarning {
+                            document_id,
+                            code: SyncWarningCode::DecryptFailed,
+                            message: format!("the latest snapshot does not open: {e}"),
+                        });
+                    }
+                    None => {
+                        doc_state.current_snapshot_id = snapshot_id;
+                        doc_state.known_snapshots.insert(snapshot_id);
+                    }
                 }
                 // Only subscribe over WS if the document actually exists
                 // server-side; a local-only doc subscribes after lazy creation.
@@ -602,6 +661,11 @@ impl SyncState {
                     },
                 );
             }
+            SyncEvent::SnapshotFetched {
+                document_id,
+                snapshot_id,
+                blob,
+            } => self.adopt_fetched_snapshot(document_id, snapshot_id, blob),
             SyncEvent::SnapshotUploaded {
                 document_id,
                 snapshot_id,
@@ -765,7 +829,8 @@ impl SyncState {
                 snapshot_id,
             } => {
                 tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
-                self.snapshot_known(document_id, snapshot_id);
+                // Announced is not held: fetch it first (`SYNC-030`).
+                self.fetch_announced_snapshot(document_id, snapshot_id);
             }
 
             WsServerMsg::KeyRotationRequired { document_id } => {
@@ -915,5 +980,43 @@ impl SyncState {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SocketUrl;
+    use crate::http::{SecretToken, TokenPair};
+
+    /// A logged socket address carries no token (`SYNC-061`), whichever way
+    /// it is formatted.
+    #[test]
+    fn a_logged_socket_url_carries_no_token() {
+        let url = SocketUrl::new("wss", "relay.example", "s3cr3t-token");
+        assert!(url.expose().ends_with("?token=s3cr3t-token"));
+        for shown in [format!("{url}"), format!("{url:?}")] {
+            assert!(!shown.contains("s3cr3t"), "{shown}");
+            assert!(shown.starts_with("wss://relay.example/api/ws"), "{shown}");
+        }
+    }
+
+    /// A token pair logged by `Debug` prints neither token (`SYNC-061`).
+    #[test]
+    fn a_logged_token_pair_carries_no_token() {
+        let pair = TokenPair {
+            access_token: SecretToken::from("acc-s3cr3t".to_owned()),
+            refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
+            access_expires_in: 60,
+        };
+        let shown = format!("{pair:?}");
+        assert!(!shown.contains("s3cr3t"), "{shown}");
+    }
+
+    /// Both tokens wipe their bytes when dropped (`SYNC-100`): the bound fails
+    /// the build the day either stops doing so.
+    #[test]
+    fn session_tokens_wipe_on_drop() {
+        fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
+        wipes_on_drop::<SecretToken>();
     }
 }

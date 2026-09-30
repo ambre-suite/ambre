@@ -124,8 +124,8 @@ impl SyncState {
                                     exchange_key,
                                     tokens: auth.tokens.borrow().as_ref().cloned().unwrap_or(
                                         http::TokenPair {
-                                            access_token: String::new(),
-                                            refresh_token: String::new(),
+                                            access_token: http::SecretToken::default(),
+                                            refresh_token: http::SecretToken::default(),
                                             access_expires_in: 0,
                                         },
                                     ),

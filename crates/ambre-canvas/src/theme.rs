@@ -116,3 +116,52 @@ impl Default for ThemeControl {
         Self::new(Theme::default())
     }
 }
+
+#[cfg(test)]
+mod stylesheet_tests {
+    use super::THEME_CSS;
+    use std::collections::BTreeSet;
+
+    /// The shell stylesheet the launcher links beside [`THEME_CSS`].
+    const SHELL_CSS: &str = include_str!("../../ambre-app/styles.css");
+
+    /// Every custom property `css` declares (`--name:`).
+    fn declared(css: &str) -> BTreeSet<&str> {
+        css.match_indices("--")
+            .filter_map(|(at, _)| {
+                let rest = &css[at..];
+                let end =
+                    rest.find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))?;
+                rest[end..]
+                    .trim_start()
+                    .starts_with(':')
+                    .then(|| &rest[..end])
+            })
+            .collect()
+    }
+
+    /// Every custom property `css` reads (`var(--name`).
+    fn read(css: &str) -> BTreeSet<&str> {
+        css.match_indices("var(")
+            .filter_map(|(at, _)| {
+                let rest = css[at + 4..].trim_start();
+                let end =
+                    rest.find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))?;
+                rest.starts_with("--").then(|| &rest[..end])
+            })
+            .collect()
+    }
+
+    // `UI-THREAD-031`: the shell reads no token that the generated sheet does
+    // not emit and the shell does not declare itself.
+    #[test]
+    fn the_stylesheet_reads_only_declared_tokens() {
+        let known: BTreeSet<&str> = declared(THEME_CSS)
+            .union(&declared(SHELL_CSS))
+            .copied()
+            .collect();
+        let unknown: Vec<&str> = read(SHELL_CSS).difference(&known).copied().collect();
+        assert!(unknown.is_empty(), "read but declared nowhere: {unknown:?}");
+        assert!(known.contains("--text") && known.contains("--error"));
+    }
+}

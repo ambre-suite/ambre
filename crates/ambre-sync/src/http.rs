@@ -3,11 +3,39 @@ use std::rc::Rc;
 
 use gloo_net::http::Response;
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
+/// A session token: an access or a refresh token. It wipes its bytes when
+/// dropped, so a sign-out leaves no token in the worker's memory
+/// (`SYNC-100`). Its `Debug` prints no byte of it, so no log can carry one
+/// (`SYNC-061`). Serialized and parsed as the bare string the relay exchanges.
+#[derive(Clone, Default, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
+#[serde(transparent)]
+pub(crate) struct SecretToken(String);
+
+impl SecretToken {
+    /// The token's text, for the one header or query that carries it.
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for SecretToken {
+    fn from(token: String) -> Self {
+        Self(token)
+    }
+}
+
+impl std::fmt::Debug for SecretToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SecretToken(<redacted>)")
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenPair {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: SecretToken,
+    pub refresh_token: SecretToken,
     #[allow(dead_code)]
     pub access_expires_in: u64,
 }
@@ -23,11 +51,11 @@ pub(crate) struct AuthContext {
 
 #[derive(Serialize)]
 struct RefreshRequest {
-    refresh_token: String,
+    refresh_token: SecretToken,
 }
 
 impl AuthContext {
-    fn access_token(&self) -> Result<String, String> {
+    fn access_token(&self) -> Result<SecretToken, String> {
         self.tokens
             .borrow()
             .as_ref()
@@ -35,7 +63,7 @@ impl AuthContext {
             .ok_or_else(|| "auth required: no access token".to_owned())
     }
 
-    fn refresh_token(&self) -> Result<String, String> {
+    fn refresh_token(&self) -> Result<SecretToken, String> {
         self.tokens
             .borrow()
             .as_ref()
@@ -54,8 +82,9 @@ impl AuthContext {
     }
 }
 
-fn bearer(token: &str) -> String {
-    format!("Bearer {token}")
+/// The `Authorization` header value, wiped once the request holds its copy.
+fn bearer(token: &SecretToken) -> Zeroizing<String> {
+    Zeroizing::new(format!("Bearer {}", token.expose()))
 }
 
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
@@ -182,7 +211,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
 ) -> Result<R, String> {
     let body_json =
         serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
-    let send = |token: String| {
+    let send = |token: SecretToken| {
         gloo_net::http::Request::post(url)
             .header("Content-Type", "application/json")
             .header("Authorization", &bearer(&token))
@@ -246,7 +275,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
 ) -> Result<(), String> {
     let body_json =
         serde_json::to_vec(body).map_err(|e| format!("PATCH {url}: serialize error: {e}"))?;
-    let send = |token: String| {
+    let send = |token: SecretToken| {
         gloo_net::http::Request::patch(url)
             .header("Content-Type", "application/json")
             .header("Authorization", &bearer(&token))
@@ -302,8 +331,8 @@ pub(crate) struct SetupAccountRequest {
 #[allow(dead_code)]
 pub(crate) struct SetupAccountResponse {
     pub user_id: String,
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: SecretToken,
+    pub refresh_token: SecretToken,
     pub access_expires_in: u64,
 }
 
@@ -318,8 +347,8 @@ pub(crate) struct DevLoginRequest {
 pub(crate) struct DevLoginResponse {
     pub user_id: String,
     pub display_name: String,
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: SecretToken,
+    pub refresh_token: SecretToken,
     pub access_expires_in: u64,
 }
 
@@ -341,8 +370,8 @@ pub(crate) struct SetupKeyRequest {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct StoreMasterKeysResponse {
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: SecretToken,
+    pub refresh_token: SecretToken,
     pub access_expires_in: u64,
 }
 

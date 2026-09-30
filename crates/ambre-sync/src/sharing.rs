@@ -64,23 +64,35 @@ pub(crate) fn build_invite_request(
 }
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
-/// payload). Members with a malformed exchange pubkey are skipped rather than
-/// failing the whole rotation -- a best-effort that keeps the rest converging.
+/// payload). A member whose exchange key does not parse cannot be re-wrapped
+/// for. The rotation goes on for the others, and that member is returned in
+/// the second list so the caller reports it (`SYNC-043`). Nothing is skipped
+/// in silence.
 pub(crate) fn rotate_entries_for(
     my_xk: &StaticSecret,
     new_doc_key: &DocumentKey,
     members: &[http::DocumentMemberEntry],
-) -> Vec<http::RotateKeyEntry> {
-    members
+) -> (Vec<http::RotateKeyEntry>, Vec<String>) {
+    let mut unwrapped = Vec::new();
+    let entries = members
         .iter()
         .filter_map(|m| {
-            let peer = decode_exchange_pubkey(&m.exchange_pub_key).ok()?;
-            Some(http::RotateKeyEntry {
-                user_id: m.user_id.clone(),
-                doc_key_enc: wrap_key_b64(my_xk, &peer, new_doc_key).ok()?,
-            })
+            let wrapped = decode_exchange_pubkey(&m.exchange_pub_key)
+                .ok()
+                .and_then(|peer| wrap_key_b64(my_xk, &peer, new_doc_key).ok());
+            match wrapped {
+                Some(doc_key_enc) => Some(http::RotateKeyEntry {
+                    user_id: m.user_id.clone(),
+                    doc_key_enc,
+                }),
+                None => {
+                    unwrapped.push(m.display_name.clone());
+                    None
+                }
+            }
         })
-        .collect()
+        .collect();
+    (entries, unwrapped)
 }
 
 /// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
@@ -132,16 +144,23 @@ pub(crate) fn own_role<'a>(
 }
 
 /// Maps server member entries into bus `MemberInfo` (plaintext name/email,
-/// parsed role). Unknown roles fall back to viewer, unparsable ids to a fresh
-/// id -- the list is display-only, so it degrades instead of dropping rows.
+/// parsed role). Unknown roles fall back to viewer. A row whose id does not
+/// parse is left out and logged. An invented id names a person nothing can act
+/// on, and a revoke aimed at it addresses nobody (`SYNC-038`).
 pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<MemberInfo> {
     entries
         .into_iter()
-        .map(|m| MemberInfo {
-            user_id: UserId::parse_str(&m.user_id).unwrap_or_else(|_| UserId::new()),
-            display_name: m.display_name,
-            email: m.email,
-            role: m.role.parse().unwrap_or(Role::Viewer),
+        .filter_map(|m| {
+            let Ok(user_id) = UserId::parse_str(&m.user_id) else {
+                tracing::warn!("Sync: member row with a malformed id left out of the list");
+                return None;
+            };
+            Some(MemberInfo {
+                user_id,
+                display_name: m.display_name,
+                email: m.email,
+                role: m.role.parse().unwrap_or(Role::Viewer),
+            })
         })
         .collect()
 }
@@ -288,7 +307,15 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         .await
     {
         Ok(resp) => {
-            let user_id = UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
+            let Ok(user_id) = UserId::parse_str(&resp.user_id) else {
+                return api_error(
+                    logic_tx,
+                    "InviteToDocument",
+                    502,
+                    "the share landed, but the server named the member with a malformed identifier"
+                        .into(),
+                );
+            };
             let _ = event_tx.send(SyncEvent::InviteSent {
                 id: p.id,
                 document_id: p.document_id,
@@ -345,7 +372,17 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
         Err(e) => return api_error(logic_tx, "FetchInviteeKey", 500, e),
     };
     let fingerprint = ambre_crypto::fingerprint(&exchange_pub_key);
-    let user_id = UserId::parse_str(&invitee.id).unwrap_or_else(|_| UserId::new());
+    // The pin is filed under this id. An invented one would make the invitee
+    // new on every invitation, and a substituted key would read as a first
+    // contact (`CHROME-074`).
+    let Ok(user_id) = UserId::parse_str(&invitee.id) else {
+        return api_error(
+            logic_tx,
+            "FetchInviteeKey",
+            502,
+            "the server named the user with a malformed identifier".into(),
+        );
+    };
     let _ = event_tx.send(SyncEvent::InviteeKeyReady {
         id: p.id,
         document_id: p.document_id,
@@ -411,7 +448,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         }
     };
 
-    let keys = rotate_entries_for(&p.exchange_key, &new_doc_key, &members);
+    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &members);
     let rotate_url = format!(
         "{}://{}/api/documents/{}/rotate-key",
         p.url_scheme, p.api_base, p.document_id
@@ -434,6 +471,20 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         document_id: p.document_id,
         new_doc_key,
     });
+    // The rotation went through for everyone else. A member it could not
+    // re-wrap for has lost the document; the user who revoked is told who
+    // (`SYNC-043`).
+    if !unwrapped.is_empty() {
+        api_error(
+            logic_tx,
+            "RevokeFromDocument",
+            422,
+            format!(
+                "the new key could not be shared with {}: their key is unreadable",
+                unwrapped.join(", ")
+            ),
+        );
+    }
 }
 
 /// Inputs for [`list_members_task`].
@@ -573,7 +624,7 @@ mod tests {
     }
 
     #[test]
-    fn rotate_entries_cover_valid_members_and_skip_malformed() {
+    fn rotate_entries_cover_valid_members_and_report_malformed() {
         let (my_xk, my_pub_hex) = keypair(1);
         let my_pub: [u8; 32] = decode_exchange_pubkey(&my_pub_hex).unwrap();
         let (a_xk, a_pub) = keypair(2);
@@ -585,9 +636,11 @@ mod tests {
             member("22222222-2222-2222-2222-222222222222", "garbage"),
             member("33333333-3333-3333-3333-333333333333", &b_pub),
         ];
-        let entries = rotate_entries_for(&my_xk, &new_key, &members);
+        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, &members);
 
-        // The malformed member is dropped; the two valid ones are wrapped.
+        // The malformed member is returned for the report; the two valid ones
+        // are wrapped (`SYNC-043`).
+        assert_eq!(unwrapped.len(), 1);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].user_id, "11111111-1111-1111-1111-111111111111");
         assert_eq!(entries[1].user_id, "33333333-3333-3333-3333-333333333333");
@@ -596,17 +649,27 @@ mod tests {
     }
 
     #[test]
-    fn map_members_parses_roles_and_falls_back() {
+    fn map_members_parses_roles_and_drops_invented_ids() {
         let entries = vec![member("44444444-4444-4444-4444-444444444444", "ab"), {
             let mut m = member("not-a-uuid", "ab");
             m.role = "bogus".into();
             m
         }];
         let mapped = map_members(entries);
-        assert_eq!(mapped.len(), 2);
+        // An unparsable id is left out, never replaced by an invented one
+        // (`SYNC-038`).
+        assert_eq!(mapped.len(), 1);
         assert_eq!(mapped[0].role, Role::Editor);
-        // Unknown role -> viewer; unparsable id -> a fresh (non-nil) id.
-        assert_eq!(mapped[1].role, Role::Viewer);
+        let bogus_role = map_members(vec![{
+            let mut m = member("55555555-5555-5555-5555-555555555555", "ab");
+            m.role = "bogus".into();
+            m
+        }]);
+        assert_eq!(
+            bogus_role[0].role,
+            Role::Viewer,
+            "an unknown role reads viewer"
+        );
     }
 
     // -- Orchestration tasks (Tier 2): driven natively against a fake transport.
@@ -908,6 +971,61 @@ mod tests {
                 assert_eq!(body["keys"].as_array().unwrap().len(), 1);
             }
             other => panic!("expected rotate POST, got {other:?}"),
+        }
+    }
+
+    /// A malformed identifier from the server stops the key verification: no
+    /// key is pinned under an invented id (`CHROME-074`).
+    #[tokio::test]
+    async fn fetch_invitee_key_refuses_a_malformed_id() {
+        let (_invitee_xk, invitee_pub_hex) = keypair(2);
+        let mut json = user_search_json("invitee@test.local", &invitee_pub_hex);
+        json["users"][0]["id"] = serde_json::json!("not-a-uuid");
+        let http = FakeHttp::new(vec![Ok(json)]);
+        let (etx, erx, sink, lrx) = channels();
+        fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no key to pin");
+        assert!(matches!(
+            lrx.try_recv().expect("ApiError"),
+            LogicEvent::ApiError { code: 502, .. }
+        ));
+    }
+
+    /// A member the rotation cannot re-wrap for is reported by name, after the
+    /// rotation went through for the others (`SYNC-043`).
+    #[tokio::test]
+    async fn revoke_reports_a_member_it_could_not_rewrap_for() {
+        let (my_xk, _) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "status": "revoked" })),
+            Ok(serde_json::json!({ "members": [
+                {
+                    "user_id": "11111111-1111-1111-1111-111111111111",
+                    "display_name": "A", "email": "a@test.local",
+                    "signing_pub_key": "00", "exchange_pub_key": a_pub,
+                    "doc_key_enc": "", "role": "editor",
+                },
+                {
+                    "user_id": "22222222-2222-2222-2222-222222222222",
+                    "display_name": "Broken", "email": "b@test.local",
+                    "signing_pub_key": "00", "exchange_pub_key": "garbage",
+                    "doc_key_enc": "", "role": "editor",
+                },
+            ] })),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv().expect("RevocationComplete"),
+            SyncEvent::RevocationComplete { .. }
+        ));
+        match lrx.try_recv().expect("the skipped member is reported") {
+            LogicEvent::ApiError { message, .. } => {
+                assert!(message.contains("Broken"), "{message}")
+            }
+            other => panic!("unexpected: {other:?}"),
         }
     }
 

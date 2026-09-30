@@ -83,8 +83,7 @@ pub async fn dev_login(
         db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
 
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-    let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)
-        .unwrap_or(ambre_core::PublicKey::from_array([0u8; 32]));
+    let signing_pubkey = session_signing_key(&user.signing_pubkey)?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
@@ -96,6 +95,15 @@ pub async fn dev_login(
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,
     }))
+}
+
+/// The signing key a session is minted under, read from the stored row.
+///
+/// A stored key that does not parse is refused rather than replaced. A fallback
+/// key would mint a session every account in that state shares (`SRV-027`).
+fn session_signing_key(stored: &[u8]) -> Result<ambre_core::PublicKey, AppError> {
+    ambre_core::PublicKey::from_slice(stored)
+        .map_err(|e| AppError::Internal(format!("stored signing key does not parse: {e}")))
 }
 
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
@@ -222,8 +230,7 @@ pub async fn oidc_callback(
             .await?;
 
     let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-    let signing_pubkey = ambre_core::PublicKey::from_slice(&user.signing_pubkey)
-        .unwrap_or(ambre_core::PublicKey::from_array([0u8; 32]));
+    let signing_pubkey = session_signing_key(&user.signing_pubkey)?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
@@ -237,4 +244,22 @@ pub async fn oidc_callback(
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stored_key_that_does_not_parse_mints_no_session() {
+        assert!(matches!(
+            session_signing_key(&[3u8; 31]),
+            Err(AppError::Internal(_))
+        ));
+        assert!(session_signing_key(&[]).is_err());
+        assert_eq!(
+            session_signing_key(&[3u8; 32]).unwrap(),
+            ambre_core::PublicKey::from_array([3u8; 32])
+        );
+    }
 }

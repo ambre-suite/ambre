@@ -345,29 +345,24 @@ pub struct GetDocumentResponse {
 
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
-    auth::OptionalAuthSession(auth): auth::OptionalAuthSession,
+    auth: auth::AuthSession,
     Path(document_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
+    // The extractor refuses an anonymous caller before the register is read, so
+    // no query runs on behalf of nobody (`SRV-018`).
     let doc_id = parse_doc_id(&document_id)?;
     let doc = db::get_document(&state.db, &doc_id)
         .await?
         .ok_or(AppError::NotFound {
             resource: "document",
         })?;
-    // Membership (role + wrapped doc key) is only resolved for an authenticated
-    // caller; an anonymous request gets the public routing metadata only.
-    let mem = match &auth {
-        Some(s) => db::get_document_member(&state.db, &doc_id, &s.user_id).await?,
-        None => None,
-    };
+    let mem = db::get_document_member(&state.db, &doc_id, &auth.user_id).await?;
     // Non-members get nothing: leaking `owner_id`/`doc_type` (and even the
     // document's existence) to an arbitrary caller who holds only the UUID is an
     // unnecessary metadata disclosure. The owner keeps access even without a
     // `document_members` row (they may have been the creator pre-membership).
-    let is_owner = auth
-        .as_ref()
-        .is_some_and(|s| s.user_id.as_uuid().as_bytes() == doc.owner_id.as_bytes());
+    let is_owner = auth.user_id.as_uuid().as_bytes() == doc.owner_id.as_bytes();
     if mem.is_none() && !is_owner {
         return Err(AppError::NotFound {
             resource: "document",
@@ -433,6 +428,13 @@ pub async fn delete_document(
     if m.role != "owner" {
         return Err(AppError::Forbidden);
     }
+    // The objects and the relay state go first, the rows last. A purge that
+    // fails leaves the document in place, so the owner can delete it again.
+    // Forgetting the rows first would strand what the purge missed, with
+    // nothing left pointing at it (`SRV-057`, `SRV-017`).
+    let prefix = crate::s3::format_s3_document_prefix(&state.config.s3_env_prefix, &doc_id);
+    crate::s3::delete_prefix(&state.s3, &state.s3_bucket, &prefix).await?;
+    redis_ops::purge_document_state(&state.redis, &doc_id).await?;
     db::delete_document(&state.db, &doc_id).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
     Ok(axum::Json(serde_json::json!({"status":"deleted"})))

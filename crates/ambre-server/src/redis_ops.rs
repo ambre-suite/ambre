@@ -45,8 +45,9 @@ return redis.call('INCR', KEYS[2])
 /// Validates a client's logical clock and assigns a global sequence number.
 ///
 /// Executes `CLOCK_AND_SEQ_LUA` atomically in Redis. Returns the assigned
-/// global `seq` if the clock is exactly `last_clock + 1`, otherwise returns
-/// `AppError::Redis` with a `CLOCK_MISMATCH` detail.
+/// global `seq` if the clock is exactly `last_clock + 1`. A refused clock is the
+/// typed [`AppError::ClockMismatch`], carrying the clock the relay expected and
+/// the one it received (`SRV-037`); any other failure is the store's.
 pub async fn verify_clock_and_assign_seq(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -63,9 +64,29 @@ pub async fn verify_clock_and_assign_seq(
             [pub_key_hex, &clock.to_string()],
         )
         .await
-        .map_err(|e| AppError::Redis(format!("clock validation failed: {e}")))?;
+        .map_err(|e| clock_refusal(&e.to_string(), clock))?;
 
     Ok(result as u64)
+}
+
+/// Reads the script's `CLOCK_MISMATCH:<current>` refusal out of a store error.
+/// The expected clock is the one after the current; anything else stays a store
+/// failure.
+fn clock_refusal(error: &str, got: u64) -> AppError {
+    let current = error.split_once("CLOCK_MISMATCH:").and_then(|(_, rest)| {
+        let digits = rest.trim_start();
+        let end = digits
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(digits.len());
+        digits[..end].parse::<u64>().ok()
+    });
+    match current {
+        Some(current) => AppError::ClockMismatch {
+            expected: current + 1,
+            got,
+        },
+        None => AppError::Redis(format!("clock validation failed: {error}")),
+    }
 }
 
 /// Reseeds a cold Redis clock/seq state to the durable high-water marks, using
@@ -544,6 +565,47 @@ pub async fn doc_presence_remove(
     Ok(())
 }
 
+/// Removes every key the relay holds for a deleted document (`SRV-017`). That
+/// is the sequence counter, the per-author clock hash, the pending list and
+/// its dirty marker, the presence hash and the dead-letter list. One script, so
+/// no reader sees a half-purged document.
+pub async fn purge_document_state(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<(), AppError> {
+    const LUA: &str = "redis.call('SREM', KEYS[6], KEYS[3]) return redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5])";
+    let keys = document_state_keys(document_id);
+    let _: i64 = redis
+        .eval(
+            LUA,
+            [
+                keys[0].as_str(),
+                keys[1].as_str(),
+                keys[2].as_str(),
+                keys[3].as_str(),
+                keys[4].as_str(),
+                FLUSH_DIRTY_SET,
+            ],
+            Vec::<String>::new(),
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
+    Ok(())
+}
+
+/// The keys the relay holds for one document, in the order
+/// [`purge_document_state`] passes them: seq, clocks, pending, presence,
+/// dead-letter.
+pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 5] {
+    [
+        format!("doc:{document_id}:seq"),
+        format!("doc:{document_id}:clocks"),
+        format!("doc:{document_id}:pending"),
+        format!("doc:{document_id}:presence"),
+        format!("doc:{document_id}:deadletter"),
+    ]
+}
+
 /// Redis key for the per-document clock hash.
 #[allow(dead_code)]
 pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
@@ -622,6 +684,23 @@ pub async fn oidc_state_take(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_script_refusal_becomes_the_typed_conflict() {
+        let err = clock_refusal("ERR Error running script: CLOCK_MISMATCH:4", 7);
+        assert!(
+            matches!(
+                err,
+                AppError::ClockMismatch {
+                    expected: 5,
+                    got: 7
+                }
+            ),
+            "{err:?}"
+        );
+        let err = clock_refusal("connection reset by peer", 7);
+        assert!(matches!(err, AppError::Redis(_)), "{err:?}");
+    }
 
     #[test]
     fn format_doc_clocks_key_contains_doc_id() {
@@ -704,7 +783,16 @@ mod lua_tests {
         let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 3)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Redis(_)));
+        assert!(
+            matches!(
+                err,
+                AppError::ClockMismatch {
+                    expected: 2,
+                    got: 3
+                }
+            ),
+            "{err:?}"
+        );
 
         let _ = redis
             .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])
@@ -725,7 +813,16 @@ mod lua_tests {
         let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, 1)
             .await
             .unwrap_err();
-        assert!(matches!(err, AppError::Redis(_)));
+        assert!(
+            matches!(
+                err,
+                AppError::ClockMismatch {
+                    expected: 2,
+                    got: 1
+                }
+            ),
+            "{err:?}"
+        );
 
         let _ = redis
             .del([format_doc_clocks_key(&doc_id), format!("doc:{doc_id}:seq")])

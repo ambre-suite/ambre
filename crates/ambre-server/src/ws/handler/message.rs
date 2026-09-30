@@ -4,6 +4,44 @@
 
 use super::*;
 
+/// Orders a replay page and keeps the run of deltas before the first one that
+/// could not be read. Returns that run and the unreadable seq, if any, so the
+/// page never carries a hole the caller cannot see (`SRV-041`).
+pub(crate) fn contiguous_prefix(
+    mut fetched: Vec<(u64, Option<ambre_protocol::SeqUpdate>)>,
+) -> (Vec<ambre_protocol::SeqUpdate>, Option<u64>) {
+    fetched.sort_by_key(|(seq, _)| *seq);
+    let mut prefix = Vec::with_capacity(fetched.len());
+    for (seq, update) in fetched {
+        match update {
+            Some(update) => prefix.push(update),
+            None => return (prefix, Some(seq)),
+        }
+    }
+    (prefix, None)
+}
+
+/// The frame an update refused at clock validation sends back.
+///
+/// A refused clock is a conflict the client acts on, so it carries the expected
+/// and the received clock (`SRV-037`). A store failure reaches the client as one
+/// generic message, and its name and text stay in the log (`SRV-081`, `SRV-020`).
+pub(crate) fn update_refusal(doc_id: &DocumentId, e: &AppError) -> WsServerMsg {
+    match e {
+        AppError::ClockMismatch { .. } => WsServerMsg::Error {
+            code: 409,
+            message: e.to_string(),
+        },
+        _ => {
+            tracing::error!("clock validation failed doc={doc_id}: {e}");
+            WsServerMsg::Error {
+                code: 500,
+                message: "Internal server error".into(),
+            }
+        }
+    }
+}
+
 pub(crate) async fn handle_subscribe(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
@@ -209,11 +247,9 @@ pub(crate) async fn handle_update(
                 s
             }
             Err(e) => {
-                let err = encode_server_msg(&WsServerMsg::Error {
-                    code: 409,
-                    message: e.to_string(),
-                });
-                let _ = outbound_tx.send(err).await;
+                let _ = outbound_tx
+                    .send(encode_server_msg(&update_refusal(&doc_id, &e)))
+                    .await;
                 return;
             }
         };
@@ -440,7 +476,8 @@ pub(crate) async fn handle_request_missing(
         // Rehydrate each indexed delta into the full sealed Update the client
         // needs to decrypt and verify. The bytes live in S3 once flushed, or in
         // the pending map until then; together they cover every seq. A delta we
-        // cannot locate or decode is skipped (logged), not fatal to the page.
+        // cannot locate or decode ends the replay at that seq, and the caller is
+        // told (`SRV-041`). A page with a hole in it is never sent.
         //
         // The fetches run CONCURRENTLY. A full replay (no snapshot upload yet)
         // pulls every delta since genesis. A sequential `.await` per object
@@ -460,34 +497,40 @@ pub(crate) async fn handle_request_missing(
                     };
                 let Some(wire) = wire else {
                     tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
-                    return None;
+                    return (seq, None);
                 };
                 match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
-                    Ok(update) => Some(ambre_protocol::SeqUpdate {
-                        seq: ambre_protocol::messages::Seq(seq),
-                        update,
-                    }),
+                    Ok(update) => (
+                        seq,
+                        Some(ambre_protocol::SeqUpdate {
+                            seq: ambre_protocol::messages::Seq(seq),
+                            update,
+                        }),
+                    ),
                     Err(e) => {
                         tracing::error!(seq, error = %e, "replay: Update decode failed");
-                        None
+                        (seq, None)
                     }
                 }
             }
         });
 
-        let mut seq_updates: Vec<ambre_protocol::SeqUpdate> =
-            futures_util::future::join_all(fetches)
-                .await
-                .into_iter()
-                .flatten()
-                .collect();
-        seq_updates.sort_by_key(|u| u.seq.0);
+        let fetched = futures_util::future::join_all(fetches).await;
+        let (seq_updates, unreadable) = contiguous_prefix(fetched);
 
         let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
             document_id,
             updates: seq_updates,
         });
         if outbound_tx.send(msg).await.is_err() {
+            return;
+        }
+        if let Some(seq) = unreadable {
+            let msg = encode_server_msg(&WsServerMsg::Error {
+                code: 503,
+                message: format!("replay incomplete: delta {seq} could not be read, retry later"),
+            });
+            let _ = outbound_tx.send(msg).await;
             return;
         }
 
@@ -1505,5 +1548,82 @@ mod ed25519_tests {
             signature: Signature([0u8; 64]),
         };
         assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+
+    fn seq_update(seq: u64) -> ambre_protocol::SeqUpdate {
+        use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Seq, Signature};
+        ambre_protocol::SeqUpdate {
+            seq: Seq(seq),
+            update: ambre_protocol::Update {
+                ciphertext: Ciphertext(vec![seq as u8]),
+                nonce: Nonce([0u8; 24]),
+                public_data: ambre_protocol::public_data::UpdatePublicData {
+                    document_id: DocumentId::new(),
+                    pub_key: ambre_core::PublicKey::from_array([1u8; 32]),
+                    snapshot_id: ambre_core::SnapshotId::from_bytes([0u8; 16]),
+                    clock: Clock(seq),
+                },
+                commitment_tag: CommitmentTag([0u8; 32]),
+                signature: Signature([0u8; 64]),
+            },
+        }
+    }
+
+    #[test]
+    fn a_replay_page_stops_at_the_first_unreadable_delta() {
+        let fetched = vec![
+            (4, Some(seq_update(4))),
+            (2, Some(seq_update(2))),
+            (3, None),
+            (1, Some(seq_update(1))),
+        ];
+        let (page, unreadable) = contiguous_prefix(fetched);
+        let seqs: Vec<u64> = page.iter().map(|u| u.seq.0).collect();
+        assert_eq!(seqs, [1, 2], "seq 4 is held back behind the hole at 3");
+        assert_eq!(unreadable, Some(3));
+
+        let (page, unreadable) =
+            contiguous_prefix(vec![(2, Some(seq_update(2))), (1, Some(seq_update(1)))]);
+        assert_eq!(page.len(), 2);
+        assert_eq!(unreadable, None);
+    }
+
+    #[test]
+    fn a_refused_clock_carries_the_expected_and_the_received_value() {
+        let doc_id = DocumentId::new();
+        let refusal = update_refusal(
+            &doc_id,
+            &AppError::ClockMismatch {
+                expected: 5,
+                got: 9,
+            },
+        );
+        let WsServerMsg::Error { code, message } = refusal else {
+            panic!("expected an error frame");
+        };
+        assert_eq!(code, 409);
+        assert!(
+            message.contains("expected 5") && message.contains("got 9"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_store_failure_reaches_the_client_without_its_name_or_text() {
+        let doc_id = DocumentId::new();
+        let cause = AppError::Redis("clock validation failed: ERR connection refused".into());
+        let WsServerMsg::Error { code, message } = update_refusal(&doc_id, &cause) else {
+            panic!("expected an error frame");
+        };
+        assert_eq!(code, 500);
+        assert_eq!(message, "Internal server error");
+        for leaked in ["Redis", "redis", "refused", "clock validation"] {
+            assert!(!message.contains(leaked), "{message}");
+        }
     }
 }

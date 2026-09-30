@@ -65,6 +65,8 @@ pub enum PipelineError {
     Postcard,
     #[error("snapshot validation failed: {0}")]
     Validation(#[from] ambre_protocol::error::ValidationError),
+    #[error("the snapshot names another document")]
+    WrongDocument,
 }
 
 // -- Compression layer ---------------------------------------------------------
@@ -252,10 +254,28 @@ pub fn seal_snapshot(
     Ok(snapshot)
 }
 
+/// Decode a stored snapshot blob, the serialized [`Snapshot`] object storage
+/// holds, and open it for `document_id`. A snapshot sealed for another document
+/// is refused before any decryption.
+///
+/// # Errors
+///
+/// [`PipelineError::Postcard`] for bytes that are not a snapshot,
+/// [`PipelineError::WrongDocument`] for another document's, and every error of
+/// [`open_snapshot`].
+pub fn open_snapshot_blob(
+    blob: &[u8],
+    document_id: ambre_bus::DocumentId,
+    doc_key: &DocumentKey,
+) -> Result<Vec<u8>, PipelineError> {
+    let snapshot: Snapshot = postcard::from_bytes(blob).map_err(|_| PipelineError::Postcard)?;
+    if snapshot.public_data.document_id != document_id {
+        return Err(PipelineError::WrongDocument);
+    }
+    open_snapshot(&snapshot, doc_key)
+}
+
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
-// Used by the S3 snapshot-download path (not yet wired); kept symmetric with
-// `seal_snapshot` and covered by the round-trip test.
-#[allow(dead_code)]
 pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
     let aad = aad_of(&snapshot.public_data)?;
     let sealed = sealed_from(

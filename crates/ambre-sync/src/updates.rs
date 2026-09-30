@@ -83,14 +83,16 @@ impl SyncState {
             return;
         };
 
-        if doc_state.quarantine_len() >= QUARANTINE_ALERT {
-            let after_seq = doc_state.last_seq;
-            if self.ws_connected() {
-                self.ws_send(&WsClientMsg::RequestMissing {
-                    document_id,
-                    after_seq,
-                });
+        let ask = doc_state.quarantine_len() >= QUARANTINE_ALERT && !doc_state.gap_requested;
+        let after_seq = doc_state.last_seq;
+        if ask && self.ws_connected() {
+            if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                doc_state.gap_requested = true;
             }
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
         }
 
         let doc_state = self.documents.get_mut(&document_id).expect("doc present");
@@ -136,6 +138,90 @@ impl SyncState {
         self.release_quarantine(document_id, snapshot_id);
     }
 
+    /// Fetch a snapshot a peer announced, so its contents reach the Logic thread
+    /// before it counts as a known parent (`SYNC-030`). The answer comes back as
+    /// [`SyncEvent::SnapshotFetched`]. Off the wasm path there is no object
+    /// storage: the snapshot stays unknown, and its updates stay quarantined.
+    pub(crate) fn fetch_announced_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+    ) {
+        let Some(doc_state) = self.documents.get(&document_id) else {
+            tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
+            return;
+        };
+        if doc_state.known_snapshots.contains(&snapshot_id) {
+            // Our own upload, or one already applied.
+            return;
+        }
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::info!(
+                "Sync: snapshot {snapshot_id:?} announced, no object storage (test path)"
+            );
+            return;
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let dl_url = format!(
+                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url"
+            );
+            let body = http::SnapshotDownloadUrlRequest {
+                snapshot_id: snapshot_id.to_string(),
+            };
+            let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
+                &dl_url, &body, auth,
+            )
+            .await
+            {
+                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
+                Err(_) => None,
+            };
+            let _ = tx.send(SyncEvent::SnapshotFetched {
+                document_id,
+                snapshot_id,
+                blob,
+            });
+        });
+    }
+
+    /// Apply a fetched snapshot: deliver its contents to the Logic thread, then
+    /// register it as known and release what waited on it (`SYNC-030`). A
+    /// snapshot that did not arrive, or does not open, is reported and stays
+    /// unknown; the quarantine's own request for the missing history recovers.
+    pub(crate) fn adopt_fetched_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        blob: Option<Vec<u8>>,
+    ) {
+        let Some(doc_state) = self.documents.get(&document_id) else {
+            return;
+        };
+        let opened = match blob {
+            Some(blob) => doc_state
+                .open_snapshot_blob(&blob)
+                .map_err(|e| e.to_string()),
+            None => Err("the snapshot could not be downloaded".to_owned()),
+        };
+        match opened {
+            Ok(payload) => {
+                self.send_to_logic(LogicEvent::RemoteSnapshot {
+                    document_id,
+                    payload,
+                });
+                self.snapshot_known(document_id, snapshot_id);
+            }
+            Err(message) => self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::DecryptFailed,
+                message,
+            }),
+        }
+    }
+
     /// Decrypt and deliver every update quarantined under `snapshot_id`, oldest
     /// `clock` first.
     pub(crate) fn release_quarantine(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
@@ -149,6 +235,12 @@ impl SyncState {
                 .unwrap_or_default()
         };
         pending.sort_by_key(|u| u.public_data.clock.0);
+        if let Some(doc_state) = self.documents.get_mut(&document_id)
+            && doc_state.quarantine_len() < QUARANTINE_ALERT
+        {
+            // The gap closed: a later one asks again (`SYNC-031`).
+            doc_state.gap_requested = false;
+        }
 
         let results: Vec<Result<Vec<u8>, pipeline::PipelineError>> = {
             let Some(doc_state) = self.documents.get(&document_id) else {
@@ -209,15 +301,12 @@ impl SyncState {
                     format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
-                let (doc_key, server_created, signing_keys, role) = match http::get_json_opt_auth::<
-                    http::MembersResponse,
-                >(
-                    &members_url,
-                    auth.clone(),
-                )
-                .await
-                {
-                    Ok(Some(resp)) => {
+                let answer = MembersAnswer::classify(
+                    http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
+                        .await,
+                );
+                let (doc_key, server_created, signing_keys, role) = match answer {
+                    MembersAnswer::Exists(resp) => {
                         // Our own role rides the same response (`architecture`).
                         // An absent or unparseable row means we cannot establish
                         // write access. Fall back to the safest client-side
@@ -267,13 +356,22 @@ impl SyncState {
                             }
                         }
                     }
-                    // Not found, or a transient error: treat as local-only.
-                    // A transient error simply means no remote history this
-                    // open; the doc still works locally and reconciles later.
-                    // No members response means no directory: a local-only doc
-                    // has no peers to resolve presence for anyway, and its creator
-                    // owns it.
-                    Ok(None) | Err(_) => (DocumentKey::generate(), false, Vec::new(), Role::Owner),
+                    // Not found: the document is local-only. No members response
+                    // means no directory: a local-only doc has no peers to resolve
+                    // presence for anyway, and its creator owns it.
+                    MembersAnswer::Absent => {
+                        (DocumentKey::generate(), false, Vec::new(), Role::Owner)
+                    }
+                    // A failed request says nothing about the document. Opening it
+                    // local-only would mint a throwaway key and edit a copy nobody
+                    // receives, so the open fails and the user may retry (`SYNC-040`).
+                    MembersAnswer::Unreachable(message) => {
+                        let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                            document_id: doc_id,
+                            message: format!("the server could not be reached: {message}"),
+                        });
+                        return;
+                    }
                 };
                 // Download the latest snapshot (when one exists) so the open
                 // seeds from compacted state instead of replaying every delta
@@ -732,9 +830,50 @@ impl SyncState {
     }
 }
 
+/// What the members request says about a document being opened (`SYNC-040`).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum MembersAnswer<T> {
+    /// The server holds the document, and its members ride the answer.
+    Exists(T),
+    /// The server answered that it holds no such document: the open is local-only.
+    Absent,
+    /// The request failed, so nothing is known about the document.
+    Unreachable(String),
+}
+
+impl<T> MembersAnswer<T> {
+    /// Classifies the outcome of the members request. Only a `404` is an absent
+    /// document; a transport or decoding failure is never read as one.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn classify(outcome: Result<Option<T>, String>) -> Self {
+        match outcome {
+            Ok(Some(members)) => Self::Exists(members),
+            Ok(None) => Self::Absent,
+            Err(message) => Self::Unreachable(message),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_members_request_is_not_an_absent_document() {
+        let failed = MembersAnswer::<()>::classify(Err("GET /members: timeout".into()));
+        assert_eq!(
+            failed,
+            MembersAnswer::Unreachable("GET /members: timeout".into())
+        );
+        assert_eq!(
+            MembersAnswer::<()>::classify(Ok(None)),
+            MembersAnswer::Absent
+        );
+        assert_eq!(
+            MembersAnswer::classify(Ok(Some(7))),
+            MembersAnswer::Exists(7)
+        );
+    }
 
     /// A `SyncState` with one opened document, a controlled `doc_key` and a known
     /// signing key, plus the drainable Logic receiver and the document's known
@@ -774,6 +913,26 @@ mod tests {
             clock: Clock(clock),
         };
         pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
+    }
+
+    /// The blob object storage holds for a snapshot of `document_id`.
+    fn snapshot_blob(
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        payload: &[u8],
+        doc_key: &DocumentKey,
+        signing_key: &SigningKey,
+    ) -> Vec<u8> {
+        let public_data = SnapshotPublicData {
+            document_id,
+            pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
+            snapshot_id,
+            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_update_clocks: Vec::new(),
+        };
+        let snapshot =
+            pipeline::seal_snapshot(payload, public_data, doc_key, signing_key).expect("seal");
+        postcard::to_allocvec(&snapshot).expect("encode")
     }
 
     fn drain(rx: &ambre_bus::conduit::Receiver<LogicEvent>) -> Vec<LogicEvent> {
@@ -872,10 +1031,11 @@ mod tests {
         state.set_mock_ws(ws_tx);
         let snapshot_id = SnapshotId::new();
 
+        let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &_sk);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key,
-            snapshot_payload: Some(b"snap-blob".to_vec()),
+            snapshot_payload: Some(blob),
             snapshot_id,
             covered_seq: Seq(1500),
             doc_type: DocType::Trame,
@@ -993,15 +1153,17 @@ mod tests {
     /// 5-second empty-grid bug. The snapshot is still emitted at open.
     #[test]
     fn open_document_ready_deferred_to_initial_replay() {
-        let (mut state, rx, doc, key, _sk, _snap) = setup();
+        let (mut state, rx, doc, key, sk, _snap) = setup();
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
+        let snapshot_id = SnapshotId::new();
+        let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &sk);
 
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key,
-            snapshot_payload: Some(b"snap-blob".to_vec()),
-            snapshot_id: SnapshotId::new(),
+            snapshot_payload: Some(blob),
+            snapshot_id,
             covered_seq: Seq(0),
             doc_type: DocType::Trame,
             server_created: true,
@@ -1159,5 +1321,90 @@ mod tests {
         // No event_tx in this setup: the upload path is skipped, the current
         // snapshot id is unchanged (no SnapshotUploaded round-trip).
         assert_eq!(state.documents[&doc].current_snapshot_id, snap);
+    }
+
+    /// A snapshot a peer announced is not a known parent until its contents
+    /// reach the Logic thread (`SYNC-030`): the announcement alone releases
+    /// nothing.
+    #[test]
+    fn an_announced_snapshot_releases_nothing_until_fetched() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let announced = SnapshotId::new();
+        state.receive_update(Seq(1), make_update(doc, announced, 1, b"after", &key, &sk));
+        state.handle_ws_message(WsServerMsg::SnapshotAvailable {
+            document_id: doc,
+            snapshot_id: announced,
+        });
+        assert!(
+            drain(&rx).is_empty(),
+            "nothing delivered on the announcement"
+        );
+        assert!(!state.documents[&doc].known_snapshots.contains(&announced));
+
+        let blob = snapshot_blob(doc, announced, b"base", &key, &sk);
+        state.handle_sync_event(SyncEvent::SnapshotFetched {
+            document_id: doc,
+            snapshot_id: announced,
+            blob: Some(blob),
+        });
+        let events = drain(&rx);
+        assert!(
+            matches!(&events[..], [
+                LogicEvent::RemoteSnapshot { payload: base, .. },
+                LogicEvent::RemoteUpdate { payload: after, .. },
+            ] if base == b"base" && after == b"after"),
+            "the base reaches Logic before what rests on it: {events:?}"
+        );
+    }
+
+    /// A snapshot that does not open, or never arrived, stays unknown and is
+    /// reported (`SYNC-030`); a blob sealed for another document is refused.
+    #[test]
+    fn a_snapshot_that_does_not_open_stays_unknown() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let announced = SnapshotId::new();
+        let foreign = snapshot_blob(DocumentId::new(), announced, b"x", &key, &sk);
+        for blob in [None, Some(b"garbage".to_vec()), Some(foreign)] {
+            state.handle_sync_event(SyncEvent::SnapshotFetched {
+                document_id: doc,
+                snapshot_id: announced,
+                blob,
+            });
+        }
+        let events = drain(&rx);
+        assert_eq!(events.len(), 3);
+        assert!(
+            events
+                .iter()
+                .all(|e| matches!(e, LogicEvent::SyncWarning { .. }))
+        );
+        assert!(!state.documents[&doc].known_snapshots.contains(&announced));
+    }
+
+    /// The quarantine asks for the missing history once per gap, however many
+    /// arrivals follow past the threshold (`SYNC-031`).
+    #[test]
+    fn the_quarantine_asks_once_per_gap() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let parent = SnapshotId::new();
+        for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
+            state.receive_update(Seq(clock), make_update(doc, parent, clock, b"x", &key, &sk));
+        }
+        let asks = |rx: &ambre_bus::conduit::Receiver<Vec<u8>>| {
+            drain_ws(rx)
+                .iter()
+                .filter(|m| matches!(m, WsClientMsg::RequestMissing { .. }))
+                .count()
+        };
+        assert_eq!(asks(&ws_rx), 1, "one request for the gap");
+        // The gap closes; the next one asks again.
+        state.snapshot_known(doc, parent);
+        let other = SnapshotId::new();
+        for clock in 1..=(QUARANTINE_ALERT as u64) {
+            state.receive_update(Seq(clock), make_update(doc, other, clock, b"x", &key, &sk));
+        }
+        assert_eq!(asks(&ws_rx), 1, "one request for the next gap");
     }
 }

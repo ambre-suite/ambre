@@ -98,6 +98,11 @@ pub async fn media_download_url(
     if !s3::is_valid_content_hash(&req.content_hash) {
         return Err(AppError::BadRequest("invalid content_hash".into()));
     }
+    // A link is signed only for an object the media index records in this
+    // document, never for any well-formed address the caller supplies (`SRV-058`).
+    if !db::document_holds_media(&state.db, &doc_id, &req.content_hash).await? {
+        return Err(AppError::NotFound { resource: "media" });
+    }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
     let url = s3::generate_presigned_download_url(
         &state.s3,

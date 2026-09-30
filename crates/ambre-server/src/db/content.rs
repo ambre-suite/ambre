@@ -282,12 +282,13 @@ pub async fn insert_media(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*uploaded_by);
-    // Idempotent like `insert_update`. The `id` PK is the content hash. A
-    // retried `confirm` would otherwise raise a unique violation and surface as
-    // a 500. So would two clients confirming the same blob. The row is
-    // content-addressed, so a re-insert is a no-op.
+    // Idempotent like `insert_update`. The key is the document and the content
+    // hash together. A retried `confirm` would otherwise raise a unique
+    // violation and surface as a 500. So would two clients confirming the same
+    // blob. The row is content-addressed, so a re-insert is a no-op, and the
+    // same file in another document gets a row of its own (`SRV-058`).
     sqlx::query(
-        "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING"
+        "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (document_id, id) DO NOTHING"
     )
     .bind(content_hash)
     .bind(did)
@@ -298,6 +299,23 @@ pub async fn insert_media(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Whether the media index records `content_hash` in `document_id`.
+pub async fn document_holds_media(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    content_hash: &str,
+) -> Result<bool, AppError> {
+    let did = id_to_uuid(*document_id);
+    let held: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM media WHERE document_id = $1 AND id = $2)",
+    )
+    .bind(did)
+    .bind(content_hash)
+    .fetch_one(pool)
+    .await?;
+    Ok(held)
 }
 
 /// Snapshot compacted to be deleted (id + S3 key for cleanup).

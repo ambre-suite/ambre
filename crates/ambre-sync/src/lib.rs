@@ -336,6 +336,14 @@ enum SyncEvent {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
     },
+    /// A snapshot a peer announced was fetched, or could not be (`None`). Only
+    /// its contents reaching the Logic thread make it a known parent
+    /// (`SYNC-030`).
+    SnapshotFetched {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        blob: Option<Vec<u8>>,
+    },
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
     MediaDownloaded {
@@ -384,6 +392,10 @@ struct SyncDocumentState {
     /// that parent `snapshot_id`. Stored sealed; decrypted only on release.
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
     quarantine: HashMap<SnapshotId, Vec<Update>>,
+    /// The missing history was asked for this gap: the quarantine crossed the
+    /// soft threshold and has not dropped back under it since. One request per
+    /// gap, never one per arrival (`SYNC-031`).
+    gap_requested: bool,
     /// LRU cache of previous DocumentKeys (max 10). Used by
     /// [`open_update_fallback`] and [`open_ephemeral_fallback`] to decrypt
     /// messages sealed with a key that was rotated before the rotation
@@ -449,6 +461,7 @@ impl SyncDocumentState {
             last_seq: Seq(0),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
+            gap_requested: false,
             old_keys: Vec::new(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
@@ -544,6 +557,10 @@ impl SyncDocumentState {
 
     /// Decrypts an update with the active key, falling back to every key in the
     /// [`old_keys`] LRU cache.
+    fn open_snapshot_blob(&self, blob: &[u8]) -> Result<Vec<u8>, pipeline::PipelineError> {
+        pipeline::open_snapshot_blob(blob, self.document_id, &self.doc_key)
+    }
+
     fn open_update_fallback(
         &self,
         update: &ambre_protocol::Update,
@@ -686,8 +703,8 @@ impl SyncState {
             url_scheme,
             tokens: Rc::new(RefCell::new(tokens.map(
                 |(access_token, refresh_token, access_expires_in)| http::TokenPair {
-                    access_token,
-                    refresh_token,
+                    access_token: http::SecretToken::from(access_token),
+                    refresh_token: http::SecretToken::from(refresh_token),
                     access_expires_in,
                 },
             ))),

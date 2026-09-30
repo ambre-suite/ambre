@@ -270,9 +270,21 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
-    // H2 regression: a non-member (here an anonymous caller who only holds the
-    // UUID) must not receive `owner_id` / `doc_type` metadata. The route
-    // returns 404 instead of leaking the document's existence.
+    async fn get_document_status(app: &Router, auth: Option<&str>, doc_id: &str) -> StatusCode {
+        let mut req = Request::get(format!("/api/documents/{doc_id}"));
+        if let Some(auth) = auth {
+            req = req.header("authorization", auth);
+        }
+        app.clone()
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    // H2 regression: a non-member who holds the UUID must not receive
+    // `owner_id` / `doc_type` metadata. The route answers 404 instead of leaking
+    // the document's existence.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn get_document_hidden_from_non_member(pool: sqlx::PgPool) {
@@ -280,18 +292,95 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let auth = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &auth).await;
+        let stranger = setup_named(&app, "stranger@ambre.app", 0x51).await;
 
-        // Same document, fetched without any credentials: not a member, not the
-        // owner -> 404, not 200 with routing metadata.
-        let resp = app
-            .oneshot(
-                Request::get(format!("/api/documents/{doc_id}"))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            get_document_status(&app, Some(&stranger), &doc_id).await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    // `SRV-018`: an anonymous caller is refused before the register is read, so
+    // an existing document and an invented one draw the same 401.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn get_document_refuses_an_anonymous_caller(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let invented = uuid::Uuid::new_v4().to_string();
+
+        assert_eq!(
+            get_document_status(&app, None, &doc_id).await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            get_document_status(&app, None, &invented).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    /// The shipped `/api` router, nested exactly as `main` nests it, so a test
+    /// sees the paths a handler and the limiter see in production.
+    fn shipped_router(state: Arc<AppState>) -> Router {
+        Router::new()
+            .nest("/api", routes::api_router(Arc::clone(&state)))
+            .with_state(state)
+    }
+
+    // `SRV-022`: the provider route reaches its handler with the provider read
+    // from the path. An unconfigured provider draws the typed refusal, never the
+    // 500 a failed path extraction answered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_provider_route_reaches_its_provider(pool: sqlx::PgPool) {
+        let app = shipped_router(test_app_state(pool).await);
+        let peer = std::net::SocketAddr::from(([10, 22, 0, 1], 0));
+        for req in [
+            Request::get("/api/auth/gitlab/login")
+                .body(Body::empty())
+                .unwrap(),
+            Request::post("/api/auth/gitlab/callback")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"code":"c","state":"s"}"#))
+                .unwrap(),
+        ] {
+            let mut req = req;
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(peer));
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+            let body = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["error"], "UNKNOWN_PROVIDER", "{body}");
+        }
+    }
+
+    // `SRV-093`: a sign-in request counts against the sign-in tier through the
+    // nested router. The eleventh request from one peer inside the window is
+    // refused, where the ordinary tier would allow three hundred.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_sign_in_request_counts_against_the_sign_in_tier(pool: sqlx::PgPool) {
+        let app = shipped_router(test_app_state(pool).await);
+        // A peer address of its own, so no other test shares the window.
+        let salt = uuid::Uuid::new_v4().into_bytes();
+        let peer = std::net::SocketAddr::from(([10, 93, salt[0], salt[1]], 0));
+        let mut statuses = Vec::new();
+        for _ in 0..11 {
+            let mut req = Request::get("/api/auth/config")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(peer));
+            statuses.push(app.clone().oneshot(req).await.unwrap().status());
+        }
+        assert!(
+            statuses[..10].iter().all(|s| *s == StatusCode::OK),
+            "{statuses:?}"
+        );
+        assert_eq!(statuses[10], StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[sqlx::test]
@@ -323,7 +412,8 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn delete_document_only_by_owner(pool: sqlx::PgPool) {
-        let state = test_app_state(pool).await;
+        let stub = S3Stub::spawn([]).await;
+        let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
         let app = build_test_router(state.clone());
         let auth = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &auth).await;
@@ -338,6 +428,61 @@ mod handler_tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // `SRV-057`, `SRV-017`: deleting a document removes every object under its
+    // prefix and every key the relay holds for it. Another document's object and
+    // counter stay.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_deleted_document_leaves_nothing(pool: sqlx::PgPool) {
+        use rustis::commands::{GenericCommands, HashCommands, StringCommands};
+        let setup_state = test_app_state(pool.clone()).await;
+        let setup = build_test_router(setup_state);
+        let auth = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &auth).await;
+        let other_id = create_test_doc(&setup, &auth).await;
+        let env = Config::default().s3_env_prefix;
+        let object = |doc: &str, rest: &str| format!("{env}/documents/{doc}/{rest}");
+        let stub = S3Stub::spawn([
+            object(&doc_id, "snapshots/s1"),
+            object(&doc_id, "deltas/0000000001"),
+            object(&doc_id, "media/abc"),
+            object(&other_id, "deltas/0000000001"),
+        ])
+        .await;
+        let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
+        let app = build_test_router(state.clone());
+
+        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let other = ambre_core::DocumentId::parse_str(&other_id).unwrap();
+        let [seq, clocks, ..] = crate::redis_ops::document_state_keys(&doc);
+        let [other_seq, ..] = crate::redis_ops::document_state_keys(&other);
+        state.redis.set(&seq, 7).await.unwrap();
+        state.redis.hset(&clocks, [("aa", "3")]).await.unwrap();
+        state.redis.set(&other_seq, 4).await.unwrap();
+
+        let resp = app
+            .oneshot(
+                Request::delete(format!("/api/documents/{doc_id}"))
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        assert_eq!(stub.keys(), [object(&other_id, "deltas/0000000001")]);
+        let left: usize = state
+            .redis
+            .exists(crate::redis_ops::document_state_keys(&doc))
+            .await
+            .unwrap();
+        assert_eq!(left, 0, "no relay key survives the delete");
+        let kept: usize = state.redis.exists([&other_seq]).await.unwrap();
+        assert_eq!(kept, 1, "another document keeps its counter");
+        let _ = state.redis.del([&other_seq]).await;
     }
 
     #[sqlx::test]
@@ -867,7 +1012,7 @@ mod handler_tests {
     }
 
     /// Confirming the same media twice is idempotent. `insert_media` uses `ON
-    /// CONFLICT (id) DO NOTHING`. A retried confirm returns 200 both times,
+    /// CONFLICT (document_id, id) DO NOTHING`. A retried confirm returns 200 both times,
     /// instead of surfacing the PK unique violation as a 500. So does a
     /// second client registering the same content-addressed blob.
     #[sqlx::test]
@@ -898,6 +1043,172 @@ mod handler_tests {
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::OK);
         }
+    }
+
+    /// An S3 client with static credentials and a region. It presigns offline,
+    /// and it reaches `endpoint` when one is given.
+    fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
+        let mut conf = aws_sdk_s3::Config::builder()
+            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+            .region(aws_sdk_s3::config::Region::new("us-east-1"))
+            .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                "test-access",
+                "test-secret",
+                None,
+                None,
+                "test",
+            ))
+            .force_path_style(true);
+        if let Some(endpoint) = endpoint {
+            conf = conf.endpoint_url(endpoint);
+        }
+        aws_sdk_s3::Client::from_conf(conf.build())
+    }
+
+    /// Like [`test_app_state`], with the given S3 client.
+    async fn test_app_state_with_s3(pool: sqlx::PgPool, s3: aws_sdk_s3::Client) -> Arc<AppState> {
+        let base = test_app_state(pool).await;
+        Arc::new(AppState {
+            db: base.db.clone(),
+            redis: base.redis.clone(),
+            pubsub: base.pubsub.clone(),
+            s3,
+            s3_bucket: base.s3_bucket.clone(),
+            config: Arc::clone(&base.config),
+            jwt: Arc::clone(&base.jwt),
+            oidc_clients: Arc::clone(&base.oidc_clients),
+        })
+    }
+
+    async fn test_app_state_presigning(pool: sqlx::PgPool) -> Arc<AppState> {
+        test_app_state_with_s3(pool, offline_s3(None)).await
+    }
+
+    /// An in-process object store that answers the two calls a purge makes,
+    /// `ListObjectsV2` and `DeleteObjects`, over a set of keys.
+    struct S3Stub {
+        keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+        endpoint: String,
+    }
+
+    impl S3Stub {
+        async fn spawn(keys: impl IntoIterator<Item = String>) -> Self {
+            let keys = Arc::new(std::sync::Mutex::new(keys.into_iter().collect()));
+            let held = Arc::clone(&keys);
+            let app = Router::new().fallback(move |req: Request<Body>| {
+                let held = Arc::clone(&held);
+                async move { Self::answer(&held, req).await }
+            });
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            tokio::spawn(async move { axum::serve(listener, app).await });
+            Self { keys, endpoint }
+        }
+
+        async fn answer(
+            held: &std::sync::Mutex<std::collections::BTreeSet<String>>,
+            req: Request<Body>,
+        ) -> String {
+            let query = req.uri().query().unwrap_or("").to_string();
+            let method = req.method().clone();
+            let body = axum::body::to_bytes(req.into_body(), 1 << 20)
+                .await
+                .unwrap();
+            let body = String::from_utf8_lossy(&body);
+            let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
+            if method == axum::http::Method::POST && query.contains("delete") {
+                let mut held = held.lock().unwrap();
+                for part in body.split("<Key>").skip(1) {
+                    held.remove(part.split("</Key>").next().unwrap());
+                }
+                return format!("<DeleteResult {xmlns}></DeleteResult>");
+            }
+            let prefix = query
+                .split('&')
+                .find_map(|kv| kv.strip_prefix("prefix="))
+                .map(|p| p.replace("%2F", "/"))
+                .unwrap_or_default();
+            let contents: String = held
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|k| k.starts_with(&prefix))
+                .map(|k| format!("<Contents><Key>{k}</Key><Size>1</Size></Contents>"))
+                .collect();
+            format!(
+                "<ListBucketResult {xmlns}><Name>test-bucket</Name><Prefix>{prefix}</Prefix>\
+                 <IsTruncated>false</IsTruncated>{contents}</ListBucketResult>"
+            )
+        }
+
+        fn keys(&self) -> Vec<String> {
+            self.keys.lock().unwrap().iter().cloned().collect()
+        }
+    }
+
+    async fn post_json(
+        app: &Router,
+        auth: &str,
+        uri: String,
+        body: serde_json::Value,
+    ) -> StatusCode {
+        app.clone()
+            .oneshot(
+                Request::post(uri)
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    // `SRV-058`: a download link is signed only for an address the media index
+    // records in that document. The same file confirmed in a second document
+    // gets a row of its own there.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_download_link_names_an_object_the_document_holds(pool: sqlx::PgPool) {
+        let state = test_app_state_presigning(pool).await;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_a = create_test_doc(&setup, &owner).await;
+        let doc_b = create_test_doc(&setup, &owner).await;
+        let held = "c".repeat(64);
+        let never = "d".repeat(64);
+        let link = |doc: &str, hash: &str| {
+            (
+                format!("/api/documents/{doc}/media/download-url"),
+                serde_json::json!({ "content_hash": hash }),
+            )
+        };
+        let confirm = |doc: &str| {
+            (
+                format!("/api/documents/{doc}/media"),
+                serde_json::json!({ "content_hash": held, "mime_type": "image/png", "size_bytes": 7 }),
+            )
+        };
+
+        let (uri, body) = link(&doc_a, &held);
+        assert_eq!(
+            post_json(&app, &owner, uri, body).await,
+            StatusCode::NOT_FOUND
+        );
+
+        for doc in [&doc_a, &doc_b] {
+            let (uri, body) = confirm(doc);
+            assert_eq!(post_json(&app, &owner, uri, body).await, StatusCode::OK);
+            let (uri, body) = link(doc, &held);
+            assert_eq!(post_json(&app, &owner, uri, body).await, StatusCode::OK);
+        }
+        let (uri, body) = link(&doc_a, &never);
+        assert_eq!(
+            post_json(&app, &owner, uri, body).await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     /// A snapshot's `author_pubkey` is bound to the session identity (the token's
