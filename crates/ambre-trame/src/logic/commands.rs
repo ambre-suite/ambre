@@ -123,56 +123,7 @@ impl TrameState {
                 let indices = self.engine_indices();
                 self.engine.compute_all_dirty(&indices);
 
-                let mut cells = Vec::with_capacity(
-                    ((row_end - row_start + 1) * (col_end - col_start + 1)) as usize,
-                );
-
-                for row in row_start..=row_end {
-                    for col in col_start..=col_end {
-                        // A merge master carries its span; a covered cell renders
-                        // blank (swallowed by the master). Both flag `is_merged`.
-                        let merge_span = self
-                            .merges
-                            .get(&(row, col))
-                            .map(|&(end_row, end_col)| (end_col - col + 1, end_row - row + 1));
-                        let is_covered = self.covered.contains(&(row, col));
-                        let style = self.styles.get(&(row, col)).cloned().unwrap_or_default();
-                        let text = if is_covered {
-                            String::new()
-                        } else {
-                            // Apply the cell's number format to its computed value
-                            // (`trame-number-formats`): a `General` cell is verbatim.
-                            self.format_display(row, col, self.cell_text(row, col), &style)
-                        };
-                        cells.push(DisplayCell {
-                            row,
-                            col,
-                            text,
-                            raw: if is_covered {
-                                String::new()
-                            } else {
-                                // Reconstruct cross-sheet qualifiers from the
-                                // stable id to the display name (`trame-sheets`).
-                                self.formula_display(&self.cell_raw(row, col))
-                            },
-                            bold: self.bold.contains(&(row, col)),
-                            italic: self.italic.contains(&(row, col)),
-                            underline: style.underline,
-                            strikethrough: style.strikethrough,
-                            h_align: style.h_align,
-                            v_align: style.v_align,
-                            wrap: style.wrap,
-                            fg: style.fg,
-                            bg: style.bg,
-                            font: style.font.clone(),
-                            size: style.size,
-                            borders: style.borders,
-                            is_merged: merge_span.is_some() || is_covered,
-                            merge_span,
-                            is_filtered: self.hidden_rows.contains(&row),
-                        });
-                    }
-                }
+                let cells = self.pack_cells(row_start, row_end, col_start, col_end);
 
                 // Per-axis metric slices for the requested window: the UI feeds
                 // them straight into its variable-metric GridLayout
@@ -292,6 +243,8 @@ impl TrameState {
             // Parameterless siblings: geometry resolved against the tracked active
             // cell / active sheet (`trame-shared-filter`), like the sorts above.
             TrameCommand::RequestActiveColumnValues => self.active_column_values(),
+            TrameCommand::RequestSortRange => self.sort_range_query(),
+            TrameCommand::RequestColumnContent { col } => self.column_content(col),
             TrameCommand::RequestSelectionStats => self.selection_stats(),
             // Authoritative copy: serialize the tracked selection from the
             // document (never viewport-culled), replied via `Clipboard`.
@@ -443,5 +396,89 @@ impl TrameState {
             can_undo: self.undo_manager.can_undo(),
             can_redo: self.undo_manager.can_redo(),
         }
+    }
+}
+
+impl TrameState {
+    /// The display cells of the window `(row_start, col_start)`-`(row_end,
+    /// col_end)`, as the viewport serves them: computed text through its number
+    /// format, the raw text, and the resolved style. The formula cache must be
+    /// current.
+    pub(super) fn pack_cells(
+        &self,
+        row_start: u32,
+        row_end: u32,
+        col_start: u32,
+        col_end: u32,
+    ) -> Vec<DisplayCell> {
+        let mut cells =
+            Vec::with_capacity(((row_end - row_start + 1) * (col_end - col_start + 1)) as usize);
+
+        for row in row_start..=row_end {
+            for col in col_start..=col_end {
+                // A merge master carries its span; a covered cell renders
+                // blank (swallowed by the master). Both flag `is_merged`.
+                let merge_span = self
+                    .merges
+                    .get(&(row, col))
+                    .map(|&(end_row, end_col)| (end_col - col + 1, end_row - row + 1));
+                let is_covered = self.covered.contains(&(row, col));
+                let style = self.styles.get(&(row, col)).cloned().unwrap_or_default();
+                let text = if is_covered {
+                    String::new()
+                } else {
+                    // Apply the cell's number format to its computed value
+                    // (`trame-number-formats`): a `General` cell is verbatim.
+                    self.format_display(row, col, self.cell_text(row, col), &style)
+                };
+                cells.push(DisplayCell {
+                    row,
+                    col,
+                    text,
+                    raw: if is_covered {
+                        String::new()
+                    } else {
+                        // Reconstruct cross-sheet qualifiers from the
+                        // stable id to the display name (`trame-sheets`).
+                        self.formula_display(&self.cell_raw(row, col))
+                    },
+                    bold: self.bold.contains(&(row, col)),
+                    italic: self.italic.contains(&(row, col)),
+                    underline: style.underline,
+                    strikethrough: style.strikethrough,
+                    h_align: style.h_align,
+                    numeric: !is_covered && self.cell_is_numeric(row, col),
+                    v_align: style.v_align,
+                    wrap: style.wrap,
+                    fg: style.fg,
+                    bg: style.bg,
+                    font: style.font.clone(),
+                    size: style.size,
+                    borders: style.borders,
+                    is_merged: merge_span.is_some() || is_covered,
+                    merge_span,
+                    is_filtered: self.hidden_rows.contains(&row),
+                });
+            }
+        }
+        cells
+    }
+
+    /// Every non-empty cell of grid column `col`, all rows, for an auto-fit
+    /// (`TRAME-UI-128`). The viewport cache holds only the loaded window, so the
+    /// canvas cannot measure a column whose content lies outside it.
+    pub(super) fn column_content(&mut self, col: u32) -> TrameOutcome {
+        let indices = self.engine_indices();
+        self.engine.compute_all_dirty(&indices);
+        let rows = self.index.row_len() as u32;
+        let cells = if rows == 0 {
+            Vec::new()
+        } else {
+            self.pack_cells(0, rows - 1, col, col)
+                .into_iter()
+                .filter(|cell| !cell.text.is_empty())
+                .collect()
+        };
+        TrameOutcome::display_only(vec![TrameEvent::ColumnContent { col, cells }])
     }
 }

@@ -70,6 +70,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             | TrameEvent::DocumentRefused { .. }
             | TrameEvent::UndecodableRecords
             | TrameEvent::SortComplete
+            | TrameEvent::SortRange { .. }
+            | TrameEvent::ColumnContent { .. }
             | TrameEvent::FilterApplied { .. }
             | TrameEvent::ColumnValues { .. }
             | TrameEvent::SelectionStats { .. }
@@ -197,6 +199,8 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         | TrameEvent::UndoState { .. }
         | TrameEvent::SheetList { .. }
         | TrameEvent::ColumnValues { .. }
+        | TrameEvent::SortRange { .. }
+        | TrameEvent::ColumnContent { .. }
         | TrameEvent::SelectionStats { .. }
         | TrameEvent::FindResult { .. }
         | TrameEvent::FilterViewSaved { .. }

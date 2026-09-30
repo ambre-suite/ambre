@@ -352,3 +352,38 @@ fn grid_bottom_floors_at_header_on_tiny_canvas() {
     let state = TrameUiState::new(800.0, 10.0);
     assert_eq!(state.grid_bottom(), super::super::HEADER_HEIGHT);
 }
+
+/// A screen of narrow columns requests every column it shows
+/// (`TRAME-UI-144`): the window is walked from the real widths, not sized from
+/// the uniform one.
+#[test]
+fn scroll_requests_every_narrow_column_on_screen() {
+    let mut state = TrameUiState::new(800.0, 600.0);
+    for col in 0..200 {
+        state.col_widths.insert(col, 24.0);
+    }
+    for row in 0..200 {
+        state.row_heights.insert(row, 8.0);
+    }
+    let last_col_on_screen = state
+        .col_at_x(799.0)
+        .expect("a column under the right edge");
+    let last_row_on_screen = (0..200u32)
+        .take_while(|&r| state.row_y(r) < state.grid_bottom())
+        .last()
+        .expect("a row on screen");
+    let crate::TrameCommand::ScrollViewport {
+        col_end, row_end, ..
+    } = state.scroll_viewport_cmd()
+    else {
+        panic!("expected ScrollViewport")
+    };
+    assert!(
+        col_end >= last_col_on_screen,
+        "{col_end} < {last_col_on_screen}"
+    );
+    assert!(
+        row_end >= last_row_on_screen,
+        "{row_end} < {last_row_on_screen}"
+    );
+}

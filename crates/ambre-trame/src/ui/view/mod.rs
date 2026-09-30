@@ -259,11 +259,6 @@ pub struct TrameView {
     /// DOM `contextmenu` listener opens the menu. Browser-only.
     #[cfg(target_arch = "wasm32")]
     ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
-    /// Current selection rectangle `(r1, c1, r2, c2)`, published on every
-    /// selection change so the launcher can open the multi-column `SortDialog`
-    /// over the selection's columns (`trame-sort`). Browser-only.
-    #[cfg(target_arch = "wasm32")]
-    sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,
@@ -275,6 +270,10 @@ pub struct TrameView {
     formula_ref: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
     formula_text: RwSignal<String>,
+    /// The text the view last wrote into the formula bar. The user typed in it
+    /// exactly when the bar reads something else (`TRAME-UI-155`).
+    #[cfg(target_arch = "wasm32")]
+    formula_shown: String,
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
     /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu
@@ -311,6 +310,10 @@ pub struct TrameView {
     /// the next [`paint_content`](Self::paint_content), which owns the
     /// measurement.
     pending_autofit: Option<HeaderHit>,
+    /// A column auto-fit whose whole content the Logic thread returned
+    /// (`TRAME-UI-128`), awaiting the font context like
+    /// [`pending_autofit`](Self::pending_autofit).
+    pending_column_fit: Option<(u32, Vec<crate::DisplayCell>)>,
     /// In-progress autofill drag from the fill handle, or `None`
     /// (`trame-autofill`). Holds the source rectangle the drag started from and
     /// the source block granularity `(rows, cols)`. That is `(1, 1)` for a plain
@@ -405,9 +408,60 @@ mod interact;
 mod lifecycle;
 mod scroll;
 
+/// What the view does with a focused formula bar and no edit session.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) enum FormulaBarSync {
+    /// Nothing moved.
+    Idle,
+    /// The user typed: open an edit session seeded with what the bar holds.
+    OpenSession,
+    /// The cell changed under an untouched bar, a collaborator's write: show
+    /// the new value, and open nothing.
+    Refresh,
+}
+
+/// Decide from the bar's `input`, the text the view last `shown` in it, and
+/// the active cell's stored `seed`. Only a text the user typed opens a session
+/// (`TRAME-UI-155`). A stored value that moved under the bar is a
+/// collaborator's. The session it would open is one the user never started.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) fn formula_bar_sync(input: &str, shown: &str, seed: &str) -> FormulaBarSync {
+    if input != shown {
+        FormulaBarSync::OpenSession
+    } else if seed != shown {
+        FormulaBarSync::Refresh
+    } else {
+        FormulaBarSync::Idle
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only a text the user typed opens an edit session (`TRAME-UI-155`): a
+    /// collaborator's write under an untouched bar refreshes it and opens
+    /// nothing.
+    #[test]
+    fn only_a_typed_text_opens_an_edit_from_the_formula_bar() {
+        // The bar shows "old"; a peer rewrote the cell to "new".
+        assert_eq!(
+            formula_bar_sync("old", "old", "new"),
+            FormulaBarSync::Refresh
+        );
+        // The user typed a character.
+        assert_eq!(
+            formula_bar_sync("old5", "old", "old"),
+            FormulaBarSync::OpenSession
+        );
+        // The user typed while the peer wrote: the typing wins.
+        assert_eq!(
+            formula_bar_sync("old5", "old", "new"),
+            FormulaBarSync::OpenSession
+        );
+        assert_eq!(formula_bar_sync("old", "old", "old"), FormulaBarSync::Idle);
+    }
 
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {

@@ -23,8 +23,11 @@ pub(crate) fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
 pub(crate) fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
     use std::cmp::Ordering::Equal;
     // Type rank: lower sorts first.
+    // A NaN is not a number: it ranks with the errors, so the comparator stays
+    // a total order whatever the cell holds (`TRAME-181`).
     fn rank(v: &CellValue) -> u8 {
         match v {
+            CellValue::Number(n) if n.is_nan() => 3,
             CellValue::Number(_) => 0,
             CellValue::Text(_) => 1,
             CellValue::Boolean(_) => 2,
@@ -33,7 +36,9 @@ pub(crate) fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ord
         }
     }
     match (a, b) {
-        (CellValue::Number(x), CellValue::Number(y)) => x.partial_cmp(y).unwrap_or(Equal),
+        (CellValue::Number(x), CellValue::Number(y)) if !x.is_nan() && !y.is_nan() => {
+            x.partial_cmp(y).unwrap_or(Equal)
+        }
         (CellValue::Text(x), CellValue::Text(y)) => x.cmp(y),
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x.cmp(y),
         _ => rank(a).cmp(&rank(b)),
@@ -118,4 +123,58 @@ pub(crate) fn op_from_str(s: &str) -> Option<FilterOp> {
         "is_not_empty" => FilterOp::IsNotEmpty,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::formula::types::FormulaError;
+    use std::cmp::Ordering;
+
+    /// One value of every kind the comparator meets, a NaN among the numbers.
+    fn sample() -> Vec<CellValue> {
+        vec![
+            CellValue::Number(f64::NAN),
+            CellValue::Number(1.0),
+            CellValue::Number(2.0),
+            CellValue::Number(f64::NEG_INFINITY),
+            CellValue::Text("a".into()),
+            CellValue::Text("b".into()),
+            CellValue::Boolean(false),
+            CellValue::Boolean(true),
+            CellValue::Error(FormulaError::NumError),
+            CellValue::Error(FormulaError::BrokenRef),
+            CellValue::Empty,
+        ]
+    }
+
+    #[test]
+    fn comparator_is_a_total_order_with_nan() {
+        let values = sample();
+        for a in &values {
+            for b in &values {
+                assert_eq!(
+                    compare_cell_values(a, b),
+                    compare_cell_values(b, a).reverse(),
+                    "antisymmetry: {a:?} {b:?}"
+                );
+                for c in &values {
+                    let ab = compare_cell_values(a, b);
+                    let bc = compare_cell_values(b, c);
+                    if ab != Ordering::Greater && bc != Ordering::Greater {
+                        assert_ne!(
+                            compare_cell_values(a, c),
+                            Ordering::Greater,
+                            "transitivity: {a:?} {b:?} {c:?}"
+                        );
+                    }
+                }
+            }
+        }
+        // A NaN orders after every number, beside the errors.
+        assert_eq!(
+            compare_cell_values(&CellValue::Number(f64::NAN), &CellValue::Number(2.0)),
+            Ordering::Greater
+        );
+    }
 }

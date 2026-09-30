@@ -24,10 +24,10 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none | unheld -- the local guard is a refusal, held by `TRAME-163`, and two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-072` | `INV` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`; `ambre_trame::logic::tests::group1::multi_sheet_isolation_and_name_lookup` | none | verified |
-| `TRAME-078` | `INV` | Two sheets MUST NOT carry the same name. | this spec section 6 | none | fails -- nothing checks a name on a create or on a rename, and the strip names a new sheet after the count of tabs it shows, so four gestures (add, add, delete the first, add) put two identical labels in the strip with no second user in sight; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-078` | `INV` | Two sheets MUST NOT carry the same name. | this spec section 6 | `ambre_trame::logic::tests::group3::created_sheet_never_repeats_a_name`; `ambre_trame::logic::tests::group3::rename_to_a_taken_name_is_refused`; `ambre_trame::logic::tests::group3::concurrent_duplicate_names_read_apart` | none | verified |
 | `TRAME-079` | `OBS` | The tab strip MUST show every sheet of the document, in the document's order. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs`; `::first_scroll_viewport_hydrates_sheet_list_once` -- the order the Logic thread publishes; `ambre_trame::tests::chrome_ui::sheet_tabs_render_active_and_emit_intents` -- the strip drawing one tab per entry in that order, what joins the two halves being the launcher mirroring the list into the strip's signals | none | verified |
 | `TRAME-071` | `CONC` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | none | unheld -- the mint gives each peer its own id, the document's peer id and a per-session counter, and the order list appends rather than elects, but nothing goes red if that mint changes: no test drives two peers through a create, and the convergence property's op set carries no sheet command; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | none | fails -- when the stored order differs from the canonical one, the handler empties the list and pushes every id back, dropping the element identities a concurrent move needs to land against; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | `ambre_trame::logic::convergence_tests::concurrent_tab_moves_converge_on_one_order` | none | verified |
 | `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Add a sheet
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-160` | `PRE` | The name a rename is given MUST NOT be empty. | this spec section 4 | none | fails -- the strip drops a blank on both its paths, the Enter and the blur, and the engine writes whatever it is handed, so a rename reaching it from anywhere else leaves a tab with no label and no way to click it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-160` | `PRE` | The name a rename is given MUST NOT be empty. | this spec section 4 | `ambre_trame::logic::tests::group3::rename_to_a_blank_name_is_refused` | none | verified |
 | `TRAME-070` | `POST` | A sheet MUST keep its identity through a rename. | this spec section 3 | `ambre_trame::logic::tests::group3::rename_sheet_keeps_id_and_cells`; `::cross_sheet_reference_converges_across_peers_on_rename` | none | verified |
 | `TRAME-161` | `FRAME` | A rename MUST NOT move the sheet in the strip. | this spec section 4 | none | unheld -- the rename writes the name map alone and never the order list, and the canonical order falls back to the id, not to the label, so no sort can follow a name. No test reads the order after a rename; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-163` | `FAIL` | Deleting the last remaining sheet MUST be refused, with a message and no write. | this spec section 4 | `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` -- it asserts both the error event and the absence of an update | none | verified |
 | `TRAME-075` | `POST` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` | none | verified |
-| `TRAME-076` | `POST` | Deleting a sheet MUST leave none of its data in the document. | this spec section 6 | none | fails -- the cells, the styles, the merges and the two axes are dropped, and the column widths, the row heights, the filter and the hidden rows are not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-076` | `POST` | Deleting a sheet MUST leave none of its data in the document. | this spec section 6 | `ambre_trame::logic::tests::group3::deleted_sheet_leaves_no_data` | none | verified |
 | `TRAME-164` | `FRAME` | Deleting a sheet MUST NOT touch another sheet's data. | this spec section 5 | none | unheld -- every per-sheet container is named by the sheet id, so the drop cannot reach a neighbour's key, it does not reach four of its own either (`TRAME-076`), and no test reads a second sheet after a delete; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.6 Switch to another tab
@@ -72,11 +72,11 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 7 `verified`, 4 `failing`, 6 `untested`, 1 `unimplemented`. What holds is each
-  gesture on one peer, plus what an add leaves alone: the tab the reader is on. What is loose is
-  every frame around them, and the one invariant no single peer can reach. A distinct id between two
-  peers is an argument, not a mechanism (`TRAME-071`, `TRAME-077`). The local guard offered as
-  covering it is a refusal of its own (`TRAME-163`).
+* **Verification.** 11 `verified`, 6 `untested`, 1 `unimplemented`. What holds is each gesture on
+  one peer, plus what an add leaves alone: the tab the reader is on. What is loose is every frame
+  around them, and the one invariant no single peer can reach. A distinct id between two peers is an
+  argument, not a mechanism (`TRAME-071`, `TRAME-077`). The local guard offered as covering it is a
+  refusal of its own (`TRAME-163`).
 
 ---
 
@@ -164,13 +164,6 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A concurrent reorder may not converge** (`TRAME-074`). When the stored order does not match what
-  the strip shows, the handler clears the list and pushes every id back before moving. That is a
-  rebuild, not a move: the element identities a remote move would land against are gone. Nothing
-  drives two peers through it.
-* **A deleted sheet leaves part of itself behind** (`TRAME-076`). The cells, styles, merges and axes
-  go. The column widths, row heights, filter definition and hidden rows stay, keyed by a sheet no
-  longer in the document. Nothing reads them, and nothing removes them either.
 * **The last sheet holds locally and not between peers** (`TRAME-022`, `TRAME-077`). The rule for the
   concurrent case is decided -- deterministic re-insertion of the lowest-sorting id, identical on
   every peer -- and not implemented.
@@ -178,11 +171,6 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
   active sheet alone by design, and expects the surface to send `ActivateSheet` behind it. The
   launcher does not, so a user who clicks `+` gets a tab they have to click again. Nothing rules
   which of the two is wrong.
-* **Two sheets may share a name** (`TRAME-078`). Nothing checks, and one user is enough. The
-  launcher names a new sheet after the count of sheets. Adding two, deleting the first of them and
-  adding again yields the same name twice. A formula typed with that name resolves to whichever
-  the lookup yields first, and the two are indistinguishable in the strip.
 * **Switching a tab is a full engine reseed.** The engine pins the active sheet to its own index
   zero, so activating another one remaps every compiled reference. It is engine debt
-  (`ambre-spec-trame-engine.md`), and it is the direct cause of `TRAME-062`. A named range defined
-  without a sheet qualifier follows the reader from tab to tab.
+  (`ambre-spec-trame-engine.md`). A named range escapes it by storing its sheet id (`TRAME-062`).

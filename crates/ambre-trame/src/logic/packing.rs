@@ -44,10 +44,20 @@ pub(crate) fn apply_patch_to_style(s: &mut CellStyle, p: &StylePatch) {
     if let Some(d) = p.decimals {
         s.decimals = d;
     }
+    if let Some(step) = p.decimals_step
+        && let Some(default) = s.format.default_decimals()
+    {
+        let current = s.decimals.unwrap_or(default);
+        s.decimals = Some(current.saturating_add_signed(step).min(MAX_DECIMALS));
+    }
     // `p.border` (the selection-level edit: preset + stroke style + colour) is
     // resolved into per-cell edges by `set_cell_style`, which has the selection
     // geometry; not handled here.
 }
+
+/// The most decimal places a cell may carry: an `f64` holds no more significant
+/// digits than this.
+pub(crate) const MAX_DECIMALS: u8 = 15;
 
 /// Format a numeric `value` per a [`CellFormat`] and decimal count. Non-numeric
 /// cells keep their text (handled by the caller); this is the numeric branch.
@@ -77,11 +87,11 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
                 format!("{whole} {frac}/16")
             }
         }
-        // Date/Time MVP: render the day/second serial as an integer; a real
-        // calendar conversion lands with the date engine (Phase 2).
-        CellFormat::Date | CellFormat::Time => format!("{value}"),
-        // General / Text / Custom leave the value untouched here.
-        _ => format!("{value}"),
+        CellFormat::Date => super::number_format::format_date(value),
+        CellFormat::Time => super::number_format::format_time(value),
+        CellFormat::Custom(pattern) => super::number_format::format_custom(value, pattern),
+        // General and Text leave the value untouched.
+        CellFormat::General | CellFormat::Text => format!("{value}"),
     }
 }
 

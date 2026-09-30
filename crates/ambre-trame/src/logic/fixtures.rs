@@ -351,8 +351,8 @@ fn build_multi_sheet(state: &mut TrameState) {
         if name == "Data" {
             state.handle_command(TrameCommand::DefineName {
                 name: "readings".to_owned(),
-                // Sheet-qualified: an unqualified reference in a name definition
-                // resolves against the sheet at index 0, which is not this one.
+                // Qualified by display name: the definition is stored under the
+                // sheet's id, so it survives a rename (`TRAME-067`).
                 reference: "Data!A1:A8".to_owned(),
             });
             state.handle_command(TrameCommand::SetCellText {

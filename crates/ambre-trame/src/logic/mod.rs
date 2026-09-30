@@ -105,6 +105,15 @@ struct TrackedSelection {
     kind: SelectionKind,
 }
 
+/// Why a cell write was refused. Nothing of it reached the document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WriteRefusal {
+    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    BeyondCap,
+    /// The formula qualifies a sheet no tab carries (`TRAME-211`).
+    UnknownSheet(String),
+}
+
 /// Per-document state for a Trame (spreadsheet) document.
 ///
 /// One instance per open document, owned by the Logic thread's `DocState`
@@ -197,6 +206,12 @@ pub struct TrameState {
     /// Resolved named ranges: defined name -> target cell/range. Rebuilt from the
     /// `named_ranges` CRDT map by [`Self::rebuild_named`] on every reseed.
     named: HashMap<String, NameTarget>,
+    /// The cell writes refused since the last [`finish_cell_writes`], which
+    /// reports them to the user (`TRAME-211`, `TRAME-UI-164`). Every write path
+    /// ends there, so none of them can refuse in silence.
+    ///
+    /// [`finish_cell_writes`]: Self::finish_cell_writes
+    write_refusals: Vec<WriteRefusal>,
     /// Local undo/redo history (`trame-undo`). Subscribes to [`Self::doc`] and
     /// records one
     /// item per commit; each `TrameCommand` handler commits exactly once, so one
@@ -325,6 +340,7 @@ impl TrameState {
             sheet_id_to_u16: HashMap::new(),
             sheet_id_to_name: HashMap::new(),
             named: HashMap::new(),
+            write_refusals: Vec::new(),
             undo_manager,
             sheet_counter: 0,
             uid_counter: 0,
@@ -436,6 +452,7 @@ mod helpers;
 mod interop;
 mod merges;
 mod metrics;
+mod number_format;
 mod packing;
 /// Container naming, the packed style layout, and the workbook's persisted
 /// schema version (`ambre-spec-schema-version.md`). Public for the version half

@@ -20,8 +20,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none | fails -- on three formats. `render::content::cell_alignment` parses the text it is handed, and that text is already formatted (`TRAME-157`), so a currency, a percentage and a fraction stop parsing as numbers and align left; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none | fails -- the two copies of the parse read two different texts, `cell_alignment` the formatted text and `style_state_event` the computed value, so a percentage cell reports numeric to the toolbar and draws left in the grid; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` -- the `numeric` flag the pack hands `cell_alignment` | none | verified |
+| `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` -- the toolbar event against the pack | none | verified |
 | `TRAME-UI-095` | `OBS` | A cell that does not wrap MUST spill only over neighbours that are empty. | this spec section 3 | `ambre_trame::render::tests::spill_width_stops_at_first_non_empty_neighbour` -- over an occupied neighbour, an immediate one and the grid edge | none | verified |
 | `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none | unheld -- the three branches, left spills right, right spills left and centred both ways, are in `draw_cells_on`, and no test enters any of them; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none | unheld -- wrap excludes the cell from the spill branch and clips it to its own rect. The one test that draws a cell draws one that fits, so it reaches neither half; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -38,12 +38,11 @@ status values are normative in `ambre-spec-template.md`.
   measures it.
 * **Boundary.** none: the renderer paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 1 `verified`, 2 `failing`, 6 `untested`, 3 `unimplemented`. What holds is the
-  one rule extracted into a pure function of a layout and an emptiness predicate. What is loose is
-  everything else, inside `draw_cells_on`, where the render tests reach the drawing and read none of
-  its decisions back. The clip a too-wide text pushes is among them. The two alignment rows fail:
-  the renderer resolves the automatic alignment on the **formatted** text and the toolbar on the
-  **computed** value (section 5).
+* **Verification.** 3 `verified`, 6 `untested`, 3 `unimplemented`. What holds is the one rule
+  extracted into a pure function of a layout and an emptiness predicate. What is loose is everything
+  else, inside `draw_cells_on`, where the render tests reach the drawing and read none of its
+  decisions back. The clip a too-wide text pushes is among them. The two alignment rows hold: the
+  pack decides once, on the **computed** value, and the renderer and the toolbar read that answer.
 
 ---
 
@@ -161,11 +160,6 @@ heights. A zoomed grid is the same layout, not a different one.
 * **A number too wide for its column is spilled or cut like a label.** A spreadsheet shows a row of
   hashes instead, because a cut number reads as a smaller number. Trame has no such marker
   (`features/ambre-spec-trame-number-formats.md section 5`).
-* **The automatic alignment reads the formatted text, not the value** (`TRAME-UI-093`,
-  `TRAME-UI-094`). The Logic thread formats a cell before it packs it, so the renderer parses
-  `314.2%`, `3.14 EUR` or `3 2/16` and finds no number. A value the user reads as a number is drawn
-  left. The toolbar's copy of the parse reads the computed value instead and reports the same cell
-  as numeric. The alignment control shows right while the grid draws left.
 
   One parse read by both sides, on one text, is the fix. Which text is the open question, and
   `features/ambre-spec-trame-number-formats.md section 5` states the same split from the format's

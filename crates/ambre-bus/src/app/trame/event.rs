@@ -134,6 +134,16 @@ pub enum TrameEvent {
     /// clears a "sorting..." affordance. A no-op sort emits nothing.
     SortComplete,
 
+    /// The range a parameterless sort would order, replying to
+    /// [`RequestSortRange`](super::TrameCommand::RequestSortRange): `(r1,c1)`-`(r2,c2)`,
+    /// inclusive, corners ordered. The sort dialog opens over it (`TRAME-UI-101`).
+    SortRange { r1: u32, c1: u32, r2: u32, c2: u32 },
+
+    /// Every non-empty cell of grid column `col`, all rows, replying to
+    /// [`RequestColumnContent`](super::TrameCommand::RequestColumnContent). The
+    /// canvas measures them for an auto-fit (`TRAME-UI-128`).
+    ColumnContent { col: u32, cells: Vec<DisplayCell> },
+
     /// A local [`ApplyFilter`](super::TrameCommand::ApplyFilter) finished
     /// recomputing the hidden rows (`trame-shared-filter`).
     /// `hidden_row_count` is how many rows the filter hides. The accompanying
@@ -314,6 +324,11 @@ pub struct DisplayCell {
     pub strikethrough: bool,
     /// Horizontal text alignment.
     pub h_align: super::HAlign,
+    /// The cell's computed value is a number, before any format renders it.
+    /// `HAlign::Auto` aligns such a cell right. The Logic thread decides it
+    /// once, and the toolbar reads the same test (`TRAME-UI-093`, `TRAME-186`).
+    /// The formatted `text` of a currency or a fraction no longer parses as one.
+    pub numeric: bool,
     /// Vertical text alignment.
     pub v_align: super::VAlign,
     /// Wrap long text onto multiple lines inside the cell.

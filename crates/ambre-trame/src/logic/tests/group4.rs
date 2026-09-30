@@ -180,6 +180,90 @@ fn sort_selection_resolves_against_tracked_selection() {
     );
 }
 
+/// A sort leaves the active cell and the selection where they were: the rows
+/// move under them, as in the spreadsheets (`TRAME-183`). Nothing asks the UI to
+/// move its selection either.
+#[test]
+fn sort_keeps_active_cell_and_selection_in_place() {
+    let mut state = TrameState::new();
+    for (r, v) in ["3", "1", "2"].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r as u32,
+            col: 0,
+            text: v.to_string(),
+        });
+    }
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 1,
+        col: 0,
+        anchor_row: 2,
+        anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    let before = state.selection_rects();
+    let evts = state.handle_command(TrameCommand::SortSheetAsc);
+    assert!(evts.update.is_some(), "the rows did move");
+    assert_eq!(state.active, (1, 0));
+    assert_eq!(state.selection_rects(), before);
+    assert!(
+        !evts
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::SelectRange { .. })),
+        "the sort does not move the rendered selection"
+    );
+}
+
+/// The sort dialog opens over the range the sort orders (`TRAME-UI-101`). A
+/// whole-row band reaches Logic with no column extent, and the reply spans the
+/// used width, which is the rectangle `SortSelectionMulti` then orders.
+#[test]
+fn sort_range_query_spans_the_used_width_of_a_row_band() {
+    let mut state = TrameState::new();
+    for (r, (a, b, c)) in [("3", "c", "z"), ("1", "a", "x"), ("2", "b", "y")]
+        .iter()
+        .enumerate()
+    {
+        for (col, text) in [a, b, c].iter().enumerate() {
+            state.handle_command(TrameCommand::SetCellText {
+                row: r as u32,
+                col: col as u32,
+                text: text.to_string(),
+            });
+        }
+    }
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 2,
+        anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Rows,
+    });
+    let evts = state.handle_command(TrameCommand::RequestSortRange);
+    assert!(evts.update.is_none(), "a query writes nothing");
+    assert!(matches!(
+        &evts.display[..],
+        [TrameEvent::SortRange {
+            r1: 0,
+            c1: 0,
+            r2: 2,
+            c2: 2
+        }]
+    ));
+    // A key on the third column the dialog offered orders the rows by it.
+    state.handle_command(TrameCommand::SortSelectionMulti {
+        sort_keys: vec![ambre_bus::SortKey {
+            col: 2,
+            ascending: true,
+        }],
+        has_header: false,
+    });
+    assert_eq!(read_col(&mut state, 2, 2, 2), vec!["x", "y", "z"]);
+    assert_eq!(read_col(&mut state, 0, 2, 0), vec!["1", "2", "3"]);
+}
+
 /// The whole-sheet `SortSheetAsc` intent (whole-column selection, `trame-sort`)
 /// sorts the full used range by the active cell's column. Every row's other
 /// columns stay aligned, even the rows below the values reported by a partial

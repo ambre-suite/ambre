@@ -26,12 +26,17 @@ impl TrameState {
         col: u32,
         kind: FilterKind,
     ) -> TrameOutcome {
+        // A filter that cannot apply says so (`TRAME-FEAT-037`): the popover
+        // would otherwise close on a column that was never filtered.
         if sheet_id != self.active_sheet {
-            return TrameOutcome::display_only(vec![]);
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: "the filter applies to the sheet on screen only".to_owned(),
+            }]);
         }
         let Some(col_uid) = self.index.col_id(col as usize) else {
-            // Virtual column: no data to filter.
-            return TrameOutcome::display_only(vec![]);
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: "this column holds no data to filter".to_owned(),
+            }]);
         };
         // The sort keys read from the formula cache; make sure it is current.
         let indices = self.engine_indices();
@@ -72,30 +77,33 @@ impl TrameState {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
         let col_pos = self.index.col_pos(&col_uid).unwrap_or(col as usize);
-        let mut values: Vec<String> = (0..self.index.row_len())
+        let mut cells: Vec<CellValue> = (0..self.index.row_len())
             // Skip rows already hidden by an active filter (distinct *visible*
             // values, matching Google Sheets).
             .filter(|&pos| !self.hidden_rows.contains(&(pos as u32)))
             .filter_map(|pos| {
-                let v = self
+                match self
                     .engine
                     .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
-                    .unwrap_or(CellValue::Empty);
-                match v {
-                    CellValue::Empty => None,
-                    other => Some(other.to_display()),
+                {
+                    None | Some(CellValue::Empty) => None,
+                    Some(value) => Some(value),
                 }
             })
             .collect();
-        values.sort();
+        // Ordered as the column reads, numbers numerically, by the comparator
+        // a sort uses (`TRAME-FEAT-041`); a stable sort keeps equal texts
+        // together for the dedup.
+        cells.sort_by(compare_cell_values);
+        let mut values: Vec<String> = cells.iter().map(CellValue::to_display).collect();
         values.dedup();
         TrameOutcome::display_only(vec![TrameEvent::ColumnValues { col, values }])
     }
 
     /// Aggregate the tracked selection for the status bar (`trame-status-bar`).
-    /// Walks the selection rectangle (skipping filter-hidden rows, like
-    /// [`active_column_values`](Self::active_column_values)), pulling each cell's
-    /// evaluated value through the formula cache. `count` tallies non-empty cells;
+    /// Walks the selection rectangle, pulling each cell's evaluated value through
+    /// the formula cache. Rows a filter hides count, as they do in `SUM`, so the
+    /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`). `count` tallies non-empty cells;
     /// numeric cells additionally feed `count_num`/`sum`/`min`/`max`. A read-only
     /// query: no CRDT delta.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
@@ -110,9 +118,6 @@ impl TrameState {
         let mut max = f64::NEG_INFINITY;
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for (row, col) in self.selected_cells() {
-            if self.hidden_rows.contains(&row) {
-                continue;
-            }
             let v = self
                 .engine
                 .evaluated_value(self.active_cell_id(row, col))
@@ -184,37 +189,57 @@ impl TrameState {
     ///
     /// [`flush_delta`]: Self::flush_delta
     pub(super) fn recompute_active_filter(&mut self) {
-        let Some((col_uid, kind)) = self.load_active_filter() else {
+        let Some((col_uid, kind)) = self.stored_filter() else {
             return;
         };
-        self.write_filter_hidden(col_uid, &kind);
+        if self.index.col_pos(&col_uid).is_none() {
+            // The column is gone: the filter goes with it (`TRAME-FEAT-030`).
+            self.drop_filter();
+        } else {
+            self.write_filter_hidden(col_uid, &kind);
+        }
         self.doc.commit();
         self.rebuild_filter();
     }
 
-    /// Recompute and rewrite `filter_hidden_{sheet}` from scratch for the given
-    /// column/kind, returning the number of hidden rows. Clears the prior hidden
-    /// set first. Does not commit (the caller does).
+    /// Empty the filter definition and its hidden set, uncommitted.
+    pub(super) fn drop_filter(&self) {
+        clear_loro_map(&self.doc.get_map(filter_hidden_map_name(&self.active_sheet)));
+        clear_loro_map(&self.doc.get_map(filters_map_name(&self.active_sheet)));
+    }
+
+    /// Bring `filter_hidden_{sheet}` to the rows the filter hides on the given
+    /// column, returning how many. Only the rows whose mark changes are written,
+    /// so an edit that hides and shows nothing broadcasts nothing
+    /// (`TRAME-FEAT-036`). Does not commit (the caller does).
     pub(super) fn write_filter_hidden(&mut self, col_uid: Uid, kind: &FilterKind) -> u32 {
         let hidden = self.doc.get_map(filter_hidden_map_name(&self.active_sheet));
-        clear_loro_map(&hidden);
         let Some(col_pos) = self.index.col_pos(&col_uid) else {
+            clear_loro_map(&hidden);
             return 0; // column deleted since the filter was set
         };
-        let mut count = 0;
-        for pos in 0..self.index.row_len() {
-            let value = self
-                .engine
-                .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
-                .unwrap_or(CellValue::Empty);
-            if !filter_pass(kind, &value)
-                && let Some(uid) = self.index.row_id(pos)
-            {
-                let _ = hidden.insert(uid.to_key_part().as_str(), true);
-                count += 1;
-            }
+        let wanted: HashSet<String> = (0..self.index.row_len())
+            .filter(|&pos| {
+                let value = self
+                    .engine
+                    .evaluated_value(self.active_cell_id(pos as u32, col_pos as u32))
+                    .unwrap_or(CellValue::Empty);
+                !filter_pass(kind, &value)
+            })
+            .filter_map(|pos| self.index.row_id(pos))
+            .map(|uid| uid.to_key_part())
+            .collect();
+        let current: HashSet<String> = match hidden.get_value() {
+            LoroValue::Map(entries) => entries.keys().cloned().collect(),
+            _ => HashSet::new(),
+        };
+        for gone in current.difference(&wanted) {
+            let _ = hidden.delete(gone);
         }
-        count
+        for new in wanted.difference(&current) {
+            let _ = hidden.insert(new.as_str(), true);
+        }
+        wanted.len() as u32
     }
 
     /// Persist the active filter definition into `filters_{sheet}` as one whole
@@ -234,10 +259,18 @@ impl TrameState {
         let _ = filters.insert(FILTER_KEY, bytes);
     }
 
-    /// Read the active filter definition back from `filters_{sheet}`. Returns the
+    /// The active filter: the stored definition, when its column still exists
+    /// on the sheet. A filter never outlives the column it tests
+    /// (`TRAME-FEAT-030`), even before a peer's column delete is cleaned up.
+    pub(super) fn load_active_filter(&self) -> Option<(Uid, FilterKind)> {
+        self.stored_filter()
+            .filter(|(col_uid, _)| self.index.col_pos(col_uid).is_some())
+    }
+
+    /// Read the filter definition back from `filters_{sheet}`. Returns the
     /// filtered column's uid and the reconstructed [`FilterKind`], or `None` when
     /// no (parseable) filter is stored.
-    pub(super) fn load_active_filter(&self) -> Option<(Uid, FilterKind)> {
+    fn stored_filter(&self) -> Option<(Uid, FilterKind)> {
         let LoroValue::Map(filters) = self
             .doc
             .get_map(filters_map_name(&self.active_sheet))

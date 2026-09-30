@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::types::SheetQualifier;
 
 impl TrameState {
     /// Reset the positional formula engine and re-feed it from the active
@@ -86,17 +87,8 @@ impl TrameState {
     /// values never leave this client), so the exact ordering need not match
     /// peers -- only stability within this session matters.
     pub(super) fn rebuild_sheet_maps(&mut self) {
-        // Collect {id -> name} from the CRDT.
-        let mut entries: Vec<(String, String)> = Vec::new();
-        if let LoroValue::Map(sheets) = self.doc.get_map(SHEETS_MAP).get_value() {
-            for (id, name) in sheets.iter() {
-                let name = match name {
-                    LoroValue::String(s) => s.to_string(),
-                    _ => id.clone(),
-                };
-                entries.push((id.clone(), name));
-            }
-        }
+        // Collect {id -> name}, each name unique (`TRAME-078`).
+        let mut entries: Vec<(String, String)> = self.sheet_names().into_iter().collect();
         // Active sheet first (index 0), then the rest by id for determinism.
         entries.sort_by(|a, b| {
             let a_active = a.0 == self.active_sheet;
@@ -131,6 +123,10 @@ impl TrameState {
         };
         // Names cannot reference other names: resolve sheet qualifiers only.
         let no_names: HashMap<String, NameTarget> = HashMap::new();
+        // Resolved on first need. Reading the order list registers its root
+        // container in the snapshot, and a workbook with no legacy definition
+        // must not pay for it.
+        let mut legacy_sheet: Option<u16> = None;
         for (name, reference) in names.iter() {
             let LoroValue::String(reference) = reference else {
                 continue;
@@ -140,10 +136,28 @@ impl TrameState {
                 sheet_id_to_u16: &self.sheet_id_to_u16,
                 named: &no_names,
             };
-            // Unqualified references in a name definition default to the active
-            // sheet (index 0).
+            // `define_name` stores a qualified reference. An older build stored
+            // some unqualified. Such a definition binds to the first sheet of the
+            // strip, which every reader agrees on. It never binds to the sheet a
+            // reader is looking at (`TRAME-062`).
             let target = parse_formula(reference)
-                .and_then(|ast| resolve_refs(ast, 0, &ctx))
+                .and_then(|ast| {
+                    let default_sheet = match (&ast, legacy_sheet) {
+                        (Expr::SheetRef { .. }, _) => 0,
+                        (_, Some(sheet)) => sheet,
+                        (_, None) => {
+                            let sheet = self
+                                .sheet_order_ids()
+                                .first()
+                                .and_then(|id| self.sheet_id_to_u16.get(id))
+                                .copied()
+                                .unwrap_or(0);
+                            legacy_sheet = Some(sheet);
+                            sheet
+                        }
+                    };
+                    resolve_refs(ast, default_sheet, &ctx)
+                })
                 .ok()
                 .and_then(expr_to_name_target);
             if let Some(target) = target {
@@ -162,8 +176,32 @@ impl TrameState {
 
     /// Define or redefine a named range, persist it to the CRDT, and reseed so
     /// formulas using the name pick it up immediately.
+    ///
+    /// A name no formula can read is refused (`TRAME-155`). So is a definition
+    /// that is not a cell or range reference (`TRAME-069`). A refusal is said,
+    /// and writes nothing. The reference is stored in canonical form: see
+    /// [`canonical_name_reference`](Self::canonical_name_reference).
     pub(super) fn define_name(&mut self, name: &str, reference: &str) -> TrameOutcome {
-        let _ = self.doc.get_map(NAMED_RANGES_MAP).insert(name, reference);
+        // The grammar tries a bareword as a name last, after a function call, a
+        // reference and a boolean. `A1` or `TRUE` parse as something else, and
+        // `1TOTAL` does not parse. The parse is the one rule that decides.
+        let readable = matches!(parse_formula(name), Ok(Expr::Name(parsed)) if parsed == name);
+        if !readable {
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: format!(
+                    "\"{name}\" cannot be used as a name: a formula would not read it"
+                ),
+            }]);
+        }
+        let Some(stored) = self.canonical_name_reference(reference) else {
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: format!("\"{reference}\" is not a cell or range reference"),
+            }]);
+        };
+        let _ = self
+            .doc
+            .get_map(NAMED_RANGES_MAP)
+            .insert(name, stored.as_str());
         self.doc.commit();
         self.reseed_engine();
         let update = self.flush_delta();
@@ -172,6 +210,47 @@ impl TrameState {
             update,
             ephemeral: None,
         }
+    }
+
+    /// The stored form of a name's definition, or `None` when it is not a cell
+    /// or range reference on a sheet that exists. The qualifier is always a
+    /// stable sheet id. An unqualified reference takes the sheet the user is on
+    /// when defining it, so every reader resolves one target (`TRAME-062`). A
+    /// display name becomes its id, so a rename leaves the name resolving
+    /// (`TRAME-067`).
+    fn canonical_name_reference(&self, reference: &str) -> Option<String> {
+        let body = reference.trim().trim_start_matches('=');
+        let qualified = match parse_formula(body).ok()? {
+            bare @ (Expr::CellRef(_) | Expr::Range(_)) => Expr::SheetRef {
+                sheet: SheetQualifier::Id(self.active_sheet.clone()),
+                inner: Box::new(bare),
+            },
+            Expr::SheetRef { sheet, inner } => {
+                let sheet = match sheet {
+                    SheetQualifier::Name(name) => SheetQualifier::Id(
+                        self.sheet_name_to_u16
+                            .get(&name)
+                            .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                            .cloned()?,
+                    ),
+                    SheetQualifier::Id(id) => SheetQualifier::Id(id),
+                };
+                Expr::SheetRef { sheet, inner }
+            }
+            _ => return None,
+        };
+        // The target must resolve now: the qualifier names a live sheet, and the
+        // inner node is a reference and not, say, a nested name.
+        let no_names: HashMap<String, NameTarget> = HashMap::new();
+        let ctx = TrameCtx {
+            sheet_name_to_u16: &self.sheet_name_to_u16,
+            sheet_id_to_u16: &self.sheet_id_to_u16,
+            named: &no_names,
+        };
+        resolve_refs(qualified.clone(), 0, &ctx)
+            .ok()
+            .and_then(expr_to_name_target)?;
+        Some(render::render(&qualified))
     }
 
     /// Remove a named range and reseed. A no-op if the name is undefined.
@@ -195,6 +274,63 @@ impl TrameState {
     // Sheet lifecycle (create / rename / reorder / delete / activate) --
     // `trame-sheets`
     // -------------------------------------------------------------------------
+
+    /// Every sheet's name as the user reads it, keyed by id, no two alike
+    /// (`TRAME-078`). A create and a rename never store a taken name, but two
+    /// peers can store one concurrently. The sheet with the smaller id then keeps
+    /// the stored name, and the other reads it with the first free ` (n)` suffix.
+    /// The result depends on the document alone, so every peer reads the same.
+    pub(super) fn sheet_names(&self) -> HashMap<String, String> {
+        let mut stored: Vec<(String, String)> = match self.doc.get_map(SHEETS_MAP).get_value() {
+            LoroValue::Map(sheets) => sheets
+                .iter()
+                .map(|(id, name)| match name {
+                    LoroValue::String(s) => (id.clone(), s.to_string()),
+                    _ => (id.clone(), id.clone()),
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        stored.sort();
+        let mut taken: HashSet<String> = HashSet::new();
+        let mut names = HashMap::with_capacity(stored.len());
+        // Stored names claim first, so a suffixed name never takes one a later
+        // sheet stores as is.
+        let mut clashing = Vec::new();
+        for (id, name) in stored {
+            if taken.insert(name.clone()) {
+                names.insert(id, name);
+            } else {
+                clashing.push((id, name));
+            }
+        }
+        for (id, name) in clashing {
+            let unique = (2..)
+                .map(|n| format!("{name} ({n})"))
+                .find(|candidate| !taken.contains(candidate))
+                .unwrap_or(name);
+            taken.insert(unique.clone());
+            names.insert(id, unique);
+        }
+        names
+    }
+
+    /// `wanted`, or the first ` (n)` variant of it no sheet carries, for a create
+    /// whose name is taken (`TRAME-078`). A blank name becomes `Sheet`.
+    pub(super) fn free_sheet_name(&self, wanted: &str) -> String {
+        let wanted = match wanted.trim() {
+            "" => "Sheet",
+            trimmed => trimmed,
+        };
+        let taken: HashSet<String> = self.sheet_names().into_values().collect();
+        if !taken.contains(wanted) {
+            return wanted.to_owned();
+        }
+        (2..)
+            .map(|n| format!("{wanted} ({n})"))
+            .find(|candidate| !taken.contains(candidate))
+            .unwrap_or_else(|| wanted.to_owned())
+    }
 
     /// Every sheet id registered in the `sheets` CRDT map (unordered).
     pub(super) fn all_sheet_ids(&self) -> Vec<String> {
@@ -220,6 +356,13 @@ impl TrameState {
                 .collect(),
             _ => Vec::new(),
         };
+        // Two peers materializing the order at once can both list one id: the
+        // first occurrence is its position, every later one is ignored.
+        let mut seen = HashSet::new();
+        let listed: Vec<String> = listed
+            .into_iter()
+            .filter(|id| seen.insert(id.clone()))
+            .collect();
         let in_list: HashSet<&String> = listed.iter().collect();
         let mut unlisted: Vec<String> = self
             .all_sheet_ids()
@@ -243,15 +386,12 @@ impl TrameState {
     /// Build the [`TrameEvent::SheetList`] the tab strip consumes, in canonical
     /// order with the active sheet flagged.
     pub(super) fn sheet_list_event(&self) -> TrameEvent {
-        let map = self.doc.get_map(SHEETS_MAP);
+        let mut names = self.sheet_names();
         let sheets = self
             .sheet_order_ids()
             .into_iter()
             .map(|id| {
-                let name = match map.get(&id).map(|v| v.get_deep_value()) {
-                    Some(LoroValue::String(s)) => s.to_string(),
-                    _ => id.clone(),
-                };
+                let name = names.remove(&id).unwrap_or_else(|| id.clone());
                 (id, name)
             })
             .collect();
@@ -297,7 +437,8 @@ impl TrameState {
     pub(super) fn create_sheet(&mut self, name: &str) -> TrameOutcome {
         let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
         self.sheet_counter += 1;
-        let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name);
+        let name = self.free_sheet_name(name);
+        let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name.as_str());
         let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
         self.doc.commit();
         // Refresh the name -> index map so the new sheet is addressable.
@@ -318,6 +459,23 @@ impl TrameState {
     pub(super) fn rename_sheet(&mut self, sheet_id: &str, name: &str) -> TrameOutcome {
         if !self.all_sheet_ids().iter().any(|id| id == sheet_id) {
             return TrameOutcome::display_only(vec![]);
+        }
+        // A blank name leaves a tab with no label to click (`TRAME-160`), and a
+        // taken one leaves two tabs no reader can tell apart (`TRAME-078`).
+        let name = name.trim();
+        let refusal = if name.is_empty() {
+            Some("a sheet name cannot be empty".to_owned())
+        } else if self
+            .sheet_names()
+            .iter()
+            .any(|(id, taken)| id != sheet_id && taken == name)
+        {
+            Some(format!("a sheet named \"{name}\" already exists"))
+        } else {
+            None
+        };
+        if let Some(message) = refusal {
+            return TrameOutcome::display_only(vec![TrameEvent::Error { message }]);
         }
         let _ = self.doc.get_map(SHEETS_MAP).insert(sheet_id, name);
         self.doc.commit();
@@ -346,22 +504,40 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
         let list = self.doc.get_movable_list(SHEET_ORDER);
-        // Rewrite the list to the canonical order if it diverges, so `mov`
-        // operates on the positions the tab strip actually shows.
-        let current: Vec<String> = match list.get_value() {
+        // Bring the list to the canonical order if it diverges, so `mov` operates
+        // on the positions the tab strip shows. The elements already listed are
+        // kept: a concurrent move needs their identity to land (`TRAME-074`).
+        let current: Vec<Option<String>> = match list.get_value() {
             LoroValue::List(items) => items
                 .iter()
-                .filter_map(|v| match v {
+                .map(|v| match v {
                     LoroValue::String(s) => Some(s.to_string()),
                     _ => None,
                 })
                 .collect(),
             _ => Vec::new(),
         };
-        if current != order {
-            let _ = list.clear();
-            for id in &order {
-                let _ = list.push(id.as_str());
+        if current.iter().flatten().ne(order.iter()) || current.iter().any(Option::is_none) {
+            // Drop, from the end, each entry naming no live sheet or repeating
+            // an earlier one, as `sheet_order_ids` ignores them.
+            let live: HashSet<String> = self.all_sheet_ids().into_iter().collect();
+            let mut seen = HashSet::new();
+            let stale: Vec<usize> = current
+                .iter()
+                .enumerate()
+                .filter(|(_, id)| match id {
+                    Some(id) => !live.contains(id) || !seen.insert(id.clone()),
+                    None => true,
+                })
+                .map(|(pos, _)| pos)
+                .collect();
+            for pos in stale.into_iter().rev() {
+                let _ = list.delete(pos, 1);
+            }
+            // The ids the list lacks lead the canonical order: insert them first.
+            let unlisted = order.iter().filter(|id| !seen.contains(*id));
+            for (pos, id) in unlisted.enumerate() {
+                let _ = list.insert(pos, id.as_str());
             }
         }
         let _ = list.mov(from, to);
@@ -428,13 +604,19 @@ impl TrameState {
         }
     }
 
-    /// Drop every cell, formatting and merge entry of `sheet_id` and clear its
-    /// row/column lists, so a deleted sheet leaves no orphan containers behind.
+    /// Empty every per-sheet container of `sheet_id` the schema builds. They are
+    /// the cells, the styles, the merges, the metrics, the filter, its hidden
+    /// rows, and the two axes. A deleted sheet leaves none of its data in the
+    /// document (`TRAME-076`).
     pub(super) fn drop_sheet_containers(&mut self, sheet_id: &str) {
         for name in [
             cells_map_name(sheet_id),
             cellstyle_map_name(sheet_id),
             merges_map_name(sheet_id),
+            col_widths_map_name(sheet_id),
+            row_heights_map_name(sheet_id),
+            filters_map_name(sheet_id),
+            filter_hidden_map_name(sheet_id),
         ] {
             let map = self.doc.get_map(name);
             if let LoroValue::Map(entries) = map.get_value() {

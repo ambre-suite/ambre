@@ -24,6 +24,9 @@ impl TrameUiState {
         // source as its own result. For a plain literal, raw == display.
         let is_formula = text.starts_with('=');
         entry.raw = text.clone();
+        // A literal the engine would read as a number aligns as one until the
+        // pack confirms it.
+        entry.numeric = !is_formula && text.parse::<f64>().is_ok_and(f64::is_finite);
         entry.text = if is_formula { String::new() } else { text };
         // The shown value is now optimistic: a formula awaits recompute, and a
         // literal awaits the CRDT echo. Either way the prior error is stale.

@@ -24,6 +24,8 @@ pub struct CellContent<'a> {
     pub strikethrough: bool,
     /// Horizontal alignment ([`HAlign::Auto`] resolves numbers right, text left).
     pub h_align: ambre_bus::HAlign,
+    /// The computed value is a number: what [`HAlign::Auto`] resolves on.
+    pub numeric: bool,
     /// Vertical alignment within the cell (or the span rect for a merge master).
     pub v_align: ambre_bus::VAlign,
     /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
@@ -51,6 +53,7 @@ impl<'a> CellContent<'a> {
             underline: false,
             strikethrough: false,
             h_align: ambre_bus::HAlign::Auto,
+            numeric: text.parse::<f64>().is_ok(),
             v_align: ambre_bus::VAlign::Middle,
             fg: None,
             bg: None,
@@ -71,15 +74,16 @@ pub(super) fn rgb(packed: u32) -> Color {
     )
 }
 
-/// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to the
-/// numeric-vs-text heuristic on `text`.
-pub(super) fn cell_alignment(h: ambre_bus::HAlign, text: &str) -> Alignment {
+/// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to
+/// whether the cell computes to a number. The formatted text is not asked: a
+/// currency or a fraction no longer parses as one (`TRAME-UI-093`).
+pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: bool) -> Alignment {
     match h {
         ambre_bus::HAlign::Left => Alignment::Start,
         ambre_bus::HAlign::Center => Alignment::Center,
         ambre_bus::HAlign::Right => Alignment::End,
         ambre_bus::HAlign::Auto => {
-            if text.parse::<f64>().is_ok() {
+            if numeric {
                 Alignment::End
             } else {
                 Alignment::Start
@@ -98,10 +102,6 @@ pub(super) fn cell_v_offset(v: ambre_bus::VAlign, box_h: f64, text_h: f64) -> f6
         ambre_bus::VAlign::Bottom => (box_h - text_h).max(0.0),
     }
 }
-
-/// The default border colour (a mid grey), darker than the grid line so a border
-/// reads as a deliberate edge.
-const BORDER_DEFAULT: Color = Color::from_rgb8(0x60, 0x60, 0x60);
 
 /// Resolve a [`BorderStyle`] into a stroke `(width, dash_period)`; `dash_period`
 /// of `0.0` means a solid stroke. `Double` is handled by the caller (two passes).
@@ -171,11 +171,18 @@ fn styled_segment<S: DrawSurface>(
 }
 
 /// Stroke a cell's set border edges, each in its own style/colour, over `rect`.
-fn draw_cell_border<S: DrawSurface>(surface: &mut S, rect: Rect, content: &CellContent<'_>) {
+/// An edge the user did not colour takes `default_color`, the theme's
+/// `cell_border` (`TRAME-101`).
+fn draw_cell_border<S: DrawSurface>(
+    surface: &mut S,
+    rect: Rect,
+    content: &CellContent<'_>,
+    default_color: Color,
+) {
     let b = &content.borders;
     let mut edge = |cb: Option<ambre_bus::CellBorder>, x0, y0, x1, y1| {
         if let Some(cb) = cb {
-            let color = cb.color.map(rgb).unwrap_or(BORDER_DEFAULT);
+            let color = cb.color.map(rgb).unwrap_or(default_color);
             styled_segment(surface, x0, y0, x1, y1, color, cb.style);
         }
     };
@@ -193,15 +200,16 @@ fn has_border(b: &ambre_bus::Borders) -> bool {
 /// Draw the border layer for each supplied `(rect, content)`. Called **after** the
 /// grid lines (and the merge repaint), so a deliberate border is never
 /// overpainted. `rect` is the owning cell's rect, or the full span rect for a
-/// merge master.
-pub fn draw_cell_borders_on<'a, S, I>(surface: &mut S, cells: I)
+/// merge master. An edge the user did not colour takes `default_color`, the
+/// active theme's `cell_border` (`TRAME-101`).
+pub fn draw_cell_borders_on<'a, S, I>(surface: &mut S, cells: I, default_color: Color)
 where
     S: DrawSurface,
     I: IntoIterator<Item = (Rect, CellContent<'a>)>,
 {
     for (rect, content) in cells {
         if has_border(&content.borders) {
-            draw_cell_border(surface, rect, &content);
+            draw_cell_border(surface, rect, &content, default_color);
         }
     }
 }

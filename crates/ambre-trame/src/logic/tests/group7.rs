@@ -381,3 +381,120 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
     // Non-mutating: no CRDT delta emitted.
     assert!(out.update.is_none(), "copy must not mutate the document");
 }
+
+/// A1 holds 0.5 shown as a percentage with one decimal.
+fn percent_sheet() -> TrameState {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "0.5".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: ambre_bus::StylePatch {
+            format: Some(ambre_bus::CellFormat::Percent),
+            decimals: Some(Some(1)),
+            ..Default::default()
+        },
+    });
+    state
+}
+
+/// Find reads a cell as the grid shows it (`TRAME-UI-078`, `TRAME-108`). The
+/// percentage is found by what the user reads, not by the value behind it.
+#[test]
+fn find_matches_the_formatted_value() {
+    let mut state = percent_sheet();
+    let hits = |state: &mut TrameState, query: &str| {
+        let out = state.handle_command(TrameCommand::FindNext {
+            query: query.to_owned(),
+            match_case: false,
+            whole_cell: true,
+        });
+        match &out.display[..] {
+            [TrameEvent::FindResult { matches, .. }] => matches.len(),
+            other => panic!("expected FindResult, got {other:?}"),
+        }
+    };
+    assert_eq!(hits(&mut state, "50.0%"), 1);
+    assert_eq!(hits(&mut state, "0.5"), 0);
+}
+
+/// CSV export writes a cell as the grid shows it (`TRAME-108`).
+#[test]
+fn csv_export_writes_the_formatted_value() {
+    let mut state = percent_sheet();
+    let out = state.handle_command(TrameCommand::ExportCsv {
+        sheet_id: "s0".to_owned(),
+        delimiter: None,
+        range: None,
+    });
+    assert_eq!(String::from_utf8(export_bytes(&out)).unwrap(), "50.0%\n");
+}
+
+/// An import reports the records it could not read (`TRAME-IO-039`): the
+/// readable ones land, and the user is told how many were skipped.
+#[test]
+fn import_reports_unreadable_records() {
+    let mut state = TrameState::new();
+    let out = state.handle_command(TrameCommand::ImportCsv {
+        data: b"a,b\n\xff\xfe,c\nd,e\n".to_vec(),
+        delimiter: None,
+        has_header: false,
+        target_sheet_id: Some("s0".to_owned()),
+        start_row: 0,
+        start_col: 0,
+    });
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { message } if message.starts_with("1 record"))),
+        "the skipped record is reported: {:?}",
+        out.display
+    );
+    assert_eq!(read_cell(&mut state, 0, 0), "a");
+    assert_eq!(read_cell(&mut state, 1, 0), "d");
+}
+
+/// An export with nothing to write says so (`TRAME-IO-041`): an empty sheet
+/// and an unknown one each answer with a notice, never with silence.
+#[test]
+fn export_with_nothing_to_write_says_so() {
+    let mut state = TrameState::new();
+    for sheet_id in ["s0", "nope"] {
+        let out = state.handle_command(TrameCommand::ExportCsv {
+            sheet_id: sheet_id.to_owned(),
+            delimiter: None,
+            range: None,
+        });
+        assert!(
+            matches!(&out.display[..], [TrameEvent::Error { .. }]),
+            "{sheet_id}: {:?}",
+            out.display
+        );
+    }
+}
+
+/// An auto-fit measures the whole column (`TRAME-UI-128`): the content Logic
+/// returns reaches the rows no viewport has loaded, and leaves out the blanks.
+#[test]
+fn column_content_reaches_every_row() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "top".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 900,
+        col: 1,
+        text: "a long label far below the loaded window".to_owned(),
+    });
+    let out = state.handle_command(TrameCommand::RequestColumnContent { col: 1 });
+    assert!(out.update.is_none(), "a query writes nothing");
+    let [TrameEvent::ColumnContent { col: 1, cells }] = &out.display[..] else {
+        panic!("expected ColumnContent, got {:?}", out.display)
+    };
+    let rows: Vec<u32> = cells.iter().map(|c| c.row).collect();
+    assert_eq!(rows, vec![0, 900]);
+}

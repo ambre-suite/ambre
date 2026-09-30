@@ -36,7 +36,8 @@ impl TrameState {
         let mut matches: Vec<(u32, u32)> = Vec::new();
         for row in 0..rows {
             for col in 0..cols {
-                let text = self.cell_text(row, col);
+                // The displayed value, format included (`TRAME-UI-078`).
+                let text = self.displayed_text(row, col);
                 if !text.is_empty() && cell_matches(&text, &needle, match_case, whole_cell) {
                     matches.push((row, col));
                 }
@@ -235,7 +236,7 @@ impl TrameState {
         let haystack = if is_formula {
             raw.clone()
         } else {
-            self.cell_text(row, col)
+            self.displayed_text(row, col)
         };
         if !cell_matches(&haystack, needle, match_case, whole_cell) {
             return false;
@@ -288,10 +289,15 @@ impl TrameState {
                     raw.clone()
                 } else {
                     let cell = CellId::bound(idx, rl, cl);
-                    if self.engine.is_formula_cell(cell) {
+                    let text = if self.engine.is_formula_cell(cell) {
                         self.engine.evaluated_text(cell).unwrap_or_default()
                     } else {
                         raw.clone()
+                    };
+                    // The displayed value, format included (`TRAME-UI-078`).
+                    match self.stored_style(sheet_id, rl, cl) {
+                        Some(style) => self.format_display(0, 0, text, &style),
+                        None => text,
                     }
                 };
                 if !cell_matches(&haystack, needle, match_case, whole_cell) {
@@ -302,7 +308,13 @@ impl TrameState {
                     let stored = if new_raw.is_empty() {
                         None
                     } else {
-                        Some(self.canonicalize_input(&new_raw))
+                        match self.canonicalize_input(&new_raw) {
+                            Ok(stored) => Some(stored),
+                            Err(sheet) => {
+                                self.write_refusals.push(WriteRefusal::UnknownSheet(sheet));
+                                continue;
+                            }
+                        }
                     };
                     edits.push(((rl, cl), stored));
                 }

@@ -1917,5 +1917,6 @@ mod tests {
         header_text: Color::from_rgba8(95, 99, 104, 255),
         caret: Color::from_rgba8(20, 20, 20, 255),
         cell_error: Color::from_rgba8(204, 68, 68, 255),
+        cell_border: Color::from_rgba8(96, 96, 96, 255),
     };
 }

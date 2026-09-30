@@ -35,10 +35,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-012` | `FRAME` | A sort that changes no row order MUST NOT emit a CRDT delta. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`; `::sort_range_noops` -- both assert the outcome carries no update | none | verified |
 | `TRAME-111` | `POST` | Two values of different types MUST order by the type rank, never interleaved. | this spec section 3 | none | unheld -- every sort test seeds one type per column, so the rank branch of `compare_cell_values` is reached by no assertion; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-112` | `POST` | A descending sort MUST reverse the whole comparison, so an empty cell orders first. | this spec section 5 | none | unheld -- `ambre_trame::logic::tests::group3::sort_range_descending_keeps_header` drives a descending sort over four filled cells, and no test sorts a column holding a blank; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-181` | `POST` | A sort MUST order the range whatever values it holds. | this spec section 3 | none | fails -- `POWER(-1, 0.5)` and `LOG(-1)` return a `Number` holding NaN under no guard, and `compare_cell_values` answers "equal" to every pair one takes part in: NaN ties with 1 and with 2 while 1 orders before 2. That is not a total order, and the standard sort is entitled to abort on one (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-181` | `POST` | A sort MUST order the range whatever values it holds. | this spec section 3 | `ambre_trame::logic::helpers::tests::comparator_is_a_total_order_with_nan`; `ambre_trame::formula::functions::tests::power_without_a_real_root_is_a_num_error` | none | verified |
 | `TRAME-114` | `POST` | A sort MUST order the rows a filter hides together with the visible ones. | this spec section 2, row 3; section 5 | none | unheld -- `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` covers the mark following its row (`TRAME-FEAT-002`), not the hidden row taking part in the ordering; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-182` | `FRAME` | A sort MUST NOT move a row outside the range it was given. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_sum_block_is_stable_under_internal_sort` -- its two formula rows sit below the sorted block and are read back at their own positions | none | verified |
-| `TRAME-183` | `FRAME` | A sort MUST NOT change which cell is active, nor the selected rectangle. | this spec section 4 | none | fails -- `after_reorder` touches neither, so the active cell keeps its **position** and the row that was under it has moved away (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-183` | `FRAME` | A sort MUST leave the active cell and the selected rectangle at their positions. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_keeps_active_cell_and_selection_in_place` | none | verified |
 | `TRAME-FEAT-013` | `POST` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`; `::sort_selection_multi_resolves_against_tracked_selection`; `::sort_sheet_sorts_used_range_by_active_column` | none | verified |
 | `TRAME-115` | `FAIL` | A sort naming a sheet other than the active one MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_noops` -- it asserts the outcome carries neither an update nor a single display event | none | verified |
 | `TRAME-184` | `FAIL` | A sort left with no key inside the range MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_no_keys_is_noop` -- it runs over an empty key list and over a key naming a column outside the range | none | verified |
@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-101` | `OBS` | The dialog MUST offer exactly the columns the sort will order. | this spec section 4 | none | fails -- `ambre_trame::tests::chrome_ui::sort_dialog_adds_levels_and_emits_on_apply` opens the dialog over a cell rectangle, which is the case that agrees. **The rule fails on a whole-row selection** (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-UI-101` | `OBS` | The dialog MUST offer exactly the columns the sort will order. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_range_query_spans_the_used_width_of_a_row_band` | partial -- the test holds the range the Logic thread answers and the sort then orders; the launcher opening the dialog on that answer is DOM glue no host test reaches; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-150` | `INV` | The dialog MUST always hold at least one level, and never more levels than the range has columns. | this spec section 4 | none | unheld -- both bounds are carried by a disabled button, and the test clicks "Add sort level" once over a three-column range, which reaches neither bound; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Apply the levels, or give up
@@ -65,12 +65,11 @@ status values are normative in `ambre-spec-template.md`.
   row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a sort emits moves into the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 12 `verified`, 3 `failing`, 9 `untested`. What holds is the permutation, in the
+* **Verification.** 14 `verified`, 1 `partial`, 9 `untested`. What holds is the permutation, in the
   shape the user cares about: whole rows travel, the header stays, an already-ordered range writes
   nothing. A row outside the range stays put, and a refusal carries no acknowledgement. What is
-  loose is everything the comparator decides: the type rank and the blank. The third failure is a
-  defect, a NaN from `POWER(-1, 0.5)` that ties with every number, so the sort loses the total order
-  it needs.
+  loose is most of what the comparator decides: the type rank and the blank. Its total order holds,
+  a NaN included.
 
 ---
 
@@ -126,8 +125,9 @@ pub struct SortKey {
 
 Two values of one type compare naturally: numbers numerically, text by code point, `false` before
 `true`. Two errors, and two empty cells, compare equal, so a stable sort leaves them in place
-(`TRAME-180`). A number that is not a number compares equal to every other number, which is not an
-order at all (`TRAME-181`, section 6).
+(`TRAME-180`). A number that is not a number ranks with the errors, so the comparator stays a total
+order whatever a cell holds (`TRAME-181`). `POWER`, the one builtin that could build one, answers
+`#NUM!` instead.
 
 **Steps, when a user sorts:**
 
@@ -177,7 +177,7 @@ Everything the user touches. The menu that carries the entries is specified in
 | "Add sort level" | appends a level on the first column no level uses; disabled once every column is used |
 | "Remove sort level" | disabled on the last remaining level: a sort needs one key |
 | "Data has header row" | pins the range's first row, and is off each time the dialog opens |
-| the column picker | offers the columns of the selection the dialog was opened over (`TRAME-UI-101`) |
+| the column picker | offers the columns of the range the Logic thread resolves from the selection, the one the sort orders; a row band spans the used width (`TRAME-UI-101`) |
 | "Sort" | drops a column a higher level already uses, then emits the levels (`TRAME-UI-102`) |
 | the backdrop, "Cancel", the close button | close the dialog and emit nothing |
 
@@ -196,23 +196,14 @@ makes the viewport re-fetch, so the grid repaints in the new order with the same
 | A descending sort reverses the whole comparison | Excel's rule, keeping blanks last in both directions | the blank case then has to be written twice and kept in step with the other kinds; reversing the comparison is one comparator and one direction flag |
 | Concurrent sorts are resolved by last-writer-wins on the row order | merging the two permutations | it gives an order nobody asked for. A sort is one intent over one list, so electing the whole list at least yields an order a user did ask for |
 | The single-column sort takes no dialog | one dialog for both sorts | the two menu entries are the whole gesture, and a dialog for one column and one direction is two clicks for nothing |
+| A sort leaves the active cell and the selection at their positions (`TRAME-183`) | the selection following the rows it was drawn over | it is what Excel and Sheets do, and it is the one reading that holds for a lone cell: a selected cell following its row is a selection that moved. The sorted block is the same rectangle before and after |
+| A NaN ranks with the errors, and `POWER` refuses to build one (`TRAME-181`) | ruling one of the two alone | the source guard keeps a NaN out of a formula result, and the rank keeps the comparator total for a NaN the source did not make, such as a literal `NaN` typed as text a number parse accepts |
 | A sort orders the hidden rows too | Excel's rule, leaving filtered rows in place and sorting around them | the hidden mark is keyed by row identity, so it travels with its row and needs no recompute after the move; sorting around the gaps would need one |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The dialog reads a different selection from the one the sort orders** (`TRAME-UI-101`). The
-  canvas publishes the selection rectangle, and a whole-row band publishes column zero for both
-  corners. So "Sort range..." over selected rows offers column A alone, while the Logic thread
-  orders the full used width. A whole-sheet selection is the other end of the same defect: the
-  picker lists one option per column of the virtual grid.
-* **The comparator is not a total order** (`TRAME-181`). `POWER(-1, 0.5)` and `LOG(-1)` build a
-  `Number` holding NaN, and the comparator answers "equal" to every pair a NaN takes part in. So
-  NaN ties with 1, NaN ties with 2, and 1 orders before 2: the relation is not transitive. The
-  standard sort detects an inconsistent comparator and aborts, which in the Logic thread costs the
-  document. Nothing rules whether a NaN should be an error at the source or a rank of its own in the
-  comparator. The two builtins that produce one are the only ones with no finiteness guard.
 * **The type rank, the blank and the stability have no test** (`TRAME-111`, `TRAME-112`,
   `TRAME-180`). All three are pure functions of two values, and `compare_cell_values` is reachable
   from the host tier. This is the cheapest gap in the document to close. The stability is the one
@@ -222,10 +213,6 @@ makes the viewport re-fetch, so the grid repaints in the new order with the same
   "Range sorted" toast, and the three refusals emit no event at all. A user who sorts a single-row
   selection, or a range on a sheet the UI has not activated, sees nothing change. No order change,
   no notice, and no way to tell the refusal from a command that was lost.
-* **A sort leaves the active cell where it was** (`TRAME-183`). The position is kept, so the row
-  under it is not. The cell the user had selected now holds another row's value, and a selection
-  drawn over the sorted block covers different rows than before. Nothing says whether
-  the selection should follow the rows it was drawn over.
 * **The dialog reads a snapshot, the sort reads the live selection** (`TRAME-UI-151`). The picker
   offers the columns of the rectangle captured when "Sort range..." opened. Applying sends
   `SortSelectionMulti`, whose range is whatever the Logic thread tracks at that moment. The two

@@ -81,7 +81,7 @@ where
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;
             let y_off = cell_v_offset(content.v_align, rect.height(), text_h);
-            let x_off = match cell_alignment(content.h_align, content.text) {
+            let x_off = match cell_alignment(content.h_align, content.numeric) {
                 Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
                 Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
                 _ => 0.0,

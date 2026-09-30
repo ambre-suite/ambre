@@ -18,6 +18,13 @@ pub struct BytecodeCache {
     entries: HashMap<CellId, CellBytecode>,
     /// Cells whose raw text has changed since their last compilation.
     stale: HashSet<CellId>,
+    /// The raw text each entry of `entries` was compiled from, so a cell
+    /// retyped with the same text is recognised and not recompiled
+    /// (`TRAME-212`).
+    sources: HashMap<CellId, Box<str>>,
+    /// Formulas compiled since construction, for the tests that hold
+    /// `TRAME-212`.
+    compiles: u64,
 }
 
 impl BytecodeCache {
@@ -25,12 +32,28 @@ impl BytecodeCache {
         Self {
             entries: HashMap::new(),
             stale: HashSet::new(),
+            sources: HashMap::new(),
+            compiles: 0,
         }
     }
 
     /// Mark a cell as needing recompilation (its raw text changed).
     pub fn invalidate(&mut self, cell: CellId) {
         self.stale.insert(cell);
+    }
+
+    /// Whether `cell` holds bytecode compiled from exactly `raw`: retyping it
+    /// changes nothing, so the edit path skips it (`TRAME-212`).
+    pub fn compiled_from(&self, cell: CellId, raw: &str) -> bool {
+        self.sources
+            .get(&cell)
+            .is_some_and(|source| **source == *raw)
+    }
+
+    /// Formulas compiled since construction.
+    #[cfg(test)]
+    pub fn compiles(&self) -> u64 {
+        self.compiles
     }
 
     /// Look up the bytecode for a cell, returning `None` if it's not a formula.
@@ -72,6 +95,7 @@ impl BytecodeCache {
             // No longer a formula: drop its bytecode and the dependencies it
             // declared. The graph node stays if other formulas read this cell.
             self.entries.remove(&cell);
+            self.sources.remove(&cell);
             deps.clear_deps(cell);
             return Some(CellValue::Empty);
         }
@@ -82,12 +106,15 @@ impl BytecodeCache {
         // formula's own sheet (`cell.sheet`). Positional `A1` is bound to a
         // row/column `Uid` by `compile` against `indices`.
         let parsed = parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
+        self.compiles += 1;
+        self.sources.remove(&cell);
         match parsed {
             Ok(ast) => {
                 let bc = compile(&ast, indices);
                 match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
                     Ok(()) => {
                         self.entries.insert(cell, bc);
+                        self.sources.insert(cell, raw.into());
                         None // No error -- caller evaluates normally.
                     }
                     Err(_cycle_err) => {

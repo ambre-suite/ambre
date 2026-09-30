@@ -334,8 +334,8 @@ Each viewport answer carries a version, and the UI drops one older than the last
   structural write or an import. The active entry is shared by borrow rather than by clone.
   Answered by the "Cached sheet indexes" Story (`ambre-roadmap.md` E6).
 * **A tab switch resets the engine.** The active sheet is pinned to engine index 0, so which sheet
-  is displayed -- a view state -- decides engine identity. It is the direct cause of `TRAME-062`,
-  the unqualified name that follows the reader from tab to tab
+  is displayed -- a view state -- decides engine identity. Every bound reference therefore has to
+  carry a sheet id rather than an index, as a name's definition now does
   (`ambre-spec-trame-named-ranges.md`). **The target interns a sheet index at first sight**, stable
   for the document lifetime. A tab switch then rebuilds the active sheet's display caches alone and
   resets no engine. Answered by the "Stable engine sheet indexes" Story (`ambre-roadmap.md` E6).

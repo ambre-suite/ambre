@@ -64,6 +64,8 @@ pub struct CellData {
     pub underline: bool,
     pub strikethrough: bool,
     pub h_align: ambre_bus::HAlign,
+    /// The computed value is a number (`DisplayCell::numeric`).
+    pub numeric: bool,
     pub v_align: ambre_bus::VAlign,
     pub wrap: bool,
     pub fg: Option<u32>,
@@ -91,6 +93,7 @@ impl CellData {
             underline: self.underline,
             strikethrough: self.strikethrough,
             h_align: self.h_align,
+            numeric: self.numeric,
             v_align: self.v_align,
             fg: self.fg,
             bg: self.bg,

@@ -20,6 +20,8 @@ mod builtins_c;
 use builtins_a::*;
 use builtins_b::*;
 use builtins_c::*;
+// The calendar conversion, for the `Date` number format (`TRAME-107`).
+pub(crate) use builtins_b::ymd_from_serial;
 
 /// Ambient evaluation context threaded into every built-in call.
 ///

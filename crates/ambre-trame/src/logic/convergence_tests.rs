@@ -437,6 +437,7 @@ fn clear_style() -> StylePatch {
         size: Some(None),
         format: Some(CellFormat::default()),
         decimals: Some(None),
+        decimals_step: None,
         border: Some(BorderEdit {
             preset: BorderPreset::None,
             ..Default::default()
@@ -461,6 +462,7 @@ fn other_style() -> StylePatch {
         size: Some(Some(9)),
         format: Some(CellFormat::General),
         decimals: Some(None),
+        decimals_step: None,
         border: Some(BorderEdit {
             preset: BorderPreset::Outline,
             style: BorderStyle::Dashed,
@@ -592,4 +594,54 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
          peer A wrote: {a_intent:?}\n\
          peer B wrote: {b_intent:?}"
     );
+}
+
+/// The tab order the strip shows: the ids of the `SheetList` event.
+fn tab_order(state: &TrameState) -> Vec<String> {
+    match state.sheet_list_event() {
+        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|(id, _)| id).collect(),
+        other => panic!("expected SheetList, got {other:?}"),
+    }
+}
+
+/// Two users reorder tabs at once, from a stored order that does not list the
+/// implicit first sheet (`TRAME-074`). Both peers end on one order, and that
+/// order shows each sheet once.
+#[test]
+fn concurrent_tab_moves_converge_on_one_order() {
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::CreateSheet {
+        name: "Two".to_owned(),
+    });
+    a.handle_command(TrameCommand::CreateSheet {
+        name: "Three".to_owned(),
+    });
+    let base = a.export_snapshot();
+    let mut b = TrameState::new();
+    b.import_snapshot(&base)
+        .expect("a snapshot this build wrote reads back at the current schema");
+    let ids = tab_order(&a);
+    assert_eq!(ids.len(), 3);
+
+    a.handle_command(TrameCommand::MoveSheet {
+        sheet_id: ids[2].clone(),
+        to_index: 0,
+    });
+    b.handle_command(TrameCommand::MoveSheet {
+        sheet_id: ids[0].clone(),
+        to_index: 2,
+    });
+
+    let sa = a.export_snapshot();
+    let sb = b.export_snapshot();
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+
+    let order = tab_order(&a);
+    assert_eq!(order, tab_order(&b), "peers diverged after full exchange");
+    let mut sorted = order.clone();
+    sorted.sort();
+    let mut expected = ids.clone();
+    expected.sort();
+    assert_eq!(sorted, expected, "each sheet shows exactly once: {order:?}");
 }

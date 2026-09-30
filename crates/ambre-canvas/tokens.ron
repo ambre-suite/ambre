@@ -57,6 +57,7 @@ Tokens(
             header_text:     "#5f6368",
             caret:           "#141414",
             cell_error:      "#cc4444",
+            cell_border:     "#606060",
         ),
         dark: (
             content_bg:      "#1c1c1f",
@@ -71,6 +72,7 @@ Tokens(
             header_text:     "#9aa0a6",
             caret:           "#f0f0f0",
             cell_error:      "#e05a5a",
+            cell_border:     "#8c8c94",
         ),
     ),
 

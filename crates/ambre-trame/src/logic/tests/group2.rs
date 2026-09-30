@@ -614,6 +614,101 @@ fn delete_selected_rows_drops_the_whole_span() {
     assert_eq!(read_cell(&mut state, 2, 0), "");
 }
 
+/// Five rows selected: seeded, then the selection set over them.
+fn five_selected_rows() -> TrameState {
+    let mut state = TrameState::new();
+    for r in 0..6 {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r,
+            col: 0,
+            text: format!("r{r}"),
+        });
+    }
+    state.handle_command(TrameCommand::CommitEdit);
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 4,
+        col: 0,
+        anchor_row: 0,
+        anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Rows,
+    });
+    state
+}
+
+/// Deleting a selection of lines undoes as one step (`TRAME-088`).
+#[test]
+fn delete_selected_rows_undoes_as_one_step() {
+    let mut state = five_selected_rows();
+    state.handle_command(TrameCommand::DeleteSelectedRows);
+    assert_eq!(read_cell(&mut state, 0, 0), "r5");
+    state.handle_command(TrameCommand::Undo);
+    let restored: Vec<String> = (0..6).map(|r| read_cell(&mut state, r, 0)).collect();
+    assert_eq!(restored, vec!["r0", "r1", "r2", "r3", "r4", "r5"]);
+}
+
+/// Every line a selection deletes reaches the collaborators (`TRAME-175`):
+/// the one delta the command returns carries all five.
+#[test]
+fn delete_selected_rows_reaches_peers_whole() {
+    let mut a = five_selected_rows();
+    let mut b = TrameState::new();
+    b.import_snapshot(&a.export_snapshot())
+        .expect("a snapshot this build wrote reads back at the current schema");
+    let outcome = a.handle_command(TrameCommand::DeleteSelectedRows);
+    let update = outcome.update.expect("the delete broadcasts");
+    b.apply_remote(&update);
+    assert_eq!(read_cell(&mut b, 0, 0), "r5");
+    assert_eq!(read_cell(&mut b, 1, 0), "");
+}
+
+/// A deleted row leaves none of its formatting behind (`TRAME-082`): its
+/// height and its filter mark go with it, as a deleted column's width does.
+#[test]
+fn deleted_line_leaves_no_formatting() {
+    use crate::logic::schema::{col_widths_map_name, filter_hidden_map_name, row_heights_map_name};
+    let mut state = TrameState::new();
+    for r in 0..3 {
+        state.handle_command(TrameCommand::SetCellText {
+            row: r,
+            col: 0,
+            text: format!("{r}"),
+        });
+    }
+    state.handle_command(TrameCommand::ResizeRow {
+        version: 1,
+        sheet_id: TEST_SHEET.to_owned(),
+        row: 1,
+        height_px: 40.0,
+    });
+    state.handle_command(TrameCommand::ResizeCol {
+        version: 2,
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        width_px: 150.0,
+    });
+    state.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        kind: FilterKind::Values(vec!["0".to_owned(), "2".to_owned()]),
+    });
+    let len = |state: &TrameState, name: String| state.doc.get_map(name).len();
+    assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 1);
+    assert_eq!(
+        len(&state, filter_hidden_map_name(TEST_SHEET)),
+        1,
+        "row 1 is hidden"
+    );
+    state.handle_command(TrameCommand::DeleteRow { at: 1 });
+    assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 0);
+    assert_eq!(len(&state, filter_hidden_map_name(TEST_SHEET)), 0);
+    state.handle_command(TrameCommand::ClearFilter {
+        sheet_id: TEST_SHEET.to_owned(),
+    });
+    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    assert_eq!(len(&state, col_widths_map_name(TEST_SHEET)), 0);
+}
+
 /// `MergeSelection` merges the tracked selection; `UnmergeActive` splits the
 /// merge under the active cell.
 #[test]

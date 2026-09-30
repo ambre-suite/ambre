@@ -77,12 +77,18 @@ impl TrameView {
         self.needs_full = true;
     }
 
-    /// Request a column auto-fit (double-click on the border, `trame-resize`). The
-    /// measurement needs the parley font context, so it is deferred to the next
-    /// paint, which owns it (mirrors the editor's deferred click resolution).
+    /// Request a column auto-fit (double-click on the border, `trame-resize`).
+    /// The viewport cache holds the loaded rows only. So the column's whole
+    /// content is asked of the Logic thread, and the paint after the answer
+    /// measures it (`TRAME-UI-128`). A column is never resized from a part of
+    /// its content.
     pub(crate) fn auto_fit_col(&mut self, c: u32) {
-        self.pending_autofit = Some(HeaderHit::ColBorder(c));
-        self.edit_dirty = true;
+        if self
+            .send_command_lossless(TrameCommand::RequestColumnContent { col: c })
+            .is_err()
+        {
+            tracing::error!("Trame: the auto-fit request was refused, the column keeps its width");
+        }
     }
 
     pub(crate) fn auto_fit_row(&mut self, r: u32) {
@@ -90,11 +96,10 @@ impl TrameView {
         self.edit_dirty = true;
     }
 
-    /// Measure a column/row's cached cells and emit a resize sized to its content
+    /// Measure a row's cached cells and emit a resize sized to its content
     /// (`trame-resize`). UI-side over the viewport cache: the parley layouts of every
-    /// cached cell of the axis are measured. The max natural extent, plus padding and
-    /// clamped to the minimum, becomes the new width/height. A column with no cached
-    /// content snaps to the default.
+    /// cached cell of the row are measured. The max natural extent, plus padding and
+    /// clamped to the minimum, becomes the new height.
     pub(crate) fn resolve_autofit(
         &mut self,
         hit: HeaderHit,
@@ -102,38 +107,10 @@ impl TrameView {
         text_cache: &mut TextCache,
     ) {
         use ambre_draw::Alignment;
-        let pad = (crate::render::CELL_PAD_X * 2.0) as f32;
         match hit {
-            HeaderHit::ColBorder(c) => {
-                let mut max_w = 0.0f32;
-                for ((_, col), data) in self.state.cell_cache.iter() {
-                    if *col != c || data.text.is_empty() {
-                        continue;
-                    }
-                    let size = data
-                        .size
-                        .map(|s| s as f32)
-                        .unwrap_or(crate::render::BODY_SIZE);
-                    let lyt = text_cache.get_or_build_font(
-                        font_cx,
-                        &data.text,
-                        size,
-                        f32::MAX,
-                        Alignment::Start,
-                        data.bold,
-                        data.italic,
-                        data.font.as_deref(),
-                        false,
-                    );
-                    max_w = max_w.max(lyt.width());
-                }
-                let width = if max_w > 0.0 {
-                    (max_w + pad).max(crate::ui::grid::MIN_COL_WIDTH as f32)
-                } else {
-                    crate::ui::grid::COL_WIDTH as f32
-                };
-                self.send_resize_col(c, width);
-            }
+            // A column auto-fit measures the whole column the Logic thread
+            // returns (`auto_fit_col`), never this cache.
+            HeaderHit::ColBorder(_) => {}
             HeaderHit::RowBorder(r) => {
                 let mut max_h = 0.0f32;
                 for ((row, _), data) in self.state.cell_cache.iter() {
@@ -887,5 +864,71 @@ impl TrameView {
             }
             _ => false,
         }
+    }
+}
+
+/// The width a column auto-fit gives the column holding `cells`: the widest
+/// natural text, plus the cell padding, never under the minimum. A column with
+/// no content takes the default width (`trame-resize`). `cells` is the whole
+/// column (`TRAME-UI-128`).
+pub(crate) fn fit_column_width(
+    cells: &[crate::DisplayCell],
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+) -> f32 {
+    let pad = (crate::render::CELL_PAD_X * 2.0) as f32;
+    let widest = cells
+        .iter()
+        .filter(|cell| !cell.text.is_empty())
+        .map(|cell| {
+            let size = cell.size.map(f32::from).unwrap_or(crate::render::BODY_SIZE);
+            text_cache
+                .get_or_build_font(
+                    font_cx,
+                    &cell.text,
+                    size,
+                    f32::MAX,
+                    ambre_draw::Alignment::Start,
+                    cell.bold,
+                    cell.italic,
+                    cell.font.as_deref(),
+                    false,
+                )
+                .width()
+        })
+        .fold(0.0f32, f32::max);
+    if cells.iter().any(|cell| !cell.text.is_empty()) {
+        (widest + pad).max(crate::ui::grid::MIN_COL_WIDTH as f32)
+    } else {
+        crate::ui::grid::COL_WIDTH as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fit_column_width;
+    use ambre_canvas::TextCache;
+    use ambre_draw::FontContext;
+
+    /// A column with content is sized from it; an empty one takes the default
+    /// width (`trame-resize`).
+    #[test]
+    fn a_column_fit_sizes_from_content_or_defaults_when_empty() {
+        let (mut font_cx, mut cache) = (FontContext::new(), TextCache::new(1.0));
+        let empty = fit_column_width(&[], &mut font_cx, &mut cache);
+        assert_eq!(empty, crate::ui::grid::COL_WIDTH as f32);
+        let blank = crate::DisplayCell::default();
+        assert_eq!(
+            fit_column_width(&[blank], &mut font_cx, &mut cache),
+            empty,
+            "a blank measures nothing"
+        );
+        let cell = crate::DisplayCell {
+            text: "content".to_owned(),
+            ..Default::default()
+        };
+        let sized = fit_column_width(&[cell], &mut font_cx, &mut cache);
+        assert!(sized >= crate::ui::grid::MIN_COL_WIDTH as f32);
+        assert_ne!(sized, empty, "content is measured, not defaulted");
     }
 }

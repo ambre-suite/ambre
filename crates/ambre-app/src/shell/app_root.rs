@@ -139,7 +139,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         zoom,
         ctx_scope,
         filter_active,
-        sel_bounds,
+        sort_range,
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
@@ -229,6 +229,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // which already holds every frame on the board -- including the off-screen
     // ones a link exists to reach.
     let link_open = RwSignal::new(false);
+    // Open the sort dialog over the range the Logic thread resolved
+    // (`trame-sort`), the reply to the `RequestSortRange` sent by "Sort range...".
+    Effect::new(move |_| {
+        let Some((r1, c1, r2, c2)) = sort_range.get() else {
+            return;
+        };
+        sort_range.set(None);
+        sort_dialog.set(Some(trame_chrome::SortDialogState { r1, c1, r2, c2 }));
+    });
     // Follow the outbound half of a link the board handed back (`toile-links`).
     // The board decided; this only performs, which is why nothing here reads a
     // target or writes one.
@@ -474,11 +483,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 };
                 find_state.set(Some(trame_chrome::FindReplaceState { mode }));
             } else if id == trame_chrome::SORT_RANGE_MULTI {
-                // UI-only intent (`trame-sort`): open the sort dialog over
-                // the current selection (published by the canvas view). The dialog
-                // emits the typed `SortRangeMulti` itself via `on_sort_apply`.
-                let (r1, c1, r2, c2) = sel_bounds.get_untracked().unwrap_or((0, 0, 0, 0));
-                sort_dialog.set(Some(trame_chrome::SortDialogState { r1, c1, r2, c2 }));
+                // Ask the Logic thread for the range the sort would order
+                // (`trame-sort`). A band selection has no extent the canvas
+                // knows, so the dialog opens on the `SortRange` reply, below.
+                if let Some(document_id) = current_doc.get_untracked() {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Trame(TrameCommand::RequestSortRange),
+                    });
+                }
             } else if id == trame_chrome::FILTER_COLUMN {
                 let (x, y) = client_anchor(anchor_pos.get_untracked());
                 // `col` is provisional; the ColumnValues reply carries the real one.

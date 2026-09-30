@@ -299,7 +299,8 @@ fn shared_filter_is_undoable() {
     assert!(!is_filtered(&mut state, 1, 0), "undo removed the filter");
 }
 
-/// Apply/clear on a non-active sheet, or a virtual column, is a pure no-op.
+/// Apply on a non-active sheet, or a virtual column, writes nothing and says
+/// so (`TRAME-FEAT-037`); a clear with nothing to clear is a pure no-op.
 #[test]
 fn shared_filter_noop_guards() {
     let mut state = TrameState::new();
@@ -311,7 +312,8 @@ fn shared_filter_noop_guards() {
         col: 0,
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });
-    assert!(wrong.display.is_empty() && wrong.update.is_none());
+    assert!(matches!(&wrong.display[..], [TrameEvent::Error { .. }]));
+    assert!(wrong.update.is_none());
     let wrong_clear = state.handle_command(TrameCommand::ClearFilter {
         sheet_id: "nope".to_owned(),
     });
@@ -323,7 +325,112 @@ fn shared_filter_noop_guards() {
         col: 50,
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });
-    assert!(virtual_col.display.is_empty() && virtual_col.update.is_none());
+    assert!(matches!(
+        &virtual_col.display[..],
+        [TrameEvent::Error { .. }]
+    ));
+    assert!(virtual_col.update.is_none());
+}
+
+/// Column A holds `values`, column B its row index; a filter on A hides the
+/// rows whose value is not `keep`.
+fn filtered_sheet(values: &[&str], keep: &str) -> TrameState {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, values);
+    for row in 0..values.len() as u32 {
+        state.handle_command(TrameCommand::SetCellText {
+            row,
+            col: 1,
+            text: format!("{row}"),
+        });
+    }
+    state.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: TEST_SHEET.to_owned(),
+        col: 0,
+        kind: FilterKind::Values(vec![keep.to_owned()]),
+    });
+    state
+}
+
+/// A filter never outlives the column it tests (`TRAME-FEAT-030`): deleting
+/// that column drops the definition and the hidden rows, and says so.
+#[test]
+fn filter_goes_with_its_column() {
+    let mut state = filtered_sheet(&["x", "y", "x"], "x");
+    assert_eq!(state.hidden_rows.len(), 1);
+    let out = state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::FilterCleared))
+    );
+    assert!(state.load_active_filter().is_none());
+    assert!(state.hidden_rows.is_empty());
+    let def = state
+        .doc
+        .get_map(crate::logic::schema::filters_map_name(TEST_SHEET));
+    assert_eq!(def.len(), 0, "no definition left in the document");
+}
+
+/// The status bar totals what a formula over the same cells totals
+/// (`TRAME-FEAT-029`): a hidden row still counts, as it does in `SUM`.
+#[test]
+fn status_bar_total_matches_sum_under_a_filter() {
+    let mut state = filtered_sheet(&["x", "y", "x"], "x");
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 2,
+        col: 1,
+        anchor_row: 0,
+        anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    let out = state.handle_command(TrameCommand::RequestSelectionStats);
+    let [TrameEvent::SelectionStats { sum, count, .. }] = &out.display[..] else {
+        panic!("expected SelectionStats")
+    };
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 3,
+        text: "=SUM(B1:B3)".to_owned(),
+    });
+    assert_eq!(read_cell(&mut state, 0, 3), "3");
+    assert_eq!(*sum, 3.0);
+    assert_eq!(*count, 3);
+}
+
+/// An edit outside the filtered column writes nothing to the hidden set
+/// (`TRAME-FEAT-036`): the edit is one operation, whatever the rows hidden.
+#[test]
+fn edit_outside_the_filtered_column_leaves_the_hidden_set_alone() {
+    let mut state = filtered_sheet(&["x", "y", "y", "y", "x"], "x");
+    assert_eq!(state.hidden_rows.len(), 3);
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "first".to_owned(),
+    });
+    let before = state.doc.len_ops();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "second".to_owned(),
+    });
+    assert_eq!(state.doc.len_ops() - before, 1, "the cell write alone");
+    assert_eq!(state.hidden_rows.len(), 3);
+}
+
+/// The popover lists the values in the order the column reads them: numbers
+/// numerically, before text (`TRAME-FEAT-041`).
+#[test]
+fn filter_values_are_ordered_as_the_column_reads() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["10", "9", "b", "100", "9", "a"]);
+    let out = state.handle_command(TrameCommand::RequestActiveColumnValues);
+    let [TrameEvent::ColumnValues { values, .. }] = &out.display[..] else {
+        panic!("expected ColumnValues")
+    };
+    assert_eq!(values, &vec!["9", "10", "100", "a", "b"]);
 }
 
 /// Unit-test every `condition_pass` operator and both the numeric and the

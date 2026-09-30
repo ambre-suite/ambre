@@ -516,14 +516,14 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
 /// or [`Expr::Name`] nodes, so the compiler only deals with concrete refs.
 ///
 /// `default_sheet` is the sheet the formula itself lives on (its unqualified
-/// references resolve there). Returns an error string for an unknown sheet name
-/// or undefined name.
+/// references resolve there). Returns an error string for an unknown sheet
+/// name.
 ///
 /// # Errors
 ///
-/// A message for a sheet display name that resolves to nothing, and for an
-/// undefined name. A deleted sheet is not an error here: it evaluates to
-/// `#REF!`.
+/// A message for a sheet display name that resolves to nothing. A deleted sheet
+/// is not an error here: it evaluates to `#REF!`, and an undefined name to
+/// `#NAME?`.
 pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Result<Expr, String> {
     match expr {
         Expr::CellRef(mut r) => {
@@ -565,7 +565,10 @@ pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Res
         Expr::Name(name) => match ctx.resolve_name(&name) {
             Some(NameTarget::Cell(r)) => Ok(Expr::CellRef(r)),
             Some(NameTarget::Range(r)) => Ok(Expr::Range(r)),
-            None => Err(format!("undefined name: {name}")),
+            // An undefined name is a value, not a failure to parse. The cell
+            // reads `#NAME?` until the name is defined; a reseed then
+            // recompiles it (`TRAME-065`).
+            None => Ok(Expr::Literal(CellValue::Error(FormulaError::NameError))),
         },
         Expr::BinOp { kind, lhs, rhs } => Ok(Expr::BinOp {
             kind,

@@ -222,6 +222,45 @@ mod tests {
         )
     }
 
+    /// A border the user did not colour follows the active theme (`TRAME-101`):
+    /// its stroke is the palette's `cell_border`, and the two themes differ.
+    #[test]
+    fn uncoloured_border_follows_the_theme() {
+        let mut state = fixture(&[(0, 0, "x")]);
+        if let Some(cell) = state.cell_cache.get_mut(&(0, 0)) {
+            cell.borders.top = Some(ambre_bus::CellBorder {
+                style: ambre_bus::BorderStyle::Solid,
+                color: None,
+            });
+        }
+        let stroked = |theme: Theme| {
+            let palette = theme.palette();
+            let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+            draw_cells(
+                &mut surface,
+                &state,
+                palette,
+                &mut font_cx,
+                &mut cache,
+                true,
+                None,
+                &clock,
+                &mut stats,
+            );
+            surface.count(|op| {
+                matches!(
+                    op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_border
+                )
+            })
+        };
+        assert_ne!(
+            Theme::Light.palette().cell_border,
+            Theme::Dark.palette().cell_border
+        );
+        assert_eq!(stroked(Theme::Light), 1);
+        assert_eq!(stroked(Theme::Dark), 1);
+    }
+
     #[test]
     fn draw_cells_full_repaint_paints_pending_then_grid() {
         let state = fixture(&[]);

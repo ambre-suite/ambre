@@ -185,7 +185,12 @@ pub(crate) fn power(args: &[CellValue]) -> CellValue {
         Some(n) => *n,
         None => return CellValue::Error(FormulaError::TypeError),
     };
-    CellValue::Number(base.powf(exp))
+    // A negative base under a fractional exponent has no real root: `powf`
+    // answers NaN, which is not a value a cell may hold (`TRAME-181`).
+    match base.powf(exp) {
+        n if n.is_finite() => CellValue::Number(n),
+        _ => CellValue::Error(FormulaError::NumError),
+    }
 }
 
 /// Read the first argument as a single number, or `None` if absent/non-numeric.

@@ -80,9 +80,13 @@ impl TrameState {
         // collapse into the single trailing commit. The group is sealed by the
         // next command's fallback `group_end`.
         let _ = self.undo_manager.group_start();
+        // A cell past the materialization cap has no line to key its style by.
+        // It is refused whole, never drawn with a style the document does not
+        // hold (`TRAME-193`).
+        let mut refused: HashSet<(u32, u32)> = HashSet::new();
         for &(row, col) in &cells {
-            if !self.covered.contains(&(row, col)) {
-                let _ = self.materialize(row, col);
+            if !self.covered.contains(&(row, col)) && self.materialize(row, col).is_none() {
+                refused.insert((row, col));
             }
         }
         for &(row, col) in &cells {
@@ -92,7 +96,7 @@ impl TrameState {
             // it is actively wrong, since it would draw interior edges
             // inside the merged block. The master carries the whole span's
             // style.
-            if self.covered.contains(&cell) {
+            if self.covered.contains(&cell) || refused.contains(&cell) {
                 continue;
             }
             // Bold/italic live in their own in-memory sets; they are folded
@@ -173,27 +177,57 @@ impl TrameState {
         let update = self.flush_delta();
         // The active cell's resolved state drives the toolbar; DataReset re-fetches
         // the restyled viewport (number-format reformat, colours, borders).
+        let mut display = vec![self.style_state_event(), TrameEvent::DataReset];
+        if !refused.is_empty() {
+            display.push(TrameEvent::Error {
+                message: format!(
+                    "{} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not formatted",
+                    refused.len()
+                ),
+            });
+        }
         TrameOutcome {
-            display: vec![self.style_state_event(), TrameEvent::DataReset],
+            display,
             update,
             ephemeral: None,
         }
     }
 
-    /// The active cell's resolved formatting, for the toolbar controls.
+    /// Whether the cell at `(row, col)` computes to a number, before its format
+    /// renders it. The one test behind `HAlign::Auto`, for the grid and the
+    /// toolbar alike (`TRAME-UI-093`, `TRAME-UI-094`, `TRAME-186`).
+    pub(super) fn cell_is_numeric(&self, row: u32, col: u32) -> bool {
+        matches!(
+            self.engine.evaluated_value(self.active_cell_id(row, col)),
+            Some(CellValue::Number(n)) if n.is_finite()
+        )
+    }
+
+    /// The master of the merged block covering `cell`, or `cell` itself when no
+    /// block covers it.
+    fn merge_master(&self, cell: (u32, u32)) -> (u32, u32) {
+        if !self.covered.contains(&cell) {
+            return cell;
+        }
+        let (row, col) = cell;
+        self.merges
+            .iter()
+            .find(|&(&(r1, c1), &(r2, c2))| (r1..=r2).contains(&row) && (c1..=c2).contains(&col))
+            .map_or(cell, |(&master, _)| master)
+    }
+
+    /// The active cell's resolved formatting, for the toolbar controls. Inside a
+    /// merged block that is the block's style, the one the user sees, which its
+    /// master carries (`TRAME-188`).
     pub(super) fn style_state_event(&self) -> TrameEvent {
+        let shown = self.merge_master(self.active);
         TrameEvent::StyleApplied {
-            style: self.styles.get(&self.active).cloned().unwrap_or_default(),
-            bold: self.bold.contains(&self.active),
-            italic: self.italic.contains(&self.active),
+            style: self.styles.get(&shown).cloned().unwrap_or_default(),
+            bold: self.bold.contains(&shown),
+            italic: self.italic.contains(&shown),
             merged: self.merges.contains_key(&self.active) || self.covered.contains(&self.active),
-            // Same numeric heuristic the renderer uses to resolve `HAlign::Auto`
-            // (see `render::content::cell_alignment`): a value that parses as a
-            // number aligns right, everything else left.
-            numeric: self
-                .cell_text(self.active.0, self.active.1)
-                .parse::<f64>()
-                .is_ok(),
+            // The test the viewport pack hands the renderer (`TRAME-UI-094`).
+            numeric: self.cell_is_numeric(shown.0, shown.1),
         }
     }
 
@@ -243,6 +277,34 @@ impl TrameState {
         }
     }
 
+    /// The text a cell of the active sheet shows: its computed text through its
+    /// number format. Find, replace and export read this, so a cell reads the
+    /// same wherever it is shown as text (`TRAME-108`).
+    pub(super) fn displayed_text(&self, row: u32, col: u32) -> String {
+        let text = self.cell_text(row, col);
+        match self.styles.get(&(row, col)) {
+            Some(style) => self.format_display(row, col, text, style),
+            None => text,
+        }
+    }
+
+    /// The style `cellstyle_{sheet}` stores for a cell of any sheet, or `None`
+    /// for the default. An undecodable record reads as the default here: the
+    /// reseed of that sheet is what reports it (`SCHEMA-003`).
+    pub(super) fn stored_style(&self, sheet_id: &str, rl: Uid, cl: Uid) -> Option<CellStyle> {
+        match self
+            .doc
+            .get_map(cellstyle_map_name(sheet_id))
+            .get(&cell_key(rl, cl))
+            .map(|v| v.get_deep_value())
+        {
+            Some(LoroValue::Binary(bytes)) => postcard::from_bytes::<StyleRecord>(&bytes)
+                .ok()
+                .map(|record| record.style),
+            _ => None,
+        }
+    }
+
     /// Apply a cell's number format to its computed display `text`. A `General` /
     /// `Text` cell or a non-numeric value renders verbatim
     /// (`trame-number-formats`).
@@ -254,7 +316,7 @@ impl TrameState {
         style: &CellStyle,
     ) -> String {
         match style.format {
-            CellFormat::General | CellFormat::Text | CellFormat::Custom(_) => text,
+            CellFormat::General | CellFormat::Text => text,
             ref fmt => match text.parse::<f64>() {
                 Ok(v) => format_number(v, fmt, style.decimals),
                 Err(_) => text,

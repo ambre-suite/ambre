@@ -54,13 +54,19 @@ impl TrameState {
     /// `#s0!A1`). A later rename/reorder then never invalidates the reference
     /// (`trame-sheets`). Plain text, formulas without a qualifier, and formulas
     /// that fail to parse are stored verbatim (the user's exact input).
-    pub(super) fn canonicalize_input(&self, text: &str) -> String {
+    ///
+    /// # Errors
+    ///
+    /// The display name of a sheet the formula qualifies and no tab carries
+    /// (`TRAME-211`). Stored by name, it would resolve the day such a sheet
+    /// appears and break the day that sheet is renamed.
+    pub(super) fn canonicalize_input(&self, text: &str) -> Result<String, String> {
         let Some(body) = text.strip_prefix('=') else {
-            return text.to_string();
+            return Ok(text.to_string());
         };
         // A cross-sheet reference always carries a `!`; nothing else to rewrite.
         if !body.contains('!') {
-            return text.to_string();
+            return Ok(text.to_string());
         }
         let name_to_id = |name: &str| {
             self.sheet_name_to_u16
@@ -68,12 +74,13 @@ impl TrameState {
                 .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
                 .cloned()
         };
-        match parse_formula(body) {
-            Ok(ast) => format!(
-                "={}",
-                render::render(&render::canonicalize(ast, &name_to_id))
-            ),
-            Err(_) => text.to_string(),
+        let Ok(ast) = parse_formula(body) else {
+            return Ok(text.to_string());
+        };
+        let canonical = render::canonicalize(ast, &name_to_id);
+        match render::first_name_qualifier(&canonical) {
+            Some(unknown) => Err(unknown),
+            None => Ok(format!("={}", render::render(&canonical))),
         }
     }
 
@@ -245,13 +252,21 @@ impl TrameState {
             };
             self.engine.on_cell_changed(cell, "", &indices, &ctx);
         } else {
-            let Some((rl, cl)) = self.materialize(row, col) else {
-                // Beyond the materialization cap: drop the write.
-                return;
-            };
             // Persist the canonical (`sheet_id`-bound) form so cross-sheet
             // references survive rename/reorder (`trame-sheets`).
-            let stored = self.canonicalize_input(text);
+            let stored = match self.canonicalize_input(text) {
+                Ok(stored) => stored,
+                Err(sheet) => {
+                    self.write_refusals.push(WriteRefusal::UnknownSheet(sheet));
+                    return;
+                }
+            };
+            let Some((rl, cl)) = self.materialize(row, col) else {
+                // Beyond the materialization cap: the write is refused, and
+                // `finish_cell_writes` says so (`TRAME-UI-164`).
+                self.write_refusals.push(WriteRefusal::BeyondCap);
+                return;
+            };
             let _ = self
                 .doc
                 .get_map(cells_map_name(&self.active_sheet))
@@ -283,11 +298,45 @@ impl TrameState {
         // Ask the UI to re-fetch its viewport. The edit, and any formula it
         // feeds, then renders its computed result immediately, without waiting
         // for the network echo. The optimistic UI-side update covers plain
-        // literals; formulas need this round-trip.
+        // literals; formulas need this round-trip. The re-fetch also puts back
+        // what the UI drew optimistically for a refused write.
+        let mut display = vec![TrameEvent::DataReset];
+        display.extend(self.take_write_refusals());
         TrameOutcome {
-            display: vec![TrameEvent::DataReset],
+            display,
             update,
             ephemeral: None,
         }
+    }
+
+    /// One [`TrameEvent::Error`] per kind of refused write since the last call,
+    /// the refusals cleared.
+    fn take_write_refusals(&mut self) -> Vec<TrameEvent> {
+        let refusals = std::mem::take(&mut self.write_refusals);
+        let beyond_cap = refusals
+            .iter()
+            .filter(|r| **r == WriteRefusal::BeyondCap)
+            .count();
+        let mut unknown: Vec<String> = refusals
+            .into_iter()
+            .filter_map(|r| match r {
+                WriteRefusal::UnknownSheet(name) => Some(name),
+                WriteRefusal::BeyondCap => None,
+            })
+            .collect();
+        unknown.sort();
+        unknown.dedup();
+        let mut events = Vec::new();
+        if beyond_cap > 0 {
+            events.push(TrameEvent::Error {
+                message: format!(
+                    "{beyond_cap} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not written"
+                ),
+            });
+        }
+        events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
+            message: format!("no sheet is named \"{name}\": the formula was not written"),
+        }));
+        events
     }
 }

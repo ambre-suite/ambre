@@ -210,7 +210,7 @@ pub fn FormatBar(
             aria-label="Decrease decimals"
             disabled=move || !style.format.get().has_decimals()
             on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(0)), ..Default::default() })
+            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(-1), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowLeft />
         </button>
@@ -218,7 +218,7 @@ pub fn FormatBar(
             aria-label="Increase decimals"
             disabled=move || !style.format.get().has_decimals()
             on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| on_style.run(StylePatch { decimals: Some(Some(2)), ..Default::default() })
+            on:click=move |_| on_style.run(StylePatch { decimals_step: Some(1), ..Default::default() })
         >
             <Icon icon=icondata::LuDecimalsArrowRight />
         </button>

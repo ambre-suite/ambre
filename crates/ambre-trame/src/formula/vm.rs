@@ -26,6 +26,14 @@ use super::types::{
 /// 1M cells covers any realistic used area while capping the blast radius.
 const MAX_RANGE_CELLS: usize = 1_000_000;
 
+/// Ceiling on the range cells one recomputation pass may read, all ranges
+/// together (`TRAME-210`). `MAX_RANGE_CELLS` bounds the memory of one range,
+/// which is freed after its call. It leaves the time unbounded: a hundred
+/// formulas each just under it cost a hundred million reads on every recompute.
+/// The ceiling clears a running total over ten thousand rows (`SUM(A$1:An)`,
+/// fifty million reads), the heaviest shape a real sheet takes.
+pub(crate) const MAX_PASS_RANGE_CELLS: usize = 64_000_000;
+
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
 pub struct EvalContext<'a> {
@@ -48,6 +56,9 @@ pub struct EvalContext<'a> {
     /// no-argument `ROW()`/`COLUMN()`. `(0, 0)` means "unknown" (for example a bare
     /// `execute` call in tests). Set by [`EvalContext::eval_cell`].
     pub current_pos: (u32, u32),
+    /// Range cells this pass may still read ([`MAX_PASS_RANGE_CELLS`]). A range
+    /// that would overdraw it reads as `#REF!`, like one over `MAX_RANGE_CELLS`.
+    pub range_cells_left: usize,
 }
 
 /// Resolving one axis of a reference to a grid position.
@@ -72,6 +83,7 @@ impl<'a> EvalContext<'a> {
             indices,
             now_serial: 0.0,
             current_pos: (0, 0),
+            range_cells_left: MAX_PASS_RANGE_CELLS,
         }
     }
 
@@ -320,9 +332,12 @@ impl<'a> EvalContext<'a> {
         // ~70M values on each recompute. Cap the cell count and surface `#REF!`
         // rather than let a single formula OOM the WASM Logic worker. The
         // ceiling is generous relative to any real spreadsheet's used area.
-        if rows.saturating_mul(cols) > MAX_RANGE_CELLS {
+        let cells = rows.saturating_mul(cols);
+        if cells > MAX_RANGE_CELLS || cells > self.range_cells_left {
             return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
         }
+        // The whole pass shares one budget (`TRAME-210`).
+        self.range_cells_left -= cells;
         let mut values = Vec::with_capacity(rows * cols);
         for rp in rs..=re {
             for cp in cs..=ce {
@@ -634,6 +649,25 @@ mod tests {
         // cache immutably. Clone the bytecode to avoid the double borrow.
         let owned = bc_ref.clone();
         ctx.execute(&owned)
+    }
+
+    /// The ranges of one pass share one budget (`TRAME-210`). Each range below
+    /// is under the per-range cap. The one that overdraws the pass reads `#REF!`.
+    #[test]
+    fn ranges_of_one_pass_share_one_budget() {
+        let ast = parse_formula("SUM(A1:J10)").unwrap();
+        let indices = indices_with(10, 10);
+        let bc = compile(&ast, &indices);
+        let cache = HashMap::new();
+        let bc_cache = BytecodeCache::new();
+        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices);
+        assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
+        // Room for two reads of the hundred cells, not three.
+        ctx.range_cells_left = 250;
+        assert_eq!(ctx.execute(&bc).to_display(), "0");
+        assert_eq!(ctx.execute(&bc).to_display(), "0");
+        assert_eq!(ctx.range_cells_left, 50);
+        assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
     }
 
     #[test]

@@ -59,6 +59,24 @@ pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&str) -> Option<String>) ->
     })
 }
 
+/// The first display-name qualifier left in `expr`, the one
+/// [`canonicalize`] could not resolve to a sheet id.
+pub fn first_name_qualifier(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::SheetRef {
+            sheet: SheetQualifier::Name(name),
+            ..
+        } => Some(name.clone()),
+        Expr::SheetRef { inner, .. } => first_name_qualifier(inner),
+        Expr::BinOp { lhs, rhs, .. } => {
+            first_name_qualifier(lhs).or_else(|| first_name_qualifier(rhs))
+        }
+        Expr::UnaryOp { operand, .. } => first_name_qualifier(operand),
+        Expr::FnCall { args, .. } => args.iter().find_map(first_name_qualifier),
+        _ => None,
+    }
+}
+
 /// Rewrite stable-id qualifiers (`#s0!`) back into the sheet's current display
 /// name (`Data!`). An id that `id_to_name` cannot resolve (deleted sheet) is
 /// left in `#id` form, which signals the dangling reference in the formula bar.

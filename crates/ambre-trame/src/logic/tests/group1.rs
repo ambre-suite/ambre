@@ -369,18 +369,166 @@ fn named_range_defines_resolves_and_deletes() {
         "name persists across reload"
     );
 
-    // Deleting the name stops it resolving: its consumer no longer computes
-    // the sum. The engine drops the now-unresolvable formula, so the cell
-    // falls back to its raw text rather than the stale 15.
+    // Deleting the name stops it resolving: its consumer shows an error where
+    // the total stood, never the stale 15 nor its own source (`TRAME-065`).
     restored.handle_command(TrameCommand::DeleteName {
         name: "TOTAL".to_owned(),
     });
-    let after = read_c1(&mut restored, 4);
-    assert_ne!(after, "15", "deleted name must no longer resolve");
+    assert_eq!(read_c1(&mut restored, 4), "#NAME?");
+
+    // Defining it again brings the total back.
+    restored.handle_command(TrameCommand::DefineName {
+        name: "TOTAL".to_owned(),
+        reference: "A1:A3".to_owned(),
+    });
+    assert_eq!(read_c1(&mut restored, 5), "15");
+}
+
+/// A1 of the active sheet, as displayed.
+fn read_a1(state: &mut TrameState, version: u64) -> String {
+    read_cell_v(state, 0, 0, version)
+}
+
+/// The display text of `(row, col)` on the active sheet.
+fn read_cell_v(state: &mut TrameState, row: u32, col: u32, version: u64) -> String {
+    let evts = state.handle_command(TrameCommand::ScrollViewport {
+        version,
+        row_start: row,
+        row_end: row,
+        col_start: col,
+        col_end: col,
+    });
+    let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
+        panic!()
+    };
+    cells[0].text.clone()
+}
+
+/// An unqualified definition binds to the sheet it was defined on, so every
+/// reader totals the same cells whatever tab it looks at (`TRAME-062`).
+#[test]
+fn unqualified_name_resolves_the_same_for_every_reader() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Other".to_owned(),
+    });
+    let other = second_sheet_id(&state);
+    // Sheet1!A1:A2 holds 1 and 2; Other!A1:A2 holds 10 and 20.
+    for (sheet, base) in [("s0".to_owned(), 1), (other.clone(), 10)] {
+        state.handle_command(TrameCommand::ActivateSheet { sheet_id: sheet });
+        for row in 0..2 {
+            state.handle_command(TrameCommand::SetCellText {
+                row,
+                col: 0,
+                text: format!("{}", base * (row + 1)),
+            });
+        }
+    }
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: "s0".to_owned(),
+    });
+    state.handle_command(TrameCommand::DefineName {
+        name: "TOTAL".to_owned(),
+        reference: "A1:A2".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "=SUM(TOTAL)".to_owned(),
+    });
+    assert_eq!(read_cell_v(&mut state, 0, 1, 1), "3");
+    // A formula on the other sheet reads the same name, and the same cells.
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: other.clone(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "=SUM(TOTAL)".to_owned(),
+    });
+    assert_eq!(read_cell_v(&mut state, 0, 1, 2), "3");
+}
+
+/// A name reaching another sheet by its display name survives that sheet
+/// being renamed (`TRAME-067`).
+#[test]
+fn name_on_another_sheet_survives_its_rename() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Data".to_owned(),
+    });
+    let data = second_sheet_id(&state);
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: data.clone(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "7".to_owned(),
+    });
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: "s0".to_owned(),
+    });
+    state.handle_command(TrameCommand::DefineName {
+        name: "RATE".to_owned(),
+        reference: "Data!A1".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "=RATE*2".to_owned(),
+    });
+    assert_eq!(read_a1(&mut state, 1), "14");
+    state.handle_command(TrameCommand::RenameSheet {
+        sheet_id: data,
+        name: "Inputs".to_owned(),
+    });
     assert_eq!(
-        after, "=SUM(TOTAL)",
-        "unresolved formula falls back to raw text"
+        read_a1(&mut state, 2),
+        "14",
+        "the rename leaves RATE resolving"
     );
+}
+
+/// A definition that is not a reference, or names a sheet that does not exist,
+/// is refused when it is made, and writes nothing (`TRAME-069`).
+#[test]
+fn definition_that_is_not_a_reference_is_refused() {
+    let mut state = TrameState::new();
+    for reference in ["A1+1", "SUM(A1:A3)", "Nowhere!A1", "not a ref", ""] {
+        let evts = state.handle_command(TrameCommand::DefineName {
+            name: "TOTAL".to_owned(),
+            reference: reference.to_owned(),
+        });
+        assert!(
+            matches!(&evts.display[..], [TrameEvent::Error { .. }]),
+            "{reference:?} is refused"
+        );
+        assert!(evts.update.is_none(), "{reference:?} writes nothing");
+    }
+}
+
+/// A name no formula can read is refused when it is made (`TRAME-155`): a
+/// cell reference, a boolean, a leading digit, a space.
+#[test]
+fn name_a_formula_cannot_read_is_refused() {
+    let mut state = TrameState::new();
+    for name in ["A1", "TRUE", "1TOTAL", "MY TOTAL", ""] {
+        let evts = state.handle_command(TrameCommand::DefineName {
+            name: name.to_owned(),
+            reference: "B1:B3".to_owned(),
+        });
+        assert!(
+            matches!(&evts.display[..], [TrameEvent::Error { .. }]),
+            "{name:?} is refused"
+        );
+        assert!(evts.update.is_none(), "{name:?} writes nothing");
+    }
+    let evts = state.handle_command(TrameCommand::DefineName {
+        name: "_TOTAL_2".to_owned(),
+        reference: "B1:B3".to_owned(),
+    });
+    assert!(evts.update.is_some(), "a readable name is stored");
 }
 
 /// End-to-end of the reported bug: plain numeric literals typed into A1/B1
@@ -670,4 +818,184 @@ fn selection_style_is_a_single_undo() {
             "col {c} still bold after ONE undo -> style was multi-undo"
         );
     }
+}
+
+use ambre_bus::{CellFormat, StylePatch};
+
+/// Format `A1` holding `value` with `format`, the selection on it.
+fn formatted_a1(value: &str, format: CellFormat) -> TrameState {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: value.to_owned(),
+    });
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 0,
+        anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: StylePatch {
+            format: Some(format),
+            ..Default::default()
+        },
+    });
+    state
+}
+
+/// A number stays a number whatever its format prints, for the grid and for
+/// the toolbar alike (`TRAME-UI-093`, `TRAME-UI-094`, `TRAME-186`). A text
+/// stays a text.
+#[test]
+fn a_formatted_number_aligns_as_a_number_everywhere() {
+    for format in [
+        CellFormat::Currency,
+        CellFormat::Percent,
+        CellFormat::Fraction,
+        CellFormat::Date,
+        CellFormat::Custom("0 \"kg\"".to_owned()),
+    ] {
+        let mut state = formatted_a1("0.5", format.clone());
+        let a1 = read_display(&mut state, 0, 0);
+        assert!(
+            a1.text.parse::<f64>().is_err(),
+            "{format:?} prints {:?}, which is not a bare number",
+            a1.text
+        );
+        assert!(a1.numeric, "{format:?}: the grid aligns it as a number");
+        let TrameEvent::StyleApplied { numeric, .. } = state.style_state_event() else {
+            panic!("expected StyleApplied")
+        };
+        assert!(numeric, "{format:?}: the toolbar agrees with the grid");
+    }
+    let mut state = formatted_a1("label", CellFormat::Currency);
+    assert!(!read_display(&mut state, 0, 0).numeric);
+}
+
+/// The decimal buttons step the count a cell carries (`TRAME-105`). The count
+/// starts at the family default and stops at zero.
+#[test]
+fn decimal_step_adds_one_place_to_the_count() {
+    let mut state = formatted_a1("3.14159", CellFormat::Number);
+    let step = |state: &mut TrameState, by: i8| {
+        state.handle_command(TrameCommand::SetCellStyle {
+            patch: StylePatch {
+                decimals_step: Some(by),
+                ..Default::default()
+            },
+        });
+        read_display(state, 0, 0).text
+    };
+    assert_eq!(
+        read_display(&mut state, 0, 0).text,
+        "3.14",
+        "the Number default is 2"
+    );
+    assert_eq!(step(&mut state, 1), "3.142");
+    assert_eq!(step(&mut state, 1), "3.1416");
+    assert_eq!(step(&mut state, -1), "3.142");
+    for _ in 0..5 {
+        step(&mut state, -1);
+    }
+    assert_eq!(
+        read_display(&mut state, 0, 0).text,
+        "3",
+        "the count stops at zero"
+    );
+}
+
+/// A date-formatted cell shows a calendar date, never its serial
+/// (`TRAME-107`), and a time-formatted one the time of day.
+#[test]
+fn date_and_time_cells_show_the_calendar() {
+    let mut state = formatted_a1("46294.5", CellFormat::Date);
+    assert_eq!(read_display(&mut state, 0, 0).text, "2026-09-29");
+    let mut state = formatted_a1("46294.5", CellFormat::Time);
+    assert_eq!(read_display(&mut state, 0, 0).text, "12:00:00");
+}
+
+/// A cell carrying a custom pattern shows it applied (`TRAME-109`).
+#[test]
+fn custom_pattern_is_applied() {
+    let mut state = formatted_a1("1234.5", CellFormat::Custom("#,##0.00 \"EUR\"".to_owned()));
+    assert_eq!(read_display(&mut state, 0, 0).text, "1,234.50 EUR");
+    // A text under the pattern stays the text (`TRAME-103`).
+    let mut state = formatted_a1("n/a", CellFormat::Custom("0.00".to_owned()));
+    assert_eq!(read_display(&mut state, 0, 0).text, "n/a");
+}
+
+/// Select `(r1, c1)`..`(r2, c2)`, the active cell at `(r1, c1)`.
+fn select(state: &mut TrameState, (r1, c1): (u32, u32), (r2, c2): (u32, u32)) {
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: r1,
+        col: c1,
+        anchor_row: r2,
+        anchor_col: c2,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+}
+
+/// With the cursor on a cell a merge covers, the toolbar reports the style of
+/// the block the user sees, which its master carries (`TRAME-188`).
+#[test]
+fn toolbar_reports_the_block_style_inside_a_merge() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "title".to_owned(),
+    });
+    select(&mut state, (0, 0), (1, 1));
+    state.handle_command(TrameCommand::MergeSelection);
+    select(&mut state, (0, 0), (0, 0));
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: StylePatch {
+            bold: Some(true),
+            format: Some(CellFormat::Currency),
+            ..Default::default()
+        },
+    });
+    select(&mut state, (1, 1), (1, 1));
+    let TrameEvent::StyleApplied {
+        style,
+        bold,
+        merged,
+        ..
+    } = state.style_state_event()
+    else {
+        panic!("expected StyleApplied")
+    };
+    assert!(merged);
+    assert!(bold, "the block is bold");
+    assert_eq!(style.format, CellFormat::Currency);
+}
+
+/// A formatting gesture on a cell past the materialization cap says so, and
+/// draws no style the document did not store (`TRAME-193`).
+#[test]
+fn style_beyond_the_cap_is_refused_and_not_drawn() {
+    let mut state = TrameState::new();
+    let row = crate::logic::schema::MATERIALIZE_CAP as u32 + 5;
+    select(&mut state, (row, 0), (row, 0));
+    let out = state.handle_command(TrameCommand::SetCellStyle {
+        patch: StylePatch {
+            bold: Some(true),
+            ..Default::default()
+        },
+    });
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. }))
+    );
+    assert!(!read_display(&mut state, row, 0).bold, "nothing drawn");
+    let TrameEvent::StyleApplied { bold, .. } = state.style_state_event() else {
+        panic!("expected StyleApplied")
+    };
+    assert!(!bold, "the toolbar reports what the document holds");
 }

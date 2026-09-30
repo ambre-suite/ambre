@@ -28,28 +28,27 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-104` | `OBS` | A decimal count MUST be offered only for a family that renders decimal places. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families` -- exhaustive over the ten families, the predicate's one use being the `disabled` attribute of the two buttons, so it guards the control and never the write (section 5) | none | verified |
 | `TRAME-106` | `OBS` | A fraction MUST keep the sign of a value below one. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` -- the sign half. It calls the renderer directly, not through a packed cell | none | verified |
 | `TRAME-223` | `OBS` | A fraction MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` -- the carry half, on the same direct call | none | verified |
-| `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | none | fails -- `Date` and `Time` print the serial as a number; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | none | fails -- find, replace and CSV export read the unformatted value, so a cell shown as `50.0%` is found by searching `0.5`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | none | fails -- `Custom` returns the text untouched, so the pattern is stored and silently ignored; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | `ambre_trame::logic::tests::group1::date_and_time_cells_show_the_calendar`; `ambre_trame::logic::number_format::tests::date_and_time_render_the_calendar` | none | verified |
+| `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | `ambre_trame::logic::tests::group7::find_matches_the_formatted_value`; `ambre_trame::logic::tests::group7::csv_export_writes_the_formatted_value` | none | verified |
+| `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | `ambre_trame::logic::tests::group1::custom_pattern_is_applied`; `ambre_trame::logic::number_format::tests::custom_numeric_patterns`; `::custom_literals_and_interleaved_digits`; `::custom_sections_choose_by_sign`; `::custom_date_and_time_tokens` | none | verified |
 | `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Change the decimal count
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none | fails -- the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | `ambre_trame::logic::tests::group1::decimal_step_adds_one_place_to_the_count` | none | verified |
 | `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none | unheld -- the restyle writes the style containers alone and drives no engine pass, the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own. A format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a format is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 5 `verified`, 4 `failing`, 2 `untested`, 1 `unimplemented`. What holds is the
-  pair at the root of the area. A type-level argument gives what a cell holds (`TRAME-102`), and one
-  test that packs a formatted cell gives what it shows (`TRAME-157`). What is loose is the rest of
-  the pattern language: the decimal control, the date family, the custom pattern and the reach past
-  the grid. Those four rows are rules the code contradicts, and `TRAME-109` guards nothing because
-  no surface lets a user type a pattern.
+* **Verification.** 9 `verified`, 2 `untested`, 1 `unimplemented`. What holds is the pair at the
+  root of the area. A type-level argument gives what a cell holds (`TRAME-102`), and one test that
+  packs a formatted cell gives what it shows (`TRAME-157`). The decimal step, the calendar, the
+  custom pattern and the reach past the grid each have their test. What is loose is the surface: no
+  control lets a user type a pattern, so `TRAME-109` holds for patterns only a document carries.
 
 ---
 
@@ -80,9 +79,9 @@ pub enum CellFormat {
 | `Percent` | the value times a hundred, then `%` | 0 |
 | `Scientific` | exponent notation | 2 |
 | `Fraction` | a whole part and sixteenths, both signed together (`TRAME-106`) | -- |
-| `Date`, `Time` | the serial, unconverted (`TRAME-107`) | -- |
+| `Date`, `Time` | the calendar date `2026-09-29`, the time of day `14:05:09` (`TRAME-107`) | -- |
 | `Text` | the text, verbatim | -- |
-| `Custom` | the text, verbatim (`TRAME-109`) | -- |
+| `Custom` | the value through the pattern (`TRAME-109`), in the language below | -- |
 
 **Where it happens**, per cell, once:
 
@@ -92,7 +91,21 @@ pub enum CellFormat {
    which lets `#REF!` and a column header survive a format applied to the whole column.
 4. `format_number` renders the value for the family and the decimal count.
 
-**Code.** `logic/styles.rs` -- `format_display`; `logic/packing.rs` -- `format_number`;
+Find, replace and CSV export read the same rendered text, never the computed one (`TRAME-108`).
+
+**The pattern language** of `Custom`, the common subset of the spreadsheet formats:
+
+| Piece | Renders |
+|---|---|
+| `;` | up to three sections: positive, negative, zero. A sign-chosen section prints the magnitude |
+| `0` / `#` | a digit; `0` prints a zero where the number has none, `#` prints nothing |
+| `.` / `,` / `%` | the decimal point, the thousands grouping, and the value times a hundred |
+| `"text"` / `\c` | a literal |
+| `y m d h s`, `AM/PM` | the date and time parts; `m` after `h` or before `s` is the minutes |
+| anything else | itself: no pattern is refused |
+
+**Code.** `logic/styles.rs` -- `format_display`, `displayed_text`; `logic/packing.rs` --
+`format_number`; `logic/number_format.rs` -- the calendar and the pattern language;
 `logic/commands.rs` -- the viewport packing loop that calls it.
 
 ---
@@ -102,8 +115,8 @@ pub enum CellFormat {
 | Control | Effect |
 |---|---|
 | the format button | a popover listing the families, a check on the active one |
-| decrease decimals | writes a decimal count of zero (`TRAME-105`) |
-| increase decimals | writes a decimal count of two (`TRAME-105`) |
+| decrease decimals | removes one place from each selected cell's count, down to zero (`TRAME-105`) |
+| increase decimals | adds one place to each selected cell's count, from its family default (`TRAME-105`) |
 | both decimal buttons | disabled unless the active cell's family renders decimals (`TRAME-104`) |
 
 The controls read the active cell, like the rest of the toolbar, and write the whole selection. A
@@ -126,18 +139,6 @@ format edit is a restyle -- one undo item, one delta, whole-cell last-writer-win
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Date and time render their serial** (`TRAME-107`). Both families fall through to a plain number,
-  so a cell holding `=TODAY()` under a Date format shows a five-digit integer. The conversion it
-  needs already exists one module away: `ymd_from_serial`, in the function library, is what `YEAR`,
-  `MONTH` and `DAY` are built on.
-* **A format stops at the edge of the grid** (`TRAME-108`). `format_display` has one call site, the
-  viewport pack. Find, replace and CSV export each read the computed value instead, so the same cell
-  has two texts depending on who asks. `TRAME-UI-078` -- a plain cell is matched on its displayed
-  value -- is `verified` by a test whose cells carry no format. It is false as soon as one does.
-* **A custom pattern is accepted and ignored** (`TRAME-109`). `CellFormat::Custom` carries the
-  string, the toolbar has no field to type one into, and the renderer returns the text unchanged. No
-  rule says which pattern language it would be, and none says a bad one is refused. There is no
-  surface that would do the refusing.
 * **The currency is the euro, in the code** (`TRAME-110`). There is no currency choice and no
   document locale. The decimal separator, the thousands separator and the date order are whatever
   the format function was written to emit.

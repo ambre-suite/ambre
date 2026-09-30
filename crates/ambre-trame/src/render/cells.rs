@@ -122,7 +122,7 @@ where
         // neighbour cells (`trame-cell-rendering`); wrapped or multi-line text is
         // clipped to its own box. `single_line` guards against newlines pushing a
         // non-wrap value taller than the row -- that case clips like wrap does.
-        let align = cell_alignment(content.h_align, content.text);
+        let align = cell_alignment(content.h_align, content.numeric);
         let single_line = text_h <= row_h;
         let overflow = !content.wrap && single_line && text_w > avail;
         let (x_off, clip_rect, needs_clip) = if overflow {

@@ -37,19 +37,19 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | unheld -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | none | fails -- `resolve_autofit` walks the viewport cache, and a column whose cells are all outside it measures zero and is set to the default width. A double-click below the loaded window narrows a full column to the width of an empty one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | `ambre_trame::logic::tests::group7::column_content_reaches_every_row`; `ambre_trame::ui::view::interact::tests::a_column_fit_sizes_from_content_or_defaults_when_empty` | partial -- the tests hold the whole-column answer and its measure; the view requesting it on the double-click and measuring the reply is wasm glue no host test reaches; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 
 * **Budget.** none: a resize writes one entry in the size register and repaints, and
   `ambre-spec-budgets.md` budgets no resize. The repaint sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 1 `failing`, 5 `untested`, 1 `qa-manual`. What holds is the document
-  plane: the write, the reload and the concurrent race each have a test. What is loose is the UI
-  thread, where the pointer meets the zoom and the cache, and the column clamp nothing reads back.
-  A resize goes out lossless, so a refused send leaves the local size map untouched, held by a
-  manual read (`TRAME-UI-127`). An auto-fit measures the viewport cache, so a distant double-click
-  shrinks a column to the default (`TRAME-UI-128`).
+* **Verification.** 3 `verified`, 1 `partial`, 5 `untested`, 1 `qa-manual`. What holds is the
+  document plane: the write, the reload and the concurrent race each have a test. What is loose is
+  the UI thread, where the pointer meets the zoom and the cache, and the column clamp nothing reads
+  back. A resize goes out lossless, so a refused send leaves the local size map untouched, held by a
+  manual read (`TRAME-UI-127`). A column auto-fit asks the Logic thread for the whole column and
+  measures that answer, never the viewport cache (`TRAME-UI-128`).
 
 ---
 
@@ -163,11 +163,6 @@ resolved on the next frame.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **An auto-fit measures the viewport, not the column.** The cache holds the requested window
-  alone, so content further down the column does not count and the column comes out too narrow.
-  The Logic thread holds the whole column and has no text measurement; nothing states which side
-  should own it. Its worst case is `TRAME-UI-128`: measuring nothing is not read as "measure
-  later" but as "there is nothing". The column is set to the default width.
 * **A band resize is not one write.** One drag emits one command per column, each on its own, so a
   full queue can land some of the band and drop the rest. The screen shows one width and the
   document holds two. Nothing rules whether a band is one gesture or several.

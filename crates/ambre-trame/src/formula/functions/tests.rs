@@ -697,3 +697,15 @@ fn catalogue_lists_every_dispatched_name() {
         "catalogued but not dispatched"
     );
 }
+
+#[test]
+fn power_without_a_real_root_is_a_num_error() {
+    assert_eq!(
+        call_builtin("POWER", &[num(-1.0), num(0.5)], FnCtx::at_clock(0.0)).to_display(),
+        "#NUM!"
+    );
+    assert_eq!(
+        call_builtin("POWER", &[num(-8.0), num(3.0)], FnCtx::at_clock(0.0)).to_display(),
+        "-512"
+    );
+}

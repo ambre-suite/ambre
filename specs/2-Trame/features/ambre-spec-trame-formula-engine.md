@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-047` | `INV` | Two numbers MUST compare on a relative tolerance, never an absolute one. | this spec section 5 | `ambre_trame::formula::vm::tests::equality_is_relative_not_absolute` | none | verified |
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
 | `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | none | unheld -- the test above reads the error value back, which a run that allocated the million cells and then returned the error would return too. Nothing weighs the allocation; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | none | fails -- the cap is per range by construction: `MAX_RANGE_CELLS` guards one `EvalRange`, so a hundred formulas each just under it materialize a hundred million values on every recompute, on every peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
 | `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | none | unheld -- the guard is the evaluation stack in `formula/vm.rs`, and every cycle test drives the static graph instead, so no test closes a loop the graph cannot see; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-033` | `OBS` | A formula shown back to its author MUST carry only the parentheses its meaning needs. | this spec section 4 | `ambre_trame::formula::render::tests::precedence_minimal_parens`; `::pow_right_associative` | none | verified |
@@ -45,11 +45,11 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | none | fails -- `canonicalize` leaves a qualifier it cannot resolve as a name, so the formula is stored by name. It resolves the day the sheet appears and breaks the day that sheet is renamed, which is the one thing `TRAME-034` promises never happens; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | `ambre_trame::logic::tests::group3::formula_naming_a_missing_sheet_is_refused` | none | verified |
 | `TRAME-011` | `POST` | Typing into a cell MUST compile that cell again. | this spec section 3 | `ambre_trame::formula::cache::tests::stale_cell_recompiled`; `::non_formula_clears_cache` | none | verified |
 | `TRAME-040` | `POST` | An edit MUST update every cell that reads it, directly or through a range. | this spec section 3 | `ambre_trame::formula::dag::tests::simple_dependency_propagation`; `::range_dirty_collection`; `::collect_dirty_reaches_a_fixpoint_over_chained_ranges`; `ambre_trame::formula::engine::tests::cascade_after_edit`; `::range_dependency_propagates_through_a_chain` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
-| `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | none | fails -- `on_cell_changed` calls `invalidate` before it compares anything, so the staleness check `TRAME-011` rests on never sees a hit from the edit path. `::not_stale_no_recompile` holds for the cache unit alone; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | `ambre_trame::formula::engine::tests::retyping_the_same_text_does_not_recompile` | none | verified |
 | `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
 | `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | `ambre_trame::formula::dag::tests::self_reference_rejected`; `ambre_trame::formula::engine::tests::self_reference_rejected` | none | verified |
 | `TRAME-035` | `FAIL` | A reference to a sheet that never existed MUST be refused, not evaluated. | this spec section 4 | `ambre_trame::formula::parser::tests::unknown_sheet_name_is_parse_error`; `::unknown_sheet_is_error` | none | verified |
@@ -86,11 +86,11 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 31 `verified`, 4 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
+* **Verification.** 34 `verified`, 1 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
   graph and its recompute, the best-covered engine of the workspace. What is loose is weight rather
-  than behaviour: nothing measures what a range allocates. The failures are three rules the code
-  contradicts (`TRAME-008`, `TRAME-212`). Beside them is the dynamic half of cycle detection, which
-  nothing drives.
+  than behaviour: nothing measures what a range allocates. The failure is a rule the code
+  contradicts, how a reference follows a delete (`TRAME-008`); its insert twin is `TRAME-171`.
+  Beside them is the dynamic half of cycle detection, which nothing drives.
 
 ---
 
@@ -285,11 +285,10 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   The case it exists for is the one no test builds: a loop through a range, a name or another
   sheet. A direct self-reference never reaches it: `update` refuses it as a cycle of one cell
   (`TRAME-213`).
-* **The range cap bounds one range, not one pass** (`TRAME-209`, `TRAME-210`). `MAX_RANGE_CELLS`
-  refuses a single `EvalRange` over a million cells, on the stated premise of protecting the Logic
-  worker from a peer-supplied formula. A hundred formulas each just under the cap clear it, and
-  materialize a hundred million values on every recompute. The aggregate ceiling the premise needs
-  does not exist, and no budget row names one.
+* **The range caps are code constants, not budget rows** (`TRAME-209`, `TRAME-210`).
+  `MAX_RANGE_CELLS` bounds the memory of one range, and `MAX_PASS_RANGE_CELLS` bounds the reads of
+  one pass, sized to clear a running total over ten thousand rows. Neither figure is a row of
+  `1-Foundations/ambre-spec-budgets.md`, and nothing weighs the allocation `TRAME-209` forbids.
 * **A tab switch recompiles the workbook.** `rebuild_sheet_maps` pins the active sheet at index 0
   and every `CellId` carries that index. `activate_sheet` therefore resets the engine and re-parses
   every cell of every sheet. The numbers stay right (`TRAME-021` holds), but the engine's state is
@@ -302,10 +301,8 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   `features/ambre-spec-trame-engine.md`, states that the incrementally maintained sheet index must
   equal a rebuild. Every reference resolves through that index, so a divergence in it is a wrong
   number in a cell, not a slow redraw.
-* **The graph pays twice for every edit.** The memo of the evaluation pass is held behind an
-  interior mutability that results staged before write-back no longer need. Every edit
-  invalidates the compiled form of the written cell before anything compares its text
-  (`TRAME-212`), so re-typing a value recompiles it. Neither produces a wrong number; both are a
-  cost nothing weighs. The walk and the cycle check are the
+* **The graph pays for an interior mutability it no longer needs.** The memo of the evaluation
+  pass is held behind a `RefCell` that results staged before write-back make redundant. It
+  produces no wrong number; it is a cost nothing weighs. The walk and the cycle check are the
   other half, in `features/ambre-spec-trame-engine.md section 6`. Answered by the
   "A recompute bounded by what changed" Story (`ambre-roadmap.md` E6).

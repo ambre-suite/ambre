@@ -212,7 +212,8 @@ pub enum TrameCommand {
     /// Insert a blank column just right of the active cell's column.
     InsertColRight,
     /// Delete every row spanned by the current selection (descending order, so
-    /// earlier positions stay valid). One `DeleteRow` per row internally.
+    /// earlier positions stay valid). The rows share one commit: one undo step
+    /// and one delta.
     DeleteSelectedRows,
     /// Delete every column spanned by the current selection (descending order).
     DeleteSelectedCols,
@@ -279,6 +280,19 @@ pub enum TrameCommand {
     ///
     /// [`RequestActiveColumnValues`]: TrameCommand::RequestActiveColumnValues
     RequestSelectionStats,
+    /// Resolve the range a parameterless sort would order (`trame-sort`), so the
+    /// sort dialog offers exactly its columns (`TRAME-UI-101`). A band selection
+    /// carries no extent across its other axis, and only the Logic thread knows
+    /// the used range. Replies with
+    /// [`TrameEvent::SortRange`](super::TrameEvent::SortRange). A read-only query:
+    /// no CRDT delta.
+    RequestSortRange,
+    /// Every non-empty cell of grid column `col`, all rows, for a column
+    /// auto-fit (`TRAME-UI-128`). The canvas caches the loaded window only. A
+    /// column is measured whole or not resized. Replies with
+    /// [`TrameEvent::ColumnContent`](super::TrameEvent::ColumnContent). A
+    /// read-only query: no CRDT delta.
+    RequestColumnContent { col: u32 },
     /// Build the clipboard payload for the tracked selection (`trame-clipboard`). The
     /// parameterless-geometry sibling of copy. The Logic thread is the only holder of
     /// document data, so it serializes the selected cells (never culled to a viewport) into
@@ -722,6 +736,8 @@ impl TrameCommand {
                 // Read-only queries: they reply with data, emit no CRDT delta.
                 | Self::RequestActiveColumnValues
                 | Self::RequestSelectionStats
+                | Self::RequestSortRange
+                | Self::RequestColumnContent { .. }
                 | Self::CopyRange
                 | Self::FindNext { .. }
                 | Self::ExportActiveSheetCsv

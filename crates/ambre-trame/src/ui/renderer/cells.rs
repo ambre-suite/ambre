@@ -154,7 +154,7 @@ pub fn draw_cells<S: DrawSurface>(
                 Some((layout.cell_rect(row, col), c.content("")))
             })
         });
-    render::draw_cell_borders_on(surface, strip_borders);
+    render::draw_cell_borders_on(surface, strip_borders, palette.cell_border);
     // Merge masters: border around the full span rect.
     let merge_borders = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
         let (col_span, row_span) = c.merge_span?;
@@ -162,7 +162,7 @@ pub fn draw_cells<S: DrawSurface>(
         let hit = rect.intersect(strip);
         (hit.width() > 0.0 && hit.height() > 0.0).then(|| (rect, c.content("")))
     });
-    render::draw_cell_borders_on(surface, merge_borders);
+    render::draw_cell_borders_on(surface, merge_borders, palette.cell_border);
 
     // -- 4. UI-only layers tied to cell content (dirty veil + error marker). ---
     // These live on the persistent cells layer so they scroll with the data,

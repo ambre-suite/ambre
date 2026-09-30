@@ -21,7 +21,7 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate | none | verified |
-| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none | fails -- the scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The tests carry no format, so they never separate the two; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | `ambre_trame::logic::tests::group7::find_matches_the_formatted_value` | none | verified |
 | `TRAME-UI-079` | `INV` | A formula cell MUST be matched on its source text, and only when the user asks for it. | this spec section 3 | `ambre_trame::logic::tests::group6::replace_all_gates_formula_cells` -- it runs over both settings of the option, and the option is a replace option: a find has none, so it matches a formula on its value (section 6) | none | verified |
 
 ### 1.2 Replace every match in the workbook
@@ -39,11 +39,10 @@ workbook scope reaches and what it leaves alone.
   budgets no search. A replace lands under the batch row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a replace is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 4 `verified`, 1 `failing`, 1 `untested`; the shared rules and their coverage are
+* **Verification.** 5 `verified`, 1 `untested`; the shared rules and their coverage are
   `ambre-spec-find.md`. What holds is what a Trame match is. Both options reach both gestures, a
   formula is read only on request, and a rewrite preserves the bytes around the match. What is loose
-  is the workbook scope, whose frame condition nothing reads back. The failure is the computed value
-  `TRAME-UI-078` matches on, so a formatted cell is found on a text no one sees.
+  is the workbook scope, whose frame condition nothing reads back.
 
 ---
 
@@ -78,8 +77,8 @@ The shared scenario -- a search writes nothing, and a replace-all is one undo it
 
 **What a Trame match is** (the shared walk is `ambre-spec-find.md section 3`):
 
-* a plain cell matches on its displayed value, so a search for `42` finds the number the user reads
-  (`TRAME-UI-078`);
+* a plain cell matches on its displayed value, number format included, so a search for `50.0%`
+  finds the percentage the user reads (`TRAME-UI-078`);
 * a formula cell matches on its source text, and only when the `in_formulas` option is set
   (`TRAME-UI-079`);
 * a case-insensitive replace rewrites the match alone and leaves the rest of the cell byte for byte
@@ -135,10 +134,6 @@ clear, the one-undo replace-all -- are `ambre-spec-find.md section 5`. Trame's o
 The shared gaps -- the live shared session, the stale highlight, the undebounced walk -- are in
 `ambre-spec-find.md section 6`. Trame's own:
 
-* **A format hides the text a user searched for** (`TRAME-UI-078`). The scan reads the value the
-  engine computed, and the grid shows the value a format rendered. A cell displaying `50.0%` is
-  found by `0.5` and missed by `50`, and a replace rewrites the raw text under a display no one
-  matched. `features/ambre-spec-trame-number-formats.md section 5` states it from the format's side.
 * **A find cannot reach into formulas.** `in_formulas` is a replace option. `FindNext` does not
   carry it, so `Ctrl+F` matches a formula cell on its result. There is no way to look for the text a
   user typed. Nothing rules whether the find panel should offer the toggle the replace panel

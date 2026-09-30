@@ -391,10 +391,11 @@ struct Wiring {
     /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
     /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
     filter_active: RwSignal<bool>,
-    /// Current selection rectangle `(r1, c1, r2, c2)`, published by the canvas
-    /// view on each selection change. It is read when opening the multi-column
-    /// sort dialog, so it offers the selection's columns (`trame-sort`).
-    sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
+    /// The range a sort would order `(r1, c1, r2, c2)`, set by the per-frame
+    /// relay on `TrameEvent::SortRange`. The shell opens the multi-column sort
+    /// dialog over it, so the dialog offers the columns the sort orders
+    /// (`trame-sort`).
+    sort_range: RwSignal<Option<(u32, u32, u32, u32)>>,
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
     /// Sheet-tab strip model (`trame-sheets`): `(id, name)` in display order.
@@ -637,10 +638,10 @@ pub fn main() {
     // Active-filter flag (`trame-shared-filter`), mirrored from the Logic thread's
     // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
     let filter_active = RwSignal::new(false);
-    // Selection rectangle published by the canvas view (`trame-sort`), read
-    // when opening the multi-column sort dialog. Created here (like `ctx_scope`)
-    // so the view and the Leptos shell share the one signal.
-    let sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
+    // The range a sort would order (`trame-sort`), resolved by the Logic
+    // thread. The per-frame relay sets it and the Leptos shell opens the sort
+    // dialog over it. Created here so the two share the one signal.
+    let sort_range = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
     // selection scope on each right-click. The DOM menu reads it to build its
@@ -885,7 +886,7 @@ pub fn main() {
         zoom,
         ctx_scope,
         filter_active,
-        sel_bounds,
+        sort_range,
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
@@ -1461,6 +1462,12 @@ pub fn main() {
                 // Shared filter popover (`trame-shared-filter`): the distinct values of
                 // the active column landed. Populate the "by values" list, and pin the
                 // popover to the real column index.
+                // The range a sort would order landed (`trame-sort`): the shell
+                // opens the sort dialog over it.
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::SortRange { r1, c1, r2, c2 }),
+                    ..
+                } => sort_range.set(Some((*r1, *c1, *r2, *c2))),
                 UiEvent::Viewport {
                     event: AppEvent::Trame(ambre_bus::TrameEvent::ColumnValues { col, values }),
                     ..
@@ -1742,7 +1749,6 @@ pub fn main() {
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
-    let ch_tr_sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
     let ch_tr_zoom = RwSignal::new(1.0_f64);
     let make_child_fn = move |document_id: DocumentId,
                               doc_type: ambre_bus::DocType,
@@ -1806,7 +1812,6 @@ pub fn main() {
                 ch_formula_action,
                 ch_tr_sel_stats,
                 ch_tr_ctx_scope,
-                ch_tr_sel_bounds,
                 ch_tr_zoom,
             )),
         }
@@ -1878,7 +1883,6 @@ pub fn main() {
                     formula_action_tv,
                     sel_stats,
                     ctx_scope,
-                    sel_bounds,
                     zoom,
                 ))
             }

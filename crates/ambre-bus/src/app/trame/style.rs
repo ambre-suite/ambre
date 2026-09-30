@@ -107,13 +107,22 @@ impl CellFormat {
     /// families render with [`CellStyle::decimals`]; `General`, `Fraction`,
     /// `Date`, `Time`, `Text` and `Custom` ignore it (see `format_number`).
     pub fn has_decimals(&self) -> bool {
-        matches!(
-            self,
-            CellFormat::Number
-                | CellFormat::Currency
-                | CellFormat::Percent
-                | CellFormat::Scientific
-        )
+        self.default_decimals().is_some()
+    }
+
+    /// The decimal count the family renders when a cell carries none, or `None`
+    /// for a family that renders no decimals.
+    pub fn default_decimals(&self) -> Option<u8> {
+        match self {
+            CellFormat::Number | CellFormat::Currency | CellFormat::Scientific => Some(2),
+            CellFormat::Percent => Some(0),
+            CellFormat::General
+            | CellFormat::Fraction
+            | CellFormat::Date
+            | CellFormat::Time
+            | CellFormat::Text
+            | CellFormat::Custom(_) => None,
+        }
     }
 }
 
@@ -244,6 +253,11 @@ pub struct StylePatch {
     pub size: Option<Option<u16>>,
     pub format: Option<CellFormat>,
     pub decimals: Option<Option<u8>>,
+    /// Add this many places to the count each cell already carries, or its
+    /// family's default when it carries none (`TRAME-105`). Applied after
+    /// `format` and `decimals`, per cell, so a mixed selection steps each count
+    /// from its own value. A family that renders no decimals is left alone.
+    pub decimals_step: Option<i8>,
     pub border: Option<BorderEdit>,
 }
 

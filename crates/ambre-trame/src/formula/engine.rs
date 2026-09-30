@@ -54,6 +54,11 @@ impl FormulaEngine {
         indices: &SheetIndices,
         ctx: &dyn FormulaCtx,
     ) {
+        // The same text compiles to the same bytecode and computes the same
+        // value: nothing downstream changes either (`TRAME-212`).
+        if self.bytecode.compiled_from(cell, raw) {
+            return;
+        }
         self.bytecode.invalidate(cell);
         let downstream = self.deps.collect_dirty(cell, indices);
         self.dirty.insert(cell);
@@ -313,6 +318,29 @@ mod tests {
         engine.compute_all_dirty(&idx);
 
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "#CIRCULAR!");
+    }
+
+    #[test]
+    fn retyping_the_same_text_does_not_recompile() {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+        engine.on_cell_changed(cell(0, 0), "=1+1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.bytecode.compiles(), 1);
+
+        engine.on_cell_changed(cell(0, 0), "=1+1", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(
+            engine.bytecode.compiles(),
+            1,
+            "the same text is not compiled again"
+        );
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
+
+        engine.on_cell_changed(cell(0, 0), "=1+2", &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        assert_eq!(engine.bytecode.compiles(), 2, "a new text is");
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "3");
     }
 
     #[test]

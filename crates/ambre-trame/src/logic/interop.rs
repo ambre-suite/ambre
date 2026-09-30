@@ -30,16 +30,28 @@ impl TrameState {
             // CSV rows of varying field counts are common in real exports.
             .flexible(true)
             .from_reader(data.as_slice());
+        // An unreadable record is counted and reported, never dropped in
+        // silence (`TRAME-IO-039`).
+        let mut unreadable = 0u32;
         let mut records: Vec<Vec<String>> = reader
             .records()
-            .filter_map(Result::ok)
+            .filter_map(|rec| rec.inspect_err(|_| unreadable += 1).ok())
             .map(|rec| rec.iter().map(str::to_owned).collect())
             .collect();
+        let unreadable_notice = (unreadable > 0).then(|| TrameEvent::Error {
+            message: format!(
+                "{unreadable} record(s) of the file could not be read and were skipped"
+            ),
+        });
         if has_header && !records.is_empty() {
             records.remove(0);
         }
         if records.is_empty() {
-            return TrameOutcome::display_only(vec![]);
+            return TrameOutcome::display_only(vec![unreadable_notice.unwrap_or(
+                TrameEvent::Error {
+                    message: "the file holds no record to import".to_owned(),
+                },
+            )]);
         }
 
         // Open the undo group up front. A freshly created sheet and every cell
@@ -54,7 +66,8 @@ impl TrameState {
             _ => {
                 let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
                 self.sheet_counter += 1;
-                let _ = self.doc.get_map(SHEETS_MAP).insert(&id, "CSV Import");
+                let name = self.free_sheet_name("CSV Import");
+                let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name.as_str());
                 let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
                 self.doc.commit();
                 id
@@ -94,6 +107,7 @@ impl TrameState {
             rows,
             cols,
         });
+        outcome.display.extend(unreadable_notice);
         outcome
     }
 
@@ -107,9 +121,14 @@ impl TrameState {
         delimiter: Option<u8>,
         range: Option<ambre_bus::GridRange>,
     ) -> TrameOutcome {
-        // Unknown sheet: nothing to export.
+        // An export that writes no file says why (`TRAME-IO-041`).
+        let nothing = |message: &str| {
+            TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: message.to_owned(),
+            }])
+        };
         let Some(&idx) = self.sheet_id_to_u16.get(sheet_id) else {
-            return TrameOutcome::display_only(vec![]);
+            return nothing("the sheet to export no longer exists");
         };
         let index = if idx == 0 {
             self.index.clone()
@@ -119,8 +138,7 @@ impl TrameState {
         let (row_start, row_end, col_start, col_end) = match range {
             Some(r) => (r.row, r.row_end, r.col, r.col_end),
             None => match self.used_extent(sheet_id, &index) {
-                // No content at all: nothing to export.
-                None => return TrameOutcome::display_only(vec![]),
+                None => return nothing("the sheet is empty: there is nothing to export"),
                 Some((max_row, max_col)) => (0, max_row, 0, max_col),
             },
         };
@@ -181,8 +199,9 @@ impl TrameState {
         Some((max_row? as u32, max_col? as u32))
     }
 
-    /// Displayed value of a cell on an arbitrary sheet, for CSV export: the
-    /// formula result for a formula cell, otherwise the raw stored literal.
+    /// Displayed value of a cell on an arbitrary sheet, for CSV export. That is
+    /// the formula result for a formula cell, otherwise the raw stored literal.
+    /// The cell's number format then applies (`TRAME-108`).
     fn export_cell_text(
         &self,
         sheet_id: &str,
@@ -195,19 +214,21 @@ impl TrameState {
             return String::new();
         };
         let cell = CellId::bound(idx, rl, cl);
-        if self.engine.is_formula_cell(cell)
-            && let Some(text) = self.engine.evaluated_text(cell)
-        {
-            return text;
-        }
-        match self
-            .doc
-            .get_map(cells_map_name(sheet_id))
-            .get(&cell_key(rl, cl))
-            .map(|v| v.get_deep_value())
-        {
-            Some(LoroValue::String(s)) => s.to_string(),
-            _ => String::new(),
+        let text = match self.engine.evaluated_text(cell) {
+            Some(text) if self.engine.is_formula_cell(cell) => text,
+            _ => match self
+                .doc
+                .get_map(cells_map_name(sheet_id))
+                .get(&cell_key(rl, cl))
+                .map(|v| v.get_deep_value())
+            {
+                Some(LoroValue::String(s)) => s.to_string(),
+                _ => String::new(),
+            },
+        };
+        match self.stored_style(sheet_id, rl, cl) {
+            Some(style) => self.format_display(row, col, text, &style),
+            None => text,
         }
     }
 }

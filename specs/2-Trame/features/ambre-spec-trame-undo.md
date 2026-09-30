@@ -35,11 +35,10 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
 * **Verification.** 2 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
-  for gestures that write cells alone: the line delete contradicts it and `TRAME-088` carries that
-  failure. The three chords are read back off the seeded keymap, and version history is unbuilt on
-  both sides of the grammar. What a restore owes the snapshot list is open, and so is what two peers
-  reach when one restores while the other edits. The shared rules and their coverage are
-  `ambre-spec-undo.md`.
+  and the multi-line delete keeps it (`TRAME-088`). The three chords are read back off the seeded
+  keymap, and version history is unbuilt on both sides of the grammar. What a restore owes the
+  snapshot list is open, and so is what two peers reach when one restores while the other edits.
+  The shared rules and their coverage are `ambre-spec-undo.md`.
 
 ---
 
@@ -130,9 +129,6 @@ inverse, the whole reseed, the stack that dies with the document. Trame's own:
 
 The shared gaps are in `ambre-spec-undo.md section 6`. Trame's own:
 
-* **A five-row delete takes five undos** (`TRAME-088`). The rule is written in
-  `features/ambre-spec-trame-rows-and-columns.md`, and it is the one place the granularity table
-  above says one item and the code produces several.
 * **Version history does not exist** (`TRAME-123`, `TRAME-124`, `TRAME-153`, `TRAME-154`). No
   container, no command, no surface. A user who closes a document loses every step of it, and the
   roadmap's answer is a named snapshot rather than a longer stack. Prose carries a design for the

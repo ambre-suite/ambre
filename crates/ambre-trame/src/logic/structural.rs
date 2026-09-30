@@ -47,24 +47,44 @@ impl TrameState {
     /// (`trame-formula-engine`). Full id-based `#REF!` on delete is a
     /// separate broken-references story. A no-op in virtual space.
     pub(super) fn delete_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
+        let Some(filter_dropped) = self.remove_line(at, axis) else {
+            return TrameOutcome::display_only(vec![]);
+        };
+        self.doc.commit();
+        self.after_line_removal(filter_dropped)
+    }
+
+    /// The outcome of a committed removal: the structural refresh, and the
+    /// notice that the filter went with its column when it did.
+    fn after_line_removal(&mut self, filter_dropped: bool) -> TrameOutcome {
+        let mut outcome = self.after_structural();
+        if filter_dropped {
+            outcome.display.push(TrameEvent::FilterCleared);
+        }
+        outcome
+    }
+
+    /// Remove the row/column at grid position `at` and purge what it carried,
+    /// with no commit, so several removals land as one. `None` when the line is
+    /// virtual and nothing was removed, else whether the active filter went
+    /// with it.
+    fn remove_line(&mut self, at: u32, axis: Axis) -> Option<bool> {
         let at = at as usize;
         let removed = match axis {
             Axis::Row => self.index.row_id(at),
             Axis::Col => self.index.col_id(at),
         };
         let Some(removed) = removed else {
-            return TrameOutcome::display_only(vec![]); // virtual: nothing materialized
+            return None; // virtual: nothing materialized
         };
         let list_name = match axis {
             Axis::Row => rows_list_name(&self.active_sheet),
             Axis::Col => cols_list_name(&self.active_sheet),
         };
         if self.doc.get_movable_list(list_name).delete(at, 1).is_err() {
-            return TrameOutcome::display_only(vec![]);
+            return None;
         }
-        self.purge_axis(removed, axis);
-        self.doc.commit();
-        self.after_structural()
+        Some(self.purge_axis(removed, axis))
     }
 
     /// Move the row/column at grid position `from` to grid position `to`
@@ -96,10 +116,10 @@ impl TrameState {
 
     /// Delete every row/column spanned by the current selection rectangle,
     /// iterating from the far edge inward so earlier positions stay valid as the
-    /// list shifts. Each line is its own [`delete_axis`](Self::delete_axis) commit
-    /// (hence its own undo item, matching `trame-context-menu`); the final outcome
-    /// carries the refreshed display. The selection is left untouched -- the UI
-    /// owns it and re-reports it on the next cursor move.
+    /// list shifts. The removals share one commit: one undo step (`TRAME-088`)
+    /// and one delta carrying every line to the peers (`TRAME-175`). The
+    /// selection is left untouched -- the UI owns it and re-reports it on the
+    /// next cursor move.
     pub(super) fn delete_selected_axis(&mut self, axis: Axis) -> TrameOutcome {
         // The span of every selected rectangle across the axis (`TRAME-UI-129`).
         let (start, end) = self.selection_rects().into_iter().fold(
@@ -109,11 +129,24 @@ impl TrameState {
                 Axis::Col => (lo.min(c1), hi.max(c2)),
             },
         );
-        let mut outcome = TrameOutcome::display_only(vec![]);
-        for at in (start..=end).rev() {
-            outcome = self.delete_axis(at, axis);
+        let removals: Vec<bool> = (start..=end)
+            .rev()
+            .filter_map(|at| self.remove_line(at, axis))
+            .collect();
+        if removals.is_empty() {
+            return TrameOutcome::display_only(vec![]);
         }
-        outcome
+        self.doc.commit();
+        self.after_line_removal(removals.contains(&true))
+    }
+
+    /// The range [`sort_selection`](Self::sort_selection) and the multi-key sort
+    /// would order, for the sort dialog (`TRAME-UI-101`). It reads the same
+    /// [`selection_bounds`](Self::selection_bounds), so the columns the dialog
+    /// offers are the columns the sort orders.
+    pub(super) fn sort_range_query(&self) -> TrameOutcome {
+        let (r1, c1, r2, c2) = self.selection_bounds();
+        TrameOutcome::display_only(vec![TrameEvent::SortRange { r1, c1, r2, c2 }])
     }
 
     /// Single-column shared sort resolved against the tracked selection rectangle
@@ -163,7 +196,9 @@ impl TrameState {
 
     /// Drop every cell and formatting entry whose key references the removed
     /// row/column id, so a deleted line leaves no orphan entries behind.
-    pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) {
+    /// `true` when the removed column carried the active filter, which went
+    /// with it.
+    pub(super) fn purge_axis(&mut self, removed: Uid, axis: Axis) -> bool {
         for name in [
             cells_map_name(&self.active_sheet),
             cellstyle_map_name(&self.active_sheet),
@@ -186,6 +221,31 @@ impl TrameState {
                 let _ = map.delete(&key);
             }
         }
+        // A filter on the removed column goes with it (`TRAME-FEAT-030`).
+        let filter_dropped = matches!(axis, Axis::Col)
+            && self
+                .load_active_filter()
+                .is_some_and(|(col, _)| col == removed);
+        if filter_dropped {
+            self.drop_filter();
+        }
+        // The line's own formatting is keyed by its uid alone: its size, and
+        // for a row its filter mark (`TRAME-082`).
+        let line_maps = match axis {
+            Axis::Row => vec![
+                row_heights_map_name(&self.active_sheet),
+                filter_hidden_map_name(&self.active_sheet),
+            ],
+            Axis::Col => vec![col_widths_map_name(&self.active_sheet)],
+        };
+        let key = removed.to_key_part();
+        for name in line_maps {
+            let map = self.doc.get_map(name);
+            if map.get(&key).is_some() {
+                let _ = map.delete(&key);
+            }
+        }
+        filter_dropped
     }
 
     /// Shared tail of every structural op. It rebuilds the position <-> id

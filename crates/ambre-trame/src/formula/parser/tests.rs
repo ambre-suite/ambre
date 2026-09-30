@@ -345,7 +345,10 @@ fn named_cell_in_arithmetic() {
 
 #[test]
 fn undefined_name_is_error() {
-    assert!(resolve("UNKNOWN", 0).is_err());
+    assert!(matches!(
+        resolve("UNKNOWN", 0).unwrap(),
+        Expr::Literal(CellValue::Error(FormulaError::NameError))
+    ));
 }
 
 #[test]

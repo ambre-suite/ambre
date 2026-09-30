@@ -824,3 +824,237 @@ fn sort_range_descending_keeps_header() {
     });
     assert_eq!(read_col(&mut state, 0, 3, 1), vec!["Header", "3", "2", "1"]);
 }
+
+/// The tab label of `sheet_id`, as the strip shows it.
+fn tab_name(state: &TrameState, sheet_id: &str) -> String {
+    match state.sheet_list_event() {
+        TrameEvent::SheetList { sheets, .. } => sheets
+            .into_iter()
+            .find(|(id, _)| id == sheet_id)
+            .map(|(_, name)| name)
+            .expect("the sheet is listed"),
+        other => panic!("expected SheetList, got {other:?}"),
+    }
+}
+
+/// Every label the strip shows, in order.
+fn tab_names(state: &TrameState) -> Vec<String> {
+    match state.sheet_list_event() {
+        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|(_, n)| n).collect(),
+        other => panic!("expected SheetList, got {other:?}"),
+    }
+}
+
+/// The strip names a new sheet after its tab count. So add, add, delete the
+/// first added, add asks for a taken name (`TRAME-078`). The new sheet takes
+/// the first free variant instead.
+#[test]
+fn created_sheet_never_repeats_a_name() {
+    let mut state = TrameState::new();
+    for name in ["Sheet2", "Sheet3"] {
+        state.handle_command(TrameCommand::CreateSheet {
+            name: name.to_owned(),
+        });
+    }
+    let first_added = second_sheet_id(&state);
+    state.handle_command(TrameCommand::DeleteSheet {
+        sheet_id: first_added,
+    });
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Sheet3".to_owned(),
+    });
+    assert_eq!(tab_names(&state), vec!["Sheet1", "Sheet3", "Sheet3 (2)"]);
+}
+
+/// A rename to a name another sheet carries is refused and said (`TRAME-078`).
+#[test]
+fn rename_to_a_taken_name_is_refused() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Data".to_owned(),
+    });
+    let data = second_sheet_id(&state);
+    let evts = state.handle_command(TrameCommand::RenameSheet {
+        sheet_id: data.clone(),
+        name: "Sheet1".to_owned(),
+    });
+    assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
+    assert!(evts.update.is_none());
+    assert_eq!(tab_name(&state, &data), "Data");
+}
+
+/// Two peers give two sheets one name concurrently (`TRAME-078`). The merge
+/// stores both, and every peer reads the second one with a suffix.
+#[test]
+fn concurrent_duplicate_names_read_apart() {
+    let mut a = TrameState::new();
+    a.handle_command(TrameCommand::CreateSheet {
+        name: "Two".to_owned(),
+    });
+    let mut b = TrameState::new();
+    b.import_snapshot(&a.export_snapshot())
+        .expect("a snapshot this build wrote reads back at the current schema");
+    let two = second_sheet_id(&a);
+    a.handle_command(TrameCommand::RenameSheet {
+        sheet_id: two.clone(),
+        name: "Budget".to_owned(),
+    });
+    b.handle_command(TrameCommand::RenameSheet {
+        sheet_id: "s0".to_owned(),
+        name: "Budget".to_owned(),
+    });
+    let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+    assert_eq!(tab_names(&a), tab_names(&b));
+    let names = tab_names(&a);
+    assert_eq!(names.len(), 2);
+    assert_ne!(names[0], names[1], "two tabs read apart: {names:?}");
+    assert!(names.contains(&"Budget".to_owned()));
+}
+
+/// A blank rename is refused whatever path sent it (`TRAME-160`): the tab
+/// keeps its label.
+#[test]
+fn rename_to_a_blank_name_is_refused() {
+    let mut state = TrameState::new();
+    for blank in ["", "   "] {
+        let evts = state.handle_command(TrameCommand::RenameSheet {
+            sheet_id: "s0".to_owned(),
+            name: blank.to_owned(),
+        });
+        assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
+        assert!(evts.update.is_none());
+    }
+    assert_eq!(tab_name(&state, "s0"), "Sheet1");
+}
+
+/// A deleted sheet leaves none of its data in the document (`TRAME-076`):
+/// every per-sheet container is empty, the metrics and the filter included.
+#[test]
+fn deleted_sheet_leaves_no_data() {
+    use crate::logic::schema::{
+        cells_map_name, cellstyle_map_name, col_widths_map_name, cols_list_name,
+        filter_hidden_map_name, filters_map_name, merges_map_name, row_heights_map_name,
+        rows_list_name,
+    };
+    use loro::LoroValue;
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Gone".to_owned(),
+    });
+    let gone = second_sheet_id(&state);
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: gone.clone(),
+    });
+    for (row, text) in ["a", "b"].iter().enumerate() {
+        state.handle_command(TrameCommand::SetCellText {
+            row: row as u32,
+            col: 0,
+            text: text.to_string(),
+        });
+    }
+    state.handle_command(TrameCommand::ResizeCol {
+        version: 1,
+        sheet_id: gone.clone(),
+        col: 0,
+        width_px: 120.0,
+    });
+    state.handle_command(TrameCommand::ResizeRow {
+        version: 2,
+        sheet_id: gone.clone(),
+        row: 0,
+        height_px: 40.0,
+    });
+    state.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: gone.clone(),
+        col: 0,
+        kind: ambre_bus::FilterKind::Values(vec!["a".to_owned()]),
+    });
+    let filled = |state: &TrameState, name: &str| !matches!(state.doc.get_map(name).get_value(), LoroValue::Map(m) if m.is_empty());
+    for name in [
+        col_widths_map_name(&gone),
+        row_heights_map_name(&gone),
+        filters_map_name(&gone),
+        filter_hidden_map_name(&gone),
+    ] {
+        assert!(
+            filled(&state, &name),
+            "{name} was written before the delete"
+        );
+    }
+
+    state.handle_command(TrameCommand::DeleteSheet {
+        sheet_id: gone.clone(),
+    });
+    for name in [
+        cells_map_name(&gone),
+        cellstyle_map_name(&gone),
+        merges_map_name(&gone),
+        col_widths_map_name(&gone),
+        row_heights_map_name(&gone),
+        filters_map_name(&gone),
+        filter_hidden_map_name(&gone),
+    ] {
+        assert!(!filled(&state, &name), "{name} outlived its sheet");
+    }
+    for name in [rows_list_name(&gone), cols_list_name(&gone)] {
+        assert!(
+            state.doc.get_movable_list(name.as_str()).is_empty(),
+            "{name} outlived its sheet"
+        );
+    }
+}
+
+/// A formula qualifying a sheet no tab carries is refused when it is typed
+/// (`TRAME-211`): nothing is stored, and the user is told.
+#[test]
+fn formula_naming_a_missing_sheet_is_refused() {
+    let mut state = TrameState::new();
+    let evts = state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "=Nowhere!A1*2".to_owned(),
+    });
+    assert!(
+        evts.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("Nowhere")))
+    );
+    assert_eq!(read_raw(&mut state, 0, 0), "", "nothing was stored");
+    // The same formula lands once the sheet exists, stored by its id.
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Nowhere".to_owned(),
+    });
+    let evts = state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "=Nowhere!A1*2".to_owned(),
+    });
+    assert!(
+        !evts
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. }))
+    );
+    assert_eq!(read_raw(&mut state, 0, 0), "=Nowhere!A1*2");
+}
+
+/// A write past the materialization cap is refused and said
+/// (`TRAME-UI-164`), never dropped in silence.
+#[test]
+fn write_beyond_the_cap_is_refused_and_said() {
+    let mut state = TrameState::new();
+    let row = crate::logic::schema::MATERIALIZE_CAP as u32 + 5;
+    let evts = state.handle_command(TrameCommand::SetCellText {
+        row,
+        col: 0,
+        text: "far".to_owned(),
+    });
+    assert!(
+        evts.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. }))
+    );
+    assert_eq!(read_cell(&mut state, row, 0), "");
+}

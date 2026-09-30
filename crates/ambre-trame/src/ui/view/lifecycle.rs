@@ -31,7 +31,6 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
-        #[cfg(target_arch = "wasm32")] sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
         #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<f64>,
     ) -> Self {
         let window = web_sys::window().expect("no window");
@@ -63,14 +62,14 @@ impl TrameView {
             sel_stats,
             #[cfg(target_arch = "wasm32")]
             ctx_scope,
-            #[cfg(target_arch = "wasm32")]
-            sel_bounds,
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]
             formula_ref,
             #[cfg(target_arch = "wasm32")]
             formula_text,
+            #[cfg(target_arch = "wasm32")]
+            formula_shown: String::new(),
             #[cfg(target_arch = "wasm32")]
             formula_action,
             #[cfg(target_arch = "wasm32")]
@@ -82,6 +81,7 @@ impl TrameView {
             axis_drag: None,
             resize_drag: None,
             pending_autofit: None,
+            pending_column_fit: None,
             fill_drag: None,
             reorder_drag: None,
             hover_cursor: String::new(),
@@ -248,10 +248,6 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             self.sel_stats.set(None);
         }
-        // Publish the current selection rectangle so the launcher can open the
-        // multi-column sort dialog over the selection's columns (`trame-sort`).
-        #[cfg(target_arch = "wasm32")]
-        self.sel_bounds.set(Some(self.state.selection.bounds()));
     }
 
     /// The active cell's spreadsheet reference (for example `"B2"`), shown in the
@@ -328,7 +324,7 @@ impl TrameView {
         self.park_input_on(row, col);
         self.reset_blink();
         #[cfg(target_arch = "wasm32")]
-        self.formula_text.set(seed);
+        self.show_formula_text(seed);
     }
 
     /// Open an edit session on the active cell WITHOUT touching focus or the
@@ -443,9 +439,18 @@ impl TrameView {
             self.edit_dirty = true;
             self.text_input.clear();
             #[cfg(target_arch = "wasm32")]
-            self.formula_text
-                .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
+            self.show_formula_text(
+                self.cell_seed(self.state.active_row(), self.state.active_col()),
+            );
         }
+    }
+
+    /// Write `text` into the formula bar, remembering it as the view's own
+    /// (`TRAME-UI-155`).
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn show_formula_text(&mut self, text: String) {
+        self.formula_shown.clone_from(&text);
+        self.formula_text.set(text);
     }
 }
 

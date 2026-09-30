@@ -77,11 +77,13 @@ struct CanvasColors {
     header_text: String,
     caret: String,
     cell_error: String,
+    /// A cell border the user did not colour (`TRAME-101`).
+    cell_border: String,
 }
 
 impl CanvasColors {
     /// (rust-field-name, hex) pairs in `Palette` field order.
-    fn fields(&self) -> [(&'static str, &str); 12] {
+    fn fields(&self) -> [(&'static str, &str); 13] {
         [
             ("content_bg", &self.content_bg),
             ("content_pending", &self.content_pending),
@@ -95,6 +97,7 @@ impl CanvasColors {
             ("header_text", &self.header_text),
             ("caret", &self.caret),
             ("cell_error", &self.cell_error),
+            ("cell_border", &self.cell_border),
         ]
     }
 }

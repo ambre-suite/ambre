@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip | none | verified |
-| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | none | fails -- the purge covers the cell styles and the test asserts the text alone, while the width or height of the removed line, and its hidden-row mark, are never dropped; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | `ambre_trame::logic::tests::group2::deleted_line_leaves_no_formatting` | none | verified |
 | `TRAME-172` | `FRAME` | Deleting a line MUST NOT drop a cell that sits on another line. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the lines above and below the removed one keep their values across the round trip | none | verified |
 
 ### 1.4 Drag a line to another slot
@@ -56,8 +56,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-174` | `POST` | Deleting a selection of lines MUST remove every line it spans. | this spec section 4 | `ambre_trame::logic::tests::group2::delete_selected_rows_drops_the_whole_span` -- over a three-row span | none | verified |
-| `TRAME-088` | `POST` | Deleting a selection of lines MUST undo as one step. | this spec section 6 | none | fails -- each line is deleted and committed on its own, so a five-row delete takes five undos. It contradicts `TRAME-017`, whose cited tests drive the batch-write path instead; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-175` | `POST` | Every line a selection deletes MUST reach the collaborators. | this spec section 6 | none | fails -- each line flushes its own delta and only the last one is returned, so the others are exported, dropped, and never re-offered. A five-row delete reaches a peer as one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-088` | `POST` | Deleting a selection of lines MUST undo as one step. | this spec section 6 | `ambre_trame::logic::tests::group2::delete_selected_rows_undoes_as_one_step` | none | verified |
+| `TRAME-175` | `POST` | Every line a selection deletes MUST reach the collaborators. | this spec section 6 | `ambre_trame::logic::tests::group2::delete_selected_rows_reaches_peers_whole` | none | verified |
 | `TRAME-176` | `FRAME` | Deleting a selection of lines MUST NOT touch a line outside it. | this spec section 4 | `ambre_trame::logic::tests::group2::delete_selected_rows_drops_the_whole_span` -- it asserts the line above the span and the line below it keep their values | none | verified |
 
 ### 1.6 Undo an insert
@@ -78,11 +78,10 @@ status values are normative in `ambre-spec-template.md`.
   for. No bench measures it.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 13 `verified`, 4 `failing`, 3 `untested`. What holds is the single-line gesture
+* **Verification.** 16 `verified`, 1 `failing`, 3 `untested`. What holds is the single-line gesture
   and the frame conditions around it. What is loose is the metrics that follow a line, the drag that
-  lands on its own slot and the guard past the used range. Both failures matter: a multi-line
-  delete returns only the last of its deltas, so the peers see one row go where four went
-  (`TRAME-175`). An insert in a summed block pushes its last line out of the sum (`TRAME-171`).
+  lands on its own slot and the guard past the used range. The failure matters: an insert in a
+  summed block pushes its last line out of the sum (`TRAME-171`).
 
 ---
 
@@ -179,12 +178,6 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A multi-line delete reaches a collaborator as one line** (`TRAME-175`). The handler deletes
-  each line through the single-line path, and that path flushes a CRDT delta of its own. The loop
-  keeps the last outcome and drops the rest, and the export cursor has already moved past them. The
-  earlier removals are never offered again. Locally the sheet is right; on every other screen
-  it is not, and nothing reconciles the two. It is the same loop `TRAME-088` names, seen from the
-  wire instead of from the undo stack.
 * **An insert inside a summed block drops the block's last line** (`TRAME-171`). The insert reseeds
   the engine, and the reseed re-binds `=SUM(A1:A10)` against the new layout by position. The new
   line joins the sum, and the value that was on the tenth line, now on the eleventh, leaves it. The
@@ -193,14 +186,6 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
   width and a hidden mark are keyed by the line's identity. The argument that they follow the line
   is the argument that the cells do, and the cells have tests. A drag released on its own
   slot writes nothing for the same untested reason.
-* **Deleting a span of lines takes one undo per line** (`TRAME-088`). The handler deletes from the
-  far edge inward and commits each line, so a five-row delete is five undo items. `TRAME-017` says
-  one command is one undo item, and this is a command that is not. A user who deletes ten rows and
-  presses undo gets one row back.
-* **A deleted line leaves its metrics behind** (`TRAME-082`). The cells and the cell styles are
-  purged. The width or height stored for that line, and its hidden-row mark, keep their entries in
-  the document under an identity nothing can resolve. A sheet edited for long enough accumulates
-  them, and the same leak happens one level up when a sheet is deleted (`TRAME-076`).
 * **The materialization cap is a branch nothing enters** (`TRAME-089`). Ten thousand lines past the
   used range, the write is dropped with a log line. No test, no event, and nothing tells the user
   their value did not land.
@@ -209,5 +194,5 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
   is the divergence recorded as `TRAME-008` in `features/ambre-spec-trame-formula-engine.md`, and
   this is the operation that produces it.
 * **Nothing inserts or deletes more than one line at a time.** There is no "insert three rows", only
-  three inserts, and the multi-line delete is a loop over single deletes. That is where `TRAME-088`
-  comes from.
+  three inserts. The multi-line delete removes its lines in one commit, so it is one undo item and
+  one delta (`TRAME-088`, `TRAME-175`).

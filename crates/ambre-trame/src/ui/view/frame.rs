@@ -38,6 +38,12 @@ impl TrameView {
     /// (`ambre-app`), not here.
     pub(crate) fn dispatch_trame(&mut self, te: TrameEvent) {
         match te {
+            // The whole column an auto-fit asked for (`TRAME-UI-128`): measured
+            // by the next paint, which owns the font context.
+            TrameEvent::ColumnContent { col, cells } => {
+                self.pending_column_fit = Some((col, cells));
+                self.edit_dirty = true;
+            }
             // Cell content batch: merge into the cache and flag data dirty. If a
             // scroll happens the same frame the strip path reads the refreshed
             // cache; otherwise plan_repaint promotes data_dirty to a Full repaint.
@@ -177,6 +183,7 @@ impl TrameView {
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::UndoState { .. }
             | TrameEvent::SortComplete
+            | TrameEvent::SortRange { .. }
             | TrameEvent::ColumnValues { .. }
             | TrameEvent::SelectionStats { .. }
             | TrameEvent::ReplaceDone { .. }
@@ -289,12 +296,12 @@ impl TrameView {
             self.formula_ref.set(self.active_cell_ref());
 
             // While the formula input is focused it OWNS the text. The user is
-            // typing there, so the view must not overwrite `formula_text` (that
-            // would fight the caret). A divergence from the active cell's value
-            // means an edit is in progress -- open / drive an edit session from
-            // the input's content. While the input is NOT focused, the formula
-            // bar is read-only: mirror the in-cell editor buffer (live), or the
-            // active cell's stored value when idle.
+            // typing there, so the view must not overwrite what they typed (that
+            // would fight the caret). A text the view did not write means an
+            // edit is in progress -- open / drive an edit session from the
+            // input's content (`formula_bar_sync`). While the input is NOT
+            // focused, the formula bar is read-only: mirror the in-cell editor
+            // buffer (live), or the active cell's stored value when idle.
             if formula_input_focused() {
                 let text = self.formula_text.get_untracked();
                 if let Some(ed) = self.editor.as_mut() {
@@ -304,26 +311,35 @@ impl TrameView {
                     }
                 } else {
                     let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
-                    if text != seed {
+                    match super::formula_bar_sync(&text, &self.formula_shown, &seed) {
                         // First typed character in the formula bar: open an edit
                         // session on the active cell, seeded with what was typed.
-                        self.begin_edit_external();
-                        if let Some(ed) = self.editor.as_mut() {
-                            ed.set_text(&text);
-                            self.edit_dirty = true;
+                        super::FormulaBarSync::OpenSession => {
+                            self.begin_edit_external();
+                            if let Some(ed) = self.editor.as_mut() {
+                                ed.set_text(&text);
+                                self.edit_dirty = true;
+                            }
                         }
+                        super::FormulaBarSync::Refresh => self.show_formula_text(seed),
+                        super::FormulaBarSync::Idle => {}
                     }
                 }
             } else if let Some(ed) = self.editor.as_ref() {
                 let buffer = ed.text();
                 if self.formula_text.get_untracked() != buffer {
-                    self.formula_text.set(buffer);
+                    self.show_formula_text(buffer);
                 }
             } else {
                 let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
                 if self.formula_text.get_untracked() != seed {
-                    self.formula_text.set(seed);
+                    self.show_formula_text(seed);
                 }
+            }
+            // Unfocused, the bar holds only what the view wrote. That text is
+            // the base a later keystroke is told apart from.
+            if !formula_input_focused() {
+                self.formula_shown = self.formula_text.get_untracked();
             }
 
             // Handle formula bar commit / cancel actions from the DOM input.
@@ -351,8 +367,9 @@ impl TrameView {
                         // re-open an edit there, writing the value into the cell
                         // below too.
                         self.text_input.focus();
-                        self.formula_text
-                            .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
+                        self.show_formula_text(
+                            self.cell_seed(self.state.active_row(), self.state.active_col()),
+                        );
                     }
                     // Ctrl/Cmd+Enter: fill the value into every selected cell and
                     // keep the selection put (no cursor advance).
@@ -362,8 +379,9 @@ impl TrameView {
                         }
                         self.commit_edit_filled();
                         self.text_input.focus();
-                        self.formula_text
-                            .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
+                        self.show_formula_text(
+                            self.cell_seed(self.state.active_row(), self.state.active_col()),
+                        );
                     }
                     FormulaAction::Cancel => {
                         self.cancel_edit();
@@ -488,6 +506,10 @@ impl TrameView {
         // (`trame-resize`): measure the column/row's cached cells and emit a resize.
         if let Some(hit) = self.pending_autofit.take() {
             self.resolve_autofit(hit, font_cx, text_cache);
+        }
+        if let Some((col, cells)) = self.pending_column_fit.take() {
+            let width = super::interact::fit_column_width(&cells, font_cx, text_cache);
+            self.send_resize_col(col, width);
         }
         renderer::draw_cells(
             surface,

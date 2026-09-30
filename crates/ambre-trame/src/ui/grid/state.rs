@@ -332,6 +332,40 @@ impl TrameUiState {
         true
     }
 
+    /// How many columns from [`left_col`](Self::left_col) start inside the
+    /// canvas, walking their real widths. A screen of narrow columns holds more
+    /// than the uniform `viewport_cols` counts (`TRAME-UI-144`).
+    fn visible_col_span(&self) -> u32 {
+        let right = self.canvas_width;
+        let mut x = self.header_w();
+        let mut span = 0;
+        let mut col = self.left_col;
+        while x < right && col < TOTAL_COLS {
+            x += self.col_width_of(col);
+            span += 1;
+            col += 1;
+        }
+        span
+    }
+
+    /// How many rows from [`top_row`](Self::top_row) start inside the grid area,
+    /// walking their real heights (`TRAME-UI-144`). A row a filter hides counts,
+    /// and takes no height.
+    fn visible_row_span(&self) -> u32 {
+        let bottom = self.grid_bottom();
+        let mut y = self.header_h();
+        let mut span = 0;
+        let mut row = self.top_row;
+        while y < bottom && row < TOTAL_ROWS {
+            if !self.is_row_hidden(row) {
+                y += self.row_height_of(row);
+            }
+            span += 1;
+            row += 1;
+        }
+        span
+    }
+
     /// Build a `ScrollViewport` command for the current visible area plus padding.
     ///
     /// Evicts cached cells that fall outside the new requested range. Cells
@@ -351,11 +385,16 @@ impl TrameUiState {
         // After the row axis collapses there are then still enough *visible* rows
         // to fill the screen; a filtered window would otherwise run short.
         let hidden_in_window = self.hidden_rows.len() as u32;
-        let row_end = (self.top_row + self.viewport_rows + row_pad + hidden_in_window)
-            .min(TOTAL_ROWS.saturating_sub(1));
+        // Every cell the user can see is requested, whatever the sizes on
+        // screen (`TRAME-UI-144`). The span is walked from the real metrics,
+        // never less than the uniform estimate.
+        let rows_shown = self
+            .visible_row_span()
+            .max(self.viewport_rows + hidden_in_window);
+        let row_end = (self.top_row + rows_shown + row_pad).min(TOTAL_ROWS.saturating_sub(1));
         let col_start = self.left_col.saturating_sub(PADDING_COLS);
-        let col_end =
-            (self.left_col + self.viewport_cols + PADDING_COLS).min(TOTAL_COLS.saturating_sub(1));
+        let cols_shown = self.visible_col_span().max(self.viewport_cols);
+        let col_end = (self.left_col + cols_shown + PADDING_COLS).min(TOTAL_COLS.saturating_sub(1));
 
         // Evict cells that are no longer in the requested window.
         self.cell_cache.retain(|&(row, col), _| {
@@ -430,6 +469,7 @@ impl TrameUiState {
                     underline: cell.underline,
                     strikethrough: cell.strikethrough,
                     h_align: cell.h_align,
+                    numeric: cell.numeric,
                     v_align: cell.v_align,
                     wrap: cell.wrap,
                     fg: cell.fg,

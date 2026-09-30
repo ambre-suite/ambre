@@ -379,6 +379,8 @@ pub enum FormulaError {
     NumError,
     /// No applicable value (for example VLOOKUP did not find a match).
     NaError,
+    /// A name the workbook does not define (`TRAME-065`). Rendered as `#NAME?`.
+    NameError,
 }
 
 impl fmt::Display for FormulaError {
@@ -391,6 +393,7 @@ impl fmt::Display for FormulaError {
             FormulaError::TypeError => write!(f, "#TYPE!"),
             FormulaError::NumError => write!(f, "#NUM!"),
             FormulaError::NaError => write!(f, "#N/A"),
+            FormulaError::NameError => write!(f, "#NAME?"),
         }
     }
 }

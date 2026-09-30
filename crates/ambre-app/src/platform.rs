@@ -56,7 +56,7 @@ pub(crate) fn open_csv_picker(
         "Could not read the CSV file",
         toasts,
         move |data| {
-            let _ = tx.try_send(LogicCommand::App {
+            let sent = tx.try_send(LogicCommand::App {
                 document_id,
                 command: AppCommand::Trame(TrameCommand::ImportCsv {
                     data,
@@ -67,6 +67,12 @@ pub(crate) fn open_csv_picker(
                     start_col: 0,
                 }),
             });
+            // A full queue loses the file: say so, the user picks it again
+            // (`trame-import-export`).
+            if let Err(e) = sent {
+                tracing::warn!("CSV import dropped, Logic channel full ({e:?})");
+                toasts.warning("The file did not import: the document is busy. Try again.");
+            }
         },
     );
 }
