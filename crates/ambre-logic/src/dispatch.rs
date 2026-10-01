@@ -102,6 +102,7 @@ impl LogicState {
                         self.channels.clear();
                         self.channel_ledgers.clear();
                         self.opening.clear();
+                        self.read_cursors.clear();
                         self.spaces.clear();
                         self.space_opening.clear();
                         self.creating.clear();
@@ -258,6 +259,8 @@ impl LogicState {
             // -- Real-time sync (server push) ----------------------------------
             // The document is already live (pre-seeded on `OpenDocument`); a
             // snapshot for an unopened doc is dropped by `apply_remote`.
+            // The relay's numbers also give each message of a channel segment
+            // its place in the relay's order (the Murmure unread spec).
             LogicEvent::RemoteSnapshot {
                 document_id,
                 payload,

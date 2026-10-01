@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ActivitySummary, ChannelId, DocType, DocumentId, MetaId, RequestId, RestCommand,
-    SealedChannelKey, SegmentId, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId,
+    SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -167,6 +167,12 @@ pub enum SyncCommand {
     MarkRead {
         live: Vec<SegmentId>,
         finals: Vec<SegmentId>,
+    },
+    /// Move the cursor of each listed segment to the number beside it, back
+    /// as well as forward: marking a message unread (the Murmure unread
+    /// spec). Only the listed segments move.
+    MoveReadCursors {
+        cursors: Vec<(SegmentId, Seq)>,
     },
     /// Move every read cursor of the user to its document's last number
     /// (the Murmure unread spec), then answer with a fresh

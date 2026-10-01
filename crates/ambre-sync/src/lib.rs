@@ -1230,6 +1230,7 @@ impl SyncState {
                 self_join,
             } => self.handle_open_channel(channel_id, self_join),
             SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
+            SyncCommand::MoveReadCursors { cursors } => self.handle_move_read_cursors(cursors),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
             SyncCommand::CreatePublicChannel {

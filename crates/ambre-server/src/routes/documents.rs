@@ -225,12 +225,10 @@ pub async fn list_documents(
     let json: Vec<_> = docs
         .into_iter()
         .map(|d| {
-            let doc_id = ambre_core::DocumentId::from_uuid(
-                ambre_core::Uuid::from_bytes(*d.id.as_bytes())
-            );
-            let owner_id = ambre_core::UserId::from_uuid(
-                ambre_core::Uuid::from_bytes(*d.owner_id.as_bytes())
-            );
+            let doc_id =
+                ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*d.id.as_bytes()));
+            let owner_id =
+                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*d.owner_id.as_bytes()));
             let doc_type = match d.doc_type.to_lowercase().as_str() {
                 "prose" => ambre_core::DocType::Prose,
                 "trame" => ambre_core::DocType::Trame,
@@ -409,12 +407,10 @@ pub async fn get_document(
             resource: "document",
         });
     }
-    let doc_id_typed = ambre_core::DocumentId::from_uuid(
-        ambre_core::Uuid::from_bytes(*doc.id.as_bytes())
-    );
-    let owner_id_typed = ambre_core::UserId::from_uuid(
-        ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes())
-    );
+    let doc_id_typed =
+        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let owner_id_typed =
+        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
     let doc_type = match doc.doc_type.to_lowercase().as_str() {
         "prose" => ambre_core::DocType::Prose,
         "trame" => ambre_core::DocType::Trame,
@@ -533,9 +529,8 @@ pub async fn search_users(
     let json: Vec<_> = users
         .into_iter()
         .map(|u| {
-            let user_id = ambre_core::UserId::from_uuid(
-                ambre_core::Uuid::from_bytes(*u.id.as_bytes())
-            );
+            let user_id =
+                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
             UserInfoJson {
                 id: user_id,
                 email: u.email,
@@ -617,9 +612,8 @@ pub async fn list_document_members(
     let json: Vec<_> = members
         .into_iter()
         .map(|m| {
-            let user_id = ambre_core::UserId::from_uuid(
-                ambre_core::Uuid::from_bytes(*m.user_id.as_bytes())
-            );
+            let user_id =
+                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*m.user_id.as_bytes()));
             MemberInfoJson {
                 user_id,
                 email: m.email,

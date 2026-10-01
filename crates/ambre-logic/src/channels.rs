@@ -10,11 +10,63 @@ use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, DocumentActivity, MetaId,
     MurmureCommand, MurmureEvent,
 };
-#[cfg(test)]
-use ambre_murmure::ChannelState;
-use ambre_murmure::{Opening, OpeningChannel};
+use ambre_bus::{MessageId, SegmentId, Seq, UnreadCount};
+use ambre_murmure::{ChannelState, Opening, OpeningChannel, Position};
+
+/// This user's read cursor on one channel document (the Murmure unread spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReadCursor {
+    /// The relay number of the last update read.
+    pub(crate) read: Seq,
+    /// Whether the document holds an update past `read`: the relay's yes or
+    /// no, the one thing known of a segment this client does not hold.
+    pub(crate) active: bool,
+}
+
+/// The unread count of an open channel, `None` when a part of it is unknown
+/// (the Murmure unread spec). Unknown is a held segment with no cursor yet,
+/// or a final segment not loaded that may hold unread messages.
+fn unread_of(
+    channel: &ChannelState,
+    cursors: &HashMap<DocumentId, ReadCursor>,
+    me: UserId,
+) -> Option<UnreadCount> {
+    let held = channel.held_segments();
+    let mut count = UnreadCount::ZERO;
+    for segment in &held {
+        let cursor = cursors.get(&segment.document_id())?;
+        count = count.plus(channel.unread(*segment, cursor.read, me).ok()?);
+    }
+    let unknown_final = channel
+        .final_segments()
+        .into_iter()
+        .filter(|segment| !held.contains(segment))
+        .any(|segment| cursors.get(&segment.document_id()).is_none_or(|c| c.active));
+    (!unknown_final).then_some(count)
+}
 
 impl LogicState {
+    /// The mark of an open channel, counted, or `None` when its count is
+    /// not known yet.
+    fn counted(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
+        let channel = self.channels.get(&channel_id)?;
+        let unread = unread_of(channel, &self.read_cursors, self.my_user_id?)?;
+        Some(ChannelActivity {
+            channel_id,
+            active: !unread.is_zero(),
+            unread: Some(unread),
+        })
+    }
+
+    /// Hand the view the count of an open channel, once it is known.
+    fn emit_count(&self, channel_id: ChannelId) {
+        if let Some(mark) = self.counted(channel_id) {
+            self.send_to_ui(UiEvent::Activity {
+                channels: vec![mark],
+            });
+        }
+    }
+
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
     /// A channel already open or opening is left as it is.
     pub(crate) fn open_channel(&mut self, channel_id: ChannelId) {
@@ -93,7 +145,10 @@ impl LogicState {
             // ready for a live document, after a reconnect, changes nothing.
             if channel.is_pending(document_id) {
                 match channel.older_ready(document_id) {
-                    Ok(event) => self.send_to_ui(UiEvent::Channel { channel_id, event }),
+                    Ok(event) => {
+                        self.send_to_ui(UiEvent::Channel { channel_id, event });
+                        self.emit_count(channel_id);
+                    }
                     Err(error) => {
                         tracing::warn!("Logic: older segment {document_id} refused: {error}");
                         self.send_to_sync(SyncCommand::CloseDocument { document_id });
@@ -136,6 +191,7 @@ impl LogicState {
                     }
                 }
                 self.channels.insert(channel_id, *state);
+                self.emit_count(channel_id);
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
         }
@@ -275,27 +331,98 @@ impl LogicState {
                     .flatten()
                     .collect();
                 let finals = channel.final_segments();
+                // The relay moves each cursor to its document's last number.
+                // This client knows the last it was delivered, so its count
+                // runs over until the next answer, never under.
+                for segment in channel.held_segments() {
+                    let document_id = segment.document_id();
+                    self.read_cursors.insert(
+                        document_id,
+                        ReadCursor {
+                            read: channel.delivered(document_id),
+                            active: false,
+                        },
+                    );
+                }
+                for segment in &finals {
+                    let cursor =
+                        self.read_cursors
+                            .entry(segment.document_id())
+                            .or_insert(ReadCursor {
+                                read: Seq::ZERO,
+                                active: false,
+                            });
+                    cursor.active = false;
+                }
                 self.send_to_sync(SyncCommand::MarkRead { live, finals });
+                let mark = self.counted(channel_id).unwrap_or(ChannelActivity {
+                    channel_id,
+                    active: false,
+                    unread: None,
+                });
                 self.send_to_ui(UiEvent::Activity {
-                    channels: vec![ChannelActivity {
-                        channel_id,
-                        active: false,
-                    }],
+                    channels: vec![mark],
                 });
             }
+            MurmureCommand::MarkUnread { segment, message } => {
+                self.mark_unread(channel_id, segment, message);
+            }
         }
+    }
+
+    /// Mark `message` unread: it and every message after it in the channel
+    /// read as unread, and no cursor of another channel moves.
+    ///
+    /// The cursor of its segment moves to just before its number, and the
+    /// cursor of each segment listed after it to the start. A message the
+    /// relay has not numbered exactly cannot place a cursor, so the mark is
+    /// refused rather than guessed.
+    fn mark_unread(&mut self, channel_id: ChannelId, segment: SegmentId, message: MessageId) {
+        let Some(channel) = self.channels.get(&channel_id) else {
+            return;
+        };
+        let seq = match channel.position(segment, message) {
+            Some(Position::Exact(seq)) => seq,
+            other => {
+                tracing::warn!(
+                    "Logic: mark unread on {message} in {segment}: no exact number ({other:?}); refused"
+                );
+                return;
+            }
+        };
+        let mut cursors = vec![(segment, seq.before())];
+        cursors.extend(
+            channel
+                .segments_after(segment)
+                .into_iter()
+                .map(|later| (later, Seq::ZERO)),
+        );
+        for &(moved, read) in &cursors {
+            self.read_cursors
+                .insert(moved.document_id(), ReadCursor { read, active: true });
+        }
+        self.send_to_sync(SyncCommand::MoveReadCursors { cursors });
+        self.emit_count(channel_id);
     }
 
     /// Hand the view the relay's activity answer, one mark per channel: a
     /// channel is active when any of its documents is (the Murmure
     /// unread spec).
     ///
-    /// Opens nothing: the answer is a yes or no per document,
-    /// and a mark needs no more.
-    pub(crate) fn channel_activity(&self, documents: &[DocumentActivity]) {
+    /// Opens nothing: the answer is a yes or no per document, with this
+    /// user's own cursor on it. An open channel counts its unread messages
+    /// from those cursors.
+    pub(crate) fn channel_activity(&mut self, documents: &[DocumentActivity]) {
         let mut channels: Vec<ChannelActivity> = Vec::new();
         let mut index: HashMap<ChannelId, usize> = HashMap::new();
         for document in documents {
+            self.read_cursors.insert(
+                document.document_id,
+                ReadCursor {
+                    read: document.read,
+                    active: document.active,
+                },
+            );
             match index.get(&document.channel_id) {
                 Some(&i) => {
                     if let Some(channel) = channels.get_mut(i) {
@@ -307,20 +434,27 @@ impl LogicState {
                     channels.push(ChannelActivity {
                         channel_id: document.channel_id,
                         active: document.active,
+                        unread: None,
                     });
                 }
+            }
+        }
+        for mark in &mut channels {
+            if let Some(counted) = self.counted(mark.channel_id) {
+                *mark = counted;
             }
         }
         self.send_to_ui(UiEvent::Activity { channels });
     }
 
     /// Apply remote payloads to the channel that holds `document_id`
-    /// (the Murmure engine spec). Returns `false` when no open channel holds it, so the
-    /// caller reports the drop as it does for a document.
+    /// (the Murmure engine spec), each with where the relay placed it.
+    /// Returns `false` when no open channel holds it, so the caller reports
+    /// the drop as it does for a document.
     pub(crate) fn apply_channel_remote(
         &mut self,
         document_id: DocumentId,
-        payloads: &[&[u8]],
+        payloads: &[(Option<Order>, &[u8])],
     ) -> bool {
         // A channel still opening keeps the bytes until the document is ready.
         if let Some(opening) = self
@@ -329,8 +463,8 @@ impl LogicState {
             .flatten()
             .find(|o| o.expects(document_id))
         {
-            for payload in payloads {
-                opening.receive(document_id, payload);
+            for &(order, payload) in payloads {
+                opening.receive_at(document_id, order, payload);
             }
             return true;
         }
@@ -342,8 +476,8 @@ impl LogicState {
             return false;
         };
         let mut events = Vec::new();
-        for payload in payloads {
-            match channel.apply_remote(document_id, payload) {
+        for &(order, payload) in payloads {
+            match channel.apply_remote_at(document_id, order, payload) {
                 Ok(produced) => events.extend(produced),
                 Err(error) => {
                     tracing::warn!("Logic: delta for {document_id} refused: {error}");
@@ -354,6 +488,7 @@ impl LogicState {
         // a batch is news to the view.
         if let Some(event) = events.pop() {
             self.send_to_ui(UiEvent::Channel { channel_id, event });
+            self.emit_count(channel_id);
         }
         true
     }
@@ -541,7 +676,7 @@ mod tests {
         let (channel_id, active) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         assert!(state.channels.is_empty());
-        assert!(!state.apply_channel_remote(active.document_id(), &[&[]]));
+        assert!(!state.apply_channel_remote(active.document_id(), &[(None, &[])]));
         let closed = sent(&sync);
         assert!(closed.contains(&Sent::Close(active.document_id())));
         assert!(closed.iter().all(|c| matches!(c, Sent::Close(_))));
@@ -588,6 +723,7 @@ mod tests {
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: DocumentId) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
+            covered_seq: Seq(1),
             payload: stored.snapshot(document_id).expect("snapshot"),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -782,6 +918,8 @@ mod tests {
     #[test]
     fn marking_a_channel_read_moves_its_live_segments_and_clears_its_mark() {
         let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let _ = drain(&ui);
         let (channel_id, active) = open_channel(&mut state);
 
         state.handle_logic_command(LogicCommand::Channel {
@@ -803,7 +941,8 @@ mod tests {
             *channels,
             [ChannelActivity {
                 channel_id,
-                active: false
+                active: false,
+                unread: Some(UnreadCount::ZERO),
             }]
         );
     }
@@ -816,6 +955,7 @@ mod tests {
             channel_id,
             document_id: DocumentId::new(),
             active,
+            read: Seq::ZERO,
         };
 
         state.handle_logic_event(LogicEvent::Activity {
@@ -836,11 +976,13 @@ mod tests {
             [
                 ChannelActivity {
                     channel_id: busy,
-                    active: true
+                    active: true,
+                    unread: None,
                 },
                 ChannelActivity {
                     channel_id: quiet,
-                    active: false
+                    active: false,
+                    unread: None,
                 },
             ]
         );
@@ -862,6 +1004,207 @@ mod tests {
                 [SyncCommand::FetchActivity, SyncCommand::MarkAllRead]
             ),
             "got {sent:?}"
+        );
+    }
+
+    // --- Unread counts and mark unread ---
+
+    /// Alice writes on the engine; Bob is a signed-in client holding a copy
+    /// of the same channel.
+    struct Members {
+        alice: ChannelState,
+        bob: LogicState,
+        bob_ui: Receiver<UiEvent>,
+        bob_sync: Receiver<SyncCommand>,
+        channel_id: ChannelId,
+        active: SegmentId,
+    }
+
+    fn members() -> Members {
+        let channel_id = ChannelId::new();
+        let alice =
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let active = alice.active_id();
+        let segments = std::collections::HashMap::from([(
+            active,
+            alice.snapshot(active.document_id()).expect("active"),
+        )]);
+        let meta = alice.snapshot(alice.meta_id().document_id()).expect("meta");
+        let copy = ChannelState::open(channel_id, alice.meta_id(), &meta, &segments).expect("open");
+        let (mut bob, bob_ui, bob_sync) = harness();
+        signed_in(&mut bob, UserId::new());
+        bob.hold_channel(copy);
+        let _ = drain(&bob_ui);
+        Members {
+            alice,
+            bob,
+            bob_ui,
+            bob_sync,
+            channel_id,
+            active,
+        }
+    }
+
+    impl Members {
+        /// Alice sends `text`; the relay delivers it to Bob as update `seq`.
+        fn deliver(&mut self, text: &str, seq: u64) {
+            let sent = self
+                .alice
+                .send(
+                    &MessageDraft {
+                        text: text.to_owned(),
+                        mentions: Vec::new(),
+                    },
+                    UserId::new(),
+                    NOW,
+                )
+                .expect("send");
+            self.bob.handle_logic_event(LogicEvent::RemoteUpdate {
+                document_id: sent.segment.document_id(),
+                seq: Seq(seq),
+                payload: sent.delta,
+            });
+        }
+
+        /// The relay's activity answer: Bob's cursor on the active segment.
+        fn answer(&mut self, read: u64) {
+            self.bob.handle_logic_event(LogicEvent::Activity {
+                documents: vec![DocumentActivity {
+                    channel_id: self.channel_id,
+                    document_id: self.active.document_id(),
+                    active: true,
+                    read: Seq(read),
+                }],
+            });
+        }
+
+        /// Every count the view was handed for the channel since the last
+        /// call.
+        fn counts(&self) -> Vec<Option<u32>> {
+            drain(&self.bob_ui)
+                .into_iter()
+                .filter_map(|e| match e {
+                    UiEvent::Activity { channels } => Some(channels),
+                    _ => None,
+                })
+                .flatten()
+                .filter(|c| c.channel_id == self.channel_id)
+                .map(|c| c.unread.map(|count| count.0))
+                .collect()
+        }
+
+        fn message_ids(&self) -> Vec<MessageId> {
+            self.bob.channels[&self.channel_id]
+                .messages(self.active)
+                .expect("messages")
+                .iter()
+                .map(|m| m.id)
+                .collect()
+        }
+
+        fn mark_unread(&mut self, message: MessageId) {
+            self.bob.handle_logic_command(LogicCommand::Channel {
+                channel_id: self.channel_id,
+                command: MurmureCommand::MarkUnread {
+                    segment: self.active,
+                    message,
+                },
+            });
+        }
+
+        /// The cursors Bob asked the relay to move since the last call.
+        fn moved(&self) -> Vec<Vec<(SegmentId, Seq)>> {
+            drain(&self.bob_sync)
+                .into_iter()
+                .filter_map(|c| match c {
+                    SyncCommand::MoveReadCursors { cursors } => Some(cursors),
+                    _ => None,
+                })
+                .collect()
+        }
+    }
+
+    /// Each delivered message carries the relay's number, and the count
+    /// reads it against the cursor.
+    #[test]
+    fn a_delivered_message_carries_the_relay_number_its_count_reads() {
+        let mut m = members();
+        m.answer(0);
+        m.deliver("one", 5);
+        m.deliver("two", 6);
+        let ids = m.message_ids();
+        let channel = &m.bob.channels[&m.channel_id];
+        assert_eq!(
+            ids.iter()
+                .map(|id| channel.position(m.active, *id))
+                .collect::<Vec<_>>(),
+            [Some(Position::Exact(Seq(5))), Some(Position::Exact(Seq(6)))]
+        );
+    }
+
+    /// An open channel's count comes from its messages and the cursor, and
+    /// none shows while the cursor is unknown.
+    #[test]
+    fn an_open_channel_counts_the_messages_past_its_cursor() {
+        let mut m = members();
+        m.deliver("before any answer", 1);
+        assert_eq!(m.counts(), [], "no cursor yet, so no count");
+
+        m.answer(0);
+        assert_eq!(m.counts(), [Some(1)]);
+        m.deliver("two", 2);
+        assert_eq!(m.counts(), [Some(2)]);
+        m.answer(1);
+        assert_eq!(m.counts(), [Some(1)]);
+    }
+
+    /// Marking a message unread moves the cursor to just before it, so it
+    /// and every later message count again.
+    #[test]
+    fn marking_a_message_unread_moves_the_cursor_to_just_before_it() {
+        let mut m = members();
+        m.deliver("one", 5);
+        m.deliver("two", 6);
+        m.answer(6);
+        assert_eq!(m.counts(), [Some(0)]);
+        let ids = m.message_ids();
+
+        m.mark_unread(ids[1]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq(5))]]);
+        assert_eq!(m.counts(), [Some(1)]);
+
+        m.mark_unread(ids[0]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq(4))]]);
+        assert_eq!(m.counts(), [Some(2)]);
+    }
+
+    /// A message the relay has not numbered exactly cannot place a cursor.
+    #[test]
+    fn a_message_with_no_exact_number_is_not_marked_unread() {
+        let mut m = members();
+        m.answer(0);
+        m.mark_unread(MessageId::new());
+        assert_eq!(m.moved(), Vec::<Vec<(SegmentId, Seq)>>::new());
+    }
+
+    /// Marking a message unread moves no cursor of another channel.
+    #[test]
+    fn marking_a_message_unread_moves_no_cursor_of_another_channel() {
+        let mut m = members();
+        let (other, other_active) = open_channel(&mut m.bob);
+        m.deliver("one", 5);
+        let ids = m.message_ids();
+        let other_documents = m.bob.channels[&other].document_ids();
+
+        m.mark_unread(ids[0]);
+        let moved = m.moved();
+        assert_eq!(moved, [vec![(m.active, Seq(4))]]);
+        assert!(
+            moved
+                .iter()
+                .flatten()
+                .all(|(segment, _)| !other_documents.contains(&segment.document_id())),
+            "no document of {other} (active {other_active}) moves"
         );
     }
 }

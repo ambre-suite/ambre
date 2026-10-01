@@ -17,7 +17,7 @@ use crate::state::AppState;
 /// The body of a cursor move: the sequence number the caller has read up to.
 #[derive(serde::Deserialize)]
 pub struct ReadCursorRequest {
-    pub seq: u64,
+    pub seq: ambre_core::Seq,
 }
 
 /// One document of the activity answer.
@@ -29,6 +29,9 @@ pub struct ActivityJson {
     pub document_id: ambre_core::DocumentId,
     /// The document's last number is past the caller's cursor.
     pub active: bool,
+    /// The caller's own cursor. The client counts its new messages against
+    /// it; the relay still states no count (`SRV-110`).
+    pub read: ambre_core::Seq,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`: move the caller's cursor on one
@@ -49,7 +52,7 @@ pub async fn set_read_cursor(
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or_else(not_found)?;
-    let seq = i64::try_from(req.seq).map_err(|_| AppError::Conflict {
+    let seq = i64::try_from(req.seq.0).map_err(|_| AppError::Conflict {
         detail: "sequence number out of range".into(),
     })?;
     db::set_read_cursor(&state.db, &auth.user_id, &doc_id, seq).await?;
@@ -66,16 +69,17 @@ pub async fn get_activity(
         .await?
         .into_iter()
         .map(|(row, last)| {
-            let channel_id = ambre_core::ChannelId::from_uuid(
-                ambre_core::Uuid::from_bytes(*row.channel_id.as_bytes())
-            );
-            let document_id = ambre_core::DocumentId::from_uuid(
-                ambre_core::Uuid::from_bytes(*row.document_id.as_bytes())
-            );
+            let channel_id = ambre_core::ChannelId::from_uuid(ambre_core::Uuid::from_bytes(
+                *row.channel_id.as_bytes(),
+            ));
+            let document_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(
+                *row.document_id.as_bytes(),
+            ));
             ActivityJson {
                 channel_id,
                 document_id,
                 active: last > row.cursor,
+                read: ambre_core::Seq(u64::try_from(row.cursor).unwrap_or(0)),
             }
         })
         .collect();
@@ -226,7 +230,9 @@ mod tests {
             State(state.clone()),
             who,
             Path(document.to_string()),
-            axum::Json(ReadCursorRequest { seq }),
+            axum::Json(ReadCursorRequest {
+                seq: ambre_core::Seq(seq),
+            }),
         )
         .await
         {
@@ -332,9 +338,39 @@ mod tests {
         assert_eq!(active_of(&answer, meta), None, "meta carries no message");
         assert!(
             keys.iter()
-                .all(|k| *k == ["active", "channel_id", "document_id"]),
-            "an entry carries a yes or no and nothing to count: {keys:?}"
+                .all(|k| *k == ["active", "channel_id", "document_id", "read"]),
+            "an entry carries a yes or no, the caller's own cursor, and nothing to count: {keys:?}"
         );
+        let reads = read_of(&state, me()).await;
+        for (document, cursor) in [(read, 5), (unread, 0), (flushed, 2)] {
+            assert_eq!(reads.get(&document.to_string()), Some(&cursor));
+        }
+    }
+
+    /// The activity answer, as `document -> the caller's cursor`.
+    async fn read_of(
+        state: &Arc<AppState>,
+        who: auth::AuthSession,
+    ) -> std::collections::HashMap<String, u64> {
+        let resp = get_activity(State(state.clone()), who)
+            .await
+            .expect("activity")
+            .into_response();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        json["documents"]
+            .as_array()
+            .expect("documents")
+            .iter()
+            .map(|e| {
+                (
+                    e["document_id"].as_str().expect("id").to_owned(),
+                    e["read"].as_u64().expect("read"),
+                )
+            })
+            .collect()
     }
 
     /// The cursor belongs to the user, so a second device of

@@ -15,6 +15,7 @@ use loro::LoroDoc;
 use crate::channel::{ChannelState, live_segments};
 use crate::error::MurmureError;
 use crate::schema::{self, DocumentKind};
+use crate::sequence::{Order, Sequence};
 
 /// Where an opening channel stands after a document of it is ready.
 #[derive(Debug)]
@@ -38,6 +39,9 @@ pub struct OpeningChannel {
     meta: Option<LoroDoc>,
     /// The live segments `meta` named that are not ready yet.
     awaiting: HashSet<DocumentId>,
+    /// What the relay numbered of each segment so far, handed to the channel
+    /// once it opens.
+    sequences: HashMap<DocumentId, Sequence>,
 }
 
 impl OpeningChannel {
@@ -50,6 +54,7 @@ impl OpeningChannel {
             payloads: HashMap::from([(meta_id, Vec::new())]),
             meta: None,
             awaiting: HashSet::new(),
+            sequences: HashMap::new(),
         }
     }
 
@@ -77,6 +82,18 @@ impl OpeningChannel {
     /// Keep the bytes of an expected document until it is ready. Returns
     /// `false` for a document this opening does not expect.
     pub fn receive(&mut self, document_id: DocumentId, payload: &[u8]) -> bool {
+        self.receive_at(document_id, None, payload)
+    }
+
+    /// [`OpeningChannel::receive`], with where the relay placed the payload.
+    /// A segment's numbers are noted now and matched once the channel opens
+    /// (`features/ambre-spec-murmure-unread.md section 3`).
+    pub fn receive_at(
+        &mut self,
+        document_id: DocumentId,
+        order: Option<Order>,
+        payload: &[u8],
+    ) -> bool {
         // `meta` already admitted takes a live delta at once, as an open
         // channel would.
         if document_id == self.meta_id
@@ -87,13 +104,20 @@ impl OpeningChannel {
             }
             return true;
         }
-        match self.payloads.get_mut(&document_id) {
-            Some(held) => {
-                held.push(payload.to_vec());
-                true
-            }
-            None => false,
+        let Some(held) = self.payloads.get_mut(&document_id) else {
+            return false;
+        };
+        held.push(payload.to_vec());
+        // `meta` holds no message: only a segment is numbered.
+        if let Some(order) = order
+            && document_id != self.meta_id
+        {
+            self.sequences
+                .entry(document_id)
+                .or_default()
+                .note(order, payload);
         }
+        true
     }
 
     /// `document_id` has all its bytes. `meta` names the live segments to
@@ -128,6 +152,7 @@ impl OpeningChannel {
             self.channel_id,
             (self.meta_id, meta),
             &self.payloads,
+            std::mem::take(&mut self.sequences),
         )?;
         Ok(Opening::Open(Box::new(state)))
     }

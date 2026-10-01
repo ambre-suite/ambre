@@ -233,6 +233,20 @@ fn the_final_segments_are_listed_loaded_or_not() {
     assert_eq!(state.final_segments(), [stored.final_id]);
 }
 
+/// Marking a message unread moves the cursors of the segments listed after
+/// its own, and of no other (`MURMURE-154`).
+#[test]
+fn the_segments_after_one_are_those_listed_later() {
+    let stored = stored_channel();
+    let state = open(&stored);
+    assert_eq!(
+        state.segments_after(stored.final_id),
+        [stored.closing_id, stored.active_id]
+    );
+    assert_eq!(state.segments_after(stored.active_id), []);
+    assert_eq!(state.held_segments(), [stored.active_id, stored.closing_id]);
+}
+
 #[test]
 fn a_live_segment_is_not_an_older_one() {
     let stored = stored_channel();

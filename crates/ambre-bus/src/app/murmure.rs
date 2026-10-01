@@ -14,7 +14,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, UserId};
+use crate::{
+    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId,
+};
 
 /// One document a channel groups, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,14 +32,43 @@ pub struct DocumentActivity {
     pub channel_id: ChannelId,
     pub document_id: DocumentId,
     pub active: bool,
+    /// The caller's own read cursor on the document: the sequence number it
+    /// has read up to. The client counts against it once it holds the
+    /// document.
+    pub read: Seq,
 }
 
-/// Whether a channel holds something new, the mark the sidebar shows before
-/// any count is known (`MURMURE-119`).
+/// Whether a channel holds something new, and how much once the client
+/// knows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelActivity {
     pub channel_id: ChannelId,
+    /// The mark the sidebar shows before any count is known (`MURMURE-119`).
     pub active: bool,
+    /// The new messages of the channel, once the loaded document gives the
+    /// number (`MURMURE-120`). `None` while only the mark is known.
+    pub unread: Option<UnreadCount>,
+}
+
+/// How many messages of a channel are past the reader's cursor. A distinct
+/// type, so a count of mentions never takes its place.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnreadCount(pub u32);
+
+impl UnreadCount {
+    /// Nothing unread.
+    pub const ZERO: Self = Self(0);
+
+    /// The two counts together, held at the top rather than wrapping.
+    #[must_use]
+    pub const fn plus(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+
+    /// Whether nothing is unread.
+    pub const fn is_zero(self) -> bool {
+        self.0 == 0
+    }
 }
 
 /// A wall-clock instant in Unix milliseconds.
@@ -90,17 +121,24 @@ pub enum MurmureCommand {
     /// The view shows the latest message of the channel: move the read
     /// cursor to it (`MURMURE-115`). A relay record, never a document write.
     MarkRead,
+    /// Show the channel unread from `message` on: move the cursor of its
+    /// segment to just before it (`MURMURE-117`). A relay record, never a
+    /// document write.
+    MarkUnread {
+        segment: SegmentId,
+        message: MessageId,
+    },
 }
 
 impl MurmureCommand {
     /// Whether the command can change a document of the channel.
     ///
     /// The same question [`AppCommand::is_mutating`](crate::AppCommand::is_mutating)
-    /// answers for a document. A load reads.
+    /// answers for a document. A load reads, and a cursor is no document.
     pub fn is_mutating(&self) -> bool {
         match self {
             Self::SendMessage { .. } => true,
-            Self::LoadOlder { .. } | Self::MarkRead => false,
+            Self::LoadOlder { .. } | Self::MarkRead | Self::MarkUnread { .. } => false,
         }
     }
 }

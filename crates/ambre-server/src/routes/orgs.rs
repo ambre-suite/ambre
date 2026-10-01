@@ -74,9 +74,8 @@ pub struct OrgMemberResponse {
 }
 
 fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
-    let user_id = ambre_core::UserId::from_uuid(
-        ambre_core::Uuid::from_bytes(*m.user_id.as_bytes())
-    );
+    let user_id =
+        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*m.user_id.as_bytes()));
     OrgMemberResponse {
         user_id,
         email: m.email.clone(),
@@ -586,7 +585,10 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
-        assert_eq!(resp.user_id, "00000000-0000-0000-0000-000000000001");
+        assert_eq!(
+            resp.user_id.to_string(),
+            "00000000-0000-0000-0000-000000000001"
+        );
         assert_eq!(resp.email, "user@test.com");
         assert_eq!(resp.display_name, "Test User");
         assert_eq!(resp.role, Role::Admin);

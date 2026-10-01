@@ -367,10 +367,15 @@ pub(crate) fn admit_space(payloads: &[&[u8]], space_id: SpaceId) -> Result<LoroD
 fn import_current(payloads: &[&[u8]], document_id: DocumentId) -> Result<LoroDoc, MurmureError> {
     let doc = LoroDoc::new();
     for payload in payloads {
-        doc.import(payload).map_err(|e| {
-            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
-            SchemaError::PayloadRejected
-        })?;
+        // A snapshot may carry the relay's numbers before its Loro bytes;
+        // the document is the bytes past them.
+        doc.import(crate::sequence::loro_part(payload))
+            .map_err(|e| {
+                tracing::warn!(
+                    "[Murmure] document {document_id} rejected by the CRDT engine: {e:?}"
+                );
+                SchemaError::PayloadRejected
+            })?;
     }
     let found = read_version(&doc)?;
     match verdict(found, SCHEMA_VERSION) {

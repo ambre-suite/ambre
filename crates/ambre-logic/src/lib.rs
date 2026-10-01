@@ -60,13 +60,14 @@ pub mod fixtures;
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    RestEvent, Role, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
+    RestEvent, Role, Seq, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
     UiEvent, UserId,
 };
 
 use ambre_core::SessionNonce;
 use ambre_core::schema::SchemaError;
 
+use ambre_murmure::Order;
 use ambre_prose::ProseState;
 use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
@@ -662,6 +663,10 @@ struct LogicState {
     /// snapshot names the last delta it folds in (`SRV-083`). Keyed by
     /// document, dropped with its channel.
     channel_ledgers: HashMap<DocumentId, snapshot_check::SeqLedger>,
+    /// This user's read cursor on each channel document (the Murmure unread
+    /// spec). The relay's activity answer sets it, and this client's own
+    /// marks move it. Cleared on `Logout`.
+    read_cursors: HashMap<DocumentId, channels::ReadCursor>,
     /// Open Murmure spaces, keyed by `space_id`: one document each, apart
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
@@ -757,6 +762,7 @@ impl LogicState {
             channels: HashMap::new(),
             opening: HashMap::new(),
             channel_ledgers: HashMap::new(),
+            read_cursors: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
             creating: HashMap::new(),
@@ -1394,7 +1400,9 @@ mod pass_tests {
             .last()
             .expect("the close saves a snapshot");
         let mut reopened = board();
-        reopened.state.apply_remote(reopened.document_id, &snapshot);
+        reopened
+            .state
+            .apply_remote(reopened.document_id, Order::Snapshot(Seq::ZERO), &snapshot);
         assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
     }
 
@@ -1424,7 +1432,7 @@ mod pass_tests {
             })
             .update
             .expect("the peer's delta");
-        state.apply_remote(document_id, &delta);
+        state.apply_remote(document_id, Order::Update(Seq(1)), &delta);
         assert!(!state.has_pending_work(), "the import landed first");
         assert_eq!(elements(&state, document_id), 1_001);
         state.handle_logic_command(LogicCommand::App {

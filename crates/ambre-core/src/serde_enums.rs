@@ -30,10 +30,7 @@ pub mod doc_type {
             "trame" => Ok(DocType::Trame),
             "toile" => Ok(DocType::Toile),
             "murmure" => Ok(DocType::Murmure),
-            _ => Err(serde::de::Error::custom(format!(
-                "unknown doc_type: {}",
-                s
-            ))),
+            _ => Err(serde::de::Error::custom(format!("unknown doc_type: {}", s))),
         }
     }
 }

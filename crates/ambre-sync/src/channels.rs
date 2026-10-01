@@ -254,10 +254,12 @@ impl SyncState {
     /// Each final segment no longer changes, so it moves to the relay's last
     /// number.
     pub(crate) fn handle_mark_read(&self, live: &[SegmentId], finals: Vec<SegmentId>) {
-        let cursors: Vec<(DocumentId, Seq)> = live
+        let cursors: Vec<(SegmentId, Seq)> = live
             .iter()
-            .map(SegmentId::document_id)
-            .filter_map(|id| self.read_up_to(id).map(|seq| (id, seq)))
+            .filter_map(|&segment| {
+                self.read_up_to(segment.document_id())
+                    .map(|seq| (segment, seq))
+            })
             .collect();
         if self.event_tx.is_none() {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
@@ -267,14 +269,8 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            for (document_id, seq) in cursors {
-                let url =
-                    format!("{url_scheme}://{api_base}/api/documents/{document_id}/read-cursor");
-                let body = http::ReadCursorRequest { seq: seq.0 };
-                if let Err(e) = http::put_json_auth(&url, &body, auth.clone()).await {
-                    tracing::warn!("Sync: read cursor of {document_id} not moved: {e}");
-                }
-            }
+            let base = format!("{url_scheme}://{api_base}/api");
+            put_cursors(&base, cursors, auth.clone()).await;
             if !finals.is_empty() {
                 let url = format!("{url_scheme}://{api_base}/api/read-cursors/mark-read");
                 let body = http::MarkReadRequest {
@@ -284,6 +280,21 @@ impl SyncState {
                     tracing::warn!("Sync: read cursors of the final segments not moved: {e}");
                 }
             }
+        });
+    }
+
+    /// Move each listed cursor to the number Logic chose, back as well as
+    /// forward: marking a message unread (the Murmure unread spec). No other
+    /// cursor moves.
+    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(SegmentId, Seq)>) {
+        if self.event_tx.is_none() {
+            tracing::warn!("Sync: no relay on this transport, the read cursors stay");
+            return;
+        }
+        let base = format!("{}://{}/api", self.url_scheme, self.api_base);
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            put_cursors(&base, cursors, auth).await;
         });
     }
 
@@ -335,6 +346,18 @@ impl SyncState {
 
 fn no_relay() -> String {
     "no relay on this transport".into()
+}
+
+/// Move each cursor to its number, one request per document. A refused move
+/// leaves that cursor where it was and says so in the log.
+async fn put_cursors(base: &str, cursors: Vec<(SegmentId, Seq)>, auth: http::AuthContext) {
+    for (segment, seq) in cursors {
+        let url = format!("{base}/documents/{segment}/read-cursor");
+        let body = http::ReadCursorRequest { seq };
+        if let Err(e) = http::put_json_auth(&url, &body, auth.clone()).await {
+            tracing::warn!("Sync: read cursor of {segment} not moved: {e}");
+        }
+    }
 }
 
 /// The aad of a sealed channel key: it binds the key to its channel, so a
@@ -461,6 +484,7 @@ pub(crate) fn activity_of(
                 channel_id,
                 document_id,
                 active: e.active,
+                read: e.read,
             })
         })
         .collect()
@@ -477,7 +501,10 @@ pub(crate) fn channel_documents(
         .map(|e| {
             let document_id = DocumentId::parse_str(&e.document_id)
                 .map_err(|_| format!("bad document id {:?}", e.document_id))?;
-            Ok(ChannelDocument { document_id, kind: e.kind })
+            Ok(ChannelDocument {
+                document_id,
+                kind: e.kind,
+            })
         })
         .collect()
 }
@@ -521,7 +548,13 @@ mod tests {
     fn one_unreadable_row_fails_the_whole_listing() {
         let meta = DocumentId::new().to_string();
         // Bad document_id causes an error
-        assert!(channel_documents(&[entry(&meta, ChannelDocumentKind::Meta), entry("nope", ChannelDocumentKind::Segment)]).is_err());
+        assert!(
+            channel_documents(&[
+                entry(&meta, ChannelDocumentKind::Meta),
+                entry("nope", ChannelDocumentKind::Segment)
+            ])
+            .is_err()
+        );
         // Single valid entry succeeds
         assert!(channel_documents(&[entry(&meta, ChannelDocumentKind::Meta)]).is_ok());
     }
@@ -531,6 +564,7 @@ mod tests {
             channel_id: channel_id.to_owned(),
             document_id: document_id.to_owned(),
             active,
+            read: Seq(7),
         }
     }
 
@@ -544,7 +578,8 @@ mod tests {
             [DocumentActivity {
                 channel_id: channel,
                 document_id: segment,
-                active: true
+                active: true,
+                read: Seq(7),
             }]
         );
         let bad = activity(&channel.to_string(), "nope", false);

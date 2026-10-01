@@ -16,6 +16,7 @@ mod channel;
 mod error;
 mod opening;
 pub mod schema;
+mod sequence;
 mod space;
 
 #[cfg(test)]
@@ -24,9 +25,12 @@ mod channel_tests;
 mod schema_shape;
 #[cfg(test)]
 mod space_tests;
+#[cfg(test)]
+mod unread_tests;
 
 pub use channel::{ChannelState, Sent};
 pub use error::MurmureError;
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
+pub use sequence::{Order, Position};
 pub use space::{Listing, SpaceState};

@@ -6,6 +6,7 @@
 //!   strongly-typed identifiers (distinct newtypes over `Uuid`)
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
+//! - [`Seq`]: the relay's sequence number of a document
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
 //! - [`authorship`]: the session nonce and the peer registry entry
@@ -41,10 +42,11 @@ pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).
 pub mod schema;
-/// Serde adapters for identifier serialization as hyphenated UUID strings.
-pub mod serde_id;
+pub mod seq;
 /// Serde adapters for enum serialization as lowercase strings.
 pub mod serde_enums;
+/// Serde adapters for identifier serialization as hyphenated UUID strings.
+pub mod serde_id;
 pub mod uuid;
 pub mod version;
 
@@ -75,5 +77,6 @@ pub use schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
     SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
 };
+pub use seq::Seq;
 pub use uuid::Uuid;
 pub use version::Version;

@@ -27,9 +27,8 @@ pub struct Signature(#[serde(with = "serde_bytes")] pub [u8; 64]);
 
 // -----------------------------------------------------------------------------
 // Core wire messages
-/// Server-assigned monotonic sequence number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Seq(pub u64);
+/// Server-assigned monotonic sequence number, shared with the client threads.
+pub use ambre_core::Seq;
 
 /// Lamport logical clock (client-side).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

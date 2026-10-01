@@ -711,12 +711,16 @@ pub(crate) struct ActivityEntry {
     pub channel_id: String,
     pub document_id: String,
     pub active: bool,
+    /// The caller's own cursor. A relay that predates it answers none, which
+    /// reads as nothing read.
+    #[serde(default)]
+    pub read: ambre_core::Seq,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`.
 #[derive(Serialize)]
 pub(crate) struct ReadCursorRequest {
-    pub seq: u64,
+    pub seq: ambre_core::Seq,
 }
 
 /// `POST /api/read-cursors/mark-read`: the documents to move to their last

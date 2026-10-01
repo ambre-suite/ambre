@@ -277,9 +277,7 @@ pub async fn create_snapshot(
             covered_seq: ambre_protocol::messages::Seq(covered),
         });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
-    Ok(axum::Json(CreateSnapshotResponse {
-        snapshot_id: sid,
-    }))
+    Ok(axum::Json(CreateSnapshotResponse { snapshot_id: sid }))
 }
 
 /// Request for a presigned snapshot upload URL. `size_bytes` is the size of the

@@ -712,7 +712,7 @@ impl LogicState {
             );
             return;
         }
-        self.apply_remote(document_id, &delta.payload);
+        self.apply_remote(document_id, Order::Update(Seq(delta.seq)), &delta.payload);
         self.track_waiting(document_id, &[(delta.seq, delta.payload.as_slice())]);
     }
 
@@ -787,16 +787,35 @@ impl LogicState {
         if accepted.is_empty() {
             return;
         }
+        // A replay queues on an open document only. A channel or space
+        // document takes the whole batch now, each delta at its number.
+        if !self.docs.contains_key(&document_id) {
+            let numbered: Vec<(Option<Order>, &[u8])> = accepted
+                .iter()
+                .map(|(seq, p)| (Some(Order::Update(Seq(*seq))), p.as_slice()))
+                .collect();
+            let borrowed: Vec<&[u8]> = accepted.iter().map(|(_, p)| p.as_slice()).collect();
+            if !self.apply_channel_remote(document_id, &numbered)
+                && !self.apply_space_remote(document_id, &borrowed)
+            {
+                tracing::warn!(
+                    "Logic: replay for unopened doc {document_id} ({} delta(s)), dropping",
+                    accepted.len()
+                );
+            }
+            return;
+        }
         // One slice now, the rest one a pass (`SYNC-131`).
         self.replay(document_id, accepted);
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
-    pub(crate) fn apply_remote(&mut self, document_id: DocumentId, payload: &[u8]) {
+    /// `order` is where the relay placed it, which only a channel reads.
+    pub(crate) fn apply_remote(&mut self, document_id: DocumentId, order: Order, payload: &[u8]) {
         self.settle_import(document_id);
         // A document no entry of `docs` names may belong to an open channel.
         if !self.docs.contains_key(&document_id)
-            && (self.apply_channel_remote(document_id, &[payload])
+            && (self.apply_channel_remote(document_id, &[(Some(order), payload)])
                 || self.apply_space_remote(document_id, &[payload]))
         {
             return;
@@ -843,17 +862,10 @@ impl LogicState {
     /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
     /// [`apply_remote`] for the local-persist and viewport-forward tail.
     ///
-    /// It settles a board's import, never the replay it is a slice of.
+    /// It settles a board's import, never the replay it is a slice of. A
+    /// channel or space document never queues a replay, so it never comes here.
     pub(crate) fn merge_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
         self.settle_board_import(document_id);
-        if !self.docs.contains_key(&document_id) {
-            let borrowed: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
-            if self.apply_channel_remote(document_id, &borrowed)
-                || self.apply_space_remote(document_id, &borrowed)
-            {
-                return;
-            }
-        }
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: merge_batch for unopened doc {document_id} ({} delta(s)), dropping",
@@ -1008,7 +1020,7 @@ impl LogicState {
     /// Import a snapshot whose contents are trusted, and count the deltas a
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
     pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: u64) {
-        self.apply_remote(document_id, payload);
+        self.apply_remote(document_id, Order::Snapshot(Seq(covered)), payload);
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);

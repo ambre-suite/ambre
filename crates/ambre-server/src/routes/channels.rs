@@ -48,9 +48,9 @@ pub async fn list_channel_documents(
     let json: Vec<_> = documents
         .into_iter()
         .map(|d| {
-            let doc_id = ambre_core::DocumentId::from_uuid(
-                ambre_core::Uuid::from_bytes(*d.document_id.as_bytes())
-            );
+            let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(
+                *d.document_id.as_bytes(),
+            ));
             ChannelDocumentJson {
                 document_id: doc_id,
                 kind: d.kind.as_str(),
@@ -513,7 +513,7 @@ mod tests {
             State(state.clone()),
             session(alice),
             axum::Json(crate::routes::CreateDocumentRequest {
-                doc_type: "murmure".into(),
+                doc_type: ambre_core::DocType::Murmure,
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
                 document_id: Some(space.to_string()),

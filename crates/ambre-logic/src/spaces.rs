@@ -507,6 +507,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
+            covered_seq: Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         assert!(
@@ -625,6 +626,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
+            covered_seq: Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(&mut state, space_id.document_id(), Role::Viewer);
@@ -715,6 +717,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
+            covered_seq: Seq(1),
             payload: alice.snapshot().expect("snapshot"),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
@@ -789,6 +792,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: space_id.document_id(),
+            seq: Seq(1),
             payload: first,
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
@@ -810,6 +814,7 @@ mod tests {
             .expect("list");
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: space_id.document_id(),
+            seq: Seq(2),
             payload: delta,
         });
         let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");

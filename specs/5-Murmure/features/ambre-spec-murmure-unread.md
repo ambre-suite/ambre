@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: MURMURE UNREAD STATE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the cursors, the activity answer and mark read are built; no
-  count and no view
+**Implementation:** partial -- cursors, marks and the count of an open channel are built; no
+  count of an unloaded channel, no view
 
 > The sidebar shows where something new is, and how much. The count follows the user across their
 > devices, and a reaction or an edit never makes a channel unread.
@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-113` | `INV` | The unread count of a channel MUST count new messages alone, never reactions and never edits. | this spec section 3 | not built | unbuilt -- lands with the `Unread counts and mark unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-113` | `INV` | The unread count of a channel MUST count new messages alone, never reactions and never edits. | this spec section 3 | `ambre_murmure::unread_tests::a_message_takes_the_number_of_the_update_that_created_it`; `ambre_murmure::unread_tests::an_edit_creates_no_message_and_never_counts`; `ambre_murmure::unread_tests::the_authors_own_message_is_numbered_by_its_echo_and_never_counts`; `ambre_logic::channels::tests::a_delivered_message_carries_the_relay_number_its_count_reads` -- a message takes the number of the update that created it, and an edit in a later update moves neither its number nor the count; structural -- the count walks the message list, and a reaction or an edit adds no entry to it | none | verified |
 | `MURMURE-114` | `INV` | The read cursor of a user MUST be the same on every device of that user. | this spec section 3; `ambre-spec-server.md` | `ambre_server::routes::read_cursors::tests::a_cursor_moved_on_one_device_is_read_on_every_other` -- two devices of one user read the cursor either moved; structural -- the cursor table is keyed by user and document, and no column names a device | none | verified |
 
 ### 1.2 Read a channel
@@ -32,8 +32,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-117` | `POST` | Marking a message unread MUST move the cursor to just before it. | this spec section 3 | not built | unbuilt -- lands with the `Unread counts and mark unread` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-154` | `FRAME` | Marking a message unread MUST NOT move the cursor of another channel. | this spec section 3 | not built | unbuilt -- lands with the `Unread counts and mark unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-117` | `POST` | Marking a message unread MUST move the cursor to just before it. | this spec section 3 | `ambre_logic::channels::tests::marking_a_message_unread_moves_the_cursor_to_just_before_it`; `ambre_logic::channels::tests::a_message_with_no_exact_number_is_not_marked_unread` -- the cursor of its segment moves to one below its number, and the count takes it back | none | verified |
+| `MURMURE-154` | `FRAME` | Marking a message unread MUST NOT move the cursor of another channel. | this spec section 3 | `ambre_logic::channels::tests::marking_a_message_unread_moves_no_cursor_of_another_channel`; `ambre_murmure::channel_tests::the_segments_after_one_are_those_listed_later` -- the move names the documents of the message's own channel alone | none | verified |
 
 ### 1.4 Mark everything read
 
@@ -47,16 +47,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `SRV-109` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- Logic hands the view one mark per channel | partial -- no sidebar draws the mark; lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | partial |
-| `MURMURE-120` | `POST` | A count MUST replace the activity mark once the summaries or the document give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Unread counts and mark unread` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-120` | `POST` | A count MUST replace the activity mark once the loaded document gives it. | this spec section 3 | `ambre_logic::channels::tests::an_open_channel_counts_the_messages_past_its_cursor`; `ambre_murmure::unread_tests::a_snapshot_hands_on_the_numbers_its_writer_knew`; `ambre_murmure::unread_tests::a_message_known_only_from_a_snapshot_lies_within_its_horizon` -- an open channel whose cursors are known hands the view a count with each delta and each answer, and none before | none | verified |
+| `MURMURE-460` | `POST` | A count MUST replace the activity mark of a channel not loaded once the summaries give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- the answer reaches the view and no open reaches the Sync worker | none | verified |
 
 * **Budget.** the counters cost a light subscription per channel not held
   (`ambre-spec-budgets.md section 6`).
 * **Boundary.** the relay holds the read cursors and answers yes or no, never a count
   (`SRV-110`, `ZK-015`). The kind of each update stays sealed.
-* **Verification.** 5 `verified`, 2 `partial`, 4 `unimplemented`. the relay rows are held by the
-  read cursor route tests against a real database; the client rows by the Logic and Sync unit tests.
-  Four rows wait on a sequence number per message, which the count and mark unread both need.
+* **Verification.** 9 `verified`, 2 `partial`, 1 `unimplemented`. The read cursor route tests
+  hold the relay rows against a real database. The engine, Logic and Sync unit tests hold the
+  client rows. The count of a channel not loaded waits on the light subscription.
 
 ---
 
@@ -64,8 +65,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | Bob does | The channel holds | Each user sees | Test |
 |---|---|---|---|---|
-| posts a message | reads another channel | one new message | an unread count of 1 on the channel (`MURMURE-113`) | none |
+| posts a message | reads another channel | one new message | an unread count of 1 on the channel (`MURMURE-113`) | `ambre_logic::channels::tests::an_open_channel_counts_the_messages_past_its_cursor` |
 | reacts to a message | reads another channel | one reaction | no badge moves (`MURMURE-113`) | none |
+| edits her message | reads another channel | one edit | no badge moves (`MURMURE-113`) | `ambre_murmure::unread_tests::an_edit_creates_no_message_and_never_counts` |
+| -- | marks Alice's message unread | -- | the channel unread from that message, every other channel as it was (`MURMURE-117`, `MURMURE-154`) | `ambre_logic::channels::tests::marking_a_message_unread_moves_the_cursor_to_just_before_it` |
 | reads a channel on her phone | -- | the cursor moved on the relay | the channel read on her laptop too (`MURMURE-114`) | `ambre_server::routes::read_cursors::tests::a_cursor_moved_on_one_device_is_read_on_every_other` |
 
 ---
@@ -82,7 +85,38 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|
 | the relay activity answer | a mark: something is new | at start, before anything loads |
 | the sealed summaries | a count of messages and mentions | as updates arrive |
-| the loaded document | the exact count | when the channel opens |
+| the loaded document | the count | when the channel opens, and with each delta and each answer |
+
+**A number per message.** The relay numbers an update after its author wrote it, so no message
+carries its own number.
+
+| Delivery | What the message learns |
+|---|---|
+| an update numbered `n` | `n`, for each message whose creating operation lies in the update's range; an operation sent twice keeps the lower |
+| the relay's echo of the author's own update | its number, as any other member learns it |
+| a snapshot folding up to `h`, framed | the number its row gives, a row above `h` dropped |
+| a snapshot folding up to `h`, no row naming it | at most `h` |
+
+**The snapshot frame.** Sealed with the snapshot, so the relay reads none of it (`ZK-015`). A
+truncated frame never imports.
+
+| Bytes | Holds |
+|---|---|
+| 4 | `amsq` |
+| 4 | the row count, little-endian |
+| 24 per row | a message identifier, then its number, little-endian |
+| the rest | the Loro snapshot |
+
+**The count, and mark unread.**
+
+| Case | Rule |
+|---|---|
+| a message by someone else, numbered | counts when its number is past the cursor |
+| a message bounded by a horizon | counts when the horizon is past the cursor |
+| a message not numbered yet | counts: a count runs over, never under |
+| a segment held with no cursor known, or an active final segment not held | no count; the mark stands |
+| mark unread | the message's segment moves to one below its number, each later segment of the channel to the start |
+| mark unread on a message with no exact number | refused, never guessed |
 
 **Code.**
 
@@ -92,7 +126,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | the cursor queries | `crates/ambre-server/src/db/read_cursors.rs` |
 | the cursor, activity and mark read routes | `crates/ambre-server/src/routes/read_cursors.rs` |
 | the requests and the last number delivered | `crates/ambre-sync/src/channels.rs` |
-| the mark read command and the mark per channel | `crates/ambre-logic/src/channels.rs` |
+| the number of each delivery | `crates/ambre-sync/src/updates.rs`, `crates/ambre-sync/src/websocket.rs` |
+| the number per message, the snapshot frame | `crates/ambre-murmure/src/sequence.rs` |
+| the count and the segments after one | `crates/ambre-murmure/src/channel.rs` |
+| the cursors, the count per channel, mark read and mark unread | `crates/ambre-logic/src/channels.rs` |
 
 **Mark read.** A live segment still grows. Its cursor moves to the last number the Sync worker
 delivered, so a message sequenced and not yet shown stays unread. A final segment no longer changes,
@@ -121,7 +158,10 @@ so the relay moves its cursor to its own last number, and the client need not lo
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No count.** The client cannot map a message to its sequence number, above all inside a
-  snapshot. Neither the count nor mark unread has the number it needs, which is the
-  `Unread counts and mark unread` Story (`ambre-roadmap.md` E5).
-* **No view.** No sidebar draws the mark and no message list sends mark read.
+* **No count of a channel not loaded.** The sealed summaries need the light subscription of the
+  `Document residency` Story (`ambre-roadmap.md` E5), `MURMURE-460`.
+* **No view.** No sidebar draws the mark or the count, and no message list sends mark read or
+  mark unread.
+* **A snapshot from a member who knows no number.** Its messages read as bounded by its horizon,
+  so a cursor below the horizon counts them all. Not yet ruled whether a compaction should wait
+  for a member who holds the numbers.

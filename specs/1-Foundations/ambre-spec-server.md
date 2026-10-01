@@ -92,7 +92,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- a document past the cursor, one at it, and a `meta` document that never appears | none | verified |
-| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- every entry carries exactly a channel, a document and a yes or no | none | verified |
+| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- every entry carries exactly a channel, a document, a yes or no, and the caller's own cursor, which counts nothing | none | verified |
 
 ### 1.7 A space applies its retention
 
