@@ -6,8 +6,9 @@
 //!   UI (with a small Logic hook, for example `DocumentCreated` records the doc type).
 //! - **Server push & errors** -- unsolicited notifications (CRDT deltas,
 //!   connection status, member revocation, meeting participants...) and failures
-//!   (`AuthError` / `ApiError`). No originating request, so no `RequestId`; each
-//!   is handled explicitly by the Logic thread (apply CRDT, mutate state, ...).
+//!   (`AuthError` / `ApiError` / `SetupRequired`). No originating request, so no
+//!   `RequestId`; each is handled explicitly by the Logic thread (apply CRDT,
+//!   mutate state, ...).
 //!
 //! [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 
@@ -176,4 +177,9 @@ pub enum LogicEvent {
         code: u16,
         message: String,
     },
+
+    /// The relay refused a request or the socket because the account still owes
+    /// its key setup. Stands in for the generic error such a refusal would
+    /// otherwise raise (`ambre-spec-sync.md`, `SYNC-134`).
+    SetupRequired,
 }

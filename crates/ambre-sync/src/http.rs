@@ -103,13 +103,51 @@ fn timeout_signal() -> web_sys::AbortSignal {
     web_sys::AbortSignal::timeout_with_u32(REQUEST_TIMEOUT_MS)
 }
 
+/// The relay's error code for a request refused because the account still owes
+/// its key setup (HTTP 403). An error message ends with it exactly when the
+/// relay refused the request for that reason (`SYNC-134`).
+const SETUP_REQUIRED: &str = "SETUP_REQUIRED";
+
+/// The body the relay sends with a refusal. Only its code is read.
+#[derive(Deserialize)]
+struct RefusalBody {
+    error: String,
+}
+
+/// The error a refused request reads as. `code` is the relay's error code,
+/// read only for a 403: the one status that may stand for a setup still owed.
+fn refusal(method: &str, url: &str, status: u16, code: Option<&str>) -> String {
+    if status == 403 && code == Some(SETUP_REQUIRED) {
+        format!("{method} {url}: {SETUP_REQUIRED}")
+    } else {
+        format!("{method} {url}: HTTP {status}")
+    }
+}
+
+/// Whether `message` is the error of a request the relay refused for a key
+/// setup still owed. The code closes the message, after the URL, so no URL or
+/// other status can end with it.
+pub(crate) fn is_setup_refusal(message: &str) -> bool {
+    message.ends_with(&format!(": {SETUP_REQUIRED}"))
+}
+
+async fn refused(method: &str, url: &str, resp: Response) -> String {
+    let status = resp.status();
+    let code = if status == 403 {
+        resp.json::<RefusalBody>().await.ok().map(|body| body.error)
+    } else {
+        None
+    };
+    refusal(method, url, status, code.as_deref())
+}
+
 async fn parse_json<T: serde::de::DeserializeOwned>(
     method: &str,
     url: &str,
     resp: Response,
 ) -> Result<T, String> {
     if !resp.ok() {
-        return Err(format!("{method} {url}: HTTP {}", resp.status()));
+        return Err(refused(method, url, resp).await);
     }
     resp.json::<T>()
         .await
@@ -118,7 +156,7 @@ async fn parse_json<T: serde::de::DeserializeOwned>(
 
 async fn expect_ok(method: &str, url: &str, resp: Response) -> Result<(), String> {
     if !resp.ok() {
-        return Err(format!("{method} {url}: HTTP {}", resp.status()));
+        return Err(refused(method, url, resp).await);
     }
     Ok(())
 }
@@ -356,6 +394,14 @@ pub(crate) struct DevLoginResponse {
 pub(crate) struct MasterKeyResponse {
     pub master_key_enc: String,
     pub master_key_salt: String,
+}
+
+impl MasterKeyResponse {
+    /// Whether the account still owes its key setup: the relay holds no master
+    /// material for it, and sends the fields empty.
+    pub fn setup_owed(&self) -> bool {
+        self.master_key_enc.is_empty()
+    }
 }
 
 #[derive(Serialize)]
@@ -599,4 +645,53 @@ pub(crate) struct ConfirmUploadRequest {
     pub content_hash: String,
     pub mime_type: String,
     pub size_bytes: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Only a 403 carrying the setup code reads as a setup refusal, and no
+    /// URL makes another status read as one (`SYNC-134`).
+    #[test]
+    fn only_a_setup_refusal_reads_as_one() {
+        let url = "https://relay.example/api/documents";
+        assert!(is_setup_refusal(&refusal(
+            "GET",
+            url,
+            403,
+            Some(SETUP_REQUIRED)
+        )));
+        assert!(!is_setup_refusal(&refusal(
+            "GET",
+            url,
+            403,
+            Some("FORBIDDEN")
+        )));
+        assert!(!is_setup_refusal(&refusal("GET", url, 403, None)));
+        assert!(!is_setup_refusal(&refusal(
+            "GET",
+            url,
+            500,
+            Some(SETUP_REQUIRED)
+        )));
+        let crafted = "https://relay.example/api/users/search?q=: SETUP_REQUIRED";
+        assert!(!is_setup_refusal(&refusal("GET", crafted, 500, None)));
+    }
+
+    /// An unlock finding no master material reads as a setup owed, not as a
+    /// corrupted account (`SYNC-134`).
+    #[test]
+    fn an_account_without_master_material_owes_its_setup() {
+        let owed = MasterKeyResponse {
+            master_key_enc: String::new(),
+            master_key_salt: String::new(),
+        };
+        assert!(owed.setup_owed());
+        let stored = MasterKeyResponse {
+            master_key_enc: "c2VhbGVk".into(),
+            master_key_salt: "c2FsdA==".into(),
+        };
+        assert!(!stored.setup_owed());
+    }
 }

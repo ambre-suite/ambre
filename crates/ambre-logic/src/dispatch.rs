@@ -420,6 +420,7 @@ impl LogicState {
             LogicEvent::AuthError { message } => {
                 self.send_to_ui(UiEvent::AuthError { message });
             }
+            LogicEvent::SetupRequired => self.send_to_ui(UiEvent::SetupRequired),
             LogicEvent::ApiError {
                 id,
                 request,
@@ -1796,5 +1797,15 @@ mod tests {
         // The gate drops a refused command before the handler, so an answer at
         // all is the property under test.
         let _ = export_pdf_answer(&mut state, &ui_rx, doc_id);
+    }
+
+    /// A setup still owed reaches the UI as a setup to complete, and as
+    /// nothing else (`SYNC-134`).
+    #[test]
+    fn a_setup_owed_reaches_the_ui_as_a_setup() {
+        let (mut state, ui, _sync) = harness();
+        state.handle_logic_event(LogicEvent::SetupRequired);
+        let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        assert!(matches!(told.as_slice(), [UiEvent::SetupRequired]));
     }
 }

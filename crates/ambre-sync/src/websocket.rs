@@ -89,6 +89,7 @@ impl SyncState {
     /// Native / host-test stub: does nothing (mock transport handles WS).
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn open_websocket(&mut self) {
+        self.socket_opens += 1;
         tracing::info!("Sync: WebSocket opened (native mock)");
     }
 
@@ -278,7 +279,14 @@ impl SyncState {
             SyncEvent::WsOpened => self.resubscribe_all(),
             SyncEvent::WsDisconnected { code, reason } => {
                 self.handle_ws_disconnected(code, reason);
-                if self.documents.is_empty() {
+                if code == WS_CLOSE_SETUP_REQUIRED {
+                    // A renewed session would have no keys either, so neither
+                    // renew nor retry. The socket reopens once a session with
+                    // keys is stored (`SYNC-133`). Meanwhile the rest of the
+                    // client is told a setup is owed (`SYNC-134`).
+                    self.setup_owed = true;
+                    self.send_to_logic(LogicEvent::SetupRequired);
+                } else if self.documents.is_empty() {
                     // No open document: nothing to reconnect for.
                 } else if code == WS_CLOSE_UNAUTHORIZED {
                     // The server rejected our (expired/rotated) JWT. Refresh the
@@ -293,7 +301,7 @@ impl SyncState {
                 if ok {
                     // New access token in the shared store: reopen promptly.
                     self.reconnect_attempts = 0;
-                    if self.ws.is_none() && !self.documents.is_empty() {
+                    if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
                         self.open_websocket();
                     }
                 } else if let Some(username) = self.dev_username.clone() {
@@ -327,8 +335,9 @@ impl SyncState {
             }
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
-                // Only reconnect if still wanted and not already reconnected.
-                if self.ws.is_none() && !self.documents.is_empty() {
+                // Only reconnect if still wanted and not already reconnected. A
+                // timer armed before a setup refusal must not retry it.
+                if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
                     self.open_websocket();
                 }
             }
@@ -347,6 +356,7 @@ impl SyncState {
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
                 *self.tokens.borrow_mut() = Some(tokens);
+                self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
                 self.reply(
@@ -370,6 +380,7 @@ impl SyncState {
                 self.signing_key = Some(signing_key);
                 self.exchange_key = Some(exchange_key);
                 *self.tokens.borrow_mut() = Some(tokens);
+                self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
                 self.reply(id, RestEvent::AccountCreated { recovery_words });
@@ -987,6 +998,79 @@ impl SyncState {
 mod tests {
     use super::SocketUrl;
     use crate::http::{SecretToken, TokenPair};
+    use crate::{
+        LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState, WS_CLOSE_SETUP_REQUIRED,
+        WS_CLOSE_UNAUTHORIZED,
+    };
+    use ambre_bus::DocType;
+    use ambre_core::DocumentId;
+    use ambre_crypto::{DocumentKey, MasterSeed};
+
+    /// A worker holding one open document, and the queue of what it tells Logic.
+    fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let id = DocumentId::new();
+        state.documents.insert(
+            id,
+            SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, false),
+        );
+        (state, rx)
+    }
+
+    fn closed(code: u16) -> SyncEvent {
+        SyncEvent::WsDisconnected {
+            code,
+            reason: String::new(),
+        }
+    }
+
+    /// A socket refused for a key setup still owed is neither renewed nor
+    /// retried, by a timer armed before or a renewal landing after (`SYNC-133`).
+    /// Once a session with keys is stored, it reopens.
+    #[test]
+    fn a_socket_refused_for_a_setup_owed_is_neither_renewed_nor_retried() {
+        // Control: the authentication code does reopen, so a count of zero
+        // below is the refusal's doing and not the harness's.
+        let (mut renewed, _rx) = with_open_document();
+        renewed.handle_sync_event(closed(WS_CLOSE_UNAUTHORIZED));
+        assert_eq!(renewed.socket_opens, 1);
+
+        let (mut state, _rx) = with_open_document();
+        state.handle_sync_event(closed(WS_CLOSE_SETUP_REQUIRED));
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
+        assert_eq!(state.socket_opens, 0);
+
+        let master_seed = MasterSeed::from_array([7u8; 32]);
+        state.handle_sync_event(SyncEvent::AccountCreated {
+            id: ambre_bus::RequestId::next(),
+            recovery_words: String::new(),
+            signing_key: master_seed.derive_signing_key(),
+            exchange_key: master_seed.derive_exchange_key(),
+            master_seed,
+            tokens: TokenPair {
+                access_token: SecretToken::from("access".to_owned()),
+                refresh_token: SecretToken::from("refresh".to_owned()),
+                access_expires_in: 60,
+            },
+        });
+        assert_eq!(state.socket_opens, 1);
+    }
+
+    /// A socket refused for a key setup still owed reaches Logic as a setup to
+    /// complete, and as nothing else (`SYNC-134`).
+    #[test]
+    fn a_socket_refused_for_a_setup_owed_reaches_logic_as_a_setup() {
+        let (mut state, rx) = with_open_document();
+        state.handle_sync_event(closed(WS_CLOSE_SETUP_REQUIRED));
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(told.iter().any(|e| matches!(e, LogicEvent::SetupRequired)));
+        assert!(!told.iter().any(|e| matches!(
+            e,
+            LogicEvent::ApiError { .. } | LogicEvent::AuthError { .. }
+        )));
+    }
 
     /// A logged socket address carries no token (`SYNC-061`), whichever way
     /// it is formatted.

@@ -1098,6 +1098,7 @@ mod handler_tests {
 
     /// `SRV-027`: the socket refuses a session minted before the key setup. The
     /// upgrade completes, then the server closes before any frame is read.
+    /// `SRV-164`: it closes with the setup code, not the authentication one.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_socket_refuses_a_session_without_keys(pool: sqlx::PgPool) {
@@ -1111,7 +1112,7 @@ mod handler_tests {
         let tokens = crate::auth::issue_session(&state, user_id, None)
             .await
             .unwrap();
-        assert_eq!(first_close_code(state, &tokens.access_token).await, 4401);
+        assert_eq!(first_close_code(state, &tokens.access_token).await, 4403);
     }
 
     /// `SRV-046`: an upgrade refused on authentication closes with a code of its

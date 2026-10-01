@@ -18,6 +18,14 @@ impl SyncState {
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("{url_scheme}://{api_base}/api/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
+                    Ok(resp) if resp.setup_owed() => {
+                        // No master material to unlock: the account still owes
+                        // its key setup, which is no failure (`SYNC-134`).
+                        let _ = logic_tx.send(LogicEvent::Rest {
+                            id,
+                            evt: RestEvent::AccountSetupRequired,
+                        });
+                    }
                     Ok(resp) => {
                         // User-facing AuthError messages are deliberately generic.
                         // They never carry crypto detail (algorithm names, key/salt

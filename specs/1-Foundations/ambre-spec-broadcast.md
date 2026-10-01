@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | `ambre_server::routes::tests::handler_tests::a_refused_token_closes_the_socket_with_its_own_code` -- a token that does not verify draws the authentication close code on a live socket, after the upgrade completes | none | verified |
-| `SRV-164` | `FAIL` | An upgrade refused for a key setup still owed MUST close with a code distinct from the authentication one. | `ambre-spec-session.md`, `SRV-027`; `SRV-046` | none | fails -- the socket closes such a session with the authentication code, so the client renews into another session without keys and reconnects until the setup; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-164` | `FAIL` | An upgrade refused for a key setup still owed MUST close with a code distinct from the authentication one. | `ambre-spec-session.md`, `SRV-027`; `SRV-046` | `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a session minted before the key setup draws the setup close code on a live socket, where a token that does not verify draws the authentication one | none | verified |
 | `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | none | unheld -- every watched topic is deregistered and the outbound task is stopped at the end of the connection, and no test closes a socket to observe the hub afterwards; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 A frame arrives on the socket
@@ -79,10 +79,10 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 7 `verified`, 1 `failing`, 9 `untested`, 6 `unimplemented`. What holds is what a
-  handler test drives: the two caps, the rate bucket, the presence expiry and its removal. What is
-  loose is everything about the connection rather than the message. Each needs a live socket, and
-  two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
+* **Verification.** 8 `verified`, 9 `untested`, 6 `unimplemented`. What holds is what a handler test
+  drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
+  everything about the connection rather than the message. Each needs a live socket, and two tests
+  alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -242,7 +242,7 @@ The socket has no surface of its own. What a person meets of it is four things.
 * **The outbound queue has a depth and no policy.** It holds 256 frames per connection, and what
   happens to a connection that stops draining it is whatever the queue does, which no rule states.
 * **Two tests open a socket, and only to see it refused.** They hold the close of a token that does
-  not verify and of a session without keys (`SRV-046`, `ambre-spec-session.md`, `SRV-027`). The
+  not verify and of a session without keys (`SRV-046`, `SRV-164`, `ambre-spec-session.md`, `SRV-027`). The
   suite drives every other handler directly, so the fan-out across two connections and the teardown
   are held by nothing (`ambre-spec-testing.md section 9`).
 

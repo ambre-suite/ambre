@@ -104,8 +104,23 @@ impl LogicSink {
     /// Never today. The sink owns a closure that swallows a closed queue, and
     /// the signature keeps the `Result` for a sink that can refuse.
     pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
-        (self.0)(event);
+        (self.0)(as_setup_owed(event));
         Ok(())
+    }
+}
+
+/// Tells a failure the relay raised for a key setup still owed as the setup it
+/// is, never as a generic error (`ambre-spec-sync.md`, `SYNC-134`). Every error
+/// leaves the worker through [`LogicSink::send`], so this one mapping covers
+/// every request, whichever handler raised it.
+fn as_setup_owed(event: LogicEvent) -> LogicEvent {
+    match &event {
+        LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
+            if http::is_setup_refusal(message) =>
+        {
+            LogicEvent::SetupRequired
+        }
+        _ => event,
     }
 }
 
@@ -145,6 +160,12 @@ const QUARANTINE_LIMIT: usize = 1000;
 /// reasons (expired/rotated JWT). In the application-reserved 4000-4999 range;
 /// mirrors HTTP 401. The client reacts by refreshing its token and reconnecting.
 const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
+
+/// WebSocket close code the server sends when it refuses the upgrade because
+/// the account still owes its key setup (`ambre-spec-broadcast.md`, `SRV-164`).
+/// A renewal cannot cure it, so the client neither renews nor reconnects until
+/// the keys are stored (`ambre-spec-sync.md`, `SYNC-133`).
+const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
 
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
@@ -649,6 +670,14 @@ pub struct SyncState {
     /// actually opens. Drives the exponential reconnect backoff so a server that
     /// rejects the upgrade (for example 429 rate limit) is not hammered into a storm.
     reconnect_attempts: u32,
+    /// Set when the relay refused the socket for a key setup still owed, and
+    /// cleared once a session with keys is stored. While set, no timer or
+    /// renewal reopens the socket (`SYNC-133`).
+    setup_owed: bool,
+    /// Sockets opened on the native mock transport, which has no socket to
+    /// inspect: a host test reads it to tell a retry from none.
+    #[cfg(not(target_arch = "wasm32"))]
+    socket_opens: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
@@ -719,6 +748,9 @@ impl SyncState {
             _onopen: None,
             _reconnect_timer: None,
             reconnect_attempts: 0,
+            setup_owed: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            socket_opens: 0,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1116,6 +1148,40 @@ pub async fn run_wasm(
     }
 
     tracing::info!("Ambre Sync worker exiting (command channel closed)");
+}
+
+#[cfg(test)]
+mod setup_tests {
+    use super::*;
+
+    /// A request refused for a key setup still owed reaches Logic as a setup
+    /// to complete, whichever error variant its handler raised it under
+    /// (`SYNC-134`). Any other failure passes through unchanged.
+    #[test]
+    fn a_request_refused_for_a_setup_owed_reaches_logic_as_a_setup() {
+        let (sink, rx) = LogicSink::channel();
+        let refused = "GET https://relay.example/api/documents: SETUP_REQUIRED";
+        assert!(http::is_setup_refusal(refused));
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocuments".into(),
+            code: 500,
+            message: refused.into(),
+        });
+        let _ = sink.send(LogicEvent::AuthError {
+            message: refused.into(),
+        });
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocuments".into(),
+            code: 403,
+            message: "GET https://relay.example/api/documents: HTTP 403".into(),
+        });
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(told[0], LogicEvent::SetupRequired));
+        assert!(matches!(told[1], LogicEvent::SetupRequired));
+        assert!(matches!(told[2], LogicEvent::ApiError { code: 403, .. }));
+    }
 }
 
 #[cfg(test)]

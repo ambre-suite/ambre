@@ -138,6 +138,24 @@ struct WsConnectionState {
     msg_bucket: TokenBucket,
 }
 
+/// Close code of an upgrade refused on authentication (expired or rotated
+/// token): the client renews its token and reconnects (`SRV-046`). Mirrors HTTP
+/// 401, in the application range 4000-4999.
+const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
+
+/// Close code of an upgrade refused for a key setup still owed. A renewal
+/// cannot cure it, so the client neither renews nor retries (`SRV-164`).
+/// Mirrors the HTTP 403 of `SETUP_REQUIRED`.
+const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
+
+/// The close code and reason a refused upgrade sends for `error`.
+fn refusal_close(error: &AppError) -> (u16, &'static str) {
+    match error {
+        AppError::SetupRequired => (WS_CLOSE_SETUP_REQUIRED, "setup required"),
+        _ => (WS_CLOSE_UNAUTHORIZED, "unauthorized"),
+    }
+}
+
 async fn handle_ws(
     socket: WebSocket,
     state: Arc<AppState>,
@@ -145,17 +163,15 @@ async fn handle_ws(
 ) {
     let session = match session_result {
         Ok(s) => s,
-        Err(_) => {
-            // Tell the client explicitly that the upgrade was refused for auth
-            // reasons (expired/rotated JWT) with an application close code. It
-            // can then refresh its token and reconnect silently, instead of
-            // treating it as a generic network drop. 4401 = our "unauthorized"
-            // (4000-4999 is the reserved application range).
+        Err(e) => {
+            // Tell the client explicitly why the upgrade was refused, with an
+            // application close code, instead of a generic network drop.
+            let (code, reason) = refusal_close(&e);
             let mut socket = socket;
             let _ = socket
                 .send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                    code: 4401,
-                    reason: "unauthorized".into(),
+                    code,
+                    reason: reason.into(),
                 })))
                 .await;
             return;

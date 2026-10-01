@@ -17,7 +17,8 @@
 //! - **Service** ([`UiEvent::Rest`]): a [`RestEvent`] response forwarded from
 //!   [`crate::LogicEvent::Rest`], echoing the originating [`RequestId`].
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
-//!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`): unsolicited.
+//!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`, `SetupRequired`):
+//!   unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, Role, UserId};
@@ -147,6 +148,11 @@ pub enum UiEvent {
     /// rather than disconnected. That path goes through the page's fatal hook instead
     /// (`ambre-spec-architecture.md`, `ARCH-008`).
     FatalError { message: String },
+
+    /// The relay refused a request or the socket because the account still owes
+    /// its key setup. It calls for the setup, not for an error screen. Nothing
+    /// is retried until the keys are stored (`ambre-spec-sync.md`, `SYNC-134`).
+    SetupRequired,
 }
 
 impl UiEvent {

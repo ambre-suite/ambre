@@ -47,8 +47,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-063` | `POST` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-046` | none | unheld -- the refusal has its own close code, and the handler renews on that code alone and backs off on every other. No host test drives a close event; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-133` | `POST` | A socket the relay refuses for a key setup still owed MUST be neither renewed nor retried until the keys are stored. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-164` | none | fails -- the relay closes it with the authentication code, which this worker answers with a renewal and a reconnect; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
-| `SYNC-134` | `POST` | A key setup still owed MUST reach the rest of the client as a setup to complete, never as a generic error. | this spec section 2; `ambre-spec-session.md`, `SRV-027` | none | fails -- a request refused for it surfaces as a generic error naming the status alone, and a socket refused for it surfaces as nothing; lands with the `A session before its keys is sent to the setup` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-133` | `POST` | A socket the relay refuses for a key setup still owed MUST be neither renewed nor retried until the keys are stored. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-164` | `ambre_sync::websocket::tests::a_socket_refused_for_a_setup_owed_is_neither_renewed_nor_retried` -- on the native transport, the refusal opens no socket through a timer or a renewal, and the stored session of a setup opens one, as the authentication code does | none | verified |
+| `SYNC-134` | `POST` | A key setup still owed MUST reach the rest of the client as a setup to complete, never as a generic error. | this spec section 2; `ambre-spec-session.md`, `SRV-027` | `ambre_sync::websocket::tests::a_socket_refused_for_a_setup_owed_reaches_logic_as_a_setup` -- the refused socket; `ambre_sync::setup_tests::a_request_refused_for_a_setup_owed_reaches_logic_as_a_setup` -- the sink turns a setup refusal into the setup, under either error variant; `ambre_sync::http::tests::only_a_setup_refusal_reads_as_one` -- only a 403 with the setup code reads as one; `ambre_sync::http::tests::an_account_without_master_material_owes_its_setup` -- the test an unlock branches on; `ambre_logic::dispatch::tests::a_setup_owed_reaches_the_ui_as_a_setup` -- the logic thread relays it | none | verified |
 | `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none | unheld -- the error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | none | unheld -- the delay is doubled on each teardown, and nothing observes it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | none | unheld -- the reset is the first statement of the inbound handler, so a connection that opens and is refused never reaches it, which is the whole point: resetting on the open turns a relay refusing every connection into a client retrying without a backoff at all; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 6 `verified`, 4 `failing`, 17 `untested`. The crate graph holds the keys and the
+* **Verification.** 8 `verified`, 2 `failing`, 17 `untested`. The crate graph holds the keys and the
   CRDT apart, and unit tests hold the token redaction and wipe and the refused channel send. Each
   gap left is a browser property the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
@@ -135,6 +135,7 @@ no header of ours (`SYNC-061`).
 | Event | Response |
 |---|---|
 | the relay refuses the upgrade on authentication | renew the token silently, then reopen (`SYNC-063`) |
+| the relay refuses the upgrade for a key setup still owed | neither renew nor reopen until a session with keys is stored, and tell the client a setup is owed (`SYNC-133`, `SYNC-134`) |
 | any other close, or a socket error | back off and reopen (`SYNC-064`) |
 | the socket opens | resubscribe every document, and pull what was missed (`SYNC-033`) |
 | a frame arrives | reset the delay: only a frame proves the connection is live (`SYNC-064`) |
@@ -144,7 +145,9 @@ delay reset on the open alone would reset on every refusal. The reconnection wou
 tight loop against a relay that rate-limits it.
 
 **Requests.** Every one carries the access token. A refusal for an expired token is renewed once and
-replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`).
+replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`). A refusal
+for a key setup still owed reaches it as the setup to complete. So does an unlock that finds no
+master material (`SYNC-134`).
 
 **The document register.** The list, the create, the rename and the delete are ordinary requests,
 and one field of them is content rather than routing: the name.
@@ -173,7 +176,7 @@ each name with the key it unwraps from the same row.
 
 ## 3. SURFACE
 
-The worker has no surface of its own. What a user sees of it is four things.
+The worker has no surface of its own. What a user sees of it is five things.
 
 | What the user meets | Comes from |
 |---|---|
@@ -181,6 +184,7 @@ The worker has no surface of its own. What a user sees of it is four things.
 | a connection state per document | the socket's own events (`SYNC-064`) |
 | a document that reconnects with no action after a network drop | the backoff and the resubscription (`SYNC-063`, `SYNC-033`) |
 | an authentication error asking them to sign in again | the second refusal of a renewal (`SYNC-062`) |
+| the key setup, when the account still owes it | the setup refusal and the empty unlock (`SYNC-134`) |
 
 ---
 
@@ -195,6 +199,7 @@ The worker has no surface of its own. What a user sees of it is four things.
 | A refused upgrade has its own close code | one close code for every refusal, and a backoff over all of them | when a token expires or the relay rotates its signing key, every token is invalid at once, so a plain backoff never recovers: each new connection is refused too. A distinct code lets the client renew and reconnect with no action from the user |
 | The delay resets on a frame | resetting when the socket opens | a refused upgrade opens before it closes -- see section 2 -- so a reset on the open turns a refusal into a loop |
 | An early edit is held, not dropped | dropping an edit made before the session, and letting the user retype it | the first edit after a reload lands in the milliseconds while sign-in is still in flight. Dropping it lost that edit permanently and produced a clock the relay then refused on the next one |
+| A setup refusal is told at the one sink every event leaves by | a check in each request handler | about forty handlers turn a failed request into an error, each in its own words. One that missed the check would show a setup still owed as a generic failure. The sink sees every event, so one mapping covers each (`SYNC-134`) |
 | The tokens live in memory alone | browser storage | a token there survives the tab and is readable by any script that reaches the page. Memory dies with the worker, which is the lifetime a session should have |
 | The tokens live in memory alone | a cookie | the browser sends it on requests we did not make, which is the ambient credential the deliberate token exists to avoid |
 

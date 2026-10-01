@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3330 rows: 2395 shipped, of which 102 partial and 630 loose. 935 unbuilt.**
+**3330 rows: 2395 shipped, of which 102 partial and 627 loose. 935 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 269 | 257 | 540 | 597 |  | 1663 |
+| `verified` | 272 | 257 | 540 | 597 |  | 1666 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 24 | 2 | 22 |  |  | 48 |
+| `failing` | 21 | 2 | 22 |  |  | 45 |
 | `untested` | 231 | 131 | 195 | 2 |  | 559 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -41,7 +41,7 @@
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 |  | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 |  | 7 | 1 |
 | `ambre-spec-architecture.md` | 29 | 29 | 13 | 3 | 13 |  |
-| `ambre-spec-broadcast.md` | 23 | 17 | 7 |  | 10 | 6 |
+| `ambre-spec-broadcast.md` | 23 | 17 | 8 |  | 9 | 6 |
 | `ambre-spec-chrome.md` | 23 | 20 | 9 | 1 | 10 | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
@@ -70,7 +70,7 @@
 | `ambre-spec-sequencer.md` | 46 | 18 | 7 | 3 | 8 | 28 |
 | `ambre-spec-server.md` | 49 | 24 | 14 | 2 | 8 | 25 |
 | `ambre-spec-session.md` | 17 | 17 | 9 | 2 | 6 |  |
-| `ambre-spec-sync.md` | 27 | 27 | 6 |  | 21 |  |
+| `ambre-spec-sync.md` | 27 | 27 | 8 |  | 19 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 1 | 8 | 6 |
