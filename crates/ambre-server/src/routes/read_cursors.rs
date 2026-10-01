@@ -198,6 +198,7 @@ mod tests {
                 ambre_core::Role::Viewer,
                 &[6u8; 32],
                 &owner,
+                None,
             )
             .await
             .expect("grant");
@@ -449,7 +450,7 @@ mod tests {
             put_cursor(&state, session(alice, 1), segment, 1).await;
         }
 
-        db::remove_document_member(&state.db, &meta, &bob)
+        db::remove_document_member(&state.db, &meta, &bob, None)
             .await
             .expect("remove");
         for &segment in &segments {

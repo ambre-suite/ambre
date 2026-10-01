@@ -129,7 +129,10 @@ pub fn api_router(
             "/channels/{id}/documents",
             axum::routing::get(list_channel_documents),
         )
-        .route("/channels/{id}/join", axum::routing::post(join_channel))
+        .route(
+            "/channels/{id}/join",
+            axum::routing::post(join_channel).get(join_channel_head),
+        )
         .route(
             "/documents/{id}/read-cursor",
             axum::routing::put(set_read_cursor),

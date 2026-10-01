@@ -124,6 +124,10 @@ pub enum SyncCommand {
     /// own (`SRV-102`).
     OpenChannel {
         channel_id: ChannelId,
+        /// Whether an open space's catalogue lists the channel, so its log
+        /// admits a self-join (`SYNC-106`). The Logic thread
+        /// knows the catalogues; the Sync worker does not.
+        self_join: bool,
     },
     /// Create a public channel of a space on the relay: one channel key,
     /// its `meta` and first segment documents under it, and the channel

@@ -299,6 +299,8 @@ enum SyncEvent {
     /// documents, or why the relay refused it.
     ChannelListed {
         channel_id: ChannelId,
+        /// Whether the Logic thread said a catalogue lists the channel.
+        self_join: bool,
         result: Result<Vec<ambre_bus::ChannelDocument>, String>,
     },
     /// The answer to a public channel creation
@@ -860,6 +862,10 @@ pub struct SyncState {
     /// X25519 exchange key, derived from the master seed. Used to wrap/unwrap
     /// document keys when sharing (invite + key rotation on revoke).
     exchange_key: Option<StaticSecret>,
+    /// The `meta` documents of the public channels a catalogue lists, as the
+    /// Logic thread reports them on each open. Their logs admit a self-join
+    /// (`SYNC-106`); no other log does.
+    self_join_logs: HashSet<DocumentId>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -971,6 +977,7 @@ impl SyncState {
             master_seed: None,
             signing_key: None,
             exchange_key: None,
+            self_join_logs: HashSet::new(),
             ws: None,
             _onmessage: None,
             _onclose: None,
@@ -1228,7 +1235,10 @@ impl SyncState {
             SyncCommand::Reconnect { document_id } => self.handle_reconnect(document_id),
 
             // -- Channel sync session (control) --------------------------------
-            SyncCommand::OpenChannel { channel_id } => self.handle_open_channel(channel_id),
+            SyncCommand::OpenChannel {
+                channel_id,
+                self_join,
+            } => self.handle_open_channel(channel_id, self_join),
             SyncCommand::MarkRead { live, finals } => self.handle_mark_read(&live, finals),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),

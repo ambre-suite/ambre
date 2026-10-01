@@ -2467,7 +2467,7 @@ mod channel_gate_tests {
             .expect("group");
         }
         if let Some((member, role)) = member {
-            db::add_document_member(pool, &meta, &member, role, &[6u8; 32], &owner)
+            db::add_document_member(pool, &meta, &member, role, &[6u8; 32], &owner, None)
                 .await
                 .expect("member");
         }

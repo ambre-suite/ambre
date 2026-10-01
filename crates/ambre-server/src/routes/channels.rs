@@ -12,7 +12,9 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
+use ambre_protocol::MembershipAct;
 
 /// One document of a channel, as the listing answers it.
 #[derive(serde::Serialize)]
@@ -62,10 +64,27 @@ pub struct CreateChannelRequest {
     pub segment_id: String,
 }
 
-/// The body of a self-join: the channel key, wrapped for the caller.
+/// The body of a self-join: the channel key wrapped for the caller. It also
+/// carries the self-join as an entry of the log of `meta`, signed by the caller.
+/// A `meta` whose log holds entries takes no self-join without one.
 #[derive(serde::Deserialize)]
 pub struct JoinChannelRequest {
     pub doc_key_enc: String,
+    #[serde(default)]
+    pub entry: Option<String>,
+}
+
+/// The end of the log of `meta`, which a joining member extends: the
+/// position its entry takes and the entry it names as previous.
+#[derive(serde::Serialize)]
+pub struct JoinHeadJson {
+    /// The document whose log the self-join extends.
+    pub meta_id: String,
+    /// The role the self-join grants, which its entry must name.
+    pub role: Role,
+    pub length: u64,
+    /// The last entry, base64 url-safe, absent on an empty log.
+    pub last: Option<String>,
 }
 
 /// Parse an id of the path or the body. A malformed id answers the 403 of an
@@ -146,8 +165,9 @@ pub async fn create_channel(
 /// The relay holds the channel public and in a space (`SRV-106`), and the
 /// caller a member of that space (`SRV-105`). Every refusal is the same 403,
 /// so a stranger learns nothing of the channel. The new row on `meta` holds
-/// the caller's role in the space, capped at editor (`SRV-108`). A caller
-/// already a member keeps its row, and the answer is the same.
+/// the caller's role in the space, capped at editor (`SRV-108`). It lands
+/// with the entry the caller signed (`SRV-107`). A caller already a member
+/// keeps its row, records no entry, and gets the same answer.
 pub async fn join_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
@@ -156,7 +176,71 @@ pub async fn join_channel(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
-    let channel = db::get_channel(&state.db, &channel_id)
+    let (meta_id, role) = joinable(&state, &auth, &channel_id).await?;
+    let doc_key_enc = base64::engine::general_purpose::URL_SAFE
+        .decode(&req.doc_key_enc)
+        .map_err(|e| AppError::Conflict {
+            detail: e.to_string(),
+        })?;
+    let entry = checked_entry(
+        &state,
+        &auth,
+        meta_id.document_id(),
+        req.entry.as_deref(),
+        Expected {
+            act: MembershipAct::SelfJoin,
+            member: auth.user_id,
+            role: Some(role.as_str()),
+            key: None,
+        },
+    )
+    .await?;
+    let joined = db::add_channel_member_if_absent(
+        &state.db,
+        &meta_id,
+        &auth.user_id,
+        role,
+        &doc_key_enc,
+        entry.as_ref(),
+    )
+    .await?;
+    tracing::info!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/channels/{id}/join`: the end of the log of `meta`, to a caller
+/// the self-join would admit, with the role the join grants. A joining
+/// member reads no log before it joins, so this is what its entry extends.
+/// The refusals are the self-join's.
+pub async fn join_channel_head(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(channel_id): Path<String>,
+) -> Result<axum::Json<JoinHeadJson>, AppError> {
+    use base64::Engine;
+    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
+    let (meta_id, role) = joinable(&state, &auth, &channel_id).await?;
+    let log = db::membership_log(&state.db, &meta_id.document_id()).await?;
+    Ok(axum::Json(JoinHeadJson {
+        meta_id: meta_id.to_string(),
+        role,
+        length: u64::try_from(log.len()).unwrap_or(u64::MAX),
+        last: log
+            .last()
+            .map(|e| base64::engine::general_purpose::URL_SAFE.encode(e)),
+    }))
+}
+
+/// The `meta` of a channel the caller may join alone, and the role it takes.
+///
+/// The relay holds the channel public and in a space (`SRV-106`), and the
+/// caller a member of that space (`SRV-105`). Every refusal is the same 403.
+async fn joinable(
+    state: &AppState,
+    auth: &auth::AuthSession,
+    channel_id: &ambre_core::ChannelId,
+) -> Result<(ambre_core::MetaId, Role), AppError> {
+    let channel = db::get_channel(&state.db, channel_id)
         .await?
         .filter(|c| c.is_public)
         .ok_or(AppError::Forbidden)?;
@@ -167,16 +251,7 @@ pub async fn join_channel(
         .await?
         .ok_or(AppError::Forbidden)?;
     let role = joined_role(space_role).ok_or(AppError::Forbidden)?;
-    let doc_key_enc = base64::engine::general_purpose::URL_SAFE
-        .decode(&req.doc_key_enc)
-        .map_err(|e| AppError::Conflict {
-            detail: e.to_string(),
-        })?;
-    let joined =
-        db::add_channel_member_if_absent(&state.db, &meta_id, &auth.user_id, role, &doc_key_enc)
-            .await?;
-    tracing::info!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
-    Ok(StatusCode::NO_CONTENT)
+    Ok((meta_id, role))
 }
 
 /// The role a self-join grants on `meta`: the caller's role in the space,
@@ -192,14 +267,82 @@ fn joined_role(space_role: Role) -> Option<Role> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, DocumentId, MetaId, PublicKey, SegmentId, SpaceId, UserId};
+    use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, SpaceId, UserId};
     use base64::Engine;
+
+    /// The signing key every test user registers, so an entry one signs
+    /// checks against the row and the session alike.
+    fn signing_key() -> ed25519_dalek::SigningKey {
+        ed25519_dalek::SigningKey::from_bytes(&[7; 32])
+    }
 
     fn session(user_id: UserId) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
-            signing_pubkey: PublicKey::from_array([7; 32]),
+            signing_pubkey: ambre_core::PublicKey::from_array(
+                signing_key().verifying_key().to_bytes(),
+            ),
         }
+    }
+
+    /// The entry `who` signs about themselves at `position` of `document`'s
+    /// log, in the form a request carries it. The relay walks no digest, so
+    /// the previous one is filler.
+    fn signed_entry(
+        document: DocumentId,
+        position: u64,
+        who: UserId,
+        act: MembershipAct,
+        role: Role,
+    ) -> String {
+        use ed25519_dalek::Signer;
+        let key = signing_key();
+        let mut entry = ambre_protocol::MembershipEntry {
+            document,
+            position,
+            member: who,
+            member_key: key.verifying_key().to_bytes(),
+            act,
+            role,
+            key: None,
+            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            author: who,
+            signature: Vec::new(),
+        };
+        entry.signature = key
+            .sign(&entry.signed_bytes().expect("signed bytes"))
+            .to_bytes()
+            .to_vec();
+        base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode"))
+    }
+
+    /// The length of `document`'s log.
+    async fn log_length(state: &AppState, document: DocumentId) -> u64 {
+        let log = db::membership_log(&state.db, &document)
+            .await
+            .expect("log");
+        u64::try_from(log.len()).expect("length")
+    }
+
+    /// Opens `meta`'s log with a `Create` entry of `creator`, as Sync does
+    /// when it creates a channel.
+    async fn open_log(state: &AppState, meta: DocumentId, creator: UserId) {
+        let text = signed_entry(meta, 0, creator, MembershipAct::Create, Role::Owner);
+        let bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(text)
+            .expect("base64");
+        let entry = db::LogEntry { position: 0, bytes };
+        db::add_document_member(
+            &state.db,
+            &meta,
+            &creator,
+            Role::Owner,
+            &[6; 32],
+            &creator,
+            Some(&entry),
+        )
+        .await
+        .expect("open the log");
     }
 
     fn status<T: IntoResponse>(answer: Result<T, AppError>) -> StatusCode {
@@ -210,7 +353,19 @@ mod tests {
     }
 
     async fn user(state: &AppState, email: &str) -> UserId {
-        crate::test_helpers::create_test_user(&state.db, email).await
+        let signing = signing_key().verifying_key().to_bytes();
+        let row = db::create_user(
+            &state.db,
+            email,
+            "Test User",
+            &[1; 32],
+            &[2; 16],
+            &signing,
+            &[4; 32],
+        )
+        .await
+        .expect("user");
+        UserId::from_uuid(ambre_core::Uuid::from_bytes(*row.id.as_bytes()))
     }
 
     async fn document(state: &AppState, owner: UserId) -> DocumentId {
@@ -218,7 +373,7 @@ mod tests {
     }
 
     async fn grant(state: &AppState, document: DocumentId, member: UserId, role: Role) {
-        db::add_document_member(&state.db, &document, &member, role, &[6; 32], &member)
+        db::add_document_member(&state.db, &document, &member, role, &[6; 32], &member, None)
             .await
             .expect("grant");
     }
@@ -278,7 +433,26 @@ mod tests {
         channel
     }
 
+    /// A self-join entry of `who`, extending the log of the channel's `meta`.
+    /// A `meta` whose log is empty predates it, and its self-join carries
+    /// none. A channel the caller may not join gets none either: the route
+    /// refuses before it reads one.
+    async fn join_entry(state: &AppState, who: UserId, channel: ChannelId) -> Option<String> {
+        let (meta, role) = joinable(state, &session(who), &channel).await.ok()?;
+        let position = log_length(state, meta.document_id()).await;
+        (position > 0).then(|| {
+            signed_entry(
+                meta.document_id(),
+                position,
+                who,
+                MembershipAct::SelfJoin,
+                role,
+            )
+        })
+    }
+
     async fn join(state: &Arc<AppState>, who: UserId, channel: ChannelId, key: u8) -> StatusCode {
+        let entry = join_entry(state, who, channel).await;
         status(
             join_channel(
                 State(state.clone()),
@@ -286,6 +460,7 @@ mod tests {
                 Path(channel.to_string()),
                 axum::Json(JoinChannelRequest {
                     doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([key; 48]),
+                    entry,
                 }),
             )
             .await,
@@ -331,6 +506,13 @@ mod tests {
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
                 document_id: Some(space.to_string()),
+                entry: Some(signed_entry(
+                    space,
+                    0,
+                    alice,
+                    MembershipAct::Create,
+                    Role::Owner,
+                )),
             }),
         )
         .await;
@@ -529,6 +711,135 @@ mod tests {
             join(&state, bob, ChannelId::new(), 9).await,
             StatusCode::FORBIDDEN
         );
+    }
+
+    /// An accepted self-join records the entry the joining member signed,
+    /// beside its row, and the log of `meta` ends with it (`SRV-107`). A
+    /// member already there records nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_accepted_self_join_stores_the_entry_the_member_signed(pool: sqlx::PgPool) {
+        use base64::Engine;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, bob).await;
+
+        let entry = join_entry(&state, alice, channel.id).await;
+        assert!(entry.is_some(), "a logged meta takes the self-join's entry");
+        let answer = join_channel(
+            State(state.clone()),
+            session(alice),
+            Path(channel.id.to_string()),
+            axum::Json(JoinChannelRequest {
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                entry: entry.clone(),
+            }),
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::NO_CONTENT);
+        let log = db::membership_log(&state.db, &meta).await.expect("log");
+        assert_eq!(log.len(), 2);
+        let sent = base64::engine::general_purpose::URL_SAFE
+            .decode(entry.expect("entry"))
+            .expect("base64");
+        assert_eq!(log.last(), Some(&sent));
+
+        assert_eq!(
+            join(&state, bob, channel.id, 2).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(log_length(&state, meta).await, 2);
+    }
+
+    /// A self-join of a logged `meta` that carries no entry adds no member.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_self_join_of_a_logged_meta_without_an_entry_adds_no_member(pool: sqlx::PgPool) {
+        use base64::Engine;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, bob).await;
+
+        let answer = join_channel(
+            State(state.clone()),
+            session(alice),
+            Path(channel.id.to_string()),
+            axum::Json(JoinChannelRequest {
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                entry: None,
+            }),
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::BAD_REQUEST);
+        assert_eq!(role_on(&state, meta, alice).await, None);
+        assert_eq!(log_length(&state, meta).await, 1);
+    }
+
+    /// A self-join whose entry names another role than the one the relay
+    /// grants adds no member.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_self_join_whose_entry_claims_another_role_adds_no_member(pool: sqlx::PgPool) {
+        use base64::Engine;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        let meta = channel.meta.document_id();
+        open_log(&state, meta, bob).await;
+
+        let entry = signed_entry(meta, 1, alice, MembershipAct::SelfJoin, Role::Owner);
+        let answer = join_channel(
+            State(state.clone()),
+            session(alice),
+            Path(channel.id.to_string()),
+            axum::Json(JoinChannelRequest {
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
+                entry: Some(entry),
+            }),
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::BAD_REQUEST);
+        assert_eq!(role_on(&state, meta, alice).await, None);
+    }
+
+    /// The head of the log of `meta` reaches a caller the self-join would
+    /// admit, and a stranger to the space gets the self-join's 403.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_head_of_the_log_reaches_a_caller_the_self_join_would_admit(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let eve = user(&state, "eve@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, bob, space).await;
+        open_log(&state, channel.meta.document_id(), bob).await;
+
+        let head = |who| {
+            join_channel_head(
+                State(state.clone()),
+                session(who),
+                Path(channel.id.to_string()),
+            )
+        };
+        assert_eq!(status(head(eve).await), StatusCode::FORBIDDEN);
+        // The head names the log and the role the entry must carry: the
+        // space owner joins as an editor, after the channel's `Create`.
+        let axum::Json(answer) = head(alice).await.expect("head");
+        assert_eq!(answer.meta_id, channel.meta.to_string());
+        assert_eq!(answer.role, Role::Editor);
+        assert_eq!(answer.length, 1);
+        assert!(answer.last.is_some());
     }
 
     /// `SRV-108`: a self-join grants the role held on the space, capped at

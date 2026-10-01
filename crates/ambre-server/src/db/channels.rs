@@ -189,26 +189,37 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
 /// Add `user_id` to the members of a channel's `meta`, unless a row is there.
 ///
 /// Answers whether it wrote a row. An existing row is left as it is, so a
-/// self-join never lowers an owner nor swaps the key of a member.
+/// self-join never lowers an owner nor swaps the key of a member. The entry
+/// the joining member signed lands with a new row alone, in one transaction
+/// and under the document lock every membership change takes (`SRV-107`).
 pub async fn add_channel_member_if_absent(
     pool: &PgPool,
     meta_id: &ambre_core::MetaId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
     doc_key_enc: &[u8],
+    entry: Option<&LogEntry>,
 ) -> Result<bool, AppError> {
     let uid = id_to_uuid(*user_id);
+    let did = id_to_uuid(*meta_id);
+    let mut tx = pool.begin().await?;
+    super::members::lock_document(&mut tx, did).await?;
     let done = sqlx::query(
         "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) \
          VALUES ($1, $2, $3, $4, $2) ON CONFLICT (document_id, user_id) DO NOTHING",
     )
-    .bind(id_to_uuid(*meta_id))
+    .bind(did)
     .bind(uid)
     .bind(role.as_str())
     .bind(doc_key_enc)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(done.rows_affected() == 1)
+    let joined = done.rows_affected() == 1;
+    if joined {
+        super::members::record_change(&mut tx, did, entry).await?;
+    }
+    tx.commit().await?;
+    Ok(joined)
 }
 
 #[cfg(test)]
@@ -260,6 +271,7 @@ mod tests {
             ambre_core::Role::Editor,
             &[6u8; 32],
             &owner,
+            None,
         )
         .await
         .expect("add member");

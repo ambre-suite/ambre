@@ -13,7 +13,9 @@ impl SyncState {
     /// A channel travels as its documents (`SRV-102`): this is its only
     /// request of its own. The relay answers the same refusal to an unknown
     /// channel and to a caller who is no member of it (`SRV-047`).
-    pub(crate) fn handle_open_channel(&self, channel_id: ChannelId) {
+    /// `self_join` says whether a catalogue lists the channel; the listing
+    /// answer then records which log admits a self-join (`SYNC-106`).
+    pub(crate) fn handle_open_channel(&self, channel_id: ChannelId, self_join: bool) {
         let Some(tx) = self.event_tx.clone() else {
             // No event bus, no HTTP: say so instead of leaving the view waiting.
             self.send_to_logic(LogicEvent::ChannelOpenFailed {
@@ -30,19 +32,38 @@ impl SyncState {
             let result = http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
                 .await
                 .and_then(|resp| channel_documents(&resp.documents));
-            let _ = tx.send(SyncEvent::ChannelListed { channel_id, result });
+            let _ = tx.send(SyncEvent::ChannelListed {
+                channel_id,
+                self_join,
+                result,
+            });
         });
     }
 
     /// The answer of [`handle_open_channel`](Self::handle_open_channel), on
     /// the Sync loop.
     pub(crate) fn channel_listed(
-        &self,
+        &mut self,
         channel_id: ChannelId,
+        self_join: bool,
         result: Result<Vec<ChannelDocument>, String>,
     ) {
         match result {
             Ok(documents) => {
+                // The channel's members live in meta's log. Mark it as one
+                // that admits a self-join exactly when a catalogue lists the
+                // channel, and forget the mark when it no longer does.
+                let metas = documents
+                    .iter()
+                    .filter(|d| d.kind == ChannelDocumentKind::Meta)
+                    .map(|d| d.document_id);
+                for meta in metas {
+                    if self_join {
+                        self.self_join_logs.insert(meta);
+                    } else {
+                        self.self_join_logs.remove(&meta);
+                    }
+                }
                 self.send_to_logic(LogicEvent::ChannelDocuments {
                     channel_id,
                     documents,
@@ -55,6 +76,17 @@ impl SyncState {
                     message,
                 });
             }
+        }
+    }
+
+    /// The rule a walk of `document_id`'s log applies to a self-join: valid
+    /// in the log of a channel a catalogue lists, and nowhere else
+    /// (`SYNC-106`).
+    pub(crate) fn self_join_rule(&self, document_id: DocumentId) -> membership_log::SelfJoinRule {
+        if self.self_join_logs.contains(&document_id) {
+            membership_log::public_channel_self_join
+        } else {
+            membership_log::no_self_join
         }
     }
 
@@ -104,10 +136,28 @@ impl SyncState {
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
             let (space_key, exchange_key) = self.space_keys(space_id)?;
-            let (sealed, doc_key_enc) = new_channel_key(channel_id, &space_key, &exchange_key)?;
-            Ok((tx, sealed, doc_key_enc))
+            let author = self.author().ok_or("session locked")?;
+            // Both documents open a log under the one channel key, and the
+            // channel's members live in meta's. Each creator copy seals its
+            // own document's anchor, and the catalogue seals meta's, so a
+            // self-joiner replays from it (`SYNC-104`).
+            let channel_key = DocumentKey::generate();
+            let documents = [meta.document_id(), segment.document_id()]
+                .into_iter()
+                .map(|document_id| {
+                    let (doc_key_enc, entry) =
+                        crate::sharing::creation(document_id, &channel_key, &exchange_key, &author)?;
+                    Ok((document_id, doc_key_enc, entry))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let meta_anchor = documents
+                .first()
+                .and_then(|(_, _, entry)| digest_of(entry))
+                .ok_or("meta's first entry does not decode")?;
+            let sealed = seal_channel_key(channel_id, &channel_key, &space_key, meta_anchor)?;
+            Ok((tx, sealed, documents))
         });
-        let (tx, sealed, doc_key_enc) = match prepared {
+        let (tx, sealed, documents) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message)),
         };
@@ -117,12 +167,13 @@ impl SyncState {
         wasm_bindgen_futures::spawn_local(async move {
             let base = format!("{url_scheme}://{api_base}/api");
             let result = async {
-                for document_id in [meta.document_id(), segment.document_id()] {
+                for (document_id, doc_key_enc, entry) in documents {
                     let body = http::CreateDocumentRequest {
                         doc_type: "murmure".into(),
                         name_enc: None,
-                        doc_key_enc: doc_key_enc.clone(),
+                        doc_key_enc,
                         document_id: Some(document_id.to_string()),
+                        entry: Some(entry),
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
                         &format!("{base}/documents"),
@@ -146,7 +197,10 @@ impl SyncState {
     }
 
     /// Join a public channel alone. Unseal the catalogue's key with the space
-    /// key, wrap it for this user alone, and ask the relay for the member row. The key never leaves this worker.
+    /// key, wrap it for this user alone, and ask the relay for the member row.
+    /// The key never leaves this worker. The request carries a `SelfJoin`
+    /// entry signed at the end of meta's log, which the relay's join head
+    /// names with the role the join grants.
     pub(crate) fn handle_join_channel(
         &self,
         channel_id: ChannelId,
@@ -155,10 +209,11 @@ impl SyncState {
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
             let (space_key, exchange_key) = self.space_keys(space_id)?;
-            let doc_key_enc = join_key(channel_id, sealed, &space_key, &exchange_key)?;
-            Ok((tx, doc_key_enc))
+            let author = self.author().ok_or("session locked")?;
+            let (doc_key_enc, key_id) = join_key(channel_id, sealed, &space_key, &exchange_key)?;
+            Ok((tx, doc_key_enc, key_id, author))
         });
-        let (tx, doc_key_enc) = match prepared {
+        let (tx, doc_key_enc, key_id, author) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message)),
         };
@@ -167,8 +222,14 @@ impl SyncState {
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}/join");
-            let body = http::JoinChannelRequest { doc_key_enc };
-            let result = http::post_json_auth_ok(&url, &body, auth).await;
+            let result = async {
+                let head =
+                    http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
+                let entry = self_join_entry(&author, &head, key_id)?;
+                let body = http::JoinChannelRequest { doc_key_enc, entry };
+                http::post_json_auth_ok(&url, &body, auth).await
+            }
+            .await;
             let _ = tx.send(SyncEvent::ChannelJoined { channel_id, result });
         });
     }
@@ -283,59 +344,104 @@ fn channel_key_aad(channel_id: ChannelId) -> Vec<u8> {
     aad
 }
 
-/// A fresh channel key: sealed under the space key for the catalogue, and
-/// wrapped for this user for the relay.
-pub(crate) fn new_channel_key(
+/// The digest of an entry in request form: the anchor of the log a first
+/// entry opens, and the link the entry after it carries.
+fn digest_of(entry: &str) -> Option<ambre_protocol::EntryDigest> {
+    membership_log::decode(&[entry.to_owned()])
+        .first()
+        .and_then(membership_log::digest)
+}
+
+/// The channel key sealed under the space key for the catalogue, with the
+/// anchor of meta's log beside it (`SYNC-104`).
+pub(crate) fn seal_channel_key(
     channel_id: ChannelId,
+    channel_key: &DocumentKey,
     space_key: &DocumentKey,
-    exchange_key: &StaticSecret,
-) -> Result<(SealedChannelKey, String), String> {
-    let channel_key = DocumentKey::generate();
-    let (nonce, ciphertext) = ambre_crypto::aead::seal_document_key(
-        &channel_key,
+    meta_anchor: ambre_protocol::EntryDigest,
+) -> Result<SealedChannelKey, String> {
+    let (nonce, ciphertext) = ambre_crypto::aead::seal_anchored_key(
+        channel_key,
         &channel_key_aad(channel_id),
         space_key,
+        Some(&meta_anchor.0),
     )
     .map_err(|e| format!("seal the channel key: {e}"))?;
     let mut sealed = nonce.to_vec();
     sealed.extend_from_slice(&ciphertext);
-    let own_pub = x25519_dalek::PublicKey::from(exchange_key);
-    let wrapped = crate::sharing::wrap_key_b64(exchange_key, own_pub.as_bytes(), &channel_key)
-        .map_err(|e| format!("wrap the channel key: {e}"))?;
-    Ok((SealedChannelKey::from_bytes(sealed), wrapped))
+    Ok(SealedChannelKey::from_bytes(sealed))
 }
 
-/// Unseal a channel key the catalogue holds.
+/// Unseal a channel key the catalogue holds, with the anchor sealed beside it.
 pub(crate) fn unseal_channel_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
     space_key: &DocumentKey,
-) -> Result<DocumentKey, String> {
+) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), String> {
     let bytes = sealed.as_bytes();
     let (nonce, ciphertext) = bytes
         .split_first_chunk::<NONCE_LEN>()
         .ok_or("the sealed channel key is too short")?;
-    ambre_crypto::aead::open_document_key(
+    let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         nonce,
         ciphertext,
         &channel_key_aad(channel_id),
         space_key,
     )
-    .map_err(|e| format!("unseal the channel key: {e}"))
+    .map_err(|e| format!("unseal the channel key: {e}"))?;
+    Ok((key, anchor.map(ambre_protocol::EntryDigest)))
 }
 
 /// The self-join key: the catalogue's key, unsealed and wrapped for this
-/// user alone, as the Murmure spaces spec asks of a self-join.
+/// user alone, as the Murmure spaces spec asks of a self-join, and its id.
+/// The wrap carries the anchor the catalogue sealed, so the joiner replays
+/// meta's log from the word of the member who created the channel.
 pub(crate) fn join_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
     space_key: &DocumentKey,
     exchange_key: &StaticSecret,
-) -> Result<String, String> {
-    let channel_key = unseal_channel_key(channel_id, sealed, space_key)?;
+) -> Result<(String, KeyId), String> {
+    let (key, anchor) = unseal_channel_key(channel_id, sealed, space_key)?;
     let own_pub = x25519_dalek::PublicKey::from(exchange_key);
-    crate::sharing::wrap_key_b64(exchange_key, own_pub.as_bytes(), &channel_key)
-        .map_err(|e| format!("wrap the channel key: {e}"))
+    let wrapped =
+        crate::sharing::wrap_anchored_b64(exchange_key, own_pub.as_bytes(), &key, anchor)
+            .map_err(|e| format!("wrap the channel key: {e}"))?;
+    Ok((wrapped, key.id()))
+}
+
+/// The `SelfJoin` entry that extends the log the join head names, at the
+/// role it grants (`SYNC-106`). `None` for an empty log: it predates the
+/// log, and no entry of it could link to a first one.
+pub(crate) fn self_join_entry(
+    author: &crate::sharing::Author,
+    head: &http::JoinHeadResponse,
+    key: KeyId,
+) -> Result<Option<String>, String> {
+    if head.length == 0 {
+        return Ok(None);
+    }
+    let meta = DocumentId::parse_str(&head.meta_id).map_err(|e| format!("join head: {e}"))?;
+    let last = head
+        .last
+        .as_ref()
+        .and_then(|last| digest_of(last))
+        .ok_or("the join head names no last entry")?;
+    let draft = membership_log::Draft {
+        document: meta,
+        member: author.user_id,
+        member_key: author.signing_key.verifying_key().to_bytes(),
+        act: ambre_protocol::MembershipAct::SelfJoin,
+        role: head.role,
+        key: Some(key),
+    };
+    let entry = membership_log::sign(
+        draft,
+        (head.length, Some(last)),
+        author.user_id,
+        &author.signing_key,
+    )?;
+    membership_log::encode(&entry).map(Some)
 }
 
 /// Parse the activity answer. One row the client cannot read fails the whole
@@ -444,6 +550,9 @@ mod tests {
         assert!(activity_of(&[bad]).is_err(), "one bad row fails the answer");
     }
 
+    /// An anchor of meta's log, as the creator's `Create` entry would give it.
+    const ANCHOR: ambre_protocol::EntryDigest = ambre_protocol::EntryDigest([5; 32]);
+
     fn exchange_key(byte: u8) -> StaticSecret {
         StaticSecret::from([byte; 32])
     }
@@ -459,7 +568,31 @@ mod tests {
             ciphertext: ciphertext.to_vec(),
         };
         let own_pub = x25519_dalek::PublicKey::from(exchange_key);
-        ambre_crypto::ecdh::unwrap_document_key(exchange_key, own_pub.as_bytes(), &wrapped).ok()
+        let (key, anchor) =
+            ambre_crypto::ecdh::unwrap_anchored(exchange_key, own_pub.as_bytes(), &wrapped)
+                .ok()?;
+        assert_eq!(anchor, Some(ANCHOR.0), "every wrap carries meta's anchor");
+        Some(key)
+    }
+
+    /// A channel key sealed for the catalogue, and its creator's own copy.
+    fn new_channel_key(
+        channel_id: ChannelId,
+        space_key: &DocumentKey,
+        creator: &StaticSecret,
+    ) -> (SealedChannelKey, String) {
+        let channel_key = DocumentKey::generate();
+        let sealed =
+            seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
+        let own_pub = x25519_dalek::PublicKey::from(creator);
+        let own = crate::sharing::wrap_anchored_b64(
+            creator,
+            own_pub.as_bytes(),
+            &channel_key,
+            Some(ANCHOR),
+        )
+        .expect("wrap");
+        (sealed, own)
     }
 
     /// Whether two keys are one: what one seals, the other opens.
@@ -478,10 +611,11 @@ mod tests {
         let space_key = DocumentKey::generate();
         let (alice, bob, eve) = (exchange_key(1), exchange_key(2), exchange_key(3));
         let channel_id = ChannelId::new();
-        let (sealed, alice_enc) = new_channel_key(channel_id, &space_key, &alice).expect("create");
+        let (sealed, alice_enc) = new_channel_key(channel_id, &space_key, &alice);
         let channel_key = unwrap_own(&alice, &alice_enc).expect("Alice opens her own wrap");
 
-        let bob_enc = join_key(channel_id, &sealed, &space_key, &bob).expect("join");
+        let (bob_enc, key_id) = join_key(channel_id, &sealed, &space_key, &bob).expect("join");
+        assert_eq!(key_id, channel_key.id());
         let bob_key = unwrap_own(&bob, &bob_enc).expect("Bob opens his wrap");
         assert!(same_key(&bob_key, &channel_key));
         assert!(
@@ -496,10 +630,10 @@ mod tests {
     fn a_sealed_channel_key_opens_for_its_own_channel_and_space_only() {
         let space_key = DocumentKey::generate();
         let channel_id = ChannelId::new();
-        let (sealed, _) =
-            new_channel_key(channel_id, &space_key, &exchange_key(1)).expect("create");
-        assert_eq!(sealed.as_bytes().len(), NONCE_LEN + 32 + 16);
-        assert!(unseal_channel_key(channel_id, &sealed, &space_key).is_ok());
+        let (sealed, _) = new_channel_key(channel_id, &space_key, &exchange_key(1));
+        assert_eq!(sealed.as_bytes().len(), NONCE_LEN + 32 + 32 + 16);
+        let (_, anchor) = unseal_channel_key(channel_id, &sealed, &space_key).expect("open");
+        assert_eq!(anchor, Some(ANCHOR));
         assert!(unseal_channel_key(channel_id, &sealed, &DocumentKey::generate()).is_err());
         assert!(unseal_channel_key(ChannelId::new(), &sealed, &space_key).is_err());
         let short = SealedChannelKey::from_bytes(vec![0; 8]);
@@ -531,7 +665,7 @@ mod tests {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, String::new(), None);
         let channel_id = ChannelId::new();
-        state.handle_open_channel(channel_id);
+        state.handle_open_channel(channel_id, false);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(
             events.as_slice(),

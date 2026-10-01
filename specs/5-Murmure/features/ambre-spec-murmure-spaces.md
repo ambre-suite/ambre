@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: SPACES AND THE CHANNEL CATALOGUE
 **Type:** Vertical (feature)
-**Implementation:** partial -- a space, its catalogue and a self-join ship. The signed entry, the guest,
-the leave, the delete and the retention do not
+**Implementation:** partial -- a space, its catalogue and a self-join with its signed entry ship.
+The guest, the leave, the delete and the retention do not
 
 > A team gathers in a space. The space lists its public channels, and any member joins one with no
 > one else online. A guest reaches only the channels a member invites them into.
@@ -46,8 +46,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-039` | `POST` | A self-join MUST have the Sync worker unseal the key read from the catalogue and wrap it for the joining member alone. | this spec section 3; `SYNC-010` | `ambre_sync::channels::tests::a_self_join_unseals_the_catalogue_key_and_wraps_it_for_the_joiner_alone`; `ambre_logic::spaces::tests::a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue`; `ambre_server::routes::channels::tests::a_member_of_the_space_joins_a_public_channel_alone` -- database tier | none | verified |
-| `MURMURE-040` | `POST` | A self-join MUST add an entry the joining member signs. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-041` | `FAIL` | Given a self-join entry for a channel the catalogue does not list, every client MUST show the member as unverified. | this spec section 3; `SYNC-108` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-040` | `POST` | A self-join MUST add an entry the joining member signs. | this spec section 3; `SYNC-106` | `ambre_server::routes::channels::tests::an_accepted_self_join_stores_the_entry_the_member_signed` -- database tier; `ambre_server::routes::channels::tests::a_self_join_whose_entry_claims_another_role_adds_no_member` | none | verified |
+| `MURMURE-041` | `FAIL` | Given a self-join entry for a channel the catalogue does not list, every client MUST show the member as unverified. | this spec section 3; `SYNC-108` | `ambre_sync::sharing::tests::the_member_list_admits_a_self_join_only_in_a_marked_log`; `ambre_logic::channels::tests::a_channel_no_catalogue_lists_admits_no_self_join` | none | verified |
 | `MURMURE-042` | `FRAME` | A self-join MUST NOT write the catalogue. | this spec section 3 | `ambre_logic::spaces::tests::a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue`; `ambre_server::routes::channels::tests::a_self_join_changes_no_member_of_the_space` -- database tier | none | verified |
 
 ### 1.5 Leave a space
@@ -83,9 +83,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 10 `verified`, 20 `unimplemented`. The engine, the Logic thread, the Sync
-  worker and the relay's database tier hold a new space, the catalogue and a self-join. The signed
-  log, the leave, the delete, the guest and the retention are unbuilt.
+* **Verification.** 12 `verified`, 18 `unimplemented`. The engine, the Logic thread, the Sync
+  worker and the relay's database tier hold a new space, the catalogue and a signed self-join. The
+  leave, the delete, the guest and the retention are unbuilt.
 
 ---
 
@@ -114,10 +114,12 @@ member with the viewer role reads it, and the relay refuses a write from them (`
 1. The Logic thread reads the sealed key of the channel in the catalogue, a `SealedChannelKey`, and
    hands it to the Sync worker. No key material reaches the Logic thread (`MURMURE-157`).
 2. The Sync worker unseals it with the space key, wraps it for its own exchange key (`SYNC-010`),
-   and signs a join entry (`SYNC-106`).
+   and signs a join entry (`SYNC-106`). It reads the head of the log from the relay first, since a
+   member-to-be cannot read the log itself.
 3. The relay creates the row only for a member of the space and a channel it holds as public
-   (`SRV-105`, `SRV-106`).
-4. Every client checks the entry against the catalogue, never against the relay flag.
+   (`SRV-105`, `SRV-106`). It stores the signed entry beside the row (`SRV-107`).
+4. Every client checks the entry against the catalogue, never against the relay flag. The Logic
+   thread tells the Sync worker whether a catalogue it holds lists the channel (`MURMURE-041`).
 5. The joining client walks the key chain back from the key of the catalogue (`SYNC-119`). It
    reads the whole history of the channel, before a rotation too.
 

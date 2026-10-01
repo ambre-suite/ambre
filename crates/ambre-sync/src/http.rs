@@ -779,6 +779,24 @@ pub(crate) struct CreateChannelRequest {
 #[derive(Serialize)]
 pub(crate) struct JoinChannelRequest {
     pub doc_key_enc: String,
+    /// The signed `SelfJoin` entry that extends meta's log, absent when the
+    /// log is empty (`SYNC-132`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+}
+
+/// `GET /api/channels/{id}/join`: the end of the log a self-join extends.
+#[derive(Deserialize)]
+pub(crate) struct JoinHeadResponse {
+    /// The document whose log the self-join extends: the channel's meta.
+    pub meta_id: String,
+    /// The role the relay grants the self-join, which the entry must name.
+    pub role: ambre_bus::Role,
+    /// The number of entries, the position the self-join takes.
+    pub length: u64,
+    /// The last entry (base64), absent on an empty log.
+    #[serde(default)]
+    pub last: Option<String>,
 }
 
 #[derive(Deserialize)]

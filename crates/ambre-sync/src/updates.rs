@@ -477,6 +477,7 @@ impl SyncState {
             // response. `None` only before the session is ready, which the guard
             // above already excluded on the wasm path.
             let my_user_id = self.user_id;
+            let self_join = self.self_join_rule(document_id);
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self
@@ -497,7 +498,9 @@ impl SyncState {
                 let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
                     MembersAnswer::Exists(resp) => match &exchange_key {
                         Some(ek) => {
-                            match Self::opened_from_members(&resp, doc_id, ek, my_user_id) {
+                            match Self::opened_from_members(
+                                &resp, doc_id, ek, my_user_id, self_join,
+                            ) {
                                 Ok(o) => {
                                     signers = o.signers;
                                     named_key = o.named_key;
@@ -725,15 +728,17 @@ impl SyncState {
     /// the safe direction for a gate the server enforces anyway.
     ///
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
-    /// that does not verify leaves the open as it is (`SYNC-111`).
+    /// that does not verify leaves the open as it is (`SYNC-111`). It walks
+    /// under `self_join`, the rule of the document's log (`SYNC-106`).
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
         document_id: DocumentId,
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<UserId>,
+        self_join: membership_log::SelfJoinRule,
     ) -> Result<OpenedMembers, String> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
-        let log = crate::sharing::walk_served(document_id, anchor, &resp.log);
+        let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
         let role = crate::sharing::own_role(
             resp.members
                 .iter()
@@ -1502,8 +1507,14 @@ mod tests {
             rotation_owed: true,
             log: Vec::new(),
         };
-        let opened =
-            SyncState::opened_from_members(&resp, DocumentId::new(), &my_xk, Some(me)).unwrap();
+        let opened = SyncState::opened_from_members(
+            &resp,
+            DocumentId::new(),
+            &my_xk,
+            Some(me),
+            membership_log::no_self_join,
+        )
+        .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
         assert_eq!(opened.role, Role::Editor);
         let ids: Vec<UserId> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
@@ -1531,7 +1542,14 @@ mod tests {
             log: Vec::new(),
         };
         assert!(
-            SyncState::opened_from_members(&resp, DocumentId::new(), &my_xk, Some(me)).is_err()
+            SyncState::opened_from_members(
+                &resp,
+                DocumentId::new(),
+                &my_xk,
+                Some(me),
+                membership_log::no_self_join,
+            )
+            .is_err()
         );
     }
 

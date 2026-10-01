@@ -292,6 +292,13 @@ impl LogicState {
         }
     }
 
+    /// Whether the catalogue of an open space lists `channel_id`.
+    pub(crate) fn lists_channel(&self, channel_id: ChannelId) -> bool {
+        self.spaces
+            .values()
+            .any(|space| space.state.sealed_key(channel_id).is_ok())
+    }
+
     /// The relay holds the new channel: list it in the catalogue with its
     /// sealed key, and send the first content of its two documents.
     pub(crate) fn public_channel_created(&mut self, channel_id: ChannelId, key: SealedChannelKey) {
@@ -743,10 +750,13 @@ mod tests {
             [UiEvent::Space { event: SpaceEvent::Joined { channel_id: id }, .. }] if *id == channel_id
         ));
         let sent = drain(&sync);
-        assert!(matches!(
-            sent.as_slice(),
-            [SyncCommand::OpenChannel { channel_id: id }] if *id == channel_id
-        ));
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [SyncCommand::OpenChannel { channel_id: id, self_join: true }] if *id == channel_id
+            ),
+            "a listed channel's log admits self-joins"
+        );
         assert_eq!(updates_of(&sent, space_id.document_id()), 0);
     }
 

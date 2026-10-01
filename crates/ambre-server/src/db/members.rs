@@ -129,7 +129,7 @@ async fn append_entry(
 /// Records the entry a membership change carries (`SYNC-132`). A document
 /// whose log holds entries takes no change without one. A document with an
 /// empty log predates it, and its changes carry none.
-async fn record_change(
+pub(super) async fn record_change(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
     entry: Option<&LogEntry>,
@@ -392,7 +392,7 @@ pub async fn revoke_and_rotate(
 
 /// Locks the document row for the rest of the transaction. A rotation reads
 /// the last link under this lock, so two rotations cannot both chain from it.
-async fn lock_document(
+pub(super) async fn lock_document(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
 ) -> Result<(), AppError> {

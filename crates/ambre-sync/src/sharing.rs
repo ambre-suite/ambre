@@ -22,7 +22,7 @@ use x25519_dalek::StaticSecret;
 use ambre_bus::{DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId};
 
 use crate::http;
-use crate::membership_log::{self, Draft, Log};
+use crate::membership_log::{self, Draft, Log, SelfJoinRule};
 use crate::{LogicSink, SyncEvent};
 
 /// Decodes a hex-encoded X25519 public key into its 32 raw bytes.
@@ -105,6 +105,22 @@ pub(crate) fn served_log(
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
 ) -> (Log, Option<EntryDigest>) {
+    served_log_under(
+        document_id,
+        exchange_key,
+        resp,
+        membership_log::no_self_join,
+    )
+}
+
+/// [`served_log`], under the self-join rule of the application that owns the
+/// document (`SYNC-106`).
+pub(crate) fn served_log_under(
+    document_id: DocumentId,
+    exchange_key: &StaticSecret,
+    resp: &http::DocumentMembersResponse,
+    self_join: SelfJoinRule,
+) -> (Log, Option<EntryDigest>) {
     let rows = resp.members.iter().map(|m| {
         (
             m.exchange_pub_key.as_str(),
@@ -115,7 +131,10 @@ pub(crate) fn served_log(
     let anchor = unwrap_own(exchange_key, rows)
         .ok()
         .and_then(|(_, anchor)| anchor);
-    (walk_served(document_id, anchor, &resp.log), anchor)
+    (
+        walk_served_under(document_id, anchor, &resp.log, self_join),
+        anchor,
+    )
 }
 
 /// Walks the entries a members answer serves from `anchor`, under the rule
@@ -125,8 +144,19 @@ pub(crate) fn walk_served(
     anchor: Option<EntryDigest>,
     texts: &[String],
 ) -> Log {
+    walk_served_under(document_id, anchor, texts, membership_log::no_self_join)
+}
+
+/// [`walk_served`], under the self-join rule of the application that owns the
+/// document: a public channel's `meta` admits one, any other log none.
+pub(crate) fn walk_served_under(
+    document_id: DocumentId,
+    anchor: Option<EntryDigest>,
+    texts: &[String],
+    self_join: SelfJoinRule,
+) -> Log {
     let entries = membership_log::decode(texts);
-    Log::walk(document_id, anchor, &entries, membership_log::no_self_join)
+    Log::walk(document_id, anchor, &entries, self_join)
 }
 
 /// The entry `draft` makes after `log`, signed by `author`, in request form.
@@ -1021,6 +1051,8 @@ pub(crate) struct ListMembersParams {
     pub api_base: String,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
     pub exchange_key: StaticSecret,
+    /// The self-join rule the document's log walks under (`SYNC-106`).
+    pub self_join: SelfJoinRule,
 }
 
 /// Member-list orchestration: GET the members, map them, emit
@@ -1046,7 +1078,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                     .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
             );
             // Each row carries what the log says of it (`SYNC-108`).
-            let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, p.self_join);
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
@@ -1938,6 +1970,7 @@ mod tests {
             url_scheme: "https",
             api_base: "api.test".into(),
             exchange_key: keypair(1).0,
+            self_join: membership_log::no_self_join,
         }
     }
 
@@ -2431,5 +2464,50 @@ mod tests {
                 (MemberStanding::Unverified, Role::Editor),
             ]
         );
+    }
+
+    /// Holds `SYNC-106` at the list: a self-join verifies only in a log the
+    /// caller walks under the public-channel rule, the meta of a channel a
+    /// catalogue lists.
+    #[tokio::test]
+    async fn the_member_list_admits_a_self_join_only_in_a_marked_log() {
+        let owner = Peer::new(1);
+        let joiner = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        let draft = Draft {
+            document: logged.document_id,
+            member: joiner.author.user_id,
+            member_key: joiner.author.signing_key.verifying_key().to_bytes(),
+            act: MembershipAct::SelfJoin,
+            role: Role::Editor,
+            key: Some(logged.doc_key.id()),
+        };
+        let entry = entry_after(&logged.walk(&[]), draft, &joiner.author)
+            .unwrap()
+            .unwrap();
+        logged.log.push(entry);
+        logged.row(&joiner, String::new(), Role::Editor);
+        let rules: [(SelfJoinRule, MemberStanding); 2] = [
+            (
+                membership_log::public_channel_self_join,
+                MemberStanding::Verified,
+            ),
+            (membership_log::no_self_join, MemberStanding::Unverified),
+        ];
+        for (rule, standing) in rules {
+            let http = FakeHttp::new(vec![Ok(logged.answer())]);
+            let (etx, erx, _sink, _lrx) = channels();
+            let mut params = list_params();
+            params.document_id = logged.document_id;
+            params.exchange_key = owner.xk.clone();
+            params.self_join = rule;
+            list_members_task(&http, params, &etx).await;
+            match erx.try_recv().expect("DocumentMembersReady") {
+                SyncEvent::DocumentMembersReady { members, .. } => {
+                    assert_eq!(members[1].standing, standing);
+                }
+                _ => panic!("unexpected event (want DocumentMembersReady)"),
+            }
+        }
     }
 }

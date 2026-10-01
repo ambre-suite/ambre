@@ -22,7 +22,14 @@ impl LogicState {
             return;
         }
         self.opening.insert(channel_id, None);
-        self.send_to_sync(SyncCommand::OpenChannel { channel_id });
+        // A channel a catalogue lists is public, and its log admits a member
+        // who joined alone. Any other channel's log admits only invites
+        // (`SYNC-106`).
+        let self_join = self.lists_channel(channel_id);
+        self.send_to_sync(SyncCommand::OpenChannel {
+            channel_id,
+            self_join,
+        });
     }
 
     /// Drop a channel, open or opening, and end the session of each of its
@@ -603,7 +610,7 @@ mod tests {
         drain(rx)
             .into_iter()
             .map(|c| match c {
-                SyncCommand::OpenChannel { channel_id } => Sent::List(channel_id),
+                SyncCommand::OpenChannel { channel_id, .. } => Sent::List(channel_id),
                 SyncCommand::OpenDocument {
                     document_id,
                     doc_type: DocType::Murmure,
@@ -652,6 +659,22 @@ mod tests {
         assert_eq!(messages[0].text, "stored");
         assert!(state.channels.contains_key(&channel_id));
         assert!(state.opening.is_empty());
+    }
+
+    /// A channel no catalogue of this client lists admits invites alone, so
+    /// its member list counts no self-join.
+    #[test]
+    fn a_channel_no_catalogue_lists_admits_no_self_join() {
+        let (mut state, _, sync) = harness();
+        let channel_id = ChannelId::new();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::OpenChannel {
+                self_join: false,
+                ..
+            }]
+        ));
     }
 
     #[test]

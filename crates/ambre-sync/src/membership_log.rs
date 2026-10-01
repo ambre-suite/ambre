@@ -24,6 +24,14 @@ pub(crate) fn no_self_join(_: &MembershipEntry) -> bool {
     false
 }
 
+/// The rule the `meta` of a public channel applies, once a catalogue this
+/// client holds lists the channel: a member joins alone, at no role above
+/// editor (the Murmure spaces spec, `SRV-108`). The catalogue is the
+/// admission; the relay checks the space membership behind it.
+pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
+    matches!(entry.role, Role::Editor | Role::Viewer)
+}
+
 /// The rank of a document role, the order the relay grants them in.
 fn rank(role: Role) -> Option<u8> {
     match role {

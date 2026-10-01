@@ -593,6 +593,27 @@ fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
     assert_eq!(moved.err(), Some(CryptoError::AeadFailed));
 }
 
+/// Holds `SYNC-104` for a key sealed under another: the anchor of the log
+/// comes back with the key, a bare seal carries none, and a plaintext with a
+/// partial anchor is refused rather than read as a key.
+#[test]
+fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
+    let (inner, outer) = (DocumentKey::generate(), DocumentKey::generate());
+    let (nonce, sealed) =
+        aead::seal_anchored_key(&inner, b"channel-1", &outer, Some(&[0x33; 32])).unwrap();
+    let (key, anchor) = aead::open_anchored_key(&nonce, &sealed, b"channel-1", &outer).unwrap();
+    assert_eq!(key.as_bytes(), inner.as_bytes());
+    assert_eq!(anchor, Some([0x33; 32]));
+
+    let (nonce, bare) = aead::seal_document_key(&inner, b"channel-1", &outer).unwrap();
+    let (_, anchor) = aead::open_anchored_key(&nonce, &bare, b"channel-1", &outer).unwrap();
+    assert_eq!(anchor, None);
+
+    let (nonce, partial) = aead::seal(&[7; 48], b"channel-1", &outer).unwrap();
+    let partial = aead::open_anchored_key(&nonce, &partial, b"channel-1", &outer);
+    assert_eq!(partial.err(), Some(CryptoError::InvalidKeyLength));
+}
+
 #[test]
 fn a_sealed_value_that_is_no_key_is_refused() {
     let outer = DocumentKey::generate();

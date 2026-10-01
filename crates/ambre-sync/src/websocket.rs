@@ -626,8 +626,12 @@ impl SyncState {
                     message,
                 });
             }
-            SyncEvent::ChannelListed { channel_id, result } => {
-                self.channel_listed(channel_id, result);
+            SyncEvent::ChannelListed {
+                channel_id,
+                self_join,
+                result,
+            } => {
+                self.channel_listed(channel_id, self_join, result);
             }
             SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
             SyncEvent::ChannelCreated { channel_id, result } => {
@@ -1092,6 +1096,7 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
+        let self_join = self.self_join_rule(document_id);
         wasm_bindgen_futures::spawn_local(async move {
             let members_url =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
@@ -1126,7 +1131,8 @@ impl SyncState {
             // (`SYNC-117`). It counts only when a writer the log names
             // signed it (`SYNC-121`).
             let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
-            let log = crate::sharing::walk_served(document_id, anchor, &resp.log);
+            let log =
+                crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
             let links = crate::chain::signed_by_writers(links, log.signers());
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,

@@ -94,7 +94,29 @@ pub fn seal_document_key(
     aad: &[u8],
     outer: &DocumentKey,
 ) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
-    seal_under(inner.as_bytes(), aad, outer.as_bytes())
+    seal_anchored_key(inner, aad, outer, None)
+}
+
+/// Seals `inner` as [`seal_document_key`] does, with the anchor of the
+/// document's membership log sealed beside it, as a wrap carries it
+/// (`SYNC-104`). A member who takes a channel key from its catalogue learns
+/// where the channel's log starts from the member who sealed it, never from
+/// the relay alone.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`], which 64 bytes never reach.
+pub fn seal_anchored_key(
+    inner: &DocumentKey,
+    aad: &[u8],
+    outer: &DocumentKey,
+    anchor: Option<&[u8; 32]>,
+) -> Result<([u8; NONCE_LEN], Vec<u8>), CryptoError> {
+    let mut plain = zeroize::Zeroizing::new(inner.as_bytes().to_vec());
+    if let Some(anchor) = anchor {
+        plain.extend_from_slice(anchor);
+    }
+    seal_under(&plain, aad, outer.as_bytes())
 }
 
 /// Opens a document key sealed by [`seal_document_key`].
@@ -103,19 +125,39 @@ pub fn seal_document_key(
 ///
 /// [`CryptoError::AeadFailed`] for a wrong key, a wrong `aad` or a modified
 /// ciphertext, and [`CryptoError::InvalidKeyLength`] for a plaintext that is
-/// no key.
+/// neither a key nor a key and an anchor.
 pub fn open_document_key(
     nonce: &[u8; NONCE_LEN],
     ciphertext: &[u8],
     aad: &[u8],
     outer: &DocumentKey,
 ) -> Result<DocumentKey, CryptoError> {
-    let mut plain = open_under(nonce, ciphertext, aad, outer.as_bytes())?;
-    let key = <[u8; 32]>::try_from(plain.as_slice())
-        .map(DocumentKey::from_array)
-        .map_err(|_| CryptoError::InvalidKeyLength);
-    zeroize::Zeroize::zeroize(&mut plain);
-    key
+    open_anchored_key(nonce, ciphertext, aad, outer).map(|(key, _)| key)
+}
+
+/// Opens what [`seal_anchored_key`] sealed: the key, and the anchor of the
+/// membership log when the sealer put one beside it.
+///
+/// # Errors
+///
+/// Every error of [`open_document_key`].
+pub fn open_anchored_key(
+    nonce: &[u8; NONCE_LEN],
+    ciphertext: &[u8],
+    aad: &[u8],
+    outer: &DocumentKey,
+) -> Result<(DocumentKey, Option<[u8; 32]>), CryptoError> {
+    let plain = zeroize::Zeroizing::new(open_under(nonce, ciphertext, aad, outer.as_bytes())?);
+    let (key, anchor) = match plain.len() {
+        32 => (plain.get(..32), None),
+        64 => (plain.get(..32), plain.get(32..)),
+        _ => (None, None),
+    };
+    let key: [u8; 32] = key
+        .and_then(|k| k.try_into().ok())
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let anchor = anchor.and_then(|a| <[u8; 32]>::try_from(a).ok());
+    Ok((DocumentKey::from_array(key), anchor))
 }
 
 /// The cipher itself, over raw key bytes. Private: every caller reaches it
