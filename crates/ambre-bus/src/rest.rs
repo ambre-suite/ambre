@@ -400,6 +400,20 @@ pub enum RestCommand {
     LeaveMeeting { meeting_id: MeetingId },
     /// End a meeting for all participants. -> `MeetingEnded`.
     EndMeeting { meeting_id: MeetingId },
+
+    // -- Provider sign-in ----------------------------------------------------------
+    /// Ask the relay for the address of `provider`'s authorization page.
+    /// -> `ProviderAddress`. `provider` is a lowercase ASCII name; any other
+    /// value is refused before a request leaves the Sync worker.
+    ProviderSignIn { provider: String },
+    /// Exchange the `code` and `state` a provider returned with. -> `ProviderSignedIn`.
+    /// The session tokens stay on the Sync worker; the socket stays closed until
+    /// the keys are unlocked or set up.
+    ProviderReturn {
+        provider: String,
+        code: String,
+        state: String,
+    },
 }
 
 // -----------------------------------------------------------------------------
@@ -558,5 +572,20 @@ pub enum RestEvent {
     },
     MeetingEnded {
         meeting_id: MeetingId,
+    },
+
+    // -- Provider sign-in ----------------------------------------------------------
+    /// The provider's authorization address, and the `state` the relay bound to it.
+    ProviderAddress {
+        url: String,
+        state: String,
+    },
+    /// The provider return was exchanged. The tokens stayed on the Sync worker;
+    /// `keys_stored` says whether the next step is an unlock or a setup.
+    ProviderSignedIn {
+        user_id: UserId,
+        display_name: String,
+        email: String,
+        keys_stored: bool,
     },
 }

@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- the development sign-in, listing, creating, renaming and deleting
-ship. The provider sign-in never reaches the client, and an account has no face to unlock or set up
+ship, and so does the provider sign-in up to its tokens. An account has no face to unlock or set up
 its keys. The list has no order, no grouping and no search.
 
 > The home screen at the root of the site: sign in, then every document you can open, whatever kind
@@ -76,8 +76,9 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-095` | `POST` | The provider control MUST hand the browser to the authorization address the relay answers. | this spec section 2; `ambre-spec-session.md`, `SRV-022` | none | fails -- the control navigates the page to the route that answers that address, so the browser shows the answer and never reaches the provider; lands with the `The provider sign-in reaches the client` Story (`ambre-roadmap.md` E7) | failing |
-| `CHROME-096` | `POST` | A return from the provider MUST establish the session on the live threads, its tokens reaching the Sync worker alone. | this spec section 2; `ambre-spec-sync.md`, `SYNC-060` | not built | unbuilt -- lands with the `The provider sign-in reaches the client` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `CHROME-095` | `POST` | The provider control MUST hand the browser to the authorization address the relay answers. | this spec section 2; `ambre-spec-session.md`, `SRV-022` | `ambre_app::landing::tests::the_provider_control_asks_for_the_address` -- the control sends one request for the address and leaves the page where it is; `ambre_app::signin::tests::the_provider_address_is_followed_and_its_state_kept` -- the answered address is followed, and one that is not `https` is not; `ambre_sync::auth::provider_tests::a_provider_name_outside_its_alphabet_is_refused` | none | verified |
+| `CHROME-096` | `POST` | A return from the provider MUST establish the session on the live threads, its tokens reaching the Sync worker alone. | this spec section 2; `ambre-spec-sync.md`, `SYNC-060` | `ambre_app::signin::tests::a_provider_return_is_read_from_its_address` -- the page reads the code and the state and hands them on; `ambre_sync::auth::provider_tests::a_provider_sign_in_keeps_its_tokens_on_the_worker` -- the worker stores both tokens, and what Logic hears names the person with no byte of a token | none | verified |
+| `CHROME-101` | `FAIL` | A return from the provider MUST be refused unless it carries the state this tab was handed. | this spec section 2; `ambre-spec-session.md`, `SRV-022` | `ambre_app::signin::tests::a_return_this_tab_did_not_start_is_refused` | none | verified |
 | `CHROME-097` | `POST` | An account that holds its keys MUST be asked for its passphrase before the list is shown. | this spec section 2; `ambre-spec-session.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CHROME-098` | `POST` | An account that owes its key setup MUST be shown the setup, never an error, whether the sign-in or a later refusal reveals it. | this spec section 2; `ambre-spec-sync.md`, `SYNC-134` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CHROME-100` | `FRAME` | A passphrase typed on this screen MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -89,9 +90,10 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, a second exception to the UI
   thread's ban, recorded in section 5.
-* **Verification.** 7 `verified`, 1 `failing`, 10 `untested`, 5 `unimplemented`. What holds is what
-  a pure function carries: the path mapping, its fallback, the reload predicate and the kind list.
-  The rest are properties of a rendered page against a live session, and no tier mounts a page yet.
+* **Verification.** 10 `verified`, 10 `untested`, 4 `unimplemented`. What holds is what a pure
+  function or one mounted control carries. That is the path mapping, its fallback, the reload
+  predicate, the kind list and the provider sign-in. The rest are properties of a whole page against
+  a live session.
 ---
 
 ## 2. MODEL
@@ -115,8 +117,16 @@ surface, and which face it shows is decided by the state of the session.
 the relay answers a token pair for that. Neither can open a key. A development sign-in derives its
 keys from the name, so it skips both middle faces.
 
-The return from the provider is read on the Sync worker, never on this thread. The answer to that
-exchange carries both tokens, and they live in that worker alone (`CHROME-096`).
+The return from the provider is exchanged on the Sync worker, never on this thread. The answer to
+that exchange carries both tokens, and they live in that worker alone (`CHROME-096`). The page only
+reads the code from its address, then replaces the address so the code leaves the history.
+
+**Whose return it is.** The provider comes back to `/signin/<provider>`, which the deployment
+registers as its redirect address. The relay checks that it issued the state, not that this browser
+asked for it. So the tab keeps the state it was handed in its own session storage, and drops a
+return that carries another (`CHROME-101`). Without it, a link forged by a third party signs the
+person into the third party's account. The address the relay answers is followed only if it is
+`https`: a `javascript:` one would run in this page.
 
 The development route matters for a reason that is not convenience. It signs in on the live
 threads, so the Sync worker keeps the keys it already holds instead of losing them to a page
@@ -189,6 +199,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | the server has not answered yet | a neutral placeholder, and no sign-in control that might be the wrong one |
 | a name is entered in the development panel | the session is established on the live threads, with no page reload |
 | the identity provider button | the browser leaves for the provider and comes back signed in (`CHROME-095`, `CHROME-096`) |
+| a return this tab did not start | it is dropped, its address cleared, and the sign-in panel shows again (`CHROME-101`) |
 | a provider account holds its keys | a passphrase field opens them, then the list appears (`CHROME-097`) |
 | a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
 | the list is empty | a placeholder invites creating one, rather than a bare empty list |
@@ -218,6 +229,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | The card shows an icon, a name and a date | encrypted thumbnails on the cards | a preview of an end-to-end encrypted document is a whole pipeline: an offscreen render on save, an invalidation policy across peers, an extra encrypted object per document, and a decrypt of every image when the list loads. The gain over a tile and a name is cosmetic. |
 | The list shows no content statistics | counts of cells, words or pages on the cards | a modification time, a role and a member count are routing metadata the server already holds in plaintext and hands over for free. A word count or a cell count is content, so it must be computed on the client and stored encrypted -- a second coherent object to maintain, for a number. |
 | The worker exchanges the provider's code | the page posting the code and handing the tokens on | the answer to that exchange carries both tokens. Posted from the page, they would sit on the UI thread, which `SYNC-060` forbids. The page reads the code from its address and passes it on |
+| The tab keeps the state it was handed | trusting the relay's check of the state | the relay knows it issued the state, not to whom. A third party starts a sign-in of their own and sends the link back to the person, who is then signed in as the third party. |
 | The kind tile is a monogram | waiting for the icon pipeline before shipping the list | the icon pipeline does not exist, and a monogram is a tile of text that needs nothing. It is a stand-in and it is legible about being one. |
 
 ---

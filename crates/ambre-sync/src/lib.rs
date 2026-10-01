@@ -210,6 +210,16 @@ enum SyncEvent {
         exchange_key: StaticSecret,
         tokens: http::TokenPair,
     },
+    /// A provider return was exchanged: the session's tokens, and whether the
+    /// account holds its keys. No key is held yet, so no socket opens.
+    ProviderSignedIn {
+        id: RequestId,
+        user_id: UserId,
+        display_name: String,
+        email: String,
+        keys_stored: bool,
+        tokens: http::TokenPair,
+    },
     AccountCreated {
         id: RequestId,
         recovery_words: String,
@@ -955,6 +965,12 @@ impl SyncState {
                 display_name,
             } => self.handle_setup_account(id, passphrase, email, display_name),
             RestCommand::DevLogin { username } => self.handle_dev_login(id, username),
+            RestCommand::ProviderSignIn { provider } => self.handle_provider_sign_in(id, provider),
+            RestCommand::ProviderReturn {
+                provider,
+                code,
+                state,
+            } => self.handle_provider_return(id, provider, code, state),
             RestCommand::ChangePassphrase {
                 current_passphrase,
                 new_passphrase,

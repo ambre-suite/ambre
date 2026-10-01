@@ -64,6 +64,7 @@ use wasm_bindgen::prelude::*;
 mod host;
 mod landing;
 mod route;
+mod signin;
 
 // The crate's unit tests (pure helpers in `route`/`host`) run under headless
 // Chrome via `wasm-pack test --headless --chrome` (`just test-wasm`). `--chrome`
@@ -776,7 +777,21 @@ pub fn main() {
     // query string, and still re-establishes the session. The dev keys are
     // re-derived deterministically from the name, so no key material is stored --
     // only the username. (Real-auth refresh-token persistence is Part D.)
-    if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
+    //
+    // A return from the identity provider comes first: the page booted on it,
+    // and the Sync worker exchanges it for the session (`CHROME-096`). It is
+    // read once, and only if this tab started it (`CHROME-101`).
+    if let Some(ret) = signin::take_boot_return() {
+        tracing::info!("Provider return for '{}'", ret.provider);
+        let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
+            id: RequestId::next(),
+            cmd: RestCommand::ProviderReturn {
+                provider: ret.provider,
+                code: ret.code,
+                state: ret.state,
+            },
+        });
+    } else if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
         tracing::info!("Dev login requested for user '{username}'");
         remember_dev_user(&username);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
@@ -1271,6 +1286,25 @@ pub fn main() {
                             cmd: RestCommand::ListDocuments,
                         });
                     }
+                }
+                // The provider's address: send the browser there (`CHROME-095`).
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::ProviderAddress { url, state },
+                    ..
+                } => {
+                    signin::follow_address(url, state, |url| {
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().set_href(url);
+                        }
+                    });
+                }
+                // Signed in with the provider: the Sync worker holds the tokens,
+                // and the keys are still to open or to set up (`CHROME-096`).
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::ProviderSignedIn { keys_stored, .. },
+                    ..
+                } => {
+                    tracing::info!("Provider sign-in done (keys stored: {keys_stored})");
                 }
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::DocumentList { documents },

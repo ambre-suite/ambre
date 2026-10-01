@@ -248,6 +248,117 @@ impl SyncState {
         }
     }
 
+    /// Ask the relay for `provider`'s authorization address and hand it to
+    /// the UI, which sends the browser there (`CHROME-095`). Unauthenticated:
+    /// no session exists yet.
+    pub(crate) fn handle_provider_sign_in(&mut self, id: RequestId, provider: String) {
+        tracing::info!("Sync: ProviderSignIn ({provider})");
+        if !is_provider_name(&provider) {
+            self.send_to_logic(LogicEvent::AuthError {
+                message: PROVIDER_REFUSED.into(),
+            });
+            return;
+        }
+        if self.event_tx.is_none() {
+            self.send_to_logic(LogicEvent::AuthError {
+                message: "Sign-in failed: no relay to ask".into(),
+            });
+            return;
+        }
+        let logic_tx = self.logic_tx.clone();
+        let url = format!(
+            "{}://{}/api/auth/{provider}/login",
+            self.url_scheme, self.api_base
+        );
+        wasm_bindgen_futures::spawn_local(async move {
+            let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
+                Ok(resp) => LogicEvent::Rest {
+                    id,
+                    evt: RestEvent::ProviderAddress {
+                        url: resp.url,
+                        state: resp.state,
+                    },
+                },
+                Err(message) => LogicEvent::AuthError { message },
+            };
+            let _ = logic_tx.send(evt);
+        });
+    }
+
+    /// Exchange a provider return for a session, then ask whether the account
+    /// holds its keys. The tokens travel to [`handle_sync_event`] and stop
+    /// there: the UI hears who signed in, never with what (`CHROME-096`).
+    ///
+    /// [`handle_sync_event`]: Self::handle_sync_event
+    pub(crate) fn handle_provider_return(
+        &mut self,
+        id: RequestId,
+        provider: String,
+        code: String,
+        state: String,
+    ) {
+        tracing::info!("Sync: ProviderReturn ({provider})");
+        if !is_provider_name(&provider) {
+            self.send_to_logic(LogicEvent::AuthError {
+                message: PROVIDER_REFUSED.into(),
+            });
+            return;
+        }
+        let Some(tx) = self.event_tx.clone() else {
+            self.send_to_logic(LogicEvent::AuthError {
+                message: "Sign-in failed: no relay to ask".into(),
+            });
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        wasm_bindgen_futures::spawn_local(async move {
+            let url = format!("{url_scheme}://{api_base}/api/auth/{provider}/callback");
+            let body = http::ProviderCallbackRequest { code, state };
+            let resp = match http::post_json::<_, http::ProviderCallbackResponse>(&url, &body).await
+            {
+                Ok(resp) => resp,
+                Err(message) => {
+                    let _ = logic_tx.send(LogicEvent::AuthError { message });
+                    return;
+                }
+            };
+            // A context of its own: the worker's store takes the tokens only
+            // once the whole sign-in has succeeded.
+            let auth = http::AuthContext {
+                api_base: api_base.clone(),
+                url_scheme,
+                tokens: Rc::new(RefCell::new(Some(http::TokenPair {
+                    access_token: resp.access_token,
+                    refresh_token: resp.refresh_token,
+                    access_expires_in: resp.access_expires_in,
+                }))),
+            };
+            let keys_url = format!("{url_scheme}://{api_base}/api/keys/master");
+            let keys = match http::get_json_auth::<http::MasterKeyResponse>(&keys_url, auth.clone())
+                .await
+            {
+                Ok(keys) => keys,
+                Err(message) => {
+                    let _ = logic_tx.send(LogicEvent::AuthError { message });
+                    return;
+                }
+            };
+            let Some(tokens) = auth.tokens.borrow_mut().take() else {
+                return;
+            };
+            let _ = tx.send(SyncEvent::ProviderSignedIn {
+                id,
+                user_id: UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new()),
+                display_name: resp.display_name,
+                email: resp.email,
+                keys_stored: !keys.setup_owed(),
+                tokens,
+            });
+        });
+    }
+
     pub(crate) fn handle_setup_account(
         &mut self,
         id: RequestId,
@@ -375,5 +486,115 @@ impl SyncState {
         self.exchange_key = None;
         *self.tokens.borrow_mut() = None;
         tracing::info!("Sync: logged out, all keys zeroized");
+    }
+}
+
+/// The user-facing refusal of a provider name that is not one.
+const PROVIDER_REFUSED: &str = "Sign-in failed: unknown provider";
+
+/// Whether `provider` may name a provider in a relay path: lowercase ASCII
+/// letters and digits only. Anything else could reach another route, so it
+/// is refused before a request is built.
+pub(crate) fn is_provider_name(provider: &str) -> bool {
+    !provider.is_empty()
+        && provider.len() <= 32
+        && provider
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    use crate::http::{SecretToken, TokenPair};
+
+    fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
+        let (sink, rx) = LogicSink::channel();
+        (SyncState::new(sink, String::new(), None), rx)
+    }
+
+    fn signed_in(keys_stored: bool) -> SyncEvent {
+        SyncEvent::ProviderSignedIn {
+            id: RequestId::next(),
+            user_id: UserId::new(),
+            display_name: "Ada".into(),
+            email: "ada@example.org".into(),
+            keys_stored,
+            tokens: TokenPair {
+                access_token: SecretToken::from("access-s3cr3t".to_owned()),
+                refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
+                access_expires_in: 60,
+            },
+        }
+    }
+
+    /// A provider sign-in leaves its tokens on the worker (`CHROME-096`). What
+    /// Logic hears of it names the person, and carries no byte of a token.
+    /// No key is held yet, so no socket opens.
+    #[test]
+    fn a_provider_sign_in_keeps_its_tokens_on_the_worker() {
+        let (mut state, rx) = worker();
+        state.handle_sync_event(signed_in(true));
+
+        let stored = state.tokens.borrow();
+        let stored = stored.as_ref().expect("the worker holds the session");
+        assert_eq!(stored.access_token.expose(), "access-s3cr3t");
+        assert_eq!(stored.refresh_token.expose(), "refresh-s3cr3t");
+        assert_eq!(state.socket_opens, 0);
+        assert!(!state.setup_owed);
+
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(told.iter().any(|e| matches!(
+            e,
+            LogicEvent::Rest {
+                evt: RestEvent::ProviderSignedIn { keys_stored: true, display_name, .. },
+                ..
+            } if display_name == "Ada"
+        )));
+        let heard = format!("{told:?}");
+        assert!(!heard.contains("s3cr3t"), "a token reached Logic: {heard}");
+    }
+
+    /// An account that owes its keys is marked so, which keeps the socket
+    /// closed until the setup stores them.
+    #[test]
+    fn a_provider_sign_in_without_keys_marks_the_setup_owed() {
+        let (mut state, _rx) = worker();
+        state.handle_sync_event(signed_in(false));
+        assert!(state.setup_owed);
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        assert_eq!(state.socket_opens, 0);
+    }
+
+    /// A provider name that could reach another relay route is refused before
+    /// any request is built (`CHROME-095`).
+    #[test]
+    fn a_provider_name_outside_its_alphabet_is_refused() {
+        assert!(is_provider_name("google"));
+        assert!(is_provider_name("entra2"));
+        for bad in ["", "../keys/master", "Google", "google?x=1", "a/b", "é"] {
+            assert!(!is_provider_name(bad), "{bad:?} was accepted");
+        }
+        let (mut state, rx) = worker();
+        state.handle_rest(
+            RequestId::next(),
+            RestCommand::ProviderSignIn {
+                provider: "../keys/master".into(),
+            },
+        );
+        state.handle_rest(
+            RequestId::next(),
+            RestCommand::ProviderReturn {
+                provider: "../keys/master".into(),
+                code: "c".into(),
+                state: "s".into(),
+            },
+        );
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert_eq!(told.len(), 2);
+        assert!(told.iter().all(|e| matches!(
+            e,
+            LogicEvent::AuthError { message } if message == PROVIDER_REFUSED
+        )));
     }
 }

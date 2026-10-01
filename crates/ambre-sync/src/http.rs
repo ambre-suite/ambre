@@ -390,6 +390,31 @@ pub(crate) struct DevLoginResponse {
     pub access_expires_in: u64,
 }
 
+/// The relay's answer to `GET /api/auth/{provider}/login`.
+#[derive(Deserialize)]
+pub(crate) struct ProviderLoginResponse {
+    pub url: String,
+    pub state: String,
+}
+
+/// The provider's return, posted to `/api/auth/{provider}/callback`.
+#[derive(Serialize)]
+pub(crate) struct ProviderCallbackRequest {
+    pub code: String,
+    pub state: String,
+}
+
+/// The relay's answer to a provider return: who signed in, and their tokens.
+#[derive(Deserialize)]
+pub(crate) struct ProviderCallbackResponse {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: String,
+    pub access_token: SecretToken,
+    pub refresh_token: SecretToken,
+    pub access_expires_in: u64,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct MasterKeyResponse {
     pub master_key_enc: String,

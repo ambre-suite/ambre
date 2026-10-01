@@ -556,25 +556,33 @@ fn sign_in_panel(
             }
             .into_any()
         }
-        Some(false) => view! {
-            <div class="ambre-signin">
-                <span class="ambre-signin-wordmark">"Ambre"</span>
-                <p class="ambre-signin-tagline">
-                    "Private collaborative office suite. End-to-end encrypted."
-                </p>
-                <button
-                    class="ambre-signin-btn"
-                    on:click=move |_| {
-                        if let Some(window) = web_sys::window() {
-                            let _ = window.location().set_href("/api/auth/google/login");
+        Some(false) => {
+            // Ask the Sync worker for the provider's address; the reply sends
+            // the browser there (`CHROME-095`). The page itself requests nothing.
+            let to_logic = to_logic.clone();
+            view! {
+                <div class="ambre-signin">
+                    <span class="ambre-signin-wordmark">"Ambre"</span>
+                    <p class="ambre-signin-tagline">
+                        "Private collaborative office suite. End-to-end encrypted."
+                    </p>
+                    <button
+                        class="ambre-signin-btn"
+                        on:click=move |_| {
+                            let _ = to_logic.try_send(LogicCommand::Rest {
+                                id: RequestId::next(),
+                                cmd: RestCommand::ProviderSignIn {
+                                    provider: "google".to_owned(),
+                                },
+                            });
                         }
-                    }
-                >
-                    "Sign in with Google"
-                </button>
-            </div>
+                    >
+                        "Sign in with Google"
+                    </button>
+                </div>
+            }
+            .into_any()
         }
-        .into_any(),
     }
 }
 
@@ -691,6 +699,38 @@ mod tests {
             0
         );
 
+        container.remove();
+    }
+
+    /// The provider control asks for the provider's address, and goes nowhere
+    /// on its own: the page stays put until the address arrives (`CHROME-095`).
+    #[wasm_bindgen_test]
+    async fn the_provider_control_asks_for_the_address() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let dev_mode = RwSignal::new(Some(false));
+        let before = web_sys::window().unwrap().location().href().unwrap();
+
+        let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
+        let button = container
+            .query_selector(".ambre-signin-btn")
+            .unwrap()
+            .unwrap();
+        click(&button);
+        tick().await;
+
+        let sent: Vec<LogicCommand> = rx.try_iter().collect();
+        assert_eq!(sent.len(), 1);
+        assert!(matches!(
+            &sent[0],
+            LogicCommand::Rest { cmd: RestCommand::ProviderSignIn { provider }, .. }
+                if provider == "google"
+        ));
+        assert_eq!(
+            web_sys::window().unwrap().location().href().unwrap(),
+            before
+        );
         container.remove();
     }
 

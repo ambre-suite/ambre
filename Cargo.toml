@@ -181,6 +181,10 @@ web-sys = { version = "0.3.85", features = [
     "WheelEvent",
     "Window",
     "UrlSearchParams",
+    # The provider sign-in: the return address is replaced once read, and the
+    # state of the sign-in a tab started is kept for that tab alone.
+    "History",
+    "Storage",
 ] }
 js-sys = "0.3.85"
 wasm-bindgen = "0.2"

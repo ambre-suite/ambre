@@ -368,6 +368,29 @@ impl SyncState {
                     },
                 );
             }
+            SyncEvent::ProviderSignedIn {
+                id,
+                user_id,
+                display_name,
+                email,
+                keys_stored,
+                tokens,
+            } => {
+                // The tokens stop here (`CHROME-096`). No key is held yet, so no
+                // socket opens: the unlock or the setup opens it.
+                self.user_id = Some(user_id);
+                *self.tokens.borrow_mut() = Some(tokens);
+                self.setup_owed = !keys_stored;
+                self.reply(
+                    id,
+                    RestEvent::ProviderSignedIn {
+                        user_id,
+                        display_name,
+                        email,
+                        keys_stored,
+                    },
+                );
+            }
             SyncEvent::AccountCreated {
                 id,
                 recovery_words,
