@@ -44,7 +44,8 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
 /// Request body for adding a member.
 #[derive(serde::Deserialize)]
 pub struct AddMemberRequest {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     /// A role word, parsed by the handler: an unknown word answers 409.
     pub role: String,
     /// Encrypted Shamir share for this member (base64 or hex).
@@ -60,7 +61,8 @@ pub struct UpdateMemberRoleRequest {
 
 #[derive(serde::Serialize)]
 pub struct OrgMemberResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     /// Serialized as its lowercase word.
@@ -70,8 +72,11 @@ pub struct OrgMemberResponse {
 }
 
 fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
+    let user_id = ambre_core::UserId::from_uuid(
+        ambre_core::Uuid::from_bytes(*m.user_id.as_bytes())
+    );
     OrgMemberResponse {
-        user_id: m.user_id.to_string(),
+        user_id,
         email: m.email.clone(),
         display_name: m.display_name.clone(),
         role: m.role,
@@ -299,7 +304,7 @@ pub async fn add_member(
 
     let caller = require_org_role(&state.db, org_id, uid, &[Role::Owner, Role::Admin]).await?;
 
-    let member_user_id = parse_user_id_str(&req.user_id)?;
+    let member_user_id = uuid::Uuid::from_bytes(*req.user_id.as_bytes());
 
     // `add_org_member` upserts (ON CONFLICT DO UPDATE SET role), so this handler
     // is also the role-change path. Two clamps keep it from being an escalation

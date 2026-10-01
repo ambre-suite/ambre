@@ -178,7 +178,8 @@ pub async fn report_snapshot(
 #[derive(serde::Deserialize)]
 pub struct CreateSnapshotRequest {
     #[allow(dead_code)]
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: String,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,

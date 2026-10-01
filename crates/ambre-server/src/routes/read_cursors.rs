@@ -23,8 +23,10 @@ pub struct ReadCursorRequest {
 /// One document of the activity answer.
 #[derive(serde::Serialize)]
 pub struct ActivityJson {
-    pub channel_id: String,
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     /// The document's last number is past the caller's cursor.
     pub active: bool,
 }
@@ -63,10 +65,18 @@ pub async fn get_activity(
     let json: Vec<ActivityJson> = last_numbers(&state, &auth.user_id)
         .await?
         .into_iter()
-        .map(|(row, last)| ActivityJson {
-            channel_id: row.channel_id.to_string(),
-            document_id: row.document_id.to_string(),
-            active: last > row.cursor,
+        .map(|(row, last)| {
+            let channel_id = ambre_core::ChannelId::from_uuid(
+                ambre_core::Uuid::from_bytes(*row.channel_id.as_bytes())
+            );
+            let document_id = ambre_core::DocumentId::from_uuid(
+                ambre_core::Uuid::from_bytes(*row.document_id.as_bytes())
+            );
+            ActivityJson {
+                channel_id,
+                document_id,
+                active: last > row.cursor,
+            }
         })
         .collect();
     Ok(axum::Json(serde_json::json!({ "documents": json })))

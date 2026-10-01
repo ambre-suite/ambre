@@ -133,7 +133,8 @@ pub struct InviteRequest {
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
     /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
@@ -235,7 +236,7 @@ pub async fn invite_to_document(
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
     Ok(axum::Json(InviteResponse {
-        user_id: invitee_id.to_string(),
+        user_id: invitee_id,
         display_name: invitee.display_name,
         email_verified: invitee.email_verified,
     }))
