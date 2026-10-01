@@ -212,7 +212,7 @@ pub(crate) fn build_invite_request(
     let peer = decode_exchange_pubkey(invitee_pub_hex)?;
     Ok(http::InviteRequest {
         invitee_email,
-        role: role.to_string(),
+        role,
         doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor).map_err(|e| e.to_string())?,
         // The relay refuses the copy if a rotation replaced this key
         // between the read and the post (`SYNC-143`).
@@ -936,7 +936,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
             Err(e) => return api_error(logic_tx, "UpdateDocumentMemberRole", 500, e),
         };
         let body = http::RoleChangeRequest {
-            role: p.role.to_string(),
+            role: p.role,
             entry,
         };
         match http.patch(&url, &body).await {
@@ -1170,7 +1170,7 @@ mod tests {
         .expect("valid pubkey");
 
         assert_eq!(req.invitee_email, "invitee@test.local");
-        assert_eq!(req.role, "editor");
+        assert_eq!(req.role, Role::Editor);
         // The invitee unwraps against the inviter's public key: succeeds.
         assert!(unwrap_b64(&invitee_xk, &my_pub, &req.doc_key_enc).is_ok());
         // A stranger cannot (AEAD fails closed under the wrong shared secret).

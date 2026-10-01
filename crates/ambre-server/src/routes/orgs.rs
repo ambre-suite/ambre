@@ -47,7 +47,8 @@ pub struct AddMemberRequest {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
     /// A role word, parsed by the handler: an unknown word answers 409.
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// Encrypted Shamir share for this member (base64 or hex).
     pub shamir_share_enc: Option<String>,
 }
@@ -56,7 +57,8 @@ pub struct AddMemberRequest {
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
     /// A role word, parsed by the handler: an unknown word answers 409.
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
 }
 
 #[derive(serde::Serialize)]
@@ -102,16 +104,16 @@ fn org_role_rank(role: Role) -> Option<u8> {
     }
 }
 
-/// The organization role a request body names, or a 409 for a word that
-/// names none. Checked before the database, so the `role IN (...)` check
-/// constraint never surfaces as a raw 500.
-fn org_role_of(word: &str) -> Result<Role, AppError> {
-    word.parse()
-        .ok()
-        .filter(|role: &Role| role.is_valid_for_organization())
-        .ok_or(AppError::Conflict {
+/// Validates that a role is allowed in an organization context.
+/// Returns a 409 if the role is not valid for organizations.
+fn org_role_valid(role: Role) -> Result<Role, AppError> {
+    if role.is_valid_for_organization() {
+        Ok(role)
+    } else {
+        Err(AppError::Conflict {
             detail: "invalid role".into(),
         })
+    }
 }
 
 fn parse_org_id(s: &str) -> Result<uuid::Uuid, AppError> {
@@ -314,7 +316,7 @@ pub async fn add_member(
     //   2. A caller may only touch a member currently at or below their own rank.
     //      An admin can never demote or lock out an owner via the upsert.
     let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
-    let role = org_role_of(&req.role)?;
+    let role = org_role_valid(req.role)?;
     let granted_rank = org_role_rank(role).ok_or(AppError::Forbidden)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
@@ -423,7 +425,7 @@ pub async fn update_member_role(
     // Validate the role before hitting the DB. An unknown value then returns a
     // clean 409, instead of surfacing the `role IN (...)` CHECK violation as a
     // raw 500.
-    let role = org_role_of(&req.role)?;
+    let role = org_role_valid(req.role)?;
 
     db::update_org_member_role(&state.db, org_id, target_uid, role).await?;
     Ok(axum::Json(serde_json::json!({ "status": "updated" })))
@@ -491,9 +493,9 @@ mod tests {
         assert!(org_role_rank(Role::Owner) > org_role_rank(Role::Admin));
         assert!(org_role_rank(Role::Admin) > org_role_rank(Role::Member));
         assert_eq!(org_role_rank(Role::Editor), None);
-        assert!(org_role_of("nonsense").is_err());
+        assert!(org_role_valid(Role::Editor).is_err());
         assert!(
-            org_role_of("viewer").is_err(),
+            org_role_valid(Role::Viewer).is_err(),
             "a document role names no org role"
         );
     }

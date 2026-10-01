@@ -122,7 +122,8 @@ pub struct InviteRequest {
     pub invitee_email: String,
     /// A role word, parsed by the handler: an unknown word answers 409, as it
     /// always has, rather than the extractor's 422.
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
@@ -167,7 +168,7 @@ pub async fn invite_to_document(
     let invalid_role = || AppError::Conflict {
         detail: "invalid role".into(),
     };
-    let role: Role = req.role.parse().map_err(|_| invalid_role())?;
+    let role = req.role;
     let granted_rank = doc_role_rank(role).ok_or_else(invalid_role)?;
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);

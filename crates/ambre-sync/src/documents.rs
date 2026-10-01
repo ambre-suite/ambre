@@ -37,18 +37,9 @@ impl SyncState {
                             };
                             docs.push(DocumentSummary {
                                 document_id,
-                                doc_type: match e.doc_type.as_str() {
-                                    "prose" => DocType::Prose,
-                                    "toile" => DocType::Toile,
-                                    "murmure" => DocType::Murmure,
-                                    _ => DocType::Trame,
-                                },
+                                doc_type: e.doc_type,
                                 name,
-                                role: match e.role.as_str() {
-                                    "editor" => Role::Editor,
-                                    "viewer" => Role::Viewer,
-                                    _ => Role::Owner,
-                                },
+                                role: e.role,
                                 // RFC3339 -> epoch ms via the JS Date parser
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
@@ -172,7 +163,7 @@ impl SyncState {
 
                 let url = format!("{url_scheme}://{api_base}/api/documents");
                 let body = http::CreateDocumentRequest {
-                    doc_type: doc_type_to_api_string(doc_type),
+                    doc_type,
                     name_enc,
                     doc_key_enc,
                     document_id: Some(document_id.to_string()),

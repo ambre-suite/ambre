@@ -817,16 +817,6 @@ impl SyncDocumentState {
 // SyncState
 // -----------------------------------------------------------------------------
 
-fn doc_type_to_api_string(doc_type: DocType) -> String {
-    match doc_type {
-        DocType::Prose => "prose",
-        DocType::Trame => "trame",
-        DocType::Toile => "toile",
-        DocType::Murmure => "murmure",
-    }
-    .into()
-}
-
 /// Whether a client frame carries a sealed payload, which only the seal may
 /// build (`SYNC-001`).
 fn carries_payload(msg: &WsClientMsg) -> bool {

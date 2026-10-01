@@ -43,6 +43,8 @@ pub mod role;
 pub mod schema;
 /// Serde adapters for identifier serialization as hyphenated UUID strings.
 pub mod serde_id;
+/// Serde adapters for enum serialization as lowercase strings.
+pub mod serde_enums;
 pub mod uuid;
 pub mod version;
 

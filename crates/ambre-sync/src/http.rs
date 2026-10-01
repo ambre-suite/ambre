@@ -695,7 +695,8 @@ pub(crate) struct ChannelDocumentsResponse {
 pub(crate) struct ChannelDocumentEntry {
     pub document_id: String,
     /// `meta`, `segment`, `amendments` or `thread`.
-    pub kind: String,
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
 }
 
 /// `GET /api/activity`: per segment and thread of every channel of the
@@ -734,10 +735,12 @@ pub(crate) struct DocumentListResponse {
 #[derive(Deserialize)]
 pub(crate) struct DocumentEntry {
     pub id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     #[serde(default)]
     pub name_enc: Option<String>,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// The caller's wrapped copy of the DocumentKey (base64). Unwrapped via ECDH
     /// to decrypt `name_enc` for the launcher list.
     #[serde(default)]
@@ -754,7 +757,8 @@ pub(crate) struct DocumentEntry {
 
 #[derive(Serialize)]
 pub(crate) struct CreateDocumentRequest {
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     pub doc_key_enc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -803,7 +807,8 @@ pub(crate) struct JoinHeadResponse {
 #[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {
     pub document_id: String,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
 }
 
 #[derive(Serialize)]
@@ -830,7 +835,8 @@ pub(crate) struct MemberEntry {
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// Exchange public key of whoever wrapped `doc_key_enc`. The ECDH unwrap must
     /// use this peer key, not our own `exchange_pub_key`. Optional for resilience
     /// against older servers; the unwrap falls back to `exchange_pub_key`.
@@ -938,7 +944,8 @@ pub(crate) struct PubkeysResponse {
 #[derive(Serialize)]
 pub(crate) struct InviteRequest {
     pub invitee_email: String,
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
     pub key_id: String,
@@ -958,7 +965,8 @@ pub(crate) struct LeaveRequest {
 /// (`SYNC-132`).
 #[derive(Serialize)]
 pub(crate) struct RoleChangeRequest {
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
 }
@@ -1072,6 +1080,8 @@ pub(crate) struct DocumentMemberEntry {
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
+    /// Kept as text: one unknown role reads viewer rather than failing the
+    /// whole list, and the signed log decides the role anyway (`SYNC-110`).
     pub role: String,
     /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
     /// against it, which yields the log anchor (`SYNC-104`).

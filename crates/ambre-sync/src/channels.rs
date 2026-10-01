@@ -3,6 +3,7 @@ use ambre_bus::{
     ChannelDocument, ChannelDocumentKind, DocumentActivity, MetaId, SealedChannelKey, SegmentId,
     SpaceId,
 };
+use ambre_core::DocType;
 use ambre_crypto::aead::NONCE_LEN;
 
 impl SyncState {
@@ -169,7 +170,7 @@ impl SyncState {
             let result = async {
                 for (document_id, doc_key_enc, entry) in documents {
                     let body = http::CreateDocumentRequest {
-                        doc_type: "murmure".into(),
+                        doc_type: DocType::Murmure,
                         name_enc: None,
                         doc_key_enc,
                         document_id: Some(document_id.to_string()),
@@ -476,9 +477,7 @@ pub(crate) fn channel_documents(
         .map(|e| {
             let document_id = DocumentId::parse_str(&e.document_id)
                 .map_err(|_| format!("bad document id {:?}", e.document_id))?;
-            let kind = ChannelDocumentKind::parse(&e.kind)
-                .ok_or_else(|| format!("unknown document kind {:?}", e.kind))?;
-            Ok(ChannelDocument { document_id, kind })
+            Ok(ChannelDocument { document_id, kind: e.kind })
         })
         .collect()
 }
@@ -487,10 +486,10 @@ pub(crate) fn channel_documents(
 mod tests {
     use super::*;
 
-    fn entry(document_id: &str, kind: &str) -> http::ChannelDocumentEntry {
+    fn entry(document_id: &str, kind: ChannelDocumentKind) -> http::ChannelDocumentEntry {
         http::ChannelDocumentEntry {
             document_id: document_id.to_owned(),
-            kind: kind.to_owned(),
+            kind,
         }
     }
 
@@ -499,8 +498,8 @@ mod tests {
         let meta = DocumentId::new();
         let segment = DocumentId::new();
         let parsed = channel_documents(&[
-            entry(&meta.to_string(), "meta"),
-            entry(&segment.to_string(), "segment"),
+            entry(&meta.to_string(), ChannelDocumentKind::Meta),
+            entry(&segment.to_string(), ChannelDocumentKind::Segment),
         ])
         .expect("parse");
         assert_eq!(
@@ -521,8 +520,10 @@ mod tests {
     #[test]
     fn one_unreadable_row_fails_the_whole_listing() {
         let meta = DocumentId::new().to_string();
-        assert!(channel_documents(&[entry(&meta, "meta"), entry("nope", "segment")]).is_err());
-        assert!(channel_documents(&[entry(&meta, "draft")]).is_err());
+        // Bad document_id causes an error
+        assert!(channel_documents(&[entry(&meta, ChannelDocumentKind::Meta), entry("nope", ChannelDocumentKind::Segment)]).is_err());
+        // Single valid entry succeeds
+        assert!(channel_documents(&[entry(&meta, ChannelDocumentKind::Meta)]).is_ok());
     }
 
     fn activity(channel_id: &str, document_id: &str, active: bool) -> http::ActivityEntry {

@@ -194,7 +194,8 @@ pub struct DocumentSummaryJson {
     pub id: ambre_core::DocumentId,
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub owner_id: ambre_core::UserId,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     /// Serialized as its lowercase word.
     pub role: Role,
@@ -230,10 +231,17 @@ pub async fn list_documents(
             let owner_id = ambre_core::UserId::from_uuid(
                 ambre_core::Uuid::from_bytes(*d.owner_id.as_bytes())
             );
+            let doc_type = match d.doc_type.to_lowercase().as_str() {
+                "prose" => ambre_core::DocType::Prose,
+                "trame" => ambre_core::DocType::Trame,
+                "toile" => ambre_core::DocType::Toile,
+                "murmure" => ambre_core::DocType::Murmure,
+                _ => ambre_core::DocType::Prose, // fallback
+            };
             DocumentSummaryJson {
                 id: doc_id,
                 owner_id,
-                doc_type: d.doc_type,
+                doc_type,
                 name_enc: d
                     .name_enc
                     .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
@@ -258,7 +266,8 @@ pub async fn list_documents(
 /// exchange key, stored server-side for sharing.
 #[derive(serde::Deserialize)]
 pub struct CreateDocumentRequest {
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     pub doc_key_enc: String,
     /// Optional client-generated document id (lazy creation). When present the
@@ -274,7 +283,8 @@ pub struct CreateDocumentRequest {
 pub struct CreateDocumentResponse {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub document_id: ambre_core::DocumentId,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
 }
 
 pub async fn create_document(
@@ -284,11 +294,6 @@ pub async fn create_document(
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let s = auth;
-    if !["prose", "trame", "toile", "murmure"].contains(&req.doc_type.as_str()) {
-        return Err(AppError::Conflict {
-            detail: "invalid doc_type".into(),
-        });
-    }
 
     let name_enc = req
         .name_enc
@@ -301,10 +306,11 @@ pub async fn create_document(
         })
         .transpose()?;
     let client_id = req.document_id.as_deref().map(parse_doc_id).transpose()?;
+    let doc_type_str = req.doc_type.name().to_lowercase();
     let (doc, created) = db::create_document(
         &state.db,
         &s.user_id,
-        &req.doc_type,
+        &doc_type_str,
         name_enc.as_deref(),
         client_id.as_ref(),
     )
@@ -368,7 +374,8 @@ pub struct GetDocumentResponse {
     pub id: ambre_core::DocumentId,
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub owner_id: ambre_core::UserId,
-    pub doc_type: String,
+    #[serde(with = "ambre_core::serde_enums::doc_type")]
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     /// Serialized as its lowercase word.
     pub role: Option<Role>,
@@ -408,10 +415,17 @@ pub async fn get_document(
     let owner_id_typed = ambre_core::UserId::from_uuid(
         ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes())
     );
+    let doc_type = match doc.doc_type.to_lowercase().as_str() {
+        "prose" => ambre_core::DocType::Prose,
+        "trame" => ambre_core::DocType::Trame,
+        "toile" => ambre_core::DocType::Toile,
+        "murmure" => ambre_core::DocType::Murmure,
+        _ => ambre_core::DocType::Prose, // fallback
+    };
     Ok(axum::Json(GetDocumentResponse {
         id: doc_id_typed,
         owner_id: owner_id_typed,
-        doc_type: doc.doc_type,
+        doc_type,
         name_enc: doc
             .name_enc
             .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
@@ -642,7 +656,8 @@ pub async fn list_document_members(
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
     /// A role word, parsed by the handler: an unknown word answers 409.
-    pub role: String,
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// The signed entry that gives the role (`SYNC-132`).
     #[serde(default)]
     pub entry: Option<String>,
@@ -663,14 +678,12 @@ pub async fn update_document_member_role(
     if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
-    let role = req
-        .role
-        .parse()
-        .ok()
-        .filter(|role: &Role| role.is_valid_for_document())
-        .ok_or(AppError::Conflict {
+    if !req.role.is_valid_for_document() {
+        return Err(AppError::Conflict {
             detail: "invalid role".into(),
-        })?;
+        });
+    }
+    let role = req.role;
     let expected = super::share::Expected {
         act: ambre_protocol::MembershipAct::ChangeRole,
         member: target,

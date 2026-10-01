@@ -1172,7 +1172,7 @@ impl SyncState {
 
             let url = format!("{url_scheme}://{api_base}/api/documents");
             let body = http::CreateDocumentRequest {
-                doc_type: doc_type_to_api_string(doc_type),
+                doc_type,
                 name_enc: None,
                 doc_key_enc,
                 document_id: Some(document_id.to_string()),
