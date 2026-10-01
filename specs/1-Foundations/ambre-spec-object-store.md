@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- the layout, the links, the caps and the removal of a deleted
-document's objects all ship. A picture's address is still a hash of its plaintext.
+document's objects all ship. Nothing collects a picture a document stopped using.
 
 > Everything too large for a frame lives in object storage, sealed. The relay never carries those
 > bytes: it checks who is asking and hands out a link that works once, for a quarter of an hour.
@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | none | verified |
 | `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none | unheld -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-059` | `INV` | The relay MUST NOT hold an address derived from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | none | fails -- the address is a hash of the plaintext, the confirmation stores it beside the document, and the object name is built from it, so the relay can hash a file it already has and ask whether this document holds it; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-059` | `INV` | The relay MUST NOT hold an address it could compute from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the relay stores the address the Sync worker names, and the worker names one keyed by the document key, which the relay never holds; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- without that key, the bytes alone do not give it | none | verified |
 | `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -68,15 +68,12 @@ A member takes back a file they uploaded, such as the attachment of a message th
   document cold start of the same table, under 500 ms. The cold start's download half is here and
   its replay half is `ambre-spec-sequencer.md`; both read **none exists**.
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
-  reads only a name, a size and a media type. A picture's name is a hash of its plaintext, outside
-  what `ZK-007` allows and what `SRV-059` states; the bytes never enter this process.
-* **Verification.** 6 `verified`, 1 `partial`, 1 `failing`, 4 `untested`, 6 `unimplemented`. What
+  reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
+  bytes never enter this process.
+* **Verification.** 7 `verified`, 1 `partial`, 0 `failing`, 4 `untested`, 6 `unimplemented`. What
   holds is the name: the scoping, the shapes refused, and the size bound into an upload link. What
   is loose is a link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor
   the expiry has a test.
-
-  One rule is stated as failing: the address derived from the plaintext, a zero-knowledge leak the
-  relay shares with `ambre-spec-media.md` (`SRV-059`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -121,7 +118,7 @@ final segment adds one object, its sealed search index.
 |---|---|---|---|
 | a delta | the relay's own flush (`ambre-spec-sequencer.md`) | 4 MiB, on the frame (`SRV-010`) | its sequence number |
 | a snapshot | the client, on a presigned link | 50 MiB | an identifier the client mints |
-| a picture or a file | the client, on a presigned link | 100 MiB | a hash of its plaintext (`SRV-059`) |
+| a picture or a file | the client, on a presigned link | 100 MiB | a hash of its plaintext, keyed by the document key (`SRV-059`) |
 
 **A link, in steps.** The same four for an upload and a download, and the check is always first.
 
@@ -152,10 +149,10 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 | a document deleted | a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
 
-**What the relay knows about a picture.** Its address, its media type and its size, against the
-document. The address is a hash of the plaintext. So the relay can take a file it already holds, hash it,
-and answer whether this document contains it. That is a confirmation oracle over content, which
-`ZK-007` does not allow (`SRV-059`).
+**What the relay knows about a picture.** Its address and its size, against the document. The
+address is keyed by the document key. The relay cannot hash a file it already holds and ask whether
+this document contains it (`SRV-059`). It still sees that two uploads of one document share
+an address. The media type never reaches it.
 
 **Code.**
 
@@ -197,9 +194,6 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A picture's address is a hash of its plaintext.** The client computes it and the relay stores
-  it, so a fingerprint of every file in every document sits in the register
-  (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
 * **The link lifetime has a default and no ceiling.** Fifteen minutes is a figure of the deployment
   and nothing refuses a day, which is what `ZK-008` states (`SRV-052`).
 * **A delta's object outlives its index row.** The trim removes the row and no pass removes the

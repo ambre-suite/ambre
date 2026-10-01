@@ -321,11 +321,13 @@ pub enum RestCommand {
 
     // -- Media -------------------------------------------------------------------
     /// Upload a media file. -> `MediaUploaded`.
+    ///
+    /// It names no media type: the application keeps its own, and the relay
+    /// learns nothing of the blob beyond its size (`SYNC-053`).
     UploadMedia {
         document_id: DocumentId,
         /// Raw (unencrypted) media bytes.
         data: Vec<u8>,
-        mime_type: String,
     },
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {

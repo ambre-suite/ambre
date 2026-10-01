@@ -94,7 +94,7 @@ race: the last writer takes that whole unit.
 | `filter_hidden_{sheet}` | Map | `row_uid` | `true` | the row | `trame-shared-filter` | built |
 | `named_ranges` | Map | range name | A1 reference (String) | the name | `trame-named-ranges` | built |
 | `styles` | Map | `style_id` | style attribute map | the style entry | `trame-cell-styles` | design |
-| `media` | Map | `blake2b` content hash | `{dims, anchor, mime}` | the media entry | -- (foundation media flow) | design |
+| `media` | Map | media address, keyed by the document key | `{dims, anchor, mime}` | the media entry | -- (foundation media flow) | design |
 | `cond_formats_{sheet}` | List | position | `{range, priority, rule, style}` | list order, no LWW | `trame-cell-styles` | design |
 | `validations_{sheet}` | Map | `range` | `{kind, params, on_invalid, message}` | the range entry | `trame-cell-editing` | design |
 | `protections_{sheet}` | Map | `range` | `{owner, allowed, description}` | the range entry | `trame-cell-editing` | design |

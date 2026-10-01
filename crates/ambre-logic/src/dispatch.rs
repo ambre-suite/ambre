@@ -1450,19 +1450,13 @@ mod tests {
         let uploaded = sync_rx.try_iter().find_map(|cmd| match cmd {
             SyncCommand::Rest {
                 id: got,
-                cmd:
-                    RestCommand::UploadMedia {
-                        document_id,
-                        mime_type,
-                        ..
-                    },
-            } => Some((got, document_id, mime_type)),
+                cmd: RestCommand::UploadMedia { document_id, .. },
+            } => Some((got, document_id)),
             _ => None,
         });
-        let (got_id, got_doc, mime) = uploaded.expect("an UploadMedia was forwarded to Sync");
+        let (got_id, got_doc) = uploaded.expect("an UploadMedia was forwarded to Sync");
         assert_eq!(got_id, id);
         assert_eq!(got_doc, doc_id);
-        assert_eq!(mime, "image/png");
     }
 
     #[test]

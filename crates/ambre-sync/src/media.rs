@@ -4,18 +4,18 @@ impl SyncState {
     // -- Media (upload / download via presigned S3 URLs) -----------------------
 
     /// Uploads a media blob to S3 via the presigned-URL flow:
-    /// 1. Hashes the plaintext data (BLAKE2b-256 -> content_hash).
+    /// 1. Computes the address, keyed by the document key (`SYNC-050`).
     /// 2. Encrypts the data with the document key (AEAD, "ambre-media" aad).
     /// 3. Requests a presigned S3 PUT URL from the server.
     /// 4. PUTs the encrypted blob (nonce || ciphertext) directly to S3.
-    /// 5. Confirms the upload via `POST /api/documents/{id}/media`.
+    /// 5. Confirms the upload via `POST /api/documents/{id}/media`, naming the
+    ///    address and the sealed size only (`SYNC-053`).
     /// 6. Emits [`SyncEvent::MediaUploaded`].
     pub(crate) fn handle_upload_media(
         &self,
         id: RequestId,
         document_id: DocumentId,
         data: Vec<u8>,
-        mime_type: String,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -27,21 +27,6 @@ impl SyncState {
             .get(&document_id)
             .map(|ds| ds.doc_key.clone());
 
-        let Some(tx) = event_tx else {
-            let content_hash = {
-                let mut hasher = blake2::Blake2b512::new();
-                hasher.update(&data);
-                hex::encode(&hasher.finalize()[..32])
-            };
-            self.reply(
-                id,
-                RestEvent::MediaUploaded {
-                    document_id,
-                    content_hash,
-                },
-            );
-            return;
-        };
         let Some(doc_key) = doc_key else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
@@ -51,23 +36,27 @@ impl SyncState {
             });
             return;
         };
+        let content_hash = hex::encode(ambre_crypto::commitment::media_address(&doc_key, &data));
+        let Some(tx) = event_tx else {
+            self.reply(
+                id,
+                RestEvent::MediaUploaded {
+                    document_id,
+                    content_hash,
+                },
+            );
+            return;
+        };
 
         wasm_bindgen_futures::spawn_local(async move {
             let (nonce, ciphertext) =
                 ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key).expect("seal media");
             let encrypted_size = (ambre_crypto::aead::NONCE_LEN + ciphertext.len()) as u64;
 
-            let content_hash = {
-                let mut hasher = blake2::Blake2b512::new();
-                hasher.update(&data);
-                hex::encode(&hasher.finalize()[..32])
-            };
-
             let upload_url_req =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/media/upload-url");
             let body = http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
-                mime_type: mime_type.clone(),
                 size_bytes: encrypted_size,
             };
             let upload_url = match http::post_json_auth::<_, http::UploadUrlResponse>(
@@ -107,7 +96,6 @@ impl SyncState {
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/media");
             let confirm_body = http::ConfirmUploadRequest {
                 content_hash: content_hash.clone(),
-                mime_type,
                 size_bytes: encrypted_size as i64,
             };
             if let Err(e) =
@@ -246,5 +234,39 @@ impl SyncState {
                 data,
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The address the worker answers with is keyed by the document key: the
+    /// same bytes in two documents get two addresses (`SYNC-050`).
+    #[test]
+    fn an_upload_is_addressed_under_the_document_key() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let picture = b"one picture, two documents".to_vec();
+        let mut addresses = Vec::new();
+        for byte in [0x31, 0x32] {
+            let document_id = DocumentId::new();
+            let key = DocumentKey::from_array([byte; 32]);
+            let doc_state = SyncDocumentState::new(document_id, key.clone(), DocType::Toile, true);
+            state.documents.insert(document_id, doc_state);
+            state.handle_upload_media(RequestId::next(), document_id, picture.clone());
+            let answer = rx.try_iter().find_map(|event| match event {
+                LogicEvent::Rest {
+                    evt: RestEvent::MediaUploaded { content_hash, .. },
+                    ..
+                } => Some(content_hash),
+                _ => None,
+            });
+            let address = answer.expect("the upload answered with an address");
+            let expected = hex::encode(ambre_crypto::commitment::media_address(&key, &picture));
+            assert_eq!(address, expected);
+            addresses.push(address);
+        }
+        assert_ne!(addresses[0], addresses[1]);
     }
 }

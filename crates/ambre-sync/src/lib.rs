@@ -58,7 +58,6 @@ use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
 
 use base64::Engine;
-use blake2::Digest;
 use hex::encode;
 
 /// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the
@@ -1042,12 +1041,8 @@ impl SyncState {
             RestCommand::SearchUsers { query } => self.handle_search_users(id, query),
 
             // -- Media ---------------------------------------------------------
-            RestCommand::UploadMedia {
-                document_id,
-                data,
-                mime_type,
-            } => {
-                self.handle_upload_media(id, document_id, data, mime_type);
+            RestCommand::UploadMedia { document_id, data } => {
+                self.handle_upload_media(id, document_id, data);
             }
             RestCommand::DownloadMedia {
                 document_id,

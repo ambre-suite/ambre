@@ -641,10 +641,11 @@ pub(crate) struct DocumentMemberEntry {
     pub role: String,
 }
 
+/// Asks for a link to put one sealed blob. It names the keyed address and the
+/// sealed size, and nothing else of the blob (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct UploadUrlRequest {
     pub content_hash: String,
-    pub mime_type: String,
     pub size_bytes: u64,
 }
 
@@ -665,10 +666,10 @@ pub(crate) struct DownloadUrlResponse {
     pub download_url: String,
 }
 
+/// Confirms one put. The same two fields as [`UploadUrlRequest`] (`SYNC-053`).
 #[derive(Serialize)]
 pub(crate) struct ConfirmUploadRequest {
     pub content_hash: String,
-    pub mime_type: String,
     pub size_bytes: i64,
 }
 
@@ -718,5 +719,38 @@ mod tests {
             master_key_salt: "c2FsdA==".into(),
         };
         assert!(!stored.setup_owed());
+    }
+
+    /// Both legs of an upload carry the keyed address and the sealed size,
+    /// and no other field: no media type, no plaintext hash (`SYNC-053`).
+    #[test]
+    fn an_upload_names_only_the_address_and_the_size() {
+        let fields = |value: serde_json::Value| {
+            let mut keys: Vec<String> = value
+                .as_object()
+                .expect("an object")
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort();
+            keys
+        };
+        let expected = ["content_hash", "size_bytes"];
+        let ask = UploadUrlRequest {
+            content_hash: "ab".repeat(32),
+            size_bytes: 64,
+        };
+        let confirm = ConfirmUploadRequest {
+            content_hash: "ab".repeat(32),
+            size_bytes: 64,
+        };
+        assert_eq!(
+            fields(serde_json::to_value(&ask).expect("serializes")),
+            expected
+        );
+        assert_eq!(
+            fields(serde_json::to_value(&confirm).expect("serializes")),
+            expected
+        );
     }
 }

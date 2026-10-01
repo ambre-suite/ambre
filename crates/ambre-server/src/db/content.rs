@@ -276,7 +276,6 @@ pub async fn insert_media(
     document_id: &ambre_core::DocumentId,
     uploaded_by: &ambre_core::UserId,
     content_hash: &str,
-    mime_type: &str,
     size_bytes: i64,
     s3_key: &str,
 ) -> Result<(), AppError> {
@@ -288,12 +287,11 @@ pub async fn insert_media(
     // blob. The row is content-addressed, so a re-insert is a no-op, and the
     // same file in another document gets a row of its own (`SRV-058`).
     sqlx::query(
-        "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (document_id, id) DO NOTHING"
+        "INSERT INTO media (id, document_id, uploaded_by, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (document_id, id) DO NOTHING"
     )
     .bind(content_hash)
     .bind(did)
     .bind(uid)
-    .bind(mime_type)
     .bind(size_bytes)
     .bind(s3_key)
     .execute(pool)

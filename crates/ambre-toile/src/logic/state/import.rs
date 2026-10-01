@@ -99,7 +99,6 @@ impl ToileState {
             requests.push(ToileRequest::UploadMedia {
                 id,
                 data: blob.plaintext.clone(),
-                mime: blob.mime.clone(),
             });
         }
         self.pending_imports

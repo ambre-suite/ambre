@@ -311,7 +311,6 @@ dependencies = [
  "ambre-crypto",
  "ambre-protocol",
  "base64 0.22.1",
- "blake2",
  "console_error_panic_hook",
  "ed25519-dalek",
  "futures-util",

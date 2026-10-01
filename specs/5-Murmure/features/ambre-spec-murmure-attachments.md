@@ -49,8 +49,8 @@ A deleted message takes its files with it, so the erasure a delete promises cove
 
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` bounds the animation, and the
   memory rows of `ambre-spec-budgets.md section 6` bound the decoded frames.
-* **Boundary.** every attachment is sealed (`ZK-001`). Its address must not derive from its
-  plaintext, which is the media defect `SYNC-050` states.
+* **Boundary.** every attachment is sealed (`ZK-001`). Its address is keyed by the document key,
+  as every media address is (`SYNC-050`).
 * **Verification.** 12 `unimplemented`: no attachment exists in Murmure.
 
 ---
@@ -71,7 +71,6 @@ A deleted message takes its files with it, so the erasure a delete promises cove
 section 3`: a media reference, a name, a media type and a size.
 
 **The media flow** is `ambre-spec-media.md`, the one every application uses. Murmure adds no path.
-The address defect of that flow must be fixed before or with this feature (`SYNC-050`).
 
 **An animated GIF** is an attachment like any other. The client decodes it off the render thread,
 and the canvas plays its frames while it is on screen. The decoded images sit in the shared image
@@ -109,6 +108,3 @@ shares the file, so it loses the file too: the author asked for it gone.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No attachment exists in Murmure.
-* **The media address still derives from the plaintext.** `SYNC-050` states the defect. Its fix is
-  the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7), which `MURMURE-129`
-  needs first.

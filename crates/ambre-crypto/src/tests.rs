@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
-use crate::{CryptoError, aead, ecdh, envelope, hash, passphrase};
+use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
 
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
@@ -222,6 +222,33 @@ fn blake2_chain_hash() {
     assert_eq!(h1, hash::chain_hash(b"parent", b"snapshot"));
     // Order-sensitive: the split point matters.
     assert_ne!(h1, hash::chain_hash(b"paren", b"tsnapshot"));
+}
+
+// -- Media address -----------------------------------------------------------
+
+/// One address per plaintext under one key, and another under any other key.
+/// It is never the bare hash of the bytes, which the relay could compute
+/// itself (`SYNC-050`).
+#[test]
+fn a_media_address_needs_the_document_key() {
+    use blake2::{Blake2b512, Digest};
+
+    let picture = b"the same picture, used twice";
+    let address = commitment::media_address(&fixed_doc_key(), picture);
+    assert_eq!(
+        address,
+        commitment::media_address(&fixed_doc_key(), picture)
+    );
+    assert_ne!(
+        address,
+        commitment::media_address(&DocumentKey::from_array([0x12; 32]), picture)
+    );
+    assert_ne!(
+        address,
+        commitment::media_address(&fixed_doc_key(), b"another picture")
+    );
+    let plain = Blake2b512::digest(picture);
+    assert_ne!(address[..], plain[..32]);
 }
 
 // -- Property tests ----------------------------------------------------------

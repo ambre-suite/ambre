@@ -38,6 +38,34 @@ pub fn commitment_tag(
         .into()
 }
 
+/// Domain-separation tag of the media-address subkey. The subkey keeps the
+/// address apart from the commitment tag, which takes the document key directly.
+const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
+
+/// The address of a media blob: `HMAC(HMAC(key, domain), plaintext)`
+/// (`ambre-spec-media.md`, `SYNC-050`).
+///
+/// Equal bytes under one document key yield one address, so a picture used
+/// ten times is one object. Without the key, nobody can compute the address
+/// of a file they hold, so the relay cannot ask whether a document holds it.
+///
+/// # Panics
+///
+/// Never. HMAC accepts a key of any length, so its constructor cannot fail.
+pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> [u8; TAG_LEN] {
+    let subkey: [u8; TAG_LEN] = mac_over(key, MEDIA_ADDRESS_DOMAIN);
+    let mut m = HmacSha256::new_from_slice(&subkey).expect("HMAC accepts a key of any length");
+    m.update(plaintext);
+    m.finalize().into_bytes().into()
+}
+
+fn mac_over(key: &DocumentKey, data: &[u8]) -> [u8; TAG_LEN] {
+    let mut m =
+        HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts a key of any length");
+    m.update(data);
+    m.finalize().into_bytes().into()
+}
+
 /// Verifies `tag` against a freshly computed commitment, in constant time.
 ///
 /// # Errors

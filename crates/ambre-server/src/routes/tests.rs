@@ -1289,7 +1289,6 @@ mod handler_tests {
 
         let body = serde_json::json!({
             "content_hash": "a".repeat(64),
-            "mime_type": "image/png",
             "size_bytes": 10,
         });
 
@@ -1335,7 +1334,6 @@ mod handler_tests {
 
         let body = serde_json::json!({
             "content_hash": "b".repeat(64),
-            "mime_type": "image/png",
             "size_bytes": 42,
         });
 
@@ -1504,7 +1502,7 @@ mod handler_tests {
         let confirm = |doc: &str| {
             (
                 format!("/api/documents/{doc}/media"),
-                serde_json::json!({ "content_hash": held, "mime_type": "image/png", "size_bytes": 7 }),
+                serde_json::json!({ "content_hash": held, "size_bytes": 7 }),
             )
         };
 

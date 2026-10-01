@@ -18,11 +18,12 @@ fn parse_doc_id(s: &str) -> Result<ambre_core::DocumentId, AppError> {
 
 /// Request for a presigned S3 upload URL. The client uploads the encrypted
 /// blob directly; the server inserts the `media` row on confirmation.
+///
+/// The client keys the address by the document key. The relay holds a name it
+/// cannot compute from any file it has (`SRV-059`).
 #[derive(serde::Deserialize)]
 pub struct UploadUrlRequest {
     pub content_hash: String,
-    #[allow(dead_code)]
-    pub mime_type: String,
     /// Declared size of the encrypted blob. Validated against `media_max_bytes`
     /// and bound into the presigned PUT URL so the upload cannot exceed it.
     pub size_bytes: u64,
@@ -115,11 +116,11 @@ pub async fn media_download_url(
 }
 
 /// Confirmation that an upload completed. The server inserts a `media` row
-/// linking the content hash to the S3 object.
+/// linking the content hash to the S3 object. It names no media type
+/// (`SYNC-053`).
 #[derive(serde::Deserialize)]
 pub struct ConfirmUploadRequest {
     pub content_hash: String,
-    pub mime_type: String,
     pub size_bytes: i64,
 }
 
@@ -158,7 +159,6 @@ pub async fn media_confirm_upload(
         &doc_id,
         &s.user_id,
         &req.content_hash,
-        &req.mime_type,
         req.size_bytes,
         &key,
     )

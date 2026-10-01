@@ -35,15 +35,8 @@ pub use ambre_bus::rest::RequestId;
 /// [`ToileOutcome::update`].
 #[derive(Debug)]
 pub enum ToileRequest {
-    UploadMedia {
-        id: RequestId,
-        data: Vec<u8>,
-        mime: String,
-    },
-    DownloadMedia {
-        id: RequestId,
-        content_hash: String,
-    },
+    UploadMedia { id: RequestId, data: Vec<u8> },
+    DownloadMedia { id: RequestId, content_hash: String },
 }
 
 /// Result of processing a [`ToileCommand`]: display events for the UI plus

@@ -323,14 +323,9 @@ impl LogicState {
         request: ToileRequest,
     ) -> (RequestId, RestCommand) {
         match request {
-            ToileRequest::UploadMedia { id, data, mime } => (
-                id,
-                RestCommand::UploadMedia {
-                    document_id,
-                    data,
-                    mime_type: mime,
-                },
-            ),
+            ToileRequest::UploadMedia { id, data } => {
+                (id, RestCommand::UploadMedia { document_id, data })
+            }
             ToileRequest::DownloadMedia { id, content_hash } => (
                 id,
                 RestCommand::DownloadMedia {
