@@ -428,13 +428,19 @@ pub async fn delete_document(
     if m.role != "owner" {
         return Err(AppError::Forbidden);
     }
-    // The objects and the relay state go first, the rows last. A purge that
-    // fails leaves the document in place, so the owner can delete it again.
-    // Forgetting the rows first would strand what the purge missed, with
-    // nothing left pointing at it (`SRV-057`, `SRV-017`).
+    // The tombstone goes first: from then on no update, presence or flush
+    // entry writes a key of the document. The objects and the relay state go
+    // next, the rows last. A purge that fails leaves the document in place, so
+    // the owner can delete it again. Forgetting the rows first would strand
+    // what the purge missed, with nothing left pointing at it. An object a
+    // late writer puts after the sweep goes in the second sweep, once the
+    // late-write window has passed (`SRV-057`, `SRV-017`).
+    let window = crate::s3::late_write_window_secs(state.config.presigned_url_ttl_secs);
+    redis_ops::mark_document_gone(&state.redis, &doc_id, window).await?;
     let prefix = crate::s3::format_s3_document_prefix(&state.config.s3_env_prefix, &doc_id);
     crate::s3::delete_prefix(&state.s3, &state.s3_bucket, &prefix).await?;
-    redis_ops::purge_document_state(&state.redis, &doc_id).await?;
+    let sweep_due = crate::s3::unix_now() + window;
+    redis_ops::purge_document_state(&state.redis, &doc_id, window, sweep_due).await?;
     db::delete_document(&state.db, &doc_id).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
     Ok(axum::Json(serde_json::json!({"status":"deleted"})))

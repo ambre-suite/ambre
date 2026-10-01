@@ -291,6 +291,62 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
             })
             .collect();
         futures_util::future::join_all(tasks).await;
+
+        sweep_due_documents(&state).await;
+    }
+}
+
+/// How long the per-document flush lock lives. It comfortably exceeds one
+/// flush; if the holder dies mid-flush the lock expires and the next cycle
+/// retries.
+const FLUSH_LOCK_TTL_SECS: u64 = 60;
+
+/// How long a write that began before a delete may still land after it
+/// (`SRV-057`). A presigned upload link stays valid for its lifetime. A flush
+/// holds its lock at most `FLUSH_LOCK_TTL_SECS`, and a minute of margin covers
+/// the requests in flight. The tombstone lives this long, and the
+/// second sweep of the objects runs once it has passed.
+pub fn late_write_window_secs(presigned_url_ttl_secs: u64) -> u64 {
+    presigned_url_ttl_secs + FLUSH_LOCK_TTL_SECS + 60
+}
+
+/// Seconds since the Unix epoch, the clock the sweep schedule is scored in.
+pub fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Sweeps again the objects of every deleted document whose late-write window
+/// has passed, then drops it from the schedule (`SRV-057`). A sweep that fails
+/// keeps its entry, and the next cycle retries it.
+pub async fn sweep_due_documents(state: &crate::state::AppState) {
+    let now = unix_now();
+    let due = match crate::redis_ops::due_sweeps(&state.redis, now, 100).await {
+        Ok(due) => due,
+        Err(e) => {
+            tracing::error!("sweep schedule read failed: {e}");
+            return;
+        }
+    };
+    for id in due {
+        let Ok(doc_id) = ambre_core::DocumentId::parse_str(&id) else {
+            tracing::error!(id, "sweep schedule holds a malformed document id");
+            let _ = crate::redis_ops::sweep_done(&state.redis, &id, now).await;
+            continue;
+        };
+        let prefix = format_s3_document_prefix(&state.config.s3_env_prefix, &doc_id);
+        match delete_prefix(&state.s3, &state.s3_bucket, &prefix).await {
+            Ok(count) => {
+                if count > 0 {
+                    tracing::info!(document_id = %doc_id, count, "second sweep removed late objects");
+                }
+                if let Err(e) = crate::redis_ops::sweep_done(&state.redis, &id, now).await {
+                    tracing::warn!(document_id = %doc_id, error = %e, "sweep schedule update failed");
+                }
+            }
+            Err(e) => tracing::error!(document_id = %doc_id, error = %e, "second sweep failed"),
+        }
     }
 }
 
@@ -341,10 +397,15 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
     else {
         return;
     };
-    // TTL comfortably exceeds one flush cycle; if the holder dies mid-flush the
-    // lock auto-expires and the next cycle retries.
     let token = uuid::Uuid::new_v4().to_string();
-    match crate::redis_ops::try_acquire_flush_lock(&state.redis, &lock_key, &token, 60).await {
+    match crate::redis_ops::try_acquire_flush_lock(
+        &state.redis,
+        &lock_key,
+        &token,
+        FLUSH_LOCK_TTL_SECS,
+    )
+    .await
+    {
         Ok(true) => {}
         Ok(false) => return,
         Err(e) => {
@@ -385,11 +446,9 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
         return;
     }
 
-    // Dead-letter list for permanently-bad entries (malformed JSON / base64),
-    // derived from the pending key so we do not need to re-parse the doc id.
-    let deadletter_key = pending_key
-        .strip_suffix(":pending")
-        .map(|prefix| format!("{prefix}:deadletter"));
+    // Key prefix of the document, for the dead-letter list of permanently-bad
+    // entries (malformed JSON / base64). It spares re-parsing the doc id.
+    let doc_prefix = pending_key.strip_suffix(":pending");
 
     // Count of contiguous FRONT entries we have finished with -- either
     // uploaded to S3 or dead-lettered as poison. This is the exact `ltrim`
@@ -432,8 +491,8 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
         let Some((s3_key, seq, update_wire)) = fields else {
             let seq = parsed.as_ref().and_then(|p| p["seq"].as_u64()).unwrap_or(0);
             poison("malformed json / missing fields / bad base64", seq);
-            if let Some(dlk) = &deadletter_key {
-                let _: Result<usize, _> = state.redis.rpush(dlk, [blob_str]).await;
+            if let Some(prefix) = &doc_prefix {
+                let _ = crate::redis_ops::push_poison_entry(&state.redis, prefix, blob_str).await;
             }
             processed += 1;
             continue;

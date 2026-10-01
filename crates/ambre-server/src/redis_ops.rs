@@ -10,10 +10,12 @@ use rustis::resp::RefBulkString;
 ///
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
 /// - `KEYS[2]` = `doc:{id}:seq`   (counter)
+/// - `KEYS[3]` = `doc:{id}:gone`  (tombstone, see [`mark_document_gone`])
 /// - `ARGV[1]` = pub_key_hex
 /// - `ARGV[2]` = incoming clock (must be last_clock + 1)
 ///
-/// Rejects the update if the clock is not strictly sequential.
+/// Rejects the update if the clock is not strictly sequential, or if the
+/// document is being deleted.
 ///
 /// # Why the clock hash is intentionally not pruned
 ///
@@ -33,6 +35,9 @@ use rustis::resp::RefBulkString;
 /// close (a pruned author could resubmit old signed updates from clock 1). The
 /// membership bound is the correct and safe ceiling.
 pub const CLOCK_AND_SEQ_LUA: &str = r#"
+if redis.call('EXISTS', KEYS[3]) == 1 then
+    return redis.error_reply('DOCUMENT_GONE')
+end
 local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
 local incoming = tonumber(ARGV[2])
 if incoming ~= current + 1 then
@@ -56,11 +61,12 @@ pub async fn verify_clock_and_assign_seq(
 ) -> Result<u64, AppError> {
     let clocks_key = format!("doc:{document_id}:clocks");
     let seq_key = format!("doc:{document_id}:seq");
+    let gone_key = document_gone_key(document_id);
 
     let result: i64 = redis
         .eval::<i64>(
             CLOCK_AND_SEQ_LUA,
-            [clocks_key.as_str(), seq_key.as_str()],
+            [clocks_key.as_str(), seq_key.as_str(), gone_key.as_str()],
             [pub_key_hex, &clock.to_string()],
         )
         .await
@@ -70,9 +76,14 @@ pub async fn verify_clock_and_assign_seq(
 }
 
 /// Reads the script's `CLOCK_MISMATCH:<current>` refusal out of a store error.
-/// The expected clock is the one after the current; anything else stays a store
-/// failure.
+/// The expected clock is the one after the current. A document being deleted
+/// is not found; anything else stays a store failure.
 fn clock_refusal(error: &str, got: u64) -> AppError {
+    if error.contains(DOCUMENT_GONE) {
+        return AppError::NotFound {
+            resource: "document",
+        };
+    }
     let current = error.split_once("CLOCK_MISMATCH:").and_then(|(_, rest)| {
         let digits = rest.trim_start();
         let end = digits
@@ -95,9 +106,11 @@ fn clock_refusal(error: &str, got: u64) -> AppError {
 ///
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
 /// - `KEYS[2]` = `doc:{id}:seq`    (counter)
+/// - `KEYS[3]` = `doc:{id}:gone`   (tombstone: a document being deleted is not reseeded)
 /// - `ARGV[1]` = durable max seq
 /// - `ARGV[2i], ARGV[2i+1]` = pub_key_hex, durable max clock (pairs)
 const REHYDRATE_CLOCK_LUA: &str = r#"
+if redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
 local seqmax = tonumber(ARGV[1])
 local cur = tonumber(redis.call('GET', KEYS[2])) or 0
 if seqmax > cur then redis.call('SET', KEYS[2], seqmax) end
@@ -141,6 +154,7 @@ pub async fn seed_clock_state(
     }
     let clocks_key = format!("doc:{document_id}:clocks");
     let seq_key = format!("doc:{document_id}:seq");
+    let gone_key = document_gone_key(document_id);
     let mut argv = vec![max_seq.to_string()];
     for (hex, clock) in author_clocks {
         argv.push(hex.clone());
@@ -149,7 +163,7 @@ pub async fn seed_clock_state(
     redis
         .eval::<i64>(
             REHYDRATE_CLOCK_LUA,
-            [clocks_key.as_str(), seq_key.as_str()],
+            [clocks_key.as_str(), seq_key.as_str(), gone_key.as_str()],
             argv.iter().map(String::as_str).collect::<Vec<_>>(),
         )
         .await
@@ -162,6 +176,10 @@ pub async fn seed_clock_state(
 /// The entry is a JSON blob `{ seq, s3_key, update_b64 }` carrying the full
 /// sealed Update wire. The global S3 flusher picks it up every 15 seconds
 /// and uploads it to S3. The same bytes are replayed verbatim on reconnect.
+///
+/// A document being deleted takes no entry, and the call is refused as not
+/// found. An update in flight cannot recreate the list the delete purged
+/// (`SRV-017`).
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -182,26 +200,78 @@ pub async fn append_pending_delta(
         "update_b64": update_b64,
     })
     .to_string();
+    // One script: the tombstone check, the RPUSH, then the dirty mark. The
+    // flusher iterates only documents marked dirty (SMEMBERS), instead of
+    // SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
+    // load-bearing: `clear_pending_dirty_if_empty` relies on the entry being in
+    // the list whenever the marker exists, and the script runs atomically.
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[3]) == 1 then
+    return redis.error_reply('DOCUMENT_GONE')
+end
+redis.call('RPUSH', KEYS[1], ARGV[1])
+redis.call('SADD', KEYS[2], KEYS[1])
+return 1
+"#;
+    let gone_key = document_gone_key(document_id);
     redis
-        .rpush(&key, [&blob])
+        .eval::<i64>(
+            LUA,
+            [key.as_str(), FLUSH_DIRTY_SET, gone_key.as_str()],
+            [blob.as_str()],
+        )
         .await
-        .map_err(|e| AppError::Redis(format!("pending push failed: {e}")))?;
-    // Mark this document's pending list dirty AFTER the RPUSH. The flusher can
-    // then iterate only documents that actually have pending deltas (SMEMBERS),
-    // instead of SCANning the whole keyspace every cycle. The RPUSH-then-SADD
-    // order is load-bearing. `clear_pending_dirty_if_empty` relies on the entry
-    // being visible in the list before the marker exists. So an append concurrent
-    // with a drain can never leave the list non-empty while the marker is cleared.
-    //
-    // The mark is a best-effort hint, NOT a durability guard. The delta is already
-    // safely RPUSHed, and the flusher's periodic SCAN reconciliation re-marks any
-    // pending key that missed its SADD. So a failed mark is logged, not propagated
-    // -- returning an error here would make `handle_update` dead-letter a delta
-    // that is in fact safely queued.
-    if let Err(e) = mark_pending_dirty(redis, &key).await {
-        tracing::warn!(key = %key, error = %e, "pending dirty mark failed (reconcile will recover)");
-    }
+        .map_err(|e| store_refusal(&e.to_string(), "pending push failed"))?;
     Ok(())
+}
+
+/// The refusal every tombstone-guarded script answers for a document being
+/// deleted (see [`mark_document_gone`]).
+const DOCUMENT_GONE: &str = "DOCUMENT_GONE";
+
+/// Reads a guarded script's refusal out of a store error: a document being
+/// deleted is not found, anything else is a store failure.
+fn store_refusal(error: &str, what: &str) -> AppError {
+    if error.contains(DOCUMENT_GONE) {
+        AppError::NotFound {
+            resource: "document",
+        }
+    } else {
+        AppError::Redis(format!("{what}: {error}"))
+    }
+}
+
+/// RPUSHes `blob` onto `list_key` unless `gone_key` exists. The flusher and
+/// the dead-letter path use it, so neither recreates a purged list.
+async fn guarded_rpush(
+    redis: &Client,
+    list_key: &str,
+    gone_key: &str,
+    blob: &str,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return redis.error_reply('DOCUMENT_GONE')
+end
+return redis.call('RPUSH', KEYS[1], ARGV[1])
+"#;
+    let _: i64 = redis
+        .eval::<i64>(LUA, [list_key, gone_key], [blob])
+        .await
+        .map_err(|e| store_refusal(&e.to_string(), "guarded push failed"))?;
+    Ok(())
+}
+
+/// Dead-letters a poison pending entry the flusher found, unless the document
+/// is being deleted. `prefix` is the document's `doc:{id}` key prefix.
+pub async fn push_poison_entry(redis: &Client, prefix: &str, blob: &str) -> Result<(), AppError> {
+    guarded_rpush(
+        redis,
+        &format!("{prefix}:deadletter"),
+        &format!("{prefix}:gone"),
+        blob,
+    )
+    .await
 }
 
 /// Redis SET holding the `doc:{id}:pending` keys that currently have unflushed
@@ -261,7 +331,6 @@ pub async fn push_dead_letter(
     update_wire: &[u8],
 ) -> Result<(), AppError> {
     use base64::Engine;
-    let key = format!("doc:{document_id}:deadletter");
     let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
     let blob = serde_json::json!({
         "seq": seq,
@@ -269,11 +338,13 @@ pub async fn push_dead_letter(
         "update_b64": update_b64,
     })
     .to_string();
-    redis
-        .rpush(&key, [&blob])
-        .await
-        .map_err(|e| AppError::Redis(format!("dead-letter push failed: {e}")))?;
-    Ok(())
+    guarded_rpush(
+        redis,
+        &format!("doc:{document_id}:deadletter"),
+        &document_gone_key(document_id),
+        &blob,
+    )
+    .await
 }
 
 /// Loads the whole pending list of a document into a `seq -> full Update wire`
@@ -518,7 +589,8 @@ pub async fn chan_broadcast(
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never
-/// sees the plaintext cursor position or display name.
+/// sees the plaintext cursor position or display name. A document being
+/// deleted takes no presence (`SRV-017`).
 pub async fn doc_presence_update(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -526,25 +598,29 @@ pub async fn doc_presence_update(
     presence_enc_b64: &str,
     ttl_secs: u64,
 ) -> Result<(), AppError> {
-    let key = format!("doc:{document_id}:presence");
-    redis
-        .hset(&key, [(pub_key_hex, presence_enc_b64)])
-        .await
-        .map_err(|e| AppError::Redis(format!("presence update: {e}")))?;
-
     // Expire THIS member's field individually (Redis 7.4+ / Valkey 8 `HEXPIRE`),
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
-    // distinct author forever. `HEXPIRE key ttl FIELDS 1 field` returns an array
-    // of per-field status codes. The outcome is advisory here: a missing field or
-    // unsupported server is non-fatal for a fire-and-forget presence write.
-    const HEXPIRE_LUA: &str =
-        "return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])";
+    // distinct author forever. The tombstone check, the write and its TTL run
+    // as one script, so a field never lands without its expiry.
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return redis.error_reply('DOCUMENT_GONE')
+end
+redis.call('HSET', KEYS[1], ARGV[2], ARGV[3])
+return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
+"#;
+    let key = format!("doc:{document_id}:presence");
+    let gone_key = document_gone_key(document_id);
     let ttl = ttl_secs.to_string();
     redis
-        .eval::<Vec<i64>>(HEXPIRE_LUA, [key.as_str()], [ttl.as_str(), pub_key_hex])
+        .eval::<Vec<i64>>(
+            LUA,
+            [key.as_str(), gone_key.as_str()],
+            [ttl.as_str(), pub_key_hex, presence_enc_b64],
+        )
         .await
-        .map_err(|e| AppError::Redis(format!("presence hexpire: {e}")))?;
+        .map_err(|e| store_refusal(&e.to_string(), "presence update"))?;
     Ok(())
 }
 
@@ -568,16 +644,56 @@ pub async fn doc_presence_remove(
     Ok(())
 }
 
+/// The tombstone of a document being deleted. While it lives, every script
+/// that writes a key of the document refuses. A write in flight when the
+/// delete lands cannot recreate what the delete purges (`SRV-017`).
+pub fn document_gone_key(document_id: &ambre_core::DocumentId) -> String {
+    format!("doc:{document_id}:gone")
+}
+
+/// Redis sorted set of the documents whose object prefix is swept again, each
+/// scored by the Unix second the sweep is due (`SRV-057`).
+pub const SWEEP_DUE_SET: &str = "sweep:due";
+
+/// Sets the tombstone of a document for `ttl_secs`: the first step of a
+/// delete, before any object or key is removed.
+pub async fn mark_document_gone(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    ttl_secs: u64,
+) -> Result<(), AppError> {
+    const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
+    let gone_key = document_gone_key(document_id);
+    let ttl = ttl_secs.to_string();
+    let _: String = redis
+        .eval::<String>(LUA, [gone_key.as_str()], [ttl.as_str()])
+        .await
+        .map_err(|e| AppError::Redis(format!("mark document gone: {e}")))?;
+    Ok(())
+}
+
 /// Removes every key the relay holds for a deleted document (`SRV-017`). That
 /// is the sequence counter, the per-author clock hash, the pending list and
 /// its dirty marker, the presence hash and the dead-letter list. One script, so
 /// no reader sees a half-purged document.
+///
+/// The same script renews the tombstone for `ttl_secs` and schedules a second
+/// sweep of the document's objects at `sweep_due` (Unix seconds). That sweep
+/// catches an object a late writer put after the first one (`SRV-057`).
 pub async fn purge_document_state(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
+    ttl_secs: u64,
+    sweep_due: u64,
 ) -> Result<(), AppError> {
-    const LUA: &str = "redis.call('SREM', KEYS[6], KEYS[3]) return redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5])";
+    const LUA: &str = r#"
+redis.call('SREM', KEYS[6], KEYS[3])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5])
+redis.call('SET', KEYS[7], '1', 'EX', ARGV[1])
+return redis.call('ZADD', KEYS[8], ARGV[2], ARGV[3])
+"#;
     let keys = document_state_keys(document_id);
+    let gone_key = document_gone_key(document_id);
     let _: i64 = redis
         .eval(
             LUA,
@@ -588,11 +704,49 @@ pub async fn purge_document_state(
                 keys[3].as_str(),
                 keys[4].as_str(),
                 FLUSH_DIRTY_SET,
+                gone_key.as_str(),
+                SWEEP_DUE_SET,
             ],
-            Vec::<String>::new(),
+            [
+                ttl_secs.to_string(),
+                sweep_due.to_string(),
+                document_id.to_string(),
+            ],
         )
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
+    Ok(())
+}
+
+/// The documents whose second sweep is due at `now` (Unix seconds), at most
+/// `limit` of them.
+pub async fn due_sweeps(redis: &Client, now: u64, limit: usize) -> Result<Vec<String>, AppError> {
+    const LUA: &str =
+        "return redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])";
+    redis
+        .eval::<Vec<String>>(LUA, [SWEEP_DUE_SET], [now.to_string(), limit.to_string()])
+        .await
+        .map_err(|e| AppError::Redis(format!("due sweeps: {e}")))
+}
+
+/// Drops a document from the sweep schedule once its second sweep is done,
+/// unless it was rescheduled past `now` meanwhile.
+pub async fn sweep_done(redis: &Client, document_id: &str, now: u64) -> Result<(), AppError> {
+    const LUA: &str = r#"
+local due = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if due and tonumber(due) <= tonumber(ARGV[2]) then
+    return redis.call('ZREM', KEYS[1], ARGV[1])
+end
+return 0
+"#;
+    let _: i64 = redis
+        .eval::<i64>(
+            LUA,
+            [SWEEP_DUE_SET],
+            [document_id.to_owned(), now.to_string()],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("sweep done: {e}")))?;
     Ok(())
 }
 

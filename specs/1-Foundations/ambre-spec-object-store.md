@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE BLOB STORE, AND THE PRESIGNED LINK
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the layout, the links and the caps all ship. Nothing removes an
-object when the document that named it is deleted.
+**Implementation:** partial -- the layout, the links, the caps and the removal of a deleted
+document's objects all ship. A picture's address is still a hash of its plaintext.
 
 > Everything too large for a frame lives in object storage, sealed. The relay never carries those
 > bytes: it checks who is asking and hands out a link that works once, for a quarter of an hour.
@@ -50,7 +50,7 @@ happen.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete removes every object under the document prefix before the rows go | fails -- a flush in flight while the delete lands can upload a delta after the listing, and nothing fences it; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete removes every object under the document prefix before the rows go, and the second sweep removes one put after | none | verified |
 | `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- the sweep walks the deleted document's own prefix, and an object of a second document survives it. A picture two documents share is stored once under each | none | verified |
 
 ### 1.4 Erase one blob
@@ -70,14 +70,13 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name, a size and a media type. A picture's name is a hash of its plaintext, outside
   what `ZK-007` allows and what `SRV-059` states; the bytes never enter this process.
-* **Verification.** 5 `verified`, 1 `partial`, 2 `failing`, 4 `untested`, 6 `unimplemented`. What
+* **Verification.** 6 `verified`, 1 `partial`, 1 `failing`, 4 `untested`, 6 `unimplemented`. What
   holds is the name: the scoping, the shapes refused, and the size bound into an upload link. What
   is loose is a link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor
   the expiry has a test.
 
-  Two rules are stated as failing. One is the address derived from the plaintext, a zero-knowledge
-  leak the relay shares with `ambre-spec-media.md` (`SRV-059`). The other is a flush in flight that
-  outlives a delete (`SRV-057`).
+  One rule is stated as failing: the address derived from the plaintext, a zero-knowledge leak the
+  relay shares with `ambre-spec-media.md` (`SRV-059`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -150,7 +149,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 |---|---|
 | a snapshot beyond the ten most recent | the hourly pass removes the object, then the row; a failure on the object still removes the row |
 | a delta the trim covers | the row goes and the object stays (`ambre-spec-sequencer.md`, `SRV-039`) |
-| a document deleted | every object under its prefix goes, then the relay state, then the rows (`SRV-057`) |
+| a document deleted | a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
 
 **What the relay knows about a picture.** Its address, its media type and its size, against the
@@ -198,9 +197,6 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A flush in flight can outlive a delete.** The delete lists the document's prefix and removes what
-  it finds. A flush already past its checks can upload a delta after the listing, and that object
-  stays, unreferenced (`SRV-057`).
 * **A picture's address is a hash of its plaintext.** The client computes it and the relay stores
   it, so a fingerprint of every file in every document sits in the register
   (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).

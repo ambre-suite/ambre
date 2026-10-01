@@ -432,11 +432,13 @@ mod handler_tests {
 
     // `SRV-057`, `SRV-017`: deleting a document removes every object under its
     // prefix and every key the relay holds for it. Another document's object and
-    // counter stay.
+    // counter stay. A write in flight when the delete lands writes no key, and
+    // an object put after the sweep is removed by the second one.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_deleted_document_leaves_nothing(pool: sqlx::PgPool) {
-        use rustis::commands::{GenericCommands, HashCommands, StringCommands};
+        use crate::error::AppError;
+        use rustis::commands::{GenericCommands, HashCommands, ScriptingCommands, StringCommands};
         let setup_state = test_app_state(pool.clone()).await;
         let setup = build_test_router(setup_state);
         let auth = setup_and_get_auth(&setup).await;
@@ -482,7 +484,50 @@ mod handler_tests {
         assert_eq!(left, 0, "no relay key survives the delete");
         let kept: usize = state.redis.exists([&other_seq]).await.unwrap();
         assert_eq!(kept, 1, "another document keeps its counter");
-        let _ = state.redis.del([&other_seq]).await;
+
+        // The writes an update and a presence sample take, landing late.
+        let redis = &state.redis;
+        fn gone<T>(r: Result<T, AppError>) -> bool {
+            matches!(r, Err(AppError::NotFound { .. }))
+        }
+        assert!(gone(
+            crate::redis_ops::verify_clock_and_assign_seq(redis, &doc, "aa", 4).await
+        ));
+        assert!(gone(
+            crate::redis_ops::append_pending_delta(redis, &doc, 8, "k", &[1]).await
+        ));
+        assert!(gone(
+            crate::redis_ops::push_dead_letter(redis, &doc, 8, "k", &[1]).await
+        ));
+        assert!(gone(
+            crate::redis_ops::doc_presence_update(redis, &doc, "aa", "blob", 15).await
+        ));
+        crate::redis_ops::seed_clock_state(redis, &doc, 9, &[("aa".into(), 9)])
+            .await
+            .unwrap();
+        let prefix = format!("doc:{doc}");
+        assert!(gone(
+            crate::redis_ops::push_poison_entry(redis, &prefix, "x").await
+        ));
+        let left: usize = redis
+            .exists(crate::redis_ops::document_state_keys(&doc))
+            .await
+            .unwrap();
+        assert_eq!(left, 0, "a late write recreates no key");
+
+        // An object put after the sweep, then the second sweep once it is due.
+        stub.put(object(&doc_id, "media/late"));
+        let due_now = "return redis.call('ZADD', KEYS[1], 0, ARGV[1])";
+        let sweep_set = crate::redis_ops::SWEEP_DUE_SET;
+        let _: i64 = redis.eval(due_now, [sweep_set], [&doc_id]).await.unwrap();
+        crate::s3::sweep_due_documents(&state).await;
+        assert_eq!(stub.keys(), [object(&other_id, "deltas/0000000001")]);
+        let score = "return redis.call('ZSCORE', KEYS[1], ARGV[1])";
+        let left: Option<String> = redis.eval(score, [sweep_set], [&doc_id]).await.unwrap();
+        assert_eq!(left, None, "a done sweep leaves the schedule");
+
+        let gone_key = crate::redis_ops::document_gone_key(&doc);
+        let _ = redis.del([&other_seq, &gone_key]).await;
     }
 
     #[sqlx::test]
@@ -1408,6 +1453,12 @@ mod handler_tests {
 
         fn keys(&self) -> Vec<String> {
             self.keys.lock().unwrap().iter().cloned().collect()
+        }
+
+        /// An object a late writer puts behind the relay's back, as a
+        /// presigned upload does.
+        fn put(&self, key: String) {
+            self.keys.lock().unwrap().insert(key);
         }
     }
 

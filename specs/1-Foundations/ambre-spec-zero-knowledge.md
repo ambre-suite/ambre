@@ -222,8 +222,6 @@ The boundary has no control of its own. What a user meets is what it costs them.
 * **The whitelist omits the member row.** `ZK-007` names nine fields. The member row adds a role
   and an inviter. The relay reads the role and serves the inviter for the unwrap. The row must add
   both, or name the membership graph as a separate accepted set.
-* **No rule covers what the relay may keep after a delete.** The rows are `SRV-017` and `SRV-057`,
-  and until they move, a deleted document leaves its sealed objects in storage.
 
 ---
 

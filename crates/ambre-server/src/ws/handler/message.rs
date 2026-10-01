@@ -32,6 +32,11 @@ pub(crate) fn update_refusal(doc_id: &DocumentId, e: &AppError) -> WsServerMsg {
             code: 409,
             message: e.to_string(),
         },
+        // The document is being deleted (`SRV-017`).
+        AppError::NotFound { .. } => WsServerMsg::Error {
+            code: 404,
+            message: e.to_string(),
+        },
         _ => {
             tracing::error!("clock validation failed doc={doc_id}: {e}");
             WsServerMsg::Error {
@@ -300,18 +305,25 @@ pub(crate) async fn handle_update(
     }
 
     tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    if let Err(e) =
-        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
-    {
-        // The pending list is the only path this sequenced delta takes to S3. A
-        // failed push loses it durably after the seq was already assigned and
-        // will be acknowledged. Log loudly and dead-letter the full wire so an
-        // operator can replay it (H1).
-        tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
-        if let Err(dl) =
-            redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
-        {
-            tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+    match redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await {
+        Ok(()) => {}
+        // The document is being deleted: the delta has nowhere to go and must
+        // not be kept anywhere, nor broadcast (`SRV-017`).
+        Err(AppError::NotFound { .. }) => {
+            tracing::debug!("update dropped: document being deleted doc={doc_id} seq={seq}");
+            return;
+        }
+        Err(e) => {
+            // The pending list is the only path this sequenced delta takes to S3. A
+            // failed push loses it durably after the seq was already assigned and
+            // will be acknowledged. Log loudly and dead-letter the full wire so an
+            // operator can replay it (H1).
+            tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
+            if let Err(dl) =
+                redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+            {
+                tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+            }
         }
     }
 

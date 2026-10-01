@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE BLIND RELAY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the register, the roles and the three stores all ship. Deleting a
-document leaves its state behind, and the brute-force limiter is never selected.
+**Implementation:** partial -- the register, the roles, the three stores and the document delete all
+ship. The brute-force limiter is never selected.
 
 > The one process every client talks to. It routes, it orders and it keeps, and it can read none of
 > what it holds. A document is a row of metadata and a pile of sealed bytes.
@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-160` | `FAIL` | Given a frame on a document of an archived channel, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
-| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go | fails -- an update or a flush in flight while the delete lands can write a key again, and nothing fences it; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
 | `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -116,10 +116,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 14 `verified`, 2 `partial`, 1 `failing`, 6 `untested`, 1 `human-review`, 25
+* **Verification.** 15 `verified`, 2 `partial`, 6 `untested`, 1 `human-review`, 25
   `unimplemented`. What holds is what a request test can drive: the roles, the rank clamps, the
-  signature gate, the error mapping and the origin list. What is loose is every rule about the
-  process or the deployment. The one failure is a write in flight outliving a delete.
+  signature gate, the error mapping and the origin list. The delete holds too. What is loose is
+  every rule about the process or the deployment.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -149,8 +149,16 @@ makes a restart of any one of them survivable.
 | Store | Holds | Lost on a reset |
 |---|---|---|
 | the durable register | users, organizations, documents, members, and the index of every snapshot and delta | everything: it is the authority |
-| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs and the sign-in handshakes | recoverable for the ordering (`ambre-spec-sequencer.md`), final for a session |
+| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, and the tombstones and sweep schedule of deleted documents | recoverable for the ordering (`ambre-spec-sequencer.md`), final for a session |
 | object storage | every sealed blob: snapshots, deltas and media | the content itself, which nothing else holds |
+
+**A delete fences the document before it empties it.** The relay first sets a tombstone in the
+ephemeral store. Every script that writes a key of the document checks it and refuses. An update,
+a presence sample or a flush already past its checks then writes nothing (`SRV-017`). The objects
+go next, then the keys, then the rows.
+
+A presigned upload link cannot be revoked, so the relay schedules a second sweep of the objects for
+when the last link has expired (`SRV-057`). The tombstone lives as long as that window.
 
 **The register.** One row per document, and none of it is content.
 
@@ -291,9 +299,6 @@ read the activity, and set the retention of a space.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A write in flight can outlive a delete.** The delete purges the objects and the relay state,
-  then removes the rows. An update or a flush past its checks can write after the purge, and nothing
-  fences the document while it goes (`SRV-017`, `ambre-spec-object-store.md`, `SRV-057`).
 * **The register declares four tables nothing serves.** Channels, their members, their read cursors
   and meetings exist in the durable schema, and no route and no handler writes any of them
   (`ambre-spec-broadcast.md`). The design replaces the channel member table: a channel grants
