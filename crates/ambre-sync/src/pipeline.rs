@@ -357,6 +357,23 @@ pub fn name_aad(document_id: ambre_core::DocumentId) -> Vec<u8> {
     aad
 }
 
+/// Domain of a sealed media blob. The document id and the address follow it,
+/// so a blob opens under its own document and address only (`SYNC-051`,
+/// `SYNC-074`).
+const MEDIA_DOMAIN: &[u8] = b"ambre-media-v2";
+
+/// The additional data of a media blob: the domain, the document id, then the
+/// address the document stores.
+pub fn media_aad(
+    document_id: ambre_core::DocumentId,
+    address: &[u8; ambre_crypto::commitment::TAG_LEN],
+) -> Vec<u8> {
+    let mut aad = MEDIA_DOMAIN.to_vec();
+    aad.extend_from_slice(document_id.as_bytes());
+    aad.extend_from_slice(address);
+    aad
+}
+
 /// Seals a payload that travels outside a wire message: a document name or a
 /// media blob. It takes the full envelope: the cipher, the commitment tag and the
 /// author signature (`SYNC-018`). Nothing is compressed: a name is short, and a

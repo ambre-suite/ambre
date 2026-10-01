@@ -181,8 +181,6 @@ say which of the four refusals fired.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A blob is not bound to its document.** It takes the envelope under one constant string as
-  additional data, so it names neither its document nor its address (`SYNC-051`, `SYNC-074`).
 * **The author of a name or a blob is checked, not resolved.** The open verifies the signature
   against the key the object carries. Nothing yet asks whether that key belongs to a member
   (`SYNC-135`).

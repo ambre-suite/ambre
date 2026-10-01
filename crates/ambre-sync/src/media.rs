@@ -1,8 +1,45 @@
 use super::*;
 
-/// Additional data of a sealed blob. One constant: binding a blob to its
-/// document and its address is `SYNC-051` and `SYNC-074`.
-const MEDIA_AAD: &[u8] = b"ambre-media";
+type Address = [u8; ambre_crypto::commitment::TAG_LEN];
+
+/// Seals a blob for one document and the address it is stored under
+/// (`SYNC-051`, `SYNC-074`).
+fn seal_blob(
+    data: &[u8],
+    document_id: DocumentId,
+    address: &Address,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<Vec<u8>, pipeline::PipelineError> {
+    pipeline::seal_object(
+        data,
+        &pipeline::media_aad(document_id, address),
+        doc_key,
+        signing_key,
+    )
+}
+
+/// Opens a downloaded blob, refused unless it is the one the address names
+/// (`SYNC-052`). The additional data refuses a blob sealed elsewhere. The
+/// recomputed address refuses one a member sealed under this address over
+/// other bytes.
+fn open_blob(
+    blob: &[u8],
+    document_id: DocumentId,
+    content_hash: &str,
+    doc_key: &DocumentKey,
+) -> Result<Vec<u8>, String> {
+    let address: Address = hex::decode(content_hash)
+        .ok()
+        .and_then(|bytes| bytes.try_into().ok())
+        .ok_or_else(|| format!("not an address: {content_hash}"))?;
+    let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)
+        .map_err(|e| e.to_string())?;
+    if ambre_crypto::commitment::media_address(doc_key, &data) != address {
+        return Err(format!("the blob is not the one {content_hash} names"));
+    }
+    Ok(data)
+}
 
 impl SyncState {
     // -- Media (upload / download via presigned S3 URLs) -----------------------
@@ -10,7 +47,8 @@ impl SyncState {
     /// Uploads a media blob to S3 via the presigned-URL flow:
     /// 1. Computes the address, keyed by the document key (`SYNC-050`).
     /// 2. Seals the data with the full envelope: the cipher, the commitment
-    ///    tag and the author signature (`SYNC-018`).
+    ///    tag and the author signature (`SYNC-018`), bound to the document and
+    ///    the address ([`seal_blob`]).
     /// 3. Requests a presigned S3 PUT URL from the server.
     /// 4. PUTs the sealed blob ([`pipeline::seal_object`]) directly to S3.
     /// 5. Confirms the upload via `POST /api/documents/{id}/media`, naming the
@@ -41,7 +79,8 @@ impl SyncState {
             });
             return;
         };
-        let content_hash = hex::encode(ambre_crypto::commitment::media_address(&doc_key, &data));
+        let address = ambre_crypto::commitment::media_address(&doc_key, &data);
+        let content_hash = hex::encode(address);
         let Some(tx) = event_tx else {
             self.reply(
                 id,
@@ -63,7 +102,7 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let blob = pipeline::seal_object(&data, MEDIA_AAD, &doc_key, &signing_key)
+            let blob = seal_blob(&data, document_id, &address, &doc_key, &signing_key)
                 .expect("seal media");
             let encrypted_size = blob.len() as u64;
 
@@ -135,7 +174,8 @@ impl SyncState {
     /// 1. Requests a presigned S3 GET URL from the server by content_hash.
     /// 2. GETs the encrypted blob directly from S3.
     /// 3. Opens it in the envelope's order: the signature, the commitment tag,
-    ///    then the cipher under the document key ([`pipeline::open_object`]).
+    ///    then the cipher under the document key, and recomputes the address
+    ///    ([`open_blob`]).
     /// 4. Emits [`SyncEvent::MediaDownloaded`] with the plaintext data.
     pub(crate) fn handle_download_media(
         &self,
@@ -212,14 +252,14 @@ impl SyncState {
                 }
             };
 
-            let data = match pipeline::open_object(&blob, MEDIA_AAD, &doc_key) {
+            let data = match open_blob(&blob, document_id, &content_hash, &doc_key) {
                 Ok(d) => d,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
                         id: Some(id),
                         request: "DownloadMedia".into(),
                         code: 500,
-                        message: format!("Decrypt: {e}"),
+                        message: format!("Open: {e}"),
                     });
                     return;
                 }
@@ -266,5 +306,57 @@ mod tests {
             addresses.push(address);
         }
         assert_ne!(addresses[0], addresses[1]);
+    }
+
+    fn sealed(data: &[u8], document_id: DocumentId, key: &DocumentKey) -> (Vec<u8>, String) {
+        let signing = SigningKey::from_bytes(&[0x07; 32]);
+        let address = ambre_crypto::commitment::media_address(key, data);
+        let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
+        (blob, hex::encode(address))
+    }
+
+    /// A blob sealed for one document does not open under another, even one
+    /// that holds the same key (`SYNC-051`).
+    #[test]
+    fn a_blob_opens_under_its_own_document_only() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let own = DocumentId::new();
+        let (blob, address) = sealed(b"a picture", own, &key);
+        assert_eq!(open_blob(&blob, own, &address, &key).unwrap(), b"a picture");
+        assert!(open_blob(&blob, DocumentId::new(), &address, &key).is_err());
+    }
+
+    /// A blob sealed under one address does not open under another address
+    /// of the same document (`SYNC-074`).
+    #[test]
+    fn a_blob_opens_under_its_own_address_only() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = DocumentId::new();
+        let (blob, _) = sealed(b"a picture", document_id, &key);
+        let (_, other) = sealed(b"another picture", document_id, &key);
+        assert!(open_blob(&blob, document_id, &other, &key).is_err());
+    }
+
+    /// A download refuses a blob the address does not name. One is served in
+    /// place of another. The other is sealed by a member under the address,
+    /// over other bytes, and the additional data alone accepts it (`SYNC-052`).
+    #[test]
+    fn a_download_refuses_a_blob_the_address_does_not_name() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = DocumentId::new();
+        let (_, wanted) = sealed(b"a picture", document_id, &key);
+        let (served, _) = sealed(b"another picture", document_id, &key);
+        assert!(open_blob(&served, document_id, &wanted, &key).is_err());
+
+        let address = ambre_crypto::commitment::media_address(&key, b"a picture");
+        let signing = SigningKey::from_bytes(&[0x07; 32]);
+        let forged = seal_blob(b"other bytes", document_id, &address, &key, &signing).unwrap();
+        assert_eq!(
+            pipeline::open_object(&forged, &pipeline::media_aad(document_id, &address), &key)
+                .unwrap(),
+            b"other bytes"
+        );
+        assert!(open_blob(&forged, document_id, &wanted, &key).is_err());
+        assert!(open_blob(&forged, document_id, "not hex", &key).is_err());
     }
 }

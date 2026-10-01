@@ -23,7 +23,7 @@
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 11 |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 2 |
-| `media` | A picture in a document travels apart from it. | implemented | 11 | 9 |
+| `media` | A picture in a document travels apart from it. | implemented | 11 | 6 |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 19 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 | 6 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 15 implemented, 23 partial, 7 design-only. 894 contract rows, 259 loose.**
+**45 features: 15 implemented, 23 partial, 7 design-only. 894 contract rows, 256 loose.**
