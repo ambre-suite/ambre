@@ -19,7 +19,8 @@ use ambre_protocol::MembershipAct;
 /// One document of a channel, as the listing answers it.
 #[derive(serde::Serialize)]
 pub struct ChannelDocumentJson {
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     pub kind: &'static str,
 }
 
@@ -46,9 +47,14 @@ pub async fn list_channel_documents(
         .ok_or(AppError::Forbidden)?;
     let json: Vec<_> = documents
         .into_iter()
-        .map(|d| ChannelDocumentJson {
-            document_id: d.document_id.to_string(),
-            kind: d.kind.as_str(),
+        .map(|d| {
+            let doc_id = ambre_core::DocumentId::from_uuid(
+                ambre_core::Uuid::from_bytes(*d.document_id.as_bytes())
+            );
+            ChannelDocumentJson {
+                document_id: doc_id,
+                kind: d.kind.as_str(),
+            }
         })
         .collect();
     Ok(axum::Json(serde_json::json!({ "documents": json })))
@@ -58,10 +64,14 @@ pub async fn list_channel_documents(
 /// generated, and both documents already exist on the relay.
 #[derive(serde::Deserialize)]
 pub struct CreateChannelRequest {
-    pub channel_id: String,
-    pub space_id: String,
-    pub meta_id: String,
-    pub segment_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id")]
+    pub space_id: ambre_core::SpaceId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
 }
 
 /// The body of a self-join: the channel key wrapped for the caller. It also
@@ -79,7 +89,8 @@ pub struct JoinChannelRequest {
 #[derive(serde::Serialize)]
 pub struct JoinHeadJson {
     /// The document whose log the self-join extends.
-    pub meta_id: String,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
     /// The role the self-join grants, which its entry must name.
     pub role: Role,
     pub length: u64,
@@ -125,11 +136,11 @@ pub async fn create_channel(
     axum::Json(req): axum::Json<CreateChannelRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let new = db::NewChannel {
-        channel_id: parse(&req.channel_id)?,
-        space_id: parse(&req.space_id)?,
+        channel_id: req.channel_id,
+        space_id: req.space_id,
         is_public: true,
-        meta_id: parse(&req.meta_id)?,
-        segment_id: parse(&req.segment_id)?,
+        meta_id: req.meta_id,
+        segment_id: req.segment_id,
     };
     let (space, meta, segment) = (
         new.space_id.document_id(),
@@ -222,7 +233,7 @@ pub async fn join_channel_head(
     let (meta_id, role) = joinable(&state, &auth, &channel_id).await?;
     let log = db::membership_log(&state.db, &meta_id.document_id()).await?;
     Ok(axum::Json(JoinHeadJson {
-        meta_id: meta_id.to_string(),
+        meta_id,
         role,
         length: u64::try_from(log.len()).unwrap_or(u64::MAX),
         last: log

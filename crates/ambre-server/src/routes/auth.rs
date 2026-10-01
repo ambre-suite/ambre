@@ -46,7 +46,8 @@ pub struct DevLoginRequest {
 /// Response for `POST /api/auth/dev/login`.
 #[derive(serde::Serialize)]
 pub struct DevLoginResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: String,
@@ -91,7 +92,7 @@ pub async fn dev_login(
     tracing::debug!(user_id = %user_id, provider = "dev", "login");
 
     Ok(axum::Json(DevLoginResponse {
-        user_id: user_id.to_string(),
+        user_id,
         display_name: user.display_name,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -251,7 +252,7 @@ pub async fn oidc_callback(
     tracing::debug!(user_id = %user_id, provider = %provider, "login");
 
     Ok(axum::Json(CallbackResponse {
-        user_id: user_id.to_string(),
+        user_id,
         email,
         display_name,
         is_new_user: user.master_key_enc.is_none(),

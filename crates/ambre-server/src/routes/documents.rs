@@ -67,7 +67,8 @@ fn validate_identity(email: &str, display_name: &str) -> Result<(), AppError> {
 /// pair (kept in client memory) and the newly assigned user ID.
 #[derive(serde::Serialize)]
 pub struct SetupAccountResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub access_token: String,
     pub refresh_token: String,
     pub access_expires_in: u64,
@@ -116,7 +117,7 @@ pub async fn setup_account(
     tracing::debug!(user_id = %user_id, provider = "setup", "login");
 
     Ok(axum::Json(SetupAccountResponse {
-        user_id: user_id.to_string(),
+        user_id,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         access_expires_in: tokens.access_expires_in,
@@ -128,7 +129,8 @@ pub async fn setup_account(
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
 pub struct MeResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
 }
@@ -143,7 +145,7 @@ pub async fn me(
         .ok_or(AppError::NotFound { resource: "user" })?;
     let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
     Ok(axum::Json(MeResponse {
-        user_id: uid.to_string(),
+        user_id: uid,
         email: u.email,
         display_name: u.display_name,
     }))
@@ -188,8 +190,10 @@ pub async fn logout(
 /// copy of the document key.
 #[derive(serde::Serialize)]
 pub struct DocumentSummaryJson {
-    pub id: String,
-    pub owner_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub owner_id: ambre_core::UserId,
     pub doc_type: String,
     pub name_enc: Option<String>,
     /// Serialized as its lowercase word.
@@ -219,21 +223,29 @@ pub async fn list_documents(
     let docs = db::list_documents_for_user(&state.db, &s.user_id).await?;
     let json: Vec<_> = docs
         .into_iter()
-        .map(|d| DocumentSummaryJson {
-            id: d.id.to_string(),
-            owner_id: d.owner_id.to_string(),
-            doc_type: d.doc_type,
-            name_enc: d
-                .name_enc
-                .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
-            role: d.role,
-            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
-            wrapper_exchange_pub_key: d
-                .wrapper_exchange_pubkey
-                .map(hex::encode)
-                .unwrap_or_default(),
-            member_count: d.member_count.max(0) as u32,
-            updated_at: d.updated_at.to_rfc3339(),
+        .map(|d| {
+            let doc_id = ambre_core::DocumentId::from_uuid(
+                ambre_core::Uuid::from_bytes(*d.id.as_bytes())
+            );
+            let owner_id = ambre_core::UserId::from_uuid(
+                ambre_core::Uuid::from_bytes(*d.owner_id.as_bytes())
+            );
+            DocumentSummaryJson {
+                id: doc_id,
+                owner_id,
+                doc_type: d.doc_type,
+                name_enc: d
+                    .name_enc
+                    .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
+                role: d.role,
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&d.doc_key_enc),
+                wrapper_exchange_pub_key: d
+                    .wrapper_exchange_pubkey
+                    .map(hex::encode)
+                    .unwrap_or_default(),
+                member_count: d.member_count.max(0) as u32,
+                updated_at: d.updated_at.to_rfc3339(),
+            }
         })
         .collect();
     Ok(axum::Json(DocumentListResponse { documents: json }))
@@ -260,7 +272,8 @@ pub struct CreateDocumentRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     pub doc_type: String,
 }
 
@@ -341,7 +354,7 @@ pub async fn create_document(
     }
     tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
     Ok(axum::Json(CreateDocumentResponse {
-        document_id: doc_id.to_string(),
+        document_id: doc_id,
         doc_type: req.doc_type,
     }))
 }
@@ -351,8 +364,10 @@ pub async fn create_document(
 /// Full document details including the calling user's membership info.
 #[derive(serde::Serialize)]
 pub struct GetDocumentResponse {
-    pub id: String,
-    pub owner_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub owner_id: ambre_core::UserId,
     pub doc_type: String,
     pub name_enc: Option<String>,
     /// Serialized as its lowercase word.
@@ -387,9 +402,15 @@ pub async fn get_document(
             resource: "document",
         });
     }
+    let doc_id_typed = ambre_core::DocumentId::from_uuid(
+        ambre_core::Uuid::from_bytes(*doc.id.as_bytes())
+    );
+    let owner_id_typed = ambre_core::UserId::from_uuid(
+        ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes())
+    );
     Ok(axum::Json(GetDocumentResponse {
-        id: doc.id.to_string(),
-        owner_id: doc.owner_id.to_string(),
+        id: doc_id_typed,
+        owner_id: owner_id_typed,
         doc_type: doc.doc_type,
         name_enc: doc
             .name_enc
@@ -459,7 +480,8 @@ pub async fn delete_document(
 /// User info returned by search.
 #[derive(serde::Serialize)]
 pub struct UserInfoJson {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub id: ambre_core::UserId,
     pub email: String,
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
@@ -496,13 +518,18 @@ pub async fn search_users(
     let users = db::search_users(&state.db, q).await?;
     let json: Vec<_> = users
         .into_iter()
-        .map(|u| UserInfoJson {
-            id: u.id.to_string(),
-            email: u.email,
-            email_verified: u.email_verified,
-            display_name: u.display_name,
-            signing_pubkey: hex::encode(&u.signing_pubkey),
-            exchange_pubkey: hex::encode(&u.exchange_pubkey),
+        .map(|u| {
+            let user_id = ambre_core::UserId::from_uuid(
+                ambre_core::Uuid::from_bytes(*u.id.as_bytes())
+            );
+            UserInfoJson {
+                id: user_id,
+                email: u.email,
+                email_verified: u.email_verified,
+                display_name: u.display_name,
+                signing_pubkey: hex::encode(&u.signing_pubkey),
+                exchange_pubkey: hex::encode(&u.exchange_pubkey),
+            }
         })
         .collect();
     Ok(axum::Json(UserSearchResult { users: json }))
@@ -539,7 +566,8 @@ pub async fn get_pubkeys(
 /// its own entry by `exchange_pub_key` and unwraps `doc_key_enc` via ECDH.
 #[derive(serde::Serialize)]
 pub struct MemberInfoJson {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
@@ -574,20 +602,25 @@ pub async fn list_document_members(
     let members = db::list_document_members(&state.db, &doc_id).await?;
     let json: Vec<_> = members
         .into_iter()
-        .map(|m| MemberInfoJson {
-            user_id: m.user_id.to_string(),
-            email: m.email,
-            email_verified: m.email_verified,
-            display_name: m.display_name,
-            role: m.role,
-            signing_pub_key: hex::encode(&m.signing_pubkey),
-            exchange_pub_key: hex::encode(&m.exchange_pubkey),
-            doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
-            wrapper_exchange_pub_key: hex::encode(
-                m.wrapper_exchange_pubkey
-                    .as_ref()
-                    .unwrap_or(&m.exchange_pubkey),
-            ),
+        .map(|m| {
+            let user_id = ambre_core::UserId::from_uuid(
+                ambre_core::Uuid::from_bytes(*m.user_id.as_bytes())
+            );
+            MemberInfoJson {
+                user_id,
+                email: m.email,
+                email_verified: m.email_verified,
+                display_name: m.display_name,
+                role: m.role,
+                signing_pub_key: hex::encode(&m.signing_pubkey),
+                exchange_pub_key: hex::encode(&m.exchange_pubkey),
+                doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode(&m.doc_key_enc),
+                wrapper_exchange_pub_key: hex::encode(
+                    m.wrapper_exchange_pubkey
+                        .as_ref()
+                        .unwrap_or(&m.exchange_pubkey),
+                ),
+            }
         })
         .collect();
     // A member with write access that reads a debt rotates before it sends a

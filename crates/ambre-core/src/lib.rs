@@ -41,6 +41,8 @@ pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).
 pub mod schema;
+/// Serde adapters for identifier serialization as hyphenated UUID strings.
+pub mod serde_id;
 pub mod uuid;
 pub mod version;
 

@@ -26,7 +26,8 @@ fn parse_snap_id(s: &str) -> Result<ambre_core::SnapshotId, AppError> {
 /// Summary of the latest snapshot (id + S3 key).
 #[derive(serde::Serialize)]
 pub struct SnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub s3_key: String,
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
@@ -72,8 +73,10 @@ pub async fn get_snapshot_metadata(
             }),
         _ => None,
     };
+    let snap_id =
+        ambre_core::SnapshotId::from_uuid(ambre_core::Uuid::from_bytes(*snap.id.as_bytes()));
     Ok(axum::Json(SnapshotResponse {
-        snapshot_id: snap.id.to_string(),
+        snapshot_id: snap_id,
         s3_key: snap.s3_key,
         covered_seq: snap.covered_seq,
         status: snap.status,
@@ -188,7 +191,8 @@ pub struct CreateSnapshotRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 pub async fn create_snapshot(
@@ -273,7 +277,7 @@ pub async fn create_snapshot(
         });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(CreateSnapshotResponse {
-        snapshot_id: sid.to_string(),
+        snapshot_id: sid,
     }))
 }
 
@@ -335,7 +339,8 @@ pub async fn snapshot_upload_url(
 /// Request a presigned GET URL to download a specific snapshot blob.
 #[derive(serde::Deserialize)]
 pub struct SnapshotDownloadUrlRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 #[derive(serde::Serialize)]
 pub struct SnapshotDownloadUrlResponse {
@@ -353,7 +358,7 @@ pub async fn snapshot_download_url(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    let snap_id = parse_snap_id(&req.snapshot_id)?;
+    let snap_id = req.snapshot_id;
     // Resolve the snapshot scoped to the path document. A member of doc A must
     // never obtain a download URL for a snapshot of doc B (cross-document IDOR).
     let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
