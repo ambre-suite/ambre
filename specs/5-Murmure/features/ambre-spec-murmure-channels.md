@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: PRIVATE CHANNELS AND DIRECT MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- the relay keeps the key links of a channel under its `meta`
-document. No private channel, direct message or invitation exists yet
+**Implementation:** partial -- a private channel is created, left and deleted, and the relay keeps
+the key links of a channel under its `meta` document. No direct message and no invitation exists
+yet.
 
 > A few people talk where nobody else reads: a private channel of a space, or a direct message
 > between two or more members. Opening a direct message with the same people finds the one that
@@ -19,9 +20,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | `ambre_server::routes::channels::tests::a_channel_link_is_kept_under_meta_and_served_for_a_segment` -- database tier | none | verified |
 | `MURMURE-333` | `OBS` | An archived channel MUST show as archived, with no composer. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -29,52 +30,55 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-048` | `POST` | Creating a private channel MUST make its creator its owner and its only member. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-049` | `POST` | A private channel MUST name its space to the relay. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-050` | `FRAME` | Creating a private channel MUST NOT write the catalogue of its space. | this spec section 3; `MURMURE-014` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-048` | `POST` | Creating a private channel MUST make its creator its owner and its only member. | this spec section 3 | `ambre_server::routes::channels::tests::a_private_channel_has_its_creator_alone_and_names_its_space` -- the relay holds the creator as the one member and owner | none | verified |
+| `MURMURE-049` | `POST` | A private channel MUST name its space to the relay. | this spec section 3; `ZK-015` | `ambre_server::routes::channels::tests::a_private_channel_has_its_creator_alone_and_names_its_space` -- the relay holds the channel in its space, not public | none | verified |
+| `MURMURE-050` | `FRAME` | Creating a private channel MUST NOT write the catalogue of its space. | this spec section 3; `MURMURE-014` | `ambre_logic::spaces::tests::a_private_channel_writes_no_catalogue` -- no update reaches the space document | none | verified |
 
 ### 1.3 Open a direct message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-051` | `POST` | Opening a direct message with a set of members MUST open the existing one when it exists. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-052` | `POST` | A new direct message MUST wrap its key for each of its members alone. | this spec section 3; `SYNC-010` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-251` | `POST` | A new direct message MUST give every member, its creator included, the editor role. | this spec section 3; `MURMURE-252` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-053` | `FRAME` | Opening a direct message MUST NOT add a member to an existing one. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-051` | `POST` | Opening a direct message with a set of members MUST open the existing one when it exists. | this spec section 3 | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-052` | `POST` | A new direct message MUST wrap its key for each of its members alone. | this spec section 3; `SYNC-010` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-251` | `POST` | A new direct message MUST give every member, its creator included, the editor role. | this spec section 3; `MURMURE-252` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-053` | `FRAME` | Opening a direct message MUST NOT add a member to an existing one. | this spec section 3 | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Name a direct message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-054` | `POST` | A name a member sets MUST be stored in the `meta` document, and read by every member. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-055` | `FRAME` | Clearing a name MUST remove its key, and MUST NOT store an empty or a composed name. | this spec section 3; `MURMURE-016` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-054` | `POST` | A name a member sets MUST be stored in the `meta` document, and read by every member. | this spec section 3 | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-055` | `FRAME` | Clearing a name MUST remove its key, and MUST NOT store an empty or a composed name. | this spec section 3; `MURMURE-016` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Invite a member
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-058` | `FRAME` | An invite MUST NOT hand the invitee a key older than the latest history boundary. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119` | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3 | not built | unbuilt -- lands with the `Direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-058` | `FRAME` | An invite MUST NOT hand the invitee a key older than the latest history boundary. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Leave a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST cause the rotation of its key. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-257` | `FAIL` | Given the last owner leaving a private channel that keeps other members, the client MUST first hand the owner role to one of them. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST cause the rotation of its key. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the relay marks the key of the private channel owed | none | verified |
+| `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-461` | `POST` | The last member leaving a public channel MUST leave it listed, with its history, for the next member to join. | this spec section 3; `SRV-174` | not built | unbuilt -- lands with the `The last member of a public channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the public channel owes no rotation after the leave | none | verified |
+| `MURMURE-257` | `FAIL` | Given the last owner leaving a private channel that keeps other members, the relay MUST refuse the leave. | this spec section 3; `SRV-015` | `ambre_server::routes::channels::tests::the_last_owner_hands_the_role_on_before_leaving` -- refused and kept, then let through once the role is handed on | none | verified |
 
 ### 1.7 Delete a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-244` | `FAIL` | Given a delete from a member who does not own the channel, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- no document and no object of the channel is left after the purge | none | verified |
+| `MURMURE-244` | `FAIL` | Given a delete from a member who owns neither the channel nor, for a public channel, its space, the relay MUST refuse it. | this spec section 3; `SRV-015`, `SRV-175` | `ambre_server::routes::channels::tests::a_delete_from_anyone_but_an_owner_is_refused` -- an editor of the space, a stranger and an unknown channel get a 403, and nothing goes | none | verified |
+| `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | `ambre_server::routes::channels::tests::the_last_member_leaving_a_private_channel_deletes_it` -- the channel and its documents go with the last leave | none | verified |
+| `MURMURE-462` | `POST` | Deleting a channel MUST drop it from the client of its owner, with its documents and its keys. | this spec section 3; `MURMURE-243` | not built | unbuilt -- lands with the `Deleting a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-463` | `FAIL` | Given a delete the relay refuses, the client MUST keep the channel as it was. | this spec section 3; `MURMURE-244` | not built | unbuilt -- lands with the `Deleting a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- the other channel keeps its documents and objects | none | verified |
 
 ### 1.8 Convert a direct message into a private channel
 
@@ -108,8 +112,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 1 `verified`, 37 `unimplemented`. No private channel exists in the code. What
-  holds is the relay keeping a channel's key links under its `meta` document.
+* **Verification.** 11 `verified`, 30 `unimplemented`. The relay holds a private channel, its
+  leave and its delete, and the key links of a channel under its `meta` document. The Logic thread
+  creates a private channel without the catalogue. Direct messages, invites, the segment a rotation
+  closes, conversion and archive are not built.
 
 ---
 
@@ -120,7 +126,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | opens a direct message with Bob | opens a direct message with Alice | one direct message | the same conversation on both screens (`MURMURE-051`) | none |
 | names the direct message "Budget" | -- | the name in `meta` | "Budget" on both screens | none |
 | invites Carol into the direct message | -- | a notice, then Carol as a member | both told before Carol joins (`MURMURE-057`) | none |
-| leaves a private channel | writes a message | a new key, and a new active segment | Bob's message unreadable to Alice (`MURMURE-059`) | none |
+| leaves a private channel | writes a message | a new key, and a new active segment | Bob's message unreadable to Alice (`MURMURE-059`) | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only`, the rotation owed; the new segment is not built |
 
 ---
 
@@ -156,11 +162,18 @@ the active segment (`SYNC-128`, `MURMURE-060`). The rotation also locks the clos
 edit written after it never travels under the key the member who left still holds (`MURMURE-262`).
 
 **A delete is final.** The owner deletes a channel, and every document, file, member row and cursor
-goes with it (`MURMURE-243`). An owner who leaves hands the role on first (`MURMURE-257`).
+goes with it (`MURMURE-243`). An owner who leaves hands the role on first, and the relay refuses
+the leave of the last one while other members stay (`MURMURE-257`). The last member of a private
+channel leaves in the same transaction that deletes it, so no channel is left without a member.
+The owner's client drops the channel, its documents and its keys once the relay answers, and keeps
+it whole on a refusal (`MURMURE-462`, `MURMURE-463`). A public one leaves the catalogue with it
+(`MURMURE-247`).
 
 **A direct message has no owner.** Every member is an editor (`MURMURE-252`), so nobody deletes it
 for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
-public channel stays listed with no member, for the next one to join.
+public channel stays listed with no member, for the next one to join (`MURMURE-461`): the space
+reads its key in the catalogue, so nobody needs to stay to hand it on. Its last owner leaves even
+while others stay, and an owner of the space deletes it from then on (`SRV-175`).
 
 **An archive closes a channel and keeps it.** The owner archives it: every member still reads it,
 and the relay refuses every write (`MURMURE-330`, `SRV-160`). Unarchiving opens it again.
@@ -180,7 +193,14 @@ channel can use the same boundary, as an invite without history (`MURMURE-328`).
 A direct message becomes private, never public: making it public is a second act, by a space admin,
 who writes its key into the catalogue.
 
-**Code.** not built.
+**Code.**
+
+* `ambre-server/src/routes/channels.rs` -- the `public` flag at creation, and the owner's delete.
+* `ambre-server/src/db/channels.rs` -- deleting a channel with every document it groups.
+* `ambre-server/src/db/members.rs` -- a leave: the owed rotation, and the delete of an emptied
+  private channel.
+* `ambre-logic/src/spaces.rs` -- creating a private channel, with no catalogue write.
+* `ambre-sync/src/channels.rs` -- registering a channel, with a sealed key for a public one only.
 
 ---
 
@@ -210,9 +230,15 @@ who writes its key into the catalogue.
 | A direct message converts to private | straight into a public channel | the whole space would read a history written for a few members |
 | Keep or start fresh | a history duration chosen at conversion | keys change at a rotation, not on a date: a cut inside a segment would split it under two keys |
 | Archive keeps a channel | archive deletes it | a closed project still holds decisions its members come back to |
+| An owner of the space stands in for the last owner of a public channel | refusing the leave, as for a document | a space leave would answer a conflict for each public channel the member owns, an admin could not remove such a member, and a vanished owner would leave a channel nobody deletes |
+| An owner of the space stands in | every admin of the space, editors included | an editor writes the catalogue, and deleting a channel is the act an owner of the whole space already holds |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No private channel and no direct message exist.
+* **No direct message exists.** Opening, naming and inviting land with the
+  `Direct messages` Story (`ambre-roadmap.md` E5).
+* **The last owner of a public channel that keeps other members cannot leave yet.** The relay
+  refuses it as it does for any document, until `SRV-175` lands with the
+  `A public channel without an owner` Story (`ambre-roadmap.md` E5).

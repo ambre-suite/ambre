@@ -75,7 +75,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
 | `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | `ambre_server::routes::read_cursors::tests::a_removal_deletes_the_read_cursors_of_the_member_removed` -- a removal from the `meta` deletes the cursors on every document of the channel, and another member's cursor stays | none | verified |
-| `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- database tier, with the objects swept from a fake store | none | verified |
+| `SRV-174` | `POST` | The last member of a public channel MUST be able to leave it, owner or not, and the relay MUST keep the channel and its documents. | this spec section 3; `SRV-145` | not built | unbuilt -- lands with the `The last member of a public channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-175` | `POST` | The last owner of a public channel MUST be able to leave it while other members stay, and an owner of its space MUST then be able to delete it. | this spec section 3; `SRV-174`, `MURMURE-244` | not built | unbuilt -- lands with the `A public channel without an owner` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 A member joins a public channel alone
@@ -106,7 +108,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-122` | `POST` | A removal posted without a rotation MUST mark its document as owing one. | this spec section 3; `SYNC-127` | `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- it reads the debt in the register and in its mirror after the departure | none | verified |
+| `SRV-122` | `POST` | A removal posted without a rotation MUST mark its document as owing one, unless that document is the `meta` of a public channel. | this spec section 3; `SYNC-127`, `MURMURE-061` | `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- it reads the debt in the register and in its mirror after the departure; `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- and no debt after a leave of a public channel | none | verified |
 | `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- an update and a presence frame are refused while the mirror holds the debt, and accepted once it clears; `ambre_server::ws::handler::message::refusal_tests::a_frame_refused_for_its_key_names_the_key_and_the_clock` -- the author is told which key and which clock | none | verified |
 | `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | `ambre_server::routes::tests::handler_tests::an_owed_rotation_is_open_to_an_editor_and_clears_the_debt` -- the register and the mirror read no debt after the rotation; `::a_revoke_removes_and_rotates_in_one_request` -- a revoke leaves none | none | verified |
 | `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- the refused frame leaves no sequence key, and the same clock is accepted at sequence 1 once the debt clears | none | verified |
@@ -121,7 +123,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 43 `verified`, 1 `qa-manual`, 10 `unimplemented`. What holds is
+* **Verification.** 43 `verified`, 1 `qa-manual`, 12 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
   and the origin list. The delete holds too, and so does the payload type no log line can name.
   The process rules are loose; a deployment's isolation is read by hand.
@@ -208,6 +210,12 @@ the set `ZK-015` names.
 
 A space is a document like any other, so its members are its member rows. A direct message is a
 channel with no space.
+
+A public channel outlives its last member. The space reads its key in the catalogue, so the next
+member joins it alone, and the last one leaves owner or not (`SRV-174`). A private channel goes
+with its last member instead (`SRV-142`), each of its documents deleted as a deleted document is
+(`SRV-165`). The last owner of a public channel leaves it too, while others stay: an owner of the
+space document then stands in for it, as it does for the whole space (`SRV-175`). An editor of the space does not, so a catalogue writer deletes no channel.
 
 A document with no name stores nothing rather than a placeholder. The listing returns each sealed
 name beside the caller's own sealed key. A client therefore reads its whole list in one answer,
@@ -306,14 +314,13 @@ group needs a token.
 | content | the snapshot record, the delta page, and the presigned links | `ambre-spec-sequencer.md`, `ambre-spec-object-store.md` |
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
-| channels | the documents a channel groups, listed to a member alone; a public channel registered in its space; a self-join | this document, and `5-Murmure/features/ambre-spec-murmure-spaces.md` |
+| channels | the documents a channel groups, listed to a member alone; a public or private channel registered in its space; a self-join; the owner's delete | this document, `5-Murmure/features/ambre-spec-murmure-spaces.md` and `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | read cursors | a cursor, the activity answer, marking read | this document, and `ambre-spec-murmure-unread.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
 **What the surface does not carry.** Meetings have no route at all. Of the channel routes, the
-listing, the activity answer, the registration of a public channel and the self-join with its
-signed entry are built. The retention of a space is designed and unbuilt (`SRV-111` and
-`SRV-112`).
+listing, the activity answer, the registration of a channel, the signed self-join and the delete
+are built. The retention of a space is designed and unbuilt (`SRV-111` and `SRV-112`).
 
 **The last number of a document.** The activity answer compares the caller's cursor with the
 higher of two numbers. One is the sequence counter in the ephemeral store. The other is the
@@ -345,9 +352,6 @@ threads appear: `meta` and amendments carry no message a member reads.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing writes a channel.** The relay reads the two channel tables to list and to gate, and no
-  route creates a channel yet. Creation lands with the spaces and private channel Stories
-  (`ambre-roadmap.md` E5).
 * **The register declares meeting tables nothing serves.** Meetings exist in the durable schema,
   and no route and no handler writes them (`ambre-spec-broadcast.md`).
 * **The declared schema and the migrated schema differ in three places.** The address is unique and

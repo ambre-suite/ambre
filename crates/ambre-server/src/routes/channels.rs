@@ -60,10 +60,12 @@ pub async fn list_channel_documents(
     Ok(axum::Json(serde_json::json!({ "documents": json })))
 }
 
-/// The body of a public channel registration. Every id is one the client
-/// generated, and both documents already exist on the relay.
+/// The body of a channel registration. Every id is one the client generated,
+/// and both documents already exist on the relay.
 #[derive(serde::Deserialize)]
 pub struct CreateChannelRequest {
+    /// A public channel, which its catalogue lists, or a private one.
+    pub public: bool,
     #[serde(with = "ambre_core::serde_id::channel_id")]
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::space_id")]
@@ -123,12 +125,13 @@ async fn free_murmure_document(
     Ok(document)
 }
 
-/// `POST /api/channels`: register a public channel of a space, with its `meta`
-/// and its first segment.
+/// `POST /api/channels`: register a channel of a space, with its `meta` and
+/// its first segment.
 ///
-/// The caller owns both documents, and administers the space: an owner or an
-/// editor of its document. A viewer changes no catalogue, so it registers no
-/// public channel. The members of `meta` become the members of the channel
+/// The caller owns both documents, and is a member of the space. A public
+/// channel also needs an owner or an editor of the space document: a viewer
+/// changes no catalogue, so it registers no public channel. A private channel
+/// is listed nowhere, so any member of the space registers one. The members of `meta` become the members of the channel
 /// (`SRV-103`), and the space document gains no row.
 pub async fn create_channel(
     State(state): State<Arc<AppState>>,
@@ -138,7 +141,7 @@ pub async fn create_channel(
     let new = db::NewChannel {
         channel_id: req.channel_id,
         space_id: req.space_id,
-        is_public: true,
+        is_public: req.public,
         meta_id: req.meta_id,
         segment_id: req.segment_id,
     };
@@ -154,7 +157,7 @@ pub async fn create_channel(
     let space_role = db::member_role(&state.db, &space, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !space_role.can_write_document() {
+    if new.is_public && !space_role.can_write_document() {
         return Err(AppError::Forbidden);
     }
     let caller = uuid::Uuid::from_bytes(*ambre_core::Uuid::from(auth.user_id).as_bytes());
@@ -166,7 +169,35 @@ pub async fn create_channel(
         }
     }
     db::register_channel(&state.db, &new).await?;
-    tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, "channel registered");
+    tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.is_public, "channel registered");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /api/channels/{id}`: delete a channel with every document it
+/// groups, to an owner of its `meta` alone (`SRV-142`, `SRV-015`).
+///
+/// Every refusal is the same 403, so a stranger learns nothing of which
+/// channels exist. Each document is marked in the same transaction, then
+/// emptied as a deleted document is. One that fails is left to the pass
+/// (`SRV-017`, `SRV-165`).
+pub async fn delete_channel(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(channel_id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
+    let meta_id = db::get_channel(&state.db, &channel_id)
+        .await?
+        .and_then(|c| c.meta_id)
+        .ok_or(AppError::Forbidden)?;
+    let role = db::member_role(&state.db, &meta_id.document_id(), &auth.user_id).await?;
+    if role != Some(Role::Owner) {
+        return Err(AppError::Forbidden);
+    }
+    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let deleted = db::delete_channel(&state.db, &channel_id, sweep_due).await?;
+    tracing::info!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.len(), "channel deleted");
+    crate::deletion::empty_marked(&state, &deleted, sweep_due).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -410,11 +441,22 @@ mod tests {
         space: SpaceId,
         channel: &Channel,
     ) -> StatusCode {
+        register_as(state, who, space, channel, true).await
+    }
+
+    async fn register_as(
+        state: &Arc<AppState>,
+        who: UserId,
+        space: SpaceId,
+        channel: &Channel,
+        public: bool,
+    ) -> StatusCode {
         status(
             create_channel(
                 State(state.clone()),
                 session(who),
                 axum::Json(CreateChannelRequest {
+                    public,
                     channel_id: channel.id,
                     space_id: space,
                     meta_id: channel.meta,
@@ -953,5 +995,301 @@ mod tests {
                 .is_empty(),
             "a document outside the channel reads its own links"
         );
+    }
+
+    // --- The Murmure channels spec: private channels, leaves and deletes ---
+
+    /// A private channel of `space`, registered by `creator`.
+    async fn private_channel(state: &Arc<AppState>, creator: UserId, space: SpaceId) -> Channel {
+        let channel = new_channel(state, creator).await;
+        assert_eq!(
+            register_as(state, creator, space, &channel, false).await,
+            StatusCode::NO_CONTENT
+        );
+        channel
+    }
+
+    async fn delete(state: &Arc<AppState>, who: UserId, channel: ChannelId) -> StatusCode {
+        status(
+            delete_channel(
+                State(state.clone()),
+                session(who),
+                Path(channel.to_string()),
+            )
+            .await,
+        )
+    }
+
+    /// `who` leaves the channel, posting no rotation.
+    async fn leave(
+        state: &AppState,
+        who: UserId,
+        channel: &Channel,
+    ) -> Result<db::Removed, AppError> {
+        db::remove_document_member(
+            &state.db,
+            &channel.meta.document_id(),
+            &who,
+            None,
+            crate::deletion::sweep_due_stored(state),
+        )
+        .await
+    }
+
+    async fn exists(state: &AppState, document: DocumentId) -> bool {
+        db::get_document(&state.db, &document)
+            .await
+            .expect("query")
+            .is_some()
+    }
+
+    async fn owes(state: &AppState, channel: &Channel) -> bool {
+        db::rotation_owed(&state.db, &channel.meta.document_id())
+            .await
+            .expect("query")
+    }
+
+    /// A viewer of the space creates a private channel: the relay holds it
+    /// in that space and not public, with its creator as its one member and
+    /// owner. The space document keeps its members.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_private_channel_has_its_creator_alone_and_names_its_space(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let space = space(&state, alice, &[(vera, Role::Viewer)]).await;
+        let before = member_ids(&state, space.document_id()).await;
+
+        let channel = private_channel(&state, vera, space).await;
+
+        let held = db::get_channel(&state.db, &channel.id)
+            .await
+            .expect("query")
+            .expect("the channel");
+        assert_eq!(held.space_id, Some(space));
+        assert!(!held.is_public);
+        assert_eq!(held.meta_id, Some(channel.meta));
+        assert_eq!(
+            member_ids(&state, channel.meta.document_id()).await,
+            [uuid_of(vera)]
+        );
+        assert_eq!(
+            role_on(&state, channel.meta.document_id(), vera).await,
+            Some(Role::Owner)
+        );
+        assert_eq!(member_ids(&state, space.document_id()).await, before);
+    }
+
+    /// A private channel names a space its creator belongs to, and nobody
+    /// joins it alone.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_private_channel_needs_a_member_of_its_space_and_admits_no_self_join(
+        pool: sqlx::PgPool,
+    ) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+
+        let stranger = new_channel(&state, mallory).await;
+        assert_eq!(
+            register_as(&state, mallory, space, &stranger, false).await,
+            StatusCode::FORBIDDEN
+        );
+        let channel = private_channel(&state, alice, space).await;
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(role_on(&state, channel.meta.document_id(), bob).await, None);
+    }
+
+    /// The owner deletes a channel: every document it groups goes, with every
+    /// object under each. Another channel keeps its documents and objects.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn deleting_a_channel_deletes_its_documents_and_their_objects(pool: sqlx::PgPool) {
+        let stub = crate::test_helpers::S3Stub::spawn([]).await;
+        let base = crate::test_helpers::test_app_state(pool).await;
+        let state = crate::test_helpers::with_s3(
+            &base,
+            crate::test_helpers::offline_s3(Some(&stub.endpoint)),
+        );
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let gone = private_channel(&state, alice, space).await;
+        let kept = public_channel(&state, alice, space).await;
+        let env = &state.config.s3_env_prefix;
+        let documents = |c: &Channel| [c.meta.document_id(), c.segment.document_id()];
+        for document in documents(&gone).into_iter().chain(documents(&kept)) {
+            stub.put(crate::s3::format_s3_delta_key(env, &document, 1));
+        }
+
+        assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
+
+        assert!(
+            db::get_channel(&state.db, &gone.id)
+                .await
+                .expect("query")
+                .is_none()
+        );
+        for document in documents(&gone) {
+            assert!(!exists(&state, document).await);
+            assert!(crate::test_helpers::deletion_marked(&state.db, document).await);
+        }
+        crate::test_helpers::make_sweeps_due(&state.db).await;
+        crate::deletion::finish_deletions(&state).await;
+        for document in documents(&gone) {
+            assert!(!crate::test_helpers::deletion_marked(&state.db, document).await);
+        }
+        let mut left = stub.keys();
+        left.sort();
+        let mut expected: Vec<String> = documents(&kept)
+            .iter()
+            .map(|d| crate::s3::format_s3_delta_key(env, d, 1))
+            .collect();
+        expected.sort();
+        assert_eq!(left, expected);
+        for document in documents(&kept) {
+            assert!(exists(&state, document).await);
+        }
+        assert_eq!(
+            db::list_channel_documents(&state.db, &kept.id)
+                .await
+                .expect("query")
+                .len(),
+            2
+        );
+    }
+
+    /// Only an owner of the channel deletes it. An editor, a stranger and an
+    /// unknown channel get the same 403, and nothing goes.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_delete_from_anyone_but_an_owner_is_refused(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+
+        assert_eq!(delete(&state, bob, channel.id).await, StatusCode::FORBIDDEN);
+        assert_eq!(
+            delete(&state, mallory, channel.id).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            delete(&state, alice, ChannelId::new()).await,
+            StatusCode::FORBIDDEN
+        );
+        assert!(exists(&state, channel.meta.document_id()).await);
+        assert!(exists(&state, channel.segment.document_id()).await);
+    }
+
+    /// A member who leaves a private channel leaves its key owed. A member
+    /// who leaves a public channel leaves it as it was.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_leave_owes_a_rotation_on_a_private_channel_only(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let private = private_channel(&state, alice, space).await;
+        grant(&state, private.meta.document_id(), bob, Role::Editor).await;
+        let public = public_channel(&state, alice, space).await;
+        assert_eq!(
+            join(&state, bob, public.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+
+        assert_eq!(
+            leave(&state, bob, &private).await.expect("leave"),
+            db::Removed::Owed
+        );
+        assert!(owes(&state, &private).await);
+        assert_eq!(
+            leave(&state, bob, &public).await.expect("leave"),
+            db::Removed::Kept
+        );
+        assert!(!owes(&state, &public).await);
+    }
+
+    /// The last member of a private channel leaves, its owner included, and
+    /// the channel goes with every document. Another channel stays.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_last_member_leaving_a_private_channel_deletes_it(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = private_channel(&state, alice, space).await;
+        let other = private_channel(&state, alice, space).await;
+
+        let removed = leave(&state, alice, &channel).await.expect("leave");
+
+        let mut expected = vec![channel.meta.document_id(), channel.segment.document_id()];
+        expected.sort_by_key(|d| *d.as_bytes());
+        let db::Removed::ChannelDeleted(mut deleted) = removed else {
+            panic!("the channel stays: {removed:?}");
+        };
+        deleted.sort_by_key(|d| *d.as_bytes());
+        assert_eq!(deleted, expected);
+        assert!(
+            db::get_channel(&state.db, &channel.id)
+                .await
+                .expect("query")
+                .is_none()
+        );
+        // The removal marks the documents, and the route empties them: the
+        // rows stay until then (`SRV-165`).
+        for document in expected {
+            assert!(crate::test_helpers::deletion_marked(&state.db, document).await);
+        }
+        assert!(exists(&state, other.meta.document_id()).await);
+        assert_eq!(
+            role_on(&state, other.meta.document_id(), alice).await,
+            Some(Role::Owner)
+        );
+    }
+
+    /// The last owner of a private channel that keeps other members is
+    /// refused the leave, and stays. Once the role is handed on, the leave
+    /// goes through.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_last_owner_hands_the_role_on_before_leaving(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = private_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        grant(&state, meta, bob, Role::Editor).await;
+
+        let refused = leave(&state, alice, &channel).await;
+        assert!(
+            matches!(refused, Err(AppError::Conflict { .. })),
+            "{refused:?}"
+        );
+        assert_eq!(role_on(&state, meta, alice).await, Some(Role::Owner));
+
+        db::update_document_member_role(&state.db, &meta, &bob, Role::Owner, None)
+            .await
+            .expect("hand on");
+        assert_eq!(
+            leave(&state, alice, &channel).await.expect("leave"),
+            db::Removed::Owed
+        );
+        assert!(exists(&state, meta).await);
+        assert_eq!(member_ids(&state, meta).await, [uuid_of(bob)]);
     }
 }

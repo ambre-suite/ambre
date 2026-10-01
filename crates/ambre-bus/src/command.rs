@@ -129,17 +129,19 @@ pub enum SyncCommand {
         /// knows the catalogues; the Sync worker does not.
         self_join: bool,
     },
-    /// Create a public channel of a space on the relay: one channel key,
-    /// its `meta` and first segment documents under it, and the channel
-    /// record. Answered by [`crate::LogicEvent::ChannelCreated`], carrying the
-    /// key sealed under the key of the space, or by
-    /// [`crate::LogicEvent::ChannelRequestFailed`]. The space document must
-    /// have an open session, which holds the space key.
-    CreatePublicChannel {
+    /// Create a channel of a space on the relay: one channel key, its `meta`
+    /// and first segment documents under it, and the channel record.
+    /// Answered by [`crate::LogicEvent::ChannelCreated`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`]. A public channel's answer
+    /// carries the key sealed under the key of the space, for the catalogue.
+    /// Its space document must then have an open session, which holds the
+    /// space key. A private channel is listed nowhere, and gets no sealed key.
+    CreateChannel {
         channel_id: ChannelId,
         space_id: SpaceId,
         meta: MetaId,
         segment: SegmentId,
+        public: bool,
     },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.

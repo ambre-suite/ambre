@@ -448,7 +448,7 @@ impl LogicState {
             }
             LogicEvent::Activity { documents } => self.channel_activity(&documents),
             LogicEvent::ChannelCreated { channel_id, key } => {
-                self.public_channel_created(channel_id, key);
+                self.channel_created(channel_id, key);
             }
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelRequestFailed {

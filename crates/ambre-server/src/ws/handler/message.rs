@@ -1689,7 +1689,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = PublicKey::from_array([32u8; 32]);
-        db::remove_document_member(&pool, &doc_id, &editor, None)
+        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
             .await
             .unwrap();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
@@ -1744,7 +1744,7 @@ mod access_tests {
             "a member is answered"
         );
 
-        db::remove_document_member(&pool, &doc_id, &editor, None)
+        db::remove_document_member(&pool, &doc_id, &editor, None, 0)
             .await
             .unwrap();
         let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);

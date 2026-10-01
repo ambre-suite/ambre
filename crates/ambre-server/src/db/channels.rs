@@ -186,6 +186,79 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
     Ok(())
 }
 
+/// Delete a channel, and mark the delete of every document it groups
+/// (`SRV-142`). The caller empties them as a deleted document is emptied,
+/// and the pass finishes any it misses (`SRV-165`). Answers the documents
+/// marked, empty for an unknown channel.
+pub async fn delete_channel(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    sweep_due: i64,
+) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let channel = id_to_uuid(*channel_id);
+    let mut tx = pool.begin().await?;
+    // `meta` first, as a removal locks it, so a delete racing the last
+    // leave waits for it rather than deadlocking.
+    sqlx::query(
+        "SELECT 1 FROM documents WHERE id = (SELECT document_id FROM channel_documents \
+         WHERE channel_id = $1 AND kind = 'meta') FOR NO KEY UPDATE",
+    )
+    .bind(channel)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let deleted = delete_channel_in(&mut tx, channel, sweep_due).await?;
+    tx.commit().await?;
+    Ok(deleted)
+}
+
+/// [`delete_channel`] inside `tx`.
+///
+/// The channel row is locked first. A document joining the channel takes a
+/// key share on that row, so none lands between the listing and the delete.
+/// The channel row goes now, and its `channel_documents` rows with it, so no
+/// member reaches a document through the channel past the commit.
+pub(super) async fn delete_channel_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    channel: uuid::Uuid,
+    sweep_due: i64,
+) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let held: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+            .bind(channel)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if held.is_none() {
+        return Ok(Vec::new());
+    }
+    let documents: Vec<uuid::Uuid> =
+        sqlx::query_scalar("SELECT document_id FROM channel_documents WHERE channel_id = $1")
+            .bind(channel)
+            .fetch_all(&mut **tx)
+            .await?;
+    super::documents::begin_deletions_in(tx, &documents, sweep_due).await?;
+    sqlx::query("DELETE FROM channels WHERE id = $1")
+        .bind(channel)
+        .execute(&mut **tx)
+        .await?;
+    Ok(documents.into_iter().map(uuid_row_to_id).collect())
+}
+
+/// The channel whose `meta` is `document_id`, with its public flag. `None`
+/// for any other document.
+pub(super) async fn channel_of_meta(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+) -> Result<Option<(uuid::Uuid, bool)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT c.id, c.is_public FROM channel_documents d \
+         JOIN channels c ON c.id = d.channel_id \
+         WHERE d.document_id = $1 AND d.kind = 'meta'",
+    )
+    .bind(document_id)
+    .fetch_optional(&mut **tx)
+    .await?)
+}
+
 /// Add `user_id` to the members of a channel's `meta`, unless a row is there.
 ///
 /// Answers whether it wrote a row. An existing row is left as it is, so a

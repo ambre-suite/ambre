@@ -16,6 +16,20 @@ pub struct MemberRow {
     pub invited_by: Option<uuid::Uuid>,
 }
 
+/// What a removal posted alone did, decided inside its transaction.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Removed {
+    /// The document owes a rotation (`SRV-122`).
+    Owed,
+    /// The key stays: every member of the space reads a public channel's key
+    /// in the catalogue anyway (`SRV-122`).
+    Kept,
+    /// The last member left a channel that is not public, which went with
+    /// every document it grouped (`SRV-142`). Each is marked for its delete,
+    /// which the caller runs (`SRV-165`).
+    ChannelDeleted(Vec<ambre_core::DocumentId>),
+}
+
 /// `document_members` joined with `users` for display purposes. Carries the
 /// member's public keys and their wrapped copy of the document key. A client
 /// can then locate its own entry and unwrap the key, or rewrap on rotation.
@@ -339,29 +353,46 @@ pub async fn list_document_members(
 
 /// Removes a user from a document's membership, with the read cursors the
 /// membership held (`SRV-137`), and leaves the document owing a rotation
-/// (`SRV-122`). Every key it held is one the member removed holds.
+/// (`SRV-122`). Every key it held is one the member removed holds. The `meta`
+/// of a public channel owes nothing: every member of the space reads its key
+/// in the catalogue anyway.
 ///
 /// Refuses to delete the document's only remaining owner (last-owner lockout):
 /// with no owner left, nobody could manage sharing. The check and the delete
 /// share one transaction with the target row locked so two concurrent removals
 /// cannot both see two owners.
+///
+/// The `meta` of a channel that is not public is the one exception: its last
+/// member leaves, owner or not, and the channel goes with it (`SRV-142`). Each
+/// of its documents is marked for its delete, at `sweep_due`, in the same
+/// transaction. An owner who leaves other members behind is still refused.
 pub async fn remove_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     entry: Option<&LogEntry>,
-) -> Result<(), AppError> {
+    sweep_due: i64,
+) -> Result<Removed, AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
     lock_document(&mut tx, did).await?;
     record_change(&mut tx, did, entry).await?;
-    delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
+    let channel = super::channels::channel_of_meta(&mut tx, did).await?;
+    if let Some(emptied) = delete_member(&mut tx, did, id_to_uuid(*user_id), channel).await? {
+        let deleted = super::channels::delete_channel_in(&mut tx, emptied, sweep_due).await?;
+        tx.commit().await?;
+        return Ok(Removed::ChannelDeleted(deleted));
+    }
+    if matches!(channel, Some((_, true))) {
+        tx.commit().await?;
+        return Ok(Removed::Kept);
+    }
     sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
         .bind(did)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    Ok(())
+    Ok(Removed::Owed)
 }
 
 /// Removes a member and re-wraps the new key for every member who stays, in
@@ -384,7 +415,7 @@ pub async fn revoke_and_rotate(
     // document queue on it instead of deadlocking on the member rows.
     lock_document(&mut tx, did).await?;
     record_change(&mut tx, did, entry).await?;
-    delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
+    delete_member(&mut tx, did, id_to_uuid(*user_id), None).await?;
     rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, members, link).await?;
     tx.commit().await?;
     Ok(())
@@ -479,11 +510,17 @@ pub async fn rotation_owed(
 
 /// Deletes one member row with its read cursors, refusing the last owner. The
 /// target row is locked so two concurrent removals cannot both see two owners.
+///
+/// `channel` is the channel whose `meta` the document is, with its public
+/// flag. When the member is the last of a channel that is not public, the
+/// last-owner check does not hold, and the channel is answered for its delete
+/// (`SRV-142`).
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
     user_id: uuid::Uuid,
-) -> Result<(), AppError> {
+    channel: Option<(uuid::Uuid, bool)>,
+) -> Result<Option<uuid::Uuid>, AppError> {
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
     )
@@ -492,8 +529,22 @@ async fn delete_member(
     .fetch_optional(&mut **tx)
     .await?;
     let current_role = decode_role_opt(current_role)?;
+    // The lock on the document serializes every removal from it, so the
+    // count holds until the commit.
+    let empties_private = match channel {
+        Some((channel, false)) if current_role.is_some() => {
+            let members: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM document_members WHERE document_id = $1",
+            )
+            .bind(document_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            (members == 1).then_some(channel)
+        }
+        _ => None,
+    };
 
-    if current_role == Some(ambre_core::Role::Owner) {
+    if current_role == Some(ambre_core::Role::Owner) && empties_private.is_none() {
         ensure_not_last_owner(tx, document_id).await?;
     }
 
@@ -503,7 +554,7 @@ async fn delete_member(
         .execute(&mut **tx)
         .await?;
     super::read_cursors::delete_read_cursors_of(&mut **tx, document_id, user_id).await?;
-    Ok(())
+    Ok(empties_private)
 }
 
 /// Updates the role of a document member.

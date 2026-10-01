@@ -62,6 +62,25 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
     })
 }
 
+/// Whether the register of deletes still marks `document`.
+pub async fn deletion_marked(pool: &PgPool, document: ambre_core::DocumentId) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (SELECT 1 FROM document_deletions WHERE document_id = $1)",
+    )
+    .bind(uuid::Uuid::from_bytes(*document.as_bytes()))
+    .fetch_one(pool)
+    .await
+    .expect("deletion register")
+}
+
+/// Makes the second sweep of every marked delete due now.
+pub async fn make_sweeps_due(pool: &PgPool) {
+    sqlx::query("UPDATE document_deletions SET sweep_due = 0")
+        .execute(pool)
+        .await
+        .expect("sweep due");
+}
+
 /// Creates a test user directly in the database (bypasses OIDC flow).
 pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId {
     let user = db::create_user(

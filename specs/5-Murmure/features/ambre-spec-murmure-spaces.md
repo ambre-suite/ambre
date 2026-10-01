@@ -66,7 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-247` | `POST` | Deleting a public channel MUST remove its entry from the catalogue. | this spec section 3; `MURMURE-243` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-247` | `POST` | Deleting a public channel MUST remove its entry from the catalogue. | this spec section 3; `MURMURE-243` | not built | unbuilt -- lands with the `Deleting a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-248` | `POST` | Deleting a space MUST delete every channel of the space, then the space document. | this spec section 3; `SRV-143` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |

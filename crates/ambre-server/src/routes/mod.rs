@@ -125,6 +125,7 @@ pub fn api_router(
             axum::routing::post(media_confirm_upload),
         )
         .route("/channels", axum::routing::post(create_channel))
+        .route("/channels/{id}", axum::routing::delete(delete_channel))
         .route(
             "/channels/{id}/documents",
             axum::routing::get(list_channel_documents),

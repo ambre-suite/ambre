@@ -216,6 +216,27 @@ pub async fn begin_deletion(
     Ok(())
 }
 
+/// Marks the delete of each of `documents` inside `tx`, as [`begin_deletion`]
+/// marks one. The rows stay: the pass empties a marked document whose rows
+/// are left, and forgets them last (`SRV-165`).
+pub(super) async fn begin_deletions_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    documents: &[uuid::Uuid],
+    sweep_due: i64,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO document_deletions (document_id, sweep_due) \
+         SELECT unnest($1::uuid[]), $2 \
+         ON CONFLICT (document_id) DO UPDATE \
+         SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
+    )
+    .bind(documents)
+    .bind(sweep_due)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 /// Every delete still marked, the earliest sweep first, at most `limit`.
 pub async fn pending_deletions(
     pool: &PgPool,

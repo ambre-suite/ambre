@@ -303,11 +303,11 @@ enum SyncEvent {
         self_join: bool,
         result: Result<Vec<ambre_bus::ChannelDocument>, String>,
     },
-    /// The answer to a public channel creation
-    /// (`SyncCommand::CreatePublicChannel`): the sealed key for the catalogue.
+    /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
+    /// sealed key for the catalogue of a public channel.
     ChannelCreated {
         channel_id: ChannelId,
-        result: Result<ambre_bus::SealedChannelKey, String>,
+        result: Result<Option<ambre_bus::SealedChannelKey>, String>,
     },
     /// The answer to a self-join (`SyncCommand::JoinChannel`).
     ChannelJoined {
@@ -1233,12 +1233,13 @@ impl SyncState {
             SyncCommand::MoveReadCursors { cursors } => self.handle_move_read_cursors(cursors),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
-            SyncCommand::CreatePublicChannel {
+            SyncCommand::CreateChannel {
                 channel_id,
                 space_id,
                 meta,
                 segment,
-            } => self.handle_create_public_channel(channel_id, space_id, meta, segment),
+                public,
+            } => self.handle_create_channel(channel_id, space_id, (meta, segment), public),
             SyncCommand::JoinChannel {
                 channel_id,
                 space_id,

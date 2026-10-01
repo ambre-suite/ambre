@@ -773,10 +773,11 @@ pub(crate) struct CreateDocumentRequest {
     pub entry: Option<String>,
 }
 
-/// `POST /api/channels`: a public channel of a space, with its first two
-/// documents.
+/// `POST /api/channels`: a channel of a space, with its first two documents.
 #[derive(Serialize)]
 pub(crate) struct CreateChannelRequest {
+    /// A public channel, which its catalogue lists, or a private one.
+    pub public: bool,
     pub channel_id: String,
     pub space_id: String,
     pub meta_id: String,

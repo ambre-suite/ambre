@@ -1,14 +1,16 @@
 // ambre-logic/src/spaces.rs
 // ============================================================================
 // Murmure spaces: the space document and its catalogue, the creation of a
-// public channel, and the self-join (the Murmure spaces spec). A space is one
+// public or a private channel, and the self-join (the Murmure spaces and
+// channels specs). A space is one
 // document, never an entry of `docs`. No key reaches this thread: the
 // catalogue key travels sealed, and only the Sync worker opens it.
 // ============================================================================
 
 use super::*;
 use ambre_bus::{
-    ChannelId, PublicChannelDraft, SealedChannelKey, SpaceCommand, SpaceEvent, SpaceId, Timestamp,
+    ChannelId, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand, SpaceEvent,
+    SpaceId, Timestamp,
 };
 use ambre_murmure::{ChannelState, ChannelType, Listing, SpaceState};
 
@@ -18,11 +20,13 @@ pub(crate) struct OpenSpace {
     role: Role,
 }
 
-/// A public channel the relay is creating, until it answers.
+/// A channel the relay is creating, until it answers.
 pub(crate) struct Creating {
     space_id: SpaceId,
     channel: ChannelState,
-    draft: PublicChannelDraft,
+    /// What the catalogue will list, for a public channel. `None` for a
+    /// private one, which no catalogue lists.
+    listing: Option<PublicChannelDraft>,
 }
 
 impl LogicState {
@@ -259,20 +263,15 @@ impl LogicState {
                         return self.channel_failed(space_id, channel_id, error.to_string());
                     }
                 };
-                self.send_to_sync(SyncCommand::CreatePublicChannel {
-                    channel_id,
-                    space_id,
-                    meta: channel.meta_id(),
-                    segment: channel.active_id(),
-                });
-                self.creating.insert(
-                    channel_id,
-                    Creating {
-                        space_id,
-                        channel,
-                        draft,
-                    },
-                );
+                self.create_channel(space_id, channel, Some(draft));
+            }
+            SpaceCommand::CreatePrivateChannel { draft, now } => {
+                // Any member of the space may: the channel is listed nowhere.
+                let PrivateChannelDraft { channel_id, name } = draft;
+                match ChannelState::create(channel_id, ChannelType::Private, Some(&name), now) {
+                    Ok(channel) => self.create_channel(space_id, channel, None),
+                    Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
+                }
             }
             SpaceCommand::JoinChannel { channel_id } => {
                 // The key the catalogue holds, sealed: the Sync worker opens
@@ -292,6 +291,31 @@ impl LogicState {
         }
     }
 
+    /// Ask the relay for a new channel, and hold it until the relay answers.
+    fn create_channel(
+        &mut self,
+        space_id: SpaceId,
+        channel: ChannelState,
+        listing: Option<PublicChannelDraft>,
+    ) {
+        let channel_id = channel.channel_id();
+        self.send_to_sync(SyncCommand::CreateChannel {
+            channel_id,
+            space_id,
+            meta: channel.meta_id(),
+            segment: channel.active_id(),
+            public: listing.is_some(),
+        });
+        self.creating.insert(
+            channel_id,
+            Creating {
+                space_id,
+                channel,
+                listing,
+            },
+        );
+    }
+
     /// Whether the catalogue of an open space lists `channel_id`.
     pub(crate) fn lists_channel(&self, channel_id: ChannelId) -> bool {
         self.spaces
@@ -299,13 +323,14 @@ impl LogicState {
             .any(|space| space.state.sealed_key(channel_id).is_ok())
     }
 
-    /// The relay holds the new channel: list it in the catalogue with its
-    /// sealed key, and send the first content of its two documents.
-    pub(crate) fn public_channel_created(&mut self, channel_id: ChannelId, key: SealedChannelKey) {
+    /// The relay holds the new channel: list a public one in the catalogue
+    /// with its sealed key, and send the first content of its two documents.
+    /// A private one writes no catalogue.
+    pub(crate) fn channel_created(&mut self, channel_id: ChannelId, key: Option<SealedChannelKey>) {
         let Some(Creating {
             space_id,
             channel,
-            draft,
+            listing,
         }) = self.creating.remove(&channel_id)
         else {
             return;
@@ -313,21 +338,27 @@ impl LogicState {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
-        let listing = Listing {
-            topic: draft.topic.as_ref(),
-            category: draft.category,
-            position: draft.position,
-            key,
-        };
-        let delta = match space.state.list_channel(&channel, &listing) {
-            Ok(delta) => delta,
-            Err(error) => return self.channel_failed(space_id, channel_id, error.to_string()),
-        };
-        self.send_to_sync(SyncCommand::SendUpdate {
-            document_id: space_id.document_id(),
-            payload: delta,
-            summary: None,
-        });
+        if let Some(draft) = listing {
+            let Some(key) = key else {
+                let message = "the relay answered no sealed key".to_owned();
+                return self.channel_failed(space_id, channel_id, message);
+            };
+            let listing = Listing {
+                topic: draft.topic.as_ref(),
+                category: draft.category,
+                position: draft.position,
+                key,
+            };
+            let delta = match space.state.list_channel(&channel, &listing) {
+                Ok(delta) => delta,
+                Err(error) => return self.channel_failed(space_id, channel_id, error.to_string()),
+            };
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id: space_id.document_id(),
+                payload: delta,
+                summary: None,
+            });
+        }
         for document_id in [
             channel.meta_id().document_id(),
             channel.active_id().document_id(),
@@ -560,22 +591,23 @@ mod tests {
         });
         let sent = drain(&sync);
         let [
-            SyncCommand::CreatePublicChannel {
+            SyncCommand::CreateChannel {
                 channel_id: asked,
                 space_id: of,
                 meta,
                 segment,
+                public: true,
             },
         ] = sent.as_slice()
         else {
-            panic!("one creation, got {sent:?}");
+            panic!("one public creation, got {sent:?}");
         };
         assert_eq!((*asked, *of), (channel_id, space_id));
         let (meta, segment) = (meta.document_id(), segment.document_id());
 
         state.handle_logic_event(LogicEvent::ChannelCreated {
             channel_id,
-            key: sealed(7),
+            key: Some(sealed(7)),
         });
         let sent = drain(&sync);
         assert_eq!(
@@ -683,9 +715,80 @@ mod tests {
         // A late answer for a creation given up lists nothing either.
         state.handle_logic_event(LogicEvent::ChannelCreated {
             channel_id,
-            key: sealed(1),
+            key: Some(sealed(1)),
         });
         assert!(drain(&sync).is_empty());
+    }
+
+    // --- Creating a private channel ---
+
+    /// A viewer of the space creates a private channel. The relay is asked
+    /// for a private one, and once it holds it, the two documents open and go
+    /// up whole. The catalogue is never written, and lists nothing.
+    #[test]
+    fn a_private_channel_writes_no_catalogue() {
+        let (mut state, ui, sync) = harness();
+        let space_id = SpaceId::new();
+        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: Seq(1),
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        ready(&mut state, space_id.document_id(), Role::Viewer);
+        let _ = (drain(&ui), drain(&sync));
+        let channel_id = ChannelId::new();
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::CreatePrivateChannel {
+                draft: PrivateChannelDraft {
+                    channel_id,
+                    name: "board".to_owned(),
+                },
+                now: NOW,
+            },
+        });
+        let sent = drain(&sync);
+        let [
+            SyncCommand::CreateChannel {
+                channel_id: asked,
+                space_id: of,
+                meta,
+                segment,
+                public: false,
+            },
+        ] = sent.as_slice()
+        else {
+            panic!("one private creation, got {sent:?}");
+        };
+        assert_eq!((*asked, *of), (channel_id, space_id));
+        let (meta, segment) = (meta.document_id(), segment.document_id());
+
+        state.handle_logic_event(LogicEvent::ChannelCreated {
+            channel_id,
+            key: None,
+        });
+        let sent = drain(&sync);
+        assert_eq!(updates_of(&sent, space_id.document_id()), 0);
+        ready(&mut state, meta, Role::Owner);
+        ready(&mut state, segment, Role::Owner);
+        let sent = drain(&sync);
+        assert_eq!(updates_of(&sent, space_id.document_id()), 0);
+        assert_eq!(
+            (updates_of(&sent, meta), updates_of(&sent, segment)),
+            (1, 1)
+        );
+        let channel = &state.channels[&channel_id];
+        assert_eq!(channel.channel_type(), Some(ChannelType::Private));
+        assert_eq!(channel.name().as_deref(), Some("board"));
+        assert!(state.spaces[&space_id].state.catalogue().is_empty());
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::Space { event: SpaceEvent::ChannelCreated { channel_id: id }, .. }
+                if *id == channel_id
+        )));
     }
 
     // --- A self-join ---

@@ -272,6 +272,15 @@ pub struct PublicChannelDraft {
     pub position: u32,
 }
 
+/// A private channel the view asks a space to create. It is listed nowhere,
+/// so it has no topic, category nor rank in the catalogue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrivateChannelDraft {
+    /// Minted by the view, so it can follow the channel before it exists.
+    pub channel_id: ChannelId,
+    pub name: String,
+}
+
 /// A command for an open space, UI thread -> Logic thread.
 ///
 /// Carried by [`LogicCommand::Space`](crate::LogicCommand::Space). A space is
@@ -292,6 +301,14 @@ pub enum SpaceCommand {
         /// The instant of the creation, stamped by the view.
         now: Timestamp,
     },
+    /// Create a private channel of the space, with this user as its owner and
+    /// only member (`MURMURE-048`). The catalogue does not change
+    /// (`MURMURE-050`).
+    CreatePrivateChannel {
+        draft: PrivateChannelDraft,
+        /// The instant of the creation, stamped by the view.
+        now: Timestamp,
+    },
     /// Join a public channel of the catalogue, with no other member online
     /// (`MURMURE-039`).
     JoinChannel { channel_id: ChannelId },
@@ -309,7 +326,8 @@ pub enum SpaceEvent {
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     },
-    /// The relay holds the new channel, and the catalogue lists it.
+    /// The relay holds the new channel, and the catalogue lists it when it
+    /// is public.
     ChannelCreated { channel_id: ChannelId },
     /// The user is now a member of the channel, which the view may open.
     Joined { channel_id: ChannelId },

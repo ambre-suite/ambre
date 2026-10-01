@@ -18,10 +18,36 @@ pub async fn delete_document(
     state: &AppState,
     document_id: &ambre_core::DocumentId,
 ) -> Result<(), AppError> {
-    let window = crate::s3::late_write_window_secs(state.config.presigned_url_ttl_secs);
-    let sweep_due = crate::s3::unix_now() + window;
+    let sweep_due = sweep_due(state);
     crate::db::begin_deletion(&state.db, document_id, unix_i64(sweep_due)).await?;
     empty_document(state, document_id, sweep_due).await
+}
+
+/// When the second sweep of a delete begun now is due (`SRV-057`).
+pub fn sweep_due(state: &AppState) -> u64 {
+    let window = crate::s3::late_write_window_secs(state.config.presigned_url_ttl_secs);
+    crate::s3::unix_now() + window
+}
+
+/// [`sweep_due`] as the register stores it.
+pub fn sweep_due_stored(state: &AppState) -> i64 {
+    unix_i64(sweep_due(state))
+}
+
+/// Empties documents whose delete a transaction already marked, as a deleted
+/// channel marks each of its documents (`SRV-142`). A document that fails
+/// keeps its mark, and the pass finishes it (`SRV-165`).
+pub async fn empty_marked(
+    state: &AppState,
+    documents: &[ambre_core::DocumentId],
+    sweep_due: i64,
+) {
+    let sweep_due = u64::try_from(sweep_due).unwrap_or(0);
+    for doc in documents {
+        if let Err(e) = empty_document(state, doc, sweep_due).await {
+            tracing::warn!(document_id = %doc, error = %e, "a marked delete is left to the pass");
+        }
+    }
 }
 
 /// Fences a document, then empties it. The tombstone goes first: from then on

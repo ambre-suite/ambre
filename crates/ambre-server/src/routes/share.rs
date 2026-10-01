@@ -278,11 +278,34 @@ pub async fn revoke_from_document(
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no frame slips in between the commit and it.
     crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
-    if let Err(e) = db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref()).await {
-        restore_debt_mirror(&state, &doc_id).await;
-        return Err(e);
+    let sweep_due = crate::deletion::sweep_due_stored(&state);
+    let removed =
+        match db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref(), sweep_due)
+            .await
+        {
+            Ok(removed) => removed,
+            Err(e) => {
+                restore_debt_mirror(&state, &doc_id).await;
+                return Err(e);
+            }
+        };
+    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
+    match removed {
+        db::Removed::Owed => {}
+        // A public channel owes nothing (`SRV-122`): the mirror goes back to
+        // what the register says.
+        db::Removed::Kept => {
+            restore_debt_mirror(&state, &doc_id).await;
+            notify_removed(&state, &doc_id, &target).await;
+            return Ok(axum::Json(serde_json::json!({"status":"revoked"})));
+        }
+        // Nobody is left to tell (`SRV-142`).
+        db::Removed::ChannelDeleted(documents) => {
+            tracing::info!(document_id = %doc_id, "last member left, channel deleted");
+            crate::deletion::empty_marked(&state, &documents, sweep_due).await;
+            return Ok(axum::Json(serde_json::json!({"status":"revoked"})));
+        }
     }
-    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member removed, rotation owed");
 
     notify_removed(&state, &doc_id, &target).await;
     // Every member who stays learns of the debt as it learns of a new key. It

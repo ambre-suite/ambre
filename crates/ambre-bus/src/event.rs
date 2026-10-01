@@ -192,12 +192,13 @@ pub enum LogicEvent {
     ///
     /// [`SyncCommand::FetchActivity`]: crate::SyncCommand::FetchActivity
     Activity { documents: Vec<DocumentActivity> },
-    /// The relay holds the new public channel, answering
-    /// [`SyncCommand::CreatePublicChannel`](crate::SyncCommand::CreatePublicChannel).
-    /// `key` is the channel key sealed under the space key, for the catalogue.
+    /// The relay holds the new channel, answering
+    /// [`SyncCommand::CreateChannel`](crate::SyncCommand::CreateChannel).
+    /// `key` is the channel key sealed under the space key, for the catalogue
+    /// of a public channel. Absent for a private one.
     ChannelCreated {
         channel_id: ChannelId,
-        key: SealedChannelKey,
+        key: Option<SealedChannelKey>,
     },
     /// The user is a member of the channel, answering
     /// [`SyncCommand::JoinChannel`](crate::SyncCommand::JoinChannel).

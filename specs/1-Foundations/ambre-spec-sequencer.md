@@ -103,7 +103,7 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.

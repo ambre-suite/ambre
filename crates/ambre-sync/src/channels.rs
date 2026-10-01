@@ -123,20 +123,28 @@ impl SyncState {
         Ok((space.doc_key.clone(), exchange_key))
     }
 
-    /// Create a public channel of a space on the relay (the Murmure spaces
-    /// spec). One fresh key opens both documents, wrapped for this user alone,
-    /// and goes back to the Logic thread sealed under the space key. No step
-    /// leaves a channel the relay holds half made: each document is created
-    /// by its own id, so a retry finds it.
-    pub(crate) fn handle_create_public_channel(
+    /// Create a channel of a space on the relay (the Murmure spaces and
+    /// channels specs). One fresh key opens both documents, wrapped for this
+    /// user alone. A public channel's key also goes back to the Logic thread
+    /// sealed under the space key, for the catalogue. A private one is listed
+    /// nowhere, so its key goes nowhere else. No step leaves a channel the
+    /// relay holds half made: each document is created by its own id, so a
+    /// retry finds it.
+    pub(crate) fn handle_create_channel(
         &self,
         channel_id: ChannelId,
         space_id: SpaceId,
-        meta: MetaId,
-        segment: SegmentId,
+        (meta, segment): (MetaId, SegmentId),
+        public: bool,
     ) {
         let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            let (space_key, exchange_key) = self.space_keys(space_id)?;
+            // A private channel is listed nowhere, so it needs no space key.
+            let space_key = if public {
+                Some(self.space_keys(space_id)?.0)
+            } else {
+                None
+            };
+            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
             let author = self.author().ok_or("session locked")?;
             // Both documents open a log under the one channel key, and the
             // channel's members live in meta's. Each creator copy seals its
@@ -151,11 +159,16 @@ impl SyncState {
                     Ok((document_id, doc_key_enc, entry))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
-            let meta_anchor = documents
-                .first()
-                .and_then(|(_, _, entry)| digest_of(entry))
-                .ok_or("meta's first entry does not decode")?;
-            let sealed = seal_channel_key(channel_id, &channel_key, &space_key, meta_anchor)?;
+            let sealed = match space_key {
+                Some(space_key) => {
+                    let meta_anchor = documents
+                        .first()
+                        .and_then(|(_, _, entry)| digest_of(entry))
+                        .ok_or("meta's first entry does not decode")?;
+                    Some(seal_channel_key(channel_id, &channel_key, &space_key, meta_anchor)?)
+                }
+                None => None,
+            };
             Ok((tx, sealed, documents))
         });
         let (tx, sealed, documents) = match prepared {
@@ -184,6 +197,7 @@ impl SyncState {
                     .await?;
                 }
                 let body = http::CreateChannelRequest {
+                    public,
                     channel_id: channel_id.to_string(),
                     space_id: space_id.to_string(),
                     meta_id: meta.to_string(),
@@ -682,14 +696,17 @@ mod tests {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, String::new(), None);
         let (channel_id, space_id) = (ChannelId::new(), SpaceId::new());
-        state.handle_create_public_channel(channel_id, space_id, MetaId::new(), SegmentId::new());
+        for public in [true, false] {
+            let documents = (MetaId::new(), SegmentId::new());
+            state.handle_create_channel(channel_id, space_id, documents, public);
+        }
         state.handle_join_channel(
             channel_id,
             space_id,
             &SealedChannelKey::from_bytes(vec![1; 72]),
         );
         let events: Vec<LogicEvent> = rx.try_iter().collect();
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 3);
         assert!(events.iter().all(|e| matches!(
             e,
             LogicEvent::ChannelRequestFailed { channel_id: id, .. } if *id == channel_id
