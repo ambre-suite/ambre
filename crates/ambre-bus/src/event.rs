@@ -6,7 +6,7 @@
 //!   UI (with a small Logic hook, for example `DocumentCreated` records the doc type).
 //! - **Server push & errors** -- unsolicited notifications (CRDT deltas,
 //!   connection status, member revocation, meeting participants...) and failures
-//!   (`AuthError` / `ApiError` / `SetupRequired`). No originating request, so no
+//!   (`AuthError` / `ApiError` / `SetupRequired` / `UpdateRequired`). No originating request, so no
 //!   `RequestId`; each is handled explicitly by the Logic thread (apply CRDT,
 //!   mutate state, ...).
 //!
@@ -182,4 +182,8 @@ pub enum LogicEvent {
     /// its key setup. Stands in for the generic error such a refusal would
     /// otherwise raise (`ambre-spec-sync.md`, `SYNC-134`).
     SetupRequired,
+
+    /// The relay speaks a newer wire version than this build. Only an update
+    /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
+    UpdateRequired,
 }

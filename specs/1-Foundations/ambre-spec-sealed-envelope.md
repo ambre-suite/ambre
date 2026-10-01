@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
 | `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | `ambre_sync::pipeline::tests::a_sealed_object_carries_the_signature_and_the_tag` -- a name or a blob carries both, a flipped signature byte and a re-signed wrong tag each refuse; structural -- no Sync path calls the bare cipher under a document key | none | verified |
-| `SYNC-125` | `INV` | Every sealed payload MUST name, in its public metadata, the identifier of the key that sealed it. | this spec section 2; `SYNC-115` | not built | unbuilt -- lands with the `Every sealed object names its key` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-125` | `INV` | Every sealed payload MUST name, in its public metadata, the identifier of the key that sealed it. | this spec section 2; `SYNC-115` | `ambre_sync::pipeline::tests::a_frame_names_the_key_that_sealed_it` -- an update names its key, and a seal or an open under another key is refused; `ambre_sync::pipeline::tests::an_object_names_the_key_that_sealed_it` -- a name or a blob names its key in its header, and a header rewritten to name another fails to open. The snapshot and the ephemeral frame take the same check, which no test drives | none | verified |
 
 ### 1.2 A payload is sealed
 
@@ -51,6 +51,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-008` | `FAIL` | An ephemeral frame whose counter is not greater than the last one seen for its author and document MUST be dropped. | this spec section 2 | `ambre_sync::ephemeral_tests::monotonic_counter_accepted_replay_dropped` -- an equal and a lower counter are both refused, and forward progress resumes, and the check has one hole the rule does not state, an author evicted by `SYNC-088`'s cap losing the baseline the rule reads and replaying once | none | verified |
 | `SYNC-009` | `FAIL` | Decompression MUST be refused past a size ceiling drawn from the compressed length. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_bomb_rejected` -- 8 MiB compressed answers the typed refusal; `::decompress_within_ceiling_ok` -- a legitimate payload is untouched by the bound, the half that keeps the ceiling from being a denial of service of its own | none | verified |
 | `SYNC-090` | `FAIL` | An unknown compression version MUST be refused, never guessed. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_unknown_version_rejected` -- the version byte is echoed in a typed error rather than falling through to a default codec | none | verified |
+| `SYNC-138` | `FAIL` | A document name or a media blob of a layout the reader does not know MUST be refused by that layout, before any other part of it is read. | this spec section 2; `ambre-spec-media.md` | `ambre_sync::pipeline::tests::an_unknown_object_layout_is_refused_before_any_check` -- a later layout is named in a typed error by the open and by the key read, and one byte alone is enough to refuse | none | verified |
 | `SYNC-089` | `POST` | The signature MUST be verified before the cipher is opened. | this spec section 2; `ZK-001` | none | unheld -- the three refusals are each driven, and their order is not: `SYNC-019`'s tests would pass on any order, so nothing would go red if the open decrypted first and authenticated afterwards. The order is what keeps unauthenticated bytes out of the decoder; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | none | unheld -- the client verifier and the relay one both call the strict form, which refuses a non-canonical scalar and a small-order key, and no test presents a second valid signature over one message; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -65,10 +66,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 9 `verified`, 8 `untested`, 5 `unimplemented`. What holds is refusal: a tampered
-  byte, a wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
-  decompression bomb and an unknown codec. What is loose is every rule stated as an absence. No
-  unsealed send is forbidden, no nonce asserted fresh, no order established.
+* **Verification.** 11 `verified`, 8 `untested`, 4 `unimplemented`. What holds is refusal: a
+  tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a replayed
+  counter, a decompression bomb and an unknown codec. What is loose is every rule stated as an
+  absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.
 ---
 
 ## 2. MODEL
@@ -120,9 +121,17 @@ pub struct CrdtDelta(Vec<u8>);               // a Loro update, opaque to the env
 ```
 
 **Two standalone objects take the same envelope.** A document name and a media blob travel outside
-any message. So they carry their own parts: the author key, the signature, the commitment tag, the
-nonce, then the ciphertext. Neither is compressed. A name's additional data holds its document
-id, so it opens under its own document only (`SYNC-018`, `SYNC-068`).
+any message. So they carry their own parts: the layout, the key identifier, the author key, the
+signature, the commitment tag, the nonce, then the ciphertext. The layout and the key identifier
+are also bound into the additional data, so a header cannot be made to name another of either.
+Neither object is compressed.
+
+**Why a layout byte.** The relay keeps a blob across releases. Without the byte, an object of an
+older layout fails as forged or as sealed under a foreign key. With it, the reader refuses it by
+name before reading anything else (`SYNC-138`). Every object of a release shares one layout, so the
+byte tells the relay nothing about the content. A name's
+additional data holds its document id, so it opens under its own document only (`SYNC-018`,
+`SYNC-068`).
 
 **Why the nonce and the summary ride inside.** The session nonce binds each operation to its signer
 (`ambre-spec-op-authorship.md`). The activity summary tells a client what an update holds with no
@@ -184,8 +193,8 @@ say which of the four refusals fired.
 * **The author of a name or a blob is checked, not resolved.** The open verifies the signature
   against the key the object carries. Nothing yet asks whether that key belongs to a member
   (`SYNC-135`).
-* **A rotation leaves a name and every blob unreadable.** Neither names the key that sealed it
-  (`SYNC-125`, `ambre-spec-key-rotation.md`).
+* **A rotation still leaves a name and every blob unreadable.** Each names the key that sealed it,
+  and nothing brings that key back yet (`SYNC-042`, `ambre-spec-key-rotation.md`).
 * **The wire ciphertext accepts any bytes.** It is a public byte vector, so `SYNC-001` cannot be
   stated as a test and is held today by reading the send sites.
 * **No nonce is ever compared to another.** The generator is the operating system's, and nothing in

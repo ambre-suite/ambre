@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none | unheld -- the bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
 | `SYNC-045` | `INV` | An inbound frame MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | none | fails -- the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens; lands with the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | failing |
-| `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | `ambre_crypto::tests::a_key_id_is_derived_from_the_key` -- one key gives one identifier, another key another, and the key's bytes are not in it | none | verified |
 | `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -39,7 +39,7 @@ everyone who stays and posts every copy at once.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none | fails -- the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation; lands with the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | failing |
-| `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | none | fails -- the document name and every media blob stay sealed under the previous key, nothing names that key, and no member can open either again, so a revoke silently blanks the name and every picture; lands with the `Every sealed object names its key` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | none | fails -- the document name and every media blob stay sealed under the previous key. Each names that key, and nothing brings it back, so a revoke silently blanks the name and every picture; lands with the `The key chain` Story (`ambre-roadmap.md` E5) | failing |
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the `A snapshot follows each rotation` Story (`ambre-roadmap.md` E7) | unimplemented |
@@ -87,7 +87,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It also holds each link and each key
   identifier, and opens neither.
-* **Verification.** 3 `verified`, 3 `failing`, 5 `untested`, 14 `unimplemented`. What holds is the
+* **Verification.** 4 `verified`, 3 `failing`, 5 `untested`, 13 `unimplemented`. What holds is the
   relay half and the wipe the key type carries. The client side is loose: the revoke is not atomic,
   the rotation reaches the deltas alone, and the open tries every key.
 
@@ -231,9 +231,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   the wrap and the rotation post can each fail after it. Every failure reports one error to the user
   and leaves the member out of the list with a key that still opens new deltas. Nothing retries, and
   nothing records that this document is owed a rotation (`SYNC-041`).
-* **Nothing names the key of a name or a blob.** Both stay sealed under the key of their time,
-  which is correct once each names its key and the chain opens it. Neither names it today, so
-  every revoke leaves the document unnamed and its pictures unreadable (`SYNC-042`, `SYNC-125`).
+* **Nothing brings back the key a name or a blob names.** Both stay sealed under the key of their
+  time, and each names it (`SYNC-125`). That is correct once the chain opens it. Until then every
+  revoke leaves the document unnamed and its pictures unreadable (`SYNC-042`, `SYNC-119`).
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).

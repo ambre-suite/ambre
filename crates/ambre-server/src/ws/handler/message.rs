@@ -776,6 +776,7 @@ mod postcard_tests {
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([5u8; 16]),
                 pub_key: PublicKey::from_array([6u8; 32]),
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([7u8; 16]),
                 clock: Clock(42),
             },
@@ -791,6 +792,7 @@ mod postcard_tests {
             public_data: EphemeralPublicData {
                 document_id: DocumentId::from_bytes([13u8; 16]),
                 pub_key: PublicKey::from_array([14u8; 32]),
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 counter: Counter(15),
             },
             commitment_tag: CommitmentTag([16u8; 32]),
@@ -804,7 +806,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x01);
+        assert_eq!(bytes[0], ambre_protocol::CURRENT_VERSION.as_u8());
         let decoded = decode_client_msg(&bytes).unwrap();
         assert!(matches!(decoded, WsClientMsg::Subscribe { .. }));
     }
@@ -937,12 +939,12 @@ mod postcard_tests {
     }
 
     #[test]
-    fn version_byte_is_01() {
+    fn version_byte_is_the_current_version() {
         let msg = WsClientMsg::Subscribe {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x01);
+        assert_eq!(bytes[0], 0x02);
     }
 
     #[test]
@@ -952,13 +954,13 @@ mod postcard_tests {
 
     #[test]
     fn wrong_version_byte_is_error() {
-        let msg = vec![0x02, 0x00];
+        let msg = vec![0x01, 0x00];
         assert!(decode_client_msg(&msg).is_err());
     }
 
     #[test]
     fn garbage_data_returns_error_not_panics() {
-        let result = decode_client_msg(&[0x01, 0xFF, 0xFE, 0xFD]);
+        let result = decode_client_msg(&[0x02, 0xFF, 0xFE, 0xFD]);
         assert!(result.is_err());
     }
 }
@@ -1031,6 +1033,7 @@ mod ephemeral_binding_tests {
             public_data: EphemeralPublicData {
                 document_id: doc_id,
                 pub_key,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 counter: Counter(1),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -1050,6 +1053,7 @@ mod ephemeral_binding_tests {
         let public_data = EphemeralPublicData {
             document_id: doc_id,
             pub_key: pub_key.clone(),
+            key_id: ambre_core::KeyId::from_array([0u8; 16]),
             counter: Counter(1),
         };
         let nonce = Nonce([5u8; 24]);
@@ -1245,6 +1249,7 @@ mod delta_size_cap_tests {
             public_data: UpdatePublicData {
                 document_id: doc_id,
                 pub_key,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
@@ -1405,6 +1410,7 @@ mod ed25519_tests {
         let public_data = UpdatePublicData {
             document_id: DocumentId::from_bytes([0u8; 16]),
             pub_key: pubkey.clone(),
+            key_id: ambre_core::KeyId::from_array([0u8; 16]),
             snapshot_id: SnapshotId::from_bytes([1u8; 16]),
             clock: Clock(1),
         };
@@ -1443,6 +1449,7 @@ mod ed25519_tests {
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([0u8; 16]),
                 pub_key: pubkey,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(0),
             },
@@ -1466,6 +1473,7 @@ mod ed25519_tests {
         let public_data = UpdatePublicData {
             document_id: DocumentId::from_bytes([0u8; 16]),
             pub_key: pubkey.clone(),
+            key_id: ambre_core::KeyId::from_array([0u8; 16]),
             snapshot_id: SnapshotId::from_bytes([0u8; 16]),
             clock: Clock(0),
         };
@@ -1504,6 +1512,7 @@ mod ed25519_tests {
         let public_data = EphemeralPublicData {
             document_id: doc_id,
             pub_key: pubkey.clone(),
+            key_id: ambre_core::KeyId::from_array([0u8; 16]),
             counter: Counter(1),
         };
         let nonce = Nonce([2u8; 24]);
@@ -1554,6 +1563,7 @@ mod ed25519_tests {
             public_data: ambre_protocol::public_data::EphemeralPublicData {
                 document_id: DocumentId::from_bytes([0u8; 16]),
                 pub_key: pubkey.clone(),
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 counter: ambre_protocol::messages::Counter(1),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -1577,6 +1587,7 @@ mod refusal_tests {
                 public_data: ambre_protocol::public_data::UpdatePublicData {
                     document_id: DocumentId::new(),
                     pub_key: ambre_core::PublicKey::from_array([1u8; 32]),
+                    key_id: ambre_core::KeyId::from_array([0u8; 16]),
                     snapshot_id: ambre_core::SnapshotId::from_bytes([0u8; 16]),
                     clock: Clock(seq),
                 },

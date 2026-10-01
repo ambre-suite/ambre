@@ -12,5 +12,9 @@ serde_bytes = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+blake2 = { workspace = true }
+hex = { workspace = true }
+
 [lints]
 workspace = true

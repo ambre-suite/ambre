@@ -108,9 +108,9 @@ which holds no key, cannot compute it from a file it already has (`SYNC-050`).
 4. recompute the address from the plaintext, and refuse a blob whose address differs (`SYNC-052`);
 5. answer with the plaintext (`SYNC-054`).
 
-**The seal is the envelope, bound to the document and the address.** A blob carries its author
-key, the signature and the commitment tag. Its additional data is a domain string, the document id
-and the address.
+**The seal is the envelope, bound to the document and the address.** A blob carries the
+identifier of its key (`SYNC-125`), its author key, the signature and the commitment tag. Its
+additional data is a domain string, the document id and the address.
 
 | The envelope gives a frame | A blob has |
 |---|---|

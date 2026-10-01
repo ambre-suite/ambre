@@ -599,6 +599,7 @@ impl SyncState {
         let public_data = UpdatePublicData {
             document_id,
             pub_key,
+            key_id: doc_state.doc_key.id(),
             snapshot_id: doc_state.current_snapshot_id,
             clock: Clock(doc_state.local_clock),
         };
@@ -686,6 +687,7 @@ impl SyncState {
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
+            key_id: doc_state.doc_key.id(),
             snapshot_id: doc_state.current_snapshot_id,
             // The BLAKE2b parent chain is a post-MVP hardening (see
             // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
@@ -821,6 +823,7 @@ impl SyncState {
         let public_data = EphemeralPublicData {
             document_id,
             pub_key,
+            key_id: doc_state.doc_key.id(),
             counter: Counter(doc_state.ephemeral_counter),
         };
         match pipeline::seal_ephemeral(&payload, public_data, &doc_state.doc_key, &signing_key) {
@@ -909,6 +912,7 @@ mod tests {
         let public_data = UpdatePublicData {
             document_id,
             pub_key,
+            key_id: doc_key.id(),
             snapshot_id,
             clock: Clock(clock),
         };
@@ -926,6 +930,7 @@ mod tests {
         let public_data = SnapshotPublicData {
             document_id,
             pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
+            key_id: doc_key.id(),
             snapshot_id,
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),

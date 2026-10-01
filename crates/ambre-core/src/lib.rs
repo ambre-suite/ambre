@@ -25,6 +25,7 @@ pub mod error;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 pub mod id;
+pub mod key_id;
 pub mod public_key;
 pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
@@ -48,6 +49,7 @@ pub use fixtures::{
     seeded_document_id,
 };
 pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
+pub use key_id::{KEY_ID_LEN, KeyId};
 pub use public_key::PublicKey;
 pub use role::Role;
 pub use schema::{

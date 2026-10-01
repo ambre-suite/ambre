@@ -211,6 +211,7 @@ mod tests {
             public_data: UpdatePublicData {
                 document_id: doc,
                 pub_key: PublicKey::from_array([1u8; 32]),
+                key_id: ambre_core::KeyId::from_array([2u8; 16]),
                 snapshot_id: SnapshotId::new(),
                 clock: Clock(1),
             },

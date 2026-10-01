@@ -28,6 +28,9 @@ impl Version {
     /// Version 1 - first stable format.
     pub const V1: Self = Self(1);
 
+    /// Version 2 - every sealed payload names the key that sealed it.
+    pub const V2: Self = Self(2);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

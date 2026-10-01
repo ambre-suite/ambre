@@ -17,8 +17,8 @@
 //! - **Service** ([`UiEvent::Rest`]): a [`RestEvent`] response forwarded from
 //!   [`crate::LogicEvent::Rest`], echoing the originating [`RequestId`].
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
-//!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`, `SetupRequired`):
-//!   unsolicited.
+//!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`, `SetupRequired`,
+//!   `UpdateRequired`): unsolicited.
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocType, DocumentId, MeetingId, RequestId, RestEvent, Role, UserId};
@@ -153,6 +153,10 @@ pub enum UiEvent {
     /// its key setup. It calls for the setup, not for an error screen. Nothing
     /// is retried until the keys are stored (`ambre-spec-sync.md`, `SYNC-134`).
     SetupRequired,
+
+    /// The relay speaks a newer wire version than this build. It calls for a
+    /// reload onto the new client, not for an error (`ambre-spec-sync.md`, `SYNC-137`).
+    UpdateRequired,
 }
 
 impl UiEvent {

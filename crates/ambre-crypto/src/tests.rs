@@ -224,6 +224,22 @@ fn blake2_chain_hash() {
     assert_ne!(h1, hash::chain_hash(b"paren", b"tsnapshot"));
 }
 
+// -- Key identifier ----------------------------------------------------------
+
+/// A key's identifier is derived from the key alone. The same key always gives
+/// the same one, another key gives another, and the key's bytes are not in it
+/// (`SYNC-115`).
+#[test]
+fn a_key_id_is_derived_from_the_key() {
+    let key = fixed_doc_key();
+    assert_eq!(key.id(), DocumentKey::from_array([0x11; 32]).id());
+    assert_ne!(key.id(), DocumentKey::from_array([0x12; 32]).id());
+    assert_ne!(
+        key.id().as_array()[..],
+        [0x11; 32][..ambre_core::KEY_ID_LEN]
+    );
+}
+
 // -- Media address -----------------------------------------------------------
 
 /// One address per plaintext under one key, and another under any other key.

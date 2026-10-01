@@ -27,12 +27,12 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 19 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 | 6 |
-| `sync` | The one part of the client that talks to the network. | implemented | 28 | 18 |
+| `sync` | The one part of the client that talks to the network. | implemented | 29 | 18 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
-| `broadcast` | One connection per person, carrying every document they have open. | partial | 23 | 9 |
+| `broadcast` | One connection per person, carrying every document they have open. | partial | 24 | 9 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 13 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | partial | 20 | 10 |
@@ -47,7 +47,7 @@
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 4 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 | 2 |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
-| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 22 | 8 |
+| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 23 | 8 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 8 |
 | `server` | The one process every client talks to. | partial | 50 | 7 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 6 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 15 implemented, 23 partial, 7 design-only. 894 contract rows, 256 loose.**
+**45 features: 15 implemented, 23 partial, 7 design-only. 897 contract rows, 256 loose.**

@@ -421,6 +421,7 @@ impl LogicState {
                 self.send_to_ui(UiEvent::AuthError { message });
             }
             LogicEvent::SetupRequired => self.send_to_ui(UiEvent::SetupRequired),
+            LogicEvent::UpdateRequired => self.send_to_ui(UiEvent::UpdateRequired),
             LogicEvent::ApiError {
                 id,
                 request,
@@ -1826,5 +1827,15 @@ mod tests {
         state.handle_logic_event(LogicEvent::SetupRequired);
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(matches!(told.as_slice(), [UiEvent::SetupRequired]));
+    }
+
+    /// A relay on a newer wire version reaches the UI as an update to
+    /// install, and as nothing else (`SYNC-137`).
+    #[test]
+    fn a_newer_relay_reaches_the_ui_as_an_update() {
+        let (mut state, ui, _sync) = harness();
+        state.handle_logic_event(LogicEvent::UpdateRequired);
+        let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        assert!(matches!(told.as_slice(), [UiEvent::UpdateRequired]));
     }
 }

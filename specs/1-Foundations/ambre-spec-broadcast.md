@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | none | unheld -- the relay stores the frame's ciphertext as it received it and decodes nothing, which is an absence rather than a check. The two `ephemeral_binding_tests` hold the entry a forged sender never gets, which is `SRV-007` and not this rule; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-166` | `INV` | A change to the shape of any frame MUST change the version byte every frame opens on. | this spec section 3; `ambre-spec-sync.md`, `SYNC-137` | `ambre_protocol::tests::the_wire_layout_is_frozen_under_its_version` -- a digest of one frame per message variant, frozen under the version byte, where the decoder counts the variants so that one with no sample fails | none | verified |
 
 ### 1.2 A connection opens, and closes
 
@@ -46,7 +47,6 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | `SRV-087` | `FAIL` | A refused presence frame MUST be dropped in silence. | this spec section 3; `SRV-044` | type-level -- `handle_ephemeral` is handed no outbound queue, so no refusal on that path has anything to answer with. Presence arrives about ten times a minute per peer, and an error frame per refusal would be a second flood on the path the cap exists to bound | none | verified |
 | `SRV-042` | `FAIL` | A frame MUST be accepted only for a document this connection has subscribed to. | this spec section 3 | none | unheld -- every handler checks the connection's own subscription set before anything else, and no test sends a frame for an unsubscribed document: the check has no store behind it and the suite drives the handlers with a subscription already in place; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-043` | `FAIL` | A member removed while connected MUST stop being served within thirty seconds. | audit `H8`; this spec section 3 | none | unheld -- the membership is re-read past a thirty-second mark on every write, presence and replay, and the subscription is dropped when it is gone; no test removes a member on a live connection; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-
 ### 1.4 An accepted frame is fanned out
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -79,7 +79,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 8 `verified`, 9 `untested`, 6 `unimplemented`. What holds is what a handler test
+* **Verification.** 9 `verified`, 9 `untested`, 6 `unimplemented`. What holds is what a handler test
   drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
   everything about the connection rather than the message. Each needs a live socket, and two tests
   alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
@@ -133,6 +133,11 @@ is acted on. A channel adds no frame of its own (`SRV-102`).
 | a sealed presence blob | the same, minus the write role and the numbering; every refusal is silent |
 | ask for what was missed | subscribed, not too soon, still a member |
 | subscribe to a channel | the membership of the channel, which opens each of its live documents (`SRV-047`) |
+
+**The version byte.** Every frame opens on it, before the compact encoding. A frame of another
+version is refused whole. The encoding names no field, so a shape that moves under the same byte
+is read into the wrong fields (`SRV-166`). A client meeting a newer byte is owed an update
+(`SYNC-137`).
 
 **Why a presence refusal is silent.** Presence is sent about ten times a minute and no client waits
 for an answer. An error frame per refusal would be a second flood on the path the cap exists to

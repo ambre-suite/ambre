@@ -9,7 +9,7 @@ use ambre_core::version::Version;
 ///
 /// This is the version byte that must be prepended to every postcard-serialized
 /// network message, both a WebSocket frame and a REST payload.
-pub const CURRENT_VERSION: Version = Version::V1;
+pub const CURRENT_VERSION: Version = Version::V2;
 
 /// Checks that the provided version is supported.
 ///

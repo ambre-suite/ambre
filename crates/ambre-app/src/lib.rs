@@ -1272,6 +1272,11 @@ pub fn main() {
                 // the CRDT reconverges: a dropped/quarantined update is re-fetched
                 // via RequestMissing once its parent snapshot lands.
                 UiEvent::SyncWarning { code, .. } => toasts.warning(sync_warning_message(*code)),
+                // The relay moved to a newer wire version: syncing stays off
+                // until the page reloads onto the new client (`SYNC-137`).
+                UiEvent::UpdateRequired => toasts.warning(
+                    "A new version of Ambre is available. Reload the page to keep syncing.",
+                ),
                 // Session bootstrap (dev `?user=` or OIDC): show the user, and
                 // request the document list once for the landing overlay.
                 UiEvent::Rest {

@@ -12,7 +12,7 @@
 //!
 //! All three are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
 
-use ambre_core::SALT_LEN;
+use ambre_core::{KEY_ID_LEN, KeyId, SALT_LEN};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
@@ -28,6 +28,8 @@ const SIGN_DOMAIN: &[u8] = b"ambre-sign-v1";
 const EXCH_DOMAIN: &[u8] = b"ambre-exch-v1";
 /// Domain-separation tag for the passphrase-sealed file key.
 const FILE_DOMAIN: &[u8] = b"ambre-file-v1";
+/// Domain-separation tag for the identifier of a document key.
+const KEY_ID_DOMAIN: &[u8] = b"ambre-key-id-v1";
 
 /// Derives 32 bytes from `domain || seed` via BLAKE2b, truncating the 64-byte
 /// digest. Distinct domains yield independent keys from the same seed.
@@ -117,6 +119,19 @@ impl DocumentKey {
     /// Returns the raw key bytes. Restricted to crate use (AEAD, HMAC, wrap).
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+
+    /// The identifier of this key: `BLAKE2b(domain || key)`, truncated
+    /// (`SYNC-115`). It is derived from the key, so two keys never share one
+    /// in practice, and it reveals nothing of the key it names.
+    pub fn id(&self) -> KeyId {
+        let digest = Blake2b512::new()
+            .chain_update(KEY_ID_DOMAIN)
+            .chain_update(self.0)
+            .finalize();
+        let mut id = [0u8; KEY_ID_LEN];
+        id.copy_from_slice(&digest[..KEY_ID_LEN]);
+        KeyId::from_array(id)
     }
 }
 

@@ -258,6 +258,8 @@ name = "ambre-protocol"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "blake2",
+ "hex",
  "postcard",
  "serde",
  "serde_bytes",

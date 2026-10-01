@@ -187,6 +187,9 @@ enum SyncEvent {
         reason: String,
     },
     WsError,
+    /// A frame arrived under a newer wire version than this build's
+    /// (`ambre-spec-sync.md`, `SYNC-137`).
+    WireOutdated,
     /// Fired by a backoff timer scheduled after a disconnect: time to attempt a
     /// fresh WebSocket connection (see [`schedule_reconnect`](SyncState::schedule_reconnect)).
     ReconnectNow,
@@ -683,6 +686,9 @@ pub struct SyncState {
     /// cleared once a session with keys is stored. While set, no timer or
     /// renewal reopens the socket (`SYNC-133`).
     setup_owed: bool,
+    /// Set when the relay speaks a newer wire version than this build. Never
+    /// cleared: only a reload onto the new client cures it (`SYNC-137`).
+    update_owed: bool,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
@@ -758,6 +764,7 @@ impl SyncState {
             _reconnect_timer: None,
             reconnect_attempts: 0,
             setup_owed: false,
+            update_owed: false,
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             mock_ws_tx: None,

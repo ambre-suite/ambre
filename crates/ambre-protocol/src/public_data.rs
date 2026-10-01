@@ -3,7 +3,7 @@
 //! These fields are visible to the Blind Relay and are used for routing, integrity
 //! verification, and conflict resolution without decrypting the payload.
 
-use ambre_core::{DocumentId, PublicKey, SnapshotId};
+use ambre_core::{DocumentId, KeyId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 use crate::messages::{Clock, Counter};
@@ -15,6 +15,8 @@ pub struct UpdatePublicData {
     pub document_id: DocumentId,
     /// Ed25519 public key of the author.
     pub pub_key: PublicKey,
+    /// Identifier of the document key that sealed the update (`SYNC-125`).
+    pub key_id: KeyId,
     /// Snapshot identifier that this update is based on.
     pub snapshot_id: SnapshotId,
     /// Monotonic logical clock (Lamport timestamp) of the author for this document.
@@ -28,6 +30,8 @@ pub struct SnapshotPublicData {
     pub document_id: DocumentId,
     /// Ed25519 public key of the snapshot creator.
     pub pub_key: PublicKey,
+    /// Identifier of the document key that sealed the snapshot (`SYNC-125`).
+    pub key_id: KeyId,
     /// Unique identifier of this snapshot.
     pub snapshot_id: SnapshotId,
     /// BLAKE2b hash chain proving integrity of the parent snapshot without decrypting it.
@@ -47,6 +51,8 @@ pub struct EphemeralPublicData {
     pub document_id: DocumentId,
     /// Ed25519 public key of the sender.
     pub pub_key: PublicKey,
+    /// Identifier of the document key that sealed the frame (`SYNC-125`).
+    pub key_id: KeyId,
     /// Monotonic counter for ordering ephemerals from the same author.
     pub counter: Counter,
 }

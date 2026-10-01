@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3340 rows: 2395 shipped, of which 102 partial and 612 loose. 945 unbuilt.**
+**3343 rows: 2400 shipped, of which 102 partial and 612 loose. 943 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 286 | 257 | 541 | 597 |  | 1681 |
+| `verified` | 291 | 257 | 541 | 597 |  | 1686 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
 | `failing` | 11 | 2 | 17 |  |  | 30 |
 | `untested` | 231 | 131 | 195 | 2 |  | 559 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
-| `unimplemented` | 306 | 61 | 28 | 111 | 439 | 945 |
+| `unimplemented` | 304 | 61 | 28 | 111 | 439 | 943 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -41,7 +41,7 @@
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 |  | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 |  | 7 | 1 |
 | `ambre-spec-architecture.md` | 29 | 29 | 13 | 3 | 13 |  |
-| `ambre-spec-broadcast.md` | 23 | 17 | 8 |  | 9 | 6 |
+| `ambre-spec-broadcast.md` | 24 | 18 | 9 |  | 9 | 6 |
 | `ambre-spec-chrome.md` | 23 | 20 | 9 | 1 | 10 | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
@@ -53,7 +53,7 @@
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 3 |  | 13 | 2 |
 | `ambre-spec-high-density.md` | 9 | 5 | 0 |  | 5 | 4 |
-| `ambre-spec-key-rotation.md` | 25 | 11 | 3 |  | 8 | 14 |
+| `ambre-spec-key-rotation.md` | 25 | 12 | 4 |  | 8 | 13 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 |  | 2 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 10 |  | 10 | 4 |
@@ -66,11 +66,11 @@
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-schema-version.md` | 19 | 19 | 18 |  | 1 |  |
-| `ambre-spec-sealed-envelope.md` | 22 | 17 | 9 |  | 8 | 5 |
+| `ambre-spec-sealed-envelope.md` | 23 | 19 | 11 |  | 8 | 4 |
 | `ambre-spec-sequencer.md` | 46 | 18 | 7 | 3 | 8 | 28 |
 | `ambre-spec-server.md` | 50 | 24 | 15 | 2 | 7 | 26 |
 | `ambre-spec-session.md` | 17 | 17 | 9 | 2 | 6 |  |
-| `ambre-spec-sync.md` | 28 | 28 | 10 |  | 18 |  |
+| `ambre-spec-sync.md` | 29 | 29 | 11 |  | 18 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 1 | 8 | 6 |
@@ -169,7 +169,7 @@
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
 | `ambre-spec-architecture.md` | ARCH-001..029 |
-| `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164 |
+| `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
@@ -256,11 +256,11 @@
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069 |
 | `ambre-spec-residency.md` | RESID-001..020 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..019 |
-| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135 |
+| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |

@@ -188,7 +188,7 @@ pub struct SeqUpdate {
 mod validate_tests {
     use super::*;
     use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_core::{DocumentId, KeyId, PublicKey, SnapshotId};
 
     fn update(cipher: Vec<u8>, clock: u64) -> Update {
         Update {
@@ -197,6 +197,7 @@ mod validate_tests {
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
+                key_id: KeyId::from_array([4u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([3u8; 16]),
                 clock: Clock(clock),
             },
@@ -212,6 +213,7 @@ mod validate_tests {
             public_data: EphemeralPublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
+                key_id: KeyId::from_array([4u8; 16]),
                 counter: Counter(counter),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -268,6 +270,7 @@ mod validate_tests {
             public_data: SnapshotPublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
+                key_id: KeyId::from_array([4u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([3u8; 16]),
                 parent_snapshot_proof: proof,
                 parent_snapshot_update_clocks: clocks,

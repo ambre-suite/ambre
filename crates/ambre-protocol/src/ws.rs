@@ -7,6 +7,7 @@
 // ============================================================================
 
 use crate::messages::Seq;
+use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::{ChannelId, DocType, DocumentId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
@@ -159,7 +160,7 @@ pub enum WsServerMsg {
 /// When postcard cannot serialize `msg`. Every field of [`WsClientMsg`] is a
 /// postcard type, so the encoder fails only when the allocator does.
 pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
-    let buf = vec![0x01]; // wire version
+    let buf = vec![CURRENT_VERSION.as_u8()];
     postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg")
 }
 
@@ -176,7 +177,7 @@ pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
         return Err(WireDecodeError::Empty);
     }
     match data[0] {
-        0x01 => Ok(postcard::from_bytes(&data[1..])?),
+        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(&data[1..])?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }
@@ -188,7 +189,7 @@ pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
 /// When postcard cannot serialize `msg`, for the reason
 /// [`encode_client_msg`] states.
 pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
-    let buf = vec![0x01];
+    let buf = vec![CURRENT_VERSION.as_u8()];
     postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg")
 }
 
@@ -202,7 +203,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<WsServerMsg, WireDecodeError> {
         return Err(WireDecodeError::Empty);
     }
     match data[0] {
-        0x01 => Ok(postcard::from_bytes(&data[1..])?),
+        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(&data[1..])?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }
@@ -212,6 +213,15 @@ pub enum WireDecodeError {
     Empty,
     UnsupportedVersion(u8),
     Postcard(postcard::Error),
+}
+
+impl WireDecodeError {
+    /// Whether the frame came from a peer on a newer wire version than this
+    /// build's. Only an update cures it (`ambre-spec-sync.md`, `SYNC-137`).
+    /// An older peer is the relay's lag, never the user's to fix.
+    pub fn is_from_newer_peer(&self) -> bool {
+        matches!(self, WireDecodeError::UnsupportedVersion(v) if *v > CURRENT_VERSION.as_u8())
+    }
 }
 
 impl From<postcard::Error> for WireDecodeError {

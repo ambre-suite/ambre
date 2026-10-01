@@ -11,6 +11,7 @@
 
 use std::io::Read;
 
+use ambre_core::{KEY_ID_LEN, KeyId};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -69,6 +70,21 @@ pub enum PipelineError {
     WrongDocument,
     #[error("a sealed object is shorter than its header")]
     ShortObject,
+    #[error("the payload names another key than the one given")]
+    WrongKey,
+    #[error("unknown sealed object layout: {0:#x}")]
+    UnknownLayout(u8),
+}
+
+/// Refuses a key other than the one the metadata names (`SYNC-125`). On the
+/// seal it keeps a payload from naming a key that did not seal it. On the open
+/// it refuses before any cryptography.
+fn check_key(named: KeyId, doc_key: &DocumentKey) -> Result<(), PipelineError> {
+    if named == doc_key.id() {
+        Ok(())
+    } else {
+        Err(PipelineError::WrongKey)
+    }
 }
 
 // -- Compression layer ---------------------------------------------------------
@@ -190,6 +206,7 @@ pub fn seal_update(
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Update, PipelineError> {
+    check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
@@ -210,6 +227,7 @@ pub fn seal_update(
 /// Verifies, decrypts and decompresses an [`Update`] back to its CRDT payload.
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
+    check_key(update.public_data.key_id, doc_key)?;
     let aad = aad_of(&update.public_data)?;
     let sealed = sealed_from(
         &update.ciphertext,
@@ -240,6 +258,7 @@ pub fn seal_snapshot(
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Snapshot, PipelineError> {
+    check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
@@ -279,6 +298,7 @@ pub fn open_snapshot_blob(
 
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
 pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u8>, PipelineError> {
+    check_key(snapshot.public_data.key_id, doc_key)?;
     let aad = aad_of(&snapshot.public_data)?;
     let sealed = sealed_from(
         &snapshot.ciphertext,
@@ -303,6 +323,7 @@ pub fn seal_ephemeral(
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Ephemeral, PipelineError> {
+    check_key(public_data.key_id, doc_key)?;
     let aad = aad_of(&public_data)?;
     let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
@@ -321,6 +342,7 @@ pub fn open_ephemeral(
     ephemeral: &Ephemeral,
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, PipelineError> {
+    check_key(ephemeral.public_data.key_id, doc_key)?;
     let aad = aad_of(&ephemeral.public_data)?;
     let sealed = sealed_from(
         &ephemeral.ciphertext,
@@ -338,10 +360,19 @@ pub fn open_ephemeral(
 
 // -- Standalone objects: a document name, a media blob -------------------------
 
+/// The layout of a standalone object, its first byte (`SYNC-138`). The relay
+/// keeps a blob across releases, so a reader must tell an older layout from a
+/// forged one. Every object of a release shares it, so it says nothing of the
+/// content.
+const OBJECT_LAYOUT: u8 = 1;
+/// Bytes of the layout byte.
+const LAYOUT_LEN: usize = 1;
 /// Bytes of the author key that opens a standalone object.
 const AUTHOR_KEY_LEN: usize = 32;
 /// Bytes before the ciphertext of a standalone object.
-const OBJECT_HEADER_LEN: usize = AUTHOR_KEY_LEN
+const OBJECT_HEADER_LEN: usize = LAYOUT_LEN
+    + KEY_ID_LEN
+    + AUTHOR_KEY_LEN
     + ambre_crypto::signature::SIGNATURE_LEN
     + ambre_crypto::commitment::TAG_LEN
     + ambre_crypto::aead::NONCE_LEN;
@@ -374,20 +405,45 @@ pub fn media_aad(
     aad
 }
 
+/// The additional data an object is sealed under: the layout and the key
+/// identifier its header names, then the caller's own. The signature covers
+/// all three, so a header cannot be made to name another layout or key.
+fn object_aad(key_id: KeyId, aad: &[u8]) -> Vec<u8> {
+    let mut bound = vec![OBJECT_LAYOUT];
+    bound.extend_from_slice(key_id.as_array());
+    bound.extend_from_slice(aad);
+    bound
+}
+
+/// Refuses an object whose first byte names a layout this build does not read,
+/// before anything else in it is trusted (`SYNC-138`).
+fn check_layout(bytes: &[u8]) -> Result<(), PipelineError> {
+    match bytes.first() {
+        None => Err(PipelineError::ShortObject),
+        Some(&OBJECT_LAYOUT) => Ok(()),
+        Some(&other) => Err(PipelineError::UnknownLayout(other)),
+    }
+}
+
 /// Seals a payload that travels outside a wire message: a document name or a
 /// media blob. It takes the full envelope: the cipher, the commitment tag and the
 /// author signature (`SYNC-018`). Nothing is compressed: a name is short, and a
-/// blob is a format that is already compressed.
+/// blob is a format that is already compressed. The header names the key that
+/// sealed it (`SYNC-125`), after the layout it was written in (`SYNC-138`).
 ///
-/// Layout: `author key || signature || commitment tag || nonce || ciphertext`.
+/// Layout: `layout || key id || author key || signature || commitment tag ||
+/// nonce || ciphertext`.
 pub fn seal_object(
     plaintext: &[u8],
     aad: &[u8],
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Vec<u8>, PipelineError> {
-    let sealed = envelope::seal(plaintext, aad, doc_key, signing_key)?;
+    let key_id = doc_key.id();
+    let sealed = envelope::seal(plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
     let mut out = Vec::with_capacity(OBJECT_HEADER_LEN + sealed.ciphertext.len());
+    out.push(OBJECT_LAYOUT);
+    out.extend_from_slice(key_id.as_array());
     out.extend_from_slice(signing_key.verifying_key().as_bytes());
     out.extend_from_slice(&sealed.signature);
     out.extend_from_slice(&sealed.commitment_tag);
@@ -401,17 +457,23 @@ pub fn seal_object(
 ///
 /// # Errors
 ///
-/// [`PipelineError::ShortObject`] when the bytes cannot hold the header, and
-/// [`PipelineError::Crypto`] when any of the three checks fails.
+/// * [`PipelineError::UnknownLayout`] when the first byte names a layout this
+///   build does not read.
+/// * [`PipelineError::ShortObject`] when the bytes cannot hold the header.
+/// * [`PipelineError::WrongKey`] when the header names another key.
+/// * [`PipelineError::Crypto`] when any of the three checks fails.
 pub fn open_object(
     bytes: &[u8],
     aad: &[u8],
     doc_key: &DocumentKey,
 ) -> Result<Vec<u8>, PipelineError> {
+    check_layout(bytes)?;
     if bytes.len() < OBJECT_HEADER_LEN {
         return Err(PipelineError::ShortObject);
     }
-    let (author, rest) = bytes.split_at(AUTHOR_KEY_LEN);
+    let key_id = object_key(bytes)?;
+    check_key(key_id, doc_key)?;
+    let (author, rest) = bytes[LAYOUT_LEN + KEY_ID_LEN..].split_at(AUTHOR_KEY_LEN);
     let (signature, rest) = rest.split_at(ambre_crypto::signature::SIGNATURE_LEN);
     let (tag, rest) = rest.split_at(ambre_crypto::commitment::TAG_LEN);
     let (nonce, ciphertext) = rest.split_at(ambre_crypto::aead::NONCE_LEN);
@@ -424,7 +486,28 @@ pub fn open_object(
             .map_err(|_| PipelineError::ShortObject)?,
     };
     let author: [u8; AUTHOR_KEY_LEN] = author.try_into().map_err(|_| PipelineError::ShortObject)?;
-    Ok(envelope::open(&sealed, aad, doc_key, &author)?)
+    Ok(envelope::open(
+        &sealed,
+        &object_aad(key_id, aad),
+        doc_key,
+        &author,
+    )?)
+}
+
+/// The key a sealed object names, read from its header without opening it.
+///
+/// # Errors
+///
+/// [`PipelineError::UnknownLayout`] when the layout is not one this build
+/// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold an
+/// identifier.
+pub fn object_key(bytes: &[u8]) -> Result<KeyId, PipelineError> {
+    check_layout(bytes)?;
+    bytes
+        .get(LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN)
+        .and_then(|id| id.try_into().ok())
+        .map(KeyId::from_array)
+        .ok_or(PipelineError::ShortObject)
 }
 
 #[cfg(test)]
@@ -441,10 +524,16 @@ mod tests {
         (doc_key, signing, author)
     }
 
+    /// The identifier of the key [`keys`] returns.
+    fn key_id() -> KeyId {
+        DocumentKey::from_array([0x11; 32]).id()
+    }
+
     fn update_pd(author: PublicKey) -> UpdatePublicData {
         UpdatePublicData {
             document_id: DocumentId::new(),
             pub_key: author,
+            key_id: key_id(),
             snapshot_id: SnapshotId::new(),
             clock: Clock(1),
         }
@@ -465,6 +554,7 @@ mod tests {
         let pd = SnapshotPublicData {
             document_id: DocumentId::new(),
             pub_key: author,
+            key_id: key_id(),
             snapshot_id: SnapshotId::new(),
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
@@ -482,10 +572,78 @@ mod tests {
         let pd = EphemeralPublicData {
             document_id: DocumentId::new(),
             pub_key: author,
+            key_id: key_id(),
             counter: Counter(7),
         };
         let eph = seal_ephemeral(payload, pd, &doc_key, &signing).unwrap();
         assert_eq!(open_ephemeral(&eph, &doc_key).unwrap(), payload);
+    }
+
+    /// Each wire message names the key that sealed it, and a seal refuses
+    /// metadata that names another one (`SYNC-125`).
+    #[test]
+    fn a_frame_names_the_key_that_sealed_it() {
+        let (doc_key, signing, author) = keys();
+        let update = seal_update(b"delta", update_pd(author.clone()), &doc_key, &signing).unwrap();
+        assert_eq!(update.public_data.key_id, doc_key.id());
+
+        let other = DocumentKey::from_array([0x44; 32]);
+        assert!(matches!(
+            seal_update(b"delta", update_pd(author), &other, &signing),
+            Err(PipelineError::WrongKey)
+        ));
+        assert!(matches!(
+            open_update(&update, &other),
+            Err(PipelineError::WrongKey)
+        ));
+    }
+
+    /// A name or a blob names in its header the key that sealed it, and the
+    /// header cannot be rewritten to name another (`SYNC-125`).
+    #[test]
+    fn an_object_names_the_key_that_sealed_it() {
+        let (doc_key, signing, _) = keys();
+        let sealed = seal_object(b"Budget 2027", b"aad", &doc_key, &signing).unwrap();
+        assert_eq!(object_key(&sealed).unwrap(), doc_key.id());
+
+        let other = DocumentKey::from_array([0x44; 32]);
+        assert!(matches!(
+            open_object(&sealed, b"aad", &other),
+            Err(PipelineError::WrongKey)
+        ));
+
+        // A header rewritten to name another key no longer opens under it.
+        let mut renamed = seal_object(b"Budget 2027", b"aad", &other, &signing).unwrap();
+        renamed[LAYOUT_LEN..LAYOUT_LEN + KEY_ID_LEN].copy_from_slice(doc_key.id().as_array());
+        assert!(open_object(&renamed, b"aad", &doc_key).is_err());
+    }
+
+    /// An object of a layout this build does not read is refused by that
+    /// layout (`SYNC-138`). Its length, its key and its signature are never
+    /// looked at.
+    #[test]
+    fn an_unknown_object_layout_is_refused_before_any_check() {
+        let (doc_key, signing, _) = keys();
+        let mut later = seal_object(b"a picture", b"aad", &doc_key, &signing).unwrap();
+        assert_eq!(later[0], OBJECT_LAYOUT);
+        later[0] = OBJECT_LAYOUT + 1;
+        assert!(matches!(
+            open_object(&later, b"aad", &doc_key),
+            Err(PipelineError::UnknownLayout(2))
+        ));
+        assert!(matches!(
+            object_key(&later),
+            Err(PipelineError::UnknownLayout(2))
+        ));
+        // One byte alone: the layout is the first thing read.
+        assert!(matches!(
+            open_object(&[OBJECT_LAYOUT + 1], b"aad", &doc_key),
+            Err(PipelineError::UnknownLayout(2))
+        ));
+        assert!(matches!(
+            open_object(&[], b"aad", &doc_key),
+            Err(PipelineError::ShortObject)
+        ));
     }
 
     #[test]
@@ -562,22 +720,24 @@ mod tests {
         assert_eq!(open_object(&sealed, aad, &doc_key).unwrap(), b"a picture");
 
         // The signature: one flipped byte, and the author no longer signed it.
+        let signature_at = LAYOUT_LEN + KEY_ID_LEN + AUTHOR_KEY_LEN;
         let mut forged = sealed.clone();
-        forged[AUTHOR_KEY_LEN] ^= 1;
+        forged[signature_at] ^= 1;
         assert!(matches!(
             open_object(&forged, aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::InvalidSignature))
         ));
 
         // The tag: a wrong one, re-signed so the signature passes, still fails.
-        let tag_at = AUTHOR_KEY_LEN + signature::SIGNATURE_LEN;
+        let tag_at = signature_at + signature::SIGNATURE_LEN;
         let nonce_at = tag_at + commitment::TAG_LEN;
         let mut moved = sealed.clone();
         moved[tag_at] ^= 1;
         let tag: [u8; commitment::TAG_LEN] = moved[tag_at..nonce_at].try_into().unwrap();
         let nonce = &moved[nonce_at..OBJECT_HEADER_LEN];
-        let resigned = signature::sign(&signing, nonce, &moved[OBJECT_HEADER_LEN..], aad, &tag);
-        moved[AUTHOR_KEY_LEN..tag_at].copy_from_slice(&resigned);
+        let bound = object_aad(doc_key.id(), aad);
+        let resigned = signature::sign(&signing, nonce, &moved[OBJECT_HEADER_LEN..], &bound, &tag);
+        moved[signature_at..tag_at].copy_from_slice(&resigned);
         assert!(matches!(
             open_object(&moved, aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::CommitmentMismatch))

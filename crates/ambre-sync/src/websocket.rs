@@ -46,6 +46,9 @@ impl SyncState {
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn open_websocket(&mut self) {
+        if self.update_owed {
+            return;
+        }
         // Mirror the REST scheme: `ws` on localhost (http), `wss` otherwise.
         // A hardcoded `wss://` fails on a localhost http dev server (TLS error,
         // WS close code 1015).
@@ -89,6 +92,9 @@ impl SyncState {
     /// Native / host-test stub: does nothing (mock transport handles WS).
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn open_websocket(&mut self) {
+        if self.update_owed {
+            return;
+        }
         self.socket_opens += 1;
         tracing::info!("Sync: WebSocket opened (native mock)");
     }
@@ -138,6 +144,9 @@ impl SyncState {
                 match decode_server_msg(&bytes) {
                     Ok(server_msg) => {
                         let _ = tx.send(SyncEvent::WsMessage(server_msg));
+                    }
+                    Err(e) if e.is_from_newer_peer() => {
+                        let _ = tx.send(SyncEvent::WireOutdated);
                     }
                     Err(e) => tracing::error!("Sync: WS decode error: {e:?}"),
                 }
@@ -277,6 +286,23 @@ impl SyncState {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
             SyncEvent::WsOpened => self.resubscribe_all(),
+            SyncEvent::WireOutdated => {
+                if self.update_owed {
+                    return;
+                }
+                // Every later frame would fail the same way, and no retry
+                // cures it. Close for good, and say once that an update is
+                // owed (`SYNC-137`).
+                self.update_owed = true;
+                if let Some(ws) = self.ws.take() {
+                    ws.set_onmessage(None);
+                    ws.set_onclose(None);
+                    ws.set_onerror(None);
+                    let _ = ws.close();
+                }
+                self.handle_ws_disconnected(0, "wire outdated".to_owned());
+                self.send_to_logic(LogicEvent::UpdateRequired);
+            }
             SyncEvent::WsDisconnected { code, reason } => {
                 self.handle_ws_disconnected(code, reason);
                 if code == WS_CLOSE_SETUP_REQUIRED {
@@ -1089,6 +1115,30 @@ mod tests {
         state.handle_sync_event(closed(WS_CLOSE_SETUP_REQUIRED));
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(told.iter().any(|e| matches!(e, LogicEvent::SetupRequired)));
+        assert!(!told.iter().any(|e| matches!(
+            e,
+            LogicEvent::ApiError { .. } | LogicEvent::AuthError { .. }
+        )));
+    }
+
+    /// A frame of a newer wire version reaches Logic once as an update to
+    /// install, never as an error (`SYNC-137`). No timer or renewal reopens
+    /// the socket.
+    #[test]
+    fn a_newer_wire_version_reaches_logic_as_an_update_and_closes_for_good() {
+        let (mut state, rx) = with_open_document();
+        state.handle_sync_event(SyncEvent::WireOutdated);
+        state.handle_sync_event(SyncEvent::WireOutdated);
+        state.handle_sync_event(closed(WS_CLOSE_UNAUTHORIZED));
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
+        assert_eq!(state.socket_opens, 0);
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        let updates = told
+            .iter()
+            .filter(|e| matches!(e, LogicEvent::UpdateRequired))
+            .count();
+        assert_eq!(updates, 1);
         assert!(!told.iter().any(|e| matches!(
             e,
             LogicEvent::ApiError { .. } | LogicEvent::AuthError { .. }
