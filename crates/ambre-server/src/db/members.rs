@@ -176,7 +176,8 @@ pub async fn list_document_members(
         .collect()
 }
 
-/// Removes a user from a document's membership.
+/// Removes a user from a document's membership, and leaves the document owing
+/// a rotation (`SRV-122`). Every key it held is one the member removed holds.
 ///
 /// Refuses to delete the document's only remaining owner (last-owner lockout):
 /// with no owner left, nobody could manage sharing. The check and the delete
@@ -188,29 +189,71 @@ pub async fn remove_document_member(
     user_id: &ambre_core::UserId,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
-    let uid = id_to_uuid(*user_id);
-
     let mut tx = pool.begin().await?;
+    delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
+    sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
+        .bind(did)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
 
+/// Removes a member and re-wraps the new key for every member who stays, in
+/// one transaction (`ambre-spec-key-rotation.md`, `SYNC-126`). Either both
+/// land or neither does: a removal never stands without its rotation.
+pub async fn revoke_and_rotate(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    rotated_by: &ambre_core::UserId,
+    keys: &[(ambre_core::UserId, Vec<u8>)],
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
+    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Whether the document owes a rotation (`SRV-122`).
+pub async fn rotation_owed(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<bool, AppError> {
+    let owed: Option<bool> =
+        sqlx::query_scalar("SELECT rotation_owed FROM documents WHERE id = $1")
+            .bind(id_to_uuid(*document_id))
+            .fetch_optional(pool)
+            .await?;
+    Ok(owed.unwrap_or(false))
+}
+
+/// Deletes one member row, refusing the last owner. The target row is locked
+/// so two concurrent removals cannot both see two owners.
+async fn delete_member(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(), AppError> {
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
     )
-    .bind(did)
-    .bind(uid)
-    .fetch_optional(&mut *tx)
+    .bind(document_id)
+    .bind(user_id)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if current_role.as_deref() == Some("owner") {
-        ensure_not_last_owner(&mut tx, did).await?;
+        ensure_not_last_owner(tx, document_id).await?;
     }
 
     sqlx::query("DELETE FROM document_members WHERE document_id = $1 AND user_id = $2")
-        .bind(did)
-        .bind(uid)
-        .execute(&mut *tx)
+        .bind(document_id)
+        .bind(user_id)
+        .execute(&mut **tx)
         .await?;
-
-    tx.commit().await?;
     Ok(())
 }
 
@@ -262,22 +305,42 @@ pub async fn rotate_document_keys(
     rotated_by: &ambre_core::UserId,
     keys: &[(ambre_core::UserId, Vec<u8>)],
 ) -> Result<(), AppError> {
-    let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    rewrap_members(
+        &mut tx,
+        id_to_uuid(*document_id),
+        id_to_uuid(*rotated_by),
+        keys,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Writes each member's new wrapped copy and clears the document's debt
+/// (`SRV-124`), inside the caller's transaction.
+async fn rewrap_members(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    rotator: uuid::Uuid,
+    keys: &[(ambre_core::UserId, Vec<u8>)],
+) -> Result<(), AppError> {
     // The rotator re-wrapped every key with ITS exchange key, so it becomes the
     // new wrapper of record. Update `invited_by` alongside `doc_key_enc`, or
     // the ECDH unwrap would later use the stale inviter's key.
-    let rotator = id_to_uuid(*rotated_by);
-    let mut tx = pool.begin().await?;
     for (user_id, key_enc) in keys {
         let uid = id_to_uuid(*user_id);
         sqlx::query("UPDATE document_members SET doc_key_enc = $3, invited_by = $4 WHERE document_id = $1 AND user_id = $2")
-            .bind(did)
+            .bind(document_id)
             .bind(uid)
             .bind(key_enc)
             .bind(rotator)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
     }
-    tx.commit().await?;
+    sqlx::query("UPDATE documents SET rotation_owed = false WHERE id = $1")
+        .bind(document_id)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }

@@ -31,6 +31,9 @@ impl Version {
     /// Version 2 - every sealed payload names the key that sealed it.
     pub const V2: Self = Self(2);
 
+    /// Version 3 - the relay refuses a frame for its key while a rotation is owed.
+    pub const V3: Self = Self(3);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

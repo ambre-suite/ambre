@@ -11,6 +11,7 @@ use rustis::resp::RefBulkString;
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
 /// - `KEYS[2]` = `doc:{id}:seq`   (counter)
 /// - `KEYS[3]` = `doc:{id}:gone`  (tombstone, see [`mark_document_gone`])
+/// - `KEYS[4]` = `doc:{id}:rotation-owed` (see [`rotation_owed_key`])
 /// - `ARGV[1]` = pub_key_hex
 /// - `ARGV[2]` = incoming clock (must be last_clock + 1)
 ///
@@ -38,6 +39,9 @@ pub const CLOCK_AND_SEQ_LUA: &str = r#"
 if redis.call('EXISTS', KEYS[3]) == 1 then
     return redis.error_reply('DOCUMENT_GONE')
 end
+if redis.call('EXISTS', KEYS[4]) == 1 then
+    return redis.error_reply('ROTATION_OWED')
+end
 local current  = tonumber(redis.call('HGET', KEYS[1], ARGV[1])) or 0
 local incoming = tonumber(ARGV[2])
 if incoming ~= current + 1 then
@@ -53,6 +57,10 @@ return redis.call('INCR', KEYS[2])
 /// global `seq` if the clock is exactly `last_clock + 1`. A refused clock is the
 /// typed [`AppError::ClockMismatch`], carrying the clock the relay expected and
 /// the one it received (`SRV-037`); any other failure is the store's.
+///
+/// A document that owes a rotation refuses with [`AppError::RotationOwed`]
+/// before the clock is read. The frame then takes no sequence number and
+/// consumes no clock (`SRV-123`, `SRV-125`).
 pub async fn verify_clock_and_assign_seq(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -62,11 +70,17 @@ pub async fn verify_clock_and_assign_seq(
     let clocks_key = format!("doc:{document_id}:clocks");
     let seq_key = format!("doc:{document_id}:seq");
     let gone_key = document_gone_key(document_id);
+    let owed_key = rotation_owed_key(document_id);
 
     let result: i64 = redis
         .eval::<i64>(
             CLOCK_AND_SEQ_LUA,
-            [clocks_key.as_str(), seq_key.as_str(), gone_key.as_str()],
+            [
+                clocks_key.as_str(),
+                seq_key.as_str(),
+                gone_key.as_str(),
+                owed_key.as_str(),
+            ],
             [pub_key_hex, &clock.to_string()],
         )
         .await
@@ -83,6 +97,9 @@ fn clock_refusal(error: &str, got: u64) -> AppError {
         return AppError::NotFound {
             resource: "document",
         };
+    }
+    if error.contains(ROTATION_OWED) {
+        return AppError::RotationOwed;
     }
     let current = error.split_once("CLOCK_MISMATCH:").and_then(|(_, rest)| {
         let digits = rest.trim_start();
@@ -228,6 +245,10 @@ return 1
 /// The refusal every tombstone-guarded script answers for a document being
 /// deleted (see [`mark_document_gone`]).
 const DOCUMENT_GONE: &str = "DOCUMENT_GONE";
+
+/// The refusal the clock and presence scripts answer for a document that owes
+/// a rotation (see [`rotation_owed_key`]).
+const ROTATION_OWED: &str = "ROTATION_OWED";
 
 /// Reads a guarded script's refusal out of a store error: a document being
 /// deleted is not found, anything else is a store failure.
@@ -602,25 +623,37 @@ pub async fn doc_presence_update(
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
     // distinct author forever. The tombstone check, the write and its TTL run
-    // as one script, so a field never lands without its expiry.
+    // as one script, so a field never lands without its expiry. A document that
+    // owes a rotation refuses presence as it refuses a delta (`SRV-123`).
     const LUA: &str = r#"
 if redis.call('EXISTS', KEYS[2]) == 1 then
     return redis.error_reply('DOCUMENT_GONE')
+end
+if redis.call('EXISTS', KEYS[3]) == 1 then
+    return redis.error_reply('ROTATION_OWED')
 end
 redis.call('HSET', KEYS[1], ARGV[2], ARGV[3])
 return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
 "#;
     let key = format!("doc:{document_id}:presence");
     let gone_key = document_gone_key(document_id);
+    let owed_key = rotation_owed_key(document_id);
     let ttl = ttl_secs.to_string();
     redis
         .eval::<Vec<i64>>(
             LUA,
-            [key.as_str(), gone_key.as_str()],
+            [key.as_str(), gone_key.as_str(), owed_key.as_str()],
             [ttl.as_str(), pub_key_hex, presence_enc_b64],
         )
         .await
-        .map_err(|e| store_refusal(&e.to_string(), "presence update"))?;
+        .map_err(|e| {
+            let e = e.to_string();
+            if e.contains(ROTATION_OWED) {
+                AppError::RotationOwed
+            } else {
+                store_refusal(&e, "presence update")
+            }
+        })?;
     Ok(())
 }
 
@@ -674,8 +707,9 @@ pub async fn mark_document_gone(
 
 /// Removes every key the relay holds for a deleted document (`SRV-017`). That
 /// is the sequence counter, the per-author clock hash, the pending list and
-/// its dirty marker, the presence hash and the dead-letter list. One script, so
-/// no reader sees a half-purged document.
+/// its dirty marker. It is also the presence hash, the dead-letter list and
+/// the mirror of an owed rotation. One script, so no reader sees a half-purged
+/// document.
 ///
 /// The same script renews the tombstone for `ttl_secs` and schedules a second
 /// sweep of the document's objects at `sweep_due` (Unix seconds). That sweep
@@ -687,10 +721,10 @@ pub async fn purge_document_state(
     sweep_due: u64,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
-redis.call('SREM', KEYS[6], KEYS[3])
-redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5])
-redis.call('SET', KEYS[7], '1', 'EX', ARGV[1])
-return redis.call('ZADD', KEYS[8], ARGV[2], ARGV[3])
+redis.call('SREM', KEYS[7], KEYS[3])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
+redis.call('SET', KEYS[8], '1', 'EX', ARGV[1])
+return redis.call('ZADD', KEYS[9], ARGV[2], ARGV[3])
 "#;
     let keys = document_state_keys(document_id);
     let gone_key = document_gone_key(document_id);
@@ -703,6 +737,7 @@ return redis.call('ZADD', KEYS[8], ARGV[2], ARGV[3])
                 keys[2].as_str(),
                 keys[3].as_str(),
                 keys[4].as_str(),
+                keys[5].as_str(),
                 FLUSH_DIRTY_SET,
                 gone_key.as_str(),
                 SWEEP_DUE_SET,
@@ -752,15 +787,46 @@ return 0
 
 /// The keys the relay holds for one document, in the order
 /// [`purge_document_state`] passes them: seq, clocks, pending, presence,
-/// dead-letter.
-pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 5] {
+/// dead-letter, owed rotation.
+pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 6] {
     [
         format!("doc:{document_id}:seq"),
         format!("doc:{document_id}:clocks"),
         format!("doc:{document_id}:pending"),
         format!("doc:{document_id}:presence"),
         format!("doc:{document_id}:deadletter"),
+        rotation_owed_key(document_id),
     ]
+}
+
+/// The mirror of a rotation the document owes (`SRV-122`). The register holds
+/// the debt; this key lets the clock script and the presence script refuse a
+/// frame with no extra round trip (`SRV-123`). A subscribe rewrites it from the
+/// register, so a reset of this store loses it only until the next subscribe.
+pub fn rotation_owed_key(document_id: &ambre_core::DocumentId) -> String {
+    format!("doc:{document_id}:rotation-owed")
+}
+
+/// Sets or clears the mirror of an owed rotation.
+pub async fn mirror_rotation_owed(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    owed: bool,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+if ARGV[1] == '1' then
+    redis.call('SET', KEYS[1], '1')
+    return 1
+end
+return redis.call('DEL', KEYS[1])
+"#;
+    let key = rotation_owed_key(document_id);
+    let flag = if owed { "1" } else { "0" };
+    let _: i64 = redis
+        .eval::<i64>(LUA, [key.as_str()], [flag])
+        .await
+        .map_err(|e| AppError::Redis(format!("mirror rotation owed: {e}")))?;
+    Ok(())
 }
 
 /// Redis key for the per-document clock hash.
@@ -882,6 +948,39 @@ mod lua_tests {
         rustis::client::Client::connect(url.as_str())
             .await
             .expect("db-tier tests require a reachable Redis (REDIS_URL / just services-up)")
+    }
+
+    /// `SRV-123`, `SRV-125`: while the debt is mirrored, a delta and a presence
+    /// sample are refused. The delta takes no sequence number and consumes no
+    /// clock. Once the debt clears, the same clock is accepted at seq 1.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_frame_owed_a_rotation_takes_no_seq_and_no_clock() {
+        let redis = connect_redis().await;
+        let doc_id = ambre_core::DocumentId::new();
+        let pk_hex = "0aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa10aa1";
+
+        mirror_rotation_owed(&redis, &doc_id, true).await.unwrap();
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, 1).await;
+        assert!(
+            matches!(refused, Err(AppError::RotationOwed)),
+            "{refused:?}"
+        );
+        let presence = doc_presence_update(&redis, &doc_id, pk_hex, "cA==", 15).await;
+        assert!(
+            matches!(presence, Err(AppError::RotationOwed)),
+            "{presence:?}"
+        );
+        let seq: usize = redis.exists(format!("doc:{doc_id}:seq")).await.unwrap();
+        assert_eq!(seq, 0, "a refused frame takes no sequence number");
+
+        mirror_rotation_owed(&redis, &doc_id, false).await.unwrap();
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, 1)
+            .await
+            .expect("the same clock is accepted once the debt clears");
+        assert_eq!(seq, 1);
+
+        let _ = redis.del(document_state_keys(&doc_id)).await.unwrap();
     }
 
     #[tokio::test]

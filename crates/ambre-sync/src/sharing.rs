@@ -404,8 +404,10 @@ pub(crate) struct RevokeParams {
     pub exchange_key: StaticSecret,
 }
 
-/// Revoke orchestration: DELETE the share, generate a fresh `DocumentKey`, fetch
-/// the remaining members, re-wrap the new key for each, POST the rotation.
+/// Revoke orchestration: fetch the members, generate a fresh `DocumentKey` and
+/// wrap it for everyone but the member removed. Then POST the removal with
+/// every copy in one request (`SYNC-126`). The relay applies both or neither,
+/// so a failure leaves the member in and the key unchanged (`SYNC-041`).
 /// Success -> `SyncEvent::RevocationComplete` (the caller swaps the local key);
 /// every failure -> `LogicEvent::ApiError`.
 pub(crate) async fn revoke_task<H: ShareHttp>(
@@ -414,21 +416,6 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let revoke_url = format!(
-        "{}://{}/api/documents/{}/share/{}",
-        p.url_scheme, p.api_base, p.document_id, p.user_id
-    );
-    if let Err(e) = http.delete(&revoke_url).await {
-        return api_error(
-            logic_tx,
-            "RevokeFromDocument",
-            500,
-            format!("Revoke failed: {e}"),
-        );
-    }
-
-    let new_doc_key = DocumentKey::generate();
-
     let members_url = format!(
         "{}://{}/api/documents/{}/members",
         p.url_scheme, p.api_base, p.document_id
@@ -447,22 +434,31 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             );
         }
     };
+    // Compared parsed, so a spelling of the same id cannot keep the member in.
+    let staying: Vec<_> = members
+        .into_iter()
+        .filter(|m| UserId::parse_str(&m.user_id).ok() != Some(p.user_id))
+        .collect();
 
-    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &members);
-    let rotate_url = format!(
-        "{}://{}/api/documents/{}/rotate-key",
+    let new_doc_key = DocumentKey::generate();
+    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &staying);
+    let revoke_url = format!(
+        "{}://{}/api/documents/{}/revoke",
         p.url_scheme, p.api_base, p.document_id
     );
-    let body = http::RotateKeyRequest { keys };
+    let body = http::RevokeRequest {
+        user_id: p.user_id.to_string(),
+        keys,
+    };
     if let Err(e) = http
-        .post_json::<_, serde_json::Value>(&rotate_url, &body)
+        .post_json::<_, serde_json::Value>(&revoke_url, &body)
         .await
     {
         return api_error(
             logic_tx,
             "RevokeFromDocument",
             500,
-            format!("Rotate key failed: {e}"),
+            format!("Revoke failed: {e}"),
         );
     }
 
@@ -484,6 +480,107 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 unwrapped.join(", ")
             ),
         );
+    }
+}
+
+/// Inputs for [`leave_task`].
+pub(crate) struct LeaveParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    /// This user: a departure removes no one else.
+    pub user_id: UserId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+}
+
+/// Departure orchestration: DELETE this user's own share, and nothing else.
+/// No key is generated and none is posted, so the members who stay never
+/// trust a key the leaver chose (`SYNC-127`, `SYNC-130`). The relay records
+/// the rotation as owed. Success -> `SyncEvent::DocumentLeft`; failure ->
+/// `LogicEvent::ApiError`.
+pub(crate) async fn leave_task<H: ShareHttp>(
+    http: &H,
+    p: LeaveParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let url = format!(
+        "{}://{}/api/documents/{}/share/{}",
+        p.url_scheme, p.api_base, p.document_id, p.user_id
+    );
+    if let Err(e) = http.delete(&url).await {
+        return api_error(logic_tx, "LeaveDocument", 500, format!("Leave failed: {e}"));
+    }
+    let _ = event_tx.send(SyncEvent::DocumentLeft {
+        id: p.id,
+        document_id: p.document_id,
+    });
+}
+
+/// Inputs for [`settle_task`].
+pub(crate) struct SettleParams {
+    pub document_id: DocumentId,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Pays a rotation the document owes (`SYNC-128`). It fetches the members and,
+/// while the debt stands, posts a fresh key wrapped for each of them. A debt
+/// someone else already paid ends in `SyncEvent::DebtGone`, and the caller
+/// fetches the key they chose. A failure ends in `SyncEvent::DebtUnsettled`,
+/// and the next frame tries again.
+pub(crate) async fn settle_task<H: ShareHttp>(
+    http: &H,
+    p: SettleParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+) {
+    let document_id = p.document_id;
+    let unsettled = |message: String| {
+        let _ = event_tx.send(SyncEvent::DebtUnsettled {
+            document_id,
+            message,
+        });
+    };
+    let members_url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, document_id
+    );
+    let resp = match http
+        .get_json::<http::DocumentMembersResponse>(&members_url)
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => return unsettled(format!("Get members failed: {e}")),
+    };
+    if !resp.rotation_owed {
+        let _ = event_tx.send(SyncEvent::DebtGone { document_id });
+        return;
+    }
+    let new_doc_key = DocumentKey::generate();
+    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &resp.members);
+    if !unwrapped.is_empty() {
+        tracing::warn!(
+            "Sync: the owed rotation skips {} member(s) with an unreadable key",
+            unwrapped.len()
+        );
+    }
+    let rotate_url = format!(
+        "{}://{}/api/documents/{}/rotate-key",
+        p.url_scheme, p.api_base, document_id
+    );
+    let body = http::RotateKeyRequest { keys };
+    match http
+        .post_json::<_, serde_json::Value>(&rotate_url, &body)
+        .await
+    {
+        Ok(_) => {
+            let _ = event_tx.send(SyncEvent::DebtSettled {
+                document_id,
+                new_doc_key,
+            });
+        }
+        Err(e) => unsettled(format!("Rotate key failed: {e}")),
     }
 }
 
@@ -937,23 +1034,35 @@ mod tests {
         }
     }
 
+    /// A members row, for the revoke and the debt tests.
+    fn member_row(uid: &str, name: &str, pub_hex: &str) -> serde_json::Value {
+        serde_json::json!({
+            "user_id": uid,
+            "display_name": name, "email": "m@test.local",
+            "signing_pub_key": "00", "exchange_pub_key": pub_hex,
+            "doc_key_enc": "", "role": "editor",
+        })
+    }
+
+    /// A revoke posts the removal and the copies in one request, and wraps the
+    /// new key for everyone but the member removed (`SYNC-041`, `SYNC-126`).
     #[tokio::test]
-    async fn revoke_success_deletes_then_rotates_remaining_members() {
+    async fn a_revoke_posts_the_removal_and_the_copies_in_one_request() {
         let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
+        let (_c_xk, c_pub) = keypair(3);
+        let params = revoke_params(&my_xk);
+        let removed = params.user_id.to_string();
 
         let http = FakeHttp::new(vec![
-            Ok(serde_json::json!({ "status": "revoked" })), // DELETE
-            Ok(serde_json::json!({ "members": [ {
-                "user_id": "11111111-1111-1111-1111-111111111111",
-                "display_name": "A", "email": "a@test.local",
-                "signing_pub_key": "00", "exchange_pub_key": a_pub,
-                "doc_key_enc": "", "role": "editor",
-            } ] })), // GET members
-            Ok(serde_json::json!({ "status": "rotated" })), // POST rotate
+            Ok(serde_json::json!({ "members": [
+                member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
+                member_row(&removed, "Carol", &c_pub),
+            ] })), // GET members
+            Ok(serde_json::json!({ "status": "revoked" })), // POST revoke
         ]);
         let (etx, erx, sink, lrx) = channels();
-        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+        revoke_task(&http, params, &etx, &sink).await;
 
         assert!(matches!(
             erx.try_recv().expect("RevocationComplete"),
@@ -962,16 +1071,127 @@ mod tests {
         assert!(lrx.try_recv().is_err());
 
         let calls = http.calls();
-        assert_eq!(calls.len(), 3);
-        assert!(matches!(&calls[0], Call::Delete(u) if u.contains("/share/")));
-        assert!(matches!(&calls[1], Call::Get(u) if u.ends_with("/members")));
-        match &calls[2] {
+        assert_eq!(calls.len(), 2, "one read, then one write");
+        assert!(matches!(&calls[0], Call::Get(u) if u.ends_with("/members")));
+        match &calls[1] {
+            Call::Post(url, body) => {
+                assert!(url.ends_with("/revoke"));
+                assert_eq!(body["user_id"], removed.as_str());
+                let keys = body["keys"].as_array().unwrap();
+                assert_eq!(keys.len(), 1, "no copy for the member removed");
+                assert_eq!(keys[0]["user_id"], "11111111-1111-1111-1111-111111111111");
+            }
+            other => panic!("expected the revoke POST, got {other:?}"),
+        }
+    }
+
+    /// A revoke the relay refuses changes nothing here either: no key is
+    /// swapped, and the user is told (`SYNC-041`).
+    #[tokio::test]
+    async fn a_refused_revoke_swaps_no_key() {
+        let (my_xk, _) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "members": [
+                member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
+            ] })),
+            Err("HTTP 500".into()),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no key to install");
+        assert!(matches!(
+            lrx.try_recv().expect("ApiError"),
+            LogicEvent::ApiError { code: 500, .. }
+        ));
+        assert_eq!(http.calls().len(), 2);
+    }
+
+    /// Leaving deletes this user's own share and posts nothing else: no key is
+    /// generated, so none reaches the members who stay (`SYNC-127`, `SYNC-130`).
+    #[tokio::test]
+    async fn leaving_posts_the_removal_alone_and_chooses_no_key() {
+        let me = UserId::new();
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "status": "left" }))]);
+        let (etx, erx, sink, lrx) = channels();
+        let params = LeaveParams {
+            id: RequestId::next(),
+            document_id: DocumentId::new(),
+            user_id: me,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+        };
+        leave_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv().expect("DocumentLeft"),
+            SyncEvent::DocumentLeft { .. }
+        ));
+        assert!(lrx.try_recv().is_err());
+        let calls = http.calls();
+        assert_eq!(calls.len(), 1, "no GET, no POST: nothing to wrap");
+        assert!(matches!(&calls[0], Call::Delete(u) if u.ends_with(&format!("/share/{me}"))));
+    }
+
+    fn settle_params(my_xk: &StaticSecret) -> SettleParams {
+        SettleParams {
+            document_id: DocumentId::new(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: my_xk.clone(),
+        }
+    }
+
+    /// An owed rotation is paid with a fresh key wrapped for every member. The
+    /// key reaches the caller only once the relay stored it (`SYNC-128`).
+    #[tokio::test]
+    async fn an_owed_rotation_is_paid_for_every_member() {
+        let (my_xk, my_pub) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "rotation_owed": true, "members": [
+                member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+                member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
+            ] })),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_params(&my_xk), &etx).await;
+        assert!(matches!(
+            erx.try_recv().expect("DebtSettled"),
+            SyncEvent::DebtSettled { .. }
+        ));
+        match &http.calls()[1] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/rotate-key"));
-                assert_eq!(body["keys"].as_array().unwrap().len(), 1);
+                assert_eq!(body["keys"].as_array().unwrap().len(), 2);
             }
-            other => panic!("expected rotate POST, got {other:?}"),
+            other => panic!("expected the rotate POST, got {other:?}"),
         }
+    }
+
+    /// A debt already paid posts nothing, and a failed payment leaves the debt
+    /// for the next edit (`SYNC-128`).
+    #[tokio::test]
+    async fn a_paid_debt_posts_nothing_and_a_failed_one_is_retried() {
+        let (my_xk, _) = keypair(1);
+        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "members": [] }))]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_params(&my_xk), &etx).await;
+        assert!(matches!(
+            erx.try_recv().expect("DebtGone"),
+            SyncEvent::DebtGone { .. }
+        ));
+        assert_eq!(http.calls().len(), 1);
+
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "rotation_owed": true, "members": [] })),
+            Err("HTTP 403".into()),
+        ]);
+        settle_task(&http, settle_params(&my_xk), &etx).await;
+        assert!(matches!(
+            erx.try_recv().expect("DebtUnsettled"),
+            SyncEvent::DebtUnsettled { .. }
+        ));
     }
 
     /// A malformed identifier from the server stops the key verification: no
@@ -998,7 +1218,6 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
         let http = FakeHttp::new(vec![
-            Ok(serde_json::json!({ "status": "revoked" })),
             Ok(serde_json::json!({ "members": [
                 {
                     "user_id": "11111111-1111-1111-1111-111111111111",
@@ -1013,7 +1232,7 @@ mod tests {
                     "doc_key_enc": "", "role": "editor",
                 },
             ] })),
-            Ok(serde_json::json!({ "status": "rotated" })),
+            Ok(serde_json::json!({ "status": "revoked" })),
         ]);
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
@@ -1030,7 +1249,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn revoke_delete_failure_emits_500_and_stops() {
+    async fn revoke_stops_when_the_members_cannot_be_read() {
         let (my_xk, _) = keypair(1);
         let http = FakeHttp::new(vec![Err("403".into())]);
         let (etx, erx, sink, lrx) = channels();
@@ -1039,12 +1258,12 @@ mod tests {
         match lrx.try_recv().expect("ApiError emitted") {
             LogicEvent::ApiError { code, message, .. } => {
                 assert_eq!(code, 500);
-                assert!(message.contains("Revoke failed"));
+                assert!(message.contains("Get members failed"));
             }
             other => panic!("unexpected: {other:?}"),
         }
         assert!(erx.try_recv().is_err());
-        // Stopped after the failed DELETE: no members fetch, no rotation.
+        // Stopped after the failed read: nothing posted, so nothing removed.
         assert_eq!(http.calls().len(), 1);
     }
 

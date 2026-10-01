@@ -129,8 +129,8 @@ is acted on. A channel adds no frame of its own (`SRV-102`).
 |---|---|
 | subscribe to a document | the membership, read from the register |
 | unsubscribe | none: it only removes |
-| a sealed delta | subscribed, sized, well-formed, still a member, allowed to write, own key, signed, then numbered |
-| a sealed presence blob | the same, minus the write role and the numbering; every refusal is silent |
+| a sealed delta | subscribed, sized, well-formed, still a member, allowed to write, own key, signed, then numbered unless a rotation is owed; that refusal names the key and the clock, to the author alone (`SRV-123`) |
+| a sealed presence blob | the same, minus the write role and the numbering; every refusal is silent, an owed rotation included |
 | ask for what was missed | subscribed, not too soon, still a member |
 | subscribe to a channel | the membership of the channel, which opens each of its live documents (`SRV-047`) |
 

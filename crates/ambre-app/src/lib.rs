@@ -85,6 +85,12 @@ use landing::{DocItem, LandingSignals};
 /// consumer cannot grow an unbounded queue in the shared heap.
 const CHANNEL_CAPACITY: usize = 1024;
 
+/// Sync events held past a full channel. At the high count the worker stops
+/// reading the relay, and at the low count it starts again
+/// (`ambre-spec-budgets.md section 6`, `SYNC-059`).
+const SYNC_INBOX_HIGH: usize = 4 * CHANNEL_CAPACITY;
+const SYNC_INBOX_LOW: usize = CHANNEL_CAPACITY;
+
 /// A pending TOFU trust decision for the share dialog
 /// (`ambre-spec-key-verification.md`). Built by the per-frame relay from a
 /// `RestEvent::InviteeKey` (phase 1), once the fetched key has been compared
@@ -522,7 +528,11 @@ pub fn main() {
     let (sync_to_logic_tx, sync_to_logic_rx) =
         conduit::to_worker::<LogicEvent>(CHANNEL_CAPACITY, &logic_bell);
     // What the Sync -> Logic channel could not take yet, re-offered each frame.
-    let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::new(sync_to_logic_tx)));
+    let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::with_marks(
+        sync_to_logic_tx,
+        SYNC_INBOX_HIGH,
+        SYNC_INBOX_LOW,
+    )));
     // Logic -> Main, carrying document snapshots and deltas for local
     // persistence. The Main thread owns the IndexedDB store (its callbacks need a
     // live event loop, which the blocking Logic loop cannot offer). It drains
@@ -1211,6 +1221,7 @@ pub fn main() {
         // bootstrap window, where onmessage does not yet exist (order preserved).
         // Sync -> Logic: re-offer what the channel refused on an earlier turn.
         sync_inbox.borrow_mut().flush();
+        relay_pressure(&sync_inbox, &sync_worker);
 
         if sync_ready.get() {
             while let Ok(cmd) = logic_to_sync_rx.try_recv() {
@@ -1869,6 +1880,7 @@ pub fn main() {
                     view_rx,
                     w,
                     h,
+                    text_input,
                     theme_ctl,
                     prose_figures,
                     prose_signals,

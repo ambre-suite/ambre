@@ -120,14 +120,13 @@ impl SyncState {
     }
 
     /// Revokes a member from a document and rotates the document key:
-    /// 1. DELETEs the share at `/api/documents/{id}/share/{uid}`.
+    /// 1. GETs the members from the server.
     /// 2. Generates a fresh [`DocumentKey`] via CSPRNG.
-    /// 3. GETs the remaining members from the server.
-    /// 4. Wraps the new key for each remaining member via X25519 ECDH.
-    /// 5. POSTs the wrapped keys to `/api/documents/{id}/rotate-key` (the
-    ///    server atomically replaces the stored `doc_key_enc` entries and
-    ///    broadcasts `WsServerMsg::KeyRotationRequired` to every client).
-    /// 6. Emits [`SyncEvent::RevocationComplete`], which causes
+    /// 3. Wraps the new key via X25519 ECDH for each member but the one removed.
+    /// 4. POSTs the removal and every copy to `/api/documents/{id}/revoke`. The
+    ///    server applies both in one transaction and then broadcasts
+    ///    `WsServerMsg::KeyRotationRequired` (`SYNC-126`).
+    /// 5. Emits [`SyncEvent::RevocationComplete`], which causes
     ///    [`handle_sync_event`] to swap the local key and push the old key
     ///    into the [`SyncDocumentState::old_keys`] LRU cache.
     pub(crate) fn handle_revoke_from_document(
@@ -157,7 +156,7 @@ impl SyncState {
             return;
         };
 
-        // Orchestration (DELETE -> new key -> members -> rotate) lives in
+        // Orchestration (members -> new key -> one revoke POST) lives in
         // `sharing::revoke_task`. The old key is dropped/zeroized when the local
         // swap happens in `handle_sync_event` on `RevocationComplete`.
         let params = sharing::RevokeParams {
@@ -171,6 +170,34 @@ impl SyncState {
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
             sharing::revoke_task(&http, params, &tx, &logic_tx).await;
+        });
+    }
+
+    /// Leaves a document: DELETEs this user's own share and nothing else
+    /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
+    pub(crate) fn handle_leave_document(&self, id: RequestId, document_id: DocumentId) {
+        let (Some(tx), Some(user_id)) = (self.event_tx.clone(), self.user_id) else {
+            let _ = self.logic_tx.send(LogicEvent::ApiError {
+                id: None,
+                request: "LeaveDocument".into(),
+                code: 401,
+                message: "Not authenticated".into(),
+            });
+            return;
+        };
+        let logic_tx = self.logic_tx.clone();
+        let params = sharing::LeaveParams {
+            id,
+            document_id,
+            user_id,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+        };
+        let http = sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            sharing::leave_task(&http, params, &tx, &logic_tx).await;
         });
     }
 

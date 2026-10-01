@@ -137,10 +137,15 @@ pub(crate) enum SendError {
     Disconnected,
 }
 
-/// Spreadsheet column label for a 0-based index (0 -> "A", 26 -> "AA"). Used for
-/// the screen-reader cell announcement.
-fn col_label(col: u32) -> String {
-    crate::columns::col_to_alpha(col)
+/// What a screen reader hears when the active cell moves (`CHROME-023`): its
+/// reference, then its value or "empty". Rows and columns are 0-based here.
+pub(crate) fn cell_announcement(row: u32, col: u32, value: &str) -> String {
+    let at = format!("{}{}", crate::columns::col_to_alpha(col), row + 1);
+    if value.is_empty() {
+        format!("{at}, empty")
+    } else {
+        format!("{at}, {value}")
+    }
 }
 
 /// Whether the HTML formula bar `<input>` (id `ambre-formula-input`) currently
@@ -439,6 +444,14 @@ pub(crate) fn formula_bar_sync(input: &str, shown: &str, seed: &str) -> FormulaB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `CHROME-023`: the grid announces the active cell by its reference and
+    /// its value, and says an empty cell is empty rather than nothing.
+    #[test]
+    fn the_active_cell_is_announced_by_reference_and_value() {
+        assert_eq!(cell_announcement(1, 1, "42"), "B2, 42");
+        assert_eq!(cell_announcement(0, 26, ""), "AA1, empty");
+    }
 
     /// Only a text the user typed opens an edit session (`TRAME-UI-155`): a
     /// collaborator's write under an untouched bar refreshes it and opens

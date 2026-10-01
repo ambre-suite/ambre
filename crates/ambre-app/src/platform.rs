@@ -392,6 +392,7 @@ pub(crate) fn spawn_sync_worker(
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
     let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
+    let to_worker = worker.clone();
 
     let onmessage =
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
@@ -405,7 +406,12 @@ pub(crate) fn spawn_sync_worker(
                 return;
             }
             match postcard::from_bytes::<LogicEvent>(&bytes) {
-                Ok(event) => to_logic.borrow_mut().push(event),
+                Ok(event) => {
+                    to_logic.borrow_mut().push(event);
+                    // A hidden page draws no frame, so the hold is asked here
+                    // too, not only by the relay.
+                    relay_pressure(&to_logic, &to_worker);
+                }
                 Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
             }
         });
@@ -413,6 +419,20 @@ pub(crate) fn spawn_sync_worker(
     // Leak the closure: it lives for the whole session (the worker never stops).
     onmessage.forget();
     worker
+}
+
+/// Tells the Sync worker to stop or resume reading the relay, once per crossing
+/// of a mark of the inbox (`SYNC-059`).
+pub(crate) fn relay_pressure(inbox: &SyncInbox, worker: &web_sys::Worker) {
+    let cmd = match inbox.borrow_mut().pressure() {
+        Some(ambre_bus::conduit::Pressure::Hold) => SyncCommand::HoldInbound,
+        Some(ambre_bus::conduit::Pressure::Release) => SyncCommand::ReleaseInbound,
+        None => return,
+    };
+    match postcard::to_allocvec(&cmd) {
+        Ok(bytes) => post_to_worker(worker, &bytes),
+        Err(e) => tracing::error!("[UI->Sync] failed to encode {cmd:?}: {e}"),
+    }
 }
 
 /// Encode-free postMessage of raw `bytes` to the Sync worker, transferring the

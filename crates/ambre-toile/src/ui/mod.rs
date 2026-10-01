@@ -13,6 +13,7 @@
 // frame (`view`).
 // ============================================================================
 
+pub mod a11y;
 pub mod arrow;
 pub mod commands;
 pub mod comments;

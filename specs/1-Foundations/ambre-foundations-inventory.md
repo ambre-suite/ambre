@@ -27,10 +27,10 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 19 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 | 6 |
-| `sync` | The one part of the client that talks to the network. | implemented | 29 | 18 |
+| `sync` | The one part of the client that talks to the network. | implemented | 29 | 17 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
-| `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
+| `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 8 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 24 | 9 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
@@ -39,7 +39,7 @@
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 15 | 3 |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 | 13 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | partial | 9 | 5 |
-| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 25 | 7 |
+| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 25 | 6 |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 | 10 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 30 | 2 |
 | `message-bus` | The contract the three threads talk over. | partial | 28 | 11 |
@@ -51,7 +51,7 @@
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 8 |
 | `server` | The one process every client talks to. | partial | 50 | 7 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 6 |
-| `ui` | The page's own thread. | partial | 17 | 8 |
+| `ui` | The page's own thread. | partial | 17 | 7 |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 16 | 6 |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 15 implemented, 23 partial, 7 design-only. 897 contract rows, 255 loose.**
+**45 features: 15 implemented, 23 partial, 7 design-only. 897 contract rows, 250 loose.**

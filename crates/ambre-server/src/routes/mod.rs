@@ -81,6 +81,10 @@ pub fn api_router(
             axum::routing::delete(revoke_from_document),
         )
         .route(
+            "/documents/{id}/revoke",
+            axum::routing::post(revoke_and_rotate),
+        )
+        .route(
             "/documents/{id}/members",
             axum::routing::get(list_document_members),
         )

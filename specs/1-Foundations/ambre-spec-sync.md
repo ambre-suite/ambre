@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none | unheld -- the error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | none | unheld -- the delay is doubled on each teardown, and nothing observes it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | none | unheld -- the reset is the first statement of the inbound handler, so a connection that opens and is refused never reaches it, which is the whole point: resetting on the open turns a relay refusing every connection into a client retrying without a backoff at all; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | `ambre-spec-architecture.md section 4` | none | fails -- the worker cannot know. It posts messages one way with no answer, so the queue on the other side fills and the receiving thread blocks on it instead; lands with the `SYNC P4` hardening Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-026` | `ambre_bus::conduit::tests::a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low` -- the Main side asks once at each mark, never in between; `ambre_sync::websocket::tests::a_held_inbound_reopens_only_on_release_and_catches_up` -- no close, timer or renewal reopens a held socket, and the release pulls from the last sequence then sends the edit kept | none | verified |
 
 ### 1.4 A request is made
 
@@ -85,9 +85,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 11 `verified`, 1 `failing`, 17 `untested`. The crate graph holds the keys and
-  the CRDT apart. Unit tests hold the token redaction and wipe, the refused channel send and the
-  name bound to its document. Each gap left is a browser property the wasm tier cannot boot,
+* **Verification.** 12 `verified`, 17 `untested`. The crate graph holds the keys and the CRDT apart.
+  Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
+  document. Each gap left is a browser property the wasm tier cannot boot,
   `ambre-spec-testing.md section 9`.
 ---
 
@@ -140,6 +140,7 @@ no header of ours (`SYNC-061`).
 | the relay refuses the upgrade on authentication | renew the token silently, then reopen (`SYNC-063`) |
 | the relay refuses the upgrade for a key setup still owed | neither renew nor reopen until a session with keys is stored, and tell the client a setup is owed (`SYNC-133`, `SYNC-134`) |
 | a frame of a newer wire version | close for good, and tell the client an update is owed (`SYNC-137`) |
+| the Main side asks for a hold | close, and keep each edit sealed meanwhile; reopen on the release alone (`SYNC-059`) |
 | any other close, or a socket error | back off and reopen (`SYNC-064`) |
 | the socket opens | resubscribe every document, and pull what was missed (`SYNC-033`) |
 | a frame arrives | reset the delay: only a frame proves the connection is live (`SYNC-064`) |
@@ -147,6 +148,15 @@ no header of ours (`SYNC-061`).
 **Why a bare open is not proof.** A refused upgrade still completes, then closes immediately. A
 delay reset on the open alone would reset on every refusal. The reconnection would then become a
 tight loop against a relay that rate-limits it.
+
+**The hold.** A browser socket cannot pause its reads. So past a high mark of events waiting for
+the logic thread, the Main side asks for a hold. This worker then closes the socket. The relay keeps
+every delta, so nothing is lost. At the low mark the Main side releases it, and the reopen pulls
+from each document's last sequence.
+
+Presence sent meanwhile is lost, which costs a cursor for a moment. An edit sealed during the hold
+is kept and sent after the reopen (`SYNC-059`). The two marks are a row of
+`ambre-spec-budgets.md section 6`.
 
 **Requests.** Every one carries the access token. A refusal for an expired token is renewed once and
 replayed; a second refusal reaches the screen as an authentication error (`SYNC-062`). A refusal
@@ -207,16 +217,15 @@ The worker has no surface of its own. What a user sees of it is five things.
 | A setup refusal is told at the one sink every event leaves by | a check in each request handler | about forty handlers turn a failed request into an error, each in its own words. One that missed the check would show a setup still owed as a generic failure. The sink sees every event, so one mapping covers each (`SYNC-134`) |
 | The tokens live in memory alone | browser storage | a token there survives the tab and is readable by any script that reaches the page. Memory dies with the worker, which is the lifetime a session should have |
 | The tokens live in memory alone | a cookie | the browser sends it on requests we did not make, which is the ambient credential the deliberate token exists to avoid |
+| A hold closes the socket | keeping it open and dropping the deltas that arrive | a rotation notice or a removal arrives on the same socket, and a filter that drops the deltas alone must know every frame that may not be dropped. A closed socket drops nothing: the relay keeps it all, and the reopen asks |
+| A hold closes the socket | pausing the read of a stream socket | only one browser engine ships a socket with a paused read, and the worker must run on every engine |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The socket has no backpressure, and cannot have it as the pair is built.** The design says the
-  worker stops reading the socket while the path to Main is full, so the relay feels it as network
-  backpressure. A posted message returns nothing, so this worker has no way to learn that the queue
-  on the other side is full. What happens instead is the inverse: the queue fills and the receiving
-  handler blocks on it, on the thread that draws the screen (`SYNC-059`).
+* **An edit sent while the network is down is lost on the wire.** Only a hold keeps it; any other
+  close drops what is sent before the reopen, and nothing sends it again.
 * **A name sealed before the envelope opens as untitled.** The old form took the bare cipher, and
   nothing reads it any more.
 * **A rotation leaves the name unreadable.** Nothing re-seals it, so the first revoke on a document

@@ -6,10 +6,10 @@
 // Demux by document_id / channel_id in each message.
 // ============================================================================
 
-use crate::messages::Seq;
+use crate::messages::{Clock, Seq};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{ChannelId, DocType, DocumentId, PublicKey, SnapshotId};
+use ambre_core::{ChannelId, DocType, DocumentId, KeyId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -147,6 +147,17 @@ pub enum WsServerMsg {
 
     /// Error (may be global or scoped to a document/channel).
     Error { code: u16, message: String },
+
+    /// A delta refused for its key: the document owes a rotation, and every key
+    /// it held is one a departed member holds too (`ambre-spec-server.md`,
+    /// `SRV-123`). Sent to the author alone. The frame took no sequence number
+    /// and consumed no clock (`SRV-125`). So the author seals it again under
+    /// the next key, at the same clock, and sends it again (`SYNC-129`).
+    KeyRefused {
+        document_id: DocumentId,
+        key_id: KeyId,
+        clock: Clock,
+    },
 }
 
 // ---------------------------------------------------------------------------

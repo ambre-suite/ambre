@@ -40,6 +40,11 @@ pub enum AppError {
     #[error("Clock mismatch: expected {expected}, got {got}")]
     ClockMismatch { expected: u64, got: u64 },
 
+    /// The document owes a rotation, so a frame under any key it held is
+    /// refused (`SRV-123`).
+    #[error("Rotation owed")]
+    RotationOwed,
+
     #[error("Invalid signature")]
     InvalidSignature,
 
@@ -86,6 +91,7 @@ impl IntoResponse for AppError {
             AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
             AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),
+            AppError::RotationOwed => (StatusCode::CONFLICT, "ROTATION_OWED"),
             AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
             AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
             AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),

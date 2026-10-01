@@ -27,11 +27,12 @@ use ambre_bus::app::prose::WordCount;
 use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
-    WgpuSurface,
+    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, OverlayRepaint,
+    RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
+use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::probe::{CONFIRM_FRAMES, KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
@@ -98,6 +99,10 @@ pub struct ProseView {
     size: (f32, f32),
     /// Something visible changed since the last content paint.
     dirty: bool,
+    /// The shared pipe, whose live region carries the announcements.
+    text_input: TextInput,
+    /// The block the last announcement named.
+    announced: Option<BlockId>,
     fatal: bool,
     /// The five figures as the status bar slot shows them.
     figures: RwSignal<Option<[String; 5]>>,
@@ -119,11 +124,14 @@ impl ProseView {
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         width: f64,
         height: f64,
+        text_input: TextInput,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<[String; 5]>>,
         annotations: ProseSignals,
         busy_pub: BusyPublisher,
     ) -> Self {
+        // A page is never embedded, so it always owns the pipe it is handed.
+        text_input.name_content(ContentKind::Page);
         let theme = theme_ctl.get();
         let size = (width as f32, height as f32);
         let mut state = ProseUiState::default();
@@ -139,6 +147,8 @@ impl ProseView {
             theme,
             size,
             dirty: true,
+            text_input,
+            announced: None,
             fatal: false,
             figures,
             shown: None,
@@ -392,6 +402,24 @@ impl ProseView {
         self.busy_pub.publish(self.outbox.is_busy());
     }
 
+    /// Announce the block the caret entered (`CHROME-023`). A move inside the
+    /// block says nothing. A block no layout carries yet is announced once one
+    /// does, on a later frame.
+    fn announce_caret_block(&mut self) {
+        let at = self.state.cursor.map(|c| c.block_id);
+        if at == self.announced {
+            return;
+        }
+        match self.state.caret_announcement() {
+            Some((block, text)) => {
+                self.text_input.announce(&text);
+                self.announced = Some(block);
+            }
+            None if at.is_none() => self.announced = None,
+            None => {}
+        }
+    }
+
     pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
         self.now_ms = now_ms;
         self.timeline.summarize(now_ms);
@@ -421,6 +449,7 @@ impl ProseView {
             self.theme = theme;
             self.dirty = true;
         }
+        self.announce_caret_block();
         let dirty = std::mem::take(&mut self.dirty);
         if dirty {
             self.publish_threads();
@@ -684,6 +713,7 @@ impl ProseView {
         self.document_id = document_id;
         self.state = ProseUiState::default();
         self.state.resize(self.size.0, self.size.1);
+        self.announced = None;
         self.shown = None;
         self.publish_hover();
         self.publish_toolbar();

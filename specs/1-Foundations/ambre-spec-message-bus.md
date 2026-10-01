@@ -175,8 +175,10 @@ not leave (`BUS-018`), and re-offers a dropped request (`BUS-024`).
 **The Sync events are lossless too.** A delta or a service answer arrives through the worker's
 `postMessage` handler on the Main thread, which may not wait for room (`ambre-spec-architecture.md`,
 `ARCH-021`). What the queue to the Logic thread refuses waits in a backlog, in arrival order
-(`BUS-025`, `BUS-026`). The relay offers it again each frame before anything newer. It has no bound:
-the network, not the user, sets its pace, and no busy signal could slow it.
+(`BUS-025`, `BUS-026`). The relay offers it again each frame before anything newer. Past a high
+mark it asks the worker to stop reading the relay, and at a low mark to start again
+(`ambre-spec-sync.md`, `SYNC-059`). The relay holds what was not read, so the backlog stays bounded
+and loses nothing.
 
 **Code.** `crates/ambre-bus/src/` for the contract, `crates/ambre-logic/src/dispatch.rs` for the
 routing, `crates/ambre-logic/src/data.rs` for the role gate.

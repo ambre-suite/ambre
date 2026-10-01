@@ -48,6 +48,10 @@ mod handler_tests {
                 axum::routing::delete(routes::revoke_from_document),
             )
             .route(
+                "/documents/{id}/revoke",
+                axum::routing::post(routes::revoke_and_rotate),
+            )
+            .route(
                 "/documents/{id}/members",
                 axum::routing::get(routes::list_document_members),
             )
@@ -1812,6 +1816,173 @@ mod handler_tests {
             StatusCode::FORBIDDEN,
             "an editor must not be able to rotate the document key"
         );
+    }
+
+    /// Sends a request with an optional JSON body and returns its status.
+    async fn status_of(
+        app: &Router,
+        request: axum::http::request::Builder,
+        auth: &str,
+        body: Option<serde_json::Value>,
+    ) -> StatusCode {
+        let request = request.header("authorization", auth);
+        let request = match body {
+            Some(json) => request
+                .header("content-type", "application/json")
+                .body(Body::from(json.to_string())),
+            None => request.body(Body::empty()),
+        };
+        app.clone()
+            .oneshot(request.unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    /// Whether the member list says the document owes a rotation.
+    async fn owes_rotation(app: &Router, auth: &str, doc_id: &str) -> bool {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/documents/{doc_id}/members"))
+                    .header("authorization", auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["rotation_owed"].as_bool().unwrap()
+    }
+
+    /// Whether the ephemeral store mirrors a rotation owed by the document.
+    async fn debt_mirrored(state: &AppState, doc_id: &str) -> bool {
+        use rustis::commands::GenericCommands;
+        let doc = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::parse_str(doc_id).unwrap());
+        let n: usize = state
+            .redis
+            .exists(crate::redis_ops::rotation_owed_key(&doc))
+            .await
+            .unwrap();
+        n == 1
+    }
+
+    /// `SRV-145`, `SRV-122`: an editor may remove themselves, and only
+    /// themselves. The removal posts no rotation, so the document owes one, in
+    /// the register and in its mirror.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_leaves_alone_and_the_document_owes_a_rotation(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let editor = setup_named(&app, "leaver@test.com", 72).await;
+        invite(&app, &owner, &doc_id, "leaver@test.com", "editor").await;
+        let editor_uid = doc_user_id(&state, "leaver@test.com").await;
+        let owner_uid = list_members(&app, &owner, &doc_id)
+            .await
+            .into_iter()
+            .find(|m| m["user_id"] != editor_uid.as_str())
+            .unwrap()["user_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(!owes_rotation(&app, &owner, &doc_id).await);
+
+        let others = Request::delete(format!("/api/documents/{doc_id}/share/{owner_uid}"));
+        assert_eq!(
+            status_of(&app, others, &editor, None).await,
+            StatusCode::FORBIDDEN,
+            "an editor removes nobody but themselves"
+        );
+
+        let own = Request::delete(format!("/api/documents/{doc_id}/share/{editor_uid}"));
+        assert_eq!(status_of(&app, own, &editor, None).await, StatusCode::OK);
+        assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 1);
+        assert!(owes_rotation(&app, &owner, &doc_id).await);
+        assert!(debt_mirrored(&state, &doc_id).await);
+    }
+
+    /// `SRV-144`, `SRV-124`: while a rotation is owed an editor may post it,
+    /// and the rotation that lands clears the debt and its mirror.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_owed_rotation_is_open_to_an_editor_and_clears_the_debt(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let stayer = setup_named(&app, "stayer@test.com", 73).await;
+        invite(&app, &owner, &doc_id, "stayer@test.com", "editor").await;
+        let leaver = setup_named(&app, "gone@test.com", 74).await;
+        invite(&app, &owner, &doc_id, "gone@test.com", "editor").await;
+        let stayer_uid = doc_user_id(&state, "stayer@test.com").await;
+        let leaver_uid = doc_user_id(&state, "gone@test.com").await;
+
+        let leave = Request::delete(format!("/api/documents/{doc_id}/share/{leaver_uid}"));
+        assert_eq!(status_of(&app, leave, &leaver, None).await, StatusCode::OK);
+        assert!(owes_rotation(&app, &owner, &doc_id).await);
+
+        let keys = serde_json::json!({
+            "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 32]) } ],
+        });
+        let rotate = Request::post(format!("/api/documents/{doc_id}/rotate-key"));
+        assert_eq!(
+            status_of(&app, rotate, &stayer, Some(keys.clone())).await,
+            StatusCode::OK,
+            "an editor settles an owed rotation"
+        );
+        assert!(!owes_rotation(&app, &owner, &doc_id).await);
+        assert!(!debt_mirrored(&state, &doc_id).await);
+
+        let again = Request::post(format!("/api/documents/{doc_id}/rotate-key"));
+        assert_eq!(
+            status_of(&app, again, &stayer, Some(keys)).await,
+            StatusCode::FORBIDDEN,
+            "with the debt settled, rotating is the owner's again"
+        );
+    }
+
+    /// `SYNC-126`, `SYNC-041`: one request removes the member and installs the
+    /// new key for everyone who stays. No debt is left behind.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_revoke_removes_and_rotates_in_one_request(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let _ = setup_named(&app, "revokee@test.com", 75).await;
+        invite(&app, &owner, &doc_id, "revokee@test.com", "editor").await;
+        let revokee_uid = doc_user_id(&state, "revokee@test.com").await;
+        let owner_uid = list_members(&app, &owner, &doc_id)
+            .await
+            .into_iter()
+            .find(|m| m["user_id"] != revokee_uid.as_str())
+            .unwrap()["user_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let new_key = base64_encode(&[0xEFu8; 32]);
+        let body = serde_json::json!({
+            "user_id": revokee_uid,
+            "keys": [ { "user_id": owner_uid, "doc_key_enc": new_key } ],
+        });
+        let revoke = Request::post(format!("/api/documents/{doc_id}/revoke"));
+        assert_eq!(
+            status_of(&app, revoke, &owner, Some(body)).await,
+            StatusCode::OK
+        );
+        let members = list_members(&app, &owner, &doc_id).await;
+        assert_eq!(members.len(), 1, "the member is removed");
+        assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
+        assert!(!owes_rotation(&app, &owner, &doc_id).await);
+        assert!(!debt_mirrored(&state, &doc_id).await);
     }
 
     /// #6 regression: LIKE wildcards in the search query are escaped, so a bare

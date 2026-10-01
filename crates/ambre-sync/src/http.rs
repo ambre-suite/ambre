@@ -504,6 +504,10 @@ pub(crate) struct RenameDocumentRequest {
 #[derive(Deserialize)]
 pub(crate) struct MembersResponse {
     pub members: Vec<MemberEntry>,
+    /// The document owes a rotation: a member left and nobody re-keyed since
+    /// (`SRV-122`, `SYNC-128`).
+    #[serde(default)]
+    pub rotation_owed: bool,
 }
 
 #[derive(Deserialize)]
@@ -611,6 +615,14 @@ pub(crate) struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
 }
 
+/// One revoke: the member removed and the new key wrapped for everyone who
+/// stays, applied by the relay in one transaction (`SYNC-126`).
+#[derive(Serialize)]
+pub(crate) struct RevokeRequest {
+    pub user_id: String,
+    pub keys: Vec<RotateKeyEntry>,
+}
+
 #[derive(Serialize)]
 pub(crate) struct RotateKeyEntry {
     pub user_id: String,
@@ -626,6 +638,9 @@ pub(crate) struct RotateKeyResponse {
 #[derive(Deserialize)]
 pub(crate) struct DocumentMembersResponse {
     pub members: Vec<DocumentMemberEntry>,
+    /// The document owes a rotation (`SRV-122`, `SYNC-128`).
+    #[serde(default)]
+    pub rotation_owed: bool,
 }
 
 #[derive(Deserialize)]

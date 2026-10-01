@@ -7,6 +7,7 @@
 //! edit in flight changes are shaped here (`provisional`), and nothing reads the
 //! document or sends a command.
 
+pub mod a11y;
 pub mod annotate;
 pub mod cache;
 pub mod caret;

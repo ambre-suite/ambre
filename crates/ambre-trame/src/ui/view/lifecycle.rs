@@ -42,6 +42,7 @@ impl TrameView {
         // on the active cell so a first keystroke or IME opens there. Skipped for
         // an embedded child, which must not steal the caret from its host board.
         if !embedded {
+            text_input.name_content(ambre_canvas::ContentKind::Spreadsheet);
             text_input.focus();
         }
 
@@ -221,12 +222,8 @@ impl TrameView {
     pub(crate) fn announce_active(&self) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
         let value = self.cell_seed(row, col);
-        let desc = if value.is_empty() {
-            format!("{}{}, empty", col_label(col), row + 1)
-        } else {
-            format!("{}{}, {}", col_label(col), row + 1, value)
-        };
-        self.text_input.announce(&desc);
+        self.text_input
+            .announce(&cell_announcement(row, col, &value));
         self.refresh_selection_stats();
     }
 
@@ -256,7 +253,7 @@ impl TrameView {
     pub(crate) fn active_cell_ref(&self) -> String {
         format!(
             "{}{}",
-            col_label(self.state.active_col()),
+            crate::columns::col_to_alpha(self.state.active_col()),
             self.state.active_row() + 1
         )
     }

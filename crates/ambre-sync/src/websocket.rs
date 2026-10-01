@@ -1,4 +1,5 @@
 use super::*;
+use crate::rekey::Refusal;
 use zeroize::Zeroizing;
 
 /// The socket address, whose query carries the access token. Its `Display`
@@ -46,7 +47,7 @@ impl SyncState {
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn open_websocket(&mut self) {
-        if self.update_owed {
+        if self.update_owed || self.inbound_held {
             return;
         }
         // Mirror the REST scheme: `ws` on localhost (http), `wss` otherwise.
@@ -92,7 +93,7 @@ impl SyncState {
     /// Native / host-test stub: does nothing (mock transport handles WS).
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn open_websocket(&mut self) {
-        if self.update_owed {
+        if self.update_owed || self.inbound_held {
             return;
         }
         self.socket_opens += 1;
@@ -259,6 +260,42 @@ impl SyncState {
         self.open_websocket();
     }
 
+    /// Closes the socket with its handlers detached, so its close schedules
+    /// no reconnect, then reports every document disconnected.
+    fn close_quietly(&mut self, reason: &str) {
+        if let Some(ws) = self.ws.take() {
+            ws.set_onmessage(None);
+            ws.set_onclose(None);
+            ws.set_onerror(None);
+            let _ = ws.close();
+        }
+        self.handle_ws_disconnected(0, reason.to_owned());
+    }
+
+    /// Stops reading the relay while the path back to the Logic thread is
+    /// full (`SYNC-059`). A browser socket cannot pause, so it is closed. The
+    /// relay keeps every delta, and the reopen asks for what was missed.
+    pub(crate) fn hold_inbound(&mut self) {
+        if self.inbound_held {
+            return;
+        }
+        self.inbound_held = true;
+        self.close_quietly("inbound held");
+    }
+
+    /// Reopens the socket once the path back has room. The open resubscribes
+    /// every document from its last sequence, then sends what was kept.
+    pub(crate) fn release_inbound(&mut self) {
+        if !self.inbound_held {
+            return;
+        }
+        self.inbound_held = false;
+        if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
+            self.reconnect_attempts = 0;
+            self.open_websocket();
+        }
+    }
+
     /// Called by the select loop on a `WsDisconnected` event. Clears the socket
     /// and notifies the Logic thread that every open document lost its
     /// connection. A reconnection is attempted immediately.
@@ -285,7 +322,10 @@ impl SyncState {
     pub(crate) fn handle_sync_event(&mut self, event: SyncEvent) {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
-            SyncEvent::WsOpened => self.resubscribe_all(),
+            SyncEvent::WsOpened => {
+                self.resubscribe_all();
+                self.flush_held_outbox();
+            }
             SyncEvent::WireOutdated => {
                 if self.update_owed {
                     return;
@@ -294,13 +334,7 @@ impl SyncState {
                 // cures it. Close for good, and say once that an update is
                 // owed (`SYNC-137`).
                 self.update_owed = true;
-                if let Some(ws) = self.ws.take() {
-                    ws.set_onmessage(None);
-                    ws.set_onclose(None);
-                    ws.set_onerror(None);
-                    let _ = ws.close();
-                }
-                self.handle_ws_disconnected(0, "wire outdated".to_owned());
+                self.close_quietly("wire outdated");
                 self.send_to_logic(LogicEvent::UpdateRequired);
             }
             SyncEvent::WsDisconnected { code, reason } => {
@@ -466,6 +500,7 @@ impl SyncState {
                 server_created,
                 signing_keys,
                 role,
+                rotation_owed,
             } => {
                 self.documents.insert(
                     document_id,
@@ -474,6 +509,11 @@ impl SyncState {
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.role = role;
+                // A writer pays an owed rotation before its first frame; a
+                // reader sends none, so it owes nothing (`SYNC-128`).
+                if rotation_owed && role.can_write_document() {
+                    doc_state.rekey.found_debt();
+                }
                 // The blob object storage holds is the sealed snapshot. It is
                 // opened here, and only a snapshot that opens becomes the known
                 // parent and gates the replay (`SYNC-030`). One that does not
@@ -639,10 +679,35 @@ impl SyncState {
                 document_id,
                 new_doc_key,
             } => {
-                if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                    doc_state.rotate_key(new_doc_key);
-                }
+                self.install_key(document_id, new_doc_key);
                 self.reply(id, RestEvent::RevocationComplete { document_id });
+            }
+            SyncEvent::DocumentLeft { id, document_id } => {
+                // Gone from the relay's list: nothing of this document is ours
+                // to keep open (`SYNC-127`).
+                self.documents.remove(&document_id);
+                self.reply(id, RestEvent::DocumentLeft { document_id });
+            }
+            SyncEvent::DebtFound { document_id } => {
+                if let Some(doc_state) = self.documents.get_mut(&document_id)
+                    && doc_state.role.can_write_document()
+                {
+                    doc_state.rekey.found_debt();
+                }
+            }
+            SyncEvent::DebtSettled {
+                document_id,
+                new_doc_key,
+            } => self.install_key(document_id, new_doc_key),
+            SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
+            SyncEvent::DebtUnsettled {
+                document_id,
+                message,
+            } => {
+                tracing::warn!("Sync: the owed rotation of {document_id:?} failed: {message}");
+                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                    doc_state.rekey.payment_failed();
+                }
             }
             SyncEvent::DocumentMembersReady {
                 id,
@@ -689,9 +754,7 @@ impl SyncState {
                 // Swap the local key cache. This is the remaining-member path: a
                 // rotation is not a revocation. Nothing is reported as a member
                 // loss here; a revoked user is told via `DocumentRevoked`.
-                if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                    doc_state.rotate_key(new_doc_key);
-                }
+                self.install_key(document_id, new_doc_key);
             }
             SyncEvent::MediaUploaded {
                 id,
@@ -896,92 +959,15 @@ impl SyncState {
             WsServerMsg::KeyRotationRequired { document_id } => {
                 // Remaining-member re-key path only. Being revoked is a separate,
                 // targeted signal now (`DocumentRevoked`), so this message never
-                // closes a document. Fetch our freshly wrapped key, unwrap it, and
-                // rotate the local cache.
-                let event_tx = self.event_tx.clone();
-                let api_base = self.api_base.clone();
-                let url_scheme = self.url_scheme;
-                let exchange_key = self.exchange_key.clone();
-                let doc_id = document_id;
-                let auth = self.auth_context();
-
-                if let Some(tx) = event_tx {
-                    let Some(ek) = exchange_key else { return };
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let members_url =
-                            format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
-                        let members =
-                            match http::get_json_auth::<http::MembersResponse>(&members_url, auth)
-                                .await
-                            {
-                                Ok(resp) => resp.members,
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Sync: KeyRotationRequired fetch members failed: {e}"
-                                    );
-                                    return;
-                                }
-                            };
-
-                        let our_exchange_pub = {
-                            let pk = x25519_dalek::PublicKey::from(&ek);
-                            hex::encode(pk.as_bytes())
-                        };
-
-                        let entry = match members
-                            .iter()
-                            .find(|m| m.exchange_pub_key == our_exchange_pub)
-                        {
-                            Some(e) => e,
-                            None => {
-                                tracing::warn!(
-                                    "Sync: KeyRotationRequired: own member entry not found"
-                                );
-                                return;
-                            }
-                        };
-
-                        let new_doc_key = match (|| -> Result<DocumentKey, String> {
-                            let encrypted = base64::engine::general_purpose::URL_SAFE
-                                .decode(&entry.doc_key_enc)
-                                .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
-                            if encrypted.len() < 24 {
-                                return Err("wrapped key too short".into());
-                            }
-                            let nonce: [u8; 24] = encrypted[..24]
-                                .try_into()
-                                .map_err(|_| "invalid nonce length")?;
-                            let ciphertext = encrypted[24..].to_vec();
-                            // The new key was wrapped by the rotator. Unwrap
-                            // against THEIR exchange key, not our own (fallback to
-                            // our own for older servers without the wrapper field).
-                            let wrapper_hex = if entry.wrapper_exchange_pub_key.is_empty() {
-                                &entry.exchange_pub_key
-                            } else {
-                                &entry.wrapper_exchange_pub_key
-                            };
-                            let peer_pub: [u8; 32] = hex::decode(wrapper_hex)
-                                .map_err(|e| format!("hex decode pubkey: {e}"))?
-                                .try_into()
-                                .map_err(|_| "invalid pubkey length")?;
-                            let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
-                            ambre_crypto::ecdh::unwrap_document_key(&ek, &peer_pub, &wrapped)
-                                .map_err(|e| format!("ECDH unwrap: {e}"))
-                        })() {
-                            Ok(k) => k,
-                            Err(e) => {
-                                tracing::error!("Sync: KeyRotationRequired unwrap failed: {e}");
-                                return;
-                            }
-                        };
-
-                        let _ = tx.send(SyncEvent::KeyRotated {
-                            document_id: doc_id,
-                            new_doc_key,
-                        });
-                    });
-                }
+                // closes a document.
+                self.fetch_rotated_key(document_id);
             }
+
+            WsServerMsg::KeyRefused {
+                document_id,
+                key_id,
+                clock,
+            } => self.handle_key_refused(document_id, key_id, clock.0),
 
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
@@ -1038,6 +1024,112 @@ impl SyncState {
                     code,
                     message,
                 });
+            }
+        }
+    }
+}
+
+impl SyncState {
+    /// Fetches this client's newly wrapped key, unwraps it and installs it.
+    /// A members answer that says a rotation is owed carries no new key: a
+    /// member left, and the debt is recorded instead (`SYNC-128`).
+    pub(crate) fn fetch_rotated_key(&self, document_id: DocumentId) {
+        let (Some(tx), Some(ek)) = (self.event_tx.clone(), self.exchange_key.clone()) else {
+            return;
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let members_url =
+                format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
+            let resp = match http::get_json_auth::<http::MembersResponse>(&members_url, auth).await
+            {
+                Ok(resp) => resp,
+                Err(e) => {
+                    tracing::error!("Sync: KeyRotationRequired fetch members failed: {e}");
+                    return;
+                }
+            };
+            if resp.rotation_owed {
+                let _ = tx.send(SyncEvent::DebtFound { document_id });
+                return;
+            }
+
+            let our_exchange_pub = {
+                let pk = x25519_dalek::PublicKey::from(&ek);
+                hex::encode(pk.as_bytes())
+            };
+            let Some(entry) = resp
+                .members
+                .iter()
+                .find(|m| m.exchange_pub_key == our_exchange_pub)
+            else {
+                tracing::warn!("Sync: KeyRotationRequired: own member entry not found");
+                return;
+            };
+
+            let new_doc_key = match (|| -> Result<DocumentKey, String> {
+                let encrypted = base64::engine::general_purpose::URL_SAFE
+                    .decode(&entry.doc_key_enc)
+                    .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
+                if encrypted.len() < 24 {
+                    return Err("wrapped key too short".into());
+                }
+                let nonce: [u8; 24] = encrypted[..24]
+                    .try_into()
+                    .map_err(|_| "invalid nonce length")?;
+                let ciphertext = encrypted[24..].to_vec();
+                // The new key was wrapped by the rotator. Unwrap against THEIR
+                // exchange key, not our own (fallback to our own for older
+                // servers without the wrapper field).
+                let wrapper_hex = if entry.wrapper_exchange_pub_key.is_empty() {
+                    &entry.exchange_pub_key
+                } else {
+                    &entry.wrapper_exchange_pub_key
+                };
+                let peer_pub: [u8; 32] = hex::decode(wrapper_hex)
+                    .map_err(|e| format!("hex decode pubkey: {e}"))?
+                    .try_into()
+                    .map_err(|_| "invalid pubkey length")?;
+                let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
+                ambre_crypto::ecdh::unwrap_document_key(&ek, &peer_pub, &wrapped)
+                    .map_err(|e| format!("ECDH unwrap: {e}"))
+            })() {
+                Ok(k) => k,
+                Err(e) => {
+                    tracing::error!("Sync: KeyRotationRequired unwrap failed: {e}");
+                    return;
+                }
+            };
+
+            let _ = tx.send(SyncEvent::KeyRotated {
+                document_id,
+                new_doc_key,
+            });
+        });
+    }
+
+    /// The relay refused our frame at `clock` because the document owes a
+    /// rotation (`SRV-123`). The clock is still free. Under the current key the
+    /// debt is paid first; under an older one the frame is sent again now
+    /// (`SYNC-128`, `SYNC-129`).
+    pub(crate) fn handle_key_refused(
+        &mut self,
+        document_id: DocumentId,
+        key_id: KeyId,
+        clock: u64,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let current = doc_state.doc_key.id();
+        match doc_state.rekey.refused(key_id, clock, current) {
+            Refusal::Stale | Refusal::Wait => {}
+            Refusal::Settle => self.start_settle(document_id),
+            Refusal::Resend => {
+                let refused = doc_state.rekey.take_refused(current);
+                self.resend_refused(document_id, refused, Vec::new());
             }
         }
     }
@@ -1143,6 +1235,55 @@ mod tests {
             e,
             LogicEvent::ApiError { .. } | LogicEvent::AuthError { .. }
         )));
+    }
+
+    /// A hold stops reading the relay until the release, and nothing else
+    /// reopens the socket meanwhile (`SYNC-059`). The reopen asks for what was
+    /// missed, then sends the edit sealed during the hold.
+    #[test]
+    fn a_held_inbound_reopens_only_on_release_and_catches_up() {
+        use ambre_bus::SyncCommand;
+        use ambre_protocol::messages::Seq;
+        use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
+
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.signing_key = Some(MasterSeed::generate().derive_signing_key());
+        let id = DocumentId::new();
+        let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
+        doc.last_seq = Seq(7);
+        state.documents.insert(id, doc);
+
+        state.handle_command(SyncCommand::HoldInbound);
+        state.handle_sync_event(closed(1006));
+        state.handle_sync_event(SyncEvent::ReconnectNow);
+        state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
+        assert_eq!(state.socket_opens, 0, "held: nothing reopens");
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: id,
+            payload: b"typed during the hold".to_vec(),
+        });
+        assert_eq!(state.held_outbox.borrow().len(), 1, "the edit is kept");
+
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        state.handle_command(SyncCommand::ReleaseInbound);
+        assert_eq!(state.socket_opens, 1);
+        state.handle_sync_event(SyncEvent::WsOpened);
+        let sent: Vec<WsClientMsg> = wire
+            .try_iter()
+            .map(|bytes| decode_client_msg(&bytes).expect("decode"))
+            .collect();
+        assert!(matches!(sent[0], WsClientMsg::Subscribe { document_id } if document_id == id));
+        assert!(matches!(
+            sent[1],
+            WsClientMsg::RequestMissing {
+                after_seq: Seq(7),
+                ..
+            }
+        ));
+        assert!(matches!(sent[2], WsClientMsg::Update(_)));
+        assert_eq!(sent.len(), 3);
     }
 
     /// A logged socket address carries no token (`SYNC-061`), whichever way

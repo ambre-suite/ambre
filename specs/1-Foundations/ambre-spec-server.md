@@ -62,8 +62,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-007` | `FAIL` | Every update, snapshot and presence frame MUST carry a valid signature by the key the caller's token names; an unsigned or forged frame MUST have no effect. | this spec section 3; `ZK-005` | `ambre_server::ws::handler::message::ed25519_tests::invalid_signature_is_rejected`; `::tampered_ciphertext_rejects_signature`; `::unsigned_ephemeral_is_rejected` -- the refusals; `ephemeral_binding_tests::forged_author_key_writes_no_presence`; `routes::tests::handler_tests::create_snapshot_rejects_forged_author` -- the absence of effect on both paths | none | verified |
 | `SRV-008` | `FAIL` | A read-only member MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` -- the live path leaves the queue empty; `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the request path refuses, and a viewer holds the document key and its own signing key, so this check is the only thing between it and an accepted delta | none | verified |
 | `SRV-015` | `FAIL` | Outside the exceptions of `SRV-144` to `SRV-146`, only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`; `::delete_document_only_by_owner` -- the refusals; `::revoke_then_rotate_replaces_owner_key` -- the owner's own path still completes | none | verified |
-| `SRV-144` | `POST` | While a rotation is owed, the relay MUST accept it from any member with write access. | this spec section 3; `SYNC-128` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-145` | `POST` | A member MUST be able to remove themselves. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-144` | `POST` | While a rotation is owed, the relay MUST accept it from any member with write access. | this spec section 3; `SYNC-128` | `ambre_server::routes::tests::handler_tests::an_owed_rotation_is_open_to_an_editor_and_clears_the_debt` -- an editor's rotation is refused while nothing is owed and accepted once a member left | none | verified |
+| `SRV-145` | `POST` | A member MUST be able to remove themselves. | this spec section 3; `SYNC-127` | `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- an editor removes their own share, and the relay answers with success | none | verified |
 | `SRV-146` | `POST` | An admin of a space MUST be able to re-key a public channel of that space. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-157` | `FAIL` | Given a removal from a member whose standing to moderate the relay revoked, the relay MUST refuse it. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-moderation.md` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-159` | `POST` | A conversion of a direct message MUST record the space of the channel and mark it private. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -104,10 +104,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-122` | `POST` | A removal posted without a rotation MUST mark its document as owing one. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-122` | `POST` | A removal posted without a rotation MUST mark its document as owing one. | this spec section 3; `SYNC-127` | `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- it reads the debt in the register and in its mirror after the departure | none | verified |
+| `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- an update and a presence frame are refused while the mirror holds the debt, and accepted once it clears; `ambre_server::ws::handler::message::refusal_tests::a_frame_refused_for_its_key_names_the_key_and_the_clock` -- the author is told which key and which clock | none | verified |
+| `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | `ambre_server::routes::tests::handler_tests::an_owed_rotation_is_open_to_an_editor_and_clears_the_debt` -- the register and the mirror read no debt after the rotation; `::a_revoke_removes_and_rotates_in_one_request` -- a revoke leaves none | none | verified |
+| `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- the refused frame leaves no sequence key, and the same clock is accepted at sequence 1 once the debt clears | none | verified |
 | `SRV-136` | `POST` | A removal from a space MUST remove the member from every channel of that space, and mark each private one as owing a rotation. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
@@ -117,10 +117,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 15 `verified`, 2 `partial`, 6 `untested`, 1 `human-review`, 26
-  `unimplemented`. What holds is what a request test can drive: the roles, the rank clamps, the
-  signature gate, the error mapping and the origin list. The delete holds too. What is loose is
-  every rule about the process or the deployment.
+* **Verification.** 21 `verified`, 2 `partial`, 6 `untested`, 1 `human-review`, 20 `unimplemented`.
+  What holds is what a request test can drive: the roles, the rank clamps, the signature gate, the
+  error mapping and the origin list. The delete holds too. What is loose is every rule about the
+  process or the deployment.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -150,7 +150,7 @@ makes a restart of any one of them survivable.
 | Store | Holds | Lost on a reset |
 |---|---|---|
 | the durable register | users, organizations, documents, members, and the index of every snapshot and delta | everything: it is the authority |
-| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, and the tombstones and sweep schedule of deleted documents | recoverable for the ordering (`ambre-spec-sequencer.md`), final for a session |
+| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, the tombstones and sweep schedule of deleted documents, and the mirror of each owed rotation | recoverable for the ordering (`ambre-spec-sequencer.md`) and the mirror, final for a session |
 | object storage | every sealed blob: snapshots, deltas and media | the content itself, which nothing else holds |
 
 **A delete fences the document before it empties it.** The relay first sets a tombstone in the
@@ -170,6 +170,20 @@ when the last link has expired (`SRV-057`). The tombstone lives as long as that 
 | one member row per participant | a role, plus the document key sealed for that member |
 | the wrapper of a member's key | the identity whose exchange key seals it, which the client needs to open it |
 | the membership log | one signed entry per invite, revoke and role change, served beside the member rows (`SRV-104`) |
+| a rotation owed | one flag, set by a departure and cleared by the rotation that follows (`SRV-122`, `SRV-124`) |
+
+**A departure leaves a debt, and the relay holds it.** A member who removes themselves posts no key,
+so the removal sets the flag in the same transaction (`SRV-145`, `SRV-122`). The ephemeral store
+mirrors it, and the scripts that take a clock or a presence sample read the mirror. While it holds,
+every key the document has is one the leaver held. So every frame is refused before its clock is
+read, and takes no sequence number (`SRV-123`, `SRV-125`).
+
+Any writer may then rotate (`SRV-144`). The rotation clears the flag in its own transaction, and
+the mirror after it (`SRV-124`). A subscription rewrites the mirror from the register, so a reset
+of the ephemeral store loses the debt until the next subscription only.
+
+A revoke by an owner owes nothing. It posts the removal and every wrapped copy to one route, and the
+relay applies both in one transaction (`ambre-spec-key-rotation.md`, `SYNC-126`).
 
 **What a Murmure channel adds to the register.** Every document of a channel is an ordinary
 document row. The register adds only what the relay needs to route, seal and expire them, which is
@@ -219,6 +233,7 @@ infrastructure failure.
 | a role too low, a membership missing on a write | `403` |
 | a document a caller may not see, or that does not exist | `404`, the same answer for both (`SRV-005`) |
 | a name already taken, a payload that will not decode | `409` |
+| a frame while a rotation is owed | on the socket, a refusal naming the document, the key and the clock (`SRV-123`) |
 | a signature that does not verify | `422` |
 | a blob larger than its cap | `413` (`ambre-spec-object-store.md`) |
 | the register, the ephemeral store or object storage | `500`, one generic message, the cause in the log alone (`SRV-020`) |
@@ -266,7 +281,7 @@ group needs a token.
 | keys | storing the caller's sealed master material, and re-sealing it under a new passphrase | `ambre-spec-session.md` |
 | users | the search by address, and one user's public keys | this document, and `ambre-spec-key-verification.md` for what a client does with them |
 | documents | create, list, read, rename, delete | this document |
-| members | invite, remove, change a role, list, re-key | this document, and `ambre-spec-key-rotation.md` |
+| members | invite, remove, leave, revoke in one request, change a role, list, re-key | this document, and `ambre-spec-key-rotation.md` |
 | content | the snapshot record, the delta page, and the presigned links | `ambre-spec-sequencer.md`, `ambre-spec-object-store.md` |
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |

@@ -6,7 +6,8 @@
 // draws caret, selection and the IME composition string. But it is the real
 // keyboard FOCUS, so it doubles as the accessibility entry point to the canvas
 // content. That means an accessible textbox plus a paired polite live region
-// that announces the focused cell as the selection moves.
+// that announces the focused unit as the selection moves. Each application
+// names the box after its own kind of document, and writes its own unit.
 //
 // On the web the accessibility tree IS the DOM. Content a11y therefore means
 // mirroring the focused content into the DOM rather than pushing a tree to a
@@ -26,6 +27,40 @@ use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, HtmlTextAreaElement};
+
+/// The kind of document the content holds. It names the pipe to assistive
+/// technology, so each application describes its own content (`CHROME-024`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentKind {
+    /// A Trame grid: the pipe stands for the active cell.
+    Spreadsheet,
+    /// A Toile board: the pipe stands for the selection.
+    Board,
+    /// A Prose page: the pipe stands for the text at the caret.
+    Page,
+}
+
+impl ContentKind {
+    /// The accessible name of the pipe.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Spreadsheet => "Spreadsheet cell",
+            Self::Board => "Whiteboard",
+            Self::Page => "Document text",
+        }
+    }
+
+    /// What a screen reader says the pipe is, in place of a text box.
+    #[must_use]
+    pub fn role_description(self) -> &'static str {
+        match self {
+            Self::Spreadsheet => "spreadsheet cell",
+            Self::Board => "whiteboard",
+            Self::Page => "document",
+        }
+    }
+}
 
 /// Handle to the transparent input pipe + content a11y mirror. Cheap to clone
 /// (element refs plus a shared flag); lives on the UI thread only, so `!Send`.
@@ -71,8 +106,6 @@ impl TextInput {
             ("spellcheck", "false"),
             ("tabindex", "0"),
             ("wrap", "off"),
-            ("aria-label", "Spreadsheet cell"),
-            ("aria-roledescription", "spreadsheet cell"),
         ] {
             let _ = textarea.set_attribute(k, v);
         }
@@ -133,11 +166,45 @@ impl TextInput {
         self.textarea.set_value("");
     }
 
+    /// Name the pipe after the kind of document the view holds (`CHROME-024`).
+    /// The top-level view calls it once it owns the pipe. An embedded child
+    /// never does, since the pipe still belongs to the document around it.
+    pub fn name_content(&self, kind: ContentKind) {
+        let _ = self.textarea.set_attribute("aria-label", kind.label());
+        let _ = self
+            .textarea
+            .set_attribute("aria-roledescription", kind.role_description());
+    }
+
     /// Announce the focused content (for example `"B2, 42"`) to screen readers via the
     /// polite live region. Called by the view when the selection moves or a cell
     /// edit commits (`ambre-spec-accessibility.md`). Replacing the text content
     /// of an `aria-live` region is what triggers the announcement.
     pub fn announce(&self, text: &str) {
         self.live.set_text_content(Some(text));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `CHROME-024`: each kind names itself, and only the spreadsheet says it
+    /// is a cell. A board or a page announced as a cell is the defect.
+    #[test]
+    fn only_the_spreadsheet_names_itself_a_cell() {
+        let kinds = [
+            ContentKind::Spreadsheet,
+            ContentKind::Board,
+            ContentKind::Page,
+        ];
+        for kind in kinds {
+            let says_cell = kind.label().to_lowercase().contains("cell")
+                || kind.role_description().contains("cell");
+            assert_eq!(says_cell, kind == ContentKind::Spreadsheet, "{kind:?}");
+        }
+        let mut labels: Vec<_> = kinds.iter().map(|k| k.label()).collect();
+        labels.dedup();
+        assert_eq!(labels.len(), 3, "no two kinds share a name");
     }
 }

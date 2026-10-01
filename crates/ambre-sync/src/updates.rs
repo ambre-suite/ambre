@@ -48,6 +48,9 @@ impl SyncState {
         doc_state.last_seq = seq;
         if authored_by_us {
             doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock.0);
+            // The echo is the relay's receipt: that frame and every earlier
+            // one need no resend (`SYNC-129`).
+            doc_state.rekey.confirm_through(update.public_data.clock.0);
         }
 
         let snapshot_id = update.public_data.snapshot_id;
@@ -305,7 +308,7 @@ impl SyncState {
                     http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
                         .await,
                 );
-                let (doc_key, server_created, signing_keys, role) = match answer {
+                let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
                     MembersAnswer::Exists(resp) => {
                         // Our own role rides the same response (`architecture`).
                         // An absent or unparseable row means we cannot establish
@@ -338,7 +341,7 @@ impl SyncState {
                         // mismatch instead of a clear auth error (H3).
                         match &exchange_key {
                             Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
-                                Ok(key) => (key, true, signing_keys, role),
+                                Ok(key) => (key, true, signing_keys, role, resp.rotation_owed),
                                 Err(_) => {
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                         document_id: doc_id,
@@ -359,9 +362,13 @@ impl SyncState {
                     // Not found: the document is local-only. No members response
                     // means no directory: a local-only doc has no peers to resolve
                     // presence for anyway, and its creator owns it.
-                    MembersAnswer::Absent => {
-                        (DocumentKey::generate(), false, Vec::new(), Role::Owner)
-                    }
+                    MembersAnswer::Absent => (
+                        DocumentKey::generate(),
+                        false,
+                        Vec::new(),
+                        Role::Owner,
+                        false,
+                    ),
                     // A failed request says nothing about the document. Opening it
                     // local-only would mint a throwaway key and edit a copy nobody
                     // receives, so the open fails and the user may retry (`SYNC-040`).
@@ -438,6 +445,7 @@ impl SyncState {
                     server_created,
                     signing_keys,
                     role,
+                    rotation_owed,
                 });
             });
         } else {
@@ -595,25 +603,117 @@ impl SyncState {
             tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
             return;
         };
+        // An owed rotation is paid before any frame: the edit waits unsealed,
+        // and takes its clock once the new key lands (`SYNC-128`).
+        if doc_state.rekey.owes() {
+            if doc_state.rekey.hold(payload) {
+                self.start_settle(document_id);
+            }
+            return;
+        }
         doc_state.local_clock += 1;
+        let clock = doc_state.local_clock;
+        if let Some(key_id) =
+            self.seal_and_send(document_id, clock, &payload, &signing_key, pub_key)
+            && let Some(doc_state) = self.documents.get_mut(&document_id)
+            && doc_state.rekey.record_sent(clock, key_id, payload)
+        {
+            tracing::warn!("[Sync] unconfirmed log full doc={document_id}, oldest forgotten");
+        }
+    }
+
+    /// Seals `payload` at `clock` under the current key and sends it. Returns
+    /// the key it was sealed under, `None` when the seal failed.
+    fn seal_and_send(
+        &self,
+        document_id: DocumentId,
+        clock: u64,
+        payload: &[u8],
+        signing_key: &SigningKey,
+        pub_key: PublicKey,
+    ) -> Option<KeyId> {
+        let doc_state = self.documents.get(&document_id)?;
+        let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
             pub_key,
-            key_id: doc_state.doc_key.id(),
+            key_id,
             snapshot_id: doc_state.current_snapshot_id,
-            clock: Clock(doc_state.local_clock),
+            clock: Clock(clock),
         };
-        match pipeline::seal_update(&payload, public_data, &doc_state.doc_key, &signing_key) {
+        match pipeline::seal_update(payload, public_data, &doc_state.doc_key, signing_key) {
             Ok(update) => {
                 tracing::info!(
-                    "[Sync] seal_update ok doc={document_id} clock={} -> {} bytes ciphertext",
-                    doc_state.local_clock,
+                    "[Sync] seal_update ok doc={document_id} clock={clock} -> {} bytes ciphertext",
                     update.ciphertext.0.len(),
                 );
                 self.ws_send(&WsClientMsg::Update(update));
+                Some(key_id)
             }
-            Err(e) => tracing::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}"),
+            Err(e) => {
+                tracing::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}");
+                None
+            }
         }
+    }
+
+    /// Seals the refused frames again under the current key, at their own
+    /// clocks and in order (`SYNC-129`). Then the edits that waited for the key
+    /// take the next clocks.
+    pub(crate) fn resend_refused(
+        &mut self,
+        document_id: DocumentId,
+        refused: Vec<(u64, Vec<u8>)>,
+        waiting: Vec<Vec<u8>>,
+    ) {
+        if let (Some(signing_key), Some(pub_key)) =
+            (self.signing_key.clone(), self.author_pub_key())
+        {
+            for (clock, payload) in refused {
+                self.seal_and_send(document_id, clock, &payload, &signing_key, pub_key.clone());
+            }
+        }
+        for payload in waiting {
+            self.handle_send_update(document_id, payload);
+        }
+    }
+
+    /// Installs `new_key` as the document's current key, then sends what the
+    /// owed rotation held back. A key this client already holds as current is
+    /// not pushed into the cache a second time.
+    pub(crate) fn install_key(&mut self, document_id: DocumentId, new_key: DocumentKey) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        if doc_state.doc_key.id() != new_key.id() {
+            doc_state.rotate_key(new_key);
+        }
+        let current = doc_state.doc_key.id();
+        let (refused, waiting) = doc_state.rekey.key_installed(current);
+        self.resend_refused(document_id, refused, waiting);
+    }
+
+    /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
+    pub(crate) fn start_settle(&mut self, document_id: DocumentId) {
+        let (Some(tx), Some(exchange_key)) = (self.event_tx.clone(), self.exchange_key.clone())
+        else {
+            if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                doc_state.rekey.payment_failed();
+            }
+            return;
+        };
+        let params = crate::sharing::SettleParams {
+            document_id,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+            exchange_key,
+        };
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            crate::sharing::settle_task(&http, params, &tx).await;
+        });
     }
 
     /// Lazily materialize a local-only document server-side (first-modification
@@ -1074,6 +1174,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Owner,
+            rotation_owed: false,
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -1111,6 +1212,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Owner,
+            rotation_owed: false,
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq(0));
@@ -1201,6 +1303,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Owner,
+            rotation_owed: false,
         });
         let at_open = drain(&rx);
         assert!(
@@ -1258,6 +1361,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Owner,
+            rotation_owed: false,
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),
@@ -1295,6 +1399,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Viewer,
+            rotation_owed: false,
         });
         let _ = drain(&rx);
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -1319,6 +1424,7 @@ mod tests {
             server_created: true,
             signing_keys: Vec::new(),
             role: Role::Editor,
+            rotation_owed: false,
         });
         assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
     }
@@ -1438,5 +1544,123 @@ mod tests {
             state.receive_update(Seq(clock), make_update(doc, other, clock, b"x", &key, &sk));
         }
         assert_eq!(asks(&ws_rx), 1, "one request for the next gap");
+    }
+
+    /// Each update sent, as its clock, the key it names and its plaintext.
+    fn sent_updates(
+        rx: &ambre_bus::conduit::Receiver<Vec<u8>>,
+        keys: &[&DocumentKey],
+    ) -> Vec<(u64, KeyId, Vec<u8>)> {
+        drain_ws(rx)
+            .into_iter()
+            .filter_map(|msg| match msg {
+                WsClientMsg::Update(u) => {
+                    let key = keys.iter().find(|k| k.id() == u.public_data.key_id)?;
+                    let plain = pipeline::open_update(&u, key).expect("opens");
+                    Some((u.public_data.clock.0, u.public_data.key_id, plain))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A frame refused while a rotation is owed waits for the rotation, then is
+    /// sealed again at its own clock under the new key. An edit made meanwhile
+    /// takes the next clock, and a late refusal of the first sealing sends
+    /// nothing (`SYNC-128`, `SYNC-129`).
+    #[test]
+    fn a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock() {
+        let (mut state, _rx, doc, k1, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_send_update(doc, b"a".to_vec());
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k1]),
+            vec![(1, k1.id(), b"a".to_vec())]
+        );
+
+        state.handle_ws_message(WsServerMsg::KeyRefused {
+            document_id: doc,
+            key_id: k1.id(),
+            clock: Clock(1),
+        });
+        state.handle_send_update(doc, b"b".to_vec());
+        assert!(drain_ws(&ws_rx).is_empty(), "nothing leaves before the key");
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::DebtSettled {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+        });
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k1, &k2]),
+            vec![(1, k2.id(), b"a".to_vec()), (2, k2.id(), b"b".to_vec())]
+        );
+
+        state.handle_ws_message(WsServerMsg::KeyRefused {
+            document_id: doc,
+            key_id: k1.id(),
+            clock: Clock(1),
+        });
+        assert!(drain_ws(&ws_rx).is_empty(), "a late refusal is stale");
+    }
+
+    /// A refusal that names a key older than the current one is answered at
+    /// once. The frame is sealed again under the current key, at its clock
+    /// (`SYNC-129`).
+    #[test]
+    fn a_frame_refused_under_an_older_key_is_sent_again_at_once() {
+        let (mut state, _rx, doc, k1, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_send_update(doc, b"a".to_vec());
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+        });
+        let _ = drain_ws(&ws_rx);
+
+        state.handle_ws_message(WsServerMsg::KeyRefused {
+            document_id: doc,
+            key_id: k1.id(),
+            clock: Clock(1),
+        });
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k1, &k2]),
+            vec![(1, k2.id(), b"a".to_vec())]
+        );
+    }
+
+    /// A writer that opens a document owing a rotation sends nothing before it
+    /// pays; a reader records no debt (`SYNC-128`).
+    #[test]
+    fn a_writer_opening_an_owed_document_pays_before_its_first_frame() {
+        for (role, held) in [(Role::Editor, true), (Role::Viewer, false)] {
+            let (mut state, _rx, _doc, _k, sk, _snap) = setup();
+            state.signing_key = Some(sk);
+            let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+            state.set_mock_ws(ws_tx);
+            let doc = DocumentId::new();
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: DocumentKey::generate(),
+                snapshot_payload: None,
+                snapshot_id: SnapshotId::genesis(doc),
+                covered_seq: Seq(0),
+                doc_type: DocType::Trame,
+                server_created: true,
+                signing_keys: Vec::new(),
+                role,
+                rotation_owed: true,
+            });
+            let _ = drain_ws(&ws_rx);
+            state.handle_send_update(doc, b"a".to_vec());
+            assert_eq!(drain_ws(&ws_rx).is_empty(), held, "{role:?}");
+        }
     }
 }

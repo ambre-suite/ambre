@@ -306,6 +306,9 @@ pub enum RestCommand {
         document_id: DocumentId,
         user_id: UserId,
     },
+    /// Leave a document: this user's own removal, and nothing else. The members
+    /// who stay pay the rotation it leaves owed (`SYNC-127`). -> `DocumentLeft`.
+    LeaveDocument { document_id: DocumentId },
     /// List current members. -> `DocumentMembers`.
     ListDocumentMembers { document_id: DocumentId },
     /// Update a member's role. -> `MemberRoleUpdated`.
@@ -483,6 +486,10 @@ pub enum RestEvent {
     },
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {
+        document_id: DocumentId,
+    },
+    /// This user left the document; the Sync worker closed it.
+    DocumentLeft {
         document_id: DocumentId,
     },
     DocumentMembers {

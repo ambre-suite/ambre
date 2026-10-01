@@ -162,23 +162,117 @@ pub async fn revoke_from_document(
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
+    // A member may always remove themselves (`SRV-145`). Removing anyone else
+    // is the owner's alone (`SRV-015`).
+    if target != s.user_id && m.role != "owner" {
+        return Err(AppError::Forbidden);
+    }
+    // The removal posts no rotation, so the document owes one (`SRV-122`). The
+    // mirror is raised first: no frame slips in between the commit and it.
+    crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
+    if let Err(e) = db::remove_document_member(&state.db, &doc_id, &target).await {
+        restore_debt_mirror(&state, &doc_id).await;
+        return Err(e);
+    }
+    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member removed, rotation owed");
+
+    notify_removed(&state, &doc_id, &target).await;
+    // Every member who stays learns of the debt as it learns of a new key. It
+    // re-reads the member list, which now says a rotation is owed.
+    notify_rotation(&state, &doc_id).await;
+    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+}
+
+/// Request to remove a member and rotate the key in one step
+/// (`ambre-spec-key-rotation.md`, `SYNC-126`).
+#[derive(serde::Deserialize)]
+pub struct RevokeRequest {
+    pub user_id: String,
+    pub keys: Vec<RotateKeyEntry>,
+}
+
+/// Removes a member and installs the new key for everyone who stays, in one
+/// transaction. Either both land, or nothing changes (`SYNC-041`, `SYNC-126`).
+pub async fn revoke_and_rotate(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(document_id): Path<String>,
+    Json(req): Json<RevokeRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let s = auth;
+    let doc_id = parse_doc_id(&document_id)?;
+    let target = parse_user_id(&req.user_id)?;
+    let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
     if m.role != "owner" {
         return Err(AppError::Forbidden);
     }
-    db::remove_document_member(&state.db, &doc_id, &target).await?;
-    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member revoked");
+    let keys = decode_keys(&req.keys)?;
+    db::revoke_and_rotate(&state.db, &doc_id, &target, &s.user_id, &keys).await?;
+    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
+    // The rotation landed with the removal, so no debt stands (`SRV-124`).
+    restore_debt_mirror(&state, &doc_id).await;
 
-    // Notify the revoked user directly on their personal topic so their client
-    // closes the document. Targeted (not a doc broadcast): only the removed user
-    // learns they were revoked, and no remaining member can mistake this for their
-    // own revocation. Best-effort -- the membership row is the source of truth.
+    notify_removed(&state, &doc_id, &target).await;
+    notify_rotation(&state, &doc_id).await;
+    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+}
+
+/// Notifies the removed user directly on their personal topic so their client
+/// closes the document. Targeted (not a doc broadcast): only the removed user
+/// learns they were removed, and no remaining member can mistake this for their
+/// own removal. Best-effort -- the membership row is the source of truth.
+async fn notify_removed(
+    state: &AppState,
+    doc_id: &ambre_core::DocumentId,
+    target: &ambre_core::UserId,
+) {
     let msg =
         ambre_protocol::ws::encode_server_msg(&ambre_protocol::ws::WsServerMsg::DocumentRevoked {
-            document_id: doc_id,
+            document_id: *doc_id,
         });
-    let _ = crate::redis_ops::user_broadcast(&state.redis, &target, &msg).await;
+    let _ = crate::redis_ops::user_broadcast(&state.redis, target, &msg).await;
+}
 
-    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+/// Tells every member still on the document to re-read its member list: a new
+/// wrapped copy, or a rotation owed. No user id: it is not a removal signal.
+async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
+    let msg = ambre_protocol::ws::encode_server_msg(
+        &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
+            document_id: *doc_id,
+        },
+    );
+    let _ = crate::redis_ops::doc_broadcast(&state.redis, doc_id, &msg).await;
+}
+
+/// Rewrites the debt mirror from the register, which is the authority. A
+/// failure is logged: a subscribe rewrites the mirror again.
+async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) {
+    let restored = match db::rotation_owed(&state.db, doc_id).await {
+        Ok(owed) => crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, owed).await,
+        Err(e) => Err(e),
+    };
+    if let Err(e) = restored {
+        tracing::error!(document_id = %doc_id, error = %e, "rotation debt mirror not restored");
+    }
+}
+
+/// Decodes the wrapped copies of a rotation payload.
+fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Vec<u8>)>, AppError> {
+    use base64::Engine;
+    entries
+        .iter()
+        .map(|e| {
+            let uid = parse_user_id(&e.user_id)?;
+            let enc = base64::engine::general_purpose::URL_SAFE
+                .decode(&e.doc_key_enc)
+                .map_err(|er| AppError::Conflict {
+                    detail: er.to_string(),
+                })?;
+            Ok((uid, enc))
+        })
+        .collect()
 }
 
 /// Request to rotate the Document Key after revoking a member.
@@ -200,43 +294,34 @@ pub async fn rotate_document_key(
     Path(document_id): Path<String>,
     Json(req): Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    // Owner-only, symmetric with `revoke_from_document`. Rotating the document key
-    // rewraps EVERY member's `doc_key_enc`, and makes the caller the wrapper of
-    // record. An editor allowed here could omit members from the payload, leaving
-    // their key stale after rotation -> lockout. It could also re-key the document
-    // out from under the owner. Key rotation is membership management; it belongs
-    // to the owner exactly like revoke.
-    if m.role != "owner" {
+    // Owner-only outside a debt. Rotating the document key rewraps EVERY
+    // member's `doc_key_enc`, and makes the caller the wrapper of record. An
+    // editor allowed here could omit members from the payload, leaving their
+    // key stale after rotation -> lockout. While a rotation is owed, every
+    // frame is refused until one lands. So any member with write access may
+    // settle it (`SRV-144`), and that risk is the price of not stalling.
+    let may_rotate = match m.role.as_str() {
+        "owner" => true,
+        "editor" => db::rotation_owed(&state.db, &doc_id).await?,
+        _ => false,
+    };
+    if !may_rotate {
         return Err(AppError::Forbidden);
     }
 
-    let mut keys = Vec::with_capacity(req.keys.len());
-    for e in &req.keys {
-        let uid = parse_user_id(&e.user_id)?;
-        let enc = base64::engine::general_purpose::URL_SAFE
-            .decode(&e.doc_key_enc)
-            .map_err(|er| AppError::Conflict {
-                detail: er.to_string(),
-            })?;
-        keys.push((uid, enc));
-    }
+    let keys = decode_keys(&req.keys)?;
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
-    // Tell every REMAINING member to re-fetch its freshly wrapped key. No user id.
-    // This is a re-key signal, not a revocation. The rotator (an owner) never
-    // appears as "revoked", and cannot kick itself out of its own document.
-    let msg = ambre_protocol::ws::encode_server_msg(
-        &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
-            document_id: doc_id,
-        },
-    );
-    let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
+    // The rotation landed, so the debt is cleared (`SRV-124`).
+    restore_debt_mirror(&state, &doc_id).await;
+    // Tell every REMAINING member to re-fetch its freshly wrapped key. This is
+    // a re-key signal, not a revocation.
+    notify_rotation(&state, &doc_id).await;
     Ok(axum::Json(serde_json::json!({"status":"rotated"})))
 }
 

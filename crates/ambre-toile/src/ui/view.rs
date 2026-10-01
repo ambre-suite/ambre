@@ -591,6 +591,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] followed_link: RwSignal<Option<super::link::ShellNav>>,
     ) -> Self {
         if !embedded {
+            text_input.name_content(ambre_canvas::ContentKind::Board);
             text_input.focus();
         }
         let theme = theme_ctl.get();
@@ -967,6 +968,7 @@ impl ToileView {
             ToileEvent::SelectionData(elements) => {
                 self.selection_data = elements;
                 self.needs_full = true;
+                self.announce_selection();
             }
             // Every element id on the board, for select-all (`TOILE-UI-033`).
             ToileEvent::BoardIds(ids) => {
@@ -1769,6 +1771,16 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
+
+    /// Announce the selection through the shared live region (`CHROME-023`).
+    /// A lone element waits for its data, which carries its kind and text.
+    fn announce_selection(&self) {
+        if let Some(text) =
+            super::a11y::selection_announcement(&self.selection, &self.selection_data)
+        {
+            self.text_input.announce(&text);
+        }
+    }
 
     /// Clear the status-bar aggregates (`toile-status-bar`) on an empty
     /// selection. Wasm-only (leptos signal); a host no-op keeps `plan_repaint`
@@ -3344,6 +3356,7 @@ impl ToileView {
                 // means "whole board" to Logic (used by Fit), never "nothing".
                 self.clear_sel_stats();
                 self.selection_data.clear();
+                self.announce_selection();
             } else {
                 self.send_edit(ToileCommand::RequestSelectionStats {
                     ids: self.selection.clone(),

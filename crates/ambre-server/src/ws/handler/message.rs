@@ -26,8 +26,18 @@ pub(crate) fn contiguous_prefix(
 /// A refused clock is a conflict the client acts on, so it carries the expected
 /// and the received clock (`SRV-037`). A store failure reaches the client as one
 /// generic message, and its name and text stay in the log (`SRV-081`, `SRV-020`).
-pub(crate) fn update_refusal(doc_id: &DocumentId, e: &AppError) -> WsServerMsg {
+///
+/// A document that owes a rotation refuses the frame for its key. The refusal
+/// names the key and the clock, so the author seals that frame again under the
+/// next key (`SRV-123`, `ambre-spec-sync.md`, `SYNC-129`).
+pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> WsServerMsg {
+    let doc_id = &update.public_data.document_id;
     match e {
+        AppError::RotationOwed => WsServerMsg::KeyRefused {
+            document_id: *doc_id,
+            key_id: update.public_data.key_id,
+            clock: update.public_data.clock,
+        },
         AppError::ClockMismatch { .. } => WsServerMsg::Error {
             code: 409,
             message: e.to_string(),
@@ -93,6 +103,16 @@ pub(crate) async fn handle_subscribe(
         },
         Ok(false) => {}
         Err(e) => tracing::error!(error = %e, "subscribe: clock state cold check failed"),
+    }
+    // Rewrite the mirror of an owed rotation from the register, before this
+    // client can send. A reset of the ephemeral store then loses the debt only
+    // until the next subscribe (`SRV-123`).
+    let mirrored = match db::rotation_owed(&state.db, &document_id).await {
+        Ok(owed) => redis_ops::mirror_rotation_owed(&state.redis, &document_id, owed).await,
+        Err(e) => Err(e),
+    };
+    if let Err(e) = mirrored {
+        tracing::error!(error = %e, "subscribe: rotation debt mirror failed");
     }
 
     conn.doc_subscriptions.insert(document_id);
@@ -253,7 +273,7 @@ pub(crate) async fn handle_update(
             }
             Err(e) => {
                 let _ = outbound_tx
-                    .send(encode_server_msg(&update_refusal(&doc_id, &e)))
+                    .send(encode_server_msg(&update_refusal(&update, &e)))
                     .await;
                 return;
             }
@@ -396,9 +416,14 @@ pub(crate) async fn handle_ephemeral(
 
     let pub_key_hex = eph.public_data.pub_key.to_hex();
     let presence_enc_b64 = base64::engine::general_purpose::URL_SAFE.encode(&eph.ciphertext.0);
-    let _ =
-        redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &presence_enc_b64, 15)
-            .await;
+    // A refused write is not broadcast either: a document that owes a rotation
+    // carries no presence sealed under a key a departed member holds (`SRV-123`).
+    if redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &presence_enc_b64, 15)
+        .await
+        .is_err()
+    {
+        return;
+    }
 
     let broadcast = encode_server_msg(&WsServerMsg::Ephemeral(eph));
     let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
@@ -944,7 +969,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x02);
+        assert_eq!(bytes[0], 0x03);
     }
 
     #[test]
@@ -1618,9 +1643,8 @@ mod refusal_tests {
 
     #[test]
     fn a_refused_clock_carries_the_expected_and_the_received_value() {
-        let doc_id = DocumentId::new();
         let refusal = update_refusal(
-            &doc_id,
+            &seq_update(9).update,
             &AppError::ClockMismatch {
                 expected: 5,
                 got: 9,
@@ -1638,9 +1662,9 @@ mod refusal_tests {
 
     #[test]
     fn a_store_failure_reaches_the_client_without_its_name_or_text() {
-        let doc_id = DocumentId::new();
         let cause = AppError::Redis("clock validation failed: ERR connection refused".into());
-        let WsServerMsg::Error { code, message } = update_refusal(&doc_id, &cause) else {
+        let WsServerMsg::Error { code, message } = update_refusal(&seq_update(1).update, &cause)
+        else {
             panic!("expected an error frame");
         };
         assert_eq!(code, 500);
@@ -1648,5 +1672,24 @@ mod refusal_tests {
         for leaked in ["Redis", "redis", "refused", "clock validation"] {
             assert!(!message.contains(leaked), "{message}");
         }
+    }
+
+    /// `SRV-123`: a frame refused while a rotation is owed is answered by name.
+    /// The author learns which key and which clock to seal again.
+    #[test]
+    fn a_frame_refused_for_its_key_names_the_key_and_the_clock() {
+        let update = seq_update(4).update;
+        let refusal = update_refusal(&update, &AppError::RotationOwed);
+        let WsServerMsg::KeyRefused {
+            document_id,
+            key_id,
+            clock,
+        } = refusal
+        else {
+            panic!("expected a key refusal");
+        };
+        assert_eq!(document_id, update.public_data.document_id);
+        assert_eq!(key_id, update.public_data.key_id);
+        assert_eq!(clock.0, 4);
     }
 }

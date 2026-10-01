@@ -7,6 +7,8 @@
 //! - **Control & content-send** -- document/channel session control and CRDT /
 //!   ephemeral byte payloads (`Vec<u8>` = genuine network bytes the Sync thread
 //!   encrypts/compresses/transmits).
+//! - **Flow control** -- `HoldInbound` and `ReleaseInbound`, which the Main
+//!   relay posts when the path back to the Logic thread fills and drains.
 //! - **Lifecycle** -- `Shutdown`.
 //!
 //! Crosses a `postMessage` boundary from the Main instance to the separate Sync
@@ -89,6 +91,13 @@ pub enum SyncCommand {
         channel_id: ChannelId,
         payload: Vec<u8>,
     },
+
+    // -- Flow control (posted by the Main relay, never by Logic) ---------------
+    /// The path back to the Logic thread is full: stop reading the socket
+    /// until [`SyncCommand::ReleaseInbound`] (`SYNC-059`).
+    HoldInbound,
+    /// The path back has room again: reopen the socket and catch up.
+    ReleaseInbound,
 
     // -- Lifecycle -------------------------------------------------------------
     Shutdown,

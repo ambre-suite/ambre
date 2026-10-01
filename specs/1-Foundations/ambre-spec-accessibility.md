@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: ACCESSIBILITY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the chrome uses the platform's own patterns. The content is mirrored
-into the page for one application out of three, under a label written for that one.
+**Implementation:** partial -- the chrome uses the platform's own patterns. Each application mirrors
+its focused unit into the page, under a name for its own kind of document.
 
 > What a screen reader and a keyboard reach. The chrome is DOM, so it inherits the platform's
 > accessibility for free. The content is pixels we drew, so it reaches assistive technology only
@@ -27,8 +27,8 @@ other five documents of the DOM side.
 | `CHROME-066` | `INV` | A control with two states MUST report which one it is in. | this spec section 2 | none | unheld -- the same test asserts only that an unpressed toggle carries no pressed state. It raises the signal and never reads the element again, because the re-render lands on a later microtask, so a toggle that never reported pressed would pass; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-069` | `INV` | A menu trigger MUST declare that it opens a menu. | this spec section 2, the pattern table | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed` -- it reads the trigger's popup declaration off the mounted button | none | verified |
 | `CHROME-070` | `INV` | A menu trigger MUST report whether it is open. | this spec section 2, the pattern table | none | unheld -- the same test checks that the menu element is absent on mount, which is the DOM and not the declaration a screen reader reads, and nothing asserts the expanded state at either value; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-023` | `OBS` | The focused unit of drawn content MUST be announced, in every application that draws content. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-009` | none | fails -- the mechanism is a live region in the shared crate and one application calls it. A board and a page announce nothing at all as the selection moves; lands with the `Each application announces its own content` Story (`ambre-roadmap.md` E7) | failing |
-| `CHROME-024` | `OBS` | The name the content announces MUST describe the kind of document the view holds. | this spec section 2 | none | fails -- the shared crate fixes the name and the role description at creation, naming a spreadsheet cell, so a board and a page announce themselves as one; lands with the `Each application announces its own content` Story (`ambre-roadmap.md` E7) | failing |
+| `CHROME-023` | `OBS` | The focused unit of drawn content MUST be announced, in every application that draws content. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-009` | `ambre_trame::ui::view::tests::the_active_cell_is_announced_by_reference_and_value` -- the grid says the cell and its value, or that it is empty; `ambre_toile::ui::a11y::tests::a_board_announces_its_selection` -- one element by its kind and text, several by their count; `ambre_toile::ui::a11y::tests::an_element_is_announced_once_its_data_arrives_and_never_whole` -- a lone element waits for its data, and a long body is cut; `ambre_prose::view::a11y::tests::a_page_announces_the_block_at_the_caret` -- the block at the caret by its kind and text | none | verified |
+| `CHROME-024` | `OBS` | The name the content announces MUST describe the kind of document the view holds. | this spec section 2 | `ambre_canvas::text_input::tests::only_the_spreadsheet_names_itself_a_cell` -- three kinds, three names, and only the grid says it is a cell | none | verified |
 | `CHROME-025` | `INV` | The element that carries content focus MUST stay in the page's tab order. | this spec section 2; `ambre-spec-text-input.md` | none | unheld -- the pipe is created focusable, which is what makes it the content's entry point as well as its keyboard. Nothing refuses the change that would take it out of the order; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-067` | `INV` | The element that carries content focus MUST NOT be hidden from assistive technology. | this spec section 2; `ambre-spec-text-input.md` | none | unheld -- the pipe is never marked hidden, so the rule holds by absence. Nothing refuses the hidden marking that an element drawn as nothing invites, and `CHROME-059` is the style that invites it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-026` | `INV` | A menu MUST be fully operable from the keyboard: move, jump to an end, jump by first letter, choose, and dismiss. | this spec section 2 | none | unheld -- the rule holds for one menu of two: the shared menu implements all five, and the launcher's document-type menu carries the roles with no key handling at all. No test drives either; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -41,14 +41,14 @@ other five documents of the DOM side.
   `ambre-spec-budgets.md` budgets no chrome operation.
 * **Boundary.** none: an announcement carries what the user already sees on their own screen, into
   their own page. It reaches no relay and crosses no thread.
-* **Verification.** 3 `verified`, 2 `failing`, 8 `untested`, 2 `unimplemented`. Every row is an
-  `INV` or an `OBS`. This document owns no gesture, the components belong to
-  `ambre-spec-chrome.md`, and the announcement belongs to the view that draws.
+* **Verification.** 5 `verified`, 8 `untested`, 2 `unimplemented`. Every row is an `INV` or an
+  `OBS`. This document owns no gesture, the components belong to `ambre-spec-chrome.md`, and the
+  announcement belongs to the view that draws.
 
-  The three verified rules are the three a headless browser can mount and read an attribute off.
-  Everything else is a property of the whole page with an assistive technology attached, and no
-  tier drives one (`ambre-spec-testing.md section 8`). Two rows are stated as failing: the
-  mechanism exists and the callers do not.
+  Three verified rules are read off a mounted component. The two content rules are held by the
+  text each view composes and the name each kind carries. The write into the page is one call no
+  test observes. Everything else needs an assistive technology attached, and no tier drives one
+  (`ambre-spec-testing.md section 8`).
 ---
 
 ## 2. MODEL
@@ -88,17 +88,21 @@ Writing new text into the live region is what produces the announcement. The sco
 the focused unit and not the document. A hundred-thousand-row mirror is a second rendering of the
 document, in DOM, and that cost is what the whole content design exists to avoid.
 
-**Where it stands.** The mechanism is shared and the calls are not.
+**What each application says.** The mechanism is shared, and the words are each view's own.
 
-| Application | Announces |
-|---|---|
-| the spreadsheet | the active cell reference and its value on every selection change, plus a refused operation |
-| the board | nothing |
-| the page | nothing, and it has no view yet |
+| Application | The pipe is named | Announces |
+|---|---|---|
+| the spreadsheet | a spreadsheet cell | the active cell reference and its value on every selection change, plus a refused operation |
+| the board | a whiteboard | the selection: one element by its kind, its text and its lock, several by their count, and an emptied one as such |
+| the page | a document | the block the caret enters, by its kind and the start of its text; a move inside the block says nothing |
 
-**Code:** `crates/ambre-canvas/src/text_input.rs` creates the pipe and the live region and holds the
-announcement call; `crates/ambre-trame/src/ui/view/lifecycle.rs` and
-`crates/ambre-trame/src/ui/view/frame.rs` are its only two callers. The chrome patterns are
+One pipe serves the whole page, so the top-level view names it. A document embedded in a board
+leaves the name alone, since the board still owns the pipe (`CHROME-024`).
+
+**Code:** `crates/ambre-canvas/src/text_input.rs` creates the pipe and the live region, holds the
+announcement call and the kinds. The words are `crates/ambre-trame/src/ui/view/mod.rs`,
+`crates/ambre-toile/src/ui/a11y.rs` and `crates/ambre-prose/src/view/a11y.rs`, and each view
+names the pipe at its creation. The chrome patterns are
 `crates/ambre-chrome/src/context_menu.rs`, `dialog.rs`, `toast.rs`, `status.rs` and `format.rs`, and
 the belt is `crates/ambre-chrome/tests/chrome_ui.rs`. The hidden-region style is
 `crates/ambre-app/styles.css`.
@@ -119,8 +123,8 @@ the belt is `crates/ambre-chrome/tests/chrome_ui.rs`. The hidden-region style is
 | an icon-only button is focused | its name is read out, and its pressed state with it |
 | the zoom chip is focused | it is read out as a menu trigger, with its current factor |
 
-**A board and a page are silent.** Everything above that concerns content is the spreadsheet's
-today, because it is the only view that calls the announcement (`CHROME-023`).
+**A board's tools are silent.** A board announces its selection. Switching a tool or opening an
+editor is drawn and says nothing, which is `CHROME-029`.
 
 ---
 
@@ -139,13 +143,12 @@ today, because it is the only view that calls the announcement (`CHROME-023`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The content's accessible name is fixed in the shared crate.** It names a spreadsheet cell,
-  whatever the view. `CHROME-024` states the rule and nothing refuses the current value.
-* **Two applications never announce.** The board moves a selection, opens an editor and switches
-  tools in silence, and the page has no view at all (`CHROME-023`).
+* **Nothing observes the write into the page.** The words and the names are unit-tested. The call
+  that writes them is one line per view, and the browser tier that would read it back is the one
+  `ambre-spec-testing.md section 8` describes. Reading it back is the `Each surface's name read back
+  from the page` Story (`ambre-roadmap.md` E9).
 * **Nothing states what the content owes beyond the focused unit.** A screen-reader user cannot ask
-  "what is in this column" or "how many elements are selected". Only the focused unit exists in
-  the page.
+  "what is in this column". Only the focused unit exists in the page.
 * **No test in any tier drives an assistive technology.** The wasm tier mounts a component and reads
   its attributes, which is what holds `CHROME-006` and `CHROME-022`. Nothing observes what a screen
   reader actually says, and nothing walks the page for an unnamed control.

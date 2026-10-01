@@ -249,6 +249,8 @@
 | `SyncDocumentState`, per open document | < 1 MB | `DocumentKey`, counters, sync state, quarantine |
 | `quarantine`, per document | ~2 MB max | Capped at 1000 updates of ~2 KB average |
 | `old_keys`, per document | negligible | Capped at 10 `DocumentKey` (32 bytes plus overhead) |
+| Unconfirmed updates, per document | 1024 updates | `UNCONFIRMED_LIMIT`: the sent frames the relay has not echoed yet, kept to resend one it refuses (`SYNC-129`). Past the cap the oldest is forgotten, and a refusal for it resends nothing |
+| Sync events held on Main past a full channel | 4096 events, released at 1024 | `SYNC_INBOX_HIGH` and `SYNC_INBOX_LOW`, four times and once the channel capacity. At the high mark the Sync worker closes its socket, and the relay holds the rest (`SYNC-059`). The bound is a count, not bytes: a replay batch is one event |
 | Sync overhead, 1 host document plus 3 embedded | ~4-8 MB | The typical scenario |
 | `LoroDoc` | < 10 MB target, per 100k cells | |
 | `LoroDoc` Prose | < 10 MB, per 100 pages and 50 000 words | |

@@ -469,6 +469,25 @@ impl<T> Drop for Receiver<T> {
 pub struct Backlog<T> {
     to: Sender<T>,
     held: VecDeque<T>,
+    marks: Option<Marks>,
+    holding: bool,
+}
+
+/// The two lengths between which a [`Backlog`] asks its source to stop. The
+/// gap between them keeps one burst from flapping the source on and off.
+#[derive(Debug, Clone, Copy)]
+struct Marks {
+    high: usize,
+    low: usize,
+}
+
+/// What a [`Backlog`] asks of the source that feeds it (`SYNC-059`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pressure {
+    /// The backlog reached its high mark: stop sending.
+    Hold,
+    /// The backlog fell to its low mark: send again.
+    Release,
 }
 
 impl<T> Backlog<T> {
@@ -476,6 +495,38 @@ impl<T> Backlog<T> {
         Self {
             to,
             held: VecDeque::new(),
+            marks: None,
+            holding: false,
+        }
+    }
+
+    /// A backlog that asks its source to stop at `high` values held, and to
+    /// start again at `low`. Read the request with [`Backlog::pressure`].
+    ///
+    /// # Panics
+    ///
+    /// When `low` is not below `high`: the source would never be released.
+    pub fn with_marks(to: Sender<T>, high: usize, low: usize) -> Self {
+        assert!(low < high, "the low mark must sit below the high mark");
+        Self {
+            marks: Some(Marks { high, low }),
+            ..Self::new(to)
+        }
+    }
+
+    /// What the source must do now, once per crossing of a mark. `None` when
+    /// nothing changed since the last call, or when the backlog has no marks.
+    pub fn pressure(&mut self) -> Option<Pressure> {
+        let marks = self.marks?;
+        let len = self.held.len();
+        if !self.holding && len >= marks.high {
+            self.holding = true;
+            Some(Pressure::Hold)
+        } else if self.holding && len <= marks.low {
+            self.holding = false;
+            Some(Pressure::Release)
+        } else {
+            None
         }
     }
 
@@ -697,6 +748,29 @@ mod tests {
         assert_eq!(rx.try_recv(), Ok(2));
         backlog.flush();
         assert_eq!(rx.try_recv(), Ok(3));
+    }
+
+    /// A backlog asks its source to stop once at the high mark, and to start
+    /// again once at the low mark, never in between (`SYNC-059`).
+    #[test]
+    fn a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low() {
+        let (tx, rx) = local(1);
+        let mut backlog = Backlog::with_marks(tx, 3, 1);
+        let mut asked = Vec::new();
+        for n in 0..5 {
+            backlog.push(n);
+            asked.extend(backlog.pressure());
+        }
+        assert_eq!(backlog.len(), 4, "one in the channel, four held");
+        assert_eq!(asked, vec![Pressure::Hold]);
+        for _ in 0..3 {
+            let _ = rx.try_recv();
+            backlog.flush();
+            asked.extend(backlog.pressure());
+        }
+        assert_eq!(backlog.len(), 1);
+        assert_eq!(asked, vec![Pressure::Hold, Pressure::Release]);
+        assert_eq!(backlog.pressure(), None, "one request per crossing");
     }
 
     #[test]

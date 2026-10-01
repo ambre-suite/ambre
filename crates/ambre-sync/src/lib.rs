@@ -133,6 +133,7 @@ mod members;
 pub mod mock;
 pub mod mock_relay;
 mod pipeline;
+mod rekey;
 mod sharing;
 mod updates;
 mod websocket;
@@ -274,6 +275,8 @@ enum SyncEvent {
         /// local-only open. Gates mutating commands in Logic as a UX measure;
         /// the server remains the sole authority.
         role: Role,
+        /// The members answer says the document owes a rotation (`SYNC-128`).
+        rotation_owed: bool,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -354,6 +357,33 @@ enum SyncEvent {
     KeyRotated {
         document_id: DocumentId,
         new_doc_key: DocumentKey,
+    },
+    /// This user's departure landed: the relay removed their own share
+    /// (`SYNC-127`). The document closes locally.
+    DocumentLeft {
+        id: RequestId,
+        document_id: DocumentId,
+    },
+    /// The document owes a rotation: a member left and nobody re-keyed since
+    /// (`SYNC-128`). Found in a members answer, never guessed.
+    DebtFound {
+        document_id: DocumentId,
+    },
+    /// This client paid the owed rotation: the relay stored `new_doc_key` for
+    /// every member, and it becomes the current key (`SYNC-128`).
+    DebtSettled {
+        document_id: DocumentId,
+        new_doc_key: DocumentKey,
+    },
+    /// The debt was paid by someone else before this client could. Their key
+    /// is fetched like any other rotation's.
+    DebtGone {
+        document_id: DocumentId,
+    },
+    /// Paying the debt failed. The next frame tries again.
+    DebtUnsettled {
+        document_id: DocumentId,
+        message: String,
     },
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
@@ -465,6 +495,9 @@ struct SyncDocumentState {
     /// have any content. Stays `false` for local-only / offline opens, which
     /// emit `DocumentReady` immediately (no replay to wait for).
     awaiting_initial_hydration: bool,
+    /// Updates sent and not yet echoed, and the rotation this document owes
+    /// (`SYNC-128`, `SYNC-129`).
+    rekey: rekey::Rekey,
 }
 
 impl SyncDocumentState {
@@ -499,6 +532,7 @@ impl SyncDocumentState {
             signing_keys: HashMap::new(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
+            rekey: rekey::Rekey::default(),
         }
     }
 
@@ -682,6 +716,12 @@ pub struct SyncState {
     /// Set when the relay speaks a newer wire version than this build. Never
     /// cleared: only a reload onto the new client cures it (`SYNC-137`).
     update_owed: bool,
+    /// Set while the path back to the Logic thread is full. The socket stays
+    /// closed until the Main relay releases it (`SYNC-059`).
+    inbound_held: bool,
+    /// Updates sealed while the socket is held closed, as wire frames in order.
+    /// Sent once it reopens, so a hold loses no edit of this user.
+    held_outbox: RefCell<Vec<Vec<u8>>>,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
@@ -758,6 +798,8 @@ impl SyncState {
             reconnect_attempts: 0,
             setup_owed: false,
             update_owed: false,
+            inbound_held: false,
+            held_outbox: RefCell::new(Vec::new()),
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             mock_ws_tx: None,
@@ -862,6 +904,17 @@ impl SyncState {
                 let _ = tx.send(wire);
                 return;
             }
+            if self.inbound_held
+                && matches!(
+                    msg,
+                    WsClientMsg::Update(_) | WsClientMsg::ChannelUpdate { .. }
+                )
+            {
+                // A hold is ours, not the network's: keep the edit for the
+                // reopen rather than lose it (`SYNC-059`).
+                self.held_outbox.borrow_mut().push(wire);
+                return;
+            }
             tracing::warn!("[Sync->Server] ws_send called with no socket, dropping message");
             return;
         };
@@ -870,6 +923,26 @@ impl SyncState {
             std::mem::discriminant(msg),
             wire.len()
         );
+        self.send_wire(ws, wire);
+    }
+
+    /// Sends the frames kept while the socket was held closed, in order, on
+    /// whichever transport is up. With none, they stay kept.
+    fn flush_held_outbox(&self) {
+        let held = std::mem::take(&mut *self.held_outbox.borrow_mut());
+        for wire in held {
+            if let Some(ws) = self.ws.as_ref() {
+                self.send_wire(ws, wire);
+            } else if let Some(tx) = &self.mock_ws_tx {
+                let _ = tx.send(wire);
+            } else {
+                self.held_outbox.borrow_mut().push(wire);
+            }
+        }
+    }
+
+    /// Pushes one encoded frame onto the socket.
+    fn send_wire(&self, ws: &WebSocket, wire: Vec<u8>) {
         // `wire` lives in the wasm heap, which is a SharedArrayBuffer under the
         // shared-memory threading model. Browsers reject `WebSocket.send` on a
         // view backed by a SharedArrayBuffer, so copy into a fresh (non-shared)
@@ -941,6 +1014,10 @@ impl SyncState {
             } => {
                 self.handle_send_channel_ephemeral(channel_id, payload);
             }
+
+            // -- Flow control --------------------------------------------------
+            SyncCommand::HoldInbound => self.hold_inbound(),
+            SyncCommand::ReleaseInbound => self.release_inbound(),
 
             // -- Lifecycle -----------------------------------------------------
             SyncCommand::Shutdown => self.handle_logout(),
@@ -1025,6 +1102,9 @@ impl SyncState {
                 user_id,
             } => {
                 self.handle_revoke_from_document(id, document_id, user_id);
+            }
+            RestCommand::LeaveDocument { document_id } => {
+                self.handle_leave_document(id, document_id);
             }
             RestCommand::ListDocumentMembers { document_id } => {
                 self.handle_list_document_members(id, document_id);

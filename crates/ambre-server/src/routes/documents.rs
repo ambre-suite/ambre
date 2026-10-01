@@ -577,7 +577,12 @@ pub async fn list_document_members(
             ),
         })
         .collect();
-    Ok(axum::Json(serde_json::json!({"members":json})))
+    // A member with write access that reads a debt rotates before it sends a
+    // frame (`ambre-spec-key-rotation.md`, `SYNC-128`).
+    let rotation_owed = db::rotation_owed(&state.db, &doc_id).await?;
+    Ok(axum::Json(
+        serde_json::json!({"members":json,"rotation_owed":rotation_owed}),
+    ))
 }
 
 /// Request body for changing a member's role.

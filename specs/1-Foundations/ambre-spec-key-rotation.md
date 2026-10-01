@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: KEY ROTATION
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the rotation ships and the remaining members re-key. A revoke that
-fails halfway leaves the key live, and the rotation re-keys the deltas alone.
+**Implementation:** partial -- a revoke lands whole, and a departure leaves a rotation owed. The
+rotation re-keys the deltas alone.
 
 > Taking someone off a document means they cannot read what is written after it. The document gets
 > a new key, sealed again for everyone who stays, and the person removed keeps only what they
@@ -33,12 +33,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.2 Remove a member
 
-The initiating client asks the relay to drop the member. It then generates a key, re-wraps it for
-everyone who stays and posts every copy at once.
+The initiating client generates a key and wraps it for everyone who stays. It posts the removal
+and every copy in one request, so the revoke lands whole or not at all.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none | fails -- the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation; lands with the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the new key is wrapped for everyone but the member removed; `ambre_sync::sharing::tests::a_refused_revoke_swaps_no_key` -- a refused revoke installs no key; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay removes the member and stores every copy together | none | verified |
 | `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | none | fails -- the document name and every media blob stay sealed under the previous key. Each names that key, and nothing brings it back, so a revoke silently blanks the name and every picture; lands with the `The key chain` Story (`ambre-roadmap.md` E5) | failing |
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -46,7 +46,7 @@ everyone who stays and posts every copy at once.
 | `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed`; `ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` -- the rotation names each member it could not re-wrap for, and the revoke reports them | none | verified |
 | `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-126` | `POST` | A revoke MUST post the removal, the wrapped copies and the link in one request. | this spec section 3; `SYNC-041` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-126` | `POST` | A revoke MUST post the removal and the wrapped copies in one request. | this spec section 3; `SYNC-041` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- one read of the members, then one post that names the member and carries every copy; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay applies the one request whole and leaves no debt | none | verified |
 
 ### 1.3 Take on a rotation
 
@@ -74,22 +74,22 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-127` | `POST` | A member who leaves MUST post the removal alone, and leave the rotation owed. | this spec section 3; `SRV-122` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-128` | `POST` | A client with write access that finds a rotation owed MUST rotate before it sends a frame. | this spec section 3; `SRV-123` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-129` | `POST` | A frame the relay refuses for its key MUST be sealed again under the current key and sent again. | this spec section 3; `SRV-123` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-130` | `FRAME` | Leaving MUST NOT choose the next key. | this spec section 3 | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-127` | `POST` | A member who leaves MUST post the removal alone, and leave the rotation owed. | this spec section 3; `SRV-122` | `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- one removal of the user's own share, and no other call; `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- the relay records the debt | none | verified |
+| `SYNC-128` | `POST` | A client with write access that finds a rotation owed MUST rotate before it sends a frame. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` -- a writer sends nothing before it pays, and a reader records no debt; `ambre_sync::rekey::tests::a_debt_found_holds_the_next_edit_until_the_key_lands` -- an edit waits for the key; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- the payment wraps the key for every member; `ambre_sync::sharing::tests::a_paid_debt_posts_nothing_and_a_failed_one_is_retried` -- a debt already paid posts nothing, and a failed payment is tried again; `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- a refusal is how a writer in flight finds the debt; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- many refusals start one payment | none | verified |
+| `SYNC-129` | `POST` | A frame the relay refuses for its key MUST be sealed again under the current key and sent again. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- the refused frame leaves again at its own clock under the new key, before the edits that waited; `ambre_sync::updates::tests::a_frame_refused_under_an_older_key_is_sent_again_at_once` -- a refusal of a key already replaced is answered at once; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- the refused frames come back at their own clocks, in order; `ambre_sync::rekey::tests::a_refusal_of_an_older_key_resends_without_paying` -- an older key owes no payment | none | verified |
+| `SYNC-130` | `FRAME` | Leaving MUST NOT choose the next key. | this spec section 3 | `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the departure reads no member and posts no key, so there is none to choose | none | verified |
 
 * **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
   `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. The
-  cache of previous keys is the `old_keys` holder of `ambre-spec-budgets.md section 6`. A step
-  back along the chain costs one small open and one signature check.
+  cache of previous keys and the unconfirmed updates are rows of `ambre-spec-budgets.md section 6`.
+  A step back along the chain costs one small open and one signature check.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It also holds each link and each key
   identifier, and opens neither.
-* **Verification.** 5 `verified`, 2 `failing`, 5 `untested`, 13 `unimplemented`. What holds is the
-  relay half, the wipe the key type carries and the open by name. The client side is loose: the
-  revoke is not atomic, and the rotation reaches the deltas alone.
+* **Verification.** 11 `verified`, 1 `failing`, 5 `untested`, 8 `unimplemented`. What holds is the
+  relay half, the key wipe, the open by name, the revoke in one request and the debt a departure
+  leaves. The client side is loose: the rotation reaches the deltas alone.
 
 ---
 
@@ -100,9 +100,10 @@ verification.
 
 | Alice does | Bob and Carol do | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| removes Carol | Bob edits | Bob's edit under the new key | Carol cannot read Bob's edit; Bob works on (`SYNC-041`) | `sharing::tests::revoke_success_deletes_then_rotates_remaining_members` |
-| removes Carol, and the removal fails | -- | nothing new | Alice is told, and Carol stays a member (`SYNC-041`) | `sharing::tests::revoke_delete_failure_emits_500_and_stops` |
-| removes Carol, and the rotation fails | Bob edits | Bob's edit under the previous key | Alice is told the revoke failed, Carol is out of the list, and Carol can still read Bob's edit (`SYNC-041`) | none, and it fails -- section 5 |
+| removes Carol | Bob edits | Bob's edit under the new key | Carol cannot read Bob's edit; Bob works on (`SYNC-041`) | `sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` |
+| removes Carol, and the revoke fails | Bob edits | Bob's edit under the same key | Alice is told, Carol stays a member, and nothing changed (`SYNC-041`) | `sharing::tests::a_refused_revoke_swaps_no_key` |
+| -- | Carol leaves; Bob edits | Bob's edit under a key Bob chose | Bob's client rotates before its edit leaves, and Carol cannot read it (`SYNC-127`, `SYNC-128`) | `updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` |
+| -- | Carol leaves while Bob's edit is in flight | Bob's edit, refused, then sent again under the new key | Bob sees nothing happen; Carol cannot read the edit (`SYNC-129`) | `updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` |
 | removes Carol | Bob reopens the document | Alice's content, and a name nobody can open | the document is called nothing, and every picture in it is missing (`SYNC-042`) | none, and it fails -- section 5 |
 | removes Carol, whose row Bob's relay serves malformed | Bob reopens | Alice's content | Alice is told the rotation could not reach Bob, by name (`SYNC-043`) | `sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` |
 | removes Carol while Bob's edit is in flight | Bob's edit arrives sealed under the previous key | Bob's edit | Alice reads it: the previous key is cached (`SYNC-044`) | none -- section 5 |
@@ -124,12 +125,12 @@ which is the relay's table and this worker's memory.
 **The initiating client, in steps.** The Logic thread does no cryptography and no network here: the
 key never leaves the Sync worker.
 
-1. generate a new document key from the system generator;
-2. fetch the remaining members and their exchange keys;
-3. wrap the new key once per remaining member (`SYNC-035`, `SYNC-043`);
-4. post the removal, every wrapped copy and the signed link in one request (`SYNC-126`). The
-   relay applies them in one transaction, records the
-   rotator as the wrapper (`SYNC-046`) and broadcasts the notice after the commit (`SYNC-047`);
+1. fetch the members and their exchange keys;
+2. generate a new document key from the system generator;
+3. wrap the new key once per member but the one removed (`SYNC-035`, `SYNC-043`);
+4. post the removal and every wrapped copy in one request (`SYNC-126`). The relay applies them in
+   one transaction, records the rotator as the wrapper (`SYNC-046`) and broadcasts the notice after
+   the commit (`SYNC-047`). The signed link joins the same request with the chain (`SYNC-118`);
 5. move the previous key into the cache, install the new one, and report the revoke done;
 6. seal a fresh snapshot under the new key (`SYNC-048`).
 
@@ -140,6 +141,15 @@ choose the next key: the members who stay would then trust a key the leaver pick
 2. It refuses every frame sealed under the key the removal left behind (`SRV-123`).
 3. The first member client to send finds the debt, and rotates first (`SYNC-128`).
 4. A frame refused for its key is sealed again under the new key and sent again (`SYNC-129`).
+
+A writer finds the debt in the members answer, at the open or at the notice a departure sends. It
+pays at its next edit, so a debt nobody writes after costs nothing. An edit made meanwhile waits
+unsealed for the new key.
+
+**Why a refused frame keeps its clock.** The relay refuses before it reads the clock, so the clock
+is still free, and so is every one after it. The worker keeps each update it sent until the relay
+echoes it back. On a refusal, it seals the refused updates again under the new key, at their own
+clocks and in order. A late refusal names the key the frame no longer carries, and is ignored.
 
 **Every other client, in steps.**
 
@@ -196,8 +206,10 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 
 **Code.**
 
-* `crates/ambre-sync/src/sharing.rs` -- the revoke, the new key and the re-wrap for each member;
-* `crates/ambre-sync/src/websocket.rs` -- the notice, the fetch, the unwrap and the swap;
+* `crates/ambre-sync/src/sharing.rs` -- the revoke, the departure, the payment of a debt, and the
+  re-wrap for each member;
+* `crates/ambre-sync/src/rekey.rs` -- the updates kept until their echo, and the debt;
+* `crates/ambre-sync/src/websocket.rs` -- the notice, the fetch, the unwrap, the swap and the refusal;
 * `crates/ambre-sync/src/lib.rs` -- the cache of previous keys, and the two opens by name;
 * `crates/ambre-server/src/db/members.rs` -- the transaction, and the wrapper of record.
 
@@ -227,10 +239,12 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A revoke is four requests and no transaction.** The removal is posted first; the members fetch,
-  the wrap and the rotation post can each fail after it. Every failure reports one error to the user
-  and leaves the member out of the list with a key that still opens new deltas. Nothing retries, and
-  nothing records that this document is owed a rotation (`SYNC-041`).
+* **Nothing on screen leaves a document.** The worker takes the command and the relay accepts it,
+  but no screen sends it yet (`SYNC-127`). The `A member can leave a document from the screen`
+  Story (`ambre-roadmap.md` E7) adds it.
+* **A member added during a revoke keeps the previous key.** The members are read before the post,
+  and a member invited between the two gets no copy of the new key. The `A member invited during a
+  revoke gets the new key` Story (`ambre-roadmap.md` E7) closes it.
 * **Nothing brings back the key a name or a blob names.** Both stay sealed under the key of their
   time, and each names it (`SYNC-125`). That is correct once the chain opens it. Until then every
   revoke leaves the document unnamed and its pictures unreadable (`SYNC-042`, `SYNC-119`).
