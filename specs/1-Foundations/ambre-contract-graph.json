@@ -2200,7 +2200,7 @@
   {"edge": "verified-by", "from": "SYNC-068", "to": "ambre_sync::pipeline::tests::a_name_opens_under_its_own_document_only"},
   {"edge": "cites-section", "from": "SYNC-136", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-rule", "from": "SYNC-136", "to": "SYNC-068"},
-  {"edge": "lands-with", "from": "SYNC-136", "to": "A create fails on a foreign answer"},
+  {"edge": "verified-by", "from": "SYNC-136", "to": "ambre_sync::documents::tests::a_create_fails_on_a_foreign_answer"},
   {"edge": "cites-section", "from": "SYNC-069", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "verified-by", "from": "SYNC-069", "to": "ambre_sync::channels::tests::a_channel_message_is_refused_not_dropped"},
   {"edge": "cites-document", "from": "SYNC-066", "to": "ambre-spec-zero-knowledge.md"},

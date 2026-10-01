@@ -159,6 +159,18 @@ impl SyncState {
         String::from_utf8(plaintext).ok()
     }
 
+    /// The document a create answer names, refused unless the client minted
+    /// it. The name is sealed under that id, and no other id opens it
+    /// (`SYNC-136`).
+    fn created_document(minted: DocumentId, answered: &str) -> Result<DocumentId, String> {
+        match DocumentId::parse_str(answered) {
+            Ok(answered) if answered == minted => Ok(minted),
+            _ => Err(format!(
+                "CreateDocument: the relay answered {answered}, not the minted {minted}"
+            )),
+        }
+    }
+
     pub(crate) fn handle_create_document(
         &mut self,
         id: RequestId,
@@ -219,15 +231,18 @@ impl SyncState {
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await
                 {
-                    Ok(resp) => {
-                        // The relay echoes the id the client minted, or refuses.
-                        debug_assert_eq!(resp.document_id, document_id.to_string());
-                        let _ = tx.send(SyncEvent::DocumentCreated {
-                            id,
-                            document_id,
-                            doc_type,
-                        });
-                    }
+                    Ok(resp) => match Self::created_document(document_id, &resp.document_id) {
+                        Ok(document_id) => {
+                            let _ = tx.send(SyncEvent::DocumentCreated {
+                                id,
+                                document_id,
+                                doc_type,
+                            });
+                        }
+                        Err(message) => {
+                            let _ = tx.send(SyncEvent::HttpError { id, message });
+                        }
+                    },
                     Err(e) => {
                         let _ = tx.send(SyncEvent::HttpError { id, message: e });
                     }
@@ -369,5 +384,22 @@ impl SyncState {
             }
             self.reply(id, RestEvent::DocumentRenamed { document_id });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A create answer that names another document, or no document, fails:
+    /// only the minted id opens the name sealed under it (`SYNC-136`).
+    #[test]
+    fn a_create_fails_on_a_foreign_answer() {
+        let minted = DocumentId::new();
+        let answer = SyncState::created_document(minted, &minted.to_string());
+        assert_eq!(answer, Ok(minted));
+        let foreign = DocumentId::new().to_string();
+        assert!(SyncState::created_document(minted, &foreign).is_err());
+        assert!(SyncState::created_document(minted, "not an id").is_err());
     }
 }
