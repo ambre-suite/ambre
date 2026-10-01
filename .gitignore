@@ -7,6 +7,8 @@ dist
 .env
 # Local DB tooling config (pgAdmin/DBeaver), contains dev connection details.
 servers.json
+# Snapshot a local Redis writes into its working directory.
+dump.rdb
 .claude
 # Python bytecode cache from the scripts/ tooling (just spec-code / contracts).
 __pycache__/

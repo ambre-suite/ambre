@@ -50,7 +50,7 @@ happen.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete removes every object under the document prefix before the rows go, and the second sweep removes one put after | none | verified |
+| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to by more than the late-write window, the lifetime of an upload link plus that of a flush. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete removes every object under the document prefix before the rows go, and the second sweep removes one put after | none | verified |
 | `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- the sweep walks the deleted document's own prefix, and an object of a second document survives it. A picture two documents share is stored once under each | none | verified |
 
 ### 1.4 Erase one blob

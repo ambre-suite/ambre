@@ -20,7 +20,7 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3337 rows: 2398 shipped, of which 102 partial and 625 loose. 939 unbuilt.**
+**3338 rows: 2398 shipped, of which 102 partial and 625 loose. 940 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -30,7 +30,7 @@
 | `untested` | 231 | 131 | 195 | 2 |  | 559 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
-| `unimplemented` | 304 | 61 | 24 | 111 | 439 | 939 |
+| `unimplemented` | 305 | 61 | 24 | 111 | 439 | 940 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -68,7 +68,7 @@
 | `ambre-spec-schema-version.md` | 19 | 19 | 18 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 21 | 17 | 8 |  | 9 | 4 |
 | `ambre-spec-sequencer.md` | 46 | 18 | 7 | 3 | 8 | 28 |
-| `ambre-spec-server.md` | 49 | 24 | 15 | 2 | 7 | 25 |
+| `ambre-spec-server.md` | 50 | 24 | 15 | 2 | 7 | 26 |
 | `ambre-spec-session.md` | 17 | 17 | 9 | 2 | 6 |  |
 | `ambre-spec-sync.md` | 27 | 27 | 8 |  | 19 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
@@ -258,7 +258,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..019 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |
