@@ -47,7 +47,7 @@ use ambre_bus::{
     RestCommand, RestEvent, Role, SecretBytes, SecretString, SnapshotId, SyncCommand, UserId,
     UserInfo,
 };
-use ambre_core::PublicKey;
+use ambre_core::{KeyId, PublicKey};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -429,10 +429,9 @@ struct SyncDocumentState {
     /// soft threshold and has not dropped back under it since. One request per
     /// gap, never one per arrival (`SYNC-031`).
     gap_requested: bool,
-    /// LRU cache of previous DocumentKeys (max 10). Used by
-    /// [`open_update_fallback`] and [`open_ephemeral_fallback`] to decrypt
-    /// messages sealed with a key that was rotated before the rotation
-    /// notification propagated to this client.
+    /// LRU cache of previous DocumentKeys (max 10). A frame that names one of
+    /// them opens under it: it was sealed before its author learned of the
+    /// rotation.
     old_keys: Vec<DocumentKey>,
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
@@ -509,24 +508,24 @@ impl SyncDocumentState {
         self.quarantine.values().map(Vec::len).sum()
     }
 
-    /// Decrypts an ephemeral message with the active key, falling back to every
-    /// key in the [`old_keys`] LRU cache if the active key fails. Returns the
-    /// result of the last attempt (the active key) if all keys fail.
-    fn open_ephemeral_fallback(
+    /// The key a frame names: the active key, or one in the [`old_keys`]
+    /// cache. `None` when this client holds no such key (`SYNC-045`).
+    fn key_named(&self, id: KeyId) -> Option<&DocumentKey> {
+        std::iter::once(&self.doc_key)
+            .chain(&self.old_keys)
+            .find(|key| key.id() == id)
+    }
+
+    /// Opens an ephemeral with the one key it names, and with no other
+    /// (`SYNC-045`).
+    fn open_ephemeral_named(
         &self,
         eph: &ambre_protocol::Ephemeral,
     ) -> Result<Vec<u8>, pipeline::PipelineError> {
-        match pipeline::open_ephemeral(eph, &self.doc_key) {
-            Ok(payload) => Ok(payload),
-            Err(_) => {
-                for old_key in &self.old_keys {
-                    if let Ok(payload) = pipeline::open_ephemeral(eph, old_key) {
-                        return Ok(payload);
-                    }
-                }
-                pipeline::open_ephemeral(eph, &self.doc_key)
-            }
-        }
+        let key = self
+            .key_named(eph.public_data.key_id)
+            .ok_or(pipeline::PipelineError::WrongKey)?;
+        pipeline::open_ephemeral(eph, key)
     }
 
     /// Anti-replay gate for an inbound ephemeral. Returns `true` if `counter` is
@@ -588,27 +587,21 @@ impl SyncDocumentState {
         self.signing_keys.get(&author_pk).copied()
     }
 
-    /// Decrypts an update with the active key, falling back to every key in the
-    /// [`old_keys`] LRU cache.
+    /// Opens a snapshot blob with the active key.
     fn open_snapshot_blob(&self, blob: &[u8]) -> Result<Vec<u8>, pipeline::PipelineError> {
         pipeline::open_snapshot_blob(blob, self.document_id, &self.doc_key)
     }
 
-    fn open_update_fallback(
+    /// Opens an update with the one key it names, and with no other
+    /// (`SYNC-045`).
+    fn open_update_named(
         &self,
         update: &ambre_protocol::Update,
     ) -> Result<Vec<u8>, pipeline::PipelineError> {
-        match pipeline::open_update(update, &self.doc_key) {
-            Ok(payload) => Ok(payload),
-            Err(_) => {
-                for old_key in &self.old_keys {
-                    if let Ok(payload) = pipeline::open_update(update, old_key) {
-                        return Ok(payload);
-                    }
-                }
-                pipeline::open_update(update, &self.doc_key)
-            }
-        }
+        let key = self
+            .key_named(update.public_data.key_id)
+            .ok_or(pipeline::PipelineError::WrongKey)?;
+        pipeline::open_update(update, key)
     }
 
     /// Replaces the active document key with `new_key`, pushing the previous

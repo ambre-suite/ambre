@@ -52,7 +52,7 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
-            let opened = doc_state.open_update_fallback(&update);
+            let opened = doc_state.open_update_named(&update);
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
@@ -248,7 +248,7 @@ impl SyncState {
             };
             pending
                 .iter()
-                .map(|u| doc_state.open_update_fallback(u))
+                .map(|u| doc_state.open_update_named(u))
                 .collect()
         };
         for opened in results {
@@ -917,6 +917,33 @@ mod tests {
             clock: Clock(clock),
         };
         pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
+    }
+
+    /// A frame opens with the one key it names (`SYNC-045`). A previous key
+    /// still cached opens its own frames, and a key this client never held
+    /// is refused before any open is attempted.
+    #[test]
+    fn a_frame_opens_with_the_key_it_names_and_no_other() {
+        let (mut state, _rx, document_id, old_key, signing_key, snapshot) = setup();
+        let new_key = DocumentKey::generate();
+        let stranger = DocumentKey::generate();
+        let doc_state = state.documents.get_mut(&document_id).unwrap();
+        doc_state.rotate_key(new_key.clone());
+
+        let under =
+            |key: &DocumentKey| make_update(document_id, snapshot, 1, b"d", key, &signing_key);
+        assert_eq!(doc_state.open_update_named(&under(&new_key)).unwrap(), b"d");
+        assert_eq!(doc_state.open_update_named(&under(&old_key)).unwrap(), b"d");
+        assert_eq!(
+            doc_state.key_named(old_key.id()).map(DocumentKey::id),
+            Some(old_key.id())
+        );
+
+        assert!(doc_state.key_named(stranger.id()).is_none());
+        assert!(matches!(
+            doc_state.open_update_named(&under(&stranger)),
+            Err(pipeline::PipelineError::WrongKey)
+        ));
     }
 
     /// The blob object storage holds for a snapshot of `document_id`.

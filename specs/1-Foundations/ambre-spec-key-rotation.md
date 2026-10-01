@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none | unheld -- the bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
-| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | none | fails -- the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens; lands with the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | `ambre_sync::updates::tests::a_frame_opens_with_the_key_it_names_and_no_other` -- a frame under the current key or a cached one opens with it, and a frame naming a key never held is refused before any open | none | verified |
 | `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | `ambre_crypto::tests::a_key_id_is_derived_from_the_key` -- one key gives one identifier, another key another, and the key's bytes are not in it | none | verified |
 | `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -87,9 +87,9 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It also holds each link and each key
   identifier, and opens neither.
-* **Verification.** 4 `verified`, 3 `failing`, 5 `untested`, 13 `unimplemented`. What holds is the
-  relay half and the wipe the key type carries. The client side is loose: the revoke is not atomic,
-  the rotation reaches the deltas alone, and the open tries every key.
+* **Verification.** 5 `verified`, 2 `failing`, 5 `untested`, 13 `unimplemented`. What holds is the
+  relay half, the wipe the key type carries and the open by name. The client side is loose: the
+  revoke is not atomic, and the rotation reaches the deltas alone.
 
 ---
 
@@ -198,7 +198,7 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 
 * `crates/ambre-sync/src/sharing.rs` -- the revoke, the new key and the re-wrap for each member;
 * `crates/ambre-sync/src/websocket.rs` -- the notice, the fetch, the unwrap and the swap;
-* `crates/ambre-sync/src/lib.rs` -- the cache of previous keys, and the two fallback opens;
+* `crates/ambre-sync/src/lib.rs` -- the cache of previous keys, and the two opens by name;
 * `crates/ambre-server/src/db/members.rs` -- the transaction, and the wrapper of record.
 
 ---
@@ -237,10 +237,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).
-* **The open tries every cached key.** An inbound frame is attempted against the current key, then
-  each cached key, then the current key again for its error. So an unopenable frame costs eleven
-  attempts. A frame sealed under a key that was rotated away still opens for as long as it is
-  cached (`SYNC-045`).
+* **A key rotated away still opens on the client.** An inbound frame opens with the key it names,
+  and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the cache
+  exists for. Refusing a frame under the key a removal left behind is the relay's job (`SRV-123`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
 * **The key chain is not built.** Past the tenth rotation an older key leaves the cache, and nothing

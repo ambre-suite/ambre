@@ -703,7 +703,7 @@
   {"edge": "cites-rule", "from": "SYNC-078", "to": "ZK-011"},
   {"edge": "cites-section", "from": "SYNC-045", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "cites-rule", "from": "SYNC-045", "to": "SYNC-125"},
-  {"edge": "lands-with", "from": "SYNC-045", "to": "A revoked key opens nothing"},
+  {"edge": "verified-by", "from": "SYNC-045", "to": "ambre_sync::updates::tests::a_frame_opens_with_the_key_it_names_and_no_other"},
   {"edge": "cites-section", "from": "SYNC-115", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "verified-by", "from": "SYNC-115", "to": "ambre_crypto::tests::a_key_id_is_derived_from_the_key"},
   {"edge": "cites-section", "from": "SYNC-116", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},

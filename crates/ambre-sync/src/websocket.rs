@@ -803,7 +803,7 @@ impl SyncState {
                     );
                     return;
                 };
-                let opened = doc_state.open_ephemeral_fallback(&eph);
+                let opened = doc_state.open_ephemeral_named(&eph);
                 self.deliver_remote(doc_id, Some(opened), |payload| {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
