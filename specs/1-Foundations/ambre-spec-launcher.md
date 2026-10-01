@@ -1,8 +1,9 @@
 # AMBRE -- FEATURE: THE LAUNCHER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- signing in, listing, creating, renaming and deleting all ship; the
-list has no order, no grouping and no search.
+**Implementation:** partial -- the development sign-in, listing, creating, renaming and deleting
+ship. The provider sign-in never reaches the client, and an account has no face to unlock or set up
+its keys. The list has no order, no grouping and no search.
 
 > The home screen at the root of the site: sign in, then every document you can open, whatever kind
 > it is. Picking one opens it; picking a kind creates one.
@@ -30,6 +31,7 @@ other five documents of the DOM side.
 | `CHROME-079` | `OBS` | An unnamed document MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- the card has no branch that reaches for an identifier, and nothing refuses the fallback a later author would add. It is the half that leaks: a name is absent by design, and an identifier on screen is routing metadata the user never asked to see; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | none | unheld -- the tab title is recomputed each frame from the name and the label, and no test reads a title; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | none | unheld -- the panel renders a neutral placeholder while the answer is absent and branches once it arrives. Nothing refuses a default that would flash the wrong sign-in for one frame; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-099` | `OBS` | The recovery words MUST be shown once, at the setup, and be readable nowhere afterwards. | this spec section 2; `ambre-spec-zero-knowledge.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Resolve a path
 
@@ -68,6 +70,18 @@ There is no recovery, so the gesture is gated on the user reading the name back.
 |---|---|---|---|---|---|---|
 | `CHROME-041` | `FAIL` | A delete MUST be confirmed against the document's own name before anything is dispatched. | this spec section 2; README pillar "E2EE" | none | unheld -- the card stores the target and opens a modal that renders the name, and the dispatch sits behind the confirming action. Nothing refuses a second delete path added without the modal, and there is no recovery from one; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
+### 1.6 Sign in, then unlock or set up
+
+The provider says who the person is; a passphrase opens their keys, or a setup creates them.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-095` | `POST` | The provider control MUST hand the browser to the authorization address the relay answers. | this spec section 2; `ambre-spec-session.md`, `SRV-022` | none | fails -- the control navigates the page to the route that answers that address, so the browser shows the answer and never reaches the provider; lands with the `The provider sign-in reaches the client` Story (`ambre-roadmap.md` E7) | failing |
+| `CHROME-096` | `POST` | A return from the provider MUST establish the session on the live threads, its tokens reaching the Sync worker alone. | this spec section 2; `ambre-spec-sync.md`, `SYNC-060` | not built | unbuilt -- lands with the `The provider sign-in reaches the client` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `CHROME-097` | `POST` | An account that holds its keys MUST be asked for its passphrase before the list is shown. | this spec section 2; `ambre-spec-session.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `CHROME-098` | `POST` | An account that owes its key setup MUST be shown the setup, never an error, whether the sign-in or a later refusal reveals it. | this spec section 2; `ambre-spec-sync.md`, `SYNC-134` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `CHROME-100` | `FRAME` | A passphrase typed on this screen MUST NOT outlive its submission on the UI thread. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-010` | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
+
 * **Budget.** none of its own: the list is a handful of rows of DOM and `ambre-spec-budgets.md`
   budgets no chrome operation. The frame the home screen does not draw is a saving, charged to
   `ambre-spec-frame.md`.
@@ -75,10 +89,9 @@ There is no recovery, so the gesture is gated on the user reading the name back.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, a second exception to the UI
   thread's ban, recorded in section 5.
-* **Verification.** 7 `verified`, 10 `untested`, 0 `unimplemented`. What holds is what a pure
-  function carries: the path mapping and its fallback, and the two halves of the reload predicate.
-  The kind list and the parser's freedom from side effects are held too. The rest are properties of
-  a rendered page against a live session. The tier that mounts a page does not have one.
+* **Verification.** 7 `verified`, 1 `failing`, 10 `untested`, 5 `unimplemented`. What holds is what
+  a pure function carries: the path mapping, its fallback, the reload predicate and the kind list.
+  The rest are properties of a rendered page against a live session, and no tier mounts a page yet.
 ---
 
 ## 2. MODEL
@@ -86,15 +99,24 @@ There is no recovery, so the gesture is gated on the user reading the name back.
 **CRDT containers.** none. The launcher reads a list the Sync thread built and sends commands; it
 opens no document.
 
-**Two faces, one signal.** The screen is a full-bleed overlay over the content surface, and which
-face it shows is decided by whether a session name is known.
+**The faces, and the session that picks one.** The screen is a full-bleed overlay over the content
+surface, and which face it shows is decided by the state of the session.
 
 | Session | Face |
 |---|---|
 | unknown, and the server has not answered | a neutral placeholder (`CHROME-045`) |
 | unknown, and the server reports a development mode | a name field that signs in without reloading the page |
-| unknown, otherwise | a single button that hands the browser to the identity provider |
+| unknown, otherwise | a single button that hands the browser to the identity provider (`CHROME-095`) |
+| signed in with the provider, keys stored | a passphrase field that opens them (`CHROME-097`) |
+| signed in with the provider, keys owed | the setup: a passphrase, then the recovery words once (`CHROME-098`, `CHROME-099`) |
 | known | the header, the kind picker and the document list |
+
+**Why a provider sign-in is not yet a session.** The provider vouches for who the person is, and
+the relay answers a token pair for that. Neither can open a key. A development sign-in derives its
+keys from the name, so it skips both middle faces.
+
+The return from the provider is read on the Sync worker, never on this thread. The answer to that
+exchange carries both tokens, and they live in that worker alone (`CHROME-096`).
 
 The development route matters for a reason that is not convenience. It signs in on the live
 threads, so the Sync worker keeps the keys it already holds instead of losing them to a page
@@ -166,7 +188,9 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | the site is opened at its root | the overlay covers a frozen content surface, and the sign-in panel or the list appears |
 | the server has not answered yet | a neutral placeholder, and no sign-in control that might be the wrong one |
 | a name is entered in the development panel | the session is established on the live threads, with no page reload |
-| the identity provider button | the browser leaves for the provider and comes back signed in |
+| the identity provider button | the browser leaves for the provider and comes back signed in (`CHROME-095`, `CHROME-096`) |
+| a provider account holds its keys | a passphrase field opens them, then the list appears (`CHROME-097`) |
+| a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
 | the list is empty | a placeholder invites creating one, rather than a bare empty list |
 | a card is clicked | the document opens, in place or after a reload depending on its kind |
 | the kind picker is opened | one entry per creatable kind, each under its generic label |
@@ -193,6 +217,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | The content surface is covered, never unmounted | unmounting the canvas while the home screen is shown | it destroys the GPU surface, the offscreen pair and the atlases, and rebuilding them is the slowest thing the client does. Covering it and pausing the loop costs a paused frame. |
 | The card shows an icon, a name and a date | encrypted thumbnails on the cards | a preview of an end-to-end encrypted document is a whole pipeline: an offscreen render on save, an invalidation policy across peers, an extra encrypted object per document, and a decrypt of every image when the list loads. The gain over a tile and a name is cosmetic. |
 | The list shows no content statistics | counts of cells, words or pages on the cards | a modification time, a role and a member count are routing metadata the server already holds in plaintext and hands over for free. A word count or a cell count is content, so it must be computed on the client and stored encrypted -- a second coherent object to maintain, for a number. |
+| The worker exchanges the provider's code | the page posting the code and handing the tokens on | the answer to that exchange carries both tokens. Posted from the page, they would sit on the UI thread, which `SYNC-060` forbids. The page reads the code from its address and passes it on |
 | The kind tile is a monogram | waiting for the icon pipeline before shipping the list | the icon pipeline does not exist, and a monogram is a tile of text that needs nothing. It is a stand-in and it is legible about being one. |
 
 ---

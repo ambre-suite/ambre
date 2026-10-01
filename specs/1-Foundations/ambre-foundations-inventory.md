@@ -23,7 +23,6 @@
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 11 |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 2 |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 17 | 10 |
 | `media` | A picture in a document travels apart from it. | implemented | 11 | 11 |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 19 | 1 |
@@ -41,6 +40,7 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 | 13 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | partial | 9 | 5 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 25 | 8 |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 23 | 11 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 30 | 2 |
 | `message-bus` | The contract the three threads talk over. | partial | 28 | 11 |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 | 6 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 16 implemented, 22 partial, 7 design-only. 884 contract rows, 266 loose.**
+**45 features: 15 implemented, 23 partial, 7 design-only. 890 contract rows, 267 loose.**
