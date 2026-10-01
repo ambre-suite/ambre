@@ -480,7 +480,6 @@ impl ToileState {
                     "Figma / Miro import is not yet available".to_owned(),
                 )])
             }
-            ToileCommand::RequestSnapshot => ToileOutcome::display_only(Vec::new()),
             ToileCommand::SetViewport(vp) => {
                 self.viewport = vp;
                 ToileOutcome::display_only(vec![self.viewport_event()])

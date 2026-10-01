@@ -1400,6 +1400,31 @@ mod tests {
         );
     }
 
+    /// A Sync request for a board's snapshot answers with the whole board: a
+    /// fresh engine that imports the payload holds what the board held.
+    #[test]
+    fn a_snapshot_request_answers_with_the_board() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = board_with_content(&mut state);
+        while sync_rx.try_recv().is_ok() {}
+
+        state.handle_logic_event(LogicEvent::SnapshotNeeded {
+            document_id: doc_id,
+        });
+
+        let Ok(SyncCommand::SendSnapshot {
+            document_id,
+            payload,
+        }) = sync_rx.try_recv()
+        else {
+            panic!("a snapshot is sent");
+        };
+        assert_eq!(document_id, doc_id);
+        let mut reopened = ToileState::new();
+        let _ = reopened.import_snapshot(&payload);
+        assert_eq!(reopened.element_count(), 1);
+    }
+
     // -- Service-plane routing: interop media uploads (`toile-media`) ------
     //
     // A Toile media import issues `UploadMedia` requests, which the dispatcher

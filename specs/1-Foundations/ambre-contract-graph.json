@@ -4243,7 +4243,7 @@
   {"edge": "verified-by", "from": "TOILE-245", "to": "ambre_toile::logic::convergence_tests::a_restore_still_offers_what_this_client_wrote_offline"},
   {"edge": "cites-section", "from": "TOILE-218", "section": "3", "to": "3-Toile/features/ambre-spec-toile-engine.md"},
   {"edge": "cites-section", "from": "TOILE-093", "section": "3", "to": "3-Toile/features/ambre-spec-toile-engine.md"},
-  {"edge": "lands-with", "from": "TOILE-093", "to": "Toile's snapshot command answers"},
+  {"edge": "verified-by", "from": "TOILE-093", "to": "ambre_logic::dispatch::tests::a_snapshot_request_answers_with_the_board"},
   {"edge": "cites-section", "from": "TOILE-219", "section": "3", "to": "3-Toile/features/ambre-spec-toile-engine.md"},
   {"edge": "cites-document", "from": "TOILE-219", "to": "ambre-spec-delta-order.md"},
   {"edge": "cites-section", "from": "TOILE-091", "section": "3", "to": "3-Toile/features/ambre-spec-toile-engine.md"},

@@ -1363,9 +1363,6 @@ pub enum ToileCommand {
         passphrase: crate::rest::SecretBytes,
     },
 
-    // -- Persistence / compaction (no CRDT mutation) --
-    RequestSnapshot,
-
     // -- Viewport (drives culling; no CRDT effect) --
     SetViewport(Viewport),
 
@@ -1414,7 +1411,6 @@ impl ToileCommand {
                 | Self::RequestSelectionStats { .. }
                 | Self::RequestSelectionData { .. }
                 | Self::RequestBoardIds
-                | Self::RequestSnapshot
                 | Self::CopyElements { .. }
                 | Self::ExportSvg
                 | Self::ExportPdf

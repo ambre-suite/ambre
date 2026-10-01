@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-093` | `POST` | A snapshot request MUST answer with the board's snapshot. | this spec section 3 | none | fails -- the snapshot command returns an empty outcome, and the dispatcher answers a Sync request from the document state directly instead. No caller sends the command; lands with the `Toile's snapshot command answers` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-093` | `POST` | A snapshot request MUST answer with the board's snapshot. | this spec section 3 | `ambre_logic::dispatch::tests::a_snapshot_request_answers_with_the_board` -- the snapshot sent for a board with one shape opens on a fresh engine holding that shape | none | verified |
 | `TOILE-219` | `FRAME` | Answering with a snapshot MUST NOT write to the board and MUST NOT move the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `export_snapshot` takes `&self`, so it can write neither the board nor the cursor | none | verified |
 
 ### 1.6 Move one element in the index
@@ -104,7 +104,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 30 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other
+* **Verification.** 31 `verified`, 3 `failing`, 4 `untested`. What holds is the pair no other
   application holds: the index equivalence and the convergence of every derived cache. Both under
   one property test, neither at a culling camera (`TOILE-206`). What is loose is four rules nothing
   exercises and `TOILE-023`, a measurement; ten verified rows are structural.
@@ -439,9 +439,6 @@ error rather than a silent drop (`TOILE-UI-101`).
 * **A remote change rebuilds everything** (`TOILE-092`). One moved note from a collaborator clears
   the bounds map, bulk-loads the index and re-reads the paint order. The same rebuild runs on an
   undo and on a redo. Answered by the same Story.
-* **A snapshot request answers nothing** (`TOILE-093`). The command is declared and returns an empty
-  outcome; no code sends it, and the dispatcher takes the snapshot from the state directly. It is a
-  variant with no behaviour on either side.
 * **The differential answer is deferred.** A remote change that touches a few visible elements still pushes
   the whole visible set. The engine could instead send the changed elements and the removals, which the UI
   applies onto the set it holds. The whole push stays as the fallback. The decision is the engine's, keyed on
