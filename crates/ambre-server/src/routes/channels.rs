@@ -415,10 +415,10 @@ mod tests {
                 State(state.clone()),
                 session(who),
                 axum::Json(CreateChannelRequest {
-                    channel_id: channel.id.to_string(),
-                    space_id: space.to_string(),
-                    meta_id: channel.meta.to_string(),
-                    segment_id: channel.segment.to_string(),
+                    channel_id: channel.id,
+                    space_id: space,
+                    meta_id: channel.meta,
+                    segment_id: channel.segment,
                 }),
             )
             .await,
@@ -847,7 +847,7 @@ mod tests {
         // The head names the log and the role the entry must carry: the
         // space owner joins as an editor, after the channel's `Create`.
         let axum::Json(answer) = head(alice).await.expect("head");
-        assert_eq!(answer.meta_id, channel.meta.to_string());
+        assert_eq!(answer.meta_id, channel.meta);
         assert_eq!(answer.role, Role::Editor);
         assert_eq!(answer.length, 1);
         assert!(answer.last.is_some());
