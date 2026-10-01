@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer, section 6; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6), which names the paint-order rewrite | failing |
+| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer, section 6; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-129` | `FRAME` | Removing a node MUST NOT drop an entry it was not asked to remove. | this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_delete_preserves_an_undecodable_layer_entry` -- it forges an entry with an unknown tag, deletes an unrelated element, and reads the raw list back to see the entry survive | none | verified |
 
 * **Budget.** a remote change under 2 ms, a row of `ambre-spec-budgets.md section 1`.
@@ -152,7 +152,7 @@ sends.
 * **A delete rewrites the whole order** (`TOILE-061`). The removal deletes every entry and re-pushes
   the survivors. Deleting one element on a board of fifty thousand nodes produces fifty thousand
   list operations, encrypted and broadcast to every peer. The next delete does it again
-  (`ambre-roadmap.md`, "Engine and render optimization").
+  (`ambre-roadmap.md`, "A board costs what it shows and what changed").
 * **Nothing stops a duplicate reaching the document** (`TOILE-060`, `TOILE-122`). The materialization
   hides one, so a duplicate is invisible until something counts the list, and the paint walk would
   otherwise paint the node twice.

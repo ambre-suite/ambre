@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`; `::intersect_area_is_overlap`; `::subtract_removes_the_clip`; `::exclude_is_symmetric_difference`; `::union_of_disjoint_keeps_both` -- a degenerate input; `::intersect_of_disjoint_is_empty` -- another; `::subtract_folds_over_multiple_clips` -- the subject against several clips | none | verified |
 | `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` -- it calls the solver twice in one process and compares the SVG, so it holds one build against itself, which is the rule as stated. Nothing compares two builds or two platforms, which is the wider rule the row once carried | none | verified |
-| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | none | fails -- the command has no menu entry, no button and no chord anywhere in the workspace, so the tests hold behaviour nothing can invoke, section 6. It lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6) | failing |
+| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | not built | unbuilt -- lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6). The command has no menu entry, no button and no chord anywhere in the workspace, section 6 | unimplemented |
 
 ### 1.2 Draw a path with the pen
 
@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the pen is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The finished path enters the document as one create and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 4 `verified`, 1 `partial`, 1 `failing`, 7 `untested`. What holds is the
+* **Verification.** 4 `verified`, 1 `partial`, 7 `untested`, 1 `unimplemented`. What holds is the
   combinator geometry, the most thoroughly tested pure function in the application -- and nothing
   can call it. What is loose is the pen itself: both refusals its handler makes, both frame
   conditions, and the style the result carries that nothing reads back.

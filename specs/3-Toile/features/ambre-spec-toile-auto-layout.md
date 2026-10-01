@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 | `TOILE-FEAT-049` | `INV` | A frame holding no children MUST place nothing, whatever its rule. | this spec section 3 | `ambre_toile::logic::autolayout::tests::empty_children_is_empty` -- it was cited under the combination row as though it held one of the combinations | none | verified |
 | `TOILE-FEAT-030` | `INV` | A solved position MUST NOT reach the document. | this spec section 3 | none | unheld -- no container holds a solved box and no code writes one, so the rule holds by absence, and nothing would go red the day a writer appeared; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-009` | `CONC` | Concurrent edits of one frame's layout MUST converge, last writer winning on the whole rule. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_auto_layout_edits_converge` -- two peers set rival rules and agree afterwards. The second test this row cited drives one peer alone, so it holds the write instead (`TOILE-FEAT-050`) | none | verified |
-| `TOILE-FEAT-029` | `OBS` | A frame carrying a layout rule MUST place its children by that rule. | this spec section 3 | none | fails -- the solver has no caller outside its own tests, so the rule is stored, converges, and moves nothing on screen, section 6. It lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6) | failing |
+| `TOILE-FEAT-029` | `OBS` | A frame carrying a layout rule MUST place its children by that rule. | this spec section 3 | not built | unbuilt -- lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6). The solver has no caller outside its own tests, so the rule moves nothing on screen, section 6 | unimplemented |
 
 ### 1.2 Give a frame a layout rule
 
@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 | `TOILE-FEAT-050` | `POST` | After a set the frame MUST carry exactly the rule given. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it reads the rule back after an add and after a change. It is the test `TOILE-FEAT-009` cited for a convergence it never drives | none | verified |
 | `TOILE-FEAT-099` | `POST` | After a clear the frame MUST carry no rule. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its clear step: the frame is read back holding none | none | verified |
 | `TOILE-FEAT-051` | `POST` | A set MUST be one undo item: one `Ctrl+Z` MUST bring back the rule the frame carried before it. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its undo step undoes a change and reads the prior rule back, on the one commit the handler makes for every set. The undo of an add and the undo of a clear are not driven | none | verified |
-| `TOILE-FEAT-031` | `POST` | A user MUST be able to give a frame a layout rule, change it and clear it. | this spec section 4 | none | fails -- the command has no menu entry, no inspector row and no chord anywhere in the workspace, section 6. It lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6) | failing |
+| `TOILE-FEAT-031` | `POST` | A user MUST be able to give a frame a layout rule, change it and clear it. | this spec section 4 | not built | unbuilt -- lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6). The command has no menu entry, no inspector row and no chord anywhere in the workspace, section 6 | unimplemented |
 | `TOILE-FEAT-052` | `FRAME` | A rule identical to the one already stored MUST NOT be written, and MUST NOT reach the other users. | this spec section 3 | none | unheld -- the handler compares the encoded rule and returns before its commit, and every set in the tests differs from the rule before it. The clear half of the same guard is held by the row below; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-053` | `FRAME` | Clearing a rule a frame does not carry MUST write nothing, and MUST reach nobody. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its last step clears an already-cleared frame and asserts that no delta leaves | none | verified |
 | `TOILE-FEAT-032` | `FAIL` | Only a frame MUST carry a layout rule: any other element MUST refuse one, and MUST say so. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_rejects_non_frame` -- the kind-mismatch notice and the absent delta | none | verified |
@@ -62,12 +62,12 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
   (`TOILE-FEAT-029`).
 * **Boundary.** none of its own: a layout rule is written to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 21 `verified`, 2 `failing`, 4 `untested`. What holds is the solver: sixteen tests,
-  thirteen of them one per combination the solver pins, each falsifiable on its own. What is loose is
-  what those thirteen never reach: the far padding no test subtracts, and the frame too small no test
-  fills. The unchanged set that must write nothing and the size a child keeps across the direction
-  are loose too. The two failures are a write held for a convergence (`TOILE-FEAT-009`) and two
-  refusals held to two standards (`TOILE-FEAT-032`).
+* **Verification.** 21 `verified`, 4 `untested`, 2 `unimplemented`. What holds is the solver:
+  sixteen tests, thirteen of them one per combination the solver pins, each falsifiable on its own.
+  What is loose is what those thirteen never reach: the far padding no test subtracts, and the frame
+  too small no test fills. The unchanged set that must write nothing and the size a child keeps
+  across the direction are loose too. The two failures are a write held for a convergence
+  (`TOILE-FEAT-009`) and two refusals held to two standards (`TOILE-FEAT-032`).
 
 ---
 

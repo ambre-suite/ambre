@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation | none | verified |
 | `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | structural -- the group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height, so there is no field a peer could author a box into | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none | unheld -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one, but no test drives a group to empty and asserts it is gone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the lookup materializes the entire element map and scans it, and the visible-set walk calls it once per visible element, section 6; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6), which names the parent-lookup scan | failing |
+| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the lookup materializes the entire element map and scans it, and the visible-set walk calls it once per visible element, section 6; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
 | `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | none | unheld -- the derivation emits the group as a node with a derived box, and no test reads a group node's style back. What the user sees around it is the selection box, which another document owns; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -174,9 +174,9 @@ the user sees is one selection box around the union of the members, with the han
   materializes the entire element map and walks it looking for a membership list that names the id.
   The visible-set walk calls that lookup once per visible element. Deriving a viewport of a hundred
   elements on a board of fifty thousand walks fifty thousand entries a hundred times, every frame.
-  Binding, unbinding, deleting and pruning call it inside their own loops. Nothing in the document
-  stores an element's parent, which is the fix and a format change
-  (`ambre-roadmap.md`, "Engine and render optimization").
+  Binding, unbinding, deleting and pruning call it inside their own loops. The fix stores an
+  element's parent in the document, a format change
+  (`ambre-roadmap.md`, "A board costs what it shows and what changed").
 * **Ungrouping a multi-selection is one command per id** (`TOILE-010`). The chord and the menu entry
   send one unbind per selected id, each committing separately, so ungrouping three groups takes three
   undos. The ids that are not groups answer an error each.
