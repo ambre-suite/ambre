@@ -24,8 +24,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-050` | `INV` | A blob's address MUST NOT be computable from its plaintext without the document key. | `ZK-007`; this spec section 3 | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the worker answers with the keyed address, and the same bytes in two documents get two; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- another key moves it, and it is never the bare hash of the bytes | none | verified |
-| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
-| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none | fails -- the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key; lands with the `A sealed blob is bound to its document and its address` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none | fails -- the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have; lands with the `A sealed blob is bound to its document and its address` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Add a picture
 
@@ -47,7 +47,7 @@ The application names an address it does not hold. The worker fetches the object
 |---|---|---|---|---|---|---|
 | `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none | unheld -- the worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none | fails -- the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none | fails -- the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted; lands with the `A sealed blob is bound to its document and its address` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | none | unheld -- every failure returns before the answer is built, a short blob, a fetch error and a bad tag each report and stop, so nothing partial is delivered. No test drives a failing download, because the leg runs only in a browser; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own for the transfer. `ambre-spec-budgets.md section 1` budgets the first
@@ -93,7 +93,8 @@ which holds no key, cannot compute it from a file it already has (`SYNC-050`).
 **An upload, in steps.**
 
 1. compute the address from the bytes, under the document key;
-2. seal the bytes under the document key;
+2. seal the bytes under the document key, signed and committed (`ambre-spec-sealed-envelope.md`,
+   `SYNC-018`);
 3. ask the relay for a presigned link to put the object;
 4. put the sealed bytes straight to object storage, with no session and no header of ours;
 5. confirm to the relay: the address and the sealed size, and nothing else (`SYNC-053`);
@@ -103,17 +104,17 @@ which holds no key, cannot compute it from a file it already has (`SYNC-050`).
 
 1. ask the relay for a presigned link, by address;
 2. get the object from object storage;
-3. split the nonce from the ciphertext and open it under the document key;
+3. check the signature and the commitment tag, then open it under the document key;
 4. answer with the plaintext (`SYNC-054`).
 
-**The seal is not the envelope.** A blob takes the cipher on its own, with one constant string as
-additional data. Three of the envelope's guarantees are therefore absent from a blob, and each
-absence is a row.
+**The seal is the envelope, with constant additional data.** A blob carries its author key, the
+signature and the commitment tag. Its additional data is one constant string, so two of the
+envelope's guarantees are still absent, and each absence is a row.
 
 | The envelope gives a frame | A blob has |
 |---|---|
-| an author signature | nothing: a blob names no author |
-| a commitment tag binding it to its document | nothing: the additional data is a constant (`SYNC-051`) |
+| an author signature | the same: the open checks it against the key the blob carries |
+| a commitment tag | the same, binding it to the key; the document is absent from the additional data (`SYNC-051`) |
 | additional data that binds the metadata to the ciphertext | nothing that names the address (`SYNC-074`), which is why `SYNC-052` has nothing to check against |
 | a compression step before the seal | nothing: a blob is sealed as it comes |
 
@@ -173,9 +174,11 @@ data the envelope gives a frame.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A blob is bound to nothing.** No signature, no commitment tag, and one constant string as
-  additional data. Two blobs of one document are interchangeable to anyone who can serve the object,
-  and a download recomputes no address to notice (`SYNC-051`, `SYNC-052`).
+* **A blob is bound to neither its document nor its address.** Its additional data is one constant
+  string. Two blobs of one document are interchangeable to anyone who can serve the object, and a
+  download recomputes no address to notice (`SYNC-051`, `SYNC-052`).
+* **A blob sealed before the envelope no longer opens.** The old form took the bare cipher, and the
+  download reads only the new one.
 * **A rotation leaves every blob unreadable.** Nothing re-seals an uploaded blob, so every picture in
   a document goes blank for every member the first time someone is removed
   (`ambre-spec-key-rotation.md`, `SYNC-042`).

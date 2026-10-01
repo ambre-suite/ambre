@@ -1,13 +1,18 @@
 use super::*;
 
+/// Additional data of a sealed blob. One constant: binding a blob to its
+/// document and its address is `SYNC-051` and `SYNC-074`.
+const MEDIA_AAD: &[u8] = b"ambre-media";
+
 impl SyncState {
     // -- Media (upload / download via presigned S3 URLs) -----------------------
 
     /// Uploads a media blob to S3 via the presigned-URL flow:
     /// 1. Computes the address, keyed by the document key (`SYNC-050`).
-    /// 2. Encrypts the data with the document key (AEAD, "ambre-media" aad).
+    /// 2. Seals the data with the full envelope: the cipher, the commitment
+    ///    tag and the author signature (`SYNC-018`).
     /// 3. Requests a presigned S3 PUT URL from the server.
-    /// 4. PUTs the encrypted blob (nonce || ciphertext) directly to S3.
+    /// 4. PUTs the sealed blob ([`pipeline::seal_object`]) directly to S3.
     /// 5. Confirms the upload via `POST /api/documents/{id}/media`, naming the
     ///    address and the sealed size only (`SYNC-053`).
     /// 6. Emits [`SyncEvent::MediaUploaded`].
@@ -47,11 +52,20 @@ impl SyncState {
             );
             return;
         };
+        let Some(signing_key) = self.signing_key.clone() else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                id: Some(id),
+                request: "UploadMedia".into(),
+                code: 401,
+                message: "Session locked".into(),
+            });
+            return;
+        };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let (nonce, ciphertext) =
-                ambre_crypto::aead::seal(&data, b"ambre-media", &doc_key).expect("seal media");
-            let encrypted_size = (ambre_crypto::aead::NONCE_LEN + ciphertext.len()) as u64;
+            let blob = pipeline::seal_object(&data, MEDIA_AAD, &doc_key, &signing_key)
+                .expect("seal media");
+            let encrypted_size = blob.len() as u64;
 
             let upload_url_req =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/media/upload-url");
@@ -78,8 +92,6 @@ impl SyncState {
                 }
             };
 
-            let mut blob = nonce.to_vec();
-            blob.extend_from_slice(&ciphertext);
             // S3 presigned PUT goes straight to object storage, not our API:
             // no session, no CSRF header.
             if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
@@ -122,8 +134,8 @@ impl SyncState {
     /// Downloads a media blob from S3 via the presigned-URL flow:
     /// 1. Requests a presigned S3 GET URL from the server by content_hash.
     /// 2. GETs the encrypted blob directly from S3.
-    /// 3. Splits the nonce (first [`ambre_crypto::aead::NONCE_LEN`] bytes) from
-    ///    the ciphertext and decrypts with the document key.
+    /// 3. Opens it in the envelope's order: the signature, the commitment tag,
+    ///    then the cipher under the document key ([`pipeline::open_object`]).
     /// 4. Emits [`SyncEvent::MediaDownloaded`] with the plaintext data.
     pub(crate) fn handle_download_media(
         &self,
@@ -200,21 +212,7 @@ impl SyncState {
                 }
             };
 
-            if blob.len() < ambre_crypto::aead::NONCE_LEN {
-                let _ = logic_tx.send(LogicEvent::ApiError {
-                    id: Some(id),
-                    request: "DownloadMedia".into(),
-                    code: 500,
-                    message: "Blob too short".into(),
-                });
-                return;
-            }
-            let (nonce_bytes, ciphertext) = blob.split_at(ambre_crypto::aead::NONCE_LEN);
-            let nonce: [u8; ambre_crypto::aead::NONCE_LEN] =
-                nonce_bytes.try_into().expect("nonce len");
-
-            let data = match ambre_crypto::aead::open(&nonce, ciphertext, b"ambre-media", &doc_key)
-            {
+            let data = match pipeline::open_object(&blob, MEDIA_AAD, &doc_key) {
                 Ok(d) => d,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {

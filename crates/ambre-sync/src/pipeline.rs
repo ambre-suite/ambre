@@ -67,6 +67,8 @@ pub enum PipelineError {
     Validation(#[from] ambre_protocol::error::ValidationError),
     #[error("the snapshot names another document")]
     WrongDocument,
+    #[error("a sealed object is shorter than its header")]
+    ShortObject,
 }
 
 // -- Compression layer ---------------------------------------------------------
@@ -334,6 +336,80 @@ pub fn open_ephemeral(
     )
 }
 
+// -- Standalone objects: a document name, a media blob -------------------------
+
+/// Bytes of the author key that opens a standalone object.
+const AUTHOR_KEY_LEN: usize = 32;
+/// Bytes before the ciphertext of a standalone object.
+const OBJECT_HEADER_LEN: usize = AUTHOR_KEY_LEN
+    + ambre_crypto::signature::SIGNATURE_LEN
+    + ambre_crypto::commitment::TAG_LEN
+    + ambre_crypto::aead::NONCE_LEN;
+
+/// Domain of a sealed document name. The document id follows it in the
+/// additional data, so a name opens under its own document only (`SYNC-068`).
+const NAME_DOMAIN: &[u8] = b"ambre-doc-name-v2";
+
+/// The additional data of a document name: the domain, then the document id.
+pub fn name_aad(document_id: ambre_core::DocumentId) -> Vec<u8> {
+    let mut aad = NAME_DOMAIN.to_vec();
+    aad.extend_from_slice(document_id.as_bytes());
+    aad
+}
+
+/// Seals a payload that travels outside a wire message: a document name or a
+/// media blob. It takes the full envelope: the cipher, the commitment tag and the
+/// author signature (`SYNC-018`). Nothing is compressed: a name is short, and a
+/// blob is a format that is already compressed.
+///
+/// Layout: `author key || signature || commitment tag || nonce || ciphertext`.
+pub fn seal_object(
+    plaintext: &[u8],
+    aad: &[u8],
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<Vec<u8>, PipelineError> {
+    let sealed = envelope::seal(plaintext, aad, doc_key, signing_key)?;
+    let mut out = Vec::with_capacity(OBJECT_HEADER_LEN + sealed.ciphertext.len());
+    out.extend_from_slice(signing_key.verifying_key().as_bytes());
+    out.extend_from_slice(&sealed.signature);
+    out.extend_from_slice(&sealed.commitment_tag);
+    out.extend_from_slice(&sealed.nonce);
+    out.extend_from_slice(&sealed.ciphertext);
+    Ok(out)
+}
+
+/// Opens what [`seal_object`] sealed, in the envelope's order: the signature,
+/// then the commitment tag, then the cipher.
+///
+/// # Errors
+///
+/// [`PipelineError::ShortObject`] when the bytes cannot hold the header, and
+/// [`PipelineError::Crypto`] when any of the three checks fails.
+pub fn open_object(
+    bytes: &[u8],
+    aad: &[u8],
+    doc_key: &DocumentKey,
+) -> Result<Vec<u8>, PipelineError> {
+    if bytes.len() < OBJECT_HEADER_LEN {
+        return Err(PipelineError::ShortObject);
+    }
+    let (author, rest) = bytes.split_at(AUTHOR_KEY_LEN);
+    let (signature, rest) = rest.split_at(ambre_crypto::signature::SIGNATURE_LEN);
+    let (tag, rest) = rest.split_at(ambre_crypto::commitment::TAG_LEN);
+    let (nonce, ciphertext) = rest.split_at(ambre_crypto::aead::NONCE_LEN);
+    let sealed = Sealed {
+        nonce: nonce.try_into().map_err(|_| PipelineError::ShortObject)?,
+        ciphertext: ciphertext.to_vec(),
+        commitment_tag: tag.try_into().map_err(|_| PipelineError::ShortObject)?,
+        signature: signature
+            .try_into()
+            .map_err(|_| PipelineError::ShortObject)?,
+    };
+    let author: [u8; AUTHOR_KEY_LEN] = author.try_into().map_err(|_| PipelineError::ShortObject)?;
+    Ok(envelope::open(&sealed, aad, doc_key, &author)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,5 +531,59 @@ mod tests {
         // not modeled here), but the aad-bound commitment/AEAD no longer match.
         update.public_data.document_id = DocumentId::new();
         assert!(open_update(&update, &doc_key).is_err());
+    }
+
+    /// A standalone object carries the author signature and the commitment
+    /// tag, and each is checked on the open (`SYNC-018`).
+    #[test]
+    fn a_sealed_object_carries_the_signature_and_the_tag() {
+        use ambre_crypto::{commitment, signature};
+
+        let (doc_key, signing, _) = keys();
+        let aad = b"ambre-media";
+        let sealed = seal_object(b"a picture", aad, &doc_key, &signing).unwrap();
+        assert_eq!(open_object(&sealed, aad, &doc_key).unwrap(), b"a picture");
+
+        // The signature: one flipped byte, and the author no longer signed it.
+        let mut forged = sealed.clone();
+        forged[AUTHOR_KEY_LEN] ^= 1;
+        assert!(matches!(
+            open_object(&forged, aad, &doc_key),
+            Err(PipelineError::Crypto(CryptoError::InvalidSignature))
+        ));
+
+        // The tag: a wrong one, re-signed so the signature passes, still fails.
+        let tag_at = AUTHOR_KEY_LEN + signature::SIGNATURE_LEN;
+        let nonce_at = tag_at + commitment::TAG_LEN;
+        let mut moved = sealed.clone();
+        moved[tag_at] ^= 1;
+        let tag: [u8; commitment::TAG_LEN] = moved[tag_at..nonce_at].try_into().unwrap();
+        let nonce = &moved[nonce_at..OBJECT_HEADER_LEN];
+        let resigned = signature::sign(&signing, nonce, &moved[OBJECT_HEADER_LEN..], aad, &tag);
+        moved[AUTHOR_KEY_LEN..tag_at].copy_from_slice(&resigned);
+        assert!(matches!(
+            open_object(&moved, aad, &doc_key),
+            Err(PipelineError::Crypto(CryptoError::CommitmentMismatch))
+        ));
+
+        // Too short to hold the header.
+        assert!(matches!(
+            open_object(&sealed[..OBJECT_HEADER_LEN - 1], aad, &doc_key),
+            Err(PipelineError::ShortObject)
+        ));
+    }
+
+    /// A name sealed for one document does not open under another, even one
+    /// that holds the same key (`SYNC-068`).
+    #[test]
+    fn a_name_opens_under_its_own_document_only() {
+        let (doc_key, signing, _) = keys();
+        let own = DocumentId::new();
+        let sealed = seal_object(b"Budget 2027", &name_aad(own), &doc_key, &signing).unwrap();
+        assert_eq!(
+            open_object(&sealed, &name_aad(own), &doc_key).unwrap(),
+            b"Budget 2027"
+        );
+        assert!(open_object(&sealed, &name_aad(DocumentId::new()), &doc_key).is_err());
     }
 }

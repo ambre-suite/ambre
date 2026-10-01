@@ -19,6 +19,8 @@ impl SyncState {
                             .documents
                             .into_iter()
                             .map(|e| {
+                                let document_id = DocumentId::parse_str(&e.id)
+                                    .unwrap_or_else(|_| DocumentId::new());
                                 // E2EE: the name arrives as `name_enc`. Decrypt it
                                 // here (Sync) so the Logic/UI threads only ever see
                                 // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
@@ -26,6 +28,7 @@ impl SyncState {
                                 let name = e.name_enc.as_deref().and_then(|name_enc| {
                                     exchange_key.as_ref().and_then(|ek| {
                                         Self::decrypt_document_name(
+                                            document_id,
                                             ek,
                                             &e.doc_key_enc,
                                             &e.wrapper_exchange_pub_key,
@@ -34,8 +37,7 @@ impl SyncState {
                                     })
                                 });
                                 DocumentSummary {
-                                    document_id: DocumentId::parse_str(&e.id)
-                                        .unwrap_or_else(|_| DocumentId::new()),
+                                    document_id,
                                     doc_type: match e.doc_type.as_str() {
                                         "prose" => DocType::Prose,
                                         "toile" => DocType::Toile,
@@ -93,6 +95,7 @@ impl SyncState {
     /// pubkey is hex, empty meaning "self-wrapped" (fall back to our own key).
     /// Returns `None` on any decode/crypto failure (the launcher shows "Untitled").
     pub(crate) fn decrypt_document_name(
+        document_id: DocumentId,
         exchange_key: &x25519_dalek::StaticSecret,
         doc_key_enc: &str,
         wrapper_exchange_pub_key: &str,
@@ -120,17 +123,39 @@ impl SyncState {
         let doc_key =
             ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()?;
 
-        // 2. AEAD-open the name (same AAD as the seal in create/rename).
-        let name_bytes = base64::engine::general_purpose::URL_SAFE
+        // 2. Open the name under the envelope, bound to its own document.
+        Self::open_document_name(document_id, &doc_key, name_enc)
+    }
+
+    /// Seals a document name with the full envelope, bound to its document
+    /// (`SYNC-018`, `SYNC-068`), and encodes it as base64 for the relay.
+    pub(crate) fn seal_document_name(
+        document_id: DocumentId,
+        doc_key: &DocumentKey,
+        signing_key: &SigningKey,
+        name: &str,
+    ) -> Result<String, pipeline::PipelineError> {
+        let sealed = pipeline::seal_object(
+            name.as_bytes(),
+            &pipeline::name_aad(document_id),
+            doc_key,
+            signing_key,
+        )?;
+        Ok(base64::engine::general_purpose::URL_SAFE.encode(sealed))
+    }
+
+    /// Opens what [`Self::seal_document_name`] sealed. `None` on any failure:
+    /// a name sealed for another document, a forged author, a wrong key.
+    pub(crate) fn open_document_name(
+        document_id: DocumentId,
+        doc_key: &DocumentKey,
+        name_enc: &str,
+    ) -> Option<String> {
+        let bytes = base64::engine::general_purpose::URL_SAFE
             .decode(name_enc)
             .ok()?;
-        if name_bytes.len() < 24 {
-            return None;
-        }
-        let name_nonce: [u8; 24] = name_bytes[..24].try_into().ok()?;
         let plaintext =
-            ambre_crypto::aead::open(&name_nonce, &name_bytes[24..], b"ambre-doc-name", &doc_key)
-                .ok()?;
+            pipeline::open_object(&bytes, &pipeline::name_aad(document_id), doc_key).ok()?;
         String::from_utf8(plaintext).ok()
     }
 
@@ -147,28 +172,30 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
+            let signing_key = self.signing_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 // E2EE: the server only ever stores ciphertext. Generate a fresh
                 // DocumentKey, seal the name with it, and wrap the key for the
                 // owner (ourselves) via X25519. We can then recover it on open.
-                let Some(exchange_key) = exchange_key else {
+                let (Some(exchange_key), Some(signing_key)) = (exchange_key, signing_key) else {
                     let _ = tx.send(SyncEvent::HttpError {
                         id,
-                        message: "CreateDocument: session locked (no exchange key)".into(),
+                        message: "CreateDocument: session locked (no session keys)".into(),
                     });
                     return;
                 };
                 let doc_key = DocumentKey::generate();
+                // The client mints the id, so the name is bound to its document
+                // before the relay has seen either (`SYNC-068`).
+                let document_id = DocumentId::new();
 
                 let name_enc = if name.is_empty() {
                     None
                 } else {
-                    let (nonce, ct) =
-                        ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key)
-                            .expect("seal doc name");
-                    let mut buf = nonce.to_vec();
-                    buf.extend_from_slice(&ct);
-                    Some(base64::engine::general_purpose::URL_SAFE.encode(&buf))
+                    Some(
+                        Self::seal_document_name(document_id, &doc_key, &signing_key, &name)
+                            .expect("seal doc name"),
+                    )
                 };
 
                 let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
@@ -187,14 +214,14 @@ impl SyncState {
                     doc_type: doc_type_to_api_string(doc_type),
                     name_enc,
                     doc_key_enc,
-                    document_id: None,
+                    document_id: Some(document_id.to_string()),
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await
                 {
                     Ok(resp) => {
-                        let document_id = DocumentId::parse_str(&resp.document_id)
-                            .unwrap_or_else(|_| DocumentId::new());
+                        // The relay echoes the id the client minted, or refuses.
+                        debug_assert_eq!(resp.document_id, document_id.to_string());
                         let _ = tx.send(SyncEvent::DocumentCreated {
                             id,
                             document_id,
@@ -267,7 +294,15 @@ impl SyncState {
                 .get(&document_id)
                 .map(|ds| ds.doc_key.clone());
             let exchange_key = self.exchange_key.clone();
+            let signing_key = self.signing_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
+                let Some(signing_key) = signing_key else {
+                    let _ = tx.send(SyncEvent::HttpError {
+                        id,
+                        message: "RenameDocument: session locked (no signing key)".into(),
+                    });
+                    return;
+                };
                 // E2EE: the new name is sealed with the document key before it
                 // leaves the client. The server only ever stores ciphertext.
                 //
@@ -309,12 +344,8 @@ impl SyncState {
                         }
                     }
                 };
-                let (nonce, ct) =
-                    ambre_crypto::aead::seal(name.as_bytes(), b"ambre-doc-name", &doc_key)
-                        .expect("seal doc name");
-                let mut buf = nonce.to_vec();
-                buf.extend_from_slice(&ct);
-                let name_enc = base64::engine::general_purpose::URL_SAFE.encode(&buf);
+                let name_enc = Self::seal_document_name(doc_id, &doc_key, &signing_key, &name)
+                    .expect("seal doc name");
 
                 // PATCH /api/documents/{id} (matches the server route).
                 let url = format!("{url_scheme}://{api_base}/api/documents/{doc_id}");
