@@ -38,7 +38,7 @@ editor and not restated here.
 | `TOILE-UI-191` | `OBS` | The committed body MUST NOT be painted under the editor: one body is on screen, not two. | this spec section 3 | none | unheld -- every test of the content pass passes no element under edit, so the branch that drops it is never taken; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-192` | `OBS` | An open editor MUST show a caret blinking on a one-second cycle, so the element reads as editable. | this spec section 4 | none | unheld -- the blink is a frame-clock parity in the paint pass, and no test drives two frames a half-cycle apart; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-381` | `CONC` | A close MUST keep a peer's edit to the same body that arrived while the editor was open. | this spec section 3; `TOILE-030` | `ambre_toile::logic::convergence_tests::an_open_editor_keeps_a_peers_edit` -- a peer's edit lands between the open and the close, and both writers' words survive on both replicas; structural -- the close sends the body the editor opened on as the base (`ambre_toile::ui::edit::InlineEditor::opened_text`) | none | verified |
-| `TOILE-UI-382` | `OBS` | Leaving the editor MUST NOT take off the screen, even for a frame, a peer's words the document keeps. | this spec section 3; `TOILE-UI-381` | none | fails -- the local echo paints the typed body, which lacks a peer's edit that landed while the editor was open, and the words come back one round trip later. It lands with the `A note close never hides a peer's words` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-382` | `OBS` | Leaving the editor, on a note body or on an arrow's caption, MUST NOT take off the screen, even for a frame, a peer's words the document keeps. | this spec section 3; `TOILE-UI-381`; `TOILE-263` | none | fails -- the local echo paints the typed text, which lacks a peer's edit that landed while the editor was open, and the words come back one round trip later. A note and a caption echo alike. It lands with the `A text close never hides a peer's words` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-065` | `OBS` | Formatting MUST be applicable to a range inside one body, not to the element alone. | this spec section 3 | not built | unbuilt -- lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Place a note or a text element
@@ -220,9 +220,9 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The local echo shows the typed body for a moment.** A close paints what was typed at once, and
-  a peer's words that landed while the editor was open reappear one round trip later
-  (`TOILE-UI-382`). The document never loses them; only that frame does.
+* **The local echo shows the typed text for a moment.** A close paints what was typed at once, on a
+  note body or an arrow's caption. A peer's words that landed while the editor was open reappear one
+  round trip later (`TOILE-UI-382`). The document never loses them; only that frame does.
 * **Formatting applies to the element, not to a range** (`TOILE-UI-065`). Bold, italic, the family and
   the size live in the element's style register, so a word cannot be emphasized inside a sentence.
   The controls in the panel and the floating bar look like text controls and act on the whole element
