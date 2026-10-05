@@ -37,6 +37,7 @@ prefix is `SCHEMA`.
 | `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
 | `SCHEMA-018` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | this spec section 2; architecture section 2.D; `ambre-spec-fixtures.md section 2` | Trame `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape`; Toile `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape`; Prose `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `SCHEMA-019` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | this spec section 2; architecture section 2.D | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
+| `SCHEMA-020` | `CONC` | Two peers migrating one document at the same time MUST NOT lose an edit made to what either migrated. | this spec section 2 | none | fails -- each peer runs the step on its own copy, and a step that creates a container under a map key creates a rival one. The Toile `3 -> 4` step does this for each body, so a body typed into on the losing peer before the two meet is lost. It lands with the `Two peers migrating one board keep both edits` Story (`ambre-roadmap.md` E7) | failing |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -61,10 +62,10 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 18 `verified`, 1 `human-review`. A test holds what the register promises: the
-  number carried from creation, the comparison at each full-state entry, and a named case per
-  verdict. A layout moved under an unchanged number turns a shape belt red, as would a field with
-  its own register. Each style register carries a convergence test. A reviewer reads `SCHEMA-017`.
+* **Verification.** 18 `verified`, 1 `failing`, 1 `human-review`. A test holds the register: the
+  number carried from creation, the check at each full-state entry, a case per verdict. A layout
+  moved under an unchanged number turns a shape belt red. A reviewer reads `SCHEMA-017`. Two peers
+  migrating at once can lose an edit (`SCHEMA-020`).
 
 ---
 

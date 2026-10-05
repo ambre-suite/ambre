@@ -216,9 +216,6 @@ the board as it was.
   `The UI-thread belts` and `The Toile belts` (`ambre-roadmap.md` E9).
 * **A thread carries no reader state.** Nothing marks a thread read, so the panel cannot say what is
   new since the last visit. A board of open threads offers no unread count.
-* **The precedent the body rule cites does not exist** (`TOILE-FEAT-013`). A sticky body is a
-  whole-string register today, not a text container, so a comment body is the first one of the
-  application (`TOILE-030`, `ambre-spec-toile-text-editing.md`).
 * **Nothing says who may comment.** Whether a viewer may open a thread, and whether a member may
   resolve someone else's, is a permission question no row covers
   (`ambre-spec-membership.md`). The engine takes the one decision that needs no rule: an edit on

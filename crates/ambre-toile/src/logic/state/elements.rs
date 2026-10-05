@@ -15,7 +15,9 @@ use crate::logic::model::{
     ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
 };
 
-use super::codec::{bin_of, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
+use super::codec::{
+    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
+};
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
 impl ToileState {
@@ -122,11 +124,17 @@ impl ToileState {
                 let _ = em.insert("doc_id", document_id.to_string());
                 let _ = em.insert("doc_type", format!("{doc_type:?}"));
             }
+            // The body is a text seeded at birth, as a frame's notes are, so
+            // every peer types into the one container (`TOILE-030`).
             (ElementKind::Sticky | ElementKind::Text, InitContent::Text(t)) => {
-                let _ = em.insert("text", t.as_str());
+                if let Ok(text) = em.insert_container(BODY, LoroText::new())
+                    && !t.is_empty()
+                {
+                    let _ = text.insert(0, t);
+                }
             }
             (ElementKind::Sticky | ElementKind::Text, InitContent::None) => {
-                let _ = em.insert("text", "");
+                let _ = em.insert_container(BODY, LoroText::new());
             }
             (ElementKind::Frame, _) => {
                 // Frame content: an empty membership list plus an empty
@@ -144,10 +152,11 @@ impl ToileState {
         }
     }
 
-    /// Overwrite the plaintext body of a sticky / text element. Phase 0
-    /// stores the body as a single LWW string field, so an edit is a full-body
-    /// `insert` on the `"text"` key. Only sticky / text elements carry that field;
-    /// a request against any other kind (or a missing element) is a rejected no-op.
+    /// Write the body of a sticky / text element. The editor hands the whole
+    /// body, and the write diffs it into the body's `LoroText`. So two authors
+    /// editing one note each keep the characters they typed (`TOILE-030`).
+    /// Only sticky / text elements carry that field; a request against any
+    /// other kind (or a missing element) is a rejected no-op.
     pub(super) fn set_text(&mut self, id: &ElementId, text: &str) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
@@ -157,12 +166,18 @@ impl ToileState {
         }
         // The `"text"` field exists only on sticky / text elements (seeded at
         // creation). Reject a SetText aimed at any other kind.
-        if em.get("text").is_none() {
+        if em.get(BODY).is_none() {
             return ToileOutcome::display_only(vec![ToileEvent::Error(
                 ToileError::ContentKindMismatch,
             )]);
         }
-        let _ = em.insert("text", text);
+        let Some(body) = body_text_or_seed(&em) else {
+            return ToileOutcome::display_only(Vec::new());
+        };
+        if body.to_string() == text {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let _ = body.update(text, loro::UpdateOptions::default());
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }

@@ -21,8 +21,8 @@ use crate::logic::stroke::smooth_stroke;
 
 use super::ToileState;
 use super::codec::{
-    bin_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_from_tags, read_connector,
-    str_of,
+    bin_of, body_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_from_tags,
+    read_connector, str_of,
 };
 
 impl ToileState {
@@ -226,8 +226,8 @@ impl ToileState {
             }
             ElementKind::Frame => DisplayGeom::Frame(str_of(em, "name")),
             ElementKind::Group => DisplayGeom::Group,
-            ElementKind::Sticky => DisplayGeom::Sticky(str_of(em, "text")),
-            ElementKind::Text => DisplayGeom::Text(str_of(em, "text")),
+            ElementKind::Sticky => DisplayGeom::Sticky(body_of(em)),
+            ElementKind::Text => DisplayGeom::Text(body_of(em)),
             ElementKind::Drawing => {
                 let raw = bin_of(em, "points");
                 let pts: Vec<StrokePoint> = postcard::from_bytes(&raw).unwrap_or_else(|_| {

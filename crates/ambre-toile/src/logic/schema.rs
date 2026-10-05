@@ -17,7 +17,7 @@
 
 use std::borrow::Cow;
 
-use loro::{ExportMode, LoroDoc, LoroValue};
+use loro::{ExportMode, LoroDoc, LoroText, LoroValue};
 
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
@@ -25,7 +25,7 @@ use ambre_core::schema::{
 };
 
 use crate::logic::model::ElementStyle;
-use crate::logic::state::{CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESENTATION_ORDER};
+use crate::logic::state::{BODY, CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESENTATION_ORDER};
 
 /// The schema version this build writes into every board it creates
 /// (`SCHEMA-004`).
@@ -35,8 +35,9 @@ use crate::logic::state::{CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESENTATIO
 /// existing document across it (`SCHEMA-009`). `1 -> 2` puts the layout version
 /// in front of every `"style"` register, which obliges the [`MIGRATIONS`] row
 /// that rewrites the registers an older board holds. `2 -> 3` moves the deck
-/// out of the `presentation` map and into two root containers.
-pub const SCHEMA_VERSION: u32 = 3;
+/// out of the `presentation` map and into two root containers. `3 -> 4` turns
+/// each note and text body from a string register into a text container.
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -92,6 +93,8 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// `presentation` map, whose two sub-containers each peer created for itself.
 /// They land in the two root containers every peer addresses alike
 /// (`TOILE-029`).
+///
+/// `3 -> 4` moves each string body into a text container (`TOILE-030`).
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -107,6 +110,11 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         from: 2,
         to: 3,
         apply: presentation_root_step,
+    },
+    SchemaMigration {
+        from: 3,
+        to: 4,
+        apply: body_text_step,
     },
 ];
 
@@ -200,6 +208,47 @@ fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
     }
     // A board that carried no deck still gets the defaults a fresh one has.
     crate::logic::state::presentation::seed_presentation_config(doc);
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The `3 -> 4` step: move each string body into a text container
+/// (`TOILE-030`).
+///
+/// A version 3 board holds the body of a note or a text element as one string
+/// register, which two authors race for whole. The step replaces each such
+/// register with a text holding the same characters. A body already a text is
+/// left alone.
+///
+/// Two peers migrating one board each mint their own text, and the map keeps
+/// one of the two. Both hold the same characters, so the board converges. An
+/// edit typed into the losing text before the two peers meet is lost, the
+/// race the register had.
+fn body_text_step(doc: &LoroDoc) -> Result<(), String> {
+    let root = doc.get_map(ELEMENTS);
+    let LoroValue::Map(entries) = root.get_value() else {
+        return Ok(());
+    };
+    for id in entries.keys() {
+        let Some(map) = root
+            .get(id.as_str())
+            .and_then(|v| v.into_container().ok())
+            .and_then(|c| c.into_map().ok())
+        else {
+            continue;
+        };
+        let Some(Ok(LoroValue::String(body))) = map.get(BODY).map(|v| v.into_value()) else {
+            continue;
+        };
+        let text = map
+            .insert_container(BODY, LoroText::new())
+            .map_err(|e| format!("seeding the body text of {id} failed: {e}"))?;
+        if !body.is_empty() {
+            text.insert(0, &body)
+                .map_err(|e| format!("writing the body of {id} failed: {e}"))?;
+        }
+    }
     stamp(doc);
     doc.commit();
     Ok(())
@@ -409,6 +458,43 @@ mod tests {
             Some(LoroValue::Double(800.0)),
             "the config the board carried must survive the move"
         );
+    }
+
+    /// `TOILE-030`, the `3 -> 4` row: a version 3 board keeps every body, now
+    /// as a text two authors can share. Without the step the body
+    /// would still read, and still race whole.
+    #[test]
+    fn a_board_whose_bodies_are_strings_keeps_them_as_text() {
+        let doc = LoroDoc::new();
+        let elements = doc.get_map(ELEMENTS);
+        for (id, body) in [("e1", "buy milk"), ("e2", "")] {
+            let em = elements
+                .insert_container(id, loro::LoroMap::new())
+                .expect("seed");
+            em.insert("type", "sticky").expect("seed");
+            em.insert(BODY, body).expect("the layout before the text");
+        }
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, 3i64)
+            .expect("stamp");
+        doc.commit();
+        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+
+        let gated = gate(&bytes).expect("version 3 migrates");
+        let migrated = LoroDoc::new();
+        migrated.import(&gated).expect("imports");
+        for (id, body) in [("e1", "buy milk"), ("e2", "")] {
+            let text = migrated
+                .get_map(ELEMENTS)
+                .get(id)
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_map().ok())
+                .and_then(|em| em.get(BODY))
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_text().ok())
+                .expect("the body is a text");
+            assert_eq!(text.to_string(), body, "{id} lost its body");
+        }
     }
 
     #[test]

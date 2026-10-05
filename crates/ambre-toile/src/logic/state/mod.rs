@@ -76,6 +76,7 @@ use crate::logic::schema;
 
 // Root container names.
 pub(crate) const ELEMENTS: &str = "elements";
+pub(crate) use codec::BODY;
 pub(crate) const CONNECTORS: &str = "connectors";
 const LAYERS: &str = "layers";
 const BOARD: &str = "board";

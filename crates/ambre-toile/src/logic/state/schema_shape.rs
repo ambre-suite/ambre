@@ -27,15 +27,14 @@
 //! as a `const` or as a literal handed to `insert`, must carry a line.
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
-//! and an unchanged type leaves the shape identical (`SCHEMA-017`). A `LoroText`
-//! reads as `string`, like a plain register would, so a body demoted from a
-//! text container to a register is the same line. Both halves stay with the
-//! reviewer.
+//! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
+//! stays with the reviewer. A `LoroText` reads as `text` and a register as
+//! `string`, so a body demoted from a text container moves a line.
 
 use std::collections::BTreeSet;
 
 use kurbo::{BezPath, Point, Size};
-use loro::{LoroDoc, LoroValue};
+use loro::{Container, LoroDoc, LoroValue, ValueOrContainer};
 
 use ambre_bus::{DocType, DocumentId, UserId};
 
@@ -121,28 +120,72 @@ impl Shape {
     }
 }
 
-/// Walk a value, recording every path below it.
+/// The type a container holds, in the spelling of [`type_name`]. A text is
+/// `text` and never `string`: a body demoted to a register then moves a line
+/// (`TOILE-030`).
+fn container_name(container: &Container) -> &'static str {
+    match container {
+        Container::Map(_) => "map",
+        Container::List(_) | Container::MovableList(_) => "list",
+        Container::Text(_) => "text",
+        _ => "container",
+    }
+}
+
+impl Shape {
+    /// Record one child at `path`, and everything below it.
+    fn visit(&mut self, path: &str, child: ValueOrContainer) {
+        match child {
+            ValueOrContainer::Value(value) => {
+                self.record(path, &value);
+                walk_value(path, &value, self);
+            }
+            ValueOrContainer::Container(container) => {
+                self.lines
+                    .insert(format!("{path}: {}", container_name(&container)));
+                walk(path, &container, true, self);
+            }
+        }
+    }
+}
+
+/// Walk a container, recording every path below it.
 ///
 /// `schema_words` says whether this level's keys are the schema's own. Below a
 /// dictionary level the keys are schema words again: an id names an entry, and
 /// the entry's fields are the schema's. A list holds entries and never keys, so
 /// its elements all fold onto one path.
-fn walk(prefix: &str, value: &LoroValue, schema_words: bool, shape: &mut Shape) {
+fn walk(prefix: &str, container: &Container, schema_words: bool, shape: &mut Shape) {
+    let item = format!("{prefix}/{ANY}");
+    match container {
+        Container::Map(map) => map.for_each(|key, child| {
+            shape.keys.insert(key.to_owned());
+            let segment = if schema_words { key } else { ANY };
+            shape.visit(&format!("{prefix}/{segment}"), child);
+        }),
+        Container::List(list) => list.for_each(|child| shape.visit(&item, child)),
+        Container::MovableList(list) => list.for_each(|child| shape.visit(&item, child)),
+        _ => {}
+    }
+}
+
+/// Walk a plain value the way [`walk`] walks a container. No register holds a
+/// map or a list today, so this records nothing until one does.
+fn walk_value(prefix: &str, value: &LoroValue, shape: &mut Shape) {
     match value {
         LoroValue::Map(entries) => {
             for (key, child) in entries.iter() {
                 shape.keys.insert(key.clone());
-                let segment = if schema_words { key.as_str() } else { ANY };
-                let path = format!("{prefix}/{segment}");
+                let path = format!("{prefix}/{key}");
                 shape.record(&path, child);
-                walk(&path, child, true, shape);
+                walk_value(&path, child, shape);
             }
         }
         LoroValue::List(items) => {
             let path = format!("{prefix}/{ANY}");
-            for item in items.iter() {
-                shape.record(&path, item);
-                walk(&path, item, true, shape);
+            for child in items.iter() {
+                shape.record(&path, child);
+                walk_value(&path, child, shape);
             }
         }
         _ => {}
@@ -153,13 +196,21 @@ fn walk(prefix: &str, value: &LoroValue, schema_words: bool, shape: &mut Shape) 
 /// `postcard` layouts its binary registers carry.
 fn shape_of(doc: &LoroDoc) -> Shape {
     let mut shape = Shape::default();
-    let LoroValue::Map(roots) = doc.get_deep_value() else {
+    let LoroValue::Map(roots) = doc.get_value() else {
         return shape;
     };
     for (name, value) in roots.iter() {
+        let LoroValue::Container(id) = value else {
+            continue;
+        };
+        let Some(container) = doc.get_container(id.clone()) else {
+            continue;
+        };
         shape.keys.insert(name.clone());
-        shape.record(name, value);
-        walk(name, value, keys_are_schema_words(name), &mut shape);
+        shape
+            .lines
+            .insert(format!("{name}: {}", container_name(&container)));
+        walk(name, &container, keys_are_schema_words(name), &mut shape);
     }
     for (path, hex) in postcard_layouts() {
         shape.lines.insert(format!("postcard/{path}: {hex}"));

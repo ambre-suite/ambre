@@ -117,6 +117,100 @@ fn set_text_rejects_a_non_text_element() {
     ));
 }
 
+/// Two authors write one body at once, each sending the whole body as the
+/// editor does, then each receives the other's delta.
+fn race_two_bodies(a: &mut ToileState, b: &mut ToileState, id: &ElementId, ta: &str, tb: &str) {
+    let da = a
+        .handle_command(ToileCommand::SetText {
+            id: id.clone(),
+            text: ta.to_owned(),
+        })
+        .update
+        .expect("A's edit broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::SetText {
+            id: id.clone(),
+            text: tb.to_owned(),
+        })
+        .update
+        .expect("B's edit broadcasts a delta");
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+}
+
+/// `TOILE-030`: two authors typing in one note both keep their words. Each
+/// sends the whole body, and the write merges it character by character, so
+/// neither sentence is lost to the other.
+#[test]
+fn two_authors_typing_in_one_note_both_keep_their_words() {
+    for kind in [ElementKind::Sticky, ElementKind::Text] {
+        let mut a = ToileState::new();
+        let mut b = ToileState::new();
+        let id = created_id(&a.handle_command(ToileCommand::CreateElement {
+            kind,
+            at: Point::ZERO,
+            size: Size::new(120.0, 80.0),
+            content: InitContent::Text("buy milk".to_owned()),
+            fill: None,
+            correlate: 0,
+        }));
+        b.apply_remote(&a.export_snapshot());
+
+        race_two_bodies(&mut a, &mut b, &id, "buy milk and eggs", "please buy milk");
+
+        let merged = body_of(&a, &id).expect("a body");
+        assert_eq!(
+            Some(&merged),
+            body_of(&b, &id).as_ref(),
+            "the bodies diverged"
+        );
+        assert_eq!(
+            merged, "please buy milk and eggs",
+            "{kind:?} lost a sentence"
+        );
+    }
+}
+
+/// `TOILE-030`: a pasted note is born with a body two authors share, and a
+/// pasted arrow keeps its caption. Both are texts on the board, which the
+/// copy carries as their string.
+#[test]
+fn a_pasted_note_and_arrow_keep_their_text() {
+    let mut st = ToileState::new();
+    let note = create_sticky(&mut st, Point::ZERO, "draft");
+    let other = create_rect(&mut st, Point::new(200.0, 0.0), Size::new(10.0, 10.0));
+    let arrow = connect(&mut st, note.clone(), other.clone());
+    st.handle_command(ToileCommand::SetConnectorLabel {
+        id: arrow,
+        text: "next".to_owned(),
+    });
+
+    let copy = st.handle_command(ToileCommand::CopyElements {
+        ids: vec![note, other],
+    });
+    let paste = st.handle_command(ToileCommand::PasteElements {
+        payload: clip_of(&copy),
+        at: Point::new(0.0, 400.0),
+    });
+    let pasted = created_ids(&paste)
+        .into_iter()
+        .find(|id| body_of(&st, id).is_some())
+        .expect("the note is pasted");
+    assert_eq!(body_of(&st, &pasted).as_deref(), Some("draft"));
+    let pasted_arrow = st.connector_ids().pop().expect("the arrow is pasted");
+    assert_eq!(
+        caption(&st, &pasted_arrow),
+        "next",
+        "the copy lost its caption"
+    );
+
+    let mut peer = ToileState::new();
+    peer.apply_remote(&st.export_snapshot());
+    race_two_bodies(&mut st, &mut peer, &pasted, "draft one", "a draft");
+    assert_eq!(body_of(&st, &pasted).as_deref(), Some("a draft one"));
+    assert_eq!(body_of(&st, &pasted), body_of(&peer, &pasted));
+}
+
 #[test]
 fn move_translates_bounds() {
     let mut st = ToileState::new();

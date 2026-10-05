@@ -16,7 +16,7 @@ use crate::logic::interop::{ExportElement, export_svg};
 use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 
 use super::ToileState;
-use super::codec::{bin_of, f64_of, kind_from_tags, str_of};
+use super::codec::{bin_of, body_of, f64_of, kind_from_tags, str_of};
 
 /// The name an SVG export carries. The board's own title is a launcher concern:
 /// the Logic thread holds a document, not its listing entry. The name therefore
@@ -116,7 +116,7 @@ impl ToileState {
                 _ => None,
             },
             text: match kind {
-                ElementKind::Text | ElementKind::Sticky => Some(str_of(&em, "text")),
+                ElementKind::Text | ElementKind::Sticky => Some(body_of(&em)),
                 _ => None,
             },
             media_hash: match kind {

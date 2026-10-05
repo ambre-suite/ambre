@@ -6,7 +6,7 @@
 //! super::codec::*`.
 
 use kurbo::{Affine, Point, Rect, Vec2};
-use loro::{LoroMap, LoroText, LoroValue};
+use loro::{Container, LoroMap, LoroText, LoroValue, ValueOrContainer};
 
 use crate::logic::command::{ClipValue, InitContent};
 use crate::logic::connector::Connector;
@@ -120,6 +120,16 @@ pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], off
             }
             ClipValue::Bool(b) => {
                 let _ = m.insert(k.as_str(), *b);
+            }
+            // A body and a caption are text containers on the board, which
+            // the capture read as their string. Written back as a string they
+            // would race whole (`TOILE-030`, `TOILE-047`).
+            ClipValue::Str(s) if k == BODY || k == LABEL => {
+                if let Ok(text) = m.insert_container(k.as_str(), LoroText::new())
+                    && !s.is_empty()
+                {
+                    let _ = text.insert(0, s);
+                }
             }
             ClipValue::Str(s) => {
                 let _ = m.insert(k.as_str(), s.as_str());
@@ -311,6 +321,30 @@ pub(super) fn bool_of(m: &LoroMap, k: &str) -> bool {
         m.get(k).map(|v| v.into_value()),
         Some(Ok(LoroValue::Bool(true)))
     )
+}
+
+/// The element field holding the body of a sticky or a text element.
+pub(crate) const BODY: &str = "text";
+
+/// The body of a sticky or text element, read from its `LoroText`
+/// (`TOILE-030`). A flat string reads as itself: a board before version 4
+/// carries one, and so does a write from a client on an older build.
+pub(super) fn body_of(m: &LoroMap) -> String {
+    match m.get(BODY) {
+        Some(ValueOrContainer::Container(Container::Text(t))) => t.to_string(),
+        Some(ValueOrContainer::Value(LoroValue::String(s))) => s.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The body `LoroText` of an element map, seeding one in place of a missing
+/// field or a flat string. The caller writes the whole body next, so the
+/// string a seed replaces is not lost.
+pub(super) fn body_text_or_seed(m: &LoroMap) -> Option<LoroText> {
+    if let Some(ValueOrContainer::Container(Container::Text(t))) = m.get(BODY) {
+        return Some(t);
+    }
+    m.insert_container(BODY, LoroText::new()).ok()
 }
 
 pub(super) fn str_of(m: &LoroMap, k: &str) -> String {

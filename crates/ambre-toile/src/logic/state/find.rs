@@ -11,7 +11,7 @@ use crate::logic::command::{FindOptions, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, NodeId};
 
 use super::ToileState;
-use super::codec::str_of;
+use super::codec::{body_of, str_of};
 
 impl ToileState {
     /// Scan the text-bearing elements for `query`, returning the matching ids in
@@ -68,7 +68,7 @@ impl ToileState {
             return false;
         };
         let body = match str_of(&em, "type").as_str() {
-            "sticky" | "text" => str_of(&em, "text"),
+            "sticky" | "text" => body_of(&em),
             // A frame title lives in its `name` field (empty until named).
             "frame" => str_of(&em, "name"),
             _ => return false,
