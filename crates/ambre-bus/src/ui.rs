@@ -22,8 +22,8 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelActivity, ChannelId, DocType, DocumentId, MeetingId, MurmureEvent, RequestId, RestEvent,
-    Role, SpaceEvent, SpaceId, UserId,
+    ChannelActivity, ChannelId, DirectMessageEvent, DocType, DocumentId, MeetingId, MurmureEvent,
+    RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -115,6 +115,13 @@ pub enum UiEvent {
     Space {
         space_id: SpaceId,
         event: SpaceEvent,
+    },
+
+    /// The outcome of a direct message request, under the channel id the
+    /// request minted.
+    DirectMessage {
+        requested: ChannelId,
+        event: DirectMessageEvent,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------

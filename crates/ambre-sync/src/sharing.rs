@@ -84,7 +84,7 @@ pub(crate) fn unwrap_own<'a>(
 }
 
 /// Decodes a hex-encoded Ed25519 verifying key into its 32 raw bytes.
-fn decode_signing_pubkey(hex_str: &str) -> Result<[u8; 32], String> {
+pub(crate) fn decode_signing_pubkey(hex_str: &str) -> Result<[u8; 32], String> {
     let bytes = hex::decode(hex_str).map_err(|e| format!("hex decode signing key: {e}"))?;
     bytes
         .try_into()

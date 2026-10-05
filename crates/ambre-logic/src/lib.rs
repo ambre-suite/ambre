@@ -33,8 +33,10 @@ pub mod persistence;
 //   - `data`:     application data plane (app commands, remote deltas, snapshots)
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
 //   - `channels`: Murmure channels, each a set of documents (the Murmure engine spec)
+//   - `direct`:   Murmure direct messages, found or created by their members
 mod channels;
 mod data;
+mod direct;
 mod dispatch;
 /// A history replay imported in slices (`SYNC-131`).
 mod replay;
@@ -678,6 +680,9 @@ struct LogicState {
     creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
     /// Self-joins the relay has not answered yet, with their space.
     joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Direct message requests the relay has not answered yet, keyed by the
+    /// channel id each minted, with the channel it would create.
+    direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
     /// The whole content of a document this client created, sent as its first
     /// update once the Sync worker holds its session.
     unsent: HashMap<DocumentId, Vec<u8>>,
@@ -767,6 +772,7 @@ impl LogicState {
             space_opening: HashMap::new(),
             creating: HashMap::new(),
             joining: HashMap::new(),
+            direct: HashMap::new(),
             unsent: HashMap::new(),
             my_user_id: None,
             my_display_name: None,

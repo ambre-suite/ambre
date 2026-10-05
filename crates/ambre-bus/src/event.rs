@@ -203,6 +203,15 @@ pub enum LogicEvent {
     /// The user is a member of the channel, answering
     /// [`SyncCommand::JoinChannel`](crate::SyncCommand::JoinChannel).
     ChannelJoined { channel_id: ChannelId },
+    /// The relay holds the direct message of the requested members,
+    /// answering
+    /// [`SyncCommand::CreateDirectMessage`](crate::SyncCommand::CreateDirectMessage).
+    /// `channel_id` is the requested one when the relay created it, and the
+    /// existing one's otherwise.
+    DirectMessageOpened {
+        requested: ChannelId,
+        channel_id: ChannelId,
+    },
     /// A creation or a join failed, and the relay changed nothing.
     ChannelRequestFailed {
         channel_id: ChannelId,

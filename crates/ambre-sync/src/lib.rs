@@ -314,6 +314,13 @@ enum SyncEvent {
         channel_id: ChannelId,
         result: Result<(), String>,
     },
+    /// The answer to a direct message request
+    /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
+    /// under the requested id, or the one that already held its members.
+    DirectMessageOpened {
+        requested: ChannelId,
+        result: Result<ChannelId, String>,
+    },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
@@ -1245,6 +1252,12 @@ impl SyncState {
                 space_id,
                 key,
             } => self.handle_join_channel(channel_id, space_id, &key),
+            SyncCommand::CreateDirectMessage {
+                channel_id,
+                meta,
+                segment,
+                members,
+            } => self.handle_create_direct_message(channel_id, (meta, segment), members),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

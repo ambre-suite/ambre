@@ -640,6 +640,85 @@ fn an_unset_property_is_an_absent_key() {
     );
 }
 
+// --- MURMURE-016, MURMURE-054, MURMURE-055: the name of a direct message ---
+
+/// A second member of `state`, opened from every byte the first holds.
+fn second_member(state: &ChannelState) -> ChannelState {
+    let meta = state.meta_id();
+    let segments = HashMap::from([(
+        state.active_id(),
+        state
+            .export_all(state.active_id().document_id())
+            .expect("segment"),
+    )]);
+    let meta_bytes = state.export_all(meta.document_id()).expect("meta");
+    ChannelState::open(state.channel_id(), meta, &meta_bytes, &segments).expect("open")
+}
+
+#[test]
+fn a_name_one_member_sets_reaches_every_member() {
+    let mut alice =
+        ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW).expect("create");
+    let mut bob = second_member(&alice);
+
+    let named = alice.name_direct(Some("  trip  ")).expect("name");
+    assert_eq!(named.meta, alice.meta_id());
+    assert_eq!(
+        named.event,
+        MurmureEvent::Named {
+            name: Some("trip".into())
+        }
+    );
+    let events = bob
+        .apply_remote(named.meta.document_id(), &named.delta)
+        .expect("apply");
+    assert_eq!(
+        events,
+        [MurmureEvent::Named {
+            name: Some("trip".into())
+        }]
+    );
+    assert_eq!(bob.name().as_deref(), Some("trip"));
+
+    let renamed = bob.name_direct(Some("holiday")).expect("rename");
+    alice
+        .apply_remote(renamed.meta.document_id(), &renamed.delta)
+        .expect("apply");
+    assert_eq!(alice.name().as_deref(), Some("holiday"));
+}
+
+#[test]
+fn clearing_a_name_removes_its_key() {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, Some("trip"), NOW)
+        .expect("create");
+    let mut bob = second_member(&alice);
+    let meta = alice.meta_id().document_id();
+
+    for cleared in [None, Some("   ")] {
+        let named = alice.name_direct(cleared).expect("clear");
+        assert_eq!(named.event, MurmureEvent::Named { name: None });
+        bob.apply_remote(meta, &named.delta).expect("apply");
+        for state in [&alice, &bob] {
+            let channel = state.doc(meta).expect("meta").get_map(CHANNEL);
+            assert!(channel.get(CHANNEL_NAME).is_none(), "no key, no empty name");
+            assert_eq!(state.name(), None);
+        }
+    }
+}
+
+#[test]
+fn only_a_direct_message_takes_a_name_from_a_member() {
+    for kind in [ChannelType::Private, ChannelType::Public] {
+        let mut state =
+            ChannelState::create(ChannelId::new(), kind, Some("team"), NOW).expect("create");
+        assert_eq!(
+            state.name_direct(Some("other")).map(|n| n.event),
+            Err(MurmureError::NotDirect(state.channel_id()))
+        );
+        assert_eq!(state.name().as_deref(), Some("team"));
+    }
+}
+
 // --- robustness ---
 
 #[test]

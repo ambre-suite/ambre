@@ -28,7 +28,7 @@ mod space_tests;
 #[cfg(test)]
 mod unread_tests;
 
-pub use channel::{ChannelState, Sent};
+pub use channel::{ChannelState, Named, Sent};
 pub use error::MurmureError;
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};

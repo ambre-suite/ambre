@@ -1,7 +1,7 @@
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, DocumentActivity, MetaId, SealedChannelKey, SegmentId,
-    SpaceId,
+    ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MetaId, SealedChannelKey,
+    SegmentId, SpaceId,
 };
 use ambre_core::DocType;
 use ambre_crypto::aead::NONCE_LEN;
@@ -249,6 +249,65 @@ impl SyncState {
         });
     }
 
+    /// Ask the relay for the direct message of this user and `members`
+    /// (the Murmure channels spec): the relay creates it, or answers the one
+    /// that already holds exactly them. One fresh key opens it, wrapped for
+    /// every member under the exchange key the view pinned. The relay's
+    /// copy of each key is fetched again first, and a key that changed
+    /// fails the request: a relay that swaps a key gets no wrap under it.
+    /// The same answer gives each member's signing key, which their invite
+    /// in the log names.
+    pub(crate) fn handle_create_direct_message(
+        &self,
+        channel_id: ChannelId,
+        ids: (MetaId, SegmentId),
+        members: Vec<DirectMember>,
+    ) {
+        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
+            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
+            let author = self.author().ok_or("session locked")?;
+            Ok((tx, exchange_key, author))
+        });
+        let (tx, exchange_key, author) = match prepared {
+            Ok(prepared) => prepared,
+            Err(message) => return self.channel_answered(channel_id, Err(message)),
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let base = format!("{url_scheme}://{api_base}/api");
+            let result = async {
+                let mut signing_keys = Vec::with_capacity(members.len());
+                for member in &members {
+                    let url = format!("{base}/users/{}/pubkeys", member.user_id);
+                    let served =
+                        http::get_json_auth::<http::PubkeysResponse>(&url, auth.clone()).await?;
+                    check_pinned(member, &served.exchange_pubkey)?;
+                    signing_keys.push(crate::sharing::decode_signing_pubkey(
+                        &served.signing_pubkey,
+                    )?);
+                }
+                let invited: Vec<_> = members.iter().zip(signing_keys).collect();
+                let body =
+                    direct_message_request(&author, &exchange_key, channel_id, ids, &invited)?;
+                let answer = http::post_json_auth::<_, http::DirectMessageResponse>(
+                    &format!("{base}/channels/direct"),
+                    &body,
+                    auth,
+                )
+                .await?;
+                ChannelId::parse_str(&answer.channel_id)
+                    .map_err(|_| format!("bad channel id {:?}", answer.channel_id))
+            }
+            .await;
+            let _ = tx.send(SyncEvent::DirectMessageOpened {
+                requested: channel_id,
+                result,
+            });
+        });
+    }
+
     // -- Read cursors ------------------------------------------------------------
 
     /// The sequence number a read of `document_id` reaches: the last one this
@@ -482,6 +541,89 @@ pub(crate) fn self_join_entry(
     membership_log::encode(&entry).map(Some)
 }
 
+/// The request that creates a direct message of the signer and `members`
+/// under a fresh key.
+///
+/// Meta's log makes every member an editor, and leaves no owner: the signer
+/// creates it, invites each member as an editor, then lowers its own role to
+/// editor. Each member comes with the signing key their invite names. Every
+/// wrap carries the log's root, so each member replays it. The segment opens
+/// no log of its own: the relay resolves its access to meta's members.
+pub(crate) fn direct_message_request(
+    author: &crate::sharing::Author,
+    exchange_key: &StaticSecret,
+    channel_id: ChannelId,
+    (meta, segment): (MetaId, SegmentId),
+    members: &[(&DirectMember, [u8; 32])],
+) -> Result<http::CreateDirectMessageRequest, String> {
+    let key = DocumentKey::generate();
+    let document = meta.document_id();
+    let own_key = author.signing_key.verifying_key().to_bytes();
+    let others: Vec<UserId> = members.iter().map(|(m, _)| m.user_id).collect();
+    let signing_keys: HashMap<UserId, [u8; 32]> = members
+        .iter()
+        .map(|(m, signing)| (m.user_id, *signing))
+        .chain([(author.user_id, own_key)])
+        .collect();
+    let mut next = (0, None);
+    let mut root = None;
+    let mut entries = Vec::with_capacity(others.len() + 2);
+    for (member, act, role) in ambre_protocol::ownerless_log(author.user_id, &others) {
+        let draft = membership_log::Draft {
+            document,
+            member,
+            member_key: *signing_keys.get(&member).ok_or("a member has no signing key")?,
+            act,
+            role,
+            key: (act != ambre_protocol::MembershipAct::ChangeRole).then(|| key.id()),
+        };
+        let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
+        let digest = membership_log::digest(&entry).ok_or("an entry does not encode")?;
+        root.get_or_insert(digest);
+        next = (next.0 + 1, Some(digest));
+        entries.push(membership_log::encode(&entry)?);
+    }
+    // The creation goes first, so the first digest is the log's root.
+    let root = root.ok_or("the log holds no creation")?;
+    let wrap = |peer: &[u8; 32]| {
+        crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
+            .map_err(|e| format!("wrap the channel key: {e}"))
+    };
+    let own_pub = x25519_dalek::PublicKey::from(exchange_key);
+    let members = members
+        .iter()
+        .map(|(m, _)| {
+            wrap(&m.exchange_pub_key).map(|doc_key_enc| http::DirectMemberJson {
+                user_id: m.user_id.to_string(),
+                doc_key_enc,
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(http::CreateDirectMessageRequest {
+        channel_id: channel_id.to_string(),
+        meta_id: meta.to_string(),
+        segment_id: segment.to_string(),
+        members,
+        doc_key_enc: wrap(own_pub.as_bytes())?,
+        key_id: hex::encode(key.id().as_array()),
+        entries,
+    })
+}
+
+/// Refuse a member whose exchange key, as the relay serves it now, is not
+/// the one the view pinned for them.
+pub(crate) fn check_pinned(member: &DirectMember, served_hex: &str) -> Result<(), String> {
+    let served = crate::sharing::decode_exchange_pubkey(served_hex)?;
+    if served == member.exchange_pub_key {
+        Ok(())
+    } else {
+        Err(format!(
+            "the exchange key of {} is not the one pinned",
+            member.user_id
+        ))
+    }
+}
+
 /// Parse the activity answer. One row the client cannot read fails the whole
 /// answer, as a listing does.
 pub(crate) fn activity_of(
@@ -526,6 +668,7 @@ pub(crate) fn channel_documents(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::Role;
 
     fn entry(document_id: &str, kind: ChannelDocumentKind) -> http::ChannelDocumentEntry {
         http::ChannelDocumentEntry {
@@ -723,6 +866,113 @@ mod tests {
         assert!(matches!(
             events.as_slice(),
             [LogicEvent::ChannelOpenFailed { channel_id: id, .. }] if *id == channel_id
+        ));
+    }
+
+    /// The key a member opens from a wrap `sender` made, with the root it
+    /// carries.
+    fn unwrap_from(
+        holder: &StaticSecret,
+        sender: &StaticSecret,
+        doc_key_enc: &str,
+    ) -> Option<(DocumentKey, Option<ambre_protocol::EntryDigest>)> {
+        let bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(doc_key_enc)
+            .ok()?;
+        let (nonce, ciphertext) = bytes.split_first_chunk::<NONCE_LEN>()?;
+        let wrapped = ambre_crypto::ecdh::WrappedKey {
+            nonce: *nonce,
+            ciphertext: ciphertext.to_vec(),
+        };
+        let sender_pub = x25519_dalek::PublicKey::from(sender);
+        let (key, root) =
+            ambre_crypto::ecdh::unwrap_anchored(holder, sender_pub.as_bytes(), &wrapped).ok()?;
+        Some((key, root.map(ambre_protocol::EntryDigest)))
+    }
+
+    fn member_of(exchange_key: &StaticSecret) -> DirectMember {
+        DirectMember {
+            user_id: UserId::new(),
+            exchange_pub_key: x25519_dalek::PublicKey::from(exchange_key).to_bytes(),
+        }
+    }
+
+    /// A direct message's log replays to every member as an editor, the
+    /// creator included, and leaves no owner. Each member opens one key
+    /// from their own wrap, with the log's root beside it.
+    #[test]
+    fn a_direct_message_makes_every_member_an_editor_under_one_key() {
+        let author = crate::sharing::Author {
+            user_id: UserId::new(),
+            signing_key: SigningKey::from_bytes(&[4; 32]),
+        };
+        let alice = exchange_key(1);
+        let (bob, carol) = (exchange_key(2), exchange_key(3));
+        let members = [member_of(&bob), member_of(&carol)];
+        let invited: Vec<_> = members
+            .iter()
+            .zip(5u8..)
+            .map(|(m, seed)| (m, SigningKey::from_bytes(&[seed; 32]).verifying_key().to_bytes()))
+            .collect();
+        let meta = MetaId::new();
+        let body = direct_message_request(
+            &author,
+            &alice,
+            ChannelId::new(),
+            (meta, SegmentId::new()),
+            &invited,
+        )
+        .expect("request");
+
+        assert_eq!(body.entries.len(), members.len() + 2);
+        let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
+        assert_eq!(body.key_id, hex::encode(own_key.id().as_array()));
+        let entries = membership_log::decode(&body.entries);
+        let log = membership_log::Log::walk(
+            meta.document_id(),
+            root,
+            &entries,
+            membership_log::no_self_join,
+        );
+        let everyone = [author.user_id, members[0].user_id, members[1].user_id];
+        for user in everyone {
+            assert_eq!(
+                log.standing(user),
+                (ambre_bus::MemberStanding::Verified, Some(Role::Editor)),
+                "{user}"
+            );
+        }
+
+        for (secret, wrap) in [(&bob, &body.members[0]), (&carol, &body.members[1])] {
+            let (key, opened_root) =
+                unwrap_from(secret, &alice, &wrap.doc_key_enc).expect("member wrap");
+            assert_eq!(opened_root, root);
+            assert!(same_key(&key, &own_key));
+        }
+    }
+
+    /// A member whose key the relay now serves differently is refused: no
+    /// wrap leaves under a key the view did not pin.
+    #[test]
+    fn a_key_other_than_the_pinned_one_is_refused() {
+        let bob = member_of(&exchange_key(2));
+        assert!(check_pinned(&bob, &hex::encode(bob.exchange_pub_key)).is_ok());
+        let other = x25519_dalek::PublicKey::from(&exchange_key(3)).to_bytes();
+        assert!(check_pinned(&bob, &hex::encode(other)).is_err());
+        assert!(check_pinned(&bob, "not hex").is_err());
+    }
+
+    #[test]
+    fn with_no_relay_a_direct_message_fails_at_once() {
+        let (sink, rx) = LogicSink::channel();
+        let state = SyncState::new(sink, String::new(), None);
+        let channel_id = ChannelId::new();
+        let members = vec![member_of(&exchange_key(2))];
+        state.handle_create_direct_message(channel_id, (MetaId::new(), SegmentId::new()), members);
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(
+            events.as_slice(),
+            [LogicEvent::ChannelRequestFailed { channel_id: id, .. }] if *id == channel_id
         ));
     }
 }

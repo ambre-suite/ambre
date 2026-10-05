@@ -76,6 +76,47 @@ pub struct CreateChannelRequest {
     pub segment_id: ambre_core::SegmentId,
 }
 
+/// One member of a new direct message, other than its creator, with the
+/// channel key wrapped for them alone.
+#[derive(serde::Deserialize)]
+pub struct DirectMemberJson {
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
+    pub doc_key_enc: String,
+}
+
+/// The body of a direct message request. Every id is one the client
+/// generated, and none exists on the relay yet.
+#[derive(serde::Deserialize)]
+pub struct CreateDirectMessageRequest {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
+    /// Every member but the caller.
+    pub members: Vec<DirectMemberJson>,
+    /// The channel key wrapped for the caller.
+    pub doc_key_enc: String,
+    /// The hex identifier of the channel key, which the creation and every
+    /// invite of the log name.
+    pub key_id: String,
+    /// The log of `meta`, signed by the caller, in order: its `Create`, one
+    /// editor `Invite` per member in the order of `members`, then the
+    /// caller's own `ChangeRole` to editor.
+    pub entries: Vec<String>,
+}
+
+/// The direct message a request reached: the one it created, or the one
+/// that already held its members.
+#[derive(serde::Serialize)]
+pub struct DirectMessageJson {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    pub created: bool,
+}
+
 /// The body of a self-join: the channel key wrapped for the caller. It also
 /// carries the self-join as an entry of the log of `meta`, signed by the caller.
 /// A `meta` whose log holds entries takes no self-join without one.
@@ -171,6 +212,96 @@ pub async fn create_channel(
     db::register_channel(&state.db, &new).await?;
     tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.is_public, "channel registered");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /api/channels/direct`: open the direct message of the caller and
+/// `members`, created when none holds exactly them (`SRV-176`, `SRV-177`).
+///
+/// The new channel belongs to no space, and every member is an editor of its
+/// `meta`, the caller included, so nobody owns it. The log records why: the
+/// caller creates `meta`, invites each member as an editor, then sets its own
+/// role to editor. Every entry is checked before anything is written. A
+/// direct message already holding exactly these members answers its id, and
+/// the request writes nothing: no member is added to it.
+pub async fn create_direct_message(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    axum::Json(req): axum::Json<CreateDirectMessageRequest>,
+) -> Result<axum::Json<DirectMessageJson>, AppError> {
+    use base64::Engine;
+    let invalid = |detail: &str| AppError::BadRequest(detail.into());
+    if req.meta_id.document_id() == req.segment_id.document_id() {
+        return Err(invalid("meta and segment are one document"));
+    }
+    let mut seen = std::collections::HashSet::from([auth.user_id]);
+    if req.members.is_empty() || !req.members.iter().all(|m| seen.insert(m.user_id)) {
+        return Err(invalid(
+            "a direct message needs distinct members besides the caller",
+        ));
+    }
+    if req.entries.len() != req.members.len() + 2 {
+        return Err(invalid(
+            "one entry per member, plus the creation and the role",
+        ));
+    }
+    for member in &req.members {
+        db::get_user(&state.db, &member.user_id)
+            .await?
+            .ok_or(AppError::NotFound { resource: "user" })?;
+    }
+    let decode = |b64: &str| {
+        base64::engine::general_purpose::URL_SAFE
+            .decode(b64)
+            .map_err(|e| AppError::BadRequest(e.to_string()))
+    };
+    let mut keys = vec![(auth.user_id, decode(&req.doc_key_enc)?)];
+    for member in &req.members {
+        keys.push((member.user_id, decode(&member.doc_key_enc)?));
+    }
+    let key_id = super::share::parse_key_id(&req.key_id)?;
+    let meta = req.meta_id.document_id();
+    let others: Vec<_> = req.members.iter().map(|m| m.user_id).collect();
+    let mut entries = Vec::with_capacity(req.entries.len());
+    for (text, (member, act, role)) in req
+        .entries
+        .iter()
+        .zip(ambre_protocol::ownerless_log(auth.user_id, &others))
+    {
+        // The creation and each invite name the key they hand over, and the
+        // role change names none.
+        let key = (act != MembershipAct::ChangeRole).then_some(key_id);
+        let expected = Expected {
+            act,
+            member,
+            role: Some(role.as_str()),
+            key: Some(key),
+        };
+        let entry = checked_entry(&state, &auth, meta, Some(text), expected)
+            .await?
+            .ok_or_else(|| invalid("an entry is missing"))?;
+        entries.push(entry);
+    }
+    let found = db::find_or_create_direct_message(
+        &state.db,
+        &db::NewDirectMessage {
+            channel_id: req.channel_id,
+            meta_id: req.meta_id,
+            segment_id: req.segment_id,
+            creator: auth.user_id,
+            members: &keys,
+            entries: &entries,
+        },
+    )
+    .await?;
+    let (channel_id, created) = match found {
+        db::DirectMessage::Created => (req.channel_id, true),
+        db::DirectMessage::Existing(channel_id) => (channel_id, false),
+    };
+    tracing::info!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created, "direct message");
+    Ok(axum::Json(DirectMessageJson {
+        channel_id,
+        created,
+    }))
 }
 
 /// `DELETE /api/channels/{id}`: delete a channel with every document it
@@ -1291,5 +1422,243 @@ mod tests {
         );
         assert!(exists(&state, meta).await);
         assert_eq!(member_ids(&state, meta).await, [uuid_of(bob)]);
+    }
+
+    // --- Direct messages (`SRV-176`, `SRV-177`) ---
+
+    /// The request of `creator` for a direct message with `others`, under
+    /// fresh ids. Its log creates `meta`, invites each member as an editor,
+    /// then sets the creator's own role to editor. Each member's key is
+    /// filled with a byte of its own, so a test tells the wraps apart.
+    fn direct_request(creator: UserId, others: &[UserId]) -> CreateDirectMessageRequest {
+        let meta = MetaId::from_document(DocumentId::new());
+        let entries = ambre_protocol::ownerless_log(creator, others)
+            .zip(0u64..)
+            .map(|((member, act, role), position)| {
+                let key = (act != MembershipAct::ChangeRole).then_some(DIRECT_KEY);
+                authored_entry(meta.document_id(), position, member, act, role, key, creator)
+            })
+            .collect();
+        let key = |byte: u8| base64::engine::general_purpose::URL_SAFE.encode([byte; 48]);
+        CreateDirectMessageRequest {
+            channel_id: ChannelId::new(),
+            meta_id: meta,
+            segment_id: SegmentId::from_document(DocumentId::new()),
+            members: others
+                .iter()
+                .zip(2u8..)
+                .map(|(&user_id, byte)| DirectMemberJson {
+                    user_id,
+                    doc_key_enc: key(byte),
+                })
+                .collect(),
+            doc_key_enc: key(1),
+            key_id: hex::encode(DIRECT_KEY.as_array()),
+            entries,
+        }
+    }
+
+    /// The channel key every test direct message names.
+    const DIRECT_KEY: ambre_core::KeyId = ambre_core::KeyId::from_array([8; 16]);
+
+    /// The entry `author` signs about `member` at `position` of `document`'s
+    /// log, in the form a request carries it. The relay walks no digest, so
+    /// the previous one is filler.
+    fn authored_entry(
+        document: DocumentId,
+        position: u64,
+        member: UserId,
+        act: MembershipAct,
+        role: Role,
+        key: Option<ambre_core::KeyId>,
+        author: UserId,
+    ) -> String {
+        use ed25519_dalek::Signer;
+        let signing = signing_key();
+        let mut entry = ambre_protocol::MembershipEntry {
+            document,
+            position,
+            member,
+            member_key: signing.verifying_key().to_bytes(),
+            act,
+            role,
+            key,
+            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            author,
+            signature: Vec::new(),
+        };
+        entry.signature = signing
+            .sign(&entry.signed_bytes().expect("signed bytes"))
+            .to_bytes()
+            .to_vec();
+        base64::engine::general_purpose::URL_SAFE.encode(entry.encode().expect("encode"))
+    }
+
+    async fn open_direct(
+        state: &Arc<AppState>,
+        who: UserId,
+        req: CreateDirectMessageRequest,
+    ) -> Result<DirectMessageJson, AppError> {
+        create_direct_message(State(state.clone()), session(who), axum::Json(req))
+            .await
+            .map(|axum::Json(json)| json)
+    }
+
+    async fn direct_messages(state: &AppState) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM channels WHERE space_id IS NULL")
+            .fetch_one(&state.db)
+            .await
+            .expect("count")
+    }
+
+    /// `SRV-176`: a direct message belongs to no space and is not public.
+    /// Every member is an editor of its `meta`, the creator included, so it
+    /// has no owner, and nobody deletes it for the others.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_direct_message_has_no_space_and_no_owner(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let req = direct_request(alice, &[bob, carol]);
+        let (channel_id, meta) = (req.channel_id, req.meta_id.document_id());
+
+        let answer = open_direct(&state, alice, req).await.expect("create");
+        assert_eq!((answer.channel_id, answer.created), (channel_id, true));
+
+        let channel = db::get_channel(&state.db, &channel_id)
+            .await
+            .expect("query")
+            .expect("the channel exists");
+        assert_eq!(channel.space_id, None);
+        assert!(!channel.is_public);
+        for who in [alice, bob, carol] {
+            assert_eq!(role_on(&state, meta, who).await, Some(Role::Editor));
+        }
+        let log = db::membership_log(&state.db, &meta).await.expect("log");
+        assert_eq!(log.len(), 4, "create, two invites, the creator's role");
+        assert_eq!(
+            delete(&state, alice, channel_id).await,
+            StatusCode::FORBIDDEN
+        );
+        assert!(exists(&state, meta).await);
+    }
+
+    /// `SRV-176`: the relay stores, for each member, the key wrapped for
+    /// that member, and reads none of them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn each_member_holds_the_key_wrapped_for_them(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let req = direct_request(alice, &[bob]);
+        let meta = req.meta_id.document_id();
+        open_direct(&state, alice, req).await.expect("create");
+
+        for (who, byte) in [(alice, 1u8), (bob, 2)] {
+            let row = db::get_document_member(&state.db, &meta, &who)
+                .await
+                .expect("query")
+                .expect("a member");
+            assert_eq!(row.doc_key_enc, [byte; 48]);
+        }
+    }
+
+    /// `SRV-177`: a request for a set of members that already has a direct
+    /// message answers it, from either side, and writes nothing: no channel,
+    /// no document, no member.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_same_members_reach_the_same_direct_message(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let first = direct_request(alice, &[bob]);
+        let (channel_id, meta) = (first.channel_id, first.meta_id.document_id());
+        open_direct(&state, alice, first).await.expect("create");
+
+        let again = direct_request(bob, &[alice]);
+        let (other_id, other_meta) = (again.channel_id, again.meta_id.document_id());
+        let answer = open_direct(&state, bob, again).await.expect("open");
+        assert_eq!((answer.channel_id, answer.created), (channel_id, false));
+        assert!(
+            db::get_channel(&state.db, &other_id)
+                .await
+                .expect("query")
+                .is_none()
+        );
+        assert!(!exists(&state, other_meta).await);
+        assert_eq!(member_ids(&state, meta).await.len(), 2);
+        assert_eq!(
+            db::membership_log(&state.db, &meta)
+                .await
+                .expect("log")
+                .len(),
+            3
+        );
+        assert_eq!(direct_messages(&state).await, 1);
+
+        let wider = direct_request(alice, &[bob, user(&state, "carol@test.dev").await]);
+        let answer = open_direct(&state, alice, wider).await.expect("create");
+        assert!(answer.created, "one more member is another set");
+        assert_eq!(direct_messages(&state).await, 2);
+    }
+
+    /// `SRV-177`: two requests racing for one set of members create one
+    /// direct message, and both answer it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn racing_requests_create_one_direct_message(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let (a, b) = tokio::join!(
+            open_direct(&state, alice, direct_request(alice, &[bob])),
+            open_direct(&state, bob, direct_request(bob, &[alice])),
+        );
+        let (a, b) = (a.expect("alice"), b.expect("bob"));
+        assert_eq!(a.channel_id, b.channel_id);
+        assert!(a.created != b.created, "exactly one created it");
+        assert_eq!(direct_messages(&state).await, 1);
+    }
+
+    /// `SRV-176`: a log that leaves the creator an owner, or a request that
+    /// names the caller as a member, is refused, and nothing is written.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_direct_message_with_an_owner_is_refused(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+
+        let mut owned = direct_request(alice, &[bob]);
+        owned.entries.pop();
+        assert!(matches!(
+            open_direct(&state, alice, owned).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let mut swapped = direct_request(alice, &[bob]);
+        let last = swapped.entries.len() - 1;
+        swapped.entries[last] = authored_entry(
+            swapped.meta_id.document_id(),
+            u64::try_from(last).expect("position"),
+            alice,
+            MembershipAct::ChangeRole,
+            Role::Owner,
+            None,
+            alice,
+        );
+        assert!(matches!(
+            open_direct(&state, alice, swapped).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let with_self = direct_request(alice, &[alice]);
+        assert!(matches!(
+            open_direct(&state, alice, with_self).await,
+            Err(AppError::BadRequest(_))
+        ));
+        assert_eq!(direct_messages(&state).await, 0);
     }
 }

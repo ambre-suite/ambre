@@ -24,8 +24,8 @@
 //!   kept explicit.
 
 use crate::{
-    ChannelId, DocType, DocumentId, MurmureCommand, RequestId, RestCommand, SpaceCommand, SpaceId,
-    Timestamp,
+    ChannelId, DirectMessageDraft, DocType, DocumentId, MurmureCommand, RequestId, RestCommand,
+    SpaceCommand, SpaceId, Timestamp,
 };
 use ambre_core::SessionNonce;
 
@@ -144,6 +144,15 @@ pub enum LogicCommand {
     /// Close a channel: the Logic thread drops its state and closes each of
     /// its documents.
     CloseChannel { channel_id: ChannelId },
+
+    /// Open the direct message of this user and `draft.members`, created
+    /// when none holds exactly them (the Murmure channels spec). Answered by
+    /// [`crate::UiEvent::DirectMessage`] under `draft.channel_id`.
+    OpenDirectMessage {
+        draft: DirectMessageDraft,
+        /// The instant of a creation, stamped by the view.
+        now: Timestamp,
+    },
 
     /// Create a space: a new space document, with the user as its owner and
     /// only member (the Murmure spaces spec). The space opens at once.

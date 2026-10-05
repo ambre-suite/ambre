@@ -107,6 +107,7 @@ impl LogicState {
                         self.space_opening.clear();
                         self.creating.clear();
                         self.joining.clear();
+                        self.direct.clear();
                         self.unsent.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
@@ -160,6 +161,7 @@ impl LogicState {
             }
             LogicCommand::OpenChannel { channel_id } => self.open_channel(channel_id),
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
+            LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
             LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
             LogicCommand::CreateSpace {
@@ -451,6 +453,10 @@ impl LogicState {
                 self.channel_created(channel_id, key);
             }
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
+            LogicEvent::DirectMessageOpened {
+                requested,
+                channel_id,
+            } => self.direct_message_opened(requested, channel_id),
             LogicEvent::ChannelRequestFailed {
                 channel_id,
                 message,

@@ -646,6 +646,15 @@ impl SyncState {
                     result.map(|()| LogicEvent::ChannelJoined { channel_id }),
                 );
             }
+            SyncEvent::DirectMessageOpened { requested, result } => {
+                self.channel_answered(
+                    requested,
+                    result.map(|channel_id| LogicEvent::DirectMessageOpened {
+                        requested,
+                        channel_id,
+                    }),
+                );
+            }
             SyncEvent::DocumentMaterialized { document_id } => {
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {

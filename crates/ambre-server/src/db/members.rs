@@ -116,7 +116,7 @@ pub async fn add_document_member(
 /// signed for another place is refused: another landed first, and the
 /// client signs again after it. A stored entry is never rewritten
 /// (`SYNC-107`).
-async fn append_entry(
+pub(super) async fn append_entry(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
     entry: &LogEntry,

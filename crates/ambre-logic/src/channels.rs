@@ -84,6 +84,28 @@ impl LogicState {
         });
     }
 
+    /// Hold a channel the relay just created, and open the session of its two
+    /// documents. Their whole content leaves as their first update once the
+    /// Sync worker holds each session.
+    pub(crate) fn hold_created(&mut self, channel: ChannelState) {
+        for document_id in [
+            channel.meta_id().document_id(),
+            channel.active_id().document_id(),
+        ] {
+            match channel.export_all(document_id) {
+                Ok(export) => {
+                    self.unsent.insert(document_id, export);
+                }
+                Err(error) => tracing::warn!("Logic: export of {document_id} failed: {error}"),
+            }
+            self.send_to_sync(SyncCommand::OpenDocument {
+                document_id,
+                doc_type: DocType::Murmure,
+            });
+        }
+        self.channels.insert(channel.channel_id(), channel);
+    }
+
     /// Drop a channel, open or opening, and end the session of each of its
     /// documents.
     pub(crate) fn close_channel(&mut self, channel_id: ChannelId) {
@@ -176,6 +198,10 @@ impl LogicState {
             }
             Ok(Opening::Open(state)) => {
                 self.opening.remove(&channel_id);
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: MurmureEvent::Named { name: state.name() },
+                });
                 // The closing segment first, so the view draws the history in
                 // order.
                 for segment in [state.closing_id(), Some(state.active_id())]
@@ -364,6 +390,22 @@ impl LogicState {
                     channels: vec![mark],
                 });
             }
+            MurmureCommand::Name { name } => match channel.name_direct(name.as_deref()) {
+                Ok(named) => {
+                    self.send_to_sync(SyncCommand::SendUpdate {
+                        document_id: named.meta.document_id(),
+                        payload: named.delta,
+                        summary: None,
+                    });
+                    self.send_to_ui(UiEvent::Channel {
+                        channel_id,
+                        event: named.event,
+                    });
+                }
+                Err(error) => {
+                    tracing::warn!("Logic: name of channel {channel_id} refused: {error}");
+                }
+            },
             MurmureCommand::MarkUnread { segment, message } => {
                 self.mark_unread(channel_id, segment, message);
             }
@@ -783,13 +825,18 @@ mod tests {
         let shown = drain(&ui);
         let [
             UiEvent::Channel {
+                event: MurmureEvent::Named { name },
+                ..
+            },
+            UiEvent::Channel {
                 channel_id: shown_channel,
                 event: MurmureEvent::Messages { segment, messages },
             },
         ] = shown.as_slice()
         else {
-            panic!("the active segment's messages, got {shown:?}");
+            panic!("the channel's name, then its active segment's messages, got {shown:?}");
         };
+        assert_eq!(*name, stored.name());
         assert_eq!(*shown_channel, channel_id);
         assert_eq!(*segment, stored.active_id());
         assert_eq!(messages[0].text, "stored");

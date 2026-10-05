@@ -31,6 +31,10 @@ pub enum MurmureError {
     #[error("channel {0} is not public, so the catalogue cannot list it")]
     NotPublic(ChannelId),
 
+    /// Only a direct message takes a name from any member (`MURMURE-054`).
+    #[error("channel {0} is not a direct message, so no member renames it")]
+    NotDirect(ChannelId),
+
     /// The catalogue lists no channel of that identifier.
     #[error("the catalogue lists no channel {0}")]
     NotListed(ChannelId),

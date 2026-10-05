@@ -128,6 +128,10 @@ pub enum MurmureCommand {
         segment: SegmentId,
         message: MessageId,
     },
+    /// Name a direct message, or clear its name with `None` (`MURMURE-054`,
+    /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
+    /// and every member reads it.
+    Name { name: Option<String> },
 }
 
 impl MurmureCommand {
@@ -137,7 +141,7 @@ impl MurmureCommand {
     /// answers for a document. A load reads, and a cursor is no document.
     pub fn is_mutating(&self) -> bool {
         match self {
-            Self::SendMessage { .. } => true,
+            Self::SendMessage { .. } | Self::Name { .. } => true,
             Self::LoadOlder { .. } | Self::MarkRead | Self::MarkUnread { .. } => false,
         }
     }
@@ -171,6 +175,10 @@ pub enum MurmureEvent {
     /// The channel could not open: the relay refused it, or one of its
     /// documents failed the checks. Nothing of it is held.
     OpenFailed { message: String },
+    /// The name the channel's `meta` holds, at the open and after any change
+    /// to it. `None` for an unnamed channel: the view composes what it shows
+    /// from the members, and stores nothing (`MURMURE-016`).
+    Named { name: Option<String> },
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).
@@ -279,6 +287,41 @@ pub struct PrivateChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
     pub channel_id: ChannelId,
     pub name: String,
+}
+
+/// A member of a direct message, other than this user, with the exchange key
+/// the user confirmed for them (`ambre-spec-key-verification.md`).
+///
+/// The key is public. The Sync worker fetches the member's key again and
+/// wraps the channel key only when the two match. So a key the relay swapped
+/// in never receives a wrap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirectMember {
+    pub user_id: UserId,
+    pub exchange_pub_key: [u8; 32],
+}
+
+/// A direct message the view asks for: this user and `members`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectMessageDraft {
+    /// Minted by the view. It names the request, and the channel too when
+    /// the relay creates one. An existing direct message keeps its own.
+    pub channel_id: ChannelId,
+    /// Every member but this user.
+    pub members: Vec<DirectMember>,
+}
+
+/// The outcome of a direct message request, Logic thread -> UI thread.
+///
+/// Carried by [`UiEvent::DirectMessage`](crate::UiEvent::DirectMessage).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DirectMessageEvent {
+    /// The direct message of these members, created or found
+    /// (`MURMURE-051`). It is opening: its events follow under `channel_id`,
+    /// which differs from the request's when the direct message existed.
+    Opened { channel_id: ChannelId },
+    /// The request failed. Nothing changed on the relay.
+    Failed { message: String },
 }
 
 /// A command for an open space, UI thread -> Logic thread.

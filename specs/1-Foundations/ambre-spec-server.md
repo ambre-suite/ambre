@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-012` | `INV` | The relay MUST perform no cryptographic operation beyond verifying a signature and minting its own tokens. | this spec section 5; `ZK-004` | cargo-deny -- `deny.toml` refuses the cipher, the exchange and the passphrase derivation in this process, and the continuous-integration `deny` job fails the manifest that adds one. `ed25519-dalek` is the one grant, which is exactly the two operations named | none | verified |
-| `SRV-011` | `INV` | A document MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner` -- the refusal; `::owner_can_leave_when_another_owner_remains` -- the case that must still work, so neither end rots into the other | none | verified |
+| `SRV-011` | `INV` | A document that has an owner MUST NOT be left without one. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner` -- the refusal; `::owner_can_leave_when_another_owner_remains` -- the case that must still work, so neither end rots into the other | none | verified |
 | `SRV-170` | `INV` | A log macro, a span or an `instrument` field of the relay MUST NOT name a payload, a blob, a body or its bytes, unless it reads only the length. | `ZK-001`, `ZK-006`; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py` refuses each of those names in a log macro, a span or an `instrument` field of `ambre-server`, a length aside | none | verified |
 | `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | type-level -- every payload the relay stores, reads back or forwards is a `Payload`, with no `Debug` and no `Display`, so a log line naming one under any name does not compile; `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a decoded message prints each ciphertext as its length; ci-gate -- `scripts/crate_boundaries.py` refuses a log line in a file that reads a payload's or a ciphertext's bytes | none | verified |
 | `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
@@ -79,6 +79,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-174` | `POST` | The last member of a public channel MUST be able to leave it, owner or not, and the relay MUST keep the channel and its documents. | this spec section 3; `SRV-145` | not built | unbuilt -- lands with the `The last member of a public channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-175` | `POST` | The last owner of a public channel MUST be able to leave it while other members stay, and an owner of its space MUST then be able to delete it. | this spec section 3; `SRV-174`, `MURMURE-244` | not built | unbuilt -- lands with the `A public channel without an owner` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-176` | `POST` | A direct message MUST be created whole in one transaction, in no space, with an editor row for each member and no owner, and only from a log that says so. | this spec section 3; `SRV-104` | `ambre_server::routes::channels::tests::a_direct_message_has_no_space_and_no_owner` -- database tier, an editor row per member; `ambre_server::routes::channels::tests::each_member_holds_the_key_wrapped_for_them` -- each row holds its own wrap; `ambre_server::routes::channels::tests::a_direct_message_with_an_owner_is_refused` -- a log that keeps an owner writes nothing | none | verified |
+| `SRV-177` | `FRAME` | A direct message request MUST NOT create a second direct message for a set of members that already holds one. | this spec section 3; `SRV-176` | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` -- database tier, the existing one answers; `ambre_server::routes::channels::tests::racing_requests_create_one_direct_message` -- two racing requests create one | none | verified |
 
 ### 1.5 A member joins a public channel alone
 
@@ -123,7 +125,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 43 `verified`, 1 `qa-manual`, 12 `unimplemented`. What holds is
+* **Verification.** 45 `verified`, 1 `qa-manual`, 12 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
   and the origin list. The delete holds too, and so does the payload type no log line can name.
   The process rules are loose; a deployment's isolation is read by hand.
@@ -209,7 +211,16 @@ the set `ZK-015` names.
 | a read cursor | a member, a document and a number | the activity answer (`SRV-109`) |
 
 A space is a document like any other, so its members are its member rows. A direct message is a
-channel with no space.
+channel with no space. It arrives whole in one request: both documents, an editor row for each
+member, and the log of `meta` that grants exactly those rows (`SRV-176`). The client signs that log
+and the relay checks it act by act against one sequence, `ownerless_log` in `ambre-protocol`, so
+the two sides cannot drift apart. Its segment holds no row of its own, since every document of a
+channel reads the rows of `meta`. A direct message has no owner, so `SRV-011` never applies to it.
+
+Two direct messages never hold the same members (`SRV-177`). The request takes a transaction lock
+keyed by the sorted set of members, then looks for a channel with no space whose rows on `meta`
+are exactly that set. A racing request waits on the lock and finds the first one's channel. The
+lock is advisory and lasts the transaction, so no table holds the set.
 
 A public channel outlives its last member. The space reads its key in the catalogue, so the next
 member joins it alone, and the last one leaves owner or not (`SRV-174`). A private channel goes
@@ -314,13 +325,14 @@ group needs a token.
 | content | the snapshot record, the delta page, and the presigned links | `ambre-spec-sequencer.md`, `ambre-spec-object-store.md` |
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
-| channels | the documents a channel groups, listed to a member alone; a public or private channel registered in its space; a self-join; the owner's delete | this document, `5-Murmure/features/ambre-spec-murmure-spaces.md` and `5-Murmure/features/ambre-spec-murmure-channels.md` |
+| channels | the documents a channel groups, listed to a member alone; a public or private channel registered in its space; a direct message, created or found; a self-join; the owner's delete | this document, `5-Murmure/features/ambre-spec-murmure-spaces.md` and `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | read cursors | a cursor, the activity answer, marking read | this document, and `ambre-spec-murmure-unread.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
 **What the surface does not carry.** Meetings have no route at all. Of the channel routes, the
-listing, the activity answer, the registration of a channel, the signed self-join and the delete
-are built. The retention of a space is designed and unbuilt (`SRV-111` and `SRV-112`).
+listing, the activity answer, the registration of a channel, the direct message, the signed
+self-join and the delete are built. The retention of a space is designed and unbuilt (`SRV-111`
+and `SRV-112`).
 
 **The last number of a document.** The activity answer compares the caller's cursor with the
 higher of two numbers. One is the sequence counter in the ephemeral store. The other is the

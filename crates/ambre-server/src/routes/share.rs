@@ -439,7 +439,7 @@ fn decode_members(ids: &[String]) -> Result<Vec<ambre_core::UserId>, AppError> {
 }
 
 /// Decodes the hex identifier of the key an invitation wraps.
-fn parse_key_id(text: &str) -> Result<ambre_core::KeyId, AppError> {
+pub(crate) fn parse_key_id(text: &str) -> Result<ambre_core::KeyId, AppError> {
     let bytes: [u8; ambre_core::KEY_ID_LEN] = hex::decode(text)
         .ok()
         .and_then(|b| b.try_into().ok())

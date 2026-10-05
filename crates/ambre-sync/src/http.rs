@@ -784,6 +784,40 @@ pub(crate) struct CreateChannelRequest {
     pub segment_id: String,
 }
 
+/// One member of a direct message, other than the caller, and the channel
+/// key wrapped for them.
+#[derive(Serialize)]
+pub(crate) struct DirectMemberJson {
+    pub user_id: String,
+    pub doc_key_enc: String,
+}
+
+/// `POST /api/channels/direct`: a direct message of the caller and
+/// `members`, which the relay creates or finds.
+#[derive(Serialize)]
+pub(crate) struct CreateDirectMessageRequest {
+    pub channel_id: String,
+    pub meta_id: String,
+    pub segment_id: String,
+    pub members: Vec<DirectMemberJson>,
+    /// The channel key wrapped for the caller.
+    pub doc_key_enc: String,
+    /// The hex identifier of the channel key.
+    pub key_id: String,
+    /// The log of `meta`: its `Create`, one editor `Invite` per member in
+    /// the order of `members`, then the caller's own `ChangeRole` to editor.
+    pub entries: Vec<String>,
+}
+
+/// The direct message a request reached: the one it created, or the one that
+/// already held its members.
+#[derive(Deserialize)]
+pub(crate) struct DirectMessageResponse {
+    pub channel_id: String,
+    #[allow(dead_code)]
+    pub created: bool,
+}
+
 /// `POST /api/channels/{id}/join`: the channel key, wrapped for the caller.
 #[derive(Serialize)]
 pub(crate) struct JoinChannelRequest {

@@ -45,6 +45,19 @@ pub struct Sent {
     pub event: MurmureEvent,
 }
 
+/// What a name change produced: the delta to hand the Sync worker under
+/// `meta`, and the event to hand the view.
+#[derive(Debug)]
+pub struct Named {
+    /// The document the name lives in, the address of the delta.
+    pub meta: MetaId,
+    /// Every operation of the change, as a Loro update. Empty of operations
+    /// when the name was already so.
+    pub delta: Vec<u8>,
+    /// The name now, for the view.
+    pub event: MurmureEvent,
+}
+
 /// An open channel: its documents, each apart (`MURMURE-021`).
 ///
 /// No thread document yet: threads arrive with their Story, and the spec's
@@ -206,6 +219,39 @@ impl ChannelState {
     /// The name of the channel, absent when it has none (`MURMURE-018`).
     pub fn name(&self) -> Option<String> {
         schema::string(&self.meta.doc.get_map(CHANNEL), CHANNEL_NAME)
+    }
+
+    /// Name a direct message in its `meta`, or clear its name with `None`
+    /// (`MURMURE-054`). A name of blanks alone clears it too. A cleared name
+    /// is an absent key, never an empty string (`MURMURE-055`). The engine
+    /// stores what the member typed, trimmed, and composes nothing
+    /// (`MURMURE-016`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NotDirect`] for any other channel: a public channel's
+    /// name lives in its catalogue too. [`MurmureError::Crdt`] when Loro
+    /// refuses a write or the export.
+    pub fn name_direct(&mut self, name: Option<&str>) -> Result<Named, MurmureError> {
+        if self.channel_type() != Some(ChannelType::Direct) {
+            return Err(MurmureError::NotDirect(self.channel_id));
+        }
+        let name = name.map(str::trim).filter(|n| !n.is_empty());
+        let doc = &self.meta.doc;
+        let before = doc.oplog_vv();
+        let channel = doc.get_map(CHANNEL);
+        match name {
+            Some(name) => channel.insert(CHANNEL_NAME, name)?,
+            None if channel.get(CHANNEL_NAME).is_some() => channel.delete(CHANNEL_NAME)?,
+            None => {}
+        }
+        doc.commit();
+        Ok(Named {
+            meta: self.meta_id(),
+            delta: doc.export(ExportMode::updates(&before))?,
+            event: MurmureEvent::Named {
+                name: name.map(str::to_owned),
+            },
+        })
     }
 
     /// Every operation of one held document, as one Loro update: the first
@@ -432,7 +478,7 @@ impl ChannelState {
     ///
     /// A segment answers with its whole message list: the view keys messages
     /// by identifier, so an unchanged one is replaced by itself. `meta` answers
-    /// with nothing until a feature reads it.
+    /// with the name it holds (`MURMURE-054`).
     ///
     /// # Errors
     /// [`MurmureError::NotHeld`] for a document the channel does not hold, and
@@ -474,7 +520,9 @@ impl ChannelState {
             .ok_or(MurmureError::NotHeld(document_id))?;
         doc.import(sequence::loro_part(payload))?;
         if document_id == self.meta.id {
-            return Ok(Vec::new());
+            // The name is the one field of `meta` a view shows. It is read
+            // whole, so a delta that touched something else repeats it.
+            return Ok(vec![MurmureEvent::Named { name: self.name() }]);
         }
         // Every document but `meta` is a segment: a channel holds no thread
         // document yet.

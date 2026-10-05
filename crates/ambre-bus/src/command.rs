@@ -23,7 +23,7 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivitySummary, ChannelId, DocType, DocumentId, MetaId, RequestId, RestCommand,
+    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, MetaId, RequestId, RestCommand,
     SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId,
 };
 
@@ -151,6 +151,17 @@ pub enum SyncCommand {
         channel_id: ChannelId,
         space_id: SpaceId,
         key: SealedChannelKey,
+    },
+    /// Open or create the direct message of this user and `members`, in one
+    /// request: one channel key wrapped for each member alone, and a log in
+    /// which nobody stays owner. Answered by
+    /// [`crate::LogicEvent::DirectMessageOpened`] or
+    /// [`crate::LogicEvent::ChannelRequestFailed`] under `channel_id`.
+    CreateDirectMessage {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        members: Vec<DirectMember>,
     },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------

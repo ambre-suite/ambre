@@ -359,22 +359,7 @@ impl LogicState {
                 summary: None,
             });
         }
-        for document_id in [
-            channel.meta_id().document_id(),
-            channel.active_id().document_id(),
-        ] {
-            match channel.export_all(document_id) {
-                Ok(export) => {
-                    self.unsent.insert(document_id, export);
-                }
-                Err(error) => tracing::warn!("Logic: export of {document_id} failed: {error}"),
-            }
-            self.send_to_sync(SyncCommand::OpenDocument {
-                document_id,
-                doc_type: DocType::Murmure,
-            });
-        }
-        self.channels.insert(channel_id, channel);
+        self.hold_created(channel);
         self.send_to_ui(UiEvent::Space {
             space_id,
             event: SpaceEvent::ChannelCreated { channel_id },
@@ -396,6 +381,9 @@ impl LogicState {
 
     /// A creation or a join failed on the relay, which changed nothing.
     pub(crate) fn channel_request_failed(&mut self, channel_id: ChannelId, message: String) {
+        if self.direct.remove(&channel_id).is_some() {
+            return self.direct_failed(channel_id, message);
+        }
         let space_id = match (
             self.creating.remove(&channel_id),
             self.joining.remove(&channel_id),

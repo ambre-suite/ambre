@@ -295,6 +295,129 @@ pub async fn add_channel_member_if_absent(
     Ok(joined)
 }
 
+/// A direct message to create: its documents, its members, and the log of
+/// its `meta` (`SRV-176`).
+pub struct NewDirectMessage<'a> {
+    pub channel_id: ambre_core::ChannelId,
+    pub meta_id: ambre_core::MetaId,
+    pub segment_id: ambre_core::SegmentId,
+    /// Who creates it: a member too, and the author of every entry.
+    pub creator: ambre_core::UserId,
+    /// Every member, the creator included, with the key wrapped for them.
+    pub members: &'a [(ambre_core::UserId, Vec<u8>)],
+    /// The log of `meta`, in position order.
+    pub entries: &'a [LogEntry],
+}
+
+/// What a direct message request found or made.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DirectMessage {
+    /// The relay made the direct message the request named.
+    Created,
+    /// A direct message of exactly these members was there already, so
+    /// nothing was written (`SRV-177`).
+    Existing(ambre_core::ChannelId),
+}
+
+/// Find the direct message of exactly `new.members`, or create it in one
+/// transaction (`SRV-176`, `SRV-177`).
+///
+/// An advisory lock on the sorted member set holds the lookup and the
+/// creation together. So two concurrent requests for one set meet there, and
+/// the second finds the first. The new channel belongs to no space and is not
+/// public. Every member gets an editor row on `meta`, so nobody owns it. The
+/// segment gets no row: its access resolves to `meta` (`access_document!`).
+pub async fn find_or_create_direct_message(
+    pool: &PgPool,
+    new: &NewDirectMessage<'_>,
+) -> Result<DirectMessage, AppError> {
+    let mut members: Vec<uuid::Uuid> = new.members.iter().map(|(u, _)| id_to_uuid(*u)).collect();
+    members.sort_unstable();
+    let lock_key = members
+        .iter()
+        .map(uuid::Uuid::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("direct:{lock_key}"))
+        .execute(&mut *tx)
+        .await?;
+    let existing: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT c.id FROM channels c \
+         JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         WHERE c.space_id IS NULL AND (SELECT array_agg(m.user_id ORDER BY m.user_id) \
+         FROM document_members m WHERE m.document_id = d.document_id) = $1 \
+         ORDER BY c.id LIMIT 1",
+    )
+    .bind(&members)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(existing) = existing {
+        return Ok(DirectMessage::Existing(uuid_row_to_id(existing)));
+    }
+    let conflict = || AppError::Conflict {
+        detail: "the channel or one of its documents already exists".into(),
+    };
+    let creator = id_to_uuid(new.creator);
+    let channel = id_to_uuid(new.channel_id);
+    for document in [new.meta_id.document_id(), new.segment_id.document_id()] {
+        let done = sqlx::query(
+            "INSERT INTO documents (id, owner_id, doc_type) VALUES ($1, $2, 'murmure') \
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(id_to_uuid(document))
+        .bind(creator)
+        .execute(&mut *tx)
+        .await?;
+        if done.rows_affected() != 1 {
+            return Err(conflict());
+        }
+    }
+    let done = sqlx::query(
+        "INSERT INTO channels (id, space_id, is_public) VALUES ($1, NULL, false) \
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(channel)
+    .execute(&mut *tx)
+    .await?;
+    if done.rows_affected() != 1 {
+        return Err(conflict());
+    }
+    for (document, kind) in [
+        (new.meta_id.document_id(), ChannelDocumentKind::Meta),
+        (new.segment_id.document_id(), ChannelDocumentKind::Segment),
+    ] {
+        sqlx::query(
+            "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
+        )
+        .bind(id_to_uuid(document))
+        .bind(channel)
+        .bind(kind.as_str())
+        .execute(&mut *tx)
+        .await?;
+    }
+    let meta = id_to_uuid(new.meta_id);
+    for (member, doc_key_enc) in new.members {
+        sqlx::query(
+            "INSERT INTO document_members (document_id, user_id, role, doc_key_enc, invited_by) \
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(meta)
+        .bind(id_to_uuid(*member))
+        .bind(ambre_core::Role::Editor.as_str())
+        .bind(doc_key_enc)
+        .bind(creator)
+        .execute(&mut *tx)
+        .await?;
+    }
+    for entry in new.entries {
+        super::members::append_entry(&mut tx, meta, entry).await?;
+    }
+    tx.commit().await?;
+    Ok(DirectMessage::Created)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
