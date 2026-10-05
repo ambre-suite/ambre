@@ -88,6 +88,7 @@ fn set_text_overwrites_sticky_body() {
 
     let out = st.handle_command(ToileCommand::SetText {
         id: id.clone(),
+        base: "hello".to_owned(),
         text: "bonjour monde".to_owned(),
     });
     assert!(
@@ -103,6 +104,7 @@ fn set_text_rejects_a_non_text_element() {
     let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let out = st.handle_command(ToileCommand::SetText {
         id,
+        base: String::new(),
         text: "nope".to_owned(),
     });
     assert!(
@@ -117,21 +119,28 @@ fn set_text_rejects_a_non_text_element() {
     ));
 }
 
+/// Write `text` over the body `st` holds now, as an editor opened on it would.
+fn set_body(
+    st: &mut ToileState,
+    id: &ElementId,
+    base: &str,
+    text: &str,
+) -> crate::logic::command::ToileOutcome {
+    st.handle_command(ToileCommand::SetText {
+        id: id.clone(),
+        base: base.to_owned(),
+        text: text.to_owned(),
+    })
+}
+
 /// Two authors write one body at once, each sending the whole body as the
 /// editor does, then each receives the other's delta.
 fn race_two_bodies(a: &mut ToileState, b: &mut ToileState, id: &ElementId, ta: &str, tb: &str) {
-    let da = a
-        .handle_command(ToileCommand::SetText {
-            id: id.clone(),
-            text: ta.to_owned(),
-        })
+    let base = body_of(a, id).expect("a body");
+    let da = set_body(a, id, &base, ta)
         .update
         .expect("A's edit broadcasts a delta");
-    let db = b
-        .handle_command(ToileCommand::SetText {
-            id: id.clone(),
-            text: tb.to_owned(),
-        })
+    let db = set_body(b, id, &base, tb)
         .update
         .expect("B's edit broadcasts a delta");
     b.apply_remote(&da);
@@ -169,6 +178,41 @@ fn two_authors_typing_in_one_note_both_keep_their_words() {
             "{kind:?} lost a sentence"
         );
     }
+}
+
+/// `TOILE-UI-381`: B opens an editor on "buy milk", and A's edit lands before
+/// B closes it. B's close names the body it opened on, so it adds B's words
+/// to A's rather than deleting them. A peer that writes no change keeps the
+/// stored body whole.
+#[test]
+fn an_open_editor_keeps_a_peers_edit() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let id = create_sticky(&mut a, Point::ZERO, "buy milk");
+    b.apply_remote(&a.export_snapshot());
+
+    let opened = body_of(&b, &id).expect("a body");
+    let da = set_body(&mut a, &id, "buy milk", "please buy milk")
+        .update
+        .expect("A's edit broadcasts a delta");
+    b.apply_remote(&da);
+    let db = set_body(&mut b, &id, &opened, "buy milk and eggs")
+        .update
+        .expect("B's close broadcasts a delta");
+    a.apply_remote(&db);
+
+    assert_eq!(
+        body_of(&b, &id).as_deref(),
+        Some("please buy milk and eggs")
+    );
+    assert_eq!(body_of(&a, &id), body_of(&b, &id), "the bodies diverged");
+
+    let unchanged = set_body(&mut b, &id, "buy milk", "buy milk");
+    assert!(unchanged.update.is_none(), "an unchanged close wrote");
+    assert_eq!(
+        body_of(&b, &id).as_deref(),
+        Some("please buy milk and eggs")
+    );
 }
 
 /// `TOILE-030`: a pasted note is born with a body two authors share, and a

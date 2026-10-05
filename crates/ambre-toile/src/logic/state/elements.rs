@@ -152,12 +152,15 @@ impl ToileState {
         }
     }
 
-    /// Write the body of a sticky / text element. The editor hands the whole
-    /// body, and the write diffs it into the body's `LoroText`. So two authors
-    /// editing one note each keep the characters they typed (`TOILE-030`).
-    /// Only sticky / text elements carry that field; a request against any
-    /// other kind (or a missing element) is a rejected no-op.
-    pub(super) fn set_text(&mut self, id: &ElementId, text: &str) -> ToileOutcome {
+    /// Write the body of a sticky / text element. The editor hands the body it
+    /// opened on and the whole body it closes with. The write merges that
+    /// change into the stored body, then diffs the result into its `LoroText`.
+    /// So two authors editing one note each keep the characters they typed
+    /// (`TOILE-030`), even when one edit lands while the other's editor is
+    /// open (`TOILE-UI-381`). Only sticky / text elements carry that field; a
+    /// request against any other kind (or a missing element) is a rejected
+    /// no-op.
+    pub(super) fn set_text(&mut self, id: &ElementId, base: &str, text: &str) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
@@ -174,10 +177,12 @@ impl ToileState {
         let Some(body) = body_text_or_seed(&em) else {
             return ToileOutcome::display_only(Vec::new());
         };
-        if body.to_string() == text {
+        let stored = body.to_string();
+        let merged = merge_body(base, &stored, text);
+        if merged == stored {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = body.update(text, loro::UpdateOptions::default());
+        let _ = body.update(&merged, loro::UpdateOptions::default());
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }
@@ -561,6 +566,39 @@ impl ToileState {
     }
 }
 
+/// The body that keeps both the change an editor made, from `base` to `typed`,
+/// and the change `stored` carries since `base` (`TOILE-UI-381`). The merge
+/// replays both diffs as two peers of a scratch document that share `base`.
+/// So it resolves the way the body's own text would, character by character.
+/// The peer ids are fixed, so every replica computes the same body.
+fn merge_body(base: &str, stored: &str, typed: &str) -> String {
+    if stored == base || stored == typed {
+        return typed.to_owned();
+    }
+    if typed == base {
+        return stored.to_owned();
+    }
+    let seed = loro::LoroDoc::new();
+    let _ = seed.set_peer_id(1);
+    let _ = seed.get_text(BODY).insert(0, base);
+    seed.commit();
+    let side = |peer, body: &str| {
+        let doc = seed.fork();
+        let _ = doc.set_peer_id(peer);
+        let _ = doc
+            .get_text(BODY)
+            .update(body, loro::UpdateOptions::default());
+        doc.commit();
+        doc
+    };
+    let theirs = side(2, stored);
+    let mine = side(3, typed);
+    if let Ok(update) = theirs.export(loro::ExportMode::all_updates()) {
+        let _ = mine.import(&update);
+    }
+    mine.get_text(BODY).to_string()
+}
+
 #[cfg(test)]
 mod inner_tests {
     //! The commit-free `*_inner` helpers (`toile-import-export`). Several creates,
@@ -874,6 +912,7 @@ mod inner_tests {
         });
         st.handle_command(ToileCommand::SetText {
             id: id.clone(),
+            base: "hello".to_owned(),
             text: "changed".to_owned(),
         });
         let body = st

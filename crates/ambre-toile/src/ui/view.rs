@@ -3166,7 +3166,10 @@ impl ToileView {
                         if !locked {
                             self.patch_element_text(&id, &text);
                         }
-                        self.send_edit(ToileCommand::SetText { id, text });
+                        // The base lets Logic keep a peer's edit that landed
+                        // while the editor was open (`TOILE-UI-381`).
+                        let base = self.editor.as_ref().unwrap().opened_text().to_owned();
+                        self.send_edit(ToileCommand::SetText { id, base, text });
                     }
                     EditTarget::ConnectorLabel(id) => {
                         self.patch_connector_label(&id, &text);

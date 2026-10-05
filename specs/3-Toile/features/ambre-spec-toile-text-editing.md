@@ -2,8 +2,8 @@
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- a body is edited in place with its committed look, and a placement
-opens its own editor. Two typists merge, but an open editor overwrites a remote edit. No gesture
-that opens or closes the editor has a test.
+opens its own editor. Two typists merge, even across an open editor. No gesture that opens or
+closes the editor has a test.
 
 > A user double-clicks a note and types into it, where it sits, at the size it will keep. Placing a
 > new note opens its editor straight away, so the next thing typed goes in rather than placing
@@ -37,7 +37,8 @@ editor and not restated here.
 | `TOILE-UI-190` | `OBS` | A rotated note MUST keep its rotation while it is edited. | this spec section 4 | none | unheld -- `ambre_toile::ui::render::tests::rotated_sticky_body_rotates_its_glyphs` holds the committed body, the overlay rotates about the same centre, and no test paints it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-191` | `OBS` | The committed body MUST NOT be painted under the editor: one body is on screen, not two. | this spec section 3 | none | unheld -- every test of the content pass passes no element under edit, so the branch that drops it is never taken; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-192` | `OBS` | An open editor MUST show a caret blinking on a one-second cycle, so the element reads as editable. | this spec section 4 | none | unheld -- the blink is a frame-clock parity in the paint pass, and no test drives two frames a half-cycle apart; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-381` | `CONC` | A close MUST keep a peer's edit to the same body that arrived while the editor was open. | this spec section 3; `TOILE-030` | none | fails -- the close diffs the typed body against the body stored at that moment, which holds the peer's edit and the typed one does not, so the close deletes it. It lands with the `An open editor keeps a peer's edit to its note` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-381` | `CONC` | A close MUST keep a peer's edit to the same body that arrived while the editor was open. | this spec section 3; `TOILE-030` | `ambre_toile::logic::convergence_tests::an_open_editor_keeps_a_peers_edit` -- a peer's edit lands between the open and the close, and both writers' words survive on both replicas; structural -- the close sends the body the editor opened on as the base (`ambre_toile::ui::edit::InlineEditor::opened_text`) | none | verified |
+| `TOILE-UI-382` | `OBS` | Leaving the editor MUST NOT take off the screen, even for a frame, a peer's words the document keeps. | this spec section 3; `TOILE-UI-381` | none | fails -- the local echo paints the typed body, which lacks a peer's edit that landed while the editor was open, and the words come back one round trip later. It lands with the `A note close never hides a peer's words` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-065` | `OBS` | Formatting MUST be applicable to a range inside one body, not to the element alone. | this spec section 3 | not built | unbuilt -- lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Place a note or a text element
@@ -76,6 +77,7 @@ editor and not restated here.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | none | unheld -- `Escape` closes the editor and the same key clears a selection when none is open, so the two behaviours share one handler and neither is driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the merge builds a scratch document per close, cheap for a note, and no bench measures it at the size the budget names; lands with the `A note close holds its budget` Story (`ambre-roadmap.md` E7) | untested |
 | `TOILE-UI-206` | `POST` | Leaving the editor MUST keep its element selected, so the next gesture acts on what was just typed into. | this spec section 4 | none | unheld -- the selection is set at the open and the close does not touch it, and no test reads it after a close; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-064` | `POST` | A body edit MUST be one undo item, however many keystrokes it took. | this spec section 3; `TOILE-014` | none | unheld -- the editor holds the buffer and sends one whole-body write when it closes, so the granularity holds by construction, and nothing drives an edit and counts the items; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | none | unheld -- the core answers nothing when the buffer matches the body it was seeded with, and no test closes an untouched editor; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -85,12 +87,13 @@ editor and not restated here.
 
 * **Budget.** a keystroke to a draft under 2 ms and text layout of a dirty paragraph under 2 ms
   (`ambre-spec-budgets.md section 1` and section 5.B). The editor echoes locally and shapes at paint
-  time, so no keystroke waits for a round trip. Neither figure has a bench.
+  time, so no keystroke waits for a round trip. A close holds the body commit row (`TOILE-UI-383`).
+  No figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 11 `verified`, 1 `failing`, 24 `untested`, 1 `unimplemented`. What holds is the
-  body's look under edit, and a locked element does not echo a refused body. A close deletes a
-  peer's edit (`TOILE-UI-381`). What is loose is the gestures: every entry and exit that opens or
+* **Verification.** 12 `verified`, 1 `failing`, 25 `untested`, 1 `unimplemented`. What holds is the
+  body's look under edit, and a close keeps a peer's edit (`TOILE-UI-381`). The local echo hides
+  those words for a frame (`TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or
   closes the editor, and the shared-text substrate (`TOILE-065`).
 
 ---
@@ -101,6 +104,7 @@ editor and not restated here.
 |---|---|---|---|---|
 | types into a note | watches | nothing until Alice leaves the editor | Alice's letters locally, and Bob's screen unchanged until the commit | none -- section 6 |
 | types "hello" into a note | types "world" into the same note | both words, merged character by character | the same body holding both words, once both edits arrive (`TOILE-030`) | `logic::convergence_tests::two_authors_typing_in_one_note_both_keep_their_words` |
+| types "please" into a note | has the same note open, and adds "and eggs" | both changes, merged from the body Bob opened on | Bob's typed body for a moment, then both changes (`TOILE-UI-381`) | `logic::convergence_tests::an_open_editor_keeps_a_peers_edit` |
 | leaves the editor without changing anything | watches | nothing: an unchanged body is no write | no change, and no undo item | none -- section 6 |
 | deletes the note being edited elsewhere | is editing it | the deletion | Bob's editor closing on its own, and his half-typed body written back or refused | none, and the rule fails today -- section 6 |
 | pans the board while editing | watches | nothing | Alice's editor closing the moment the note leaves the screen (`TOILE-UI-210`) | none, and the rule fails today -- section 6 |
@@ -115,8 +119,10 @@ race for. Every other row of this table is about one user's own editor.
 **Containers.** None of its own. The body is one text on the element, seeded at its birth and
 declared in `ambre-spec-toile-schema.md section 3` (`TOILE-030`).
 
-**Command** (`ambre-bus`): `SetText { id, text }` -- the whole body, written once when the editor
-closes. The handler diffs it into the body's text, so a concurrent edit keeps its characters. It
+**Command** (`ambre-bus`): `SetText { id, base, text }` -- the whole body, written once when the
+editor closes, and the body it opened on. The handler merges the change from `base` to `text` into
+the stored body, then diffs the result into its text. So an edit that landed while the editor was
+open keeps its characters (`TOILE-UI-381`). It
 refuses any element that carries no body field, and a locked one
 (`TOILE-197`, `TOILE-033`).
 
@@ -152,8 +158,8 @@ body is selected when the entry was a keystroke rather than a double-click (`TOI
 visible set does not carry opens nothing, silently (`TOILE-UI-195`).
 
 **Steps, when it closes:** ask the core for the committed body, which answers nothing when it is
-unchanged (`TOILE-UI-207`). One whole-body write is sent for a real change (`TOILE-UI-064`), and
-the handler applies it as the character diff from the stored body (`TOILE-030`). The
+unchanged (`TOILE-UI-207`). One whole-body write is sent for a real change (`TOILE-UI-064`). It
+names the body the core opened on, so the handler merges it into the stored body (`TOILE-UI-381`). The
 local painted body is updated at the same moment, so the committed look does not flash the old value
 for a frame. A locked element is not echoed: the typed body is not shown, because the write will
 refuse it (`TOILE-UI-209`).
@@ -163,7 +169,8 @@ refuse it (`TOILE-UI-209`).
 * `crates/ambre-toile/src/ui/edit.rs` -- the wrapper: which element, and the pinned style;
 * `ui/render.rs` -- the two helpers both sides share, and the painted body;
 * `ui/view.rs` -- the open, the close, the caret blink and the local echo;
-* `logic/state/elements.rs` -- the whole-body write, diffed into the text, and its two refusals.
+* `logic/state/elements.rs` -- the whole-body write, merged from its base into the text, and its
+  two refusals.
 
 ---
 
@@ -213,10 +220,9 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **An open editor does not see a remote edit** (`TOILE-030`). Two edits made apart merge, but the
-  close diffs the typed body against the body stored at that moment. A remote edit that arrived while
-  the editor was open sits in the stored body alone, so the close deletes it. A fix
-  diffs from the body the editor opened on (`TOILE-UI-381`).
+* **The local echo shows the typed body for a moment.** A close paints what was typed at once, and
+  a peer's words that landed while the editor was open reappear one round trip later
+  (`TOILE-UI-382`). The document never loses them; only that frame does.
 * **Formatting applies to the element, not to a range** (`TOILE-UI-065`). Bold, italic, the family and
   the size live in the element's style register, so a word cannot be emphasized inside a sentence.
   The controls in the panel and the floating bar look like text controls and act on the whole element

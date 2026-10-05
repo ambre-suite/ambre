@@ -177,6 +177,12 @@ impl InlineEditor {
         self.core.committed_text()
     }
 
+    /// The body the editor opened on, which a body commit names as its base
+    /// (`TOILE-UI-381`).
+    pub fn opened_text(&self) -> &str {
+        self.core.initial_text()
+    }
+
     /// The currently selected text, or `None` when the selection is collapsed
     /// (or an IME composition is active). Font-free: safe inside a native
     /// clipboard `copy` / `cut` event.

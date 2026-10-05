@@ -306,6 +306,12 @@ impl TextEditor {
         (text != self.initial).then_some(text)
     }
 
+    /// The body the editor was opened on. A host that merges the commit into a
+    /// shared body names it as the common ancestor of the two edits.
+    pub fn initial_text(&self) -> &str {
+        &self.initial
+    }
+
     /// The currently selected text, or `None` when the selection is collapsed
     /// (or an IME composition is active). Font-free: reads the buffer over the
     /// selection byte range, so it can be called synchronously inside a native

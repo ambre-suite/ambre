@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-195` | `POST` | A body overwrite MUST leave the body reading exactly the text written; a concurrent edit merges into it (`TOILE-030`). | this spec section 3 | `ambre_toile::logic::convergence_tests::set_text_overwrites_sticky_body` | none | verified |
+| `TOILE-195` | `POST` | Given a body unchanged since the base it names, a body overwrite MUST leave it reading exactly the text written; an edit since the base merges in (`TOILE-UI-381`). | this spec section 3 | `ambre_toile::logic::convergence_tests::set_text_overwrites_sticky_body` | none | verified |
 | `TOILE-196` | `FRAME` | A body overwrite MUST NOT touch the element's geometry, its style or its place in the paint order. | this spec section 3 | structural -- the handler writes one field of one element map | none | verified |
 | `TOILE-197` | `FAIL` | A body overwrite MUST reject an element that carries no body, and MUST answer an error. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_text_rejects_a_non_text_element` | none | verified |
 
@@ -132,7 +132,7 @@ kind is that document's field table.
 | `ResizeElement { id, new }` | the new rectangle, normalized so a negative drag is still a rectangle |
 | `RotateElement { id, radians }` | an absolute angle about the box centre |
 | `RestyleElements { ids, style }` | one whole style register per element (`TOILE-018`) |
-| `SetText { id, text }` | the whole body of a note or a text element, diffed into its text (`TOILE-030`) |
+| `SetText { id, base, text }` | the whole body of a note or a text element and the body it was edited from, merged into its text (`TOILE-030`, `TOILE-UI-381`) |
 | `LockElements { ids, locked }` | the advisory lock, set or cleared |
 | `AlignElements { ids, op }` | one of eight one-shot batches over the selection: six alignments and two distributions (`TOILE-037`) |
 | `DeleteElements { ids }` | the removal, cascading through a group's members |

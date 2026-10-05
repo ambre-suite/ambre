@@ -484,6 +484,7 @@ fn board_of_every_key() -> ToileState {
 
     st.handle_command(ToileCommand::SetText {
         id: sticky.clone(),
+        base: "note".to_owned(),
         text: "hello".to_owned(),
     });
     st.handle_command(ToileCommand::RestyleElements {
