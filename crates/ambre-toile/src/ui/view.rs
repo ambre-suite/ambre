@@ -3173,7 +3173,10 @@ impl ToileView {
                     }
                     EditTarget::ConnectorLabel(id) => {
                         self.patch_connector_label(&id, &text);
-                        self.send_edit(ToileCommand::SetConnectorLabel { id, text });
+                        // The base keeps a peer's caption edit that landed
+                        // while the editor was open (`TOILE-263`).
+                        let base = self.editor.as_ref().unwrap().opened_text().to_owned();
+                        self.send_edit(ToileCommand::SetConnectorLabel { id, base, text });
                     }
                     // A title commits as a rename, and the engine trims it and
                     // refuses a no-op (`TOILE-249`, `TOILE-250`).

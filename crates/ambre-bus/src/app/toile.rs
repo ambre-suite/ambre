@@ -1224,12 +1224,14 @@ pub enum ToileCommand {
         id: ConnectorId,
         style: ElementStyle,
     },
-    /// Overwrite an arrow's caption. The whole caption travels, and the handler
-    /// diffs it into the `label` char-CRDT. Two peers captioning one arrow
-    /// therefore converge character by character, instead of one body winning
+    /// Write an arrow's caption. The whole caption travels as `text`, with
+    /// `base`, the caption the editor opened on. The handler merges the change
+    /// into the `label` char-CRDT, so two peers captioning one arrow converge
+    /// character by character, instead of one body winning
     /// (`toile-connectors`).
     SetConnectorLabel {
         id: ConnectorId,
+        base: String,
         text: String,
     },
 

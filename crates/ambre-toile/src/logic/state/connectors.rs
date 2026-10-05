@@ -11,7 +11,7 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
 };
 
-use super::codec::{connector_label_or_seed, encode_anchor, map_str, write_connector};
+use super::codec::{connector_label_or_seed, encode_anchor, map_str, merge_text, write_connector};
 use super::{CONNECTORS, LAYERS, ToileState};
 
 impl ToileState {
@@ -111,19 +111,27 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    /// Overwrite an arrow's caption. The caption is a `LoroText`, and the whole
-    /// body is diffed into it rather than replacing it. Two peers typing on one
-    /// arrow then converge character by character (`TOILE-047`).
-    pub(super) fn set_connector_label(&mut self, id: ConnectorId, text: &str) -> ToileOutcome {
+    /// Write an arrow's caption. The caption is a `LoroText`. The change from
+    /// `base`, the caption the editor opened on, to `text` is merged into the
+    /// stored caption, then diffed into it. Two peers typing on one arrow then
+    /// converge character by character (`TOILE-047`), even when one edit lands
+    /// while the other's editor is open (`TOILE-263`).
+    pub(super) fn set_connector_label(
+        &mut self,
+        id: ConnectorId,
+        base: &str,
+        text: &str,
+    ) -> ToileOutcome {
         let Some(cm) = self.connector_map(&id) else {
             return self.err_no_connector(&id);
         };
         let Some(label) = connector_label_or_seed(&cm) else {
             return self.err_no_connector(&id);
         };
+        let merged = merge_text(base, &label.to_string(), text);
         // The diff is bounded by the caption's length, which a caption is; a
         // timeout here would silently drop the edit, so none is set.
-        let _ = label.update(text, loro::UpdateOptions::default());
+        let _ = label.update(&merged, loro::UpdateOptions::default());
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }

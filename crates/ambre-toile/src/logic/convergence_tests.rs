@@ -226,6 +226,7 @@ fn a_pasted_note_and_arrow_keep_their_text() {
     let arrow = connect(&mut st, note.clone(), other.clone());
     st.handle_command(ToileCommand::SetConnectorLabel {
         id: arrow,
+        base: String::new(),
         text: "next".to_owned(),
     });
 
@@ -412,6 +413,7 @@ fn a_caption_reaches_the_viewport() {
     assert_eq!(caption(&st, &c), "", "an arrow is born without a caption");
     let out = st.handle_command(ToileCommand::SetConnectorLabel {
         id: c.clone(),
+        base: String::new(),
         text: "owns".into(),
     });
     assert!(out.update.is_some(), "a caption broadcasts a delta");
@@ -424,6 +426,7 @@ fn captioning_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::SetConnectorLabel {
         id: ConnectorId("nope".into()),
+        base: String::new(),
         text: "hi".into(),
     });
     assert!(out.update.is_none(), "a refused caption writes nothing");
@@ -449,6 +452,7 @@ fn concurrent_captions_converge() {
     // other: A prepends, B appends.
     a.handle_command(ToileCommand::SetConnectorLabel {
         id: c.clone(),
+        base: String::new(),
         text: "cost".into(),
     });
     b.apply_remote(&a.export_snapshot());
@@ -456,6 +460,7 @@ fn concurrent_captions_converge() {
     let da = a
         .handle_command(ToileCommand::SetConnectorLabel {
             id: c.clone(),
+            base: "cost".into(),
             text: "unit cost".into(),
         })
         .update
@@ -463,6 +468,7 @@ fn concurrent_captions_converge() {
     let db = b
         .handle_command(ToileCommand::SetConnectorLabel {
             id: c.clone(),
+            base: "cost".into(),
             text: "cost in EUR".into(),
         })
         .update
@@ -477,6 +483,51 @@ fn concurrent_captions_converge() {
         merged.contains("unit") && merged.contains("EUR"),
         "both edits must survive a merge, got {merged:?}"
     );
+}
+
+/// `TOILE-263`: a peer's caption edit that lands while this viewer's caption
+/// editor is open survives the close. The close names the caption the editor
+/// opened on, so only this viewer's own change is written over the peer's.
+#[test]
+fn an_open_caption_editor_keeps_a_peers_edit() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let c = create_connector(&mut a);
+    a.handle_command(ToileCommand::SetConnectorLabel {
+        id: c.clone(),
+        base: String::new(),
+        text: "cost".into(),
+    });
+    b.apply_remote(&a.export_snapshot());
+
+    // B opens its editor on "cost". A's edit lands on B while it is open.
+    let da = a
+        .handle_command(ToileCommand::SetConnectorLabel {
+            id: c.clone(),
+            base: "cost".into(),
+            text: "unit cost".into(),
+        })
+        .update
+        .expect("A's caption broadcasts a delta");
+    b.apply_remote(&da);
+
+    // B closes with its own typing, still based on "cost".
+    let db = b
+        .handle_command(ToileCommand::SetConnectorLabel {
+            id: c.clone(),
+            base: "cost".into(),
+            text: "cost in EUR".into(),
+        })
+        .update
+        .expect("B's caption broadcasts a delta");
+    a.apply_remote(&db);
+
+    assert_eq!(
+        caption(&b, &c),
+        "unit cost in EUR",
+        "B's close lost A's edit"
+    );
+    assert_eq!(caption(&a, &c), caption(&b, &c), "the captions diverged");
 }
 
 #[test]

@@ -439,7 +439,9 @@ impl ToileState {
             ToileCommand::DeleteConnector { id } => self.delete_connector(id),
             ToileCommand::SetLink { id, link } => self.set_link(&id, link),
             ToileCommand::RestyleConnector { id, style } => self.restyle_connector(id, style),
-            ToileCommand::SetConnectorLabel { id, text } => self.set_connector_label(id, &text),
+            ToileCommand::SetConnectorLabel { id, base, text } => {
+                self.set_connector_label(id, &base, &text)
+            }
             ToileCommand::CommitStroke { points, style } => self.commit_stroke(points, style),
             ToileCommand::CopyElements { ids } => self.copy_elements(&ids),
             ToileCommand::PasteElements { payload, at } => self.paste_elements(&payload, at),

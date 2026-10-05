@@ -16,7 +16,8 @@ use crate::logic::model::{
 };
 
 use super::codec::{
-    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
+    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, merge_text,
+    stroke_aabb,
 };
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
@@ -178,7 +179,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         let stored = body.to_string();
-        let merged = merge_body(base, &stored, text);
+        let merged = merge_text(base, &stored, text);
         if merged == stored {
             return ToileOutcome::display_only(Vec::new());
         }
@@ -564,39 +565,6 @@ impl ToileState {
             self.viewport_event(),
         ])
     }
-}
-
-/// The body that keeps both the change an editor made, from `base` to `typed`,
-/// and the change `stored` carries since `base` (`TOILE-UI-381`). The merge
-/// replays both diffs as two peers of a scratch document that share `base`.
-/// So it resolves the way the body's own text would, character by character.
-/// The peer ids are fixed, so every replica computes the same body.
-fn merge_body(base: &str, stored: &str, typed: &str) -> String {
-    if stored == base || stored == typed {
-        return typed.to_owned();
-    }
-    if typed == base {
-        return stored.to_owned();
-    }
-    let seed = loro::LoroDoc::new();
-    let _ = seed.set_peer_id(1);
-    let _ = seed.get_text(BODY).insert(0, base);
-    seed.commit();
-    let side = |peer, body: &str| {
-        let doc = seed.fork();
-        let _ = doc.set_peer_id(peer);
-        let _ = doc
-            .get_text(BODY)
-            .update(body, loro::UpdateOptions::default());
-        doc.commit();
-        doc
-    };
-    let theirs = side(2, stored);
-    let mine = side(3, typed);
-    if let Ok(update) = theirs.export(loro::ExportMode::all_updates()) {
-        let _ = mine.import(&update);
-    }
-    mine.get_text(BODY).to_string()
 }
 
 #[cfg(test)]

@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-046` | `INV` | A connector MUST carry its own style, so an arrow can be coloured and thickened. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_carries_its_own_style` -- it restyles one arrow of two and reads the second keeping the default: the register is per connector, not shared | none | verified |
 | `TOILE-167` | `INV` | Every path kind and every anchor the format stores MUST be reachable: a shape the document can hold is one a user can make. | this spec section 3 | not built | unbuilt -- lands with the `Every connector shape a user can make` Story (`ambre-roadmap.md` E6). Section 6 lists the shapes no gesture makes | unimplemented |
 | `TOILE-047` | `CONC` | A caption on a connector MUST converge character by character, like a note body. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_captions_converge` -- it holds two peers editing opposite ends of one caption and reads both surviving the merge | none | verified |
-| `TOILE-263` | `CONC` | Leaving a caption editor MUST keep a peer's edit to the same caption that arrived while it was open. | this spec section 3; `TOILE-047` | none | fails -- the close sends the whole caption and the handler diffs it against the caption stored at that moment, so a peer's edit that landed meanwhile is deleted. A note body names the text it opened on and merges (`TOILE-UI-381`); a caption names nothing. It lands with the `An open caption editor keeps a peer's edit` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-263` | `CONC` | Leaving a caption editor MUST keep a peer's edit to the same caption that arrived while it was open. | this spec section 3; `TOILE-047` | `ambre_toile::logic::convergence_tests::an_open_caption_editor_keeps_a_peers_edit` -- a peer's edit lands between the open and the close, and both writers' words survive on both replicas; structural -- the close sends the caption the editor opened on as the base (`ambre_toile::ui::edit::InlineEditor::opened_text`) | none | verified |
 | `TOILE-UI-346` | `OBS` | A caption MUST be painted on the arrow it belongs to, over a plate, so it stays readable where it crosses the line. | this spec section 4 | none | unheld -- the paint pass runs after the element bodies and fills a plate sized to the laid-out text, and no test reads a painted frame; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-351` | `OBS` | A selected arrow MUST be shown by tracing the arrow itself and putting one handle on each end, rather than by a selection box: a rectangle around a diagonal says nothing about which end a drag would move. | this spec section 4 | `ambre_toile::ui::render::tests::a_selected_arrow_gets_two_handles_and_no_box` -- the two handles and the absent box; `ambre_toile::ui::render::tests::a_vanished_arrow_paints_nothing` -- the stale case | none | verified |
 | `TOILE-232` | `INV` | A caption MUST store what it says and never where it sits: its place on the arrow is recomputed on read, like the arrow's own geometry (`TOILE-006`). | this spec section 3 | `ambre_toile::ui::label::tests::a_straight_arrow_anchors_at_its_midpoint` -- the straight case; `ambre_toile::ui::label::tests::an_elbow_anchors_half_way_along_the_run` -- the elbow; structural -- the format holds one text and no position (`ambre-spec-toile-schema.md section 3`) | none | verified |
@@ -99,7 +99,7 @@ status values are normative in `ambre-spec-template.md`.
   connector on the board rather than once per visible connector, and no bench measures either.
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 22 `verified`, 8 `partial`, 2 `failing`, 12 `untested`, 1 `qa-manual`, 1
+* **Verification.** 23 `verified`, 8 `partial`, 1 `failing`, 12 `untested`, 1 `qa-manual`, 1
   `unimplemented`. What holds is the pure geometry and what the surface paints back: which arrow a
   point lands on, and which end a press grabs. Held too are both ways an arrow goes dangling. What
   is loose is the paths between them, because the view is not host-constructible. Loose too are a
@@ -118,6 +118,7 @@ status values are normative in `ambre-spec-template.md`.
 | deletes a shape | joins that shape to another, at the same moment | the arrow, bound to a shape nobody holds | nothing painted on either board, and both are told (`TOILE-165`) | `logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` |
 | drags a shape an arrow ends at, for a second | watches | the shape's new position, and no connector write at all | the arrow re-routed on every frame (`TOILE-164`) | none |
 | types `unit cost` on an arrow's caption | types `cost in EUR` on the same caption, offline | one caption holding both edits, merged character by character | the same caption on both screens, neither user's typing dropped (`TOILE-047`) | `logic::convergence_tests::concurrent_captions_converge` |
+| types `unit cost` on an arrow's caption | has that caption open, and adds `in EUR` | both changes, merged from the caption Bob opened on | Bob's typed caption for a moment, then both changes (`TOILE-263`) | `logic::convergence_tests::an_open_caption_editor_keeps_a_peers_edit` |
 
 ---
 
@@ -178,6 +179,10 @@ one already dangling before the write is not announced again.
 typing on one arrow therefore merge inside one text, instead of one body winning (`TOILE-047`).
 The caption travels whole on the wire because the surface holds a plain buffer; the document stores
 the char-CRDT.
+
+The command also names the caption the editor opened on. The handler merges the change from that
+base into the stored caption, as a note body does (`TOILE-UI-381`). A peer's edit that landed while
+the editor was open therefore survives the close (`TOILE-263`).
 
 The handler seeds the `label` container **at the connector's birth**, not on the first caption.
 Seeding at creation puts the same container on every peer, inside the creation delta, before anyone

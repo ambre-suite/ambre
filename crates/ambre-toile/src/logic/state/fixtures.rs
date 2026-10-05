@@ -355,6 +355,7 @@ fn build_connectors_and_groups(state: &mut ToileState) {
         });
         state.handle_command(ToileCommand::SetConnectorLabel {
             id: last_connector(state),
+            base: String::new(),
             text: format!("{from} to {to}"),
         });
     }

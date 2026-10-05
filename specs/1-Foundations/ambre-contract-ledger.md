@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3348 rows: 2416 shipped, of which 102 partial and 609 loose. 932 unbuilt.**
+**3348 rows: 2416 shipped, of which 102 partial and 608 loose. 932 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 308 | 257 | 543 | 597 |  | 1705 |
+| `verified` | 308 | 257 | 544 | 597 |  | 1706 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 6 | 2 | 18 |  |  | 26 |
+| `failing` | 6 | 2 | 17 |  |  | 25 |
 | `untested` | 231 | 131 | 196 | 2 |  | 560 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -107,7 +107,7 @@
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 3 | 14 |  |
 | `ambre-spec-toile-clipboard.md` | 18 | 17 | 13 |  | 4 | 1 |
 | `ambre-spec-toile-comments.md` | 31 | 31 | 26 |  | 5 |  |
-| `ambre-spec-toile-connectors.md` | 46 | 45 | 22 | 8 | 15 | 1 |
+| `ambre-spec-toile-connectors.md` | 46 | 45 | 23 | 8 | 14 | 1 |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 28 | 1 | 4 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 5 | 8 |  |
 | `ambre-spec-toile-engine.md` | 38 | 38 | 31 |  | 7 |  |

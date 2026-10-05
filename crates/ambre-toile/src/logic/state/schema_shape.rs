@@ -566,6 +566,7 @@ fn board_of_every_key() -> ToileState {
         .expect("the connector is in the paint order");
     st.handle_command(ToileCommand::SetConnectorLabel {
         id: connector,
+        base: String::new(),
         text: "edge".to_owned(),
     });
     st.handle_command(ToileCommand::React {
