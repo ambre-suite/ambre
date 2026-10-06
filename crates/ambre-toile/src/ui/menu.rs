@@ -416,11 +416,14 @@ pub fn resolve_menu_command(
         ALIGN_BOTTOM => align(selection, AlignOp::Bottom),
         DISTRIBUTE_H => align(selection, AlignOp::DistributeH),
         DISTRIBUTE_V => align(selection, AlignOp::DistributeV),
-        // Frame membership: the frame is the geometric container of the selection.
-        // Logic stays authoritative on membership (the display exposes no
-        // parent-frame edge), so Remove is a best-effort against that container.
-        ADD_TO_FRAME => frame_children(selection, selected, display, true),
-        REMOVE_FROM_FRAME => frame_children(selection, selected, display, false),
+        // Frame membership. Add targets the geometric container of the
+        // selection. Remove names no frame: the display carries no parent-frame
+        // edge, so Logic takes each element out of the frame that really holds
+        // it (`TOILE-UI-149`).
+        ADD_TO_FRAME => add_to_frame(selection, selected, display),
+        REMOVE_FROM_FRAME => vec![ToileCommand::RemoveFromFrames {
+            ids: selection.to_vec(),
+        }],
         // Reactions: set / clear the local user's reaction on each
         // selected target. One `React` per element; the emoji glyph is looked up
         // from the fixed picker set.
@@ -479,13 +482,12 @@ fn reorder_each(selection: &[ElementId], to: ZTarget) -> Vec<ToileCommand> {
         .collect()
 }
 
-/// Build the `SetFrameChildren` command adding (or removing) the selection to its
-/// containing frame; empty when no enclosing frame exists.
-fn frame_children(
+/// Build the `SetFrameChildren` command adding the selection to its containing
+/// frame; empty when no enclosing frame exists.
+fn add_to_frame(
     selection: &[ElementId],
     selected: &[DisplayElement],
     display: &DisplayViewport,
-    add: bool,
 ) -> Vec<ToileCommand> {
     let union = selection
         .iter()
@@ -497,15 +499,10 @@ fn frame_children(
     let Some(frame) = containing_frame(display, selection, union) else {
         return Vec::new();
     };
-    let (add_ids, remove_ids) = if add {
-        (selection.to_vec(), Vec::new())
-    } else {
-        (Vec::new(), selection.to_vec())
-    };
     vec![ToileCommand::SetFrameChildren {
         frame,
-        add: add_ids,
-        remove: remove_ids,
+        add: selection.to_vec(),
+        remove: Vec::new(),
     }]
 }
 
@@ -821,6 +818,23 @@ mod tests {
             out.as_slice(),
             [ToileCommand::SetFrameChildren { frame, add, remove }]
                 if frame == &eid("f") && add == &vec![eid("a")] && remove.is_empty()
+        ));
+    }
+
+    /// `TOILE-UI-149`: the removal names the selection and no frame, even when
+    /// a frame other than the element's parent contains its box. Logic resolves
+    /// the parent.
+    #[test]
+    fn remove_from_frame_names_no_frame() {
+        let dv = viewport(vec![
+            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
+            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+        ]);
+        let out =
+            resolve_menu_command(REMOVE_FROM_FRAME, &[eid("a")], None, &els(&dv), &dv).unwrap();
+        assert!(matches!(
+            out.as_slice(),
+            [ToileCommand::RemoveFromFrames { ids }] if ids == &vec![eid("a")]
         ));
     }
 

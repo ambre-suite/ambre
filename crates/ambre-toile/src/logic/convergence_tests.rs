@@ -1658,6 +1658,36 @@ fn set_frame_children_adds_and_removes_membership() {
     assert_eq!(st.membership_of(&f), vec![b]);
 }
 
+/// `TOILE-UI-149`: the removal takes an element out of the frame whose list
+/// holds it, not out of the frame whose box contains it. Here the box sits in
+/// `near`, and the member list is `far`'s.
+#[test]
+fn remove_from_frames_targets_the_real_parent() {
+    let mut st = ToileState::new();
+    let near = create_frame(&mut st, Point::ZERO, Size::new(100.0, 100.0));
+    let far = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(100.0, 100.0));
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: far.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+
+    let out = st.handle_command(ToileCommand::RemoveFromFrames {
+        ids: vec![a.clone()],
+    });
+    assert!(out.update.is_some(), "the removal broadcasts a delta");
+    assert!(
+        st.membership_of(&far).is_empty(),
+        "a stays in its own frame"
+    );
+    assert!(st.membership_of(&near).is_empty());
+
+    // An element no frame holds writes nothing.
+    let out = st.handle_command(ToileCommand::RemoveFromFrames { ids: vec![a] });
+    assert!(out.update.is_none(), "nothing held, nothing written");
+}
+
 #[test]
 fn frame_children_paint_after_their_frame() {
     let mut st = ToileState::new();

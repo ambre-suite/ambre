@@ -98,9 +98,11 @@ nested containers, both declared in `ambre-spec-toile-schema.md section 3`: a me
 speaker-notes text. Its optional layout register belongs to
 `features/ambre-spec-toile-auto-layout.md`.
 
-**Commands** (`ambre-bus`): `SetFrameChildren { frame, add, remove }` and `RenameFrame { frame, name }`,
-each meant as one undo item. Creating, moving, resizing, rotating, reordering and deleting a frame use
-the ordinary element commands (`features/ambre-spec-toile-elements.md`).
+**Commands** (`ambre-bus`): `SetFrameChildren { frame, add, remove }`, `RemoveFromFrames { ids }` and
+`RenameFrame { frame, name }`, each meant as one undo item. `RemoveFromFrames` names no frame: the
+handler takes each id out of every frame whose list holds it (`TOILE-UI-149`). Creating, moving,
+resizing, rotating, reordering and deleting a frame use the ordinary element commands
+(`features/ambre-spec-toile-elements.md`).
 
 **Steps, when membership changes:**
 
@@ -153,6 +155,7 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 | a press on a frame's title | nothing: the selection is the view's own (`TOILE-254`, `TOILE-256`) |
 | a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-261`, `TOILE-262`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
+| "Remove from frame", in the same menu | `RemoveFromFrames` naming the selection (`TOILE-UI-149`) |
 | typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
 
 **What a frame looks like.** A rectangle painted from its own style register, before its members,

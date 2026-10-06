@@ -1046,6 +1046,13 @@ pub enum ToileCommand {
         add: Vec<ElementId>,
         remove: Vec<ElementId>,
     },
+    /// Take each listed element out of the frame that holds it, whichever that
+    /// is. The engine resolves the membership, because the display carries no
+    /// parent-frame edge and the frame that contains a box need not be its
+    /// parent (`toile-menus`). An id no frame holds is skipped. One undo item.
+    RemoveFromFrames {
+        ids: Vec<ElementId>,
+    },
     /// Name a frame (`toile-frames`). The title is one LWW register, not a
     /// shared text. A title is short and written by one person at a time. Two
     /// writers converge on one whole name, never interleaving into a third

@@ -369,6 +369,7 @@ impl ToileState {
             ToileCommand::SetFrameChildren { frame, add, remove } => {
                 self.set_frame_children(&frame, &add, &remove)
             }
+            ToileCommand::RemoveFromFrames { ids } => self.remove_from_frames(&ids),
             ToileCommand::RenameFrame { frame, name } => self.rename_frame(&frame, &name),
             ToileCommand::SetSlideOrder { order } => self.set_slide_order(&order),
             ToileCommand::NextSlide => self.next_slide(),

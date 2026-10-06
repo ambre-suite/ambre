@@ -210,6 +210,44 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
+    /// Take each of `ids` out of every frame whose membership list holds it
+    /// (`TOILE-UI-149`). Membership is read here, never inferred from a box: an
+    /// element dragged out of its frame's box is still that frame's member. A
+    /// concurrent add can leave one id in two lists, so every list is swept.
+    /// Nothing held writes nothing. One commit, so one undo item.
+    pub(super) fn remove_from_frames(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        let gone: HashSet<&str> = ids.iter().map(ElementId::as_str).collect();
+        let frames: Vec<ElementId> = self
+            .layers
+            .iter()
+            .filter_map(|node| match node {
+                NodeId::Element(id) if self.is_frame(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        let mut changed = false;
+        for frame in &frames {
+            let Some(list) = self.children_list(frame) else {
+                continue;
+            };
+            let LoroValue::List(items) = list.get_deep_value() else {
+                continue;
+            };
+            // Back to front, so a delete never shifts an index still to visit.
+            for (idx, v) in items.iter().enumerate().rev() {
+                if matches!(v, LoroValue::String(s) if gone.contains(s.as_str())) {
+                    let _ = list.delete(idx, 1);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
     /// The title a frame carries, empty until it is named. Test / integration
     /// accessor; every surface reads it off the display payload instead.
     pub fn frame_name(&self, frame: &ElementId) -> String {
