@@ -280,6 +280,25 @@ pub struct PublicChannelDraft {
     pub position: u32,
 }
 
+/// Whether a member of a space is online, as the member list marks it.
+///
+/// Away and busy join this set with the `Presence states` Story.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Presence {
+    /// A connection of the member holds the space open.
+    Online,
+    /// No connection of the member refreshed their presence in time.
+    Offline,
+}
+
+/// One member of a space, as the member list draws it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberView {
+    pub user_id: UserId,
+    pub display_name: String,
+    pub presence: Presence,
+}
+
 /// A private channel the view asks a space to create. It is listed nowhere,
 /// so it has no topic, category nor rank in the catalogue.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -355,6 +374,13 @@ pub enum SpaceCommand {
     /// Join a public channel of the catalogue, with no other member online
     /// (`MURMURE-039`).
     JoinChannel { channel_id: ChannelId },
+    /// Send this user's presence on the space, and turn offline the members
+    /// whose presence expired. The view sends it once per refresh period
+    /// (`ambre-spec-budgets.md section 8`): the Logic thread reads no clock.
+    RefreshPresence {
+        /// The view's clock. It never travels: it ages the members.
+        now: Timestamp,
+    },
 }
 
 /// An event from an open space, Logic thread -> UI thread.
@@ -369,6 +395,9 @@ pub enum SpaceEvent {
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
     },
+    /// The members of the space, whole, after an open or any change: the
+    /// online ones first, then the others, each group by display name.
+    Members { members: Vec<MemberView> },
     /// The relay holds the new channel, and the catalogue lists it when it
     /// is public.
     ChannelCreated { channel_id: ChannelId },

@@ -14,6 +14,7 @@
 
 mod channel;
 mod error;
+mod members;
 mod opening;
 pub mod schema;
 mod sequence;
@@ -30,6 +31,9 @@ mod unread_tests;
 
 pub use channel::{ChannelState, Named, Sent};
 pub use error::MurmureError;
+pub use members::{
+    PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_frame, presence_frame,
+};
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use sequence::{Order, Position};

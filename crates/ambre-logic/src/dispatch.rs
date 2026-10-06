@@ -107,6 +107,7 @@ impl LogicState {
                         self.space_opening.clear();
                         self.creating.clear();
                         self.joining.clear();
+                        self.member_requests.clear();
                         self.direct.clear();
                         self.unsent.clear();
                         self.owed.clear();
@@ -231,6 +232,12 @@ impl LogicState {
                 if self.resolve_pending_seal(id, &evt) {
                     return;
                 }
+                // The member rows of a space this thread asked for become its
+                // member list (the Murmure members spec).
+                if let Some(space_id) = self.member_requests.remove(&id) {
+                    self.space_members_answered(space_id, evt);
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine. It
                 // is not forwarded to the UI. UI-issued requests are absent from
@@ -254,6 +261,7 @@ impl LogicState {
                         doc.state.set_user_id(*user_id);
                         doc.state.set_display_name(display_name);
                     }
+                    self.spaces_know_me(*user_id);
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });
             }
@@ -315,14 +323,18 @@ impl LogicState {
                 from_user_id,
                 payload,
             } => {
-                self.apply_ephemeral(document_id, from_user_id, &payload);
+                if !self.space_presence_heard(document_id, from_user_id, &payload) {
+                    self.apply_ephemeral(document_id, from_user_id, &payload);
+                }
             }
 
             LogicEvent::PeerLeft {
                 document_id,
                 user_id,
             } => {
-                self.peer_left(document_id, user_id);
+                if !self.space_peer_left(document_id, user_id) {
+                    self.peer_left(document_id, user_id);
+                }
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {

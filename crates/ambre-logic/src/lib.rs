@@ -680,6 +680,10 @@ struct LogicState {
     creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
     /// Self-joins the relay has not answered yet, with their space.
     joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Member listings of a space this thread asked the relay for, until it
+    /// answers. The answer becomes the member list of that space, and never
+    /// reaches the view as a service event.
+    member_requests: HashMap<RequestId, ambre_bus::SpaceId>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -772,6 +776,7 @@ impl LogicState {
             space_opening: HashMap::new(),
             creating: HashMap::new(),
             joining: HashMap::new(),
+            member_requests: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             my_user_id: None,

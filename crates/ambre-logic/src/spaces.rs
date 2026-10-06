@@ -12,12 +12,16 @@ use ambre_bus::{
     ChannelId, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand, SpaceEvent,
     SpaceId, Timestamp,
 };
-use ambre_murmure::{ChannelState, ChannelType, Listing, SpaceState};
+use ambre_murmure::{
+    ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_frame, presence_frame,
+};
 
-/// An open space, and the role the relay gave this user on its document.
+/// An open space, the role the relay gave this user on its document, and
+/// its members with their presence.
 pub(crate) struct OpenSpace {
     state: SpaceState,
     role: Role,
+    roster: Roster,
 }
 
 /// A channel the relay is creating, until it answers.
@@ -53,6 +57,7 @@ impl LogicState {
             OpenSpace {
                 state,
                 role: Role::Owner,
+                roster: Roster::new(self.my_user_id),
             },
         );
         self.send_to_sync(SyncCommand::OpenDocument {
@@ -81,6 +86,7 @@ impl LogicState {
         let opening = self.space_opening.remove(&space_id).is_some();
         self.creating.retain(|_, c| c.space_id != space_id);
         self.joining.retain(|_, s| *s != space_id);
+        self.member_requests.retain(|_, s| *s != space_id);
         self.unsent.remove(&space_id.document_id());
         if held || opening {
             self.send_to_sync(SyncCommand::CloseDocument {
@@ -108,6 +114,7 @@ impl LogicState {
         let space_id = SpaceId::from_document(document_id);
         if let Some(space) = self.spaces.get_mut(&space_id) {
             space.role = role;
+            self.space_live(space_id);
             return true;
         }
         let Some(payloads) = self.space_opening.remove(&space_id) else {
@@ -116,8 +123,17 @@ impl LogicState {
         let borrowed: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
         match SpaceState::open(space_id, &borrowed) {
             Ok(state) => {
-                self.spaces.insert(space_id, OpenSpace { state, role });
+                let roster = Roster::new(self.my_user_id);
+                self.spaces.insert(
+                    space_id,
+                    OpenSpace {
+                        state,
+                        role,
+                        roster,
+                    },
+                );
                 self.show_catalogue(space_id);
+                self.space_live(space_id);
             }
             Err(error) => {
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
@@ -288,6 +304,128 @@ impl LogicState {
                     Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
                 }
             }
+            SpaceCommand::RefreshPresence { now } => {
+                let expired = space.roster.tick(now);
+                self.send_presence(space_id);
+                if expired {
+                    self.show_members(space_id);
+                }
+            }
+        }
+    }
+
+    // --- The members of a space, and their presence ---
+
+    /// The document of a space is live: show this user online to the other
+    /// members, and ask the relay for the member rows (the Murmure members
+    /// spec).
+    fn space_live(&mut self, space_id: SpaceId) {
+        self.send_presence(space_id);
+        let id = RequestId::next();
+        self.member_requests.insert(id, space_id);
+        self.send_to_sync(SyncCommand::Rest {
+            id,
+            cmd: RestCommand::ListDocumentMembers {
+                document_id: space_id.document_id(),
+            },
+        });
+    }
+
+    /// Send this user's presence frame on the space document, and on no
+    /// other: only the members of the space hold its key.
+    fn send_presence(&self, space_id: SpaceId) {
+        self.send_to_sync(SyncCommand::SendEphemeral {
+            document_id: space_id.document_id(),
+            payload: presence_frame(),
+        });
+    }
+
+    /// The relay answered the member listing of a space: its rows become the
+    /// member list.
+    pub(crate) fn space_members_answered(&mut self, space_id: SpaceId, answer: RestEvent) {
+        let RestEvent::DocumentMembers { members, .. } = answer else {
+            tracing::warn!("Logic: the members of space {space_id} could not be listed");
+            return;
+        };
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return;
+        };
+        space.roster.set_members(
+            members
+                .into_iter()
+                .map(|member| (member.user_id, member.display_name)),
+        );
+        self.show_members(space_id);
+    }
+
+    /// Hand the view the member list of a space.
+    fn show_members(&self, space_id: SpaceId) {
+        let Some(space) = self.spaces.get(&space_id) else {
+            return;
+        };
+        self.send_to_ui(UiEvent::Space {
+            space_id,
+            event: SpaceEvent::Members {
+                members: space.roster.view(),
+            },
+        });
+    }
+
+    /// An ephemeral frame on a document. Returns `false` when no space, open
+    /// or opening, holds it. A frame that is no presence frame is dropped
+    /// without an error (`PRESENCE-013`).
+    ///
+    /// A member heard for the first time gets this user's frame at once, so
+    /// a newcomer sees who is online without waiting a refresh period.
+    pub(crate) fn space_presence_heard(
+        &mut self,
+        document_id: DocumentId,
+        from: UserId,
+        payload: &[u8],
+    ) -> bool {
+        let space_id = SpaceId::from_document(document_id);
+        if self.space_opening.contains_key(&space_id) {
+            return true;
+        }
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return false;
+        };
+        if !is_presence_frame(payload) || Some(from) == self.my_user_id {
+            return true;
+        }
+        if space.roster.heard(from) {
+            self.send_presence(space_id);
+            self.show_members(space_id);
+        }
+        true
+    }
+
+    /// The relay says a peer stopped watching a document. Returns `false`
+    /// when no space, open or opening, holds it.
+    ///
+    /// The departure of another connection of this user turns no one
+    /// offline: this connection answers with its frame, so the other members
+    /// see this user online again.
+    pub(crate) fn space_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
+        let space_id = SpaceId::from_document(document_id);
+        if self.space_opening.contains_key(&space_id) {
+            return true;
+        }
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return false;
+        };
+        if Some(user) == self.my_user_id {
+            self.send_presence(space_id);
+        } else if space.roster.left(user) {
+            self.show_members(space_id);
+        }
+        true
+    }
+
+    /// The session names this user: every open space shows them online.
+    pub(crate) fn spaces_know_me(&mut self, me: UserId) {
+        for space in self.spaces.values_mut() {
+            space.roster.set_me(me);
         }
     }
 
@@ -495,7 +633,10 @@ mod tests {
         );
 
         ready(&mut state, space_id.document_id(), Role::Owner);
-        let sent = drain(&sync);
+        let sent: Vec<SyncCommand> = drain(&sync)
+            .into_iter()
+            .filter(|c| matches!(c, SyncCommand::SendUpdate { .. }))
+            .collect();
         let [
             SyncCommand::SendUpdate {
                 document_id,
@@ -538,7 +679,11 @@ mod tests {
             last_catalogue(&drain(&ui)),
             Some((Some("Acme".to_owned()), Vec::new()))
         );
-        assert!(drain(&sync).is_empty(), "an opened space uploads nothing");
+        assert_eq!(
+            updates_of(&drain(&sync), space_id.document_id()),
+            0,
+            "an opened space uploads nothing"
+        );
     }
 
     #[test]
@@ -924,5 +1069,251 @@ mod tests {
         ));
         assert!(state.spaces.is_empty());
         assert!(!state.apply_space_remote(space_id.document_id(), &[&[]]));
+    }
+
+    // --- The members of a space, and their presence ---
+
+    use ambre_bus::{MemberInfo, MemberView, Presence, RequestId, RestCommand, RestEvent};
+    use ambre_murmure::PRESENCE_EXPIRY_MS;
+
+    /// The member list of the last members event the view got.
+    fn last_members(shown: &[UiEvent]) -> Option<Vec<MemberView>> {
+        shown.iter().rev().find_map(|e| match e {
+            UiEvent::Space {
+                event: SpaceEvent::Members { members },
+                ..
+            } => Some(members.clone()),
+            _ => None,
+        })
+    }
+
+    /// Every presence frame sent, with the document it went on.
+    fn frames(sent: &[SyncCommand]) -> Vec<(DocumentId, Vec<u8>)> {
+        sent.iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendEphemeral {
+                    document_id,
+                    payload,
+                } => Some((*document_id, payload.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The member listing this thread asked for, with the document it names.
+    fn member_request(sent: &[SyncCommand]) -> Option<(RequestId, DocumentId)> {
+        sent.iter().find_map(|c| match c {
+            SyncCommand::Rest {
+                id,
+                cmd: RestCommand::ListDocumentMembers { document_id },
+            } => Some((*id, *document_id)),
+            _ => None,
+        })
+    }
+
+    fn member(user_id: UserId, name: &str) -> MemberInfo {
+        MemberInfo {
+            user_id,
+            display_name: name.to_owned(),
+            email: format!("{name}@example.org"),
+            role: Role::Editor,
+            verified: true,
+        }
+    }
+
+    /// A space the relay holds, opened with these members, and the channels
+    /// drained.
+    fn space_with(
+        state: &mut LogicState,
+        ui: &Receiver<UiEvent>,
+        sync: &Receiver<SyncCommand>,
+        members: Vec<MemberInfo>,
+    ) -> SpaceId {
+        let space_id = SpaceId::new();
+        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: Seq(1),
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        ready(state, space_id.document_id(), Role::Editor);
+        let (id, _) = member_request(&drain(sync)).expect("a member listing");
+        state.handle_logic_event(LogicEvent::Rest {
+            id,
+            evt: RestEvent::DocumentMembers {
+                document_id: space_id.document_id(),
+                members,
+            },
+        });
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::RefreshPresence { now: NOW },
+        });
+        let _ = (drain(ui), drain(sync));
+        space_id
+    }
+
+    fn frame_from(state: &mut LogicState, space_id: SpaceId, from: UserId, payload: Vec<u8>) {
+        state.handle_logic_event(LogicEvent::RemoteEphemeral {
+            document_id: space_id.document_id(),
+            from_user_id: from,
+            payload,
+        });
+    }
+
+    /// Opening a space sends this user's presence at once, on the space
+    /// document and on no other. Only the members of the space hold that
+    /// key, so no one outside it learns of the open.
+    #[test]
+    fn opening_a_space_sends_this_users_presence_on_its_document_alone() {
+        let (mut state, _ui, sync) = harness();
+        let space_id = SpaceId::new();
+        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: Seq(1),
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        assert!(frames(&drain(&sync)).is_empty(), "no frame before the open");
+        ready(&mut state, space_id.document_id(), Role::Editor);
+        assert_eq!(
+            frames(&drain(&sync)),
+            [(space_id.document_id(), ambre_murmure::presence_frame())]
+        );
+    }
+
+    /// The member list is the relay's rows for the space document: the
+    /// answer becomes a members event, never a service event of the view.
+    /// Listing them opens no other document.
+    #[test]
+    fn the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else() {
+        let (mut state, ui, sync) = harness();
+        let space_id = SpaceId::new();
+        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: Seq(1),
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        let _ = drain(&sync);
+        ready(&mut state, space_id.document_id(), Role::Editor);
+        let sent = drain(&sync);
+        let (id, listed) = member_request(&sent).expect("a member listing");
+        assert_eq!(listed, space_id.document_id());
+        let (alice, bob) = (UserId::new(), UserId::new());
+        state.handle_logic_event(LogicEvent::Rest {
+            id,
+            evt: RestEvent::DocumentMembers {
+                document_id: space_id.document_id(),
+                members: vec![member(bob, "Bob"), member(alice, "Alice")],
+            },
+        });
+        let shown = drain(&ui);
+        assert!(!shown.iter().any(|e| matches!(e, UiEvent::Rest { .. })));
+        let members = last_members(&shown).expect("a member list");
+        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        assert_eq!(ids, [alice, bob]);
+        assert!(members.iter().all(|m| m.presence == Presence::Offline));
+        let opened = sent
+            .iter()
+            .chain(drain(&sync).iter())
+            .filter(|c| matches!(c, SyncCommand::OpenDocument { .. }))
+            .count();
+        assert_eq!(opened, 0, "the list opens no document");
+    }
+
+    /// A frame turns its member online, and gets this user's frame back
+    /// once, so the newcomer sees who is online without waiting a refresh
+    /// period. A second frame of the same member asks nothing more.
+    #[test]
+    fn a_frame_shows_its_member_online_and_a_newcomer_is_answered_once() {
+        let (mut state, ui, sync) = harness();
+        let bob = UserId::new();
+        let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
+        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        let members = last_members(&drain(&ui)).expect("a member list");
+        assert_eq!(members[0].presence, Presence::Online);
+        assert_eq!(frames(&drain(&sync)).len(), 1, "one answer");
+
+        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        assert!(drain(&ui).is_empty());
+        assert!(frames(&drain(&sync)).is_empty());
+    }
+
+    /// A member whose last frame is older than the expiry shows offline at
+    /// the next tick, and each tick sends this user's frame.
+    #[test]
+    fn a_member_with_no_frame_within_the_expiry_shows_offline() {
+        let (mut state, ui, sync) = harness();
+        let bob = UserId::new();
+        let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
+        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        let _ = (drain(&ui), drain(&sync));
+
+        let tick = |state: &mut LogicState, offset: u64| {
+            state.handle_logic_command(LogicCommand::Space {
+                space_id,
+                command: SpaceCommand::RefreshPresence {
+                    now: Timestamp(NOW.0 + offset),
+                },
+            });
+        };
+        tick(&mut state, PRESENCE_EXPIRY_MS);
+        assert!(last_members(&drain(&ui)).is_none(), "Bob is still online");
+        assert_eq!(frames(&drain(&sync)).len(), 1);
+
+        tick(&mut state, PRESENCE_EXPIRY_MS + 1);
+        let members = last_members(&drain(&ui)).expect("a member list");
+        assert_eq!(members[0].presence, Presence::Offline);
+        assert_eq!(frames(&drain(&sync)).len(), 1);
+    }
+
+    /// The relay's word that a member left turns them offline at once. The
+    /// departure of another tab of this user turns no
+    /// one offline: this tab answers with its frame.
+    #[test]
+    fn a_departure_turns_its_member_offline_and_another_tab_of_this_user_answers() {
+        let (mut state, ui, sync) = harness();
+        let (me, bob) = (UserId::new(), UserId::new());
+        state.my_user_id = Some(me);
+        let space_id = space_with(
+            &mut state,
+            &ui,
+            &sync,
+            vec![member(me, "Me"), member(bob, "Bob")],
+        );
+        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        let _ = (drain(&ui), drain(&sync));
+
+        state.handle_logic_event(LogicEvent::PeerLeft {
+            document_id: space_id.document_id(),
+            user_id: bob,
+        });
+        let members = last_members(&drain(&ui)).expect("a member list");
+        let presence = |id: UserId| members.iter().find(|m| m.user_id == id).map(|m| m.presence);
+        assert_eq!(presence(bob), Some(Presence::Offline));
+        assert_eq!(presence(me), Some(Presence::Online));
+
+        state.handle_logic_event(LogicEvent::PeerLeft {
+            document_id: space_id.document_id(),
+            user_id: me,
+        });
+        assert!(drain(&ui).is_empty());
+        assert_eq!(frames(&drain(&sync)).len(), 1, "this tab answers");
+    }
+
+    /// A frame that is no presence frame is dropped without an error, and
+    /// changes nothing.
+    #[test]
+    fn a_frame_that_does_not_decode_is_dropped() {
+        let (mut state, ui, sync) = harness();
+        let bob = UserId::new();
+        let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
+        frame_from(&mut state, space_id, bob, vec![9, 9, 9]);
+        assert!(drain(&ui).is_empty());
+        assert!(drain(&sync).is_empty());
     }
 }
