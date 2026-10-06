@@ -19,7 +19,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
 
-use ambre_bus::{DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId};
+use ambre_bus::{
+    ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId,
+};
 
 use crate::http;
 use crate::membership_log::{self, Draft, Log, SelfJoinRule};
@@ -787,33 +789,47 @@ pub(crate) async fn leave_task<H: ShareHttp>(
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
-    let me = p.author.user_id;
-    let members_url = format!(
-        "{}://{}/api/documents/{}/members",
-        p.url_scheme, p.api_base, p.document_id
-    );
-    let url = format!(
-        "{}://{}/api/documents/{}/share/{}",
-        p.url_scheme, p.api_base, p.document_id, me
-    );
+    let left = leave_document(
+        http,
+        p.document_id,
+        &p.author,
+        p.url_scheme,
+        &p.api_base,
+        &p.exchange_key,
+    )
+    .await;
+    match left {
+        Ok(()) => {
+            let _ = event_tx.send(SyncEvent::DocumentLeft {
+                id: p.id,
+                document_id: p.document_id,
+            });
+        }
+        Err(e) => api_error(logic_tx, "LeaveDocument", 500, e),
+    }
+}
+
+/// DELETEs this user's own share of `document_id` with the revoke they sign
+/// on the log the relay serves. A log that moved meanwhile is read again.
+async fn leave_document<H: ShareHttp>(
+    http: &H,
+    document_id: DocumentId,
+    author: &Author,
+    url_scheme: &str,
+    api_base: &str,
+    exchange_key: &StaticSecret,
+) -> Result<(), String> {
+    let me = author.user_id;
+    let members_url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
+    let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/share/{me}");
     let mut tries = 0;
     loop {
         tries += 1;
-        let resp = match http
+        let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
-        {
-            Ok(resp) => resp,
-            Err(e) => {
-                return api_error(
-                    logic_tx,
-                    "LeaveDocument",
-                    500,
-                    format!("Get members failed: {e}"),
-                );
-            }
-        };
-        let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+            .map_err(|e| format!("Get members failed: {e}"))?;
+        let (log, _) = served_log(document_id, exchange_key, &resp);
         let role = resp
             .members
             .iter()
@@ -821,30 +837,54 @@ pub(crate) async fn leave_task<H: ShareHttp>(
             .and_then(|m| m.role.parse().ok())
             .unwrap_or(Role::Viewer);
         let draft = Draft {
-            document: p.document_id,
+            document: document_id,
             member: me,
-            member_key: p.author.signing_key.verifying_key().to_bytes(),
+            member_key: author.signing_key.verifying_key().to_bytes(),
             act: MembershipAct::Revoke,
             role,
             key: None,
         };
-        let entry = match entry_after(&log, draft, &p.author) {
-            Ok(entry) => entry,
-            Err(e) => return api_error(logic_tx, "LeaveDocument", 500, e),
-        };
+        let entry = entry_after(&log, draft, author)?;
         let body = http::LeaveRequest { entry };
         match http.delete(&url, &body).await {
-            Ok(()) => break,
+            Ok(()) => return Ok(()),
             Err(e) if http::is_log_moved(&e) && tries < ROTATION_TRIES => {}
-            Err(e) => {
-                return api_error(logic_tx, "LeaveDocument", 500, format!("Leave failed: {e}"));
-            }
+            Err(e) => return Err(format!("Leave failed: {e}")),
         }
     }
-    let _ = event_tx.send(SyncEvent::DocumentLeft {
-        id: p.id,
-        document_id: p.document_id,
-    });
+}
+
+/// Inputs for [`leave_channel_task`], gathered from `SyncState` before
+/// spawning.
+pub(crate) struct ChannelLeaveParams {
+    pub channel_id: ChannelId,
+    /// This user, who signs their own revoke on the channel's `meta`.
+    pub author: Author,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Leave a channel. Find its `meta`, the document whose rows are its members,
+/// then leave that document as any other. The members who stay owe the
+/// rotation (`SYNC-127`, `SYNC-130`).
+///
+/// Nothing lands on any failure. The caller hears the reason.
+pub(crate) async fn leave_channel_task<H: ShareHttp>(
+    http: &H,
+    p: ChannelLeaveParams,
+) -> Result<(), String> {
+    let (scheme, base) = (p.url_scheme, &p.api_base);
+    let url = format!("{scheme}://{base}/api/channels/{}/documents", p.channel_id);
+    let listed = http
+        .get_json::<http::ChannelDocumentsResponse>(&url)
+        .await?;
+    let meta = crate::channels::channel_documents(&listed.documents)?
+        .into_iter()
+        .find(|d| d.kind == ChannelDocumentKind::Meta)
+        .ok_or("the channel has no meta document")?
+        .document_id;
+    leave_document(http, meta, &p.author, scheme, base, &p.exchange_key).await
 }
 
 /// Inputs for [`settle_task`].
@@ -1766,6 +1806,88 @@ mod tests {
             lrx.try_recv(),
             Ok(LogicEvent::ApiError { code: 409, .. })
         ));
+    }
+
+    /// A member who leaves a channel finds its `meta`. They post their own
+    /// removal there, signed and alone: the members who stay owe the
+    /// rotation.
+    #[tokio::test]
+    async fn leaving_a_channel_posts_this_users_removal_on_its_meta() {
+        let (my_xk, _) = keypair(1);
+        let author = author();
+        let me = author.user_id;
+        let meta = DocumentId::new();
+        let channel_id = ChannelId::new();
+        let listing = serde_json::json!({ "documents": [
+            { "document_id": DocumentId::new().to_string(), "kind": "segment" },
+            { "document_id": meta.to_string(), "kind": "meta" },
+        ]});
+        let http = FakeHttp::new(vec![
+            Ok(listing),
+            Ok(serde_json::json!({ "members": [] })),
+            Ok(serde_json::json!({ "status": "left" })),
+        ]);
+        let params = ChannelLeaveParams {
+            channel_id,
+            author,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: my_xk,
+        };
+        assert_eq!(leave_channel_task(&http, params).await, Ok(()));
+
+        let calls = http.calls();
+        assert_eq!(calls.len(), 3, "the listing, the members, the removal");
+        assert!(
+            matches!(&calls[0], Call::Get(url) if url.ends_with(&format!("/channels/{channel_id}/documents")))
+        );
+        assert!(matches!(&calls[1], Call::Get(url) if url.ends_with(&format!("/{meta}/members"))));
+        let Call::Delete(url, body) = &calls[2] else {
+            panic!("expected the leave DELETE, got {:?}", calls[2]);
+        };
+        assert!(url.ends_with(&format!("/documents/{meta}/share/{me}")));
+        let entry = posted_entry(body);
+        assert_eq!(
+            (entry.member, entry.author, entry.act),
+            (me, me, MembershipAct::Revoke)
+        );
+        assert!(body.get("keys").is_none(), "the leaver picks no key");
+    }
+
+    /// A leave the relay refuses, or a channel with no `meta`, answers the
+    /// reason, and nothing more is posted.
+    #[tokio::test]
+    async fn a_refused_leave_answers_its_reason() {
+        let params = || ChannelLeaveParams {
+            channel_id: ChannelId::new(),
+            author: author(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: keypair(1).0,
+        };
+        let http = FakeHttp::new(vec![Err("404".into())]);
+        assert_eq!(
+            leave_channel_task(&http, params()).await,
+            Err("404".into())
+        );
+
+        let no_meta = serde_json::json!({ "documents": [
+            { "document_id": DocumentId::new().to_string(), "kind": "segment" },
+        ]});
+        let http = FakeHttp::new(vec![Ok(no_meta)]);
+        assert!(leave_channel_task(&http, params()).await.is_err());
+        assert_eq!(http.calls().len(), 1, "nothing is posted");
+
+        let listing = serde_json::json!({ "documents": [
+            { "document_id": DocumentId::new().to_string(), "kind": "meta" },
+        ]});
+        let http = FakeHttp::new(vec![
+            Ok(listing),
+            Ok(serde_json::json!({ "members": [] })),
+            Err("HTTP 403".into()),
+        ]);
+        assert!(leave_channel_task(&http, params()).await.is_err());
+        assert_eq!(http.calls().len(), 3, "a refusal is not tried again");
     }
 
     /// A revoke the relay refuses changes nothing here either: no key is

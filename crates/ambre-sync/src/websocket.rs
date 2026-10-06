@@ -652,6 +652,12 @@ impl SyncState {
                     result.map(|()| LogicEvent::ChannelDeleted { channel_id }),
                 );
             }
+            SyncEvent::ChannelLeft { channel_id, result } => {
+                self.channel_answered(
+                    channel_id,
+                    result.map(|()| LogicEvent::ChannelLeft { channel_id }),
+                );
+            }
             SyncEvent::DirectMessageOpened { requested, result } => {
                 self.channel_answered(
                     requested,

@@ -472,6 +472,7 @@ impl LogicState {
             }
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
+            LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),
             LogicEvent::DirectMessageOpened {
                 requested,
                 channel_id,

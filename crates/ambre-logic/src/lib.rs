@@ -682,6 +682,8 @@ struct LogicState {
     joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
     /// Channel deletes the relay has not answered yet, with their space.
     deleting: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    /// Channel leaves the relay has not answered yet, with their space.
+    leaving: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
     /// Member listings of a space this thread asked the relay for, until it
     /// answers. The answer becomes the member list of that space, and never
     /// reaches the view as a service event.
@@ -779,6 +781,7 @@ impl LogicState {
             creating: HashMap::new(),
             joining: HashMap::new(),
             deleting: HashMap::new(),
+            leaving: HashMap::new(),
             member_requests: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),

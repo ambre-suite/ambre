@@ -379,6 +379,11 @@ pub enum SpaceCommand {
     /// leaves the catalogue (`MURMURE-462`, `MURMURE-247`). A refusal keeps
     /// it whole (`MURMURE-463`).
     DeleteChannel { channel_id: ChannelId },
+    /// Leave a channel of the space. Once the relay answers, the client drops
+    /// it with its documents and its keys (`MURMURE-467`). A public one stays
+    /// in the catalogue, and a private one's key is owed to the members who
+    /// stay (`MURMURE-059`). A refusal keeps it whole.
+    LeaveChannel { channel_id: ChannelId },
     /// Send this user's presence on the space, and turn offline the members
     /// whose presence expired. The view sends it once per refresh period
     /// (`ambre-spec-budgets.md section 8`): the Logic thread reads no clock.
@@ -410,7 +415,10 @@ pub enum SpaceEvent {
     Joined { channel_id: ChannelId },
     /// The relay deleted the channel, and this client holds nothing of it.
     ChannelDeleted { channel_id: ChannelId },
-    /// A creation, a join or a delete failed. Nothing changed on the relay.
+    /// The user left the channel, and this client holds nothing of it.
+    ChannelLeft { channel_id: ChannelId },
+    /// A creation, a join, a delete or a leave failed. Nothing changed on the
+    /// relay.
     ChannelFailed {
         channel_id: ChannelId,
         message: String,

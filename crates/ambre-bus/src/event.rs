@@ -221,7 +221,11 @@ pub enum LogicEvent {
     /// The relay deleted the channel, answering
     /// [`SyncCommand::DeleteChannel`](crate::SyncCommand::DeleteChannel).
     ChannelDeleted { channel_id: ChannelId },
-    /// A creation, a join or a delete failed, and the relay changed nothing.
+    /// The relay removed this user from the channel, answering
+    /// [`SyncCommand::LeaveChannel`](crate::SyncCommand::LeaveChannel).
+    ChannelLeft { channel_id: ChannelId },
+    /// A creation, a join, a delete or a leave failed, and the relay changed
+    /// nothing.
     ChannelRequestFailed {
         channel_id: ChannelId,
         message: String,

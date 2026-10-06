@@ -91,6 +91,7 @@ impl LogicState {
         self.creating.retain(|_, c| c.space_id != space_id);
         self.joining.retain(|_, s| *s != space_id);
         self.deleting.retain(|_, s| *s != space_id);
+        self.leaving.retain(|_, s| *s != space_id);
         self.member_requests.retain(|_, s| *s != space_id);
         self.unsent.remove(&space_id.document_id());
         if held || opening {
@@ -316,6 +317,11 @@ impl LogicState {
                 // whole.
                 self.deleting.insert(channel_id, space_id);
                 self.send_to_sync(SyncCommand::DeleteChannel { channel_id });
+            }
+            SpaceCommand::LeaveChannel { channel_id } => {
+                // As with a delete, nothing changes before the relay answers.
+                self.leaving.insert(channel_id, space_id);
+                self.send_to_sync(SyncCommand::LeaveChannel { channel_id });
             }
             SpaceCommand::RefreshPresence { now } => {
                 let expired = space.roster.tick(now);
@@ -569,16 +575,7 @@ impl LogicState {
         let Some(space_id) = self.deleting.remove(&channel_id) else {
             return;
         };
-        if let Some(channel) = self.channels.get(&channel_id) {
-            let segments = channel
-                .final_segments()
-                .into_iter()
-                .map(|s| s.document_id());
-            for document_id in channel.document_ids().into_iter().chain(segments) {
-                self.read_cursors.remove(&document_id);
-            }
-        }
-        self.close_channel(channel_id);
+        self.drop_channel(channel_id);
         if let Some(space) = self.spaces.get_mut(&space_id) {
             match space.state.unlist_channel(channel_id) {
                 Ok(Some(delta)) => self.send_to_sync(SyncCommand::SendUpdate {
@@ -597,8 +594,37 @@ impl LogicState {
         self.show_catalogue(space_id);
     }
 
-    /// A creation, a join or a delete failed on the relay, which changed
-    /// nothing. A channel the user asked to delete stays as it was.
+    /// The relay removed this user from the channel: drop it as a delete
+    /// does. The catalogue keeps a public one, for the next member to join.
+    pub(crate) fn channel_left(&mut self, channel_id: ChannelId) {
+        let Some(space_id) = self.leaving.remove(&channel_id) else {
+            return;
+        };
+        self.drop_channel(channel_id);
+        self.send_to_ui(UiEvent::Space {
+            space_id,
+            event: SpaceEvent::ChannelLeft { channel_id },
+        });
+    }
+
+    /// Drop a channel, open or opening, with its read cursors. The session of
+    /// each document ends, so the Sync worker forgets their keys.
+    fn drop_channel(&mut self, channel_id: ChannelId) {
+        if let Some(channel) = self.channels.get(&channel_id) {
+            let segments = channel
+                .final_segments()
+                .into_iter()
+                .map(|s| s.document_id());
+            for document_id in channel.document_ids().into_iter().chain(segments) {
+                self.read_cursors.remove(&document_id);
+            }
+        }
+        self.close_channel(channel_id);
+    }
+
+    /// A creation, a join, a delete or a leave failed on the relay, which
+    /// changed nothing. A channel the user asked to delete or to leave stays
+    /// as it was.
     pub(crate) fn channel_request_failed(&mut self, channel_id: ChannelId, message: String) {
         if self.direct.remove(&channel_id).is_some() {
             return self.direct_failed(channel_id, message);
@@ -607,10 +633,13 @@ impl LogicState {
             self.creating.remove(&channel_id),
             self.joining.remove(&channel_id),
             self.deleting.remove(&channel_id),
+            self.leaving.remove(&channel_id),
         ) {
-            (Some(creating), _, _) => creating.space_id,
-            (None, Some(space_id), _) | (None, None, Some(space_id)) => space_id,
-            (None, None, None) => return,
+            (Some(creating), ..) => creating.space_id,
+            (None, Some(space_id), ..)
+            | (None, None, Some(space_id), _)
+            | (None, None, None, Some(space_id)) => space_id,
+            (None, None, None, None) => return,
         };
         self.channel_failed(space_id, channel_id, message);
     }
@@ -1206,6 +1235,90 @@ mod tests {
 
         // A late yes for a delete given up drops nothing either.
         state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id });
+        assert!(state.channels.contains_key(&channel_id));
+    }
+
+    // --- Leaving a channel ---
+
+    /// A member leaves a public channel. Nothing changes before the relay
+    /// answers. Then the channel goes and each of its sessions ends, so the
+    /// Sync worker forgets their keys. The catalogue keeps listing it, and
+    /// nothing is written to the space.
+    #[test]
+    fn a_left_channel_leaves_the_client_once_the_relay_answers() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, meta, segment) =
+            public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (kept, ..) = public_channel(&mut state, space_id, "general", &ui, &sync);
+        let before = state.spaces[&space_id].state.version();
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::LeaveChannel { channel_id },
+        });
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::LeaveChannel { channel_id: id }] if *id == channel_id
+        ));
+        assert!(drain(&ui).is_empty(), "nothing shows before the answer");
+        assert!(state.channels.contains_key(&channel_id));
+
+        state.handle_logic_event(LogicEvent::ChannelLeft { channel_id });
+        let mut closed: Vec<DocumentId> = drain(&sync)
+            .iter()
+            .map(|c| match c {
+                SyncCommand::CloseDocument { document_id } => *document_id,
+                other => panic!("only sessions end, got {other:?}"),
+            })
+            .collect();
+        closed.sort_by_key(|d| *d.as_bytes());
+        let mut expected = [meta, segment];
+        expected.sort_by_key(|d| *d.as_bytes());
+        assert_eq!(closed, expected, "both sessions end, and only theirs");
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(state.channels.contains_key(&kept));
+        assert_eq!(state.spaces[&space_id].state.version(), before);
+        assert_eq!(state.spaces[&space_id].state.catalogue().len(), 2);
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::Space { event: SpaceEvent::ChannelLeft { channel_id: id }, .. }]
+                if *id == channel_id
+        ));
+
+        // An answer nobody here asked for drops nothing.
+        state.handle_logic_event(LogicEvent::ChannelLeft { channel_id: kept });
+        assert!(drain(&sync).is_empty());
+        assert!(state.channels.contains_key(&kept));
+    }
+
+    /// The relay refuses the leave: the view is told, and the channel and its
+    /// sessions stay as they were.
+    #[test]
+    fn a_refused_leave_keeps_the_channel_whole() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, ..) = public_channel(&mut state, space_id, "budget", &ui, &sync);
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::LeaveChannel { channel_id },
+        });
+        let _ = drain(&sync);
+        state.handle_logic_event(LogicEvent::ChannelRequestFailed {
+            channel_id,
+            message: "409".to_owned(),
+        });
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::Space { event: SpaceEvent::ChannelFailed { channel_id: id, .. }, .. }]
+                if *id == channel_id
+        ));
+        assert!(drain(&sync).is_empty(), "no session ends");
+        assert!(state.channels.contains_key(&channel_id));
+
+        // A late yes for a leave given up drops nothing either.
+        state.handle_logic_event(LogicEvent::ChannelLeft { channel_id });
         assert!(state.channels.contains_key(&channel_id));
     }
 

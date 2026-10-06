@@ -158,6 +158,13 @@ pub enum SyncCommand {
     DeleteChannel {
         channel_id: ChannelId,
     },
+    /// Remove this user from a channel: a signed `Revoke` of themselves on
+    /// its `meta`, posted with no rotation (`SYNC-127`). Answered by
+    /// [`crate::LogicEvent::ChannelLeft`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    LeaveChannel {
+        channel_id: ChannelId,
+    },
     /// Open or create the direct message of this user and `members`, in one
     /// request. It carries one channel key wrapped for each member alone, and
     /// a log in which nobody stays owner. Answered by
