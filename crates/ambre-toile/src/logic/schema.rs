@@ -21,7 +21,7 @@ use loro::{ExportMode, LoroDoc, LoroText, LoroValue};
 
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, verdict,
+    SchemaVerdict, migrate_schema, migration_peer, verdict,
 };
 
 use crate::logic::model::ElementStyle;
@@ -143,7 +143,11 @@ fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
         let LoroValue::Map(entries) = root.get_value() else {
             continue;
         };
-        for id in entries.keys() {
+        // Sorted: two peers migrating one history write the same operations
+        // only if they write them in the same order (`SCHEMA-020`).
+        let mut ids: Vec<&String> = entries.keys().collect();
+        ids.sort();
+        for id in ids {
             let Some(map) = root
                 .get(id.as_str())
                 .and_then(|v| v.into_container().ok())
@@ -200,7 +204,9 @@ fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
         .and_then(|c| c.into_map().ok())
         && let LoroValue::Map(entries) = old.get_deep_value()
     {
-        for (key, value) in entries.iter() {
+        let mut pairs: Vec<(&String, &LoroValue)> = entries.iter().collect();
+        pairs.sort_by_key(|(key, _)| *key);
+        for (key, value) in pairs {
             root_cfg
                 .insert(key.as_str(), value.clone())
                 .map_err(|e| format!("carrying the config key {key} failed: {e}"))?;
@@ -221,16 +227,17 @@ fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
 /// register with a text holding the same characters. A body already a text is
 /// left alone.
 ///
-/// Two peers migrating one board each mint their own text, and the map keeps
-/// one of the two. Both hold the same characters, so the board converges. An
-/// edit typed into the losing text before the two peers meet is lost, the
-/// race the register had.
+/// Two peers migrating one board write as one derived peer, so both mint the
+/// same text and an edit typed into either survives (`SCHEMA-020`).
 fn body_text_step(doc: &LoroDoc) -> Result<(), String> {
     let root = doc.get_map(ELEMENTS);
     let LoroValue::Map(entries) = root.get_value() else {
         return Ok(());
     };
-    for id in entries.keys() {
+    // Sorted, so every peer mints each text at the same identifier.
+    let mut ids: Vec<&String> = entries.keys().collect();
+    ids.sort();
+    for id in ids {
         let Some(map) = root
             .get(id.as_str())
             .and_then(|v| v.into_container().ok())
@@ -286,6 +293,18 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             binary: SCHEMA_VERSION,
         }),
         SchemaVerdict::Older => {
+            // Every peer migrating this history writes as one peer, so their
+            // steps mint one container, not rivals (`SCHEMA-020`). The live
+            // board keeps its own identity: only the scratch takes this one.
+            let heads = scratch.oplog_frontiers();
+            let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
+            scratch
+                .set_peer_id(peer)
+                .map_err(|e| SchemaError::MigrationFailed {
+                    from: found,
+                    to: SCHEMA_VERSION,
+                    reason: format!("taking the migration identity failed: {e:?}"),
+                })?;
             migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
             let bytes =
                 scratch
@@ -495,6 +514,64 @@ mod tests {
                 .expect("the body is a text");
             assert_eq!(text.to_string(), body, "{id} lost its body");
         }
+    }
+
+    /// `SCHEMA-020`: two peers open one version 3 board, and each migrates its
+    /// own copy. Each then types into the same body before the two meet. Both
+    /// edits survive, because both peers minted the same text, not two rivals.
+    #[test]
+    fn two_peers_migrating_one_board_keep_both_edits() {
+        let doc = LoroDoc::new();
+        let elements = doc.get_map(ELEMENTS);
+        for i in 0..24 {
+            let em = elements
+                .insert_container(&format!("e{i}"), loro::LoroMap::new())
+                .expect("seed");
+            em.insert("type", "sticky").expect("seed");
+            em.insert(BODY, "buy milk")
+                .expect("the layout before the text");
+        }
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, 3i64)
+            .expect("stamp");
+        doc.commit();
+        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+
+        let open = |peer: u64| {
+            let live = LoroDoc::new();
+            live.set_peer_id(peer).expect("a peer of its own");
+            live.import(&gate(&bytes).expect("version 3 migrates"))
+                .expect("imports");
+            live
+        };
+        let body = |live: &LoroDoc| {
+            live.get_map(ELEMENTS)
+                .get("e7")
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_map().ok())
+                .and_then(|em| em.get(BODY))
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_text().ok())
+                .expect("the body is a text")
+        };
+        let (a, b) = (open(1), open(2));
+        body(&a).insert(0, "now ").expect("a types");
+        a.commit();
+        body(&b).insert(8, " and eggs").expect("b types");
+        b.commit();
+        a.import(&b.export(ExportMode::all_updates()).expect("b's history"))
+            .expect("a merges");
+        b.import(&a.export(ExportMode::all_updates()).expect("a's history"))
+            .expect("b merges");
+
+        for (peer, live) in [("a", &a), ("b", &b)] {
+            assert_eq!(
+                body(live).to_string(),
+                "now buy milk and eggs",
+                "{peer} kept both edits"
+            );
+        }
+        assert_eq!(a.oplog_vv(), b.oplog_vv());
     }
 
     #[test]

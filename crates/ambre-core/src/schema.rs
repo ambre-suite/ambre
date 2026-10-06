@@ -168,6 +168,41 @@ pub fn migrate_schema<D>(
     Ok(())
 }
 
+/// The peer identity a migration writes under, derived from the history it
+/// starts from (`SCHEMA-020`).
+///
+/// Two peers that open one stored version each run the walk on their own copy.
+/// Under a random identity, a step that creates a container under a map key
+/// mints a rival on each peer, and the map keeps one. Under this one, both
+/// peers write the same operations under the same identifiers. The CRDT engine
+/// keeps a single copy of an operation it already holds.
+///
+/// `frontiers` holds the `(peer, counter)` of each head of the history, in any
+/// order. Two histories with the same heads are one history, and two different
+/// ones hash apart. The hash is FNV-1a, written out here so its output never
+/// moves with a library or a toolchain. It never returns `u64::MAX`, the one
+/// identity the CRDT engine reserves.
+#[must_use]
+pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut heads: Vec<(u64, i32)> = frontiers.into_iter().collect();
+    heads.sort_unstable();
+    let mut hash = OFFSET;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(PRIME);
+        }
+    };
+    feed(b"ambre-schema-migration");
+    for (peer, counter) in heads {
+        feed(&peer.to_le_bytes());
+        feed(&counter.to_le_bytes());
+    }
+    if hash == u64::MAX { hash - 1 } else { hash }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +298,21 @@ mod tests {
                 reason: "the register would not write".to_owned(),
             }
         );
+    }
+
+    #[test]
+    fn one_history_derives_one_migration_peer() {
+        let heads = [(7, 41), (3, 9)];
+        assert_eq!(
+            migration_peer(heads),
+            migration_peer([(3, 9), (7, 41)]),
+            "the order the heads arrive in does not count"
+        );
+        assert_ne!(migration_peer(heads), migration_peer([(7, 42), (3, 9)]));
+        assert_ne!(migration_peer(heads), migration_peer([(7, 41)]));
+        // Pinned: a peer on another build must derive the same identity.
+        assert_eq!(migration_peer([]), migration_peer(Vec::new()));
+        assert_eq!(migration_peer([(1, 0)]), 0xe0f9_c7c0_c2dd_425e);
     }
 
     #[test]

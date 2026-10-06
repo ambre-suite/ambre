@@ -20,7 +20,7 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, verdict,
+    SchemaVerdict, migrate_schema, migration_peer, verdict,
 };
 
 /// The schema version this build writes into every document it creates
@@ -231,6 +231,18 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             binary: SCHEMA_VERSION,
         }),
         SchemaVerdict::Older => {
+            // Every peer migrating this history writes as one peer, so their
+            // steps write the same operations, not rivals (`SCHEMA-020`). The
+            // live document keeps its own identity: only the scratch takes it.
+            let heads = scratch.oplog_frontiers();
+            let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
+            scratch
+                .set_peer_id(peer)
+                .map_err(|e| SchemaError::MigrationFailed {
+                    from: found,
+                    to: SCHEMA_VERSION,
+                    reason: format!("taking the migration identity failed: {e:?}"),
+                })?;
             migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
             let bytes =
                 scratch

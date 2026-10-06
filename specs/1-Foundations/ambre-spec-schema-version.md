@@ -37,7 +37,7 @@ prefix is `SCHEMA`.
 | `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
 | `SCHEMA-018` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | this spec section 2; architecture section 2.D; `ambre-spec-fixtures.md section 2` | Trame `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape`; Toile `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape`; Prose `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
 | `SCHEMA-019` | `INV` | A frozen shape section MUST NOT change once the default branch carries it. | this spec section 2; architecture section 2.D | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job over the shape files of every application, its own reads held by `scripts/test_schema_freeze.py` under `just test-scripts` | none | verified |
-| `SCHEMA-020` | `CONC` | Two peers migrating one document at the same time MUST NOT lose an edit made to what either migrated. | this spec section 2 | none | fails -- each peer runs the step on its own copy, and a step that creates a container under a map key creates a rival one. The Toile `3 -> 4` step does this for each body, so a body typed into on the losing peer before the two meet is lost. It lands with the `Two peers migrating one board keep both edits` Story (`ambre-roadmap.md` E7) | failing |
+| `SCHEMA-020` | `CONC` | Two peers migrating one document at the same time MUST NOT lose an edit made to what either migrated. | this spec section 2 | `ambre_toile::logic::schema::tests::two_peers_migrating_one_board_keep_both_edits` -- two peers migrate one version 3 board, each types into one body, and both edits survive with the two version vectors equal, so neither peer minted an operation the other lacks; `ambre_core::schema::tests::one_history_derives_one_migration_peer` -- the identity is pinned to its value, so a peer on another build derives the same one | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -62,10 +62,10 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 18 `verified`, 1 `failing`, 1 `human-review`. A test holds the register: the
+* **Verification.** 19 `verified`, 1 `human-review`. A test holds the register: the
   number carried from creation, the check at each full-state entry, a case per verdict. A layout
   moved under an unchanged number turns a shape belt red. A reviewer reads `SCHEMA-017`. Two peers
-  migrating at once can lose an edit (`SCHEMA-020`).
+  migrating at once keep both edits (`SCHEMA-020`).
 
 ---
 
@@ -178,7 +178,12 @@ identity back (`SCHEMA-020`).
 * two peers that start from one history write the same operations under the same identifiers;
 * the CRDT engine keeps one copy of an operation it already holds, so there is no rival;
 * two different histories derive two identities, so no identifier ever carries two contents;
-* the step walks its containers in a fixed order, and writes nothing that depends on the clock.
+* the step walks its containers in a fixed order, and writes nothing that depends on the clock;
+* the identity is a hash of the history's heads, computed in `ambre-core` (`migration_peer`). It
+  is written out there, not borrowed from a library, so a later build derives the same one.
+
+Only the scratch document takes that identity. The live one imports the migrated snapshot under its
+own, so the next edit a user types is theirs.
 
 **Code.** `crates/ambre-core/src/schema.rs` for the protocol: the two container names, the three
 verdicts, the error taxonomy and the registry walk. The walk is generic over the document, so the

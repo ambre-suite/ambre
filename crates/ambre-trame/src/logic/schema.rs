@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use ambre_bus::FilterKind;
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, verdict,
+    SchemaVerdict, migrate_schema, migration_peer, verdict,
 };
 
 use super::op_from_str;
@@ -271,7 +271,11 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
 /// definition as one `Binary(postcard(FilterRecord))` under [`FILTER_KEY`].
 fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
     if let LoroValue::Map(sheets) = doc.get_map(SHEETS_MAP).get_value() {
-        for sheet in sheets.keys() {
+        // Sorted: two peers migrating one history write the same operations
+        // only if they write them in the same order (`SCHEMA-020`).
+        let mut sheets: Vec<&String> = sheets.keys().collect();
+        sheets.sort();
+        for sheet in sheets {
             fold_filter_keys(doc, sheet)?;
         }
     }
@@ -299,6 +303,9 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
     if !sheets.iter().any(|s| s == DEFAULT_SHEET) {
         sheets.push(DEFAULT_SHEET.to_owned());
     }
+    // Sheets and cells are walked sorted, so every peer writes in one order
+    // (`SCHEMA-020`).
+    sheets.sort();
     let indices: HashMap<&str, SheetIndex> = sheets
         .iter()
         .map(|s| {
@@ -320,7 +327,9 @@ fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
             Some(SheetQualifier::Id(id)) => indices.get(id.as_str()),
             Some(SheetQualifier::Name(_)) => None,
         };
-        for (key, value) in cells.iter() {
+        let mut cells: Vec<(&String, &LoroValue)> = cells.iter().collect();
+        cells.sort_by_key(|(key, _)| *key);
+        for (key, value) in cells {
             let LoroValue::String(text) = value else {
                 continue;
             };
@@ -390,8 +399,9 @@ fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
     let bytes = postcard::to_allocvec(&record)
         .map_err(|e| format!("encoding the filter register failed: {e}"))?;
     // Replace the flat keys with the one register.
-    let old_keys: Vec<String> = fields.keys().cloned().collect();
-    for key in &old_keys {
+    let mut old_keys: Vec<&String> = fields.keys().collect();
+    old_keys.sort();
+    for key in old_keys {
         let _ = map.delete(key.as_str());
     }
     let _ = map.insert(FILTER_KEY, bytes);
@@ -437,6 +447,18 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
             binary: SCHEMA_VERSION,
         }),
         SchemaVerdict::Older => {
+            // Every peer migrating this history writes as one peer, so their
+            // steps write the same operations, not rivals (`SCHEMA-020`). The
+            // live workbook keeps its own identity: only the scratch takes it.
+            let heads = scratch.oplog_frontiers();
+            let peer = migration_peer(heads.iter().map(|id| (id.peer, id.counter)));
+            scratch
+                .set_peer_id(peer)
+                .map_err(|e| SchemaError::MigrationFailed {
+                    from: found,
+                    to: SCHEMA_VERSION,
+                    reason: format!("taking the migration identity failed: {e:?}"),
+                })?;
             migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
             let bytes =
                 scratch
