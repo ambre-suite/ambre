@@ -90,6 +90,7 @@ impl LogicState {
         let opening = self.space_opening.remove(&space_id).is_some();
         self.creating.retain(|_, c| c.space_id != space_id);
         self.joining.retain(|_, s| *s != space_id);
+        self.deleting.retain(|_, s| *s != space_id);
         self.member_requests.retain(|_, s| *s != space_id);
         self.unsent.remove(&space_id.document_id());
         if held || opening {
@@ -308,6 +309,13 @@ impl LogicState {
                     }
                     Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
                 }
+            }
+            SpaceCommand::DeleteChannel { channel_id } => {
+                // Only the relay knows who owns the channel. Nothing changes
+                // here before its answer, so a refusal leaves the channel
+                // whole.
+                self.deleting.insert(channel_id, space_id);
+                self.send_to_sync(SyncCommand::DeleteChannel { channel_id });
             }
             SpaceCommand::RefreshPresence { now } => {
                 let expired = space.roster.tick(now);
@@ -554,7 +562,43 @@ impl LogicState {
         self.open_channel(channel_id);
     }
 
-    /// A creation or a join failed on the relay, which changed nothing.
+    /// The relay deleted the channel: drop it, open or opening, and end the
+    /// session of each document, so the Sync worker forgets their keys. A
+    /// public one leaves the catalogue.
+    pub(crate) fn channel_deleted(&mut self, channel_id: ChannelId) {
+        let Some(space_id) = self.deleting.remove(&channel_id) else {
+            return;
+        };
+        if let Some(channel) = self.channels.get(&channel_id) {
+            let segments = channel
+                .final_segments()
+                .into_iter()
+                .map(|s| s.document_id());
+            for document_id in channel.document_ids().into_iter().chain(segments) {
+                self.read_cursors.remove(&document_id);
+            }
+        }
+        self.close_channel(channel_id);
+        if let Some(space) = self.spaces.get_mut(&space_id) {
+            match space.state.unlist_channel(channel_id) {
+                Ok(Some(delta)) => self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: space_id.document_id(),
+                    payload: delta,
+                    summary: None,
+                }),
+                Ok(None) => {}
+                Err(error) => tracing::warn!("Logic: unlisting {channel_id} failed: {error}"),
+            }
+        }
+        self.send_to_ui(UiEvent::Space {
+            space_id,
+            event: SpaceEvent::ChannelDeleted { channel_id },
+        });
+        self.show_catalogue(space_id);
+    }
+
+    /// A creation, a join or a delete failed on the relay, which changed
+    /// nothing. A channel the user asked to delete stays as it was.
     pub(crate) fn channel_request_failed(&mut self, channel_id: ChannelId, message: String) {
         if self.direct.remove(&channel_id).is_some() {
             return self.direct_failed(channel_id, message);
@@ -562,10 +606,11 @@ impl LogicState {
         let space_id = match (
             self.creating.remove(&channel_id),
             self.joining.remove(&channel_id),
+            self.deleting.remove(&channel_id),
         ) {
-            (Some(creating), _) => creating.space_id,
-            (None, Some(space_id)) => space_id,
-            (None, None) => return,
+            (Some(creating), _, _) => creating.space_id,
+            (None, Some(space_id), _) | (None, None, Some(space_id)) => space_id,
+            (None, None, None) => return,
         };
         self.channel_failed(space_id, channel_id, message);
     }
@@ -1034,6 +1079,134 @@ mod tests {
             "a listed channel's log admits self-joins"
         );
         assert_eq!(updates_of(&sent, space_id.document_id()), 0);
+    }
+
+    // --- Deleting a channel ---
+
+    /// A public channel created in a space, held with its two documents
+    /// ready: its id, `meta` and first segment.
+    fn public_channel(
+        state: &mut LogicState,
+        space_id: SpaceId,
+        name: &str,
+        ui: &Receiver<UiEvent>,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, DocumentId, DocumentId) {
+        let draft = draft(name);
+        let channel_id = draft.channel_id;
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::CreatePublicChannel { draft, now: NOW },
+        });
+        state.handle_logic_event(LogicEvent::ChannelCreated {
+            channel_id,
+            key: Some(sealed(7)),
+        });
+        let channel = &state.channels[&channel_id];
+        let (meta, segment) = (
+            channel.meta_id().document_id(),
+            channel.active_id().document_id(),
+        );
+        ready(state, meta, Role::Owner);
+        ready(state, segment, Role::Owner);
+        let _ = (drain(ui), drain(sync));
+        (channel_id, meta, segment)
+    }
+
+    /// The owner deletes a public channel. Nothing changes before the relay
+    /// answers. Then the channel goes, each of its sessions ends so the Sync
+    /// worker forgets their keys, and the catalogue drops its entry. The
+    /// other channel of the space stays as it was.
+    #[test]
+    fn a_deleted_channel_leaves_the_client_and_the_catalogue_once_the_relay_answers() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, meta, segment) =
+            public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (kept, ..) = public_channel(&mut state, space_id, "general", &ui, &sync);
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::DeleteChannel { channel_id },
+        });
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::DeleteChannel { channel_id: id }] if *id == channel_id
+        ));
+        assert!(drain(&ui).is_empty(), "nothing shows before the answer");
+        assert!(state.channels.contains_key(&channel_id));
+        assert_eq!(state.spaces[&space_id].state.catalogue().len(), 2);
+
+        state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id });
+        let sent = drain(&sync);
+        let mut closed: Vec<DocumentId> = sent
+            .iter()
+            .filter_map(|c| match c {
+                SyncCommand::CloseDocument { document_id } => Some(*document_id),
+                _ => None,
+            })
+            .collect();
+        closed.sort_by_key(|d| *d.as_bytes());
+        let mut expected = [meta, segment];
+        expected.sort_by_key(|d| *d.as_bytes());
+        assert_eq!(closed, expected, "both sessions end, and only theirs");
+        assert_eq!(updates_of(&sent, space_id.document_id()), 1);
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(state.channels.contains_key(&kept));
+
+        let shown = drain(&ui);
+        assert!(shown.iter().any(|e| matches!(
+            e,
+            UiEvent::Space { event: SpaceEvent::ChannelDeleted { channel_id: id }, .. }
+                if *id == channel_id
+        )));
+        let (_, catalogue) = last_catalogue(&shown).expect("the catalogue");
+        let listed: Vec<ChannelId> = catalogue.iter().map(|e| e.channel_id).collect();
+        assert_eq!(listed, [kept]);
+
+        // An answer nobody here asked for drops nothing.
+        state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id: kept });
+        assert!(drain(&sync).is_empty());
+        assert!(state.channels.contains_key(&kept));
+    }
+
+    /// The relay refuses the delete: the view is told, and the channel, its
+    /// sessions and its catalogue entry all stay as they were.
+    #[test]
+    fn a_refused_delete_keeps_the_channel_whole() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, ..) = public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let before = state.spaces[&space_id].state.version();
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::DeleteChannel { channel_id },
+        });
+        let _ = drain(&sync);
+        state.handle_logic_event(LogicEvent::ChannelRequestFailed {
+            channel_id,
+            message: "403".to_owned(),
+        });
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::Space { event: SpaceEvent::ChannelFailed { channel_id: id, .. }, .. }]
+                if *id == channel_id
+        ));
+        assert!(
+            drain(&sync).is_empty(),
+            "no session ends, nothing is written"
+        );
+        assert!(state.channels.contains_key(&channel_id));
+        assert_eq!(state.spaces[&space_id].state.version(), before);
+        assert_eq!(
+            state.spaces[&space_id].state.sealed_key(channel_id),
+            Ok(sealed(7))
+        );
+
+        // A late yes for a delete given up drops nothing either.
+        state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id });
+        assert!(state.channels.contains_key(&channel_id));
     }
 
     #[test]

@@ -249,6 +249,23 @@ impl SyncState {
         });
     }
 
+    /// Ask the relay to delete a channel with every document it groups
+    /// (`SRV-142`). The documents stay open here until the Logic thread hears
+    /// the answer and closes them, so a refusal leaves the channel whole.
+    pub(crate) fn handle_delete_channel(&self, channel_id: ChannelId) {
+        let Some(tx) = self.event_tx.clone() else {
+            return self.channel_answered(channel_id, Err(no_relay()));
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}");
+            let result = http::delete_auth(&url, auth).await;
+            let _ = tx.send(SyncEvent::ChannelDeleted { channel_id, result });
+        });
+    }
+
     /// Ask the relay for the direct message of this user and `members`
     /// (the Murmure channels spec): the relay creates it, or answers the one
     /// that already holds exactly them. One fresh key opens it, wrapped for
@@ -854,6 +871,47 @@ mod tests {
             e,
             LogicEvent::ChannelRequestFailed { channel_id: id, .. } if *id == channel_id
         )));
+    }
+
+    /// A delete answers the Logic thread either way, and touches no document
+    /// session. The Logic thread closes them once it hears the relay deleted
+    /// the channel. With no relay, the delete fails at once.
+    #[test]
+    fn a_delete_answers_logic_and_leaves_the_sessions_to_it() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let channel_id = ChannelId::new();
+        let meta = DocumentId::new();
+        state.documents.insert(
+            meta,
+            SyncDocumentState::new(meta, DocumentKey::generate(), DocType::Murmure, true),
+        );
+
+        state.handle_delete_channel(channel_id);
+        state.handle_sync_event(SyncEvent::ChannelDeleted {
+            channel_id,
+            result: Err("403".into()),
+        });
+        state.handle_sync_event(SyncEvent::ChannelDeleted {
+            channel_id,
+            result: Ok(()),
+        });
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [
+                    LogicEvent::ChannelRequestFailed { channel_id: a, .. },
+                    LogicEvent::ChannelRequestFailed { channel_id: b, .. },
+                    LogicEvent::ChannelDeleted { channel_id: c },
+                ] if [*a, *b, *c] == [channel_id; 3]
+            ),
+            "no relay, a refusal, then the relay's yes: {events:?}"
+        );
+        assert!(
+            state.documents.contains_key(&meta),
+            "no session closed here"
+        );
     }
 
     #[test]

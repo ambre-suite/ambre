@@ -314,6 +314,11 @@ enum SyncEvent {
         channel_id: ChannelId,
         result: Result<(), String>,
     },
+    /// The answer to a channel delete (`SyncCommand::DeleteChannel`).
+    ChannelDeleted {
+        channel_id: ChannelId,
+        result: Result<(), String>,
+    },
     /// The answer to a direct message request
     /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
     /// under the requested id, or the one that already held its members.
@@ -1263,6 +1268,7 @@ impl SyncState {
                 space_id,
                 key,
             } => self.handle_join_channel(channel_id, space_id, &key),
+            SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::CreateDirectMessage {
                 channel_id,
                 meta,

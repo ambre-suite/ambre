@@ -231,6 +231,48 @@ fn listing_a_channel_writes_the_space_document_alone() {
     );
 }
 
+// --- MURMURE-247 ---
+
+/// Unlisting a deleted channel removes its entry, its sealed key with it,
+/// and leaves every other entry. A peer that replays the delta lists it no
+/// more. A channel the catalogue does not list writes nothing.
+#[test]
+fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
+    let space_id = SpaceId::new();
+    let mut space = SpaceState::create(space_id, "Acme", NOW).expect("create");
+    let first = space.export_all().expect("export");
+    let (gone, kept) = (
+        channel(ChannelType::Public, "budget"),
+        channel(ChannelType::Public, "general"),
+    );
+    let listed = [
+        space
+            .list_channel(&gone, &listing(sealed(1)))
+            .expect("list"),
+        space
+            .list_channel(&kept, &listing(sealed(2)))
+            .expect("list"),
+    ];
+
+    let delta = space
+        .unlist_channel(gone.channel_id())
+        .expect("unlist")
+        .expect("a delta");
+    let [entry] = space.catalogue().try_into().expect("one entry left");
+    assert_eq!(entry.channel_id, kept.channel_id());
+    assert_eq!(
+        space.sealed_key(gone.channel_id()),
+        Err(MurmureError::NotListed(gone.channel_id()))
+    );
+    assert_eq!(space.sealed_key(kept.channel_id()), Ok(sealed(2)));
+    let peer = SpaceState::open(space_id, &[&first, &listed[0], &listed[1], &delta]).expect("open");
+    assert_eq!(peer.catalogue(), space.catalogue());
+
+    let before = space.version();
+    assert_eq!(space.unlist_channel(gone.channel_id()), Ok(None));
+    assert_eq!(space.version(), before, "an absent entry writes nothing");
+}
+
 // --- MURMURE-020: the bump that brought the space document ---
 
 /// A channel document of version 1 opens under version 2: the step stamps

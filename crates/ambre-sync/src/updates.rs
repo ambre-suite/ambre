@@ -2071,6 +2071,15 @@ mod tests {
         );
     }
 
+    /// Closing a document ends its session here. Its state goes, with the
+    /// document key and every older key, so nothing of it is read again.
+    #[test]
+    fn closing_a_document_forgets_its_keys() {
+        let (mut state, _rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_close_document(doc);
+        assert!(!state.documents.contains_key(&doc));
+    }
+
     /// The relay's word that the members changed makes Sync list them again,
     /// so a newcomer's key resolves without a view asking (`SYNC-037`). Two
     /// listings may cross: the answer to the older one changes nothing.

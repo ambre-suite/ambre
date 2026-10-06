@@ -374,6 +374,11 @@ pub enum SpaceCommand {
     /// Join a public channel of the catalogue, with no other member online
     /// (`MURMURE-039`).
     JoinChannel { channel_id: ChannelId },
+    /// Delete a channel of the space this user owns, with every document it
+    /// groups. Once the relay answers, the client drops it, and a public one
+    /// leaves the catalogue (`MURMURE-462`, `MURMURE-247`). A refusal keeps
+    /// it whole (`MURMURE-463`).
+    DeleteChannel { channel_id: ChannelId },
     /// Send this user's presence on the space, and turn offline the members
     /// whose presence expired. The view sends it once per refresh period
     /// (`ambre-spec-budgets.md section 8`): the Logic thread reads no clock.
@@ -403,7 +408,9 @@ pub enum SpaceEvent {
     ChannelCreated { channel_id: ChannelId },
     /// The user is now a member of the channel, which the view may open.
     Joined { channel_id: ChannelId },
-    /// A creation or a join failed. Nothing changed on the relay.
+    /// The relay deleted the channel, and this client holds nothing of it.
+    ChannelDeleted { channel_id: ChannelId },
+    /// A creation, a join or a delete failed. Nothing changed on the relay.
     ChannelFailed {
         channel_id: ChannelId,
         message: String,

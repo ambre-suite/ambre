@@ -152,6 +152,12 @@ pub enum SyncCommand {
         space_id: SpaceId,
         key: SealedChannelKey,
     },
+    /// Delete a channel with every document it groups (`SRV-142`). Answered
+    /// by [`crate::LogicEvent::ChannelDeleted`] or by
+    /// [`crate::LogicEvent::ChannelRequestFailed`].
+    DeleteChannel {
+        channel_id: ChannelId,
+    },
     /// Open or create the direct message of this user and `members`, in one
     /// request: one channel key wrapped for each member alone, and a log in
     /// which nobody stays owner. Answered by

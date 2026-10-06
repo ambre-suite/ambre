@@ -77,8 +77,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- no document and no object of the channel is left after the purge | none | verified |
 | `MURMURE-244` | `FAIL` | Given a delete from a member who owns neither the channel nor, for a public channel, its space, the relay MUST refuse it. | this spec section 3; `SRV-015`, `SRV-175` | `ambre_server::routes::channels::tests::a_delete_from_anyone_but_an_owner_is_refused` -- an editor of the space, a stranger and an unknown channel get a 403, and nothing goes | none | verified |
 | `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | `ambre_server::routes::channels::tests::the_last_member_leaving_a_private_channel_deletes_it` -- the channel and its documents go with the last leave | none | verified |
-| `MURMURE-462` | `POST` | Deleting a channel MUST drop it from the client of its owner, with its documents and its keys. | this spec section 3; `MURMURE-243` | not built | unbuilt -- lands with the `Deleting a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-463` | `FAIL` | Given a delete the relay refuses, the client MUST keep the channel as it was. | this spec section 3; `MURMURE-244` | not built | unbuilt -- lands with the `Deleting a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-462` | `POST` | Deleting a channel MUST drop it from the client of its owner, with its documents and its keys. | this spec section 3; `MURMURE-243` | `ambre_logic::spaces::tests::a_deleted_channel_leaves_the_client_and_the_catalogue_once_the_relay_answers` -- once the relay answers, the channel goes and the session of each of its documents ends; `ambre_sync::updates::tests::closing_a_document_forgets_its_keys` -- an ended session takes its keys with it | none | verified |
+| `MURMURE-463` | `FAIL` | Given a delete the relay refuses, the client MUST keep the channel as it was. | this spec section 3; `MURMURE-244` | `ambre_logic::spaces::tests::a_refused_delete_keeps_the_channel_whole` -- the view is told, and the channel, its sessions and its catalogue entry stay; `ambre_sync::channels::tests::a_delete_answers_logic_and_leaves_the_sessions_to_it` -- the worker closes no session of its own | none | verified |
+| `MURMURE-465` | `POST` | Deleting a channel MUST drop it from the client of every other member that holds it. | this spec section 3; `MURMURE-462` | not built | unbuilt -- lands with the `A delete reaches every member` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- the other channel keeps its documents and objects | none | verified |
 
 ### 1.8 Convert a direct message into a private channel
@@ -113,11 +114,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 21 `verified`, 21 `unimplemented`. The relay holds a private channel, its
+* **Verification.** 23 `verified`, 20 `unimplemented`. The relay holds a private channel, its
   leave and its delete, and the key links of a channel under its `meta` document. The Logic thread
-  creates a private channel without the catalogue. A direct message opens, is reused for one set
-  of members, and takes a name. Invites, the segment a rotation
-  closes, conversion and archive are not built.
+  creates a private channel without the catalogue, and the owner's client deletes one. A direct
+  message opens, is reused for one set of members, and takes a name. Invites, the segment a
+  rotation closes, conversion and archive are not built.
 
 ---
 
@@ -186,9 +187,10 @@ edit written after it never travels under the key the member who left still hold
 goes with it (`MURMURE-243`). An owner who leaves hands the role on first, and the relay refuses
 the leave of the last one while other members stay (`MURMURE-257`). The last member of a private
 channel leaves in the same transaction that deletes it, so no channel is left without a member.
-The owner's client drops the channel, its documents and its keys once the relay answers, and keeps
+
+**Each client drops a deleted channel.** The owner's client drops the channel, its documents and its keys once the relay answers, and keeps
 it whole on a refusal (`MURMURE-462`, `MURMURE-463`). A public one leaves the catalogue with it
-(`MURMURE-247`).
+(`MURMURE-247`). Every other member's client drops it too, on the relay's word (`MURMURE-465`).
 
 **A direct message has no owner.** Every member is an editor (`MURMURE-252`), so nobody deletes it
 for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
@@ -222,7 +224,8 @@ who writes its key into the catalogue.
   finding or creating a direct message under its lock.
 * `ambre-server/src/db/members.rs` -- a leave: the owed rotation, and the delete of an emptied
   private channel.
-* `ambre-logic/src/spaces.rs` -- creating a private channel, with no catalogue write.
+* `ambre-logic/src/spaces.rs` -- creating a private channel, with no catalogue write; the owner's
+  delete, which drops the channel and its catalogue entry once the relay answers.
 * `ambre-logic/src/direct.rs` -- a direct message request, and the created or existing channel it
   opens.
 * `ambre-murmure/src/channel.rs` -- the name a member sets on a direct message.
@@ -271,3 +274,6 @@ who writes its key into the catalogue.
 * **The last owner of a public channel that keeps other members cannot leave yet.** The relay
   refuses it as it does for any document, until `SRV-175` lands with the
   `A public channel without an owner` Story (`ambre-roadmap.md` E5).
+* **A delete reaches its owner alone.** The relay pushes nothing when a channel goes, so another
+  member's client keeps it until it reopens it (`MURMURE-465`). The relay's word lands with the
+  `A delete reaches every member` Story (`ambre-roadmap.md` E5).

@@ -173,6 +173,26 @@ impl SpaceState {
         self.commit_since(&before)
     }
 
+    /// Remove the entry of a deleted channel from the catalogue, and return
+    /// the delta (`MURMURE-247`). `None` when the catalogue does not list it,
+    /// so nothing is written.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses the delete or the export.
+    pub fn unlist_channel(
+        &mut self,
+        channel_id: ChannelId,
+    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        let catalogue = self.doc.get_map(CATALOGUE);
+        let key = channel_id.to_string();
+        if catalogue.get(&key).is_none() {
+            return Ok(None);
+        }
+        let before = self.doc.oplog_vv();
+        catalogue.delete(&key)?;
+        self.commit_since(&before).map(Some)
+    }
+
     /// The sealed key of a listed channel, which a self-join hands the Sync
     /// worker unopened (`MURMURE-039`).
     ///
