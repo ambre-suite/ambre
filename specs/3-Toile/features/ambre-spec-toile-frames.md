@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order | none | verified |
+| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order. `ambre_toile::logic::state::groups::tests::the_frame_clamp_ends_on_a_duplicate_entry` -- the clamp ends on a paint order holding a duplicate entry | none | verified |
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
@@ -155,7 +155,7 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 | a press on a frame's title | nothing: the selection is the view's own (`TOILE-254`, `TOILE-256`) |
 | a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-261`, `TOILE-262`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
-| "Remove from frame", in the same menu | `RemoveFromFrames` naming the selection (`TOILE-UI-149`) |
+| "Remove from frame", in the same menu | `RemoveFromFrames` naming the selection (`TOILE-UI-149`), offered when a frame holds part of it (`TOILE-UI-384`) |
 | typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
 
 **What a frame looks like.** A rectangle painted from its own style register, before its members,

@@ -238,6 +238,9 @@ pub struct ToileView {
     /// The culled [`display`](Self::display) omits the selection past the edge,
     /// so the menu scope, the style surfaces and the inline editor read this.
     selection_data: Vec<DisplayElement>,
+    /// The selected ids a frame holds, from the same reply. The menu offers
+    /// removal from a frame by this, whatever the boxes (`TOILE-UI-384`).
+    selection_framed: Vec<ElementId>,
     /// Every element id on the board, off-screen included, fetched from Logic via
     /// `RequestBoardIds` for select-all (`TOILE-UI-033`).
     board_ids: Vec<ElementId>,
@@ -469,6 +472,13 @@ pub struct ToileView {
     /// (marquee, click, nudge) without a request threaded through each
     /// mutation site.
     last_stats_sel: Vec<ElementId>,
+    /// A board change landed while something is selected, so the selection's
+    /// data may be stale: its lock, its box, its frame (`TOILE-UI-384`).
+    /// `plan_repaint` asks again once, whatever number of changes landed.
+    selection_stale: bool,
+    /// The next `SelectionData` answers a new selection, so it is announced.
+    /// A refresh of the same selection is not (`selection_stale`).
+    announce_next_data: bool,
 
     /// The render-thread mirror of remote peer presence (`toile-presence`):
     /// cursors, selection ghosts, live strokes and laser trails, keyed by
@@ -612,6 +622,7 @@ impl ToileView {
             machine: ToolMachine::new(),
             selection: Vec::new(),
             selection_data: Vec::new(),
+            selection_framed: Vec::new(),
             board_ids: Vec::new(),
             arrow: None,
             arrow_drag: None,
@@ -683,6 +694,8 @@ impl ToileView {
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
+            selection_stale: false,
+            announce_next_data: false,
             presence: PeerCursors::default(),
             presence_out: PresenceSender::default(),
             present: false,
@@ -966,14 +979,22 @@ impl ToileView {
             // Full display data of the selection, off-screen included
             // (`TOILE-UI-070`, `TOILE-UI-134`): cache it for the menu scope, the
             // style surfaces and the inline editor.
-            ToileEvent::SelectionData(elements) => {
+            ToileEvent::SelectionData { elements, framed } => {
                 self.selection_data = elements;
+                self.selection_framed = framed;
                 self.needs_full = true;
-                self.announce_selection();
+                if std::mem::take(&mut self.announce_next_data) {
+                    self.announce_selection();
+                }
             }
             // Every element id on the board, for select-all (`TOILE-UI-033`).
             ToileEvent::BoardIds(ids) => {
                 self.board_ids = ids;
+            }
+            // The selection's data may now be stale: its lock, its box, its
+            // frame. `update` asks again once (`TOILE-UI-384`).
+            ToileEvent::BoardChanged => {
+                self.selection_stale = !self.selection.is_empty();
             }
             // Remote presence (`toile-presence`): adopt the whole live set, so
             // the overlay drops a peer absent from it with no departure signal
@@ -1757,6 +1778,7 @@ impl ToileView {
             &self.selection,
             self.group_scope.as_ref(),
             &self.selection_data,
+            &self.selection_framed,
             &self.display,
         );
         self.ctx_scope.set(scope);
@@ -3366,6 +3388,7 @@ impl ToileView {
                 // means "whole board" to Logic (used by Fit), never "nothing".
                 self.clear_sel_stats();
                 self.selection_data.clear();
+                self.selection_framed.clear();
                 self.announce_selection();
             } else {
                 self.send_edit(ToileCommand::RequestSelectionStats {
@@ -3378,7 +3401,16 @@ impl ToileView {
                 self.send_edit(ToileCommand::RequestSelectionData {
                     ids: self.selection.clone(),
                 });
+                self.announce_next_data = true;
             }
+            self.selection_stale = false;
+        } else if std::mem::take(&mut self.selection_stale) && !self.selection.is_empty() {
+            // The same selection after a board change: fetch its data again.
+            // The menu and the panels then read the lock, the box and the
+            // frame it has now (`TOILE-UI-384`).
+            self.send_edit(ToileCommand::RequestSelectionData {
+                ids: self.selection.clone(),
+            });
         }
 
         // Broadcast this peer's gesture (`TOILE-UI-073`). Once per frame, so a

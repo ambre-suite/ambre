@@ -12,7 +12,7 @@ use crate::logic::index::{ElementBounds, SpatialIndex};
 use crate::logic::model::{ElementId, NodeId};
 
 use super::codec::{expanded_aabb, f64_of, map_f64};
-use super::{ELEMENTS, LAYERS, ToileState};
+use super::{CHILDREN, ELEMENTS, LAYERS, ToileState};
 
 impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and
@@ -34,11 +34,21 @@ impl ToileState {
     /// import; the incremental path (local commands) keeps them in step directly.
     pub(super) fn rebuild_caches(&mut self) {
         self.bounds.clear();
-        let elems = self.doc.get_map(ELEMENTS);
+        self.parents.clear();
         let mut leaves = Vec::new();
-        if let LoroValue::Map(m) = elems.get_deep_value() {
+        if let LoroValue::Map(m) = self.walk_elements() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(fields) = v {
+                    // Groups and frames name their members; the same pass
+                    // indexes them, so the parent lookup costs no walk of its own.
+                    if let Some(LoroValue::List(kids)) = fields.get(CHILDREN) {
+                        let container = ElementId(key.clone());
+                        for kid in kids.iter() {
+                            if let LoroValue::String(s) = kid {
+                                self.link_parent(&ElementId(s.to_string()), &container);
+                            }
+                        }
+                    }
                     // Groups carry no stored geometry; their bounds are derived
                     // from members by `recompute_groups` after this leaf pass.
                     if matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
@@ -60,6 +70,45 @@ impl ToileState {
         self.index = SpatialIndex::build(leaves.into_iter());
         self.rematerialize_layers();
         self.recompute_groups();
+    }
+
+    /// The whole element map, resolved. Every deep read of the board goes
+    /// through here, so `board_walks` counts what a command costs (`TOILE-056`).
+    pub(super) fn walk_elements(&self) -> LoroValue {
+        self.board_walks
+            .set(self.board_walks.get().saturating_add(1));
+        self.doc.get_map(ELEMENTS).get_deep_value()
+    }
+
+    /// Record that `parent`'s `children` list names `child` once more.
+    pub(super) fn link_parent(&mut self, child: &ElementId, parent: &ElementId) {
+        self.parents
+            .entry(child.clone())
+            .or_default()
+            .push(parent.clone());
+    }
+
+    /// Record that `parent`'s `children` list names `child` once less.
+    pub(super) fn unlink_parent(&mut self, child: &ElementId, parent: &ElementId) {
+        if let Some(list) = self.parents.get_mut(child) {
+            if let Some(idx) = list.iter().position(|p| p == parent) {
+                list.remove(idx);
+            }
+            if list.is_empty() {
+                self.parents.remove(child);
+            }
+        }
+    }
+
+    /// Drop every entry naming `child`, once the board no longer holds it.
+    pub(super) fn forget_parents(&mut self, child: &ElementId) {
+        self.parents.remove(child);
+    }
+
+    /// The containers whose `children` list names `id`, stale ones included.
+    /// A reader filters by kind, which also skips a container since deleted.
+    pub(super) fn parents_of(&self, id: &ElementId) -> &[ElementId] {
+        self.parents.get(id).map_or(&[], Vec::as_slice)
     }
 
     /// Re-read the `layers` list into `self.layers`, skipping malformed tags and

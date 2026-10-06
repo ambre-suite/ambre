@@ -703,7 +703,7 @@ fn selection_data_includes_offscreen_elements() {
         ids: vec![a.clone(), b.clone()],
     });
     match &out.display[0] {
-        ToileEvent::SelectionData(elements) => {
+        ToileEvent::SelectionData { elements, .. } => {
             let ids: Vec<_> = elements.iter().map(|e| e.id.clone()).collect();
             assert!(
                 ids.contains(&a) && ids.contains(&b),
@@ -1738,6 +1738,129 @@ fn remove_from_frames_targets_the_real_parent() {
     // An element no frame holds writes nothing.
     let out = st.handle_command(ToileCommand::RemoveFromFrames { ids: vec![a] });
     assert!(out.update.is_none(), "nothing held, nothing written");
+}
+
+/// The ids a `SelectionData` reply names as framed.
+fn framed_of(st: &mut ToileState, ids: Vec<ElementId>) -> Vec<ElementId> {
+    let out = st.handle_command(ToileCommand::RequestSelectionData { ids });
+    match out.display.as_slice() {
+        [ToileEvent::SelectionData { framed, .. }] => framed.clone(),
+        other => panic!("expected SelectionData, got {other:?}"),
+    }
+}
+
+/// `TOILE-UI-384`: the selection's data names an element its frame holds,
+/// though the element sits outside every frame's box. A write and a peer's
+/// delta both announce a change, so the view asks again and sees it leave.
+#[test]
+fn selection_data_names_a_member_outside_its_frame() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(100.0, 100.0));
+    let a = create_rect(&mut st, Point::new(500.0, 500.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(600.0, 500.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+    assert_eq!(
+        framed_of(&mut st, vec![a.clone(), b.clone()]),
+        vec![a.clone()]
+    );
+
+    let mut peer = ToileState::new();
+    let remote = peer.apply_remote(&st.export_snapshot());
+    assert!(
+        remote.iter().any(|e| matches!(e, ToileEvent::BoardChanged)),
+        "a peer's delta announces no change"
+    );
+
+    let out = st.handle_command(ToileCommand::RemoveFromFrames {
+        ids: vec![a.clone()],
+    });
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::BoardChanged)),
+        "a write announces no change"
+    );
+    assert!(framed_of(&mut st, vec![a, b]).is_empty());
+
+    let moved = st.handle_command(ToileCommand::SetViewport(
+        crate::logic::index::Viewport::default(),
+    ));
+    assert!(
+        !moved
+            .display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::BoardChanged)),
+        "a camera move announced a change"
+    );
+}
+
+/// `TOILE-009`: a member a frame takes from its group leaves that group's box.
+/// The detach once kept the old union until the next rebuild.
+#[test]
+fn a_member_framed_out_of_its_group_shrinks_the_group() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(5.0, 5.0));
+    let a = create_rect(&mut st, Point::new(0.0, 0.0), Size::new(5.0, 5.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(5.0, 5.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f,
+        add: vec![b],
+        remove: vec![],
+    });
+    assert_eq!(st.bounds_of(&g), st.bounds_of(&a));
+}
+
+/// `TOILE-056`: reading which container an element belongs to walks no board.
+/// The selection's data names each member's group and frame, and a camera move
+/// derives the visible set, without resolving the element map once.
+#[test]
+fn a_container_read_walks_no_board() {
+    let mut st = ToileState::new();
+    for i in 0..20 {
+        create_rect(
+            &mut st,
+            Point::new(f64::from(i) * 30.0, 0.0),
+            Size::new(10.0, 10.0),
+        );
+    }
+    let a = create_rect(&mut st, Point::new(500.0, 500.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(600.0, 500.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    let f = create_frame(&mut st, Point::new(-500.0, -500.0), Size::new(100.0, 100.0));
+    let c = create_rect(&mut st, Point::new(700.0, 500.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f,
+        add: vec![c.clone()],
+        remove: vec![],
+    });
+
+    let before = st.board_walks();
+    let out = st.handle_command(ToileCommand::RequestSelectionData {
+        ids: vec![a, b, c.clone()],
+    });
+    st.handle_command(ToileCommand::SetViewport(wide_viewport()));
+    assert_eq!(
+        st.board_walks(),
+        before,
+        "a container read walked the board"
+    );
+    match out.display.as_slice() {
+        [ToileEvent::SelectionData { elements, framed }] => {
+            let groups: Vec<_> = elements.iter().map(|e| e.group.clone()).collect();
+            assert_eq!(groups, vec![Some(g.clone()), Some(g), None]);
+            assert_eq!(framed, &vec![c]);
+        }
+        other => panic!("expected SelectionData, got {other:?}"),
+    }
 }
 
 #[test]
@@ -4357,6 +4480,15 @@ enum PeerOp {
     SetSlideOrderRot {
         by: usize,
     },
+    // Frame membership -- the `children` writes the parent cache mirrors
+    // (`TOILE-056`). A pick that is no frame answers no delta.
+    FrameNth {
+        frame: usize,
+        nth: usize,
+    },
+    UnframeNth {
+        nth: usize,
+    },
     // Auto-layout spec -- concurrent LWW register edits on a shared frame.
     SetAutoLayoutNth {
         nth: usize,
@@ -4402,6 +4534,8 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::Stroke { x, y }),
         (-200.0f64..200.0, -200.0f64..200.0).prop_map(|(x, y)| PeerOp::CreateFrame { x, y }),
         (0usize..6).prop_map(|by| PeerOp::SetSlideOrderRot { by }),
+        (0usize..6, 0usize..6).prop_map(|(frame, nth)| PeerOp::FrameNth { frame, nth }),
+        (0usize..6).prop_map(|nth| PeerOp::UnframeNth { nth }),
         (0usize..6, 0u8..3, 0.0f64..24.0).prop_map(|(nth, dir, gap)| PeerOp::SetAutoLayoutNth {
             nth,
             dir,
@@ -4538,6 +4672,18 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             fill: None,
             correlate: 0,
         }),
+        PeerOp::FrameNth { frame, nth: n } => match (nth(*frame), nth(*n)) {
+            (Some(f), Some(id)) => st.handle_command(ToileCommand::SetFrameChildren {
+                frame: f,
+                add: vec![id],
+                remove: vec![],
+            }),
+            _ => return None,
+        },
+        PeerOp::UnframeNth { nth: n } => match nth(*n) {
+            Some(id) => st.handle_command(ToileCommand::RemoveFromFrames { ids: vec![id] }),
+            None => return None,
+        },
         PeerOp::SetSlideOrderRot { by } => {
             // Rotate the current live-id set to build a permutation, so concurrent
             // peers set overlapping-but-different slide orders (convergence).
@@ -4663,6 +4809,13 @@ proptest! {
         // Identical z-order.
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layer order diverged");
 
+        // Identical frame membership, read from each peer's parent cache.
+        prop_assert_eq!(
+            framed_of(&mut a, la.clone()),
+            framed_of(&mut b, la.clone()),
+            "frame membership diverged"
+        );
+
         // Identical slide sequence: concurrent `SetSlideOrder` reorders must
         // converge on the shared `LoroMovableList<FrameId>`.
         prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
@@ -4719,6 +4872,14 @@ proptest! {
 
         prop_assert_eq!(a.element_count(), b.element_count(), "element count diverged from rebuild");
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layers diverged from rebuild");
+        // The parent cache: the group each painted element names is in the
+        // paint set below, and frame membership is read here.
+        let live = live_ids(&a);
+        prop_assert_eq!(
+            framed_of(&mut a, live.clone()),
+            framed_of(&mut b, live),
+            "frame membership diverged from rebuild"
+        );
         prop_assert_eq!(
             format!("{:?}", a.debug_viewport()),
             format!("{:?}", b.debug_viewport()),

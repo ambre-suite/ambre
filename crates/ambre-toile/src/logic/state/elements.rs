@@ -474,6 +474,7 @@ impl ToileState {
             if let Some(g) = self.enclosing_group(id) {
                 self.remove_child(&g, id);
             }
+            self.forget_parents(id);
         }
         // Drop locally-owned connectors whose endpoint was deleted and
         // strip both elements and orphaned connectors from `layers`.

@@ -58,6 +58,7 @@ mod reactions;
 #[cfg(test)]
 mod schema_shape;
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use kurbo::Rect;
@@ -115,6 +116,16 @@ pub struct ToileState {
     bounds: HashMap<ElementId, Rect>,
     /// Materialized paint order, mirrored from the `layers` list.
     layers: Vec<NodeId>,
+    /// The containers (groups and frames) whose `children` list names each
+    /// element, one entry per occurrence, in discovery order. Derived, never
+    /// authoritative: a read skips an entry whose container the board no longer
+    /// holds, so finding an element's container never walks the board
+    /// (`TOILE-056`).
+    parents: HashMap<ElementId, Vec<ElementId>>,
+    /// How many times the whole element map has been resolved. A cost probe a
+    /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
+    /// the reads that would walk take `&self`.
+    board_walks: Cell<u64>,
     /// Per-session monotonic id-minting counter.
     counter: u32,
     peer: u64,
@@ -260,6 +271,8 @@ impl ToileState {
             index: SpatialIndex::default(),
             bounds: HashMap::new(),
             layers: Vec::new(),
+            parents: HashMap::new(),
+            board_walks: Cell::new(0),
             counter: 0,
             peer,
             viewport: Viewport::default(),
@@ -333,11 +346,23 @@ impl ToileState {
     /// stacks, so the chrome's Undo/Redo affordances must be refreshed
     /// (`UNDO-006`). Undo and Redo already append their own `UndoState`; skip
     /// the duplicate.
+    /// A command that wrote also announces [`BoardChanged`](ToileEvent::BoardChanged),
+    /// ahead of that refresh.
     pub fn handle_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
         let mut outcome = self.dispatch_command(cmd);
-        let already_reported = matches!(outcome.display.last(), Some(ToileEvent::UndoState { .. }));
-        if outcome.update.is_some() && !already_reported {
-            outcome.display.push(self.undo_state_event());
+        if outcome.update.is_none() {
+            return outcome;
+        }
+        match outcome.display.pop() {
+            Some(last @ ToileEvent::UndoState { .. }) => {
+                outcome.display.push(ToileEvent::BoardChanged);
+                outcome.display.push(last);
+            }
+            last => {
+                outcome.display.extend(last);
+                outcome.display.push(ToileEvent::BoardChanged);
+                outcome.display.push(self.undo_state_event());
+            }
         }
         outcome
     }
@@ -507,7 +532,7 @@ impl ToileState {
         }
         self.absorb_imported();
         self.rebuild_caches();
-        let mut events = vec![self.viewport_event()];
+        let mut events = vec![self.viewport_event(), ToileEvent::BoardChanged];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
@@ -547,7 +572,7 @@ impl ToileState {
         }
         self.absorb_imported();
         self.rebuild_caches();
-        let mut events = vec![self.viewport_event()];
+        let mut events = vec![self.viewport_event(), ToileEvent::BoardChanged];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
@@ -610,7 +635,7 @@ impl ToileState {
             return Err(SchemaError::PayloadRejected);
         }
         self.rebuild_caches();
-        let mut events = vec![self.viewport_event()];
+        let mut events = vec![self.viewport_event(), ToileEvent::BoardChanged];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
@@ -781,13 +806,15 @@ impl ToileState {
     /// The full display data of the requested ids, off-screen included
     /// (`toile-menus`, `toile-styles`). The UI thread asks here because the
     /// culled viewport omits the selection past the edge (`TOILE-UI-070`,
-    /// `TOILE-UI-134`).
+    /// `TOILE-UI-134`). It also names the ids a frame holds, which the menu
+    /// cannot read off a box (`TOILE-UI-384`).
     fn selection_data(&self, ids: &[ElementId]) -> ToileOutcome {
         let elements = ids
             .iter()
             .filter_map(|id| self.display_element(id))
             .collect();
-        ToileOutcome::display_only(vec![ToileEvent::SelectionData(elements)])
+        let framed = self.framed_among(ids);
+        ToileOutcome::display_only(vec![ToileEvent::SelectionData { elements, framed }])
     }
 
     /// Every element id on the board, off-screen included, for select-all
@@ -924,6 +951,11 @@ impl ToileState {
     /// Number of elements currently in the CRDT. Test helper.
     pub fn element_count(&self) -> usize {
         self.bounds.len()
+    }
+
+    /// How many times the whole element map has been resolved. Test helper.
+    pub fn board_walks(&self) -> u64 {
+        self.board_walks.get()
     }
 
     /// Materialized paint order. Test helper.

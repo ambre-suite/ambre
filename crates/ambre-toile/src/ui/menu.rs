@@ -171,8 +171,11 @@ pub struct CtxScope {
     /// At least one selected element is unlocked -> Lock applies.
     pub any_unlocked: bool,
     /// The frame that geometrically contains the whole selection (if any and not
-    /// itself selected) -> Add to / Remove from frame apply.
+    /// itself selected) -> Add to frame applies.
     pub containing_frame: Option<ElementId>,
+    /// At least one selected element is held by a frame, whatever its box ->
+    /// Remove from frame applies (`TOILE-UI-384`).
+    pub framed: bool,
 }
 
 /// Find a selected element by id (linear over the selection's data, which the
@@ -187,14 +190,16 @@ fn rect_contains_rect(outer: Rect, inner: Rect) -> bool {
 }
 
 /// Classify the current selection into a [`CtxScope`] the entry builder consumes.
-/// Pure: reads the selection's whole data (`selected`, off-screen included) and
-/// the culled `DisplayViewport` for the enclosing-frame scan. `group_scope` is
-/// accepted for symmetry with the rest of the resolution path (frame lookups may
-/// later honor it); the empty-canvas case ignores everything else.
+/// Pure: reads the selection's whole data (`selected`, off-screen included), the
+/// selected ids a frame holds (`framed`), and the culled `DisplayViewport` for
+/// the enclosing-frame scan. `group_scope` is accepted for symmetry with the
+/// rest of the resolution path (frame lookups may later honor it); the
+/// empty-canvas case ignores everything else.
 pub fn ctx_scope_for(
     selection: &[ElementId],
     _group_scope: Option<&ElementId>,
     selected: &[DisplayElement],
+    framed: &[ElementId],
     display: &DisplayViewport,
 ) -> CtxScope {
     if selection.is_empty() {
@@ -237,6 +242,7 @@ pub fn ctx_scope_for(
         any_locked,
         any_unlocked,
         containing_frame,
+        framed: selection.iter().any(|id| framed.contains(id)),
     }
 }
 
@@ -347,10 +353,18 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
         }
     }
 
-    // Frame membership (only when a containing frame exists).
-    if scope.containing_frame.is_some() {
+    // Frame membership. Adding needs a frame whose box holds the selection;
+    // removing needs a frame that lists it, wherever its box now sits
+    // (`TOILE-UI-384`).
+    let add = scope.containing_frame.is_some();
+    if add || scope.framed {
         ids.push(None);
-        ids.extend([Some(ADD_TO_FRAME), Some(REMOVE_FROM_FRAME)]);
+        if add {
+            ids.push(Some(ADD_TO_FRAME));
+        }
+        if scope.framed {
+            ids.push(Some(REMOVE_FROM_FRAME));
+        }
     }
 
     ids
@@ -605,7 +619,7 @@ mod tests {
     #[test]
     fn empty_selection_is_empty_canvas_scope() {
         let dv = viewport(vec![]);
-        let scope = ctx_scope_for(&[], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[], None, &els(&dv), &[], &dv);
         assert_eq!(scope, CtxScope::default());
         assert!(!scope.over_selection);
     }
@@ -618,7 +632,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert!(scope.over_selection);
         assert_eq!(scope.count, 1);
         assert!(!scope.multi);
@@ -633,7 +647,7 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
             elem("b", ElementKind::Sticky, r(20.0, 0.0, 30.0, 10.0), false),
         ]);
-        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &[], &dv);
         assert!(scope.multi);
         assert_eq!(scope.count, 2);
     }
@@ -644,7 +658,7 @@ mod tests {
             elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
             elem("l", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), true),
         ]);
-        let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &[], &dv);
         assert!(scope.has_group);
         assert!(scope.any_locked);
         assert!(scope.any_unlocked);
@@ -656,7 +670,7 @@ mod tests {
             elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
             elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
         ]);
-        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.containing_frame, Some(eid("f")));
     }
 
@@ -671,8 +685,46 @@ mod tests {
                 false,
             ),
         ]);
-        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.containing_frame, None);
+    }
+
+    /// `TOILE-UI-384`: an element a frame holds, dragged out of that frame's
+    /// box, is still offered removal. Adding needs a box that holds it, so
+    /// add is not offered.
+    #[test]
+    fn a_framed_element_outside_every_box_is_offered_removal() {
+        let dv = viewport(vec![
+            elem("f", ElementKind::Frame, r(0.0, 0.0, 30.0, 30.0), false),
+            elem(
+                "a",
+                ElementKind::Sticky,
+                r(100.0, 100.0, 110.0, 110.0),
+                false,
+            ),
+        ]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[eid("a")], &dv);
+        assert!(scope.framed);
+        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        assert!(ids.contains(&REMOVE_FROM_FRAME), "removal not offered");
+        assert!(
+            !ids.contains(&ADD_TO_FRAME),
+            "add offered with no frame box"
+        );
+    }
+
+    /// A box that holds an element no frame lists offers add, never a removal
+    /// that would change nothing.
+    #[test]
+    fn an_unframed_element_inside_a_box_is_offered_add_only() {
+        let dv = viewport(vec![
+            elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
+            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+        ]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
+        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        assert!(ids.contains(&ADD_TO_FRAME));
+        assert!(!ids.contains(&REMOVE_FROM_FRAME));
     }
 
     /// The culled viewport holds only `a`; `b` is off-screen but in the
@@ -695,7 +747,7 @@ mod tests {
                 true,
             ),
         ];
-        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &dv);
+        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &[], &dv);
         assert_eq!(scope.count, 2);
         assert!(scope.multi);
         assert!(scope.any_locked);
@@ -906,7 +958,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             true,
         )]);
-        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
         for omitted in [
             CUT,
@@ -936,7 +988,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
         for kept in [
             CUT,

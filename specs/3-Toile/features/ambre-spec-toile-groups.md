@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: GROUPS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- grouping ships; the parent lookup scans the whole board per element.
+**Implementation:** partial -- grouping ships; a write that touches a group still walks the board.
 
 > A user selects several elements and binds them: from then on one click takes the set, and one drag
 > moves it. Ungrouping gives the elements back, in place.
@@ -21,10 +21,10 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-149` | `INV` | An element MUST belong to at most one container, a group or a frame. | this spec section 3 | none | unheld -- the binding detaches a member from its current container and the frame handler does the same, and no test puts one element in two lists and reads the second one back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation | none | verified |
+| `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation; `ambre_toile::logic::convergence_tests::a_member_framed_out_of_its_group_shrinks_the_group` -- the union shrinks when a frame takes a member | none | verified |
 | `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | structural -- the group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height, so there is no field a peer could author a box into | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none | unheld -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one, but no test drives a group to empty and asserts it is gone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the lookup materializes the entire element map and scans it, and the visible-set walk calls it once per visible element, section 6; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_container_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
 | `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | none | unheld -- the derivation emits the group as a node with a derived box, and no test reads a group node's style back. What the user sees around it is the selection box, which another document owns; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -66,11 +66,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-162` | `FRAME` | Deleting a group MUST NOT remove an element outside its own subtree. | this spec section 3 | none | unheld -- the delete expands the request to the subtree and strips exactly that set, plus the connectors it orphans, and no test puts a bystander on the board and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the transform command under 1 ms and a remote change under 2 ms, two rows of
-  `ambre-spec-budgets.md section 1`. `TOILE-056` is why neither holds on a large board: the
-  derivation is quadratic in the element count, and no bench measures it.
+  `ambre-spec-budgets.md section 1`. Neither is shown on a large board: a write that touches a
+  group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 10 `verified`, 1 `failing`, 13 `untested`. What holds is the happy path of each
+* **Verification.** 11 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
   gesture, on five tests carrying nine assertions between them. The two refusals a chord over a
   single element or a non-group answers hold too. One row holds by construction: a group has no field
   a box could be authored into. What is loose is the re-parenting, the frame conditions and the nested
@@ -126,7 +126,12 @@ and writes each leaf's coordinates, then recomputes the group boxes bottom-up (`
 
 **How the UI resolves a click.** Each painted element carries the id of its immediate enclosing group
 (`TOILE-UI-119`), and the UI walks that edge upward (`features/ambre-spec-toile-selection.md`).
-Producing that one field is what `TOILE-056` fails on.
+
+**How the parent is found.** The Logic thread keeps a derived map from each element to the containers
+whose membership list names it, one entry per occurrence. A read finds the first entry whose
+container is still a group, or any that is a frame, without walking the board (`TOILE-056`). Each
+write to a membership list updates the map in the same step. A remote change, an undo and an import
+reseed it in the pass that rebuilds the boxes, at no walk of its own.
 
 **Code:**
 
@@ -160,6 +165,7 @@ the user sees is one selection box around the union of the members, with the han
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | A group's box is derived, never stored | storing the union, refreshed on every member change | two peers writing a box for the same group would race for a value that is a function of other values, and the loser's box would contradict the members it is supposed to contain. Deriving it makes the contradiction unrepresentable |
+| An element's parent is a derived map | storing the parent in each element, as a field | it is a format change, and two peers binding one element at once would race on a register the membership lists already settle. The lists stay the truth; the map mirrors them, and a rebuild reseeds it |
 | A group reuses the frame's membership machinery | a second container model for groups | the two differ in what they paint and in what a delete does, not in how a set of children is held. One list type, one detach rule, one ordering helper |
 | A group enters the order below its lowest member | inserting the group above the selection | it reverses the members, and they must keep painting in the order they had; a group that paints nothing has no reason to be anywhere else |
 | An empty group is deleted | keeping it, as a container a user could refill | a rebuild from the document would never materialize it, so the incremental caches would disagree with a rebuild. A group is created with two members and only shrinks; one with none is meaningless |
@@ -170,12 +176,9 @@ the user sees is one selection box around the union of the members, with the han
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The parent lookup scans the whole board** (`TOILE-056`). Reading which group an element belongs to
-  materializes the entire element map and walks it looking for a membership list that names the id.
-  The visible-set walk calls that lookup once per visible element. Deriving a viewport of a hundred
-  elements on a board of fifty thousand walks fifty thousand entries a hundred times, every frame.
-  Binding, unbinding, deleting and pruning call it inside their own loops. The fix stores an
-  element's parent in the document, a format change
+* **A write that touches a group walks the board.** Recomputing the group boxes and pruning empty
+  groups each resolve the whole element map. A bind, an unbind, a move and a delete pay that walk
+  once or more, whatever their size. The read side no longer does (`TOILE-056`)
   (`ambre-roadmap.md`, "A board costs what it shows and what changed").
 * **Ungrouping a multi-selection is one command per id** (`TOILE-010`). The chord and the menu entry
   send one unbind per selected id, each committing separately, so ungrouping three groups takes three

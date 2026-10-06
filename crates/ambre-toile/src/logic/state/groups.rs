@@ -102,7 +102,9 @@ impl ToileState {
             return None;
         };
         for m in &members {
-            let _ = children.push(m.as_str());
+            if children.push(m.as_str()).is_ok() {
+                self.link_parent(m, &id);
+            }
         }
         // Insert the group NodeId just below its lowest member.
         let _ = self
@@ -140,10 +142,16 @@ impl ToileState {
             self.remove_child(p, group);
             if let Some(list) = self.children_list(p) {
                 for c in &children {
-                    let _ = list.push(c.as_str());
+                    if list.push(c.as_str()).is_ok() {
+                        self.link_parent(c, p);
+                    }
                 }
             }
         }
+        for c in &children {
+            self.unlink_parent(c, group);
+        }
+        self.forget_parents(group);
         self.doc.commit();
 
         self.bounds.remove(group);
@@ -183,7 +191,9 @@ impl ToileState {
                     .iter()
                     .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == id.as_str()))
             {
-                let _ = list.delete(idx, 1);
+                if list.delete(idx, 1).is_ok() {
+                    self.unlink_parent(id, frame);
+                }
                 changed = true;
             }
         }
@@ -196,7 +206,9 @@ impl ToileState {
             if let Some(g) = self.enclosing_group(id) {
                 self.remove_child(&g, id);
             }
-            let _ = list.push(id.as_str());
+            if list.push(id.as_str()).is_ok() {
+                self.link_parent(id, frame);
+            }
             changed = true;
         }
         if !changed {
@@ -207,6 +219,8 @@ impl ToileState {
         self.doc.commit();
         self.enforce_frame_zorder(frame);
         self.rematerialize_layers();
+        // A member taken from its group leaves that group's box (`TOILE-009`).
+        self.recompute_groups();
         self.emit_with_update(vec![self.viewport_event()])
     }
 
@@ -217,16 +231,8 @@ impl ToileState {
     /// Nothing held writes nothing. One commit, so one undo item.
     pub(super) fn remove_from_frames(&mut self, ids: &[ElementId]) -> ToileOutcome {
         let gone: HashSet<&str> = ids.iter().map(ElementId::as_str).collect();
-        let frames: Vec<ElementId> = self
-            .layers
-            .iter()
-            .filter_map(|node| match node {
-                NodeId::Element(id) if self.is_frame(id) => Some(id.clone()),
-                _ => None,
-            })
-            .collect();
         let mut changed = false;
-        for frame in &frames {
+        for frame in &self.frame_ids() {
             let Some(list) = self.children_list(frame) else {
                 continue;
             };
@@ -235,8 +241,12 @@ impl ToileState {
             };
             // Back to front, so a delete never shifts an index still to visit.
             for (idx, v) in items.iter().enumerate().rev() {
-                if matches!(v, LoroValue::String(s) if gone.contains(s.as_str())) {
-                    let _ = list.delete(idx, 1);
+                if let LoroValue::String(s) = v
+                    && gone.contains(s.as_str())
+                {
+                    if list.delete(idx, 1).is_ok() {
+                        self.unlink_parent(&ElementId(s.to_string()), frame);
+                    }
                     changed = true;
                 }
             }
@@ -246,6 +256,27 @@ impl ToileState {
         }
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Every frame in paint order.
+    fn frame_ids(&self) -> Vec<ElementId> {
+        self.layers
+            .iter()
+            .filter_map(|node| match node {
+                NodeId::Element(id) if self.is_frame(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The ids of `ids` that some frame's children list holds, in the order
+    /// given. Membership is the list, never the box (`TOILE-UI-384`). Read from
+    /// the parent cache, so the cost follows `ids`, not the board (`TOILE-056`).
+    pub(super) fn framed_among(&self, ids: &[ElementId]) -> Vec<ElementId> {
+        ids.iter()
+            .filter(|id| self.parents_of(id).iter().any(|p| self.is_frame(p)))
+            .cloned()
+            .collect()
     }
 
     /// The title a frame carries, empty until it is named. Test / integration
@@ -288,33 +319,52 @@ impl ToileState {
     /// Clamp every child of `frame` to paint after (above) the frame in
     /// `layers`. A child sitting below the frame is moved to just above it, and
     /// this repeats until the invariant holds. Commits the reordering as part of
-    /// the batch.
+    /// the batch. The caller rematerializes `layers`.
+    ///
+    /// Indices are read from the raw list, never from the materialized order.
+    /// Concurrent rewrites leave duplicate and unreadable entries the
+    /// materialized order drops, so its indices name other raw slots. Moving
+    /// by them once moved the wrong node forever. Each move here takes one child
+    /// entry from below the frame's first entry, so the loop ends within the
+    /// list's length.
     fn enforce_frame_zorder(&mut self, frame: &ElementId) {
-        let children = self.children_of(frame);
+        let children: HashSet<ElementId> = self.children_of(frame).into_iter().collect();
         if children.is_empty() {
             return;
         }
         let list = self.doc.get_movable_list(LAYERS);
         let mut moved = false;
-        loop {
-            self.rematerialize_layers();
-            let order = &self.layers;
-            let Some(fidx) = order
-                .iter()
-                .position(|n| matches!(n, NodeId::Element(e) if e == frame))
-            else {
+        for _ in 0..=list.len() {
+            let LoroValue::List(raw) = list.get_deep_value() else {
                 break;
             };
-            let below = children.iter().find_map(|c| {
-                order
-                    .iter()
-                    .position(|n| matches!(n, NodeId::Element(e) if e == c))
-                    .filter(|ci| *ci < fidx)
-            });
-            let Some(ci) = below else { break };
+            // The frame paints at its first entry; any child entry before it
+            // paints below it.
+            let mut below = None;
+            let mut fidx = None;
+            for (i, v) in raw.iter().enumerate() {
+                let LoroValue::String(s) = v else {
+                    continue;
+                };
+                match NodeId::decode(s) {
+                    Some(NodeId::Element(e)) if &e == frame => {
+                        fidx = Some(i);
+                        break;
+                    }
+                    Some(NodeId::Element(e)) if below.is_none() && children.contains(&e) => {
+                        below = Some(i);
+                    }
+                    _ => {}
+                }
+            }
+            let (Some(fidx), Some(ci)) = (fidx, below) else {
+                break;
+            };
             // Removing ci (< fidx) shifts the frame down to fidx-1, so moving the
             // child to fidx lands it just above the frame.
-            let _ = list.mov(ci, fidx);
+            if list.mov(ci, fidx).is_err() {
+                break;
+            }
             moved = true;
         }
         if moved {
@@ -349,29 +399,21 @@ impl ToileState {
         out
     }
 
-    /// The group whose `children` contains `id`, if any (a node belongs to at
-    /// most one group,).
+    /// The group whose `children` contains `id`, if any. A node belongs to at
+    /// most one group; concurrent binds can break that, and the first found
+    /// wins. Read from the parent cache, never from a walk of the board
+    /// (`TOILE-056`).
     pub(super) fn enclosing_group(&self, id: &ElementId) -> Option<ElementId> {
-        let elems = self.doc.get_map(ELEMENTS);
-        let LoroValue::Map(m) = elems.get_deep_value() else {
-            return None;
-        };
-        for (key, v) in m.iter() {
-            if let LoroValue::Map(fields) = v
-                && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
-                && let Some(LoroValue::List(kids)) = fields.get(CHILDREN)
-                && kids
-                    .iter()
-                    .any(|k| matches!(k, LoroValue::String(s) if s.as_str() == id.as_str()))
-            {
-                return Some(ElementId(key.clone()));
-            }
-        }
-        None
+        self.parents_of(id)
+            .iter()
+            .find(|p| self.is_group(p))
+            .cloned()
     }
 
-    /// Remove `child` from `group`'s `children` list (first match).
-    pub(super) fn remove_child(&self, group: &ElementId, child: &ElementId) {
+    /// Remove `child` from `group`'s `children` list (first match). The cache
+    /// forgets the link even when `group` is gone, as a cascading delete leaves it.
+    pub(super) fn remove_child(&mut self, group: &ElementId, child: &ElementId) {
+        self.unlink_parent(child, group);
         let Some(list) = self.children_list(group) else {
             return;
         };
@@ -425,7 +467,7 @@ impl ToileState {
         loop {
             let empties: Vec<ElementId> = {
                 let mut v = Vec::new();
-                if let LoroValue::Map(m) = self.doc.get_map(ELEMENTS).get_deep_value() {
+                if let LoroValue::Map(m) = self.walk_elements() {
                     for (key, val) in m.iter() {
                         if matches!(val, LoroValue::Map(f)
                             if matches!(f.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group"))
@@ -462,7 +504,7 @@ impl ToileState {
     pub(super) fn recompute_groups(&mut self) {
         let groups: Vec<(ElementId, Vec<ElementId>)> = {
             let mut v = Vec::new();
-            if let LoroValue::Map(m) = self.doc.get_map(ELEMENTS).get_deep_value() {
+            if let LoroValue::Map(m) = self.walk_elements() {
                 for (key, val) in m.iter() {
                     if let LoroValue::Map(fields) = val
                         && matches!(fields.get("type"), Some(LoroValue::String(t)) if t.as_str() == "group")
@@ -501,5 +543,59 @@ impl ToileState {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ToileOutcome};
+    use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
+
+    use super::super::{LAYERS, ToileState};
+
+    fn create(st: &mut ToileState, kind: ElementKind) -> ElementId {
+        let out: ToileOutcome = st.handle_command(ToileCommand::CreateElement {
+            kind,
+            at: Point::ZERO,
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: 0,
+        });
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
+                _ => None,
+            })
+            .expect("a create names its element")
+    }
+
+    /// `TOILE-011`: the clamp ends on a paint order holding a duplicate entry,
+    /// as two concurrent rewrites leave one. It once moved by the materialized
+    /// order's indices, which the duplicate shifts, and looped forever.
+    #[test]
+    fn the_frame_clamp_ends_on_a_duplicate_entry() {
+        let mut st = ToileState::new();
+        let r = create(&mut st, ElementKind::Shape(ShapeKind::Rect));
+        let f = create(&mut st, ElementKind::Frame);
+        let tag = NodeId::Element(r.clone()).encode();
+        let _ = st.doc.get_movable_list(LAYERS).insert(0, tag.as_str());
+        st.doc.commit();
+        st.rematerialize_layers();
+
+        st.handle_command(ToileCommand::SetFrameChildren {
+            frame: f.clone(),
+            add: vec![r.clone()],
+            remove: vec![],
+        });
+        let at = |id: &ElementId| {
+            st.layer_order()
+                .iter()
+                .position(|n| n == &NodeId::Element(id.clone()))
+        };
+        assert!(at(&f) < at(&r), "the child paints below its frame");
     }
 }

@@ -1573,9 +1573,19 @@ pub enum ToileEvent {
     /// clipboard for cross-tab paste (`toile-clipboard`).
     Clipboard(ClipboardPayload),
     SelectionStats(SelectionStats),
+    /// The board's content changed, by a local write or a peer's. It carries
+    /// nothing: a surface holding data it fetched by request asks again. A
+    /// camera move is no change, so a pan never sends it (`TOILE-UI-384`).
+    BoardChanged,
     /// Full display data for the requested ids, off-screen included
     /// (`TOILE-UI-070`, `TOILE-UI-134`).
-    SelectionData(Vec<DisplayElement>),
+    SelectionData {
+        elements: Vec<DisplayElement>,
+        /// The requested ids a frame's children list holds, whatever their
+        /// box. The menu offers removal from a frame by this, not by geometry
+        /// (`TOILE-UI-384`).
+        framed: Vec<ElementId>,
+    },
     /// Every element id on the board, for select-all (`TOILE-UI-033`).
     BoardIds(Vec<ElementId>),
     /// Text-search hits + recenter target (`toile-find`). Local view

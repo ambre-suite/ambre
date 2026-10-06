@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-147` | `POST` | Paste and select-all MUST stay in the view: they MUST emit no board command. | this spec section 2 | `ambre_toile::ui::menu::tests::paste_and_select_all_are_ui_only` -- both resolving to nothing | none | verified |
 | `TOILE-UI-148` | `POST` | Add-to-frame MUST target the frame that geometrically contains the selection. | this spec section 2 | `ambre_toile::ui::menu::tests::add_to_frame_targets_container` -- the frame, the added ids and an empty removal list | none | verified |
 | `TOILE-UI-149` | `POST` | Remove-from-frame MUST take each selected element out of the frame that holds it, whatever frame contains its box. | this spec section 3 | `ambre_toile::ui::menu::tests::remove_from_frame_names_no_frame` -- the entry names the selection and no frame; `ambre_toile::logic::convergence_tests::remove_from_frames_targets_the_real_parent` -- a box inside one frame leaves the other frame that lists it | none | verified |
-| `TOILE-UI-384` | `POST` | Remove-from-frame MUST be offered for a selection a frame holds, even when no frame contains its box. | this spec section 3; `TOILE-UI-149` | none | fails -- the entry shows only when a frame's box contains the selection, and the display carries no membership to read, so an element dragged out of its frame's box is offered no removal. It lands with the `An element outside its frame's box can still leave it` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-384` | `POST` | Remove-from-frame MUST be offered for a selection a frame holds, even when no frame contains its box. | this spec section 3; `TOILE-UI-149` | `ambre_toile::ui::menu::tests::a_framed_element_outside_every_box_is_offered_removal` -- a scope whose element a frame holds, outside every box, offers removal; `ambre_toile::logic::convergence_tests::selection_data_names_a_member_outside_its_frame` -- Logic names the member off its frame's list, and a write or a peer's delta announces the change that makes the view ask again, while a camera move does not; structural -- the view hands the reply's framed ids to the scope classifier | none | verified |
 | `TOILE-UI-150` | `POST` | Where frames overlap, the frame the entries target MUST be the front-most one that contains the selection. | this spec section 2 | none | unheld -- the lookup scans the painted order backwards and takes the first container, and the frame test holds one frame, so the choice is never exercised; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-151` | `FRAME` | Resolving an entry MUST NOT change the selection. | this spec section 2 | type-level -- the resolver borrows the selection immutably and returns commands, so it has no way to write it back | none | verified |
 | `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | `ambre_toile::ui::menu::tests::an_unknown_id_is_refused_not_ui_only` -- an unknown id resolves to `None`, never the empty list a view-only intent returns | none | verified |
@@ -99,11 +99,11 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 38 `verified`, 3 `failing`, 12 `untested`. What holds is the entry set, the omission
+* **Verification.** 39 `verified`, 2 `failing`, 12 `untested`. What holds is the entry set, the omission
   of a locked element's move entries, and a scope read from the whole selection (`TOILE-UI-134`). An unknown
   id is refused rather than passed as a view-only intent. What is loose is the pointer: which scope a
-  right-click means, and what it does to the selection. The failures are the frame notice, the removal
-  a box outside its frame is never offered, and the zoom rule its test only half proves.
+  right-click means, and what it does to the selection. The failures are the frame notice and the zoom
+  rule its test only half proves.
 
 ---
 
@@ -123,9 +123,16 @@ pub enum MenuRow {
 
 pub struct CtxScope {
     // what the pointer resolved to: the selection size, whether it is locked,
-    // whether it is a group, and the frame that contains it, if any
+    // whether it is a group, the frame that contains it, if any, and whether
+    // a frame holds part of it
 }
 ```
+
+**Where the scope reads from.** The selection's data comes from the Logic thread, off-screen included
+(`TOILE-UI-134`). The same reply names the selected ids a frame's children list holds, which no box
+tells. The Logic thread announces each board change, local or a peer's, and the view then asks for that
+data again. A camera move is no change, so a pan never re-reads the selection. The re-read costs the
+selection, not the board: containers come from a derived parent map (`TOILE-056`).
 
 **The dispatch, in steps:**
 
@@ -160,7 +167,7 @@ which is why that map is a pure function.
 | Scope | Entries |
 |---|---|
 | empty board | paste, select all |
-| one unlocked element | cut, copy, duplicate, delete; the four z-order moves; lock; add to or remove from the frame containing it; a reaction |
+| one unlocked element | cut, copy, duplicate, delete; the four z-order moves; lock; add to the frame whose box contains it, and remove from the frame that holds it, wherever it sits (`TOILE-UI-384`); a reaction |
 | several elements | the same, plus group and the six alignments |
 | three or more elements | the same, plus the two distributions |
 | a group | the same, plus ungroup |
@@ -237,8 +244,6 @@ This one restates none of them.
   move. No rule states what the user is told when an entry produces no change. Two refusals here are still
   silent: a frame entry with no enclosing frame (`TOILE-UI-153`) and a fit to the selection with nothing
   selected (`TOILE-UI-160`).
-* **The frame entries show by geometry, not by membership.** Add targets the front-most frame whose box
-  contains the selection, and no test holds two (`TOILE-UI-150`). Remove names no frame: the board takes
-  each element out of the frame that lists it (`TOILE-UI-149`). Both entries still show only when a frame
-  contains the selection's box. An element dragged out of its frame's box is therefore offered no removal
+* **Add shows by geometry, with no test of two frames.** Add targets the front-most frame whose box
+  contains the selection, and no test holds two (`TOILE-UI-150`). Remove shows by membership instead
   (`TOILE-UI-384`).
