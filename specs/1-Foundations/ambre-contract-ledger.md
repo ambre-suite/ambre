@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3349 rows: 2416 shipped, of which 102 partial and 604 loose. 933 unbuilt.**
+**3350 rows: 2417 shipped, of which 102 partial and 601 loose. 933 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 308 | 257 | 548 | 597 |  | 1710 |
+| `verified` | 308 | 257 | 552 | 597 |  | 1714 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 5 | 2 | 14 |  |  | 21 |
+| `failing` | 5 | 2 | 11 |  |  | 18 |
 | `untested` | 231 | 131 | 196 | 2 |  | 560 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -112,9 +112,9 @@
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 5 | 8 |  |
 | `ambre-spec-toile-engine.md` | 38 | 38 | 31 |  | 7 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 9 |  | 6 |  |
-| `ambre-spec-toile-frames.md` | 22 | 22 | 16 | 1 | 5 |  |
+| `ambre-spec-toile-frames.md` | 22 | 22 | 17 | 1 | 4 |  |
 | `ambre-spec-toile-freehand.md` | 12 | 12 | 6 | 1 | 5 |  |
-| `ambre-spec-toile-groups.md` | 24 | 24 | 11 |  | 13 |  |
+| `ambre-spec-toile-groups.md` | 25 | 25 | 12 |  | 13 |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 35 | 1 | 5 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 5 | 7 |  |  |
 | `ambre-spec-toile-media.md` | 29 | 29 | 25 |  | 4 |  |
@@ -128,7 +128,7 @@
 | `ambre-spec-toile-styles.md` | 30 | 30 | 22 |  | 8 |  |
 | `ambre-spec-toile-text-editing.md` | 39 | 38 | 13 |  | 25 | 1 |
 | `ambre-spec-toile-tools.md` | 30 | 30 | 23 | 1 | 6 |  |
-| `ambre-spec-toile-undo.md` | 4 | 4 | 1 |  | 3 |  |
+| `ambre-spec-toile-undo.md` | 4 | 4 | 3 |  | 1 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 4 | 1 | 7 | 1 |
 | `ambre-spec-toile-viewport.md` | 35 | 33 | 16 | 6 | 11 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 |  | 9 |  |
@@ -274,7 +274,7 @@
 | `ambre-spec-toile-find.md` | TOILE-079..080,082,142..145; TOILE-UI-111..118 |
 | `ambre-spec-toile-frames.md` | TOILE-011,048..051,099..102,237,247..256,261..262 |
 | `ambre-spec-toile-freehand.md` | TOILE-008,038..041,103..108,259 |
-| `ambre-spec-toile-groups.md` | TOILE-009..010,052..056,149..162,246; TOILE-UI-119..120 |
+| `ambre-spec-toile-groups.md` | TOILE-009..010,052..056,149..162,246,264; TOILE-UI-119..120 |
 | `ambre-spec-toile-import-export.md` | TOILE-IO-001..004,010..012,014..028,068..098 |
 | `ambre-spec-toile-links.md` | TOILE-062..066,109..115 |
 | `ambre-spec-toile-media.md` | TOILE-IO-006..009,013,034..037,049..067,101 |

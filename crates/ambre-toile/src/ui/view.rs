@@ -2626,9 +2626,11 @@ impl ToileView {
                     });
                 }
                 // Group / ungroup the selection (`toile-groups`).
+                // One command for the whole selection, so one undo item
+                // (`TOILE-094`).
                 "g" | "G" if shift => {
-                    for id in self.selection.clone() {
-                        self.send_edit(ToileCommand::UngroupElements { group: id });
+                    if let Some(cmd) = super::menu::ungroup_chord(&self.selection) {
+                        self.send_edit(cmd);
                     }
                 }
                 "g" | "G" if !self.selection.is_empty() => {

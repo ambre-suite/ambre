@@ -370,6 +370,18 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
     ids
 }
 
+/// The command `Ctrl+Shift+G` sends: one ungroup over the whole selection, so
+/// the gesture is one undo item (`TOILE-094`). The chord does not filter the
+/// groups, since the selection payload may lag a click. Logic reads the
+/// document itself and answers nothing for a non-group beside a group
+/// (`TOILE-264`). An empty selection sends nothing. Pure, so the chord's
+/// shape is host-tested here rather than through the key handler.
+pub fn ungroup_chord(selection: &[ElementId]) -> Option<ToileCommand> {
+    (!selection.is_empty()).then(|| ToileCommand::UngroupElements {
+        groups: selection.to_vec(),
+    })
+}
+
 /// Translate a menu `CommandId` into the `ToileCommand`(s) to emit against the
 /// current selection. The single place a Toile menu id becomes command(s); pure
 /// and host-tested (`toile-menus`). `PASTE` and `SELECT_ALL` are UI-only intents
@@ -399,13 +411,23 @@ pub fn resolve_menu_command(
             delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
         }],
         GROUP => vec![ToileCommand::GroupElements { ids: ids() }],
-        // One ungroup per selected group node (a non-group id is skipped here,
-        // not left for Logic to reject).
-        UNGROUP => selection
-            .iter()
-            .filter(|id| find_element(selected, id).is_some_and(|e| e.kind == ElementKind::Group))
-            .map(|id| ToileCommand::UngroupElements { group: id.clone() })
-            .collect(),
+        // One ungroup over every selected group node, so one undo item
+        // (`TOILE-094`). A non-group id is skipped here, not left for Logic to
+        // reject; a selection with no group sends nothing.
+        UNGROUP => {
+            let groups: Vec<ElementId> = selection
+                .iter()
+                .filter(|id| {
+                    find_element(selected, id).is_some_and(|e| e.kind == ElementKind::Group)
+                })
+                .cloned()
+                .collect();
+            if groups.is_empty() {
+                Vec::new()
+            } else {
+                vec![ToileCommand::UngroupElements { groups }]
+            }
+        }
         // One Reorder per selected element over the unified NodeId layer list.
         BRING_FRONT => reorder_each(selection, ZTarget::Front),
         SEND_BACK => reorder_each(selection, ZTarget::Back),
@@ -815,8 +837,30 @@ mod tests {
             resolve_menu_command(UNGROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
             out.as_slice(),
-            [ToileCommand::UngroupElements { group }] if group == &eid("g")
+            [ToileCommand::UngroupElements { groups }] if groups == &[eid("g")]
         ));
+    }
+
+    /// `TOILE-094`: the menu entry and the chord each send one ungroup for a
+    /// selection of several groups, never one per id.
+    #[test]
+    fn ungrouping_a_selection_sends_one_command() {
+        let dv = viewport(vec![
+            elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
+            elem("h", ElementKind::Group, r(20.0, 0.0, 30.0, 10.0), false),
+            elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
+        ]);
+        let sel = [eid("g"), eid("a"), eid("h")];
+        let out = resolve_menu_command(UNGROUP, &sel, None, &els(&dv), &dv).unwrap();
+        assert!(matches!(
+            out.as_slice(),
+            [ToileCommand::UngroupElements { groups }] if groups == &[eid("g"), eid("h")]
+        ));
+        assert!(matches!(
+            ungroup_chord(&sel),
+            Some(ToileCommand::UngroupElements { groups }) if groups == sel
+        ));
+        assert!(ungroup_chord(&[]).is_none());
     }
 
     #[test]

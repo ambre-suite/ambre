@@ -56,6 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | none | unheld -- the test ungroups a top-level group, where the container is the board and the re-parenting is a no-op. The nested case, where the children join the enclosing group's list, is driven by nothing; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-158` | `FRAME` | Ungrouping MUST NOT move any element. | this spec section 3 | none | unheld -- the unbind writes a membership list and a paint-order entry, and the test reads the order back, never a position; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_ungroup_of_a_non_group_answers_an_error` -- a plain rect yields a `NotAGroup` error and nothing moves | none | verified |
+| `TOILE-264` | `POST` | An ungroup whose list holds a group MUST unbind its groups and answer nothing for the ids that are not groups. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_mixed_ungroup_answers_nothing_for_its_non_groups` -- a group between two rects unbinds with no error, and the two rects alone answer one `NotAGroup` | none | verified |
 | `TOILE-160` | `FAIL` | Ungrouping an id the board does not hold MUST tell the user. | this spec section 3 | none | unheld -- the handler returns the missing-element error, and no test reads that notice back for this command; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Delete a group
@@ -70,10 +71,10 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 11 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
-  gesture, on five tests carrying nine assertions between them. The two refusals a chord over a
-  single element or a non-group answers hold too. One row holds by construction: a group has no field
-  a box could be authored into. What is loose is the re-parenting, the frame conditions and the nested
+* **Verification.** 12 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
+  gesture, and the two refusals a chord over a single element or a non-group answers. A mixed
+  ungroup unbinds its groups in silence. One row holds by construction: a group has no field a box
+  could be authored into. What is loose is the re-parenting, the frame conditions and the nested
   case.
 
 ---
@@ -100,7 +101,7 @@ the lock flag and a style register, and no coordinates at all (`TOILE-150`). Its
 the derived bounds cache and the spatial index (`TOILE-009`).
 
 **Commands** (`ambre-bus`), one undo item each: `GroupElements { ids }` and
-`UngroupElements { group }`.
+`UngroupElements { groups }`.
 
 **Steps, when a group is bound:**
 
@@ -115,9 +116,13 @@ the derived bounds cache and the spatial index (`TOILE-009`).
    (`TOILE-052`);
 7. commit once, then recompute every group's box to a fixed point.
 
-**Steps, when a group is unbound:** remove the group element and its paint-order entry. Re-parent
-its children to the group's own parent (`TOILE-157`), and drop the dead reference from that parent
-before appending them. Then commit and recompute (`TOILE-010`, `TOILE-156`).
+**Steps, when groups are unbound:** for each listed group, remove the group element. Re-parent its
+children to the group's own parent (`TOILE-157`), dropping the dead reference from that parent
+before appending them. Then strip the paint-order entries in one rewrite, commit once and recompute
+(`TOILE-010`, `TOILE-156`, `TOILE-094`). An id that is not a group changes nothing (`TOILE-159`).
+Beside a group it answers nothing, and a list with no group answers one error (`TOILE-264`). The
+chord sends the whole selection rather than filter it: the selection payload may lag a click, and
+the Logic thread reads the document itself.
 
 **How a transform reaches the members.** A move expands each selected id to the leaves of its subtree
 and writes each leaf's coordinates, then recomputes the group boxes bottom-up (`TOILE-154`,
@@ -147,7 +152,7 @@ reseed it in the pass that rebuilds the boxes, at no walk of its own.
 | Trigger | Sends |
 |---|---|
 | `Ctrl+G` on a selection of two or more | `GroupElements` over the selection |
-| `Ctrl+Shift+G` on a selection | `UngroupElements` once per selected id |
+| `Ctrl+Shift+G` on a selection | one `UngroupElements` over the selection |
 | Group and Ungroup, in the object menu and the context menu | the same two commands (`features/ambre-spec-toile-menus.md`) |
 
 **What a group looks like.** Nothing of its own: no fill, no border, no title (`TOILE-UI-120`). What
@@ -180,9 +185,6 @@ the user sees is one selection box around the union of the members, with the han
   groups each resolve the whole element map. A bind, an unbind, a move and a delete pay that walk
   once or more, whatever their size. The read side no longer does (`TOILE-056`)
   (`ambre-roadmap.md`, "A board costs what it shows and what changed").
-* **Ungrouping a multi-selection is one command per id** (`TOILE-010`). The chord and the menu entry
-  send one unbind per selected id, each committing separately, so ungrouping three groups takes three
-  undos. The ids that are not groups answer an error each.
 * **The nested transform rests on a property that cannot fail on it** (`TOILE-053`). The two-peer
   property generates a group of a group and asserts that the two peers agree. A move that reached
   only the first level of a subtree would leave both peers agreeing on the same wrong positions. The

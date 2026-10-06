@@ -114,25 +114,72 @@ impl ToileState {
         Some(id)
     }
 
-    /// Drop a group's binding: remove the group node and re-parent its children
-    /// to the group's own parent (an enclosing group, or the board). The children
-    /// survive with their `layers` order intact.
-    pub(super) fn ungroup_elements(&mut self, group: &ElementId) -> ToileOutcome {
-        let Some(gm) = self.element_map(group) else {
-            return self.err_no_element(group);
-        };
-        if str_of(&gm, "type") != "group" {
-            // An id that is not a group refuses loudly (`TOILE-159`).
-            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NotAGroup(
-                group.0.clone(),
-            ))]);
+    /// Drop each group's binding: remove the group node and re-parent its
+    /// children to the group's own parent (an enclosing group, or the board).
+    /// The children survive with their `layers` order intact.
+    ///
+    /// The list is one gesture, so every unbind lands in one commit and one
+    /// undo restores them all (`TOILE-094`). Each unbind reads the parent cache
+    /// the previous one updated, so a group listed with its own enclosing group
+    /// unbinds in either order.
+    ///
+    /// An id that is not a group changes nothing (`TOILE-159`). Beside a group
+    /// it is answered with nothing, since the surface sends the whole selection
+    /// and the user asked to ungroup what can be (`TOILE-264`). A list with no
+    /// group answers one error, naming its first id. An id the board does not
+    /// hold always answers its own error (`TOILE-160`).
+    pub(super) fn ungroup_elements(&mut self, groups: &[ElementId]) -> ToileOutcome {
+        let mut display = Vec::new();
+        let mut unbound = Vec::new();
+        let mut not_a_group = None;
+        let mut seen = HashSet::new();
+        for group in groups {
+            if !seen.insert(group) {
+                continue;
+            }
+            match self.element_map(group) {
+                None => display.push(ToileEvent::Error(ToileError::NoSuchElement(
+                    group.0.clone(),
+                ))),
+                Some(gm) if str_of(&gm, "type") != "group" => {
+                    not_a_group = not_a_group.or(Some(group));
+                }
+                Some(_) => {
+                    self.unbind_group(group);
+                    unbound.push(group);
+                }
+            }
         }
+        if unbound.is_empty() {
+            if let Some(id) = not_a_group {
+                display.push(ToileEvent::Error(ToileError::NotAGroup(id.0.clone())));
+            }
+            return ToileOutcome::display_only(display);
+        }
+        // One rewrite of the paint order for the whole list, not one per group.
+        let gone: HashSet<&ElementId> = unbound.iter().copied().collect();
+        self.strip_layers(|node| !matches!(node, NodeId::Element(e) if gone.contains(e)));
+        self.doc.commit();
+
+        for group in unbound {
+            self.bounds.remove(group);
+            self.index.remove(group);
+        }
+        self.rematerialize_layers();
+        self.recompute_groups();
+        display.push(self.viewport_event());
+        self.emit_with_update(display)
+    }
+
+    /// Write one group's unbind into the open transaction. The caller has
+    /// checked that `group` is a group, and owns the paint order, the commit
+    /// and the caches.
+    fn unbind_group(&mut self, group: &ElementId) {
         let children = self.children_of(group);
         let parent = self.enclosing_group(group);
 
-        // Remove the group element and its layers node.
+        // Remove the group element; the caller strips its layers node.
         let _ = self.doc.get_map(ELEMENTS).delete(group.as_str());
-        self.strip_layers(|node| !matches!(node, NodeId::Element(e) if e == group));
 
         // Re-parent the children to the enclosing group (board parent is implicit).
         // Drop the ungrouped group from the parent's `children`, else it lingers as
@@ -152,13 +199,6 @@ impl ToileState {
             self.unlink_parent(c, group);
         }
         self.forget_parents(group);
-        self.doc.commit();
-
-        self.bounds.remove(group);
-        self.index.remove(group);
-        self.rematerialize_layers();
-        self.recompute_groups();
-        self.emit_with_update(vec![self.viewport_event()])
     }
 
     // -- frames ---------------------------------------------------------
@@ -216,8 +256,10 @@ impl ToileState {
         }
         // Prune any group emptied by moving its last child into the frame.
         self.prune_empty_groups();
-        self.doc.commit();
+        // The clamp joins the same commit: membership and order undo together
+        // (`TOILE-048`).
         self.enforce_frame_zorder(frame);
+        self.doc.commit();
         self.rematerialize_layers();
         // A member taken from its group leaves that group's box (`TOILE-009`).
         self.recompute_groups();
@@ -318,8 +360,9 @@ impl ToileState {
 
     /// Clamp every child of `frame` to paint after (above) the frame in
     /// `layers`. A child sitting below the frame is moved to just above it, and
-    /// this repeats until the invariant holds. Commits the reordering as part of
-    /// the batch. The caller rematerializes `layers`.
+    /// this repeats until the invariant holds. The caller commits, so the
+    /// reordering joins its batch, and rematerializes `layers`. The raw list
+    /// already holds the caller's uncommitted writes.
     ///
     /// Indices are read from the raw list, never from the materialized order.
     /// Concurrent rewrites leave duplicate and unreadable entries the
@@ -327,13 +370,12 @@ impl ToileState {
     /// by them once moved the wrong node forever. Each move here takes one child
     /// entry from below the frame's first entry, so the loop ends within the
     /// list's length.
-    fn enforce_frame_zorder(&mut self, frame: &ElementId) {
+    fn enforce_frame_zorder(&self, frame: &ElementId) {
         let children: HashSet<ElementId> = self.children_of(frame).into_iter().collect();
         if children.is_empty() {
             return;
         }
         let list = self.doc.get_movable_list(LAYERS);
-        let mut moved = false;
         for _ in 0..=list.len() {
             let LoroValue::List(raw) = list.get_deep_value() else {
                 break;
@@ -365,10 +407,6 @@ impl ToileState {
             if list.mov(ci, fidx).is_err() {
                 break;
             }
-            moved = true;
-        }
-        if moved {
-            self.doc.commit();
         }
     }
 

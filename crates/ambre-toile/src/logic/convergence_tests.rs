@@ -1540,10 +1540,96 @@ fn ungroup_keeps_children_and_order() {
     let g = created_id(&st.handle_command(ToileCommand::GroupElements {
         ids: vec![a.clone(), b.clone()],
     }));
-    st.handle_command(ToileCommand::UngroupElements { group: g.clone() });
+    st.handle_command(ToileCommand::UngroupElements {
+        groups: vec![g.clone()],
+    });
     // The group node is gone; both children survive in their prior order.
     assert!(st.bounds_of(&g).is_none());
     assert_eq!(st.layer_order(), &[NodeId::Element(a), NodeId::Element(b)]);
+}
+
+/// `TOILE-094`: ungrouping a multi-selection is one gesture, so one undo
+/// restores every group it unbound.
+#[test]
+fn ungrouping_three_groups_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let mut groups = Vec::new();
+    for i in 0..3 {
+        let x = f64::from(i) * 100.0;
+        let a = create_rect(&mut st, Point::new(x, 0.0), Size::new(10.0, 10.0));
+        let b = create_rect(&mut st, Point::new(x + 20.0, 0.0), Size::new(10.0, 10.0));
+        groups.push(created_id(
+            &st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] }),
+        ));
+    }
+    st.handle_command(ToileCommand::UngroupElements {
+        groups: groups.clone(),
+    });
+    assert!(groups.iter().all(|g| st.bounds_of(g).is_none()));
+    st.handle_command(ToileCommand::Undo);
+    for g in &groups {
+        assert_eq!(
+            st.membership_of(g).len(),
+            2,
+            "one undo restores every group"
+        );
+    }
+}
+
+/// `TOILE-264`: a list holding a group unbinds it and answers nothing for the
+/// ids that are not groups; a list holding none answers one error.
+#[test]
+fn a_mixed_ungroup_answers_nothing_for_its_non_groups() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let c = create_rect(&mut st, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
+    let d = create_rect(&mut st, Point::new(60.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] }));
+    let out = st.handle_command(ToileCommand::UngroupElements {
+        groups: vec![c.clone(), g.clone(), d.clone()],
+    });
+    assert!(st.bounds_of(&g).is_none(), "the group unbinds");
+    assert!(
+        !out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(_))),
+        "no error for the non-groups beside it"
+    );
+    let out = st.handle_command(ToileCommand::UngroupElements { groups: vec![c, d] });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NotAGroup(_))]
+    ));
+}
+
+/// `TOILE-094`: a group and its own enclosing group ungrouped in one gesture
+/// leave both members on the board, whichever the selection lists first.
+#[test]
+fn ungrouping_a_group_with_its_parent_unbinds_both() {
+    for inner_first in [false, true] {
+        let mut st = ToileState::new();
+        let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+        let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+        let c = create_rect(&mut st, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
+        let inner = created_id(&st.handle_command(ToileCommand::GroupElements {
+            ids: vec![a.clone(), b.clone()],
+        }));
+        let outer = created_id(&st.handle_command(ToileCommand::GroupElements {
+            ids: vec![inner.clone(), c.clone()],
+        }));
+        let groups = if inner_first {
+            vec![inner.clone(), outer.clone()]
+        } else {
+            vec![outer.clone(), inner.clone()]
+        };
+        st.handle_command(ToileCommand::UngroupElements { groups });
+        assert!(st.bounds_of(&inner).is_none() && st.bounds_of(&outer).is_none());
+        assert_eq!(
+            st.layer_order(),
+            &[NodeId::Element(a), NodeId::Element(b), NodeId::Element(c)]
+        );
+    }
 }
 
 #[test]
@@ -1923,6 +2009,33 @@ fn set_frame_children_is_one_undo_item() {
     assert!(
         st.membership_of(&f).is_empty(),
         "one undo reverts the whole membership change"
+    );
+}
+
+/// `TOILE-048`: a child drawn before its frame is clamped above it, and one
+/// undo reverts the membership and the clamp together.
+#[test]
+fn a_clamped_membership_change_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let before = st.layer_order().to_vec();
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+    assert_eq!(
+        st.layer_order(),
+        &[NodeId::Element(f.clone()), NodeId::Element(a.clone())],
+        "the clamp lifts the child above its frame"
+    );
+    st.handle_command(ToileCommand::Undo);
+    assert!(st.membership_of(&f).is_empty());
+    assert_eq!(
+        st.layer_order(),
+        before.as_slice(),
+        "the clamp is undone too"
     );
 }
 
@@ -4647,7 +4760,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
         },
         PeerOp::UngroupNth { nth: n } => match nth(*n) {
             // A no-op on a non-group returns no delta, and `out.update` filters it.
-            Some(id) => st.handle_command(ToileCommand::UngroupElements { group: id }),
+            Some(id) => st.handle_command(ToileCommand::UngroupElements { groups: vec![id] }),
             None => return None,
         },
         PeerOp::ConnectNth { i, j } => match (nth(*i), nth(*j)) {
@@ -5015,7 +5128,7 @@ fn a_group_of_one_answers_an_error() {
 fn an_ungroup_of_a_non_group_answers_an_error() {
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
-    let out = st.handle_command(ToileCommand::UngroupElements { group: a });
+    let out = st.handle_command(ToileCommand::UngroupElements { groups: vec![a] });
     assert!(matches!(
         out.display.as_slice(),
         [ToileEvent::Error(ToileError::NotAGroup(_))]

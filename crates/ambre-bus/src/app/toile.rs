@@ -1028,11 +1028,12 @@ pub enum ToileCommand {
     GroupElements {
         ids: Vec<ElementId>,
     },
-    /// Drop a group's binding, re-parenting its children to the group's own
-    /// parent. The children survive, and only the group node goes away. One undo
-    /// item.
+    /// Drop each group's binding, re-parenting its children to the group's own
+    /// parent. The children survive, and only the group nodes go away. A
+    /// multi-selection is one gesture, so the whole list is one undo item
+    /// (`TOILE-094`).
     UngroupElements {
-        group: ElementId,
+        groups: Vec<ElementId>,
     },
 
     // -- Frames (`toile-frames`) --

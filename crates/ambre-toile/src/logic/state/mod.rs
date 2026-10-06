@@ -390,7 +390,7 @@ impl ToileState {
             ToileCommand::LockElements { ids, locked } => self.lock_elements(&ids, locked),
             ToileCommand::Reorder { node, to } => self.reorder(node, to),
             ToileCommand::GroupElements { ids } => self.group_elements(&ids),
-            ToileCommand::UngroupElements { group } => self.ungroup_elements(&group),
+            ToileCommand::UngroupElements { groups } => self.ungroup_elements(&groups),
             ToileCommand::SetFrameChildren { frame, add, remove } => {
                 self.set_frame_children(&frame, &add, &remove)
             }

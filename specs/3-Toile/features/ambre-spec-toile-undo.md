@@ -16,8 +16,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-014` | `INV` | One command that mutates the board MUST become one undo item, however many writes it makes. | this spec section 2; architecture section 2.D | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item`; `::duplicate_a_group_is_one_undo_item`; `::undo_reverts_group_as_one_item` -- three gestures driven through the command path, undo pressed once; `ambre_toile::state::elements::inner_tests::many_inner_creates_share_one_undo_item`; `::create_restyle_and_group_are_one_undo_item` -- these call the `_inner` helpers and commit by hand, so they hold that Loro groups a commit, not that a handler ends with one | fails -- one command breaks it today: a membership change whose clamp fires leaves two undo items rather than one (`TOILE-048`); lands with the `One gesture is one undo item on the board` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-094` | `INV` | One gesture the user performs once MUST become one undo item, however many commands the surface sends for it. | this spec section 2 | none | fails -- a multi-selection ungroup breaks it: the chord sends one `UngroupElements` per selected id, each its own commit, so ungrouping three groups takes three undos (`features/ambre-spec-toile-groups.md section 6`). `TOILE-014` binds the command and never the gesture, so nothing was ruling this; lands with the `One gesture is one undo item on the board` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-014` | `INV` | One command that mutates the board MUST become one undo item, however many writes it makes. | this spec section 2; architecture section 2.D | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item`; `::a_clamped_membership_change_is_one_undo_item`; `::duplicate_a_group_is_one_undo_item`; `::undo_reverts_group_as_one_item`; `::ungrouping_three_groups_is_one_undo_item` -- five commands driven through the command path, undo pressed once; `ambre_toile::state::elements::inner_tests::many_inner_creates_share_one_undo_item`; `::create_restyle_and_group_are_one_undo_item` -- these call the `_inner` helpers and commit by hand, so they hold that Loro groups a commit, not that a handler ends with one | none | verified |
+| `TOILE-094` | `INV` | One gesture the user performs once MUST become one undo item, however many commands the surface sends for it. | this spec section 2 | `ambre_toile::ui::menu::tests::ungrouping_a_selection_sends_one_command` -- the menu entry and the chord each send one command for three selected ids; `ambre_toile::logic::convergence_tests::ungrouping_three_groups_is_one_undo_item` -- that command over three groups, undone once; `ambre_toile::logic::convergence_tests::ungrouping_a_group_with_its_parent_unbinds_both` -- a nested pair in either order | none | verified |
 | `TOILE-097` | `INV` | `Ctrl+Y` MUST redo, the binding users of other applications reach for. | this spec section 3 | none | unheld -- it is the one chord the menu never renders, so even the chip test does not reach its name; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-098` | `INV` | The Undo and Redo menu entries MUST send the undo and redo intents. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` | none | verified |
 
@@ -26,12 +26,10 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   1`, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo writes reverting operations into the document, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 1 `verified`, 2 `failing`, 1 `untested`; what holds is the gesture: three driven
-  through the command path become one item each. What is loose is the four triggers of section 3,
-  three of them chords no test reads. The two failures are the rules the code answers with something
-  else. A membership change whose clamp fires takes two items (`TOILE-048`), and a multi-selection
-  ungroup takes one per group. The shared rules are `ambre-spec-undo.md`; Toile's gaps are section
-  5.
+* **Verification.** 3 `verified`, 1 `untested`; what holds is the gesture. Five commands driven
+  through the command path become one item each, a clamped membership change and a multi-selection
+  ungroup included. What is loose is the four triggers of section 3, three of them chords no test
+  reads. The shared rules are `ambre-spec-undo.md`; Toile's gaps are section 5.
 
 ---
 
@@ -67,8 +65,8 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | a group, an ungroup, a paste, a duplicate | one each (`TOILE-070`) |
 | a whole file import, however many elements | one (`features/ambre-spec-toile-import-export.md`) |
 | a body edit, however many keystrokes | one, sealed when the editor closes |
-| a membership change that reorders a child | two, and the rule says one (`TOILE-048`) |
-| ungrouping a selection of three groups | three, and `TOILE-094` says one (`features/ambre-spec-toile-groups.md section 6`) |
+| a membership change that reorders a child | one, the clamp included (`TOILE-048`) |
+| ungrouping a selection of three groups | one: the surface sends one command for it (`TOILE-094`) |
 | a copy | none: it writes nothing (`TOILE-067`) |
 | a camera change, a tool change, a presence frame, playback | none: they write nothing |
 
