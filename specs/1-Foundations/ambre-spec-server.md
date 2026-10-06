@@ -121,8 +121,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-136` | `POST` | A removal from a space MUST remove the member from every channel of that space, and mark each private one as owing a rotation. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
-  50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that register
-  reads **none exists**: no bench measures the relay today.
+  50 KB per open document of `ambre-spec-budgets.md section 6`. No bench measures the relay: each
+  of its rows there reads **none exists**.
 * **Boundary.** this document is the relay side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
@@ -216,12 +216,14 @@ the set `ZK-015` names.
 A space is a document like any other, so its members are its member rows. A direct message is a
 channel with no space. It arrives whole in one request: both documents, an editor row for each
 member, and the log of `meta` that grants exactly those rows (`SRV-176`). The client signs that log
-and the relay checks it act by act against one sequence, `ownerless_log` in `ambre-protocol`, so
-the two sides cannot drift apart. Its segment holds no row of its own, since every document of a
-channel reads the rows of `meta`. A direct message has no owner, so `SRV-011` never applies to it.
+and the relay checks it act by act. Both follow one sequence, `ownerless_log` in `ambre-protocol`,
+so the two sides cannot drift apart.
+
+The segment of a direct message holds no row of its own, since every document of a channel reads
+the rows of `meta`. A direct message has no owner, so `SRV-011` never applies to it.
 
 Two direct messages never hold the same members (`SRV-177`). The request takes a transaction lock
-keyed by the sorted set of members, then looks for a channel with no space whose rows on `meta`
+keyed by the sorted set of members. It then looks for a channel with no space whose rows on `meta`
 are exactly that set. A racing request waits on the lock and finds the first one's channel. The
 lock is advisory and lasts the transaction, so no table holds the set.
 
@@ -234,8 +236,9 @@ since no member stays to hear it.
 A public channel outlives its last member. The space reads its key in the catalogue, so the next
 member joins it alone, and the last one leaves owner or not (`SRV-174`). A private channel goes
 with its last member instead (`SRV-142`), each of its documents deleted as a deleted document is
-(`SRV-165`). The last owner of a public channel leaves it too, while others stay: an owner of the
-space document then stands in for it, as it does for the whole space (`SRV-175`). An editor of the space does not, so a catalogue writer deletes no channel.
+(`SRV-165`). The last owner of a public channel leaves it too, while others stay. An owner of the
+space document then stands in for it, as it does for the whole space (`SRV-175`). An editor of the
+space does not, so a catalogue writer deletes no channel.
 
 A document with no name stores nothing rather than a placeholder. The listing returns each sealed
 name beside the caller's own sealed key. A client therefore reads its whole list in one answer,

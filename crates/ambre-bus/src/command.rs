@@ -159,8 +159,8 @@ pub enum SyncCommand {
         channel_id: ChannelId,
     },
     /// Open or create the direct message of this user and `members`, in one
-    /// request: one channel key wrapped for each member alone, and a log in
-    /// which nobody stays owner. Answered by
+    /// request. It carries one channel key wrapped for each member alone, and
+    /// a log in which nobody stays owner. Answered by
     /// [`crate::LogicEvent::DirectMessageOpened`] or
     /// [`crate::LogicEvent::ChannelRequestFailed`] under `channel_id`.
     CreateDirectMessage {

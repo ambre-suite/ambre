@@ -1,8 +1,8 @@
 // ambre-logic/src/direct.rs
 // ============================================================================
-// Murmure direct messages: a request names its members, and the relay answers
-// with the direct message that holds exactly them, created or found (the
-// Murmure channels spec). A direct message belongs to no space, so nothing
+// Murmure direct messages (the Murmure channels spec). A request names its
+// members, and the relay answers with the direct message that holds exactly
+// them, created or found. A direct message belongs to no space, so nothing
 // here touches a catalogue. No key reaches this thread: the Sync worker wraps
 // the channel key for each member.
 // ============================================================================

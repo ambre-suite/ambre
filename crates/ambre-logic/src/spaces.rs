@@ -1,9 +1,9 @@
 // ambre-logic/src/spaces.rs
 // ============================================================================
-// Murmure spaces: the space document and its catalogue, the creation of a
-// public or a private channel, and the self-join (the Murmure spaces and
-// channels specs). A space is one
-// document, never an entry of `docs`. No key reaches this thread: the
+// Murmure spaces (the Murmure spaces and channels specs). This holds the
+// space document and its catalogue, the creation and the delete of a
+// channel, and the self-join. A space is one document, never an entry of
+// `docs`. No key reaches this thread: the
 // catalogue key travels sealed, and only the Sync worker opens it.
 // ============================================================================
 
@@ -329,9 +329,9 @@ impl LogicState {
 
     // --- The members of a space, and their presence ---
 
-    /// The document of a space is live: show this user online to the other
-    /// members, and ask the relay for the member rows (the Murmure members
-    /// spec).
+    /// The document of a space is live (the Murmure members spec). Show this
+    /// user online to the other members, and ask the relay for the member
+    /// rows.
     fn space_live(&mut self, space_id: SpaceId) {
         self.send_presence(space_id);
         self.ask_members(space_id);
@@ -449,8 +449,8 @@ impl LogicState {
     /// when no space, open or opening, holds it.
     ///
     /// The departure of another connection of this user turns no one
-    /// offline: this connection answers with its sample, so the other members
-    /// see this user online again.
+    /// offline. This connection answers with its sample, so the other
+    /// members see this user online again.
     pub(crate) fn space_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
         let space_id = SpaceId::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
@@ -506,7 +506,7 @@ impl LogicState {
             .any(|space| space.state.sealed_key(channel_id).is_ok())
     }
 
-    /// The relay holds the new channel: list a public one in the catalogue
+    /// The relay holds the new channel. List a public one in the catalogue
     /// with its sealed key, and send the first content of its two documents.
     /// A private one writes no catalogue.
     pub(crate) fn channel_created(&mut self, channel_id: ChannelId, key: Option<SealedChannelKey>) {

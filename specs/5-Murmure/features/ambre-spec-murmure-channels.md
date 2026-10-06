@@ -151,8 +151,8 @@ finds what the first made (`MURMURE-047`, `SRV-177`).
 2. The Sync worker fetches each member's keys from the relay again. An exchange key that changed
    since the view showed it fails the request, and no wrap leaves (`MURMURE-464`). The signing
    key is the one each member's invite names.
-3. It draws one key and signs the log of `meta`: its creation, one editor invite per member, then
-   its own role lowered to editor (`MURMURE-251`). No owner is left (`MURMURE-252`).
+3. It draws one key and signs the log of `meta`. The log holds its creation, one editor invite per
+   member, then its own role lowered to editor (`MURMURE-251`). No owner is left (`MURMURE-252`).
 4. It wraps the key for each member, the log's root inside (`MURMURE-052`).
 5. The relay checks the log, and stores the channel with an editor row per member in one
    transaction (`SRV-176`). The segment opens no log: its access reads the rows of `meta`.
@@ -188,13 +188,14 @@ goes with it (`MURMURE-243`). An owner who leaves hands the role on first, and t
 the leave of the last one while other members stay (`MURMURE-257`). The last member of a private
 channel leaves in the same transaction that deletes it, so no channel is left without a member.
 
-**Each client drops a deleted channel.** The owner's client drops the channel, its documents and its keys once the relay answers, and keeps
-it whole on a refusal (`MURMURE-462`, `MURMURE-463`). A public one leaves the catalogue with it
-(`MURMURE-247`). Every other member's client drops it too, on the relay's word (`MURMURE-465`).
+**Each client drops a deleted channel.** The owner's client drops the channel, its documents and
+its keys once the relay answers, and keeps it whole on a refusal (`MURMURE-462`, `MURMURE-463`). A
+public one leaves the catalogue with it (`MURMURE-247`). Every other member's client drops it too,
+on the relay's word (`MURMURE-465`).
 
 **A direct message has no owner.** Every member is an editor (`MURMURE-252`), so nobody deletes it
 for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
-public channel stays listed with no member, for the next one to join (`MURMURE-461`): the space
+public channel stays listed with no member, for the next one to join (`MURMURE-461`). The space
 reads its key in the catalogue, so nobody needs to stay to hand it on. Its last owner leaves even
 while others stay, and an owner of the space deletes it from then on (`SRV-175`).
 
@@ -229,8 +230,8 @@ who writes its key into the catalogue.
 * `ambre-logic/src/direct.rs` -- a direct message request, and the created or existing channel it
   opens.
 * `ambre-murmure/src/channel.rs` -- the name a member sets on a direct message.
-* `ambre-sync/src/channels.rs` -- registering a channel, with a sealed key for a public one only;
-  the log, the wraps and the key check of a direct message.
+* `ambre-sync/src/channels.rs` -- registering a channel, with a sealed key for a public one only.
+  It also holds the log, the wraps and the key check of a direct message.
 
 ---
 
@@ -267,9 +268,9 @@ who writes its key into the catalogue.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No invite exists.** Inviting into a private channel or a direct message, and the notice a
-  direct message of two shows first, land with the
-  `Invites into a channel` Story (`ambre-roadmap.md` E5). The notice needs a message kind the
+* **No invite exists.** Inviting into a private channel or a direct message lands with the
+  `Invites into a channel` Story (`ambre-roadmap.md` E5). So does the notice a direct message of
+  two shows first. The notice needs a message kind the
   schema does not hold yet.
 * **The last owner of a public channel that keeps other members cannot leave yet.** The relay
   refuses it as it does for any document, until `SRV-175` lands with the

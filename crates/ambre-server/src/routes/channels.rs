@@ -102,9 +102,9 @@ pub struct CreateDirectMessageRequest {
     /// The hex identifier of the channel key, which the creation and every
     /// invite of the log name.
     pub key_id: String,
-    /// The log of `meta`, signed by the caller, in order: its `Create`, one
-    /// editor `Invite` per member in the order of `members`, then the
-    /// caller's own `ChangeRole` to editor.
+    /// The log of `meta`, signed by the caller. In order, it holds its
+    /// `Create`, one editor `Invite` per member in the order of `members`,
+    /// then the caller's own `ChangeRole` to editor.
     pub entries: Vec<String>,
 }
 
@@ -1232,7 +1232,7 @@ mod tests {
             .expect("query")
     }
 
-    /// A viewer of the space creates a private channel: the relay holds it
+    /// A viewer of the space creates a private channel. The relay holds it
     /// in that space and not public, with its creator as its one member and
     /// owner. The space document keeps its members.
     #[sqlx::test]
@@ -1619,7 +1619,7 @@ mod tests {
     }
 
     /// `SRV-177`: a request for a set of members that already has a direct
-    /// message answers it, from either side, and writes nothing: no channel,
+    /// message answers it, from either side. It writes nothing: no channel,
     /// no document, no member.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

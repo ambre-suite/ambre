@@ -3,7 +3,7 @@
 //!
 //! The member rows come from the relay's table of the space document
 //! (`MURMURE-031`). The presence of each member rides the ephemerals of that
-//! document (`MURMURE-444`). The engine reads no clock: the view's tick stamps
+//! document (`MURMURE-444`). The engine reads no clock. The view's tick stamps
 //! every sample heard since the tick before, so a sample is dated to within one
 //! refresh period.
 
@@ -93,7 +93,7 @@ impl Roster {
 
     /// A presence sample came from `user`. Returns whether they were offline
     /// before, so the caller can answer a member who just came online with
-    /// its own sample: a newcomer then sees who is online without waiting a
+    /// its own sample. A newcomer then sees who is online without waiting a
     /// refresh period.
     pub fn heard(&mut self, user: UserId) -> bool {
         self.heard.insert(user, self.now).is_none()

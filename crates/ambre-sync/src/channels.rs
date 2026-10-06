@@ -267,11 +267,11 @@ impl SyncState {
     }
 
     /// Ask the relay for the direct message of this user and `members`
-    /// (the Murmure channels spec): the relay creates it, or answers the one
+    /// (the Murmure channels spec). The relay creates it, or answers the one
     /// that already holds exactly them. One fresh key opens it, wrapped for
     /// every member under the exchange key the view pinned. The relay's
     /// copy of each key is fetched again first, and a key that changed
-    /// fails the request: a relay that swaps a key gets no wrap under it.
+    /// fails the request. A relay that swaps a key gets no wrap under it.
     /// The same answer gives each member's signing key, which their invite
     /// in the log names.
     pub(crate) fn handle_create_direct_message(
@@ -561,7 +561,7 @@ pub(crate) fn self_join_entry(
 /// The request that creates a direct message of the signer and `members`
 /// under a fresh key.
 ///
-/// Meta's log makes every member an editor, and leaves no owner: the signer
+/// Meta's log makes every member an editor, and leaves no owner. The signer
 /// creates it, invites each member as an editor, then lowers its own role to
 /// editor. Each member comes with the signing key their invite names. Every
 /// wrap carries the log's root, so each member replays it. The segment opens
