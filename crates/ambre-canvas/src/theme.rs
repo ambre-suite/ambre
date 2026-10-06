@@ -164,4 +164,200 @@ mod stylesheet_tests {
         assert!(unknown.is_empty(), "read but declared nowhere: {unknown:?}");
         assert!(known.contains("--text") && known.contains("--error"));
     }
+
+    /// The CSS named colours, every one a literal the source never declared.
+    const NAMED_COLOURS: &str = "aliceblue antiquewhite aqua aquamarine azure beige bisque black \
+        blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral \
+        cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen \
+        darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon \
+        darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink \
+        deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia \
+        gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink \
+        indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue \
+        lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink \
+        lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue \
+        lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue \
+        mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen \
+        mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite \
+        navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen \
+        paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple \
+        rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell \
+        sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal \
+        thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen";
+
+    /// The colour functions, each of which spells a colour out in place.
+    const COLOUR_FUNCTIONS: [&str; 9] = [
+        "rgb(", "rgba(", "hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(",
+    ];
+
+    /// `css` with its comments blanked and its line breaks kept. A comment
+    /// that names a colour is not read as one, and a line number still holds.
+    fn uncommented(css: &str) -> String {
+        let mut out = String::with_capacity(css.len());
+        let mut rest = css;
+        while let Some(open) = rest.find("/*") {
+            out.push_str(&rest[..open]);
+            let close = rest[open..]
+                .find("*/")
+                .map_or(rest.len(), |at| open + at + 2);
+            out.extend(
+                rest[open..close]
+                    .chars()
+                    .map(|c| if c == '\n' { '\n' } else { ' ' }),
+            );
+            rest = &rest[close..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// Every declaration of `css` as (line, property, value). A selector is
+    /// the text before a `{`, so a segment ended by `;` or `}` is a
+    /// declaration.
+    fn declarations(css: &str) -> Vec<(usize, String, String)> {
+        let mut found = Vec::new();
+        let mut start = 0;
+        for (at, c) in css.char_indices() {
+            if !matches!(c, '{' | '}' | ';') {
+                continue;
+            }
+            let segment = &css[start..at];
+            if c != '{'
+                && let Some((property, value)) = segment.split_once(':')
+            {
+                let line = css[..start + segment.len() - segment.trim_start().len()]
+                    .matches('\n')
+                    .count()
+                    + 1;
+                found.push((line, property.trim().to_owned(), value.trim().to_owned()));
+            }
+            start = at + 1;
+        }
+        found
+    }
+
+    /// Whether `value` spells a colour out rather than reading a token.
+    fn names_a_colour(property: &str, value: &str) -> bool {
+        let lower = value.to_ascii_lowercase();
+        if lower.split('#').skip(1).any(|after| {
+            let digits = after.bytes().take_while(u8::is_ascii_hexdigit).count();
+            matches!(digits, 3 | 4 | 6 | 8)
+        }) {
+            return true;
+        }
+        if COLOUR_FUNCTIONS.iter().any(|f| lower.contains(f)) {
+            return true;
+        }
+        // A named colour is a bare word, so read the words of a property that
+        // takes a colour. A font family or an animation name is not one.
+        const TAKES_A_COLOUR: [&str; 8] = [
+            "color",
+            "background",
+            "border",
+            "outline",
+            "shadow",
+            "fill",
+            "stroke",
+            "caret",
+        ];
+        TAKES_A_COLOUR.iter().any(|p| property.contains(p))
+            && lower
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+                .any(|word| NAMED_COLOURS.split_whitespace().any(|name| name == word))
+    }
+
+    /// Whether `property` sets a spacing, a radius or a type size.
+    fn takes_a_scale(property: &str) -> bool {
+        [
+            "padding",
+            "margin",
+            "gap",
+            "row-gap",
+            "column-gap",
+            "font-size",
+            "font",
+        ]
+        .iter()
+        .any(|p| property == *p || property.starts_with(&format!("{p}-")))
+            && property != "font-family"
+            && property != "font-weight"
+            && property != "font-style"
+            && property != "font-variant-numeric"
+            || property == "border-radius"
+            || property.starts_with("border-") && property.ends_with("-radius")
+    }
+
+    /// Every length `value` spells out, other than zero and a hairline. A
+    /// hairline of 1px is a border width, so a `-1px` nudge is one too.
+    fn lengths(value: &str) -> Vec<&str> {
+        value
+            .split(|c: char| c.is_whitespace() || matches!(c, ',' | '(' | ')' | '/'))
+            .filter(|word| {
+                let number = word.trim_start_matches(['-', '+']);
+                let digits = number
+                    .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+                    .unwrap_or(number.len());
+                let unit = &number[digits..];
+                digits > 0
+                    && matches!(unit, "px" | "rem" | "em" | "pt")
+                    && !matches!(&number[..digits], "0" | "1")
+            })
+            .collect()
+    }
+
+    // `UI-THREAD-029`: every colour, spacing, radius and type size of the shell
+    // is a token the source declares. A literal is reported with its line.
+    #[test]
+    fn the_shell_stylesheet_spells_out_no_colour_and_no_scale() {
+        let mut literals = Vec::new();
+        for (line, property, value) in declarations(&uncommented(SHELL_CSS)) {
+            if names_a_colour(&property, &value) {
+                literals.push(format!("{line}: {property}: {value}"));
+            }
+            let spelled = lengths(&value);
+            if takes_a_scale(&property) && !spelled.is_empty() {
+                literals.push(format!("{line}: {property}: {spelled:?}"));
+            }
+        }
+        assert!(
+            literals.is_empty(),
+            "{} literals the token source never declared:\n{}",
+            literals.len(),
+            literals.join("\n")
+        );
+    }
+
+    /// The check reads what it claims to. A literal of each kind is caught,
+    /// and a token, a zero, a hairline and a comment are not.
+    #[test]
+    fn the_literal_check_catches_each_kind_and_spares_a_token() {
+        let caught = |css: &str| {
+            declarations(&uncommented(css))
+                .into_iter()
+                .filter(|(_, p, v)| {
+                    names_a_colour(p, v) || takes_a_scale(p) && !lengths(v).is_empty()
+                })
+                .count()
+        };
+        for literal in [
+            ".a { color: #fff; }",
+            ".a { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) }",
+            ".a { border: 1px solid white; }",
+            ".a { padding: 4px var(--space-2); }",
+            ".a { margin-top: 1.5rem; }",
+            ".a { border-top-left-radius: 3px; }",
+            ".a { font: 14px Roboto, sans-serif; }",
+        ] {
+            assert_eq!(caught(literal), 1, "missed {literal}");
+        }
+        for token in [
+            ".a:hover { color: var(--on-accent); }",
+            ".a { margin: 0; padding: 0 var(--space-4); }",
+            ".a { border: 1px solid var(--border); margin: -1px; }",
+            "/* a white #fff */ .a { white-space: nowrap; font-family: Roboto; }",
+            ".a { width: 320px; border-radius: 50%; }",
+        ] {
+            assert_eq!(caught(token), 0, "flagged {token}");
+        }
+    }
 }

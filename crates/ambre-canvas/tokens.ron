@@ -7,7 +7,8 @@
 // One source => canvas/DOM coherence by construction. Light is the unmarked
 // `:root` default; dark is `:root[data-theme="dark"]` and the canvas DARK palette.
 //
-// Colours are `#rrggbb`. Scales are unitless integers (px for CSS, f32 for Rust).
+// Colours are `#rrggbb`; an effect or photo colour may carry an alpha, `#rrggbbaa`.
+// Scales are unitless integers (px for CSS, f32 for Rust).
 // ============================================================================
 Tokens(
     // -- Chrome (DOM) colours -> CSS custom properties ------------------------
@@ -25,6 +26,7 @@ Tokens(
             warning:   "#c2410c",
             error:     "#cc4444",
             info:      "#2467c0",
+            on_accent: "#ffffff",
         ),
         dark: (
             bg:        "#1b1b1d",
@@ -39,7 +41,39 @@ Tokens(
             warning:   "#e8772e",
             error:     "#e05a5a",
             info:      "#5a9ae0",
+            // The dark accent is light, so the text on it is dark.
+            on_accent: "#1b1b1d",
         ),
+    ),
+
+    // -- Chrome effects -> CSS custom properties, one set per theme ----------
+    // A shadow is a vertical offset, a blur and a colour. The light theme
+    // casts softer ones: a dark shadow on a light ground reads heavier.
+    effects: (
+        light: (
+            shadow_low:  (y: 1,  blur: 4,  colour: "#0000001f"),
+            shadow_mid:  (y: 4,  blur: 14, colour: "#0000002e"),
+            shadow_high: (y: 12, blur: 48, colour: "#00000047"),
+            scrim:       "#0a0a1473",
+        ),
+        dark: (
+            shadow_low:  (y: 1,  blur: 4,  colour: "#0000001f"),
+            shadow_mid:  (y: 4,  blur: 14, colour: "#00000059"),
+            shadow_high: (y: 12, blur: 48, colour: "#0000008c"),
+            scrim:       "#0a0a1473",
+        ),
+    ),
+
+    // -- Colours drawn over a picture -> CSS, the same in both themes --------
+    // The ground is the picture, not the theme, so these do not switch.
+    photo: (
+        text:           "#ffffff",
+        text_shadow:    "#000000bf",
+        line:           "#ffffff1f",
+        control_line:   "#ffffff80",
+        control_ground: "#ffffff29",
+        veil:           "#120c05d1",
+        veil_deep:      "#120c05eb",
     ),
 
     // -- Canvas (wgpu content) colours -> Rust Palette -----------------------
@@ -77,14 +111,38 @@ Tokens(
     ),
 
     // -- Theme-independent scales (px in CSS, f32 in Rust) -------------------
-    scale: (
-        space_xs:     4,
-        space_sm:     8,
-        space_md:     12,
-        space_lg:     16,
-        radius:       6,
-        font_small:   12,
-        font_body:    14,
-        font_heading: 20,
-    ),
+    // A spacing steps by two pixels, `space_n` being `2n`. Every padding,
+    // margin and gap of the shell reads one; a hairline of 1px is a border
+    // width, not a spacing.
+    scale: [
+        ("space_1",         2),
+        ("space_2",         4),
+        ("space_3",         6),
+        ("space_4",         8),
+        ("space_5",         10),
+        ("space_6",         12),
+        ("space_7",         14),
+        ("space_8",         16),
+        ("space_10",        20),
+        ("space_11",        22),
+        ("space_12",        24),
+        ("space_13",        26),
+        ("space_14",        28),
+        ("space_20",        40),
+        ("space_24",        48),
+        ("radius_sm",       4),
+        ("radius",          6),
+        ("radius_md",       8),
+        ("radius_lg",       12),
+        ("radius_full",     999),
+        ("font_xs",         11),
+        ("font_small",      12),
+        ("font_ui",         13),
+        ("font_body",       14),
+        ("font_subheading", 15),
+        ("font_large",      16),
+        ("font_heading",    20),
+        ("font_display",    26),
+        ("font_hero",       32),
+    ],
 )

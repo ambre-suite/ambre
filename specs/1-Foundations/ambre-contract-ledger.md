@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3359 rows: 2432 shipped, of which 102 partial and 598 loose. 927 unbuilt.**
+**3359 rows: 2432 shipped, of which 102 partial and 597 loose. 927 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 315 | 256 | 564 | 597 |  | 1732 |
+| `verified` | 316 | 256 | 564 | 597 |  | 1733 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 4 | 6 | 12 | 2 |  | 24 |
+| `failing` | 3 | 6 | 12 | 2 |  | 23 |
 | `untested` | 231 | 129 | 189 | 2 |  | 551 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -46,7 +46,7 @@
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
 | `ambre-spec-delta-order.md` | 20 | 19 | 8 | 1 | 10 | 1 |
-| `ambre-spec-design-tokens.md` | 6 | 6 | 2 |  | 4 |  |
+| `ambre-spec-design-tokens.md` | 6 | 6 | 3 |  | 3 |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 |  | 1 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |

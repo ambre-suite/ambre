@@ -8,6 +8,7 @@
 // keeps the DOM chrome and the wgpu content in lockstep by construction.
 // ============================================================================
 
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -17,8 +18,10 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct Tokens {
     chrome: ThemePair<ChromeColors>,
+    effects: ThemePair<Effects>,
+    photo: Photo,
     canvas: ThemePair<CanvasColors>,
-    scale: Scale,
+    scale: Vec<(String, u32)>,
 }
 
 #[derive(Deserialize)]
@@ -41,11 +44,13 @@ struct ChromeColors {
     warning: String,
     error: String,
     info: String,
+    /// Text and icons drawn on an accent ground.
+    on_accent: String,
 }
 
 impl ChromeColors {
     /// (css-var-name, hex) pairs in declaration order.
-    fn vars(&self) -> [(&'static str, &str); 12] {
+    fn vars(&self) -> [(&'static str, &str); 13] {
         [
             ("bg", &self.bg),
             ("surface", &self.surface),
@@ -59,6 +64,75 @@ impl ChromeColors {
             ("warning", &self.warning),
             ("error", &self.error),
             ("info", &self.info),
+            ("on-accent", &self.on_accent),
+        ]
+    }
+}
+
+/// A drop shadow: a vertical offset and a blur in pixels, and a colour.
+#[derive(Deserialize)]
+struct Shadow {
+    y: u32,
+    blur: u32,
+    colour: String,
+}
+
+impl Shadow {
+    fn css(&self) -> String {
+        format!(
+            "0 {}px {}px {}",
+            self.y,
+            self.blur,
+            css_colour(&self.colour)
+        )
+    }
+}
+
+/// The chrome's shadows and the scrim behind a modal, for one theme.
+#[derive(Deserialize)]
+struct Effects {
+    shadow_low: Shadow,
+    shadow_mid: Shadow,
+    shadow_high: Shadow,
+    scrim: String,
+}
+
+impl Effects {
+    /// (css-var-name, css value) pairs in declaration order.
+    fn vars(&self) -> [(&'static str, String); 4] {
+        [
+            ("shadow-low", self.shadow_low.css()),
+            ("shadow-mid", self.shadow_mid.css()),
+            ("shadow-high", self.shadow_high.css()),
+            ("scrim", css_colour(&self.scrim).to_owned()),
+        ]
+    }
+}
+
+/// Colours drawn over a picture rather than over a theme ground, so one set
+/// serves both themes.
+#[derive(Deserialize)]
+struct Photo {
+    text: String,
+    text_shadow: String,
+    line: String,
+    control_line: String,
+    control_ground: String,
+    veil: String,
+    veil_deep: String,
+}
+
+impl Photo {
+    /// (css-var-name, hex) pairs in declaration order.
+    fn vars(&self) -> [(&'static str, &str); 7] {
+        [
+            ("photo-text", &self.text),
+            ("photo-text-shadow", &self.text_shadow),
+            ("photo-line", &self.line),
+            ("photo-control-line", &self.control_line),
+            ("photo-control-ground", &self.control_ground),
+            ("photo-veil", &self.veil),
+            ("photo-veil-deep", &self.veil_deep),
         ]
     }
 }
@@ -102,34 +176,6 @@ impl CanvasColors {
     }
 }
 
-#[derive(Deserialize)]
-struct Scale {
-    space_xs: u32,
-    space_sm: u32,
-    space_md: u32,
-    space_lg: u32,
-    radius: u32,
-    font_small: u32,
-    font_body: u32,
-    font_heading: u32,
-}
-
-impl Scale {
-    /// (css-var-name, rust-const-name, value) in declaration order.
-    fn entries(&self) -> [(&'static str, &'static str, u32); 8] {
-        [
-            ("space-xs", "SPACE_XS", self.space_xs),
-            ("space-sm", "SPACE_SM", self.space_sm),
-            ("space-md", "SPACE_MD", self.space_md),
-            ("space-lg", "SPACE_LG", self.space_lg),
-            ("radius", "RADIUS", self.radius),
-            ("font-small", "FONT_SMALL", self.font_small),
-            ("font-body", "FONT_BODY", self.font_body),
-            ("font-heading", "FONT_HEADING", self.font_heading),
-        ]
-    }
-}
-
 /// Parse `#rrggbb` into `(r, g, b)`. Panics on malformed input -- a token typo
 /// must fail the build, not ship a wrong colour.
 fn hex_rgb(hex: &str) -> (u8, u8, u8) {
@@ -144,11 +190,39 @@ fn hex_rgb(hex: &str) -> (u8, u8, u8) {
     (byte(0), byte(2), byte(4))
 }
 
+/// Check a CSS-only colour, `#rrggbb` or `#rrggbbaa`, and hand it back.
+fn css_colour(hex: &str) -> &str {
+    let h = hex
+        .strip_prefix('#')
+        .unwrap_or_else(|| panic!("token colour must start with '#': {hex}"));
+    assert!(
+        (h.len() == 6 || h.len() == 8) && h.bytes().all(|b| b.is_ascii_hexdigit()),
+        "token colour must be #rrggbb or #rrggbbaa: {hex}"
+    );
+    hex
+}
+
+/// Check the scale names: each one snake_case, none twice.
+fn check_scale(scale: &[(String, u32)]) {
+    let mut seen = BTreeSet::new();
+    for (name, _) in scale {
+        assert!(
+            !name.is_empty()
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'),
+            "scale name must be snake_case: {name}"
+        );
+        assert!(seen.insert(name), "scale name declared twice: {name}");
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=tokens.ron");
 
     let src = fs::read_to_string("tokens.ron").expect("read tokens.ron");
     let tokens: Tokens = ron::from_str(&src).expect("parse tokens.ron");
+    check_scale(&tokens.scale);
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR");
 
@@ -203,7 +277,8 @@ fn main() {
     emit_chrome(&mut rs, "CHROME_LIGHT", &tokens.chrome.light);
     emit_chrome(&mut rs, "CHROME_DARK", &tokens.chrome.dark);
 
-    for (_, rust_name, value) in tokens.scale.entries() {
+    for (name, value) in &tokens.scale {
+        let rust_name = name.to_ascii_uppercase();
         rs.push_str(&format!("pub const {rust_name}: f32 = {value}.0;\n"));
     }
 
@@ -216,13 +291,23 @@ fn main() {
     for (var, hex) in tokens.chrome.light.vars() {
         css.push_str(&format!("    --{var}: {hex};\n"));
     }
-    for (var, _, value) in tokens.scale.entries() {
+    for (var, value) in tokens.effects.light.vars() {
+        css.push_str(&format!("    --{var}: {value};\n"));
+    }
+    for (var, hex) in tokens.photo.vars() {
+        css.push_str(&format!("    --{var}: {};\n", css_colour(hex)));
+    }
+    for (name, value) in &tokens.scale {
+        let var = name.replace('_', "-");
         css.push_str(&format!("    --{var}: {value}px;\n"));
     }
     css.push_str("}\n\n");
     css.push_str(":root[data-theme=\"dark\"] {\n");
     for (var, hex) in tokens.chrome.dark.vars() {
         css.push_str(&format!("    --{var}: {hex};\n"));
+    }
+    for (var, value) in tokens.effects.dark.vars() {
+        css.push_str(&format!("    --{var}: {value};\n"));
     }
     css.push_str("}\n");
 

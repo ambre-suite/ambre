@@ -2,9 +2,10 @@
    ---------------------------------------------------------------------------
    App-shell chrome styling. The dark/light token sets (tokens.ron -> theme.css)
    are injected at startup and are the single source of every colour, spacing,
-   radius and type size (ambre-spec-design-tokens.md). The fifty literal colours
-   still in this file bypass that source and are the open defect UI-THREAD-029
-   states. Class names mirror the elements emitted by ambre-chrome::AppShell.
+   radius and type size (ambre-spec-design-tokens.md). This file spells none
+   out: a test in ambre-canvas reads it and fails on a literal (UI-THREAD-029).
+   A width, a height, a position and a 1px hairline are layout, not tokens.
+   Class names mirror the elements emitted by ambre-chrome::AppShell.
    --------------------------------------------------------------------------- */
 
 /* Colour, spacing, radius and font tokens come from the generated theme.css
@@ -39,15 +40,15 @@ input[type="radio"] {
     background: var(--bg);
     color: var(--text);
     font-family: system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
 }
 
 /* Header: title left, sync + avatar right. */
 .ambre-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 12px;
+    gap: var(--space-6);
+    padding: 0 var(--space-6);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
 }
@@ -64,7 +65,7 @@ input[type="radio"] {
 .ambre-sync {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     color: var(--text-dim);
 }
 
@@ -78,7 +79,7 @@ input[type="radio"] {
 /* Sync status modifiers (ambre-spec-chrome.md): "Syncing" (hydrating / catching up)
    pulses amber, "Offline" (no WS link) shows a muted dot. */
 .ambre-sync .dot.syncing {
-    background: var(--warning, #d9a441);
+    background: var(--warning);
     animation: ambre-sync-pulse 1s ease-in-out infinite;
 }
 
@@ -97,11 +98,11 @@ input[type="radio"] {
     height: 26px;
     border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: var(--font-xs);
     font-weight: 600;
     user-select: none;
 }
@@ -110,8 +111,8 @@ input[type="radio"] {
 .ambre-commandbar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
     min-height: 38px;
@@ -123,10 +124,10 @@ input[type="radio"] {
     background: transparent;
     color: var(--text);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-body);
     font-weight: 400;
-    padding: 4px 9px;
-    border-radius: 6px;
+    padding: var(--space-2) calc(var(--space-4) + 1px);
+    border-radius: var(--radius);
     cursor: pointer;
 }
 
@@ -150,13 +151,13 @@ input[type="radio"] {
 .ambre-commandbar button[aria-pressed="true"] {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-commandbar .sep {
     width: 1px;
     align-self: stretch;
-    margin: 4px 4px;
+    margin: var(--space-2) var(--space-2);
     background: var(--border);
 }
 
@@ -175,18 +176,18 @@ input[type="radio"] {
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text-dim);
     border: 1px solid var(--border);
-    font-size: 11px;
+    font-size: var(--font-xs);
     font-weight: 400;
     line-height: 1.4;
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-low);
     transition: opacity 0.1s ease 0.45s;
 }
 
@@ -208,8 +209,8 @@ input[type="radio"] {
     flex-direction: column;
     min-height: 0;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-low);
 }
 
 /* The shared `.sep` is a vertical rule in the horizontal bar; here it must run
@@ -218,7 +219,7 @@ input[type="radio"] {
     width: auto;
     height: 1px;
     align-self: stretch;
-    margin: 4px 4px;
+    margin: var(--space-2) var(--space-2);
 }
 
 /* The shared tooltip sits below the button in the docked bar; on a left-docked
@@ -238,15 +239,15 @@ input[type="radio"] {
     transform: translateX(-50%);
     z-index: 60;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-low);
 }
 
 /* Menu titles are text, not icons: give them horizontal padding and normal
    text sizing (the shared bar is sized for square icon buttons). */
 .ambre-menu-title {
-    padding: 0 8px;
-    font: 14px Roboto, system-ui, -apple-system, sans-serif;
+    padding: 0 var(--space-4);
+    font: var(--font-body) Roboto, system-ui, -apple-system, sans-serif;
 }
 
 /* Toile zoom control (toile-ui SS5quinquies.E): docked top-right, same chrome. */
@@ -256,15 +257,15 @@ input[type="radio"] {
     right: 8px;
     z-index: 60;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-low);
 }
 
 /* The `%` readout doubles as the reset-to-100% button: a fixed-width numeric
    label so the bar does not reflow as the zoom changes. */
 .ambre-zoom-readout {
     min-width: 48px;
-    font: 13px ui-monospace, monospace;
+    font: var(--font-ui) ui-monospace, monospace;
     color: var(--text);
 }
 
@@ -279,21 +280,21 @@ input[type="radio"] {
     z-index: 60;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     width: 220px;
-    padding: 8px;
+    padding: var(--space-4);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-    font: 13px Roboto, system-ui, -apple-system, sans-serif;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-low);
+    font: var(--font-ui) Roboto, system-ui, -apple-system, sans-serif;
     color: var(--text);
 }
 
 .ambre-inspector-section {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-3);
 }
 
 /* The z-order / lock sections are command bars, laid out as a horizontal row of
@@ -305,7 +306,7 @@ input[type="radio"] {
 .ambre-inspector-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
 }
 
 .ambre-inspector-row > label {
@@ -323,7 +324,7 @@ input[type="radio"] {
 
 /* The "Mixed" hint shown when a field differs across the selection. */
 .ambre-inspector-mixed {
-    font-size: 11px;
+    font-size: var(--font-xs);
     font-style: italic;
     color: var(--text);
     opacity: 0.75;
@@ -344,21 +345,21 @@ input[type="radio"] {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 2px;
-    padding: 4px;
+    gap: var(--space-1);
+    padding: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
 }
 
 /* The opacity slider inside the ARGB colour popover (Toile fill / stroke). */
 .ambre-color-popover .opacity {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    font-size: 12px;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-small);
     color: var(--text);
 }
 
@@ -379,11 +380,11 @@ input[type="radio"] {
     color: var(--text);
     color-scheme: light;
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-body);
     font-weight: 400;
     height: 28px;
-    padding: 0 24px 0 9px;          /* left breathing room + space for the caret */
-    border-radius: 6px;
+    padding: 0 var(--space-12) 0 calc(var(--space-4) + 1px);          /* left breathing room + space for the caret */
+    border-radius: var(--radius);
     cursor: pointer;
     outline: none;
     /* Caret tinted to match --text-dim of the light theme. */
@@ -416,10 +417,10 @@ input[type="radio"] {
     width: 64px;
     flex-shrink: 0;
     text-align: center;
-    font-size: 11px;
+    font-size: var(--font-xs);
     color: var(--text-dim);
     border-right: 1px solid var(--border);
-    padding: 0 4px;
+    padding: 0 var(--space-2);
     line-height: 26px;
     user-select: none;
 }
@@ -428,9 +429,9 @@ input[type="radio"] {
     flex: 1;
     border: none;
     background: var(--bg);
-    font-size: 13px;
+    font-size: var(--font-ui);
     font-family: inherit;
-    padding: 0 8px;
+    padding: 0 var(--space-4);
     outline: none;
     color: var(--text);
     min-width: 0;
@@ -482,7 +483,7 @@ input[type="radio"] {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: var(--space-8);
     background: var(--bg);
     color: var(--text-dim);
 }
@@ -490,7 +491,7 @@ input[type="radio"] {
 .ambre-doc-loading .spinner {
     width: 32px;
     height: 32px;
-    border: 3px solid var(--border, #333);
+    border: 3px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: ambre-spin 0.8s linear infinite;
@@ -498,7 +499,7 @@ input[type="radio"] {
 
 .ambre-doc-loading p {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--font-body);
 }
 
 @keyframes ambre-spin {
@@ -557,12 +558,12 @@ input[type="radio"] {
 .ambre-statusbar {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 0 12px;
+    gap: var(--space-7);
+    padding: 0 var(--space-6);
     background: var(--surface);
     border-top: 1px solid var(--border);
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 
 .ambre-statusbar .spacer {
@@ -573,7 +574,7 @@ input[type="radio"] {
 .ambre-statusbar .statusbar-stats {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--space-7);
 }
 
 /* Sheet-tab strip (Trame, trame-sheets): the app-agnostic <Tabs> slot, below
@@ -583,7 +584,7 @@ input[type="radio"] {
     display: flex;
     align-items: stretch;
     height: 28px;
-    padding: 0 4px;
+    padding: 0 var(--space-2);
     background: var(--surface-2);
     border-top: 1px solid var(--border);
     overflow-x: auto;
@@ -593,15 +594,15 @@ input[type="radio"] {
 .ambre-tabstrip .tab {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 12px;
+    gap: var(--space-3);
+    padding: 0 var(--space-6);
     border: none;
     border-right: 1px solid var(--border);
     border-top: 2px solid transparent;
     background: transparent;
     color: var(--text-dim);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-small);
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -623,12 +624,12 @@ input[type="radio"] {
 .ambre-tabstrip .tab-rename {
     width: 92px;
     border: 1px solid var(--accent);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
     font: inherit;
-    font-size: 12px;
-    padding: 1px 4px;
+    font-size: var(--font-small);
+    padding: 1px var(--space-2);
 }
 
 /* Trailing "+" add-sheet button: same flat-on-strip treatment as a tab. */
@@ -637,12 +638,12 @@ input[type="radio"] {
     align-items: center;
     justify-content: center;
     min-width: 28px;
-    padding: 0 8px;
+    padding: 0 var(--space-4);
     border: none;
     background: transparent;
     color: var(--text-dim);
     font: inherit;
-    font-size: 16px;
+    font-size: var(--font-large);
     line-height: 1;
     cursor: pointer;
 }
@@ -664,13 +665,13 @@ input[type="radio"] {
 /* Per-tab { Rename, Delete } context menu (fixed-positioned at the click). */
 .ambre-tab-menu {
     margin: 0;
-    padding: 4px;
+    padding: var(--space-2);
     list-style: none;
     min-width: 120px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-mid);
 }
 
 .ambre-tab-menu button {
@@ -681,9 +682,9 @@ input[type="radio"] {
     background: transparent;
     color: var(--text);
     font: inherit;
-    font-size: 13px;
-    padding: 5px 10px;
-    border-radius: 4px;
+    font-size: var(--font-ui);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-sm);
     cursor: pointer;
 }
 
@@ -710,8 +711,8 @@ input[type="radio"] {
     color: var(--text-dim);
     font: inherit;
     font-variant-numeric: tabular-nums;
-    padding: 0 4px;
-    border-radius: 4px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
 }
 
 .ambre-statusbar .statusbar-fps:hover {
@@ -724,11 +725,11 @@ input[type="radio"] {
     right: 0;
     bottom: calc(var(--status-h) + 4px);
     min-width: 220px;
-    padding: 8px 10px;
+    padding: var(--space-4) var(--space-5);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-mid);
     color: var(--text);
     font-variant-numeric: tabular-nums;
     line-height: 1.5;
@@ -751,8 +752,8 @@ input[type="radio"] {
     color: var(--text-dim);
     font: inherit;
     font-variant-numeric: tabular-nums;
-    padding: 0 4px;
-    border-radius: 4px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
 }
 
 .ambre-statusbar .statusbar-zoom-btn:hover {
@@ -765,12 +766,12 @@ input[type="radio"] {
     right: 0;
     bottom: calc(var(--status-h) + 4px);
     min-width: 90px;
-    padding: 4px;
+    padding: var(--space-2);
     list-style: none;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-mid);
     z-index: 30;
 }
 
@@ -784,8 +785,8 @@ input[type="radio"] {
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
-    padding: 4px 10px;
-    border-radius: 4px;
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-sm);
 }
 
 .statusbar-zoom-item:hover {
@@ -810,51 +811,51 @@ input[type="radio"] {
     margin: 0;
     padding: 0;
     border: none;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     color: var(--text);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-body);
     font-weight: 400;
     max-width: min(90vw, 460px);
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-high);
 }
 
 .ambre-dialog::backdrop {
-    background: rgba(10, 10, 20, 0.45);
+    background: var(--scrim);
     backdrop-filter: blur(3px);
 }
 
 .ambre-dialog-body {
-    padding: 20px 22px;
+    padding: var(--space-10) var(--space-11);
 }
 
 .ambre-dialog-body h2 {
-    font-size: 22px;
+    font-size: var(--font-heading);
     font-weight: 400;
-    margin-bottom: 10px;
+    margin-bottom: var(--space-5);
 }
 
 .ambre-dialog-body p {
     color: var(--text-dim);
     line-height: 1.5;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-8);
 }
 
 .ambre-dialog-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--space-4);
 }
 
 .ambre-dialog-actions button {
     appearance: none;
     border: 1px solid var(--border);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font: inherit;
-    padding: 6px 14px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-7);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 
@@ -868,8 +869,8 @@ input[type="radio"] {
     background-image: url("/assets/ambre.jpg");
     background-size: cover;
     background-position: center;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #fff;
+    border: 1px solid var(--photo-line);
+    color: var(--photo-text);
     overflow: hidden;
 }
 
@@ -888,24 +889,25 @@ input[type="radio"] {
 }
 
 .ambre-about-panel {
-    background: linear-gradient(180deg, rgba(18, 12, 5, 0) 0%, rgba(18, 12, 5, 0.82) 28%, rgba(18, 12, 5, 0.92) 100%);
-    padding: 48px 26px 22px;
+    background: linear-gradient(180deg, transparent 0%, var(--photo-veil) 28%, var(--photo-veil-deep) 100%);
+    padding: var(--space-24) var(--space-13) var(--space-11);
 }
 
 .ambre-dialog.ambre-about .ambre-about-panel h2 {
-    color: #fff;
-    font-size: 26px;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+    color: var(--photo-text);
+    font-size: var(--font-display);
+    text-shadow: 0 1px 8px var(--photo-text-shadow);
 }
 
 .ambre-dialog.ambre-about .ambre-about-panel p {
-    color: rgba(255, 255, 255, 0.95);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+    color: var(--photo-text);
+    text-shadow: 0 1px 6px var(--photo-text-shadow);
 }
 
 .ambre-dialog.ambre-about .ambre-dialog-actions button {
-    border-color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.16);
+    border-color: var(--photo-control-line);
+    background: var(--photo-control-ground);
+    color: var(--photo-text);
     backdrop-filter: blur(2px);
 }
 
@@ -917,11 +919,11 @@ input[type="radio"] {
 
 .ambre-share-members {
     list-style: none;
-    margin: 0 0 16px;
+    margin: 0 0 var(--space-8);
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     max-height: 320px;
     overflow-y: auto;
 }
@@ -930,10 +932,10 @@ input[type="radio"] {
     display: grid;
     grid-template-columns: 1fr auto auto;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
 }
 
 .ambre-share-member-name {
@@ -943,7 +945,7 @@ input[type="radio"] {
 .ambre-share-member-email {
     grid-column: 1;
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 
 .ambre-share-members select,
@@ -954,8 +956,8 @@ input[type="radio"] {
     background: var(--surface);
     color: var(--text);
     font: inherit;
-    padding: 5px 8px;
-    border-radius: 6px;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
 }
 
 .ambre-share-revoke {
@@ -964,26 +966,26 @@ input[type="radio"] {
     background: transparent;
     color: var(--error);
     font: inherit;
-    padding: 5px 10px;
-    border-radius: 6px;
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius);
     cursor: pointer;
 }
 
 .ambre-share-invite {
     display: grid;
     grid-template-columns: 1fr auto auto;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: var(--space-4);
+    margin-bottom: var(--space-8);
 }
 
 .ambre-share-invite button {
     appearance: none;
     border: 1px solid var(--border);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font: inherit;
-    padding: 6px 14px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-7);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 
@@ -998,11 +1000,11 @@ input[type="radio"] {
 .ambre-passphrase-panel {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-5);
 }
 
 .ambre-passphrase-panel h2 {
-    font-size: 20px;
+    font-size: var(--font-heading);
     font-weight: 400;
 }
 
@@ -1017,15 +1019,15 @@ input[type="radio"] {
     background: var(--surface);
     color: var(--text);
     font: inherit;
-    padding: 7px 10px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
 }
 
 /* Reserves its line whether or not there is a message, so the fields and the
    buttons do not jump when a mismatch appears. */
 .ambre-passphrase-error {
     min-height: 18px;
-    font-size: 12px;
+    font-size: var(--font-small);
     color: var(--error);
 }
 
@@ -1039,18 +1041,18 @@ input[type="radio"] {
     max-width: 420px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-6);
 }
 
 .ambre-tofu-panel h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--font-heading);
 }
 
 .ambre-tofu-who {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
     margin: 0;
 }
 
@@ -1060,36 +1062,36 @@ input[type="radio"] {
 
 .ambre-tofu-email {
     color: var(--text-dim);
-    font-size: 13px;
+    font-size: var(--font-ui);
 }
 
 /* The fingerprint reads aloud over the phone: monospace, spaced, prominent. */
 .ambre-tofu-fingerprint {
     margin: 0;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 15px;
+    font-size: var(--font-subheading);
     letter-spacing: 0.06em;
     line-height: 1.6;
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface, rgba(127, 127, 127, 0.08));
+    border-radius: var(--radius-md);
+    background: var(--surface);
     word-spacing: 0.3em;
 }
 
 .ambre-tofu-warning {
     margin: 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid #c0392b;
-    background: rgba(192, 57, 43, 0.1);
-    font-size: 13px;
+    padding: var(--space-5) var(--space-6);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--error);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    font-size: var(--font-ui);
 }
 
 .ambre-tofu-limit {
     margin: 0;
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: var(--font-small);
     line-height: 1.5;
 }
 
@@ -1100,8 +1102,8 @@ input[type="radio"] {
     background: transparent;
     color: inherit;
     font: inherit;
-    padding: 4px 10px;
-    border-radius: 7px;
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 
@@ -1109,10 +1111,10 @@ input[type="radio"] {
     appearance: none;
     border: 1px solid var(--border);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font: inherit;
-    padding: 6px 14px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-7);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 
@@ -1122,8 +1124,8 @@ input[type="radio"] {
     background: transparent;
     color: inherit;
     font: inherit;
-    padding: 6px 14px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-7);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 
@@ -1158,23 +1160,23 @@ input[type="radio"] {
     z-index: 1001;
     min-width: 184px;
     margin: 0;
-    padding: 4px;
+    padding: var(--space-2);
     list-style: none;
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
+    font-size: var(--font-body);
     font-weight: 400;
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
 }
 
 .ambre-ctx-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    border-radius: 5px;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius);
     color: var(--text);
     cursor: pointer;
     outline: none;
@@ -1212,7 +1214,7 @@ input[type="radio"] {
 /* Group divider between item clusters. */
 .ambre-ctx-sep {
     height: 1px;
-    margin: 4px 8px;
+    margin: var(--space-2) var(--space-4);
     background: var(--border);
 }
 
@@ -1221,17 +1223,17 @@ input[type="radio"] {
    chords align right. */
 .ambre-ctx-kbd {
     margin-left: auto;
-    padding-left: 16px;
+    padding-left: var(--space-8);
 }
 
 /* Shared keyboard-chord chip (ambre-chrome::Kbd). */
 .ambre-kbd {
-    font: 11px ui-monospace, monospace;
+    font: var(--font-xs) ui-monospace, monospace;
     color: var(--text-dim);
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    padding: 1px var(--space-3);
 }
 
 /* Toasts -- ARIA live-region notifications (ambre-chrome::ToastHost). Stacked
@@ -1244,7 +1246,7 @@ input[type="radio"] {
     z-index: 2000;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     pointer-events: none;
 }
 
@@ -1252,13 +1254,13 @@ input[type="radio"] {
     pointer-events: auto;
     min-width: 200px;
     max-width: 360px;
-    padding: 10px 14px;
+    padding: var(--space-5) var(--space-7);
     background: var(--surface);
     color: var(--text);
     border: 1px solid var(--border);
     border-left: 3px solid var(--info);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
     font-size: var(--font-body);
     cursor: pointer;
     animation: ambre-toast-in 0.18s ease;
@@ -1302,12 +1304,12 @@ input[type="radio"] {
    bottom sheet with larger touch targets (CHROME-032). */
 @media (max-width: 599px) {
     .ambre-header {
-        gap: 6px;
-        padding: 0 8px;
+        gap: var(--space-3);
+        padding: 0 var(--space-4);
     }
 
     .ambre-commandbar {
-        padding: 4px 6px;
+        padding: var(--space-2) var(--space-3);
     }
 
     .ambre-ctx-menu {
@@ -1316,12 +1318,12 @@ input[type="radio"] {
         top: auto !important;
         bottom: 0 !important;
         min-width: 0;
-        border-radius: 12px 12px 0 0;
-        padding: 8px;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        padding: var(--space-4);
     }
 
     .ambre-ctx-item {
-        padding: 12px 14px;
+        padding: var(--space-6) var(--space-7);
     }
 }
 
@@ -1362,17 +1364,17 @@ input[type="radio"] {
     max-width: 760px;
     margin-left: auto;
     margin-right: auto;
-    padding-left: var(--space-lg);
-    padding-right: var(--space-lg);
+    padding-left: var(--space-8);
+    padding-right: var(--space-8);
 }
 
 .ambre-landing-header {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    padding-top: 40px;
-    padding-bottom: var(--space-sm);
-    margin-bottom: var(--space-lg);
+    gap: var(--space-6);
+    padding-top: var(--space-20);
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-8);
 }
 
 .ambre-landing-header .title {
@@ -1386,12 +1388,12 @@ input[type="radio"] {
 .ambre-landing-actions {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: var(--space-6);
     margin-left: auto;
 }
 
 .ambre-new-doc {
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-4) var(--space-8);
     border: 0;
     border-radius: var(--radius);
     background: var(--accent);
@@ -1413,23 +1415,23 @@ input[type="radio"] {
 .ambre-new-doc-menu {
     position: absolute;
     right: 0;
-    top: calc(100% + var(--space-sm));
+    top: calc(100% + var(--space-4));
     z-index: 10;
     min-width: 200px;
     list-style: none;
     margin: 0;
-    padding: var(--space-sm);
+    padding: var(--space-4);
     border-radius: var(--radius);
     border: 1px solid var(--border);
     background: var(--surface);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-mid);
 }
 
 .ambre-new-doc-option {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
+    gap: var(--space-6);
+    padding: var(--space-4) var(--space-6);
     border-radius: var(--radius);
     cursor: pointer;
 }
@@ -1456,12 +1458,12 @@ input[type="radio"] {
 .ambre-doc-item {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md) var(--space-lg);
+    gap: var(--space-6);
+    padding: var(--space-6) var(--space-8);
     border-radius: var(--radius);
     border: 1px solid var(--border);
     background: var(--surface);
-    margin-bottom: var(--space-sm);
+    margin-bottom: var(--space-4);
 }
 
 .ambre-doc-item:hover {
@@ -1494,7 +1496,7 @@ input[type="radio"] {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
     cursor: pointer;
 }
 
@@ -1511,7 +1513,7 @@ input[type="radio"] {
 }
 
 .ambre-doc-rename-input {
-    padding: 2px 6px;
+    padding: var(--space-1) var(--space-3);
     border: 1px solid var(--accent);
     border-radius: var(--radius);
     background: var(--bg);
@@ -1523,23 +1525,23 @@ input[type="radio"] {
 .ambre-doc-meta {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: var(--space-4);
     font-size: var(--font-small);
     color: var(--text-dim);
 }
 
 .ambre-doc-shared {
-    padding: 1px 6px;
-    border-radius: 999px;
+    padding: 1px var(--space-3);
+    border-radius: var(--radius-full);
     background: var(--surface-2);
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-xs);
 }
 
 .ambre-doc-actions {
     flex: 0 0 auto;
     display: flex;
-    gap: var(--space-xs);
+    gap: var(--space-2);
     opacity: 0;
     transition: opacity 0.12s ease;
 }
@@ -1550,7 +1552,7 @@ input[type="radio"] {
 }
 
 .ambre-doc-action {
-    padding: var(--space-xs) var(--space-sm);
+    padding: var(--space-2) var(--space-4);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: transparent;
@@ -1570,14 +1572,14 @@ input[type="radio"] {
 }
 
 .ambre-doc-empty {
-    padding: var(--space-md) var(--space-lg);
+    padding: var(--space-6) var(--space-8);
     color: var(--text-dim);
     font-style: italic;
 }
 
 .ambre-landing-user {
     margin-left: auto;
-    margin-right: var(--space-md);
+    margin-right: var(--space-6);
     font-size: var(--font-body);
     color: var(--text-dim);
 }
@@ -1588,36 +1590,36 @@ input[type="radio"] {
     border-radius: var(--radius);
     background: var(--surface);
     color: var(--text);
-    padding: var(--space-lg);
+    padding: var(--space-8);
     max-width: 380px;
     font-family: system-ui, sans-serif;
 }
 
 .ambre-confirm-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--scrim);
 }
 
 .ambre-confirm-dialog h3 {
     font-size: var(--font-heading);
     font-weight: 600;
-    margin-bottom: var(--space-md);
+    margin-bottom: var(--space-6);
 }
 
 .ambre-confirm-dialog p {
     font-size: var(--font-body);
     color: var(--text-dim);
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-8);
     line-height: 1.5;
 }
 
 .ambre-confirm-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--space-sm);
+    gap: var(--space-4);
 }
 
 .ambre-btn-secondary {
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-4) var(--space-8);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: transparent;
@@ -1631,7 +1633,7 @@ input[type="radio"] {
 }
 
 .ambre-btn-danger {
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-4) var(--space-8);
     border: 0;
     border-radius: var(--radius);
     background: var(--error);
@@ -1649,13 +1651,13 @@ input[type="radio"] {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-md);
-    padding: 48px var(--space-lg);
+    gap: var(--space-6);
+    padding: var(--space-24) var(--space-8);
     text-align: center;
 }
 
 .ambre-signin-wordmark {
-    font-size: 32px;
+    font-size: var(--font-hero);
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--accent);
@@ -1664,7 +1666,7 @@ input[type="radio"] {
 .ambre-signin-tagline {
     font-size: var(--font-body);
     color: var(--text-dim);
-    margin-bottom: var(--space-md);
+    margin-bottom: var(--space-6);
 }
 
 .ambre-signin h2 {
@@ -1678,7 +1680,7 @@ input[type="radio"] {
 }
 
 .ambre-signin-input {
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-4) var(--space-6);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
@@ -1688,7 +1690,7 @@ input[type="radio"] {
 }
 
 .ambre-signin-btn {
-    padding: var(--space-sm) var(--space-lg);
+    padding: var(--space-4) var(--space-8);
     border: 0;
     border-radius: var(--radius);
     background: var(--accent);
@@ -1710,17 +1712,17 @@ input[type="radio"] {
     max-width: 280px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
     color: var(--text);
 }
 
 .ambre-filter-head {
     font-weight: 600;
-    padding: 2px 2px 6px;
+    padding: var(--space-1) var(--space-1) var(--space-3);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1739,21 +1741,21 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 20;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     color: var(--text);
 }
 
 .ambre-borders-popover .row {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     align-items: center;
     justify-content: flex-start;
-    margin-top: 6px;
+    margin-top: var(--space-3);
 }
 
 /* Line-style picker: an icon button toggling a sub-popover that renders each
@@ -1771,7 +1773,7 @@ input[type="radio"] {
     height: 28px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -1780,7 +1782,7 @@ input[type="radio"] {
 .ambre-line-style .line-style-trigger:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-line-style-popover {
@@ -1788,23 +1790,23 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 30;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 4px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-2);
     min-width: 140px;
 }
 
 .ambre-line-style-popover .line-style-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 8px;
+    padding: var(--space-3) var(--space-4);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -1812,7 +1814,7 @@ input[type="radio"] {
 
 .ambre-line-style-popover .line-style-item:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-line-style-popover .line-style-item .check {
@@ -1822,7 +1824,7 @@ input[type="radio"] {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    font-size: 16px;
+    font-size: var(--font-large);
 }
 
 .ambre-line-style-popover .line-preview {
@@ -1857,7 +1859,7 @@ input[type="radio"] {
 .ambre-borders-popover .grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 4px;
+    gap: var(--space-2);
 }
 
 .ambre-borders-popover .grid button {
@@ -1868,7 +1870,7 @@ input[type="radio"] {
     height: 28px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -1877,7 +1879,7 @@ input[type="radio"] {
 .ambre-borders-popover .grid button:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1894,12 +1896,12 @@ input[type="radio"] {
 .ambre-font .font-trigger {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     min-width: 92px;
     height: 28px;
-    padding: 0 9px;                 /* left breathing room, matches the selects */
+    padding: 0 calc(var(--space-4) + 1px);                 /* left breathing room, matches the selects */
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -1912,7 +1914,7 @@ input[type="radio"] {
 
 .ambre-font .font-trigger .label {
     flex: 1;
-    font-size: 14px;
+    font-size: var(--font-body);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1931,23 +1933,23 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 30;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 4px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-2);
     min-width: 160px;
 }
 
 .ambre-font-popover .font-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 8px;
+    padding: var(--space-3) var(--space-4);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -1956,7 +1958,7 @@ input[type="radio"] {
 
 .ambre-font-popover .font-item:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-font-popover .font-item .check {
@@ -1966,12 +1968,12 @@ input[type="radio"] {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    font-size: 16px;
+    font-size: var(--font-large);
 }
 
 .ambre-font-popover .font-item .label {
     flex: 1;
-    font-size: 15px;               /* a touch larger so the typeface reads well */
+    font-size: var(--font-subheading);               /* a touch larger so the typeface reads well */
 }
 
 /* ---------------------------------------------------------------------------
@@ -1989,23 +1991,23 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 30;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 4px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-2);
     min-width: 160px;
 }
 
 .ambre-number-format-popover .number-format-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 8px;
+    padding: var(--space-3) var(--space-4);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -2014,7 +2016,7 @@ input[type="radio"] {
 
 .ambre-number-format-popover .number-format-item:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-number-format-popover .number-format-item .check {
@@ -2024,7 +2026,7 @@ input[type="radio"] {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    font-size: 16px;
+    font-size: var(--font-large);
 }
 
 .ambre-number-format-popover .number-format-item .label {
@@ -2046,22 +2048,22 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 30;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 4px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-2);
 }
 
 .ambre-align-popover .align-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 8px;
+    padding: var(--space-3) var(--space-4);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -2070,7 +2072,7 @@ input[type="radio"] {
 
 .ambre-align-popover .align-item:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-align-popover .align-item .check {
@@ -2080,7 +2082,7 @@ input[type="radio"] {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
-    font-size: 16px;
+    font-size: var(--font-large);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2097,7 +2099,7 @@ input[type="radio"] {
    currently applied colour. */
 .ambre-color > button {
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
 }
 
 .ambre-color .swatch-strip {
@@ -2112,22 +2114,22 @@ input[type="radio"] {
     top: 100%;
     left: 0;
     z-index: 20;
-    margin-top: 4px;
+    margin-top: var(--space-2);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     color: var(--text);
 }
 
 .ambre-color-popover .reset {
     display: block;
     width: 100%;
-    margin-bottom: 6px;
-    padding: 4px 8px;
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-4);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--text);
     cursor: pointer;
@@ -2137,13 +2139,13 @@ input[type="radio"] {
 .ambre-color-popover .reset:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-color-popover .swatches {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 4px;
+    gap: var(--space-2);
 }
 
 .ambre-color-popover .swatches button {
@@ -2151,7 +2153,7 @@ input[type="radio"] {
     height: 22px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
 }
 
@@ -2163,15 +2165,15 @@ input[type="radio"] {
 .ambre-color-popover .custom {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 6px;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
     cursor: pointer;
 }
 
 .ambre-filter-modes {
     display: flex;
-    gap: 4px;
-    margin-bottom: 6px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
 }
 
 .ambre-filter-modes .mode {
@@ -2180,31 +2182,31 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 6px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 
 .ambre-filter-modes .mode[aria-pressed="true"] {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .ambre-filter-values {
     max-height: 200px;
     overflow-y: auto;
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px;
+    border-radius: var(--radius);
+    padding: var(--space-2);
 }
 
 .ambre-filter-value {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 4px;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-2);
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
@@ -2214,26 +2216,26 @@ input[type="radio"] {
 .ambre-filter-cond {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-3);
 }
 
 .ambre-filter-cond select,
 .ambre-filter-cond input {
     width: 100%;
     box-sizing: border-box;
-    padding: 4px 6px;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: var(--surface-2);
     color: var(--text);
-    font-size: 13px;
+    font-size: var(--font-ui);
 }
 
 .ambre-filter-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 6px;
-    margin-top: 8px;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
 }
 
 .ambre-filter-actions button {
@@ -2241,10 +2243,10 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 
 .ambre-filter-actions button:hover {
@@ -2254,7 +2256,7 @@ input[type="radio"] {
 .ambre-filter-actions button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2266,18 +2268,18 @@ input[type="radio"] {
     min-width: 280px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
     color: var(--text);
 }
 .ambre-find-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
 }
 .ambre-find-input {
     flex: 1 1 auto;
@@ -2286,9 +2288,9 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 13px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
+    font-size: var(--font-ui);
 }
 .ambre-find-count {
     flex: 0 0 auto;
@@ -2296,17 +2298,17 @@ input[type="radio"] {
     text-align: right;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-find-panel button {
     appearance: none;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
     display: inline-flex;
     align-items: center;
 }
@@ -2320,15 +2322,15 @@ input[type="radio"] {
 .ambre-find-opts {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 12px;
-    margin-top: 2px;
+    gap: var(--space-4) var(--space-6);
+    margin-top: var(--space-1);
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-find-opts label {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     cursor: pointer;
 }
 
@@ -2337,12 +2339,12 @@ input[type="radio"] {
 .ambre-find-title {
     display: flex;
     align-items: center;
-    margin-bottom: 14px;
+    margin-bottom: var(--space-7);
 }
 .ambre-find-heading {
     flex: 1 1 auto;
     font-weight: 600;
-    font-size: 15px;
+    font-size: var(--font-subheading);
 }
 .ambre-find-toggle,
 .ambre-find-close {
@@ -2350,13 +2352,13 @@ input[type="radio"] {
     color: var(--text-dim);
 }
 .ambre-find-close {
-    margin-right: -2px;
+    margin-right: calc(-1 * var(--space-1));
 }
 /* The chevron sits in a fixed left gutter so it reads as the mode switch. */
 .ambre-find-toggle {
     flex: 0 0 auto;
     width: 28px;
-    padding: 2px 0;
+    padding: var(--space-1) 0;
     justify-content: center;
 }
 /* Enlarge the chevron glyph (leptos_icons sizes the SVG at 1em). */
@@ -2368,7 +2370,7 @@ input[type="radio"] {
    (toggle width 22px + row gap 6px) so they align vertically with the Find
    input. */
 .ambre-find-indent {
-    margin-left: 28px;
+    margin-left: var(--space-14);
 }
 
 /* Multi-column sort dialog (`trame-sort`, "Sort range..."). A centered modal
@@ -2378,7 +2380,7 @@ input[type="radio"] {
     position: fixed;
     inset: 0;
     z-index: 70;
-    background: rgba(10, 10, 20, 0.45);
+    background: var(--scrim);
     backdrop-filter: blur(3px);
 }
 .ambre-sort-dialog {
@@ -2391,30 +2393,30 @@ input[type="radio"] {
     max-width: min(92vw, 460px);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
-    padding: 14px 16px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-high);
+    padding: var(--space-7) var(--space-8);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
     color: var(--text);
 }
 .ambre-sort-title {
     display: flex;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-6);
 }
 .ambre-sort-heading {
     flex: 1 1 auto;
     font-weight: 600;
-    font-size: 15px;
+    font-size: var(--font-subheading);
 }
 .ambre-sort-close {
     appearance: none;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-dim);
-    padding: 4px 6px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -2425,26 +2427,26 @@ input[type="radio"] {
 .ambre-sort-header-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 10px;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
     color: var(--text-dim);
     cursor: pointer;
 }
 .ambre-sort-levels {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
 }
 .ambre-sort-level {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
 }
 .ambre-sort-rank {
     flex: 0 0 52px;
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-sort-col,
 .ambre-sort-dir {
@@ -2452,8 +2454,8 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
     font: inherit;
 }
 .ambre-sort-col {
@@ -2465,8 +2467,8 @@ input[type="radio"] {
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-dim);
-    padding: 4px 6px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -2481,7 +2483,7 @@ input[type="radio"] {
 .ambre-sort-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
 }
 .ambre-sort-spacer {
     flex: 1 1 auto;
@@ -2491,12 +2493,12 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 5px 10px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-3);
     font: inherit;
 }
 .ambre-sort-add:hover:not(:disabled) {
@@ -2511,8 +2513,8 @@ input[type="radio"] {
     appearance: none;
     border: 1px solid var(--border);
     font: inherit;
-    padding: 6px 14px;
-    border-radius: 7px;
+    padding: var(--space-3) var(--space-7);
+    border-radius: var(--radius-md);
     cursor: pointer;
 }
 .ambre-sort-cancel {
@@ -2521,7 +2523,7 @@ input[type="radio"] {
 }
 .ambre-sort-apply {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border-color: var(--accent);
 }
 
@@ -2534,7 +2536,7 @@ input[type="radio"] {
     inset: 0;
     z-index: 1010;
     /* The same veil the shared modal paints, so the two overlays read alike. */
-    background: rgba(10, 10, 20, 0.45);
+    background: var(--scrim);
     backdrop-filter: blur(3px);
 }
 
@@ -2550,14 +2552,14 @@ input[type="radio"] {
     font-family: Roboto, system-ui, -apple-system, sans-serif;
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-high);
     overflow: hidden;
 }
 
 .ambre-palette-query {
-    padding: 12px 14px;
-    font-size: 15px;
+    padding: var(--space-6) var(--space-7);
+    font-size: var(--font-subheading);
     color: var(--text);
     background: transparent;
     border: none;
@@ -2567,7 +2569,7 @@ input[type="radio"] {
 
 .ambre-palette-list {
     margin: 0;
-    padding: 4px;
+    padding: var(--space-2);
     list-style: none;
     /* A long table scrolls inside the overlay rather than off the viewport. */
     max-height: 50vh;
@@ -2577,10 +2579,10 @@ input[type="radio"] {
 .ambre-palette-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 7px 10px;
-    border-radius: 5px;
-    font-size: 14px;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius);
+    font-size: var(--font-body);
     color: var(--text);
     cursor: pointer;
     user-select: none;
@@ -2595,7 +2597,7 @@ input[type="radio"] {
 
 .ambre-palette-kbd {
     margin-left: auto;
-    padding-left: 16px;
+    padding-left: var(--space-8);
 }
 
 /* Narrow viewports: the palette takes the width and drops the top inset. */
@@ -2609,7 +2611,7 @@ input[type="radio"] {
     }
 
     .ambre-palette-row {
-        padding: 12px 14px;
+        padding: var(--space-6) var(--space-7);
     }
 }
 
@@ -2623,17 +2625,17 @@ input[type="radio"] {
 .ambre-comments-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     width: 320px;
     max-height: 70vh;
     overflow-y: auto;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
     color: var(--text);
 }
 .ambre-comments-title {
@@ -2643,17 +2645,17 @@ input[type="radio"] {
 .ambre-comments-heading {
     flex: 1 1 auto;
     font-weight: 600;
-    font-size: 15px;
+    font-size: var(--font-subheading);
 }
 .ambre-comments-panel button {
     appearance: none;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-comments-panel button:hover {
     background: var(--surface-hover);
@@ -2664,7 +2666,7 @@ input[type="radio"] {
 }
 .ambre-comments-filter {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
 }
 .ambre-comments-filter-btn[aria-pressed="true"] {
     background: var(--surface-2);
@@ -2676,12 +2678,12 @@ input[type="radio"] {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
 }
 .ambre-comments-row-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
     text-align: left;
 }
@@ -2695,36 +2697,36 @@ input[type="radio"] {
 .ambre-comments-resolved {
     flex: 0 0 auto;
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-xs);
 }
 .ambre-comments-thread {
     border-top: 1px solid var(--border);
-    padding-top: 8px;
+    padding-top: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
 }
 .ambre-comments-messages {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
 }
 .ambre-comments-author {
     font-weight: 600;
 }
 .ambre-comments-time {
-    margin-left: 6px;
+    margin-left: var(--space-3);
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-xs);
 }
 .ambre-comments-body {
-    margin: 2px 0 0;
+    margin: var(--space-1) 0 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 .ambre-comments-reply {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
 }
 .ambre-comments-input,
 .ambre-comment-composer-input {
@@ -2732,20 +2734,20 @@ input[type="radio"] {
     min-width: 0;
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     color: var(--text);
-    padding: 4px 6px;
-    font-size: 13px;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-ui);
 }
 .ambre-comment-composer {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     width: 260px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 6px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-3);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
 }
 .ambre-comment-composer-post {
@@ -2753,10 +2755,10 @@ input[type="radio"] {
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-comment-composer-post:hover {
     background: var(--surface-hover);
@@ -2769,17 +2771,17 @@ input[type="radio"] {
 .ambre-deck-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     width: 280px;
     max-height: 70vh;
     overflow-y: auto;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+    padding: var(--space-4);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
-    font-size: 13px;
+    font-size: var(--font-ui);
     color: var(--text);
 }
 .ambre-deck-title {
@@ -2789,17 +2791,17 @@ input[type="radio"] {
 .ambre-deck-heading {
     flex: 1 1 auto;
     font-weight: 600;
-    font-size: 15px;
+    font-size: var(--font-subheading);
 }
 .ambre-deck-panel button {
     appearance: none;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--font-small);
 }
 .ambre-deck-panel button:hover:not(:disabled) {
     background: var(--surface-hover);
@@ -2819,19 +2821,19 @@ input[type="radio"] {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
 }
 .ambre-deck-row,
 .ambre-deck-pool-row {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
 }
 .ambre-deck-goto,
 .ambre-deck-add-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     flex: 1 1 auto;
     min-width: 0;
     text-align: left;
@@ -2840,7 +2842,7 @@ input[type="radio"] {
     flex: 0 0 auto;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
+    font-size: var(--font-xs);
 }
 .ambre-deck-name {
     flex: 1 1 auto;
@@ -2854,14 +2856,14 @@ input[type="radio"] {
 }
 .ambre-deck-add {
     border-top: 1px solid var(--border);
-    padding-top: 8px;
+    padding-top: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-3);
 }
 .ambre-deck-subhead {
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }

@@ -121,11 +121,9 @@ The user touches nothing here. What they see is whether the interface fits.
   three small differences (`CHROME-033`).
 * **No tier resizes a viewport.** The wasm tier mounts components in a document of fixed size, so
   every row here is held by reading the stylesheet.
-* **The phone block writes its own lengths.** Five literal values carry the phone block: the tightened
-  header, the tightened command bar, the sheet's padding, its corner radius and its taller rows.
-  None comes from the token source. They are a phone-only palette nobody declared
-  (`ambre-spec-design-tokens.md`,
-  `UI-THREAD-029`).
+* **The phone block has no scale of its own.** It tightens the header and the command bar and
+  grows the sheet's rows by picking other steps of the one spacing ladder
+  (`ambre-spec-design-tokens.md`, `UI-THREAD-029`). Nothing states which steps a phone uses.
 * **An open menu does not re-place itself on a resize.** The placement is computed when the menu
   opens, and a window narrowed under it leaves it where it was.
 * **Nothing rules on orientation, or on a soft keyboard.** A phone rotated, or a keyboard covering

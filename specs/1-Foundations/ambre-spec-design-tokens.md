@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- one source generates both sides and the theme switch works. The
-stylesheet still carries fifty-eight colours the source never declared.
+shell stylesheet spells out no value of its own. No test drives a switch.
 
 > The interface is drawn twice, once by the browser and once by the graphics card. The two halves
 > must not disagree about what a surface, an accent or a body size looks like. One file
@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
+| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_shell_stylesheet_spells_out_no_colour_and_no_scale` -- every declaration of the shell sheet is read, and a colour, a spacing, a radius or a type size spelled out fails it with its line; `ambre_canvas::theme::stylesheet_tests::the_literal_check_catches_each_kind_and_spares_a_token` -- the check catches a literal of each kind and spares a token, a zero, a hairline and a comment | none | verified |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
 | `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_stylesheet_reads_only_declared_tokens` -- every name the shell sheet reads is checked against the names the token source emits and the sheet declares | none | verified |
 | `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -42,10 +42,9 @@ The user flips the theme control. One act must move both halves, and it must mov
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 2 `verified`, 1 `failing`, 3 `untested`. The compiler holds the half that
-  matters: the two sides cannot come from two sources. A test holds that the shell sheet reads only
-  declared names. What nothing holds is whether a value bypassed the source, and the failing row
-  says it did.
+* **Verification.** 3 `verified`, 3 `untested`. The compiler holds the half that matters: the two
+  sides cannot come from two sources. Two tests read the shell sheet: it reads only declared names,
+  and it spells out no value of its own. What nothing holds is a switch, driven and observed.
 
 ---
 
@@ -70,12 +69,25 @@ theme is a property of the machine.
 
 | Group | Holds | Reaches |
 |---|---|---|
-| the chrome colours | background, surface, second surface, hover, border, text, dimmed text, accent, and the four status colours | the browser half, as custom properties |
+| the chrome colours | background, surface, second surface, hover, border, text, dimmed text, accent, the four status colours, and the text drawn on the accent | the browser half, as custom properties |
+| the chrome effects | three shadows, low, mid and high, and the scrim behind a modal | the browser half, as custom properties |
+| the photo colours | the text, its shadow, the lines, the control and the veil drawn over a picture | the browser half, as custom properties |
 | the content colours | content ground, pending ground, header ground, active and hovered header, grid line, header border, selection, cell text, header text, caret, error | the drawing half, as two palettes |
-| the scales | four spacings, one radius, three type sizes | both halves |
+| the scales | a spacing ladder in steps of two pixels, five radii, nine type sizes | both halves |
 
-Each colour group is declared twice, light and dark. A scale is declared once: a spacing does not
+Each colour group is declared twice, light and dark, but the photo colours. Their ground is a
+picture, not the theme, so one set serves both. A scale is declared once: a spacing does not
 change with the theme.
+
+**What the shell may still spell out.** A width, a height and a position are the shape of one
+component, not a shared value. A hairline of one pixel is a border width, not a spacing, and
+zero is no value at all. Everything else the shell sheet sets for a colour, a padding, a margin,
+a gap, a radius or a type size reads a token (`UI-THREAD-029`).
+
+**The boot screen is drawn before any token exists.** The page shows it while the binary loads,
+and the generated sheet is injected only once the binary runs. So its few colours and sizes are
+written in the page itself, and it is gone at readiness. The fatal error overlay comes after the
+injection, so it reads the tokens.
 
 **Where the two halves diverge, and why that is correct.** The chrome names a surface and the
 content names a grid line, and neither needs the other's vocabulary. What they must agree on is the
@@ -94,8 +106,8 @@ that fails to set the attribute is light rather than unstyled.
 * `crates/ambre-canvas/build.rs` -- the generator;
 * `crates/ambre-canvas/src/theme.rs` -- the includes, the theme value and the shared control;
 * `crates/ambre-app/src/platform.rs` -- the injection of the generated sheet into the page;
-* `crates/ambre-app/styles.css` -- the shell layout, which reads the properties and is where the
-  fifty-eight literals are.
+* `crates/ambre-app/styles.css` -- the shell layout, which reads the properties and spells out
+  none of its own.
 
 ---
 
@@ -127,13 +139,15 @@ The user touches one thing: the theme control. Everything else is what they see.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The shell stylesheet carries fifty-eight literal colours.** Every shadow is a literal, so no theme
-  changes one. Every white on a coloured ground is a literal too, so a light theme cannot lighten
-  the ground under it. The file's own header still promises the token sets for later, and the sets
-  are there (`UI-THREAD-029`).
-* **One test reads the sheets, and it reads names only.** It holds that every token the shell sheet
-  reads is declared (`UI-THREAD-031`). Neither tier constructs a palette or drives a switch, so the
-  values are checked by reading.
+* **The sheets are checked by reading.** One test holds that every token the shell sheet reads is
+  declared (`UI-THREAD-031`), and another that it spells out no value (`UI-THREAD-029`). Neither
+  tier constructs a palette or drives a switch.
+* **The check reads the shell sheet alone.** The boot screen in the page is drawn before the
+  tokens exist, and writes its own. A style an application sets from Rust is not read either:
+  today that is one zero border, on an embedded page.
+* **The scale is what the shell used, not a designed one.** The ladder keeps every spacing the
+  sheet carried, rounding an odd one to its even neighbour. Three dialog headings of three sizes
+  became one heading. Nothing yet rules on how many steps a ladder may hold.
 * **Nothing rules on contrast.** The two palettes are chosen by eye. No rule states a minimum ratio
   between a text colour and the ground it is drawn on (`ambre-spec-accessibility.md`).
 * **Nothing rules on a third theme, or on the system preference.** The switch has two values and
