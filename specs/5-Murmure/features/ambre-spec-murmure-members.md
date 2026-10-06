@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-440` | `INV` | The member list of a space MUST hold the members of the space document, and no one else. | this spec section 3; `MURMURE-031` | `ambre_murmure::members::tests::the_list_holds_the_member_rows_and_no_one_else` -- a sample from a user outside the rows adds no one; `ambre_logic::spaces::tests::the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else` -- the relay's rows become the list | partial -- the rows are read once, at the open: a join or a leave while the space is open lands with the `A live member list` Story (`ambre-roadmap.md` E5) | partial |
+| `MURMURE-440` | `INV` | The member list of a space MUST hold the members of the space document, and no one else. | this spec section 3; `MURMURE-031`; `SRV-168` | `ambre_murmure::members::tests::the_list_holds_the_member_rows_and_no_one_else` -- a sample from a user outside the rows adds no one; `ambre_logic::spaces::tests::the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else` -- the relay's rows become the list; `ambre_logic::spaces::tests::a_change_of_members_while_the_space_is_open_reads_the_rows_again` -- a join and a leave while the space is open, and a stale listing changes nothing; `ambre_sync::updates::tests::a_change_of_members_of_an_open_document_reaches_logic` -- the relay's word reaches Logic | none | verified |
 | `MURMURE-441` | `OBS` | The member list MUST show each member by display name and avatar. | this spec section 3; `PROFILE-001` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-442` | `OBS` | The member list MUST mark each member as online or offline. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-443` | `OBS` | Each presence state MUST differ from the others in shape as well as in colour. | this spec section 3; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -70,8 +70,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 8`). Each picture costs the avatar row of its section 6.
 * **Boundary.** the presence sample is sealed under the key of the space document (`ZK-005`). The
   relay learns the member list and the display names it already holds (`ZK-018`).
-* **Verification.** 9 `verified`, 1 `partial`, 10 `unimplemented`. The engine and the Logic
-  thread hold the list, the presence and the filter. The view rows wait on the Murmure layout.
+* **Verification.** 10 `verified`, 10 `unimplemented`. The engine and the Logic thread hold the
+  list, the presence and the filter. The view rows wait on the Murmure layout.
 
 ---
 
@@ -91,7 +91,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **CRDT containers.** none. The member rows of the space document are the relay's table
 (`MURMURE-031`, `ambre-spec-membership.md`). The display name comes with each row, and the avatar
-follows `ambre-spec-profile.md`.
+follows `ambre-spec-profile.md`. The relay says when the rows change (`SRV-178`), and an open
+space reads them again; of two readings that cross, the later one stands.
 
 **Presence in a space.** Each client that holds a space open sends one presence sample on the space
 document, once per refresh period of `ambre-spec-budgets.md section 8`. The sample is an ephemeral
@@ -161,9 +162,6 @@ the member reads it (`ambre-spec-user-settings.md`). A connection copies it into
 * **No view draws the list.** The names, the avatars, the marks, the palette and the choice of a
   member wait on the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5). The choice
   needs the key check of `ambre-spec-key-verification.md` before a direct message wraps a key.
-* **The list is read once.** The relay pushes no change of the members of a document, so a join
-  or a leave shows at the next open. The `A live member list` Story (`ambre-roadmap.md` E5)
-  closes it.
 * **Do not disturb is not ruled.** It changes who a notification wakes, so it waits on the
   notification design (`ambre-spec-murmure-notifications.md`).
 * **A space of thousands of members is not ruled.** The list and the presence scale with the

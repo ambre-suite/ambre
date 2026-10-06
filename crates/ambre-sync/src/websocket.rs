@@ -1055,6 +1055,14 @@ impl SyncState {
                 self.handle_clock_refused(document_id, expected.0, signature);
             }
 
+            WsServerMsg::MembersChanged { document_id } => {
+                // Only an open document has a view to refresh; the next open
+                // reads the rows from scratch.
+                if self.documents.contains_key(&document_id) {
+                    self.send_to_logic(LogicEvent::MembersChanged { document_id });
+                }
+            }
+
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
                 // personal topic). Close it locally and tell the Logic thread we

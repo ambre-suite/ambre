@@ -2045,6 +2045,32 @@ mod tests {
         );
     }
 
+    /// The relay's word that the members of an open document changed reaches
+    /// the Logic thread, which asks for the rows again. A document not open
+    /// here has no view to refresh, so the word stops at Sync.
+    #[test]
+    fn a_change_of_members_of_an_open_document_reaches_logic() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::MembersChanged { document_id } if *document_id == doc
+            )),
+            "the change reaches Logic"
+        );
+
+        state.handle_ws_message(WsServerMsg::MembersChanged {
+            document_id: DocumentId::new(),
+        });
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::MembersChanged { .. })),
+            "a document not open here is not reported"
+        );
+    }
+
     /// A server document opened over a live WS is only fully hydrated once its
     /// post-open catch-up replay (`MissingUpdates`) lands. The snapshot does not
     /// cover deltas committed after it, and a delta-only document has NO snapshot

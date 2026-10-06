@@ -177,6 +177,12 @@ pub enum WsServerMsg {
         expected: Clock,
         signature: Signature,
     },
+    /// The members of this document changed: someone joined, left, or took
+    /// another role (`SRV-178`). It names the document alone; a client that
+    /// shows the members asks the relay for the rows again.
+    ///
+    /// Appended last, so the wire tags of the variants above do not move.
+    MembersChanged { document_id: DocumentId },
 }
 
 // ---------------------------------------------------------------------------

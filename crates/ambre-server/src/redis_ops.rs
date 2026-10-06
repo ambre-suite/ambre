@@ -635,6 +635,18 @@ pub async fn user_broadcast(
     Ok(())
 }
 
+/// Tells every connection subscribed to a document that its members changed
+/// (`SRV-178`). The message names the document alone, which the topic already
+/// names. Best-effort, like every broadcast: the member rows stay the source of
+/// truth, and a client reads them again at its next open.
+pub async fn members_changed(redis: &Client, document_id: &ambre_core::DocumentId) {
+    let msg =
+        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::MembersChanged {
+            document_id: *document_id,
+        });
+    let _ = doc_broadcast(redis, document_id, &msg).await;
+}
+
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never

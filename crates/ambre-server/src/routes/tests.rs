@@ -3573,6 +3573,65 @@ mod handler_tests {
         );
     }
 
+    /// The next message the relay published on `stream`, decoded. Panics past
+    /// a second, so a missing broadcast fails the test rather than hanging it.
+    async fn next_server_msg(
+        stream: &mut rustis::client::PubSubStream,
+    ) -> ambre_protocol::ws::WsServerMsg {
+        use futures_util::StreamExt;
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+            .await
+            .expect("a broadcast within a second")
+            .expect("an open stream")
+            .expect("a message");
+        ambre_protocol::ws::decode_server_msg(msg.payload()).expect("a server message")
+    }
+
+    /// SRV-178: an invitation, a change of role and a removal each tell the
+    /// connections subscribed to the document that its members changed. The
+    /// message names the document alone.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_change_of_members_reaches_the_subscribers_of_the_document(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::WsServerMsg;
+        use rustis::commands::PubSubCommands;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let document_id = DocumentId::parse_str(&doc_id).expect("a document id");
+        // A connection of its own: a subscriber sharing the relay's client
+        // would desynchronise its replies (see `PubSubHub`).
+        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = subscriber
+            .subscribe(format!("doc:{doc_id}"))
+            .await
+            .expect("a subscription");
+        let changed =
+            |msg| matches!(msg, WsServerMsg::MembersChanged { document_id: d } if d == document_id);
+
+        setup_named(&app, "joiner@test.com", 93).await;
+        invite(&app, &owner, &doc_id, "joiner@test.com", "viewer").await;
+        assert!(changed(next_server_msg(&mut stream).await));
+
+        let joiner_id = doc_user_id(&state, "joiner@test.com").await;
+        assert_eq!(
+            patch_role_status(&app, &owner, &doc_id, &joiner_id, "editor").await,
+            StatusCode::OK
+        );
+        assert!(changed(next_server_msg(&mut stream).await));
+
+        assert_eq!(
+            revoke_status(&app, &owner, &doc_id, &joiner_id).await,
+            StatusCode::OK
+        );
+        // The removal tells the members who stay that a rotation is owed too;
+        // the change of members comes first.
+        assert!(changed(next_server_msg(&mut stream).await));
+    }
+
     /// The links a member reads back, oldest first.
     async fn key_links(app: &Router, auth: &str, doc_id: &str) -> Vec<String> {
         let resp = app

@@ -235,7 +235,7 @@ impl LogicState {
                 // The member rows of a space this thread asked for become its
                 // member list (the Murmure members spec).
                 if let Some(space_id) = self.member_requests.remove(&id) {
-                    self.space_members_answered(space_id, evt);
+                    self.space_members_answered(space_id, id, evt);
                     return;
                 }
                 // A response to a request this Logic thread issued on behalf of a
@@ -335,6 +335,12 @@ impl LogicState {
                 if !self.space_peer_left(document_id, user_id) {
                     self.peer_left(document_id, user_id);
                 }
+            }
+
+            LogicEvent::MembersChanged { document_id } => {
+                // Only a space shows its members live today; any other
+                // document reads them when its view asks.
+                self.space_members_changed(document_id);
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {

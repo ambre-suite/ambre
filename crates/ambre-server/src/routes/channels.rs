@@ -378,6 +378,9 @@ pub async fn join_channel(
     )
     .await?;
     tracing::info!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
+    if joined {
+        crate::redis_ops::members_changed(&state.redis, &meta_id.document_id()).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -832,6 +835,55 @@ mod tests {
             .expect("the join reaches the segment");
         assert_eq!(row.doc_key_enc, [9; 48]);
         assert_eq!(row.invited_by, Some(uuid_of(bob)));
+    }
+
+    /// `SRV-178`: a self-join tells the connections subscribed to `meta` that
+    /// its members changed. A caller already a member changes no row, and
+    /// nothing is said.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_self_join_tells_the_subscribers_of_meta(pool: sqlx::PgPool) {
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        // A connection of its own: a subscriber sharing the relay's client
+        // would desynchronise its replies (see `PubSubHub`).
+        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = subscriber
+            .subscribe(format!("doc:{meta}"))
+            .await
+            .expect("a subscription");
+        let wait = std::time::Duration::from_millis(500);
+
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+        let msg = tokio::time::timeout(wait, stream.next())
+            .await
+            .expect("a broadcast")
+            .expect("an open stream")
+            .expect("a message");
+        assert!(matches!(
+            ambre_protocol::ws::decode_server_msg(msg.payload()),
+            Ok(ambre_protocol::ws::WsServerMsg::MembersChanged { document_id }) if document_id == meta
+        ));
+
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+        assert!(
+            tokio::time::timeout(wait, stream.next()).await.is_err(),
+            "a join that adds no row says nothing"
+        );
     }
 
     /// `SRV-105`: a caller outside the space is refused, a guest of another

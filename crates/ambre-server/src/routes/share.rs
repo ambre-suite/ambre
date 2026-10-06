@@ -236,6 +236,8 @@ pub async fn invite_to_document(
             });
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
+    // The members who hold the document open read the rows again (`SRV-178`).
+    crate::redis_ops::members_changed(&state.redis, &doc_id).await;
     Ok(axum::Json(InviteResponse {
         user_id: invitee_id,
         display_name: invitee.display_name,
@@ -290,6 +292,10 @@ pub async fn revoke_from_document(
             }
         };
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
+    // The members who stay read the rows again (`SRV-178`), unless no one stays.
+    if !matches!(removed, db::Removed::ChannelDeleted(_)) {
+        crate::redis_ops::members_changed(&state.redis, &doc_id).await;
+    }
     match removed {
         db::Removed::Owed => {}
         // A public channel owes nothing (`SRV-122`): the mirror goes back to

@@ -111,6 +111,12 @@ pub enum LogicEvent {
         user_id: UserId,
     },
 
+    /// The relay said the members of an open document changed: someone joined,
+    /// left, or took another role (`SRV-178`). It carries no row. A view that
+    /// shows the members asks for them again, and that answer also makes a new
+    /// member's samples resolve (`SYNC-037`).
+    MembersChanged { document_id: DocumentId },
+
     /// Initial hydration of a freshly opened document is complete. The Sync thread has
     /// fetched members and the latest snapshot (if any), and emitted it ahead of this
     /// event. Fires exactly once per open, for both the snapshot and the empty/brand-new
