@@ -1644,7 +1644,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
 }
 
 #[test]
-fn apply_ephemeral_drops_a_malformed_frame() {
+fn apply_ephemeral_drops_a_malformed_sample() {
     let mut rx = ToileState::new();
     let events = rx.apply_ephemeral(UserId::new(), &[0xFF, 0x00, 0x13, 0x37]);
     assert!(
@@ -3718,7 +3718,7 @@ fn concurrent_first_decks_converge_on_one_list() {
 }
 
 #[test]
-fn broadcast_frame_carries_active_slide() {
+fn broadcast_sample_carries_active_slide() {
     // While broadcasting, a navigation additionally emits an ephemeral
     // carrying the new active index -- and never a CRDT delta.
     let mut st = ToileState::new();
@@ -3736,7 +3736,7 @@ fn broadcast_frame_carries_active_slide() {
 }
 
 #[test]
-fn no_broadcast_frame_when_not_broadcasting() {
+fn no_broadcast_sample_when_not_broadcasting() {
     // With broadcasting off, navigation stays purely local: no ephemeral.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
@@ -3829,7 +3829,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
 /// peers read the whole live set. A sample naming no slide is what drops this
 /// viewer from the presenters the panel offers to follow.
 #[test]
-fn stopping_a_broadcast_sends_a_frame_naming_no_slide() {
+fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
     let mut st = ToileState::new();
     deck_of_three(&mut st);
     st.handle_command(ToileCommand::SetPresentBroadcast(true));

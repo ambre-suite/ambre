@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_naming_a_block_this_peer_does_not_hold_is_dropped() {
+    fn a_sample_naming_a_block_this_peer_does_not_hold_is_dropped() {
         let mut alice = ProseState::new().expect("a document is built");
         // A block Alice mints: the root paragraph is shared scaffolding, which
         // every peer holds (`PROSE-129`).
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn a_malformed_frame_is_dropped_rather_than_raised() {
+    fn a_malformed_sample_is_dropped_rather_than_raised() {
         let mut state = ProseState::new().expect("a document is built");
         let events = state.apply_ephemeral(a_user(3), &[0xFF, 0x00]);
         assert!(events.is_empty());

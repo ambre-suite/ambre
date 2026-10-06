@@ -200,7 +200,7 @@ fn version_check() {
 /// of the socket. The cases are no bytes, a foreign version, and every
 /// truncation of a valid wire message.
 #[test]
-fn a_frame_that_does_not_decode_is_a_typed_error() {
+fn a_wire_message_that_does_not_decode_is_a_typed_error() {
     use crate::ws::{
         WireDecodeError, WsClientMsg, decode_client_msg, decode_server_msg, encode_client_msg,
     };
@@ -216,12 +216,12 @@ fn a_frame_that_does_not_decode_is_a_typed_error() {
         decode_client_msg(&[0x01, 0x00]),
         Err(WireDecodeError::UnsupportedVersion(0x01))
     ));
-    let frame = encode_client_msg(&WsClientMsg::Subscribe {
+    let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: DocumentId::new(),
     });
-    for cut in 1..frame.len() {
-        assert!(decode_client_msg(&frame[..cut]).is_err(), "cut at {cut}");
-        let _ = decode_server_msg(&frame[..cut]);
+    for cut in 1..wire.len() {
+        assert!(decode_client_msg(&wire[..cut]).is_err(), "cut at {cut}");
+        let _ = decode_server_msg(&wire[..cut]);
     }
 }
 

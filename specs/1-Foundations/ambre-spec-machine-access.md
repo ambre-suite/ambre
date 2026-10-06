@@ -98,8 +98,8 @@ A user sends a command or a message to one machine. Only that envelope reaches i
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MACH-027` | `POST` | An envelope addressed to a machine MUST be sealed with the addressed key of that machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACH-028` | `FRAME` | Addressing a frame MUST seal no other frame with the addressed key. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACH-029` | `FRAME` | Addressing a frame MUST NOT send the document key to the machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACH-028` | `FRAME` | Addressing an envelope MUST seal no other envelope with the addressed key. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACH-029` | `FRAME` | Addressing an envelope MUST NOT send the document key to the machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-030` | `FAIL` | Addressing a removed machine MUST be refused before any sealing. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.8 Remove an addressed machine

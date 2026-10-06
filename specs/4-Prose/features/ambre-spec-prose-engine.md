@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_frame_naming_a_block_this_peer_does_not_hold_is_dropped`; `::a_malformed_frame_is_dropped_rather_than_raised` | none | verified |
+| `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_sample_naming_a_block_this_peer_does_not_hold_is_dropped`; `::a_malformed_sample_is_dropped_rather_than_raised` | none | verified |
 | `PROSE-130` | `POST` | A session that has not placed its caret MUST announce itself without drawing a caret on a peer's screen. | this spec section 3; `ambre-spec-prose-schema.md`, `PROSE-121` | not built | unbuilt -- lands with the `An announced session draws no caret it did not place` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `PROSE-058` | `FRAME` | Applying a presence sample MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 

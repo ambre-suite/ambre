@@ -178,7 +178,7 @@ impl ToileState {
         }
         let change = self.slide_change(Some(old), self.playback.active);
         display.push(ToileEvent::SlideChanged(change));
-        ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_frame())
+        ToileOutcome::display_and_ephemeral(display, self.slide_broadcast_sample())
     }
 
     /// Enter presentation (focus) mode, resetting to the first slide.
@@ -194,7 +194,7 @@ impl ToileState {
                 ToileEvent::PresentModeChanged(PresentMode::Presenting),
                 ToileEvent::SlideChanged(change),
             ],
-            self.slide_broadcast_frame(),
+            self.slide_broadcast_sample(),
         )
     }
 
@@ -204,7 +204,7 @@ impl ToileState {
     /// transiently clears this presenter's cursor halo on followers until the
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
     /// continuously). `None` when not broadcasting or on an encode failure.
-    fn slide_broadcast_frame(&self) -> Option<Vec<u8>> {
+    fn slide_broadcast_sample(&self) -> Option<Vec<u8>> {
         if !self.broadcasting {
             return None;
         }
@@ -232,7 +232,7 @@ impl ToileState {
         let was = self.broadcasting;
         self.broadcasting = on;
         let ephemeral = if on {
-            self.slide_broadcast_frame()
+            self.slide_broadcast_sample()
         } else if was {
             silent_presence_frame()
         } else {
