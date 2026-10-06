@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-014` | `POST` | An ephemeral MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`; `::list_members_refreshes_the_presence_directory` -- the directory the resolution reads | none | verified |
-| `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` -- the members answer replaces it | none | verified |
+| `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` -- the members answer replaces it | partial -- the directory is rebuilt only when a view asks for the member list. On the relay's word that the members changed (`SRV-178`), only an open space asks again; an open document of another application keeps a stale directory until its next open, so a newcomer's cursor goes unattributed; lands with the `The member directory follows the relay` Story (`ambre-roadmap.md` E7) | partial |
 | `SYNC-015` | `FAIL` | An ephemeral whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
 | `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` -- a key that resolved before the rebuild resolves to nothing after it, where a merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | none | verified |
 
@@ -86,9 +86,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 30 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the directory, the role and the log walk. What is loose is the branches that
-  only run against a live relay.
+* **Verification.** 29 `verified`, 1 `partial`. Every pure transform holds, out of the browser:
+  the wrap, the weak key, the pin, the directory, the role and the log walk. What is loose is the
+  branches that only run against a live relay, and the directory a change of members leaves stale.
 ---
 
 ## 2. WHAT EACH USER SEES

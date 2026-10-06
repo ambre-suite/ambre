@@ -50,6 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-100` | `FAIL` | A wire message that does not decode MUST be refused as a typed error, never a panic, on either side of the socket. | this spec section 3; `ARCH-006` | `ambre_protocol::tests::a_wire_message_that_does_not_decode_is_a_typed_error`; cargo-fuzz -- `fuzz/fuzz_targets/wire_decode.rs`, run by the CI `fuzz` job | none | verified |
+| `SRV-179` | `FAIL` | Given a request body that does not decode, an unknown word of a closed set included, the relay MUST answer `409`. | this spec section 3 | none | fails -- the routes take the framework's own JSON extractor, which answers `422` to such a body, the code that means a signature that does not verify. `ambre_server::routes::tests::handler_tests::invalid_doc_type_is_rejected`, `::update_member_role_changes_role` and `ambre_server::routes::orgs::tests::integration::update_member_role_rejects_invalid_role` fail on it; lands with the `A body that does not decode answers 409` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | `ambre_server::ws::pubsub_hub::tests::a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out` -- the hub panics on one socket's request, refuses that request alone, and fans out to the others after its restart; `ambre_server::routes::tests::handler_tests::a_panicking_socket_ends_alone_and_its_peer_hears_it_leave` -- the socket: it closes, its peer hears it leave, and the peer is still answered; `ambre_server::supervise::tests::a_panicking_handler_answers_a_generic_error_and_the_router_keeps_serving` -- the request; `::a_panicking_unit_of_work_leaves_the_next_one_running` -- the wrapper the flusher, the compaction and the socket loop each run under | none | verified |
 | `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- four store failures, one status and one message for all of them; `::oidc_error_is_infrastructure_level` -- the provider | none | verified |
 | `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message; `ambre_server::ws::handler::message::refusal_tests::a_refused_subscription_carries_no_store_text` -- the socket path, where a store failure answers a generic 500 | none | verified |
@@ -126,10 +127,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 46 `verified`, 1 `qa-manual`, 12 `unimplemented`. What holds is
+* **Verification.** 46 `verified`, 1 `failing`, 1 `qa-manual`, 12 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
   and the origin list. The delete holds too, and so does the payload type no log line can name.
-  The process rules are loose; a deployment's isolation is read by hand.
+  The process rules are loose; a deployment's isolation is read by hand. The failure is a body that
+  does not decode, which answers `422`.
 ---
 
 ## 2. WHAT EACH USER SEES
