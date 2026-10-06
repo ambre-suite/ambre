@@ -751,6 +751,70 @@ def read_schedule(path: Path) -> dict[str, tuple[str, bool, int, str]]:
     return index
 
 
+# The release scopes, in the order the work reaches them. `--` names none and
+# is not on the line.
+MILESTONE_ORDER = ("MVP", "V1", "post-V1")
+
+
+def read_milestones(path: Path) -> dict[str, tuple[str, bool]]:
+    """The milestone of every story of the roadmap, per key, and whether it is
+    ticked.
+
+    The `Milestone` cell is the row's second cell. Section 8 carries no such
+    column, and a story there is `post-V1` by where it sits.
+    """
+    milestones: dict[str, tuple[str, bool]] = {}
+    epic = "?"
+    for line in path.read_text().splitlines():
+        head = EPIC_HEAD.match(line)
+        if head:
+            epic = head["key"]
+            continue
+        row = STORY_ROW.match(line)
+        if not row:
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        milestone = "post-V1" if epic.upper() == "POST-V1" else cells[1]
+        for key in story_keys(row["name"]):
+            milestones[key] = (milestone, row["done"] == "x")
+    return milestones
+
+
+def current_milestone(milestones: dict[str, tuple[str, bool]]) -> str | None:
+    """The milestone in progress: the earliest one with a story still open."""
+    open_ones = {m for m, done in milestones.values() if not done}
+    return next((m for m in MILESTONE_ORDER if m in open_ones), None)
+
+
+def milestone_defects(
+    where: str,
+    status: str,
+    cell: str,
+    milestones: dict[str, tuple[str, bool]],
+    current: str | None,
+) -> list[str]:
+    """Whether a `failing` row lands with a story of the milestone in progress.
+
+    A `failing` row is code that breaks its rule today, so the defect was found
+    in the milestone in progress, and it is fixed there. A later milestone
+    carries only what is not built, and `--` carries no release at all.
+    """
+    if status != "failing" or current is None:
+        return []
+    cite = cited_story(cell)
+    if cite is None:
+        return []  # `story_defects` already reports the missing citation
+    name = cite[0].strip('`"')
+    entry = milestones.get(story_key(name))
+    if entry is None or entry[0] == current:
+        return []  # an unknown story is `story_defects`' to report
+    return [
+        f"{where}: `failing` and lands with {name!r}, a {entry[0]} story -- a "
+        f"defect is fixed in the milestone that finds it, and {current} is in "
+        f"progress"
+    ]
+
+
 def duplicate_stories(path: Path) -> list[str]:
     """Each story name or phase code that two rows of one schedule carry.
 
@@ -1383,6 +1447,8 @@ def main() -> int:
     leans: dict[str, list[str]] = defaultdict(list)
     schedule = read_schedule(SPECS / ROADMAP)
     closed = read_schedule(SPECS / JOURNAL)
+    milestones = read_milestones(SPECS / ROADMAP)
+    in_progress = current_milestone(milestones)
     errors += duplicate_stories(SPECS / ROADMAP)
     findings = declared_findings()
     cited_audit: set[str] = set()
@@ -1548,6 +1614,7 @@ def main() -> int:
             held_by = cell.get(MECHANISM, rest.rsplit("|", 1)[-1])
             if status in OWES_STORY:
                 errors += story_defects(where, status, binding, schedule, closed)
+                errors += milestone_defects(where, status, binding, milestones, in_progress)
             if status != "unimplemented" and "not built" in held_by:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":

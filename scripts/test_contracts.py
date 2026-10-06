@@ -350,6 +350,42 @@ class Stories(unittest.TestCase):
         ))
 
 
+class Milestones(unittest.TestCase):
+    """A defect is fixed in the milestone that finds it: the one in progress."""
+
+    MILESTONES = {
+        "the ui-thread belts": ("V1", False),
+        "one clipboard host": ("MVP", False),
+    }
+    V1_CELL = "fails -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9)"
+    MVP_CELL = "fails -- lands with the `One clipboard host` Story (`ambre-roadmap.md` E7)"
+
+    def defects(self, status: str, cell: str, current: str = "MVP") -> list[str]:
+        return contracts.milestone_defects(WHERE, status, cell, self.MILESTONES, current)
+
+    def test_a_failing_row_on_a_later_story_is_refused(self):
+        self.assertIn("V1 story", self.defects("failing", self.V1_CELL)[0])
+
+    def test_a_failing_row_on_the_current_milestone_passes(self):
+        self.assertEqual([], self.defects("failing", self.MVP_CELL))
+
+    def test_once_v1_is_in_progress_its_defects_land_in_v1(self):
+        self.assertEqual([], self.defects("failing", self.V1_CELL, current="V1"))
+        self.assertIn("MVP story", self.defects("failing", self.MVP_CELL, current="V1")[0])
+
+    def test_a_later_story_may_carry_what_is_not_built(self):
+        self.assertEqual([], self.defects("unimplemented", self.V1_CELL))
+
+    def test_the_milestone_in_progress_is_the_earliest_with_an_open_story(self):
+        ms = {"a": ("MVP", True), "b": ("V1", False), "c": ("--", False)}
+        self.assertEqual("V1", contracts.current_milestone(ms))
+
+    def test_the_post_v1_section_has_no_milestone_column(self):
+        roadmap = contracts.SPECS / contracts.ROADMAP
+        post = [m for m, _ in contracts.read_milestones(roadmap).values() if m == "post-V1"]
+        self.assertTrue(post, "section 8 stories read as post-V1")
+
+
 class StoryKeys(unittest.TestCase):
     """A story name is a join key, and a key that forgives a word joins wrong."""
 

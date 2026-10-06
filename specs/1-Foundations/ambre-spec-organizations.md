@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-060` | `INV` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`; `::owner_cannot_remove_last_owner`; `::owner_can_leave_when_another_owner_remains` -- the count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | none | verified |
 | `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ambre-spec-zero-knowledge.md`, `ZK-004`; `ambre-spec-server.md`, `SRV-012` | cargo-deny; crate-graph -- `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it | none | verified |
-| `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none | fails -- no route deposits one. The register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release, section 5; lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | failing |
+| `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | not built | unbuilt -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1). No route deposits one. The register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release, section 5 | unimplemented |
 
 ### 1.2 Create an organization
 
@@ -64,7 +64,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 5 `verified`, 1 `partial`, 1 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
+* **Verification.** 5 `verified`, 1 `partial`, 3 `untested`, 2 `unimplemented`. What holds is the
   membership: the last owner, the grant clamp, the removal clamp, and the quorum the relay cannot
   keep. What is loose is the release -- who may ask, and whether the record survives -- and the
   deposit, which no route performs.

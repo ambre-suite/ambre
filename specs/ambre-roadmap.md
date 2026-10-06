@@ -18,7 +18,7 @@
 | **Epic** | a group of stories, one increment of value | one heading of this file |
 | **Milestone** | a release scope spanning epics | the `Milestone` column |
 
-**Seven rules, and each one exists because it was broken.**
+**Eight rules, and each one exists because it was broken.**
 
 * **A story is one row, and it says what, never how.** A checkbox, a name, its milestone, the
   features it touches. The code says how it works and git says how it got there. A row that explains
@@ -40,6 +40,10 @@
   `--` means no release scope names the story, which is why transverse work waits.
 * **An epic holds no `post-V1` story.** One such row holds an epic open for ever, so section 8
   carries them.
+* **A defect is fixed in the milestone that finds it.** A `failing` row is code that breaks its rule
+  today. Its story carries the milestone in progress: the earliest one with a story still open. A
+  later milestone carries only what is not built. `contracts.py` refuses a `failing` row bound to a
+  story of any other milestone.
 
 **An epic key is an identifier, not a rank.** `EF` precedes `E4`, and `E4` is the current objective. A
 key is minted once, because a few hundred contract rows cite one. The `Milestone` column orders the
@@ -267,9 +271,9 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A note body converges character by character | MVP | a sticky or a text body is one whole value, so of two authors typing in the same note one loses their sentence. Done when `TOILE-030` reads `verified` |
 | `[x]` An open editor keeps a peer's edit to its note | MVP | the editor closes by diffing its body against the stored one, so a peer's edit that arrived while it was open is deleted. Done when `TOILE-UI-381` reads `verified` |
 | `[x]` An open caption editor keeps a peer's edit | MVP | a caption is a shared text, but its close names no base, so a peer's edit that arrived while the editor was open is deleted. Done when `TOILE-263` reads `verified` |
-| `[ ]` A text close never hides a peer's words | V1 | the local echo paints the typed note body or caption, so a peer's words merged into it leave the screen until the round trip returns them. Done when `TOILE-UI-382` reads `verified` |
+| `[ ]` A text close never hides a peer's words | MVP | the local echo paints the typed note body or caption, so a peer's words merged into it leave the screen until the round trip returns them. Done when `TOILE-UI-382` reads `verified` |
 | `[ ]` A note close holds its budget | V1 | the close merges through a scratch document, and nothing measures what that costs on a large body. Done when `TOILE-UI-383` reads `verified` |
-| `[ ]` Two peers migrating one board keep both edits | V1 | each peer migrates its own copy, and a step that creates a container under a map key makes a rival one, so an edit typed into the losing copy is lost. Done when `SCHEMA-020` reads `verified` |
+| `[ ]` Two peers migrating one board keep both edits | MVP | each peer migrates its own copy, and a step that creates a container under a map key makes a rival one, so an edit typed into the losing copy is lost. Done when `SCHEMA-020` reads `verified` |
 | `[ ]` A large board import does not freeze the board | MVP | a Toile import applies its whole batch in one synchronous pass, so a large file holds the Logic thread and every edit waits on it. Done when `TOILE-IO-028` reads `verified` |
 | `[ ]` A board costs what it shows and what changed | MVP | every connector is routed and shipped at every camera, and dropping, reparenting or reordering one element walks the whole board, as does every remote change. Done when `TOILE-045`, `TOILE-056`, `TOILE-061`, `TOILE-091`, `TOILE-092` and `TOILE-207` read `verified` |
 | `[x]` Each application announces its own content | MVP | one application announces its focused content and the others are silent, and every surface names itself a spreadsheet cell to assistive technology. Done when `CHROME-023`, `CHROME-024` and `UI-THREAD-048` read `verified` |
@@ -332,7 +336,7 @@ owns the subsystem.
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[x]` One command registry | MVP | one description per command -- title, icon, category, chord -- with the menus, the keyboard and the command palette all derived from it instead of built beside it |
-| `[ ]` The launcher holds no application logic | V1 | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
+| `[ ]` The launcher holds no application logic | MVP | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
 | `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Pinch belongs here, in every app, and a finger's pan and flick to the "One kinetic scroll" row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |
