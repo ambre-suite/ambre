@@ -428,6 +428,27 @@ pub(crate) mod tests {
         assert_eq!(view.standing(dave.id).0, MemberStanding::Verified);
     }
 
+    /// The owner leaves last and the log holds no member. A newcomer's
+    /// self-join then extends it and counts, where the application allows
+    /// one.
+    #[test]
+    fn a_log_its_last_member_left_admits_the_next_self_join() {
+        let (alice, dave) = (Person::new(1), Person::new(4));
+        let mut log = Vec::new();
+        append(&mut log, &alice, &alice, MembershipAct::Create, Role::Owner);
+        append(&mut log, &alice, &alice, MembershipAct::Revoke, Role::Owner);
+        append(
+            &mut log,
+            &dave,
+            &dave,
+            MembershipAct::SelfJoin,
+            Role::Editor,
+        );
+        let view = Log::walk(DOC, anchor(&log), &log, |_| true);
+        assert_eq!(view.standing(dave.id), (MemberStanding::Verified, Some(Role::Editor)));
+        assert_eq!(view.standing(alice.id).0, MemberStanding::Revoked);
+    }
+
     /// Holds `SYNC-109`: an invite served again after a revoke of the same
     /// member changes nothing. Appended at the end, it does not link, and the
     /// member stays revoked.

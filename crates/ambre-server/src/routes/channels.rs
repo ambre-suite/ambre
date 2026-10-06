@@ -1444,6 +1444,54 @@ mod tests {
         );
     }
 
+    /// An editor leaves a public channel, then its owner, the last member.
+    /// Neither is refused, and the channel stays with its documents and
+    /// owes no rotation. Another member of the space then joins it alone.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_last_member_leaves_a_public_channel_for_the_next_to_join(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (carol, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+        let meta = channel.meta.document_id();
+
+        assert_eq!(
+            leave(&state, bob, &channel).await.expect("leave"),
+            db::Removed::Kept
+        );
+        assert_eq!(
+            leave(&state, alice, &channel)
+                .await
+                .expect("the owner leaves last"),
+            db::Removed::Kept
+        );
+
+        assert!(member_ids(&state, meta).await.is_empty());
+        assert!(!owes(&state, &channel).await);
+        assert!(
+            db::get_channel(&state.db, &channel.id)
+                .await
+                .expect("query")
+                .is_some_and(|c| c.is_public)
+        );
+        for document in [meta, channel.segment.document_id()] {
+            assert!(exists(&state, document).await);
+            assert!(!crate::test_helpers::deletion_marked(&state.db, document).await);
+        }
+        assert_eq!(
+            join(&state, carol, channel.id, 7).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(role_on(&state, meta, carol).await, Some(Role::Editor));
+    }
+
     /// The last owner of a private channel that keeps other members is
     /// refused the leave, and stays. Once the role is handed on, the leave
     /// goes through.

@@ -66,7 +66,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST cause the rotation of its key. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the relay marks the key of the private channel owed | none | verified |
 | `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-461` | `POST` | The last member leaving a public channel MUST leave it listed, with its history, for the next member to join. | this spec section 3; `SRV-174` | not built | unbuilt -- lands with the `The last member of a public channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-461` | `POST` | The last member leaving a public channel MUST leave it listed, with its history, for the next member to join. | this spec section 3; `SRV-174` | `ambre_server::routes::channels::tests::the_last_member_leaves_a_public_channel_for_the_next_to_join` -- the relay keeps the channel public with its documents, and the next member of the space joins it; `ambre_sync::membership_log::tests::a_log_its_last_member_left_admits_the_next_self_join` -- that member's client verifies the join on a log nobody holds | none | verified |
+| `MURMURE-467` | `POST` | Leaving a channel MUST drop it from the client of the member who leaves, with its documents and its keys. | this spec section 3; `MURMURE-059` | not built | unbuilt -- lands with the `Leaving a channel from the client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the public channel owes no rotation after the leave | none | verified |
 | `MURMURE-257` | `FAIL` | Given the last owner leaving a private channel that keeps other members, the relay MUST refuse the leave. | this spec section 3; `SRV-015` | `ambre_server::routes::channels::tests::the_last_owner_hands_the_role_on_before_leaving` -- refused and kept, then let through once the role is handed on | none | verified |
 
@@ -114,7 +115,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 23 `verified`, 20 `unimplemented`. The relay holds a private channel, its
+* **Verification.** 24 `verified`, 20 `unimplemented`. The relay holds a private channel, its
   leave and its delete, and the key links of a channel under its `meta` document. The Logic thread
   creates a private channel without the catalogue, and the owner's client deletes one. A direct
   message opens, is reused for one set of members, and takes a name. Invites, the segment a
@@ -278,3 +279,6 @@ who writes its key into the catalogue.
 * **A delete reaches its owner alone.** The relay pushes nothing when a channel goes, so another
   member's client keeps it until it reopens it (`MURMURE-465`). The relay's word lands with the
   `A delete reaches every member` Story (`ambre-roadmap.md` E5).
+* **No client leaves a channel.** The relay takes the leave, but no command of the client asks
+  for it, so the channel stays in the sidebar (`MURMURE-467`). It lands with the
+  `Leaving a channel from the client` Story (`ambre-roadmap.md` E5).
