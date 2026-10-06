@@ -84,6 +84,7 @@ editor and not restated here.
 | `TOILE-UI-208` | `FRAME` | A commit MUST NOT touch anything but the body: not the bounds, not the style, not the camera, not the tool. | this spec section 3 | none | unheld -- one command carries the id and the text, and no test reads what a close leaves alone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-209` | `FAIL` | Given a locked element, the screen MUST NOT show a body the write will be refused (`TOILE-033`). | this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_locked_element_refuses_a_text_write` -- it reads a locked sticky's body back unchanged after the write | none | verified |
 | `TOILE-UI-210` | `FAIL` | Given a pan that carries the edited element off screen, the editor MUST NOT close: scrolling is not leaving. | this spec section 4 | structural -- the editor resolves its target's geometry from the selection data Logic sends, off-screen included, so a culled element no longer reads as gone | none | verified |
+| `TOILE-UI-387` | `FAIL` | Given an element a peer deletes while the editor is open on it, the editor MUST close and tell the user the element is gone. | this spec section 4; `features/ambre-spec-toile-selection.md` (`TOILE-UI-385`) | none | fails -- the editor stays open, its close names an id the board lost, the Logic thread answers an unknown-element error and the typed text is lost in silence, section 6; lands with the `An editor closes on an element a peer deleted` Story (`ambre-roadmap.md` E7) | failing |
 
 * **Budget.** a keystroke to a draft under 2 ms and text layout of a dirty paragraph under 2 ms
   (`ambre-spec-budgets.md section 1` and section 5.B). The editor echoes locally and shapes at paint
@@ -91,10 +92,11 @@ editor and not restated here.
   No figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 13 `verified`, 25 `untested`, 1 `unimplemented`. What holds is the body's look
-  under edit, and a close that keeps a peer's edit, on the screen as in the document (`TOILE-UI-381`,
-  `TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or closes the
-  editor, and the shared-text substrate (`TOILE-065`).
+* **Verification.** 13 `verified`, 1 `failing`, 25 `untested`, 1 `unimplemented`. What holds is the
+  body's look under edit, and a close that keeps a peer's edit, on the screen as in the document
+  (`TOILE-UI-381`, `TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or
+  closes the editor, and the shared-text substrate (`TOILE-065`). The failure is an editor on an element
+  a peer deleted.
 
 ---
 
@@ -231,6 +233,9 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
 * **A peer's edit still in flight at the close.** The echo merges the body the viewport shows. An edit
   Logic has applied but whose viewport has not reached the view yet is missing from the echo. It was
   never on screen, so nothing leaves it (`TOILE-UI-382` holds), and it appears with that viewport.
+* **An editor outlives its deleted element** (`TOILE-UI-387`). The selection drops an id a peer
+  deleted, but the editor does not watch that answer. Its close names the lost id, and the typed text
+  vanishes with no word to the user. The fix closes the editor on that answer and says why.
 * **A long clash duplicates text.** Past 256 edit steps, each side is one run. Two such runs that
   overlap keep both, with the base text they share written twice. A person must then delete one copy.
 * **Formatting applies to the element, not to a range** (`TOILE-UI-065`). Bold, italic, the family and
