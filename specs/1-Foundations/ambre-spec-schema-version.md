@@ -170,6 +170,16 @@ at the same time, each write their own schema's containers.
 * a file on a user's disk has unbounded age, which is why the asynchronous half gates the container
   Story instead of following it.
 
+**Two peers migrating at once.** Each peer runs the step on its own copy. A step that creates a
+container under a map key would mint a rival on each peer, and the map would keep one. So a migration
+runs under a peer identity derived from the history it starts from, then the document takes its own
+identity back (`SCHEMA-020`).
+
+* two peers that start from one history write the same operations under the same identifiers;
+* the CRDT engine keeps one copy of an operation it already holds, so there is no rival;
+* two different histories derive two identities, so no identifier ever carries two contents;
+* the step walks its containers in a fixed order, and writes nothing that depends on the clock.
+
 **Code.** `crates/ambre-core/src/schema.rs` for the protocol: the two container names, the three
 verdicts, the error taxonomy and the registry walk. The walk is generic over the document, so the
 foundation needs no CRDT.
@@ -212,6 +222,8 @@ The user never sees the version. What they meet is what it protects them from.
 | The register is read in a scratch document, at the cost of a second import | importing into the live document and reading the register there, which is one map lookup and no second import | it reads the version off a document that is, by then, already merged into the one the user is looking at. The only way back out of a refusal is to drop their session, so the cheap read buys a refusal that destroys exactly what `SCHEMA-012` exists to protect. The cost lands on leg 3 of `ambre-spec-budgets.md section 4`, which carries no figure |
 | A register holding something other than a `u32` is refused | reading it as absent, which is version 0, which migrates and opens | it is indistinguishable from a *newer* document whose register this build cannot parse, and opening one of those is the silent loss the register exists to remove. Refusing costs a reader of a genuinely corrupt document an error message; reading costs a reader of a newer one their document |
 | An unreadable register raises one notice per import | a count of unreadable records, reported per document | the same register is met again on every later read, so the number measures repaints, not records. A count that drifts with the frame rate is worse than the plain fact, because a reader believes it |
+| A migration writes under an identity its history derives | a container per body named at the root by its element | each peer inserts the same characters into the one shared text, and the body converges doubled |
+| A migration writes under an identity its history derives | one elected peer migrates, and the others wait | a peer working offline would wait for a peer it cannot reach, and a document opened from a file has nobody to elect |
 | The walk is generic over the document type | `ambre-core` takes a `loro` dependency and owns whole migrations | `ambre-server` links `ambre-core`, and a relay that can decode a document is the one thing the zero-knowledge posture forbids (`ZK-001`). Generic over `D` costs one type parameter and keeps the CRDT out of the foundation -- which is also what holds `SCHEMA-010` with no test |
 
 ---
@@ -234,6 +246,10 @@ The user never sees the version. What they meet is what it protects them from.
   `SCHEMA-009` because a layout change moves a line of the frozen text. A value read differently
   under the same key and type leaves that text identical. The bump obligation on meaning
   therefore stays with the reviewer. Each application's schema document names that half.
+* **Two peers who each edited the old version before migrating still race.** Their histories
+  differ, so they derive two identities and mint rival containers. An edit typed into the losing
+  one before they meet is lost. The common case, two peers opening one stored version, shares a
+  history and loses nothing (`SCHEMA-020`).
 * **The relay-side minimum-version gate has a name and no owner.** It is the only answer to live
   version skew, and no document holds a rule for it.
 

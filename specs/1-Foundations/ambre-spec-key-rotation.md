@@ -65,7 +65,7 @@ A client that lacks the key a frame or a snapshot names walks the chain back fro
 |---|---|---|---|---|---|---|
 | `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Leave on one's own
@@ -186,6 +186,12 @@ pub struct KeyLink {
 A link is checked twice. The key it unseals must hash to the identifier it names (`SYNC-120`), and
 its signer must be a verified member (`SYNC-121`). A recovered key opens history, and never seals
 anything new (`SYNC-122`).
+
+**Why the chain stands before the log.** The seal and the identifier carry the chain alone. To forge
+a link, the relay would have to seal under a key it never holds. The hash binds what opens to the
+key it names. The signature adds attribution, and attribution means something only against the
+signed membership log. Until that log lands, a link's signature is checked against the signing key
+the relay serves for its author (`SYNC-121`).
 
 **A history boundary is a rotation with no link.** The chain stops there. A member who joined after
 it holds no key before it, and no walk reaches one.

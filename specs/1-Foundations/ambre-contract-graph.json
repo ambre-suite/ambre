@@ -757,7 +757,7 @@
   {"edge": "cites-section", "from": "SYNC-121", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "cites-rule", "from": "SYNC-121", "to": "SYNC-103"},
   {"edge": "cites-rule", "from": "SYNC-121", "to": "SYNC-106"},
-  {"edge": "lands-with", "from": "SYNC-121", "to": "The key chain"},
+  {"edge": "lands-with", "from": "SYNC-121", "to": "Signed membership log"},
   {"edge": "cites-section", "from": "SYNC-122", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "lands-with", "from": "SYNC-122", "to": "The key chain"},
   {"edge": "cites-section", "from": "SYNC-127", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},

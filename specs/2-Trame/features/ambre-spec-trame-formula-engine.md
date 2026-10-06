@@ -150,6 +150,12 @@ pub enum RangeEndpoint {
 }
 ```
 
+**The stored form.** The cell's register holds one canonical text, in which each reference names
+the uids it was typed against. The editor and the formula bar render it back to `A1`, and a typed
+formula is turned into it before the write. So a formula and its references stay one register, and
+one write replaces both. The sheet qualifier already works this way (`TRAME-034`). A workbook that
+stored positions converts each one to the uid at that position in a schema step (`TRAME-226`).
+
 **The two levels.** Cell-to-cell edges live in a `petgraph` DAG, where a cycle is a static error. A
 range is not expanded into edges: it is stored whole against the formula that reads it, and a write
 is tested for containment. One entire column would otherwise cost a hundred thousand edges.
@@ -260,6 +266,7 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
 | A range is a dependency of its own, not a set of edges | expanding each range into cell-to-cell edges in `petgraph` | `=SUM(A:A)` would be a hundred thousand edges, rebuilt on every row insert. Storing the rectangle and testing containment costs one entry per formula, at the price of a linear scan the interval tree will replace |
 | Cycles are caught in two places | one detector | it would have to be the dynamic one, and would then run on every evaluation. The cell graph sees only what compilation could resolve to a cell: a loop closed through a range, a name or another sheet is invisible to it, and a spreadsheet that hangs is worse than one that says `#CIRCULAR!` |
 | A reference is stored by the identities it names (`TRAME-228`) | storing positions and rewriting each formula's text on an insert or a delete, as the file formats do | the rewrite misses a formula a peer types during the insert, which then reads the wrong line after the merge (`TRAME-229`). A positional text is also re-bound by every reseed, so what a sort kept is lost on the next tab switch |
+| A formula and the uids it names are one register | the typed text in the register, and a table of its references beside it | two concurrent writes could keep one peer's text and the other's table, a formula that reads cells it never named |
 | A reorder re-anchors the range endpoints it moves (`TRAME-227`) | binding both endpoints to uids and never re-anchoring | it inverts `SUM(A1:A3)` the first time a sort moves `A3` above `A1`. A single reference follows its row; a range must stay a rectangle, and an insert inside it must widen it (`TRAME-171`) |
 | A position past the used range is virtual, not an error | materializing rows on reference | reading `=A100` on a ten-row sheet would create ninety lines nobody wrote, on every peer, for one read |
 | A position past the used range is virtual, not an error | refusing the formula | `=A100` on a ten-row sheet is a forward reference a user writes on purpose; refusing it forbids writing a formula before the data it will read |

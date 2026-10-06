@@ -211,6 +211,11 @@ separation is carried by what each crate is allowed to declare.
 | `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
 
+**What an application hands the shell.** One value implementing a trait of `ambre-chrome`: its
+command handler, its panels and its dialogs (`ARCH-018`). The shell routes a command to the handler
+of the application in front, and mounts what it is handed. It never matches on what a command of
+one application means.
+
 Two consequences follow and neither is obvious. The launcher sits **downstream** of every
 application, which is what lets the closed view registry name an application view without a cycle.
 And the transitive graph does reach the graphics stack from the Logic runtime, through an
@@ -260,6 +265,7 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | The relay is in the same workspace as the client | a separate workspace for the server | the build flags are scoped by target, so a native member is unaffected, and one workspace gives one formatter, one lint pass and one CI job. |
 | A panic aborts | unwinding on panic, and detecting the death through queue disconnection | unwinding across a shared heap with a leaked sender leaves the other threads reading a queue that will never close, so the disconnection the detection waits on never comes. Aborting is honest, and the fatal hook is what makes it visible. |
 | One binary per instance, not one per application | a separate build per application | the applications share the render runtime, the interface toolkit and the engine, so splitting them would duplicate the heavy half of the download per application. |
+| An application hands the shell one trait object | moving each command's logic into a free function of its crate, still called by the shell | the shell would still name each command it routes, so the next command would land in the shell again and nothing would stop it |
 | No dependency-injection framework | a container that resolves the graph at run time | the registry is a map and the wiring is explicit in the launcher: two queues, a closure that builds a view, and a worker handle. |
 | No fourth thread for import and export | a fourth thread for conversions | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread. |
 
