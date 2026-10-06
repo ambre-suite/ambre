@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-163` | `FAIL` | Deleting the last remaining sheet MUST be refused, with a message and no write. | this spec section 4 | `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` -- it asserts both the error event and the absence of an update | none | verified |
-| `TRAME-075` | `POST` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` | none | verified |
+| `TRAME-075` | `POST` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | none | fails -- `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` holds the local delete alone. A peer's delete leaves the reader's Logic on the deleted sheet, which the tabs no longer list, and an edit there lands on it, section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
 | `TRAME-076` | `POST` | Deleting a sheet MUST leave none of its data in the document. | this spec section 6 | `ambre_trame::logic::tests::group3::deleted_sheet_leaves_no_data` | none | verified |
 | `TRAME-164` | `FRAME` | Deleting a sheet MUST NOT touch another sheet's data. | this spec section 5 | none | unheld -- every per-sheet container is named by the sheet id, so the drop cannot reach a neighbour's key, it does not reach four of its own either (`TRAME-076`), and no test reads a second sheet after a delete; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -72,11 +72,11 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 11 `verified`, 6 `untested`, 1 `unimplemented`. What holds is each gesture on
-  one peer, plus what an add leaves alone: the tab the reader is on. What is loose is every frame
-  around them, and the one invariant no single peer can reach. A distinct id between two peers is an
-  argument, not a mechanism (`TRAME-071`, `TRAME-077`). The local guard offered as covering it is a
-  refusal of its own (`TRAME-163`).
+* **Verification.** 10 `verified`, 1 `failing`, 6 `untested`, 1 `unimplemented`. What holds is
+  each gesture on one peer, plus what an add leaves alone: the tab the reader is on. What is loose
+  is every frame around them, and what no single peer can reach: a peer's delete fails
+  (`TRAME-075`). A distinct id between two peers is an argument, not a mechanism (`TRAME-071`,
+  `TRAME-077`). The local guard offered as covering it is a refusal of its own (`TRAME-163`).
 
 ---
 
@@ -86,7 +86,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|
 | adds a sheet | adds a sheet | both, each under its own id | two new tabs, in a canonical order (`TRAME-071`) | none. The convergence op set carries no sheet command |
 | renames `Sheet2` to `Data` | writes `=Sheet2!A1` | the reference, stored by sheet id | both read the value, and both see the qualifier `Data!A1` (`TRAME-070`) | `ambre_trame::logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename` |
-| deletes `Sheet2` | is reading `Sheet2` | the workbook without it | B lands on the neighbouring tab (`TRAME-075`) | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back`, one peer |
+| deletes `Sheet2` | is reading `Sheet2` | the workbook without it | B lands on the neighbouring tab (`TRAME-075`) | none: B stays on the deleted sheet, section 6 |
 | deletes the last sheet but one | deletes the other | no sheet left | an empty workbook, on both screens (`TRAME-022`, `TRAME-077`) | none, and this is the case the rule exists for |
 | drags a tab to the front | drags the same tab to the end | one order, or a rebuilt list | possibly two different strips (`TRAME-074`) | none |
 
@@ -171,6 +171,9 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
   active sheet alone by design, and expects the surface to send `ActivateSheet` behind it. The
   launcher does not, so a user who clicks `+` gets a tab they have to click again. Nothing rules
   which of the two is wrong.
+* **A peer's delete leaves the reader on the deleted sheet** (`TRAME-075`). The fallback runs in
+  the local delete alone. A remote one drops the sheet from the tabs, and the reader's Logic keeps
+  it active. An edit then lands on a sheet nobody can reach, and is lost on the next tab switch.
 * **Switching a tab is a full engine reseed.** The engine pins the active sheet to its own index
   zero, so activating another one remaps every compiled reference. It is engine debt
   (`ambre-spec-trame-engine.md`). A named range escapes it by storing its sheet id (`TRAME-062`).

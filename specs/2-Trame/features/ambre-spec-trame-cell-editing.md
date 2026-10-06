@@ -47,12 +47,13 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | none | unheld -- a grid commit parks a `PendingCommit` and the tail of `ui/view/frame.rs` drains it after `draw_edit` flushes, which holds by the order of two statements in one function. Nothing in the types forbids a second drain site, and no test reads the buffer at key time to show the difference; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 3 | none | unheld -- `commit_edit` sends `SetCellText` for the editor's row and column, and the session lives on `TrameView`, on the far side of the headless seam; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | none | fails -- `commit_edit` sends `SetCellText` for the row and column the session opened on, and Logic resolves that position on arrival: a line a peer inserts above the cell moves the commit one cell up, section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
 | `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` -- it writes a value, then commits an empty `SetCellText`, and reads the cell back blank | none | verified |
 | `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item` | none | verified |
 | `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 3 | none | unheld -- `commit_edit` names one cell in the command and one in the local cache, and nothing watches the rest of the sheet; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 2; section 3 | none | fails -- a commit after a peer inserts a row above the open cell overwrites the value the insert moved onto its position, with no word to either user (`TRAME-UI-160`), section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-176` | `FAIL` | Given a sheet, row or column a peer deletes while a session is open on it, the session MUST close with no write and tell the user the cell is gone. | this spec section 2; `features/ambre-spec-trame-sheets.md` (`TRAME-075`) | none | fails -- the session stays open and its commit writes by position: to the line that moved onto it, or to a deleted sheet the tabs no longer list, section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
 | `TRAME-UI-163` | `FAIL` | A commit the queue cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::the_hold_bound_refuses_rather_than_grows` | partial -- the tests hold the outbox: a full queue holds the commit and retries it, and a refusal is reported. `commit_edit` updating the cache only on an accepted send is wasm glue no host test reaches; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | `ambre_trame::logic::tests::group3::write_beyond_the_cap_is_refused_and_said` | none | verified |
 
@@ -111,12 +112,11 @@ status values are normative in `ambre-spec-template.md`.
   them reads **none exists**.
 * **Boundary.** none: the draft lives on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The committed text reaches the relay sealed (`ZK-001`).
-* **Verification.** 7 `verified`, 2 `partial`, 19 `untested`, 12 `unimplemented`. What holds is the
-  commit path a cell text takes into the document. What is loose is the gesture around it: eleven
-  rows say what an edit MUST NOT touch and nothing watches one of them. The session lives on
-  `TrameView`, which owns a canvas, a textarea and Leptos signals, so the headless tier stops at
-  `TrameUiState` below it. Nine unbuilt rows are the gate of section 3, whose events ship and whose
-  handlers do nothing.
+* **Verification.** 7 `verified`, 2 `partial`, 3 `failing`, 17 `untested`, 12 `unimplemented`. What
+  holds is the commit path into the document; what fails is where it lands once a peer moves the
+  lines under it. Most rows on what an edit MUST NOT touch have nothing watching them. The session
+  lives on `TrameView`, which owns a canvas and Leptos signals, beyond the headless tier. Nine
+  unbuilt rows are the gate of section 3, whose events ship and whose handlers do nothing.
 
 ---
 
@@ -128,6 +128,8 @@ status values are normative in `ambre-spec-template.md`.
 | types `=A1+1` into `B2` | deletes row 1 | the formula, its reference broken | both read `#REF!` in `B2` (`TRAME-007`) | the same property, whose op set carries `SetText` and `DeleteRow` |
 | types into `B2` | sorts the range | the text on its own row, wherever the sort moved it | both see the value follow its row (`TRAME-004`) | the same property, whose op set carries `SetText` and `Sort` |
 | is editing `B2`, uncommitted | writes `9` into `B2` | `9`, until A commits | A keeps typing over a value that already changed underneath, and nothing says so | none, and no rule covers it -- section 6 |
+| is editing `B4`, uncommitted | inserts a row above it | the commit on `B4`, which now holds what was `B3` | A's text overwrites the moved value, which it must not (`TRAME-UI-162`) | none -- section 6 |
+| is editing a cell of `Sheet2`, uncommitted | deletes `Sheet2` | the workbook without it | A's session stays open, and the commit lands on the deleted sheet (`TRAME-UI-176`) | none -- section 6 |
 
 ---
 
@@ -305,6 +307,11 @@ at. A double-click inside selects the word.
 * **An edit over a value that changed underneath.** The open buffer is local, so a remote write to
   the same cell lands in the cache while the user types. The commit overwrites it. Nothing warns
   the user and no rule says what should happen: the two-peer table's last row is the case.
+* **A commit names a position, not a cell** (`TRAME-UI-160`, `TRAME-UI-162`, `TRAME-UI-176`).
+  Cells are keyed by stable line identities, but `SetCellText` carries a row and a column, and
+  Logic resolves them on arrival. A peer's insert, delete or move above the open cell shifts the
+  commit onto a neighbour. A peer's delete of the sheet leaves it writing to a ghost. Paste and
+  fill stay positional on purpose: they write the selection the user sees.
 * **Autocompletion** (`TRAME-UI-057`, `TRAME-UI-058`). Neither exists in the code. There is no
   completion module, no static function list, no dropdown, and no function of either name anywhere
   in the workspace. What exists is a design, and the path it names is empty.

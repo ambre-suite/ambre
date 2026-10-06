@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `prose-comments` | A discussion attached to a passage of the text. | implemented | 36 |  |
+| `prose-comments` | A discussion attached to a passage of the text. | implemented | 38 | 2 |
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 41 |  |
 | `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | implemented | 15 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 15 implemented, 9 partial, 4 design-only. 686 contract rows, 2 loose.**
+**28 features: 15 implemented, 9 partial, 4 design-only. 688 contract rows, 4 loose.**
