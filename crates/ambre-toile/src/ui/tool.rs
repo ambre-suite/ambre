@@ -1301,6 +1301,20 @@ pub fn double_click_edit(
     }
 }
 
+/// Drop from `selection` the ids the Logic thread reports the board no longer
+/// holds (`TOILE-UI-385`). A peer's deletion reaches the view as a board
+/// change, and the selection's data the view then refetches names them. Ids
+/// are never reused, so a reply to an older selection drops only ids that are
+/// gone for good. Returns whether anything was dropped.
+pub fn drop_missing(selection: &mut Vec<ElementId>, missing: &[ElementId]) -> bool {
+    if missing.is_empty() {
+        return false;
+    }
+    let before = selection.len();
+    selection.retain(|id| !missing.contains(id));
+    selection.len() != before
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1308,6 +1322,19 @@ mod tests {
         DisplayElement, DisplayGeom, DisplayNode, ElementKind, ElementStyle,
     };
     use ambre_draw::{Affine, Vec2};
+
+    /// `TOILE-UI-385`: the ids the board lost leave the selection, the others
+    /// keep their order, and an answer naming none changes nothing.
+    #[test]
+    fn a_selection_drops_the_ids_the_board_lost() {
+        let id = |s: &str| ElementId(s.to_owned());
+        let mut sel = vec![id("a"), id("b"), id("c")];
+        assert!(drop_missing(&mut sel, &[id("b"), id("z")]));
+        assert_eq!(sel, vec![id("a"), id("c")]);
+        assert!(!drop_missing(&mut sel, &[]));
+        assert!(!drop_missing(&mut sel, &[id("z")]));
+        assert_eq!(sel, vec![id("a"), id("c")]);
+    }
 
     fn rect_elem(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {

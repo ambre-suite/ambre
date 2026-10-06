@@ -807,14 +807,26 @@ impl ToileState {
     /// (`toile-menus`, `toile-styles`). The UI thread asks here because the
     /// culled viewport omits the selection past the edge (`TOILE-UI-070`,
     /// `TOILE-UI-134`). It also names the ids a frame holds, which the menu
-    /// cannot read off a box (`TOILE-UI-384`).
+    /// cannot read off a box (`TOILE-UI-384`). Last, it names the ids the board
+    /// no longer holds, which the view drops from its selection (`TOILE-UI-385`).
     fn selection_data(&self, ids: &[ElementId]) -> ToileOutcome {
         let elements = ids
             .iter()
             .filter_map(|id| self.display_element(id))
             .collect();
         let framed = self.framed_among(ids);
-        ToileOutcome::display_only(vec![ToileEvent::SelectionData { elements, framed }])
+        // Read from the element map, not from the display answer: an element
+        // the board holds is never reported gone (`TOILE-UI-385`).
+        let missing = ids
+            .iter()
+            .filter(|id| self.element_map(id).is_none())
+            .cloned()
+            .collect();
+        ToileOutcome::display_only(vec![ToileEvent::SelectionData {
+            elements,
+            framed,
+            missing,
+        }])
     }
 
     /// Every element id on the board, off-screen included, for select-all

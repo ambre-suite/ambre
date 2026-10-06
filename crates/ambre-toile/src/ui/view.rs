@@ -979,7 +979,14 @@ impl ToileView {
             // Full display data of the selection, off-screen included
             // (`TOILE-UI-070`, `TOILE-UI-134`): cache it for the menu scope, the
             // style surfaces and the inline editor.
-            ToileEvent::SelectionData { elements, framed } => {
+            ToileEvent::SelectionData {
+                elements,
+                framed,
+                missing,
+            } => {
+                // An element a peer deleted leaves the selection, so no later
+                // command names it (`TOILE-UI-385`).
+                super::tool::drop_missing(&mut self.selection, &missing);
                 self.selection_data = elements;
                 self.selection_framed = framed;
                 self.needs_full = true;

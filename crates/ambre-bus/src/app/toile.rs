@@ -1586,6 +1586,9 @@ pub enum ToileEvent {
         /// box. The menu offers removal from a frame by this, not by geometry
         /// (`TOILE-UI-384`).
         framed: Vec<ElementId>,
+        /// The requested ids the board no longer holds, a peer's deletion
+        /// included. The view drops them from its selection (`TOILE-UI-385`).
+        missing: Vec<ElementId>,
     },
     /// Every element id on the board, for select-all (`TOILE-UI-033`).
     BoardIds(Vec<ElementId>),

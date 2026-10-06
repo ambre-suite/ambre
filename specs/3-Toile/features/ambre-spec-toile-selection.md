@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-226` | `INV` | The whole edge of the selection box MUST be grabbable, even though only the corners draw a square. | this spec section 3 | `ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses` | none | verified |
 | `TOILE-UI-227` | `INV` | A handle MUST answer a hover only when exactly one element is selected, the select tool is armed and no drag is in flight. | this spec section 3 | `ambre_toile::ui::tool::tests::hover_handle_only_for_a_single_select_at_rest` | none | verified |
 | `TOILE-UI-228` | `INV` | A selection MUST NOT reach any container: it is per user and per moment. | this spec section 4; `ambre-spec-toile-schema.md section 2` | structural -- the id list is a field on the view and the schema declares no container for it | none | verified |
+| `TOILE-UI-385` | `INV` | A selection MUST drop an element the board no longer holds, a peer's deletion included. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_data_names_the_ids_a_peer_deleted` -- a peer's delete applied, the selection's data names the lost id and only it; `ambre_toile::ui::tool::tests::a_selection_drops_the_ids_the_board_lost` -- the view's reduction drops those ids and keeps the others in order | none | verified |
 | `TOILE-UI-035` | `INV` | A connector MUST be pickable: a click on an arrow, on its line or on its caption, MUST be able to name it. | this spec section 2; `features/ambre-spec-toile-connectors.md section 3` | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow`; `ambre_toile::ui::label::tests::a_click_on_the_caption_picks_the_arrow`; `ambre_toile::ui::label::tests::the_top_most_arrow_wins` | none | verified |
 | `TOILE-UI-349` | `INV` | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 4` | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order`; `ambre_toile::ui::arrow::tests::a_release_over_a_shape_re_aims_that_end` -- together, what a selected arrow answers; structural -- the selection is its own field beside the element selection, exclusive with it (`TOILE-UI-354`), and an arrow has no box, so it joins no marquee, group or transform | none | verified |
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
@@ -79,9 +80,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 21 `verified`, 1 `failing`, 7 `untested`. What holds is the geometry and select-all with
-  the pick's exclusions. A locked element wears no box, and a marquee returns a click's target and judges the
-  rotated shape as drawn. What is loose is the gestures. The one failure is the hairline.
+* **Verification.** 22 `verified`, 1 `failing`, 7 `untested`. What holds is the geometry and select-all with
+  the pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A marquee
+  returns a click's target and judges the rotated shape as drawn. What is loose is the gestures, and
+  the one failure is the hairline.
 
 ---
 
@@ -120,6 +122,11 @@ The containment test reads the rotated box, the shape the user sees, not the unr
 (`TOILE-UI-237`). The marquee resolves each hit the way a click does: up the group chain to the
 top-most group (`TOILE-UI-236`).
 
+**A selection that loses an element.** A board change, a peer's deletion included, makes the view
+fetch the selection's data again (`TOILE-UI-384`). The answer names the requested ids the board no
+longer holds, and the view drops them from the selection (`TOILE-UI-385`). Ids are never reused, so an
+answer to an older selection drops only ids that are gone for good.
+
 **Handles.** For a single selection the box is four rotated edges with a square at each rotated
 corner. A rotated rectangle drawn as a rectangle would degrade to its upright bounding box on the
 surface. The pick reads a band around each corner and each side, so a side resizes without drawing a
@@ -128,7 +135,7 @@ square (`TOILE-UI-034`). A multi-selection keeps an upright union box.
 **Code:**
 
 * `crates/ambre-toile/src/ui/hit.rs` -- the exact tests and the marquee;
-* `ui/tool.rs` -- the group resolution, the handle bands and the hover handle;
+* `ui/tool.rs` -- the group resolution, the handle bands, the hover handle and the drop of lost ids;
 * `ui/render.rs` -- the box, the handles and the rotation of both;
 * `ui/view.rs` -- the scope, select-all and the right-click resolution.
 

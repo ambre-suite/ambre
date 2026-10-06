@@ -714,6 +714,40 @@ fn selection_data_includes_offscreen_elements() {
     }
 }
 
+/// `TOILE-UI-385`: the selection's data names the requested ids the board no
+/// longer holds, a peer's deletion included, so the view can drop them.
+#[test]
+fn selection_data_names_the_ids_a_peer_deleted() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let kept = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let gone = create_rect(&mut a, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    b.apply_remote(&a.export_snapshot());
+    let delta = a
+        .handle_command(ToileCommand::DeleteElements {
+            ids: vec![gone.clone()],
+        })
+        .update
+        .expect("the delete broadcasts a delta");
+    b.apply_remote(&delta);
+
+    let out = b.handle_command(ToileCommand::RequestSelectionData {
+        ids: vec![kept.clone(), gone.clone()],
+    });
+    match out.display.as_slice() {
+        [
+            ToileEvent::SelectionData {
+                elements, missing, ..
+            },
+        ] => {
+            assert_eq!(missing, &vec![gone]);
+            assert_eq!(elements.len(), 1);
+            assert_eq!(elements.first().map(|e| &e.id), Some(&kept));
+        }
+        other => panic!("expected SelectionData, got {other:?}"),
+    }
+}
+
 /// `RequestBoardIds` returns every element id, off-screen included, which is the
 /// whole board select-all must cover (`TOILE-UI-033`).
 #[test]
@@ -1940,7 +1974,11 @@ fn a_container_read_walks_no_board() {
         "a container read walked the board"
     );
     match out.display.as_slice() {
-        [ToileEvent::SelectionData { elements, framed }] => {
+        [
+            ToileEvent::SelectionData {
+                elements, framed, ..
+            },
+        ] => {
             let groups: Vec<_> = elements.iter().map(|e| e.group.clone()).collect();
             assert_eq!(groups, vec![Some(g.clone()), Some(g), None]);
             assert_eq!(framed, &vec![c]);
