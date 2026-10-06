@@ -70,7 +70,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-086` | `POST` | While this viewer broadcasts, each slide change MUST attach an ephemeral presence frame carrying the active index. | this spec section 3 | `ambre_toile::logic::convergence_tests::broadcast_frame_carries_active_slide` | none | verified |
+| `TOILE-FEAT-086` | `POST` | While this viewer broadcasts, each slide change MUST attach a presence sample carrying the active index. | this spec section 3 | `ambre_toile::logic::convergence_tests::broadcast_frame_carries_active_slide` | none | verified |
 | `TOILE-FEAT-087` | `FRAME` | While this viewer does not broadcast, a slide change MUST attach no frame. | this spec section 3 | `ambre_toile::logic::convergence_tests::no_broadcast_frame_when_not_broadcasting` | none | verified |
 
 ### 1.6 Write a speaker note
@@ -107,8 +107,8 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Budget.** the transition frame under 4 ms at 500 elements, the slide-transition row of
   `ambre-spec-budgets.md section 1`. A transition frame is a full repaint and a fresh cull. It costs a frame
   of the board plus one pass over the two slides.
-* **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
-  ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
+* **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides a
+  presence sample, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
 * **Verification.** 45 `verified`, 0 `failing`, 0 `untested`. What holds is the
   machinery, the best-covered subject of the application: convergence, playback, follow, the solver
@@ -190,7 +190,7 @@ holds no order of its own (`TOILE-FEAT-098`, `TOILE-UI-343`).
 1. clear any follow, so a manual navigation takes control (`TOILE-FEAT-003`);
 2. clamp the index to the deck, capture the two frame snapshots and the target frame's rect, and
    emit them as one event;
-3. attach an ephemeral frame carrying the index when this viewer broadcasts, and nothing otherwise.
+3. attach a presence sample carrying the index when this viewer broadcasts, and nothing otherwise.
 
 **Steps, when a transition frame is drawn:**
 
@@ -272,7 +272,7 @@ editing chrome stays mounted and the board stays live: a key that deletes still 
 | :--- | :--- | :--- |
 | A slide is a frame of the same board | a linear deck of its own | it duplicates every element that appears twice and animates nothing. A path through the work needs no second document, no copy and no export step, and it is what makes the transition free: two slides that share an element share its id |
 | The order is shared and the playback is not | broadcasting the position as document history | it writes a delta per keystroke of navigation and cannot be left. The group agrees on the story, but each viewer looks where they want, and a reader who scrolls back must not drag everyone with them; follow-the-presenter is the opt-in that puts them together again |
-| The presenter's position rides the presence frames | a shared register naming the active slide | it persists a fact nobody wants back. The position is a gesture, not a decision: momentary, per viewer, meaningless an hour later, and the frame that carries a cursor carries it for nothing |
+| The presenter's position rides the presence samples | a shared register naming the active slide | it persists a fact nobody wants back. The position is a gesture, not a decision: momentary, per viewer, meaningless an hour later, and the frame that carries a cursor carries it for nothing |
 | A transition matches elements by their minted id | matching by position, size or shape | it guesses, and guesses differently on each board. The id match is exact and costs nothing: the author moved the element, so the two snapshots hold the same id and the tween writes itself |
 | The deck names frames, never positions | an index into the paint order | the first reorder invalidates it, while an id survives a move, a reorder and a regroup, so editing the board never rewrites the deck |
 | The solved transition is derived per frame, never stored | writing the interpolated geometry back | it puts a frame of animation in everyone's history. Derived, the animation is a view of two states the document already holds, so a peer that joins mid-transition sees the board and not a half-played artefact |

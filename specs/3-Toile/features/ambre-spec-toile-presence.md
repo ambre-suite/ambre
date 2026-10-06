@@ -58,7 +58,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral frame whatever the frame's fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the frame is there | none | verified |
+| `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral whatever its fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the ephemeral is there | none | verified |
 | `TOILE-183` | `FRAME` | Broadcasting MUST NOT write a delta, MUST NOT push an undo item, and MUST NOT ask for a repaint: the local pointer is the browser's, not the board's. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the absent delta, the empty display list, and an undo that takes back the edit before the sample | none | verified |
 | `TOILE-184` | `FAIL` | Given a sample it cannot encode, the client MUST drop it silently and MUST NOT surface an error: a lost sample is corrected by the next one. | this spec section 3 | `ambre_toile::logic::state::presence::tests::a_sample_that_will_not_encode_is_dropped_silently` -- the encode is generic, so a value that refuses to serialize reaches the failing arm | none | verified |
 | `TOILE-UI-073` | `POST` | A gesture on the board MUST broadcast the local peer's cursor, selection and in-flight stroke. | this spec section 3 | `ambre_toile::ui::presence::tests::a_sample_is_sent_on_a_change_or_on_the_heartbeat` -- the schedule alone: a changed sample goes at once, an unchanged one waits for the heartbeat; `ambre_toile::ui::view::view_tests::a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke` -- what one sample carries | none | verified |
@@ -68,7 +68,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 * **Budget.** the presence overlay under 1 ms per frame (`ambre-spec-budgets.md section 2`), held by no bench.
   It is skipped when no peer is known (`TOILE-UI-218`). A board with peers pays a scan of the visible
   set per ghost, section 6, and an alone board pays nothing.
-* **Boundary.** every presence frame leaves the client, sealed by `ZK-005`: the relay reads
+* **Boundary.** every presence sample leaves the client, sealed by `ZK-005`: the relay reads
   `document_id`, `pub_key` and `counter` alone. `ambre-sync` resolves the author first, so no peer
   paints a cursor under another name (`SYNC-014`).
 * **Verification.** 28 `verified`. What holds is the round trip: a sample leaves on every gesture
@@ -120,7 +120,7 @@ pub struct PresencePayload {
 a world point for the pointer and the laser, and the peer's `ElementId` set for the ghosts. Both
 survive a structural change, which is `PRESENCE-007`.
 
-**Command** (`ambre-bus`): `Presence { payload, now_ms }`, non-mutating, answered by an ephemeral frame: the
+**Command** (`ambre-bus`): `Presence { payload, now_ms }`, non-mutating, answered by an ephemeral: the
 local pointer is the browser's, not the board's. `now_ms` is the UI's wall clock, which the Logic thread does
 not hold. It never travels, and it is what ages the peers this client knows about. A sender's own clock
 decides nothing, so a wrong or hostile one ages nobody.
@@ -173,7 +173,7 @@ overlay accumulates the last 24 into a ring buffer.
 
 * `crates/ambre-toile/src/logic/state/presence.rs` -- the broadcast and the inbound apply;
 * `ui/presence.rs` -- the per-peer mirror and the whole overlay pass;
-* `crates/ambre-logic/src/data.rs` -- the routing of an inbound ephemeral frame to this application.
+* `crates/ambre-logic/src/data.rs` -- the routing of an inbound ephemeral to this application.
 
 ---
 

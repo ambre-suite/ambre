@@ -13,7 +13,7 @@ use ambre_bus::{
     SpaceId, Timestamp,
 };
 use ambre_murmure::{
-    ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_frame, presence_frame,
+    ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
 };
 
 /// An open space, the role the relay gave this user on its document, and
@@ -331,12 +331,12 @@ impl LogicState {
         });
     }
 
-    /// Send this user's presence frame on the space document, and on no
+    /// Send this user's presence sample on the space document, and on no
     /// other: only the members of the space hold its key.
     fn send_presence(&self, space_id: SpaceId) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: space_id.document_id(),
-            payload: presence_frame(),
+            payload: presence_sample(),
         });
     }
 
@@ -371,11 +371,11 @@ impl LogicState {
         });
     }
 
-    /// An ephemeral frame on a document. Returns `false` when no space, open
-    /// or opening, holds it. A frame that is no presence frame is dropped
+    /// An ephemeral on a document. Returns `false` when no space, open or
+    /// opening, holds it. An ephemeral that is no presence sample is dropped
     /// without an error (`PRESENCE-013`).
     ///
-    /// A member heard for the first time gets this user's frame at once, so
+    /// A member heard for the first time gets this user's sample at once, so
     /// a newcomer sees who is online without waiting a refresh period.
     pub(crate) fn space_presence_heard(
         &mut self,
@@ -390,7 +390,7 @@ impl LogicState {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return false;
         };
-        if !is_presence_frame(payload) || Some(from) == self.my_user_id {
+        if !is_presence_sample(payload) || Some(from) == self.my_user_id {
             return true;
         }
         if space.roster.heard(from) {
@@ -404,7 +404,7 @@ impl LogicState {
     /// when no space, open or opening, holds it.
     ///
     /// The departure of another connection of this user turns no one
-    /// offline: this connection answers with its frame, so the other members
+    /// offline: this connection answers with its sample, so the other members
     /// see this user online again.
     pub(crate) fn space_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
         let space_id = SpaceId::from_document(document_id);
@@ -1087,8 +1087,8 @@ mod tests {
         })
     }
 
-    /// Every presence frame sent, with the document it went on.
-    fn frames(sent: &[SyncCommand]) -> Vec<(DocumentId, Vec<u8>)> {
+    /// Every presence sample sent, with the document it went on.
+    fn samples(sent: &[SyncCommand]) -> Vec<(DocumentId, Vec<u8>)> {
         sent.iter()
             .filter_map(|c| match c {
                 SyncCommand::SendEphemeral {
@@ -1154,7 +1154,7 @@ mod tests {
         space_id
     }
 
-    fn frame_from(state: &mut LogicState, space_id: SpaceId, from: UserId, payload: Vec<u8>) {
+    fn sample_from(state: &mut LogicState, space_id: SpaceId, from: UserId, payload: Vec<u8>) {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id: space_id.document_id(),
             from_user_id: from,
@@ -1176,11 +1176,14 @@ mod tests {
             covered_seq: Seq(1),
             payload: stored.snapshot().expect("snapshot"),
         });
-        assert!(frames(&drain(&sync)).is_empty(), "no frame before the open");
+        assert!(
+            samples(&drain(&sync)).is_empty(),
+            "no sample before the open"
+        );
         ready(&mut state, space_id.document_id(), Role::Editor);
         assert_eq!(
-            frames(&drain(&sync)),
-            [(space_id.document_id(), ambre_murmure::presence_frame())]
+            samples(&drain(&sync)),
+            [(space_id.document_id(), ambre_murmure::presence_sample())]
         );
     }
 
@@ -1225,32 +1228,32 @@ mod tests {
         assert_eq!(opened, 0, "the list opens no document");
     }
 
-    /// A frame turns its member online, and gets this user's frame back
+    /// A sample turns its member online, and gets this user's sample back
     /// once, so the newcomer sees who is online without waiting a refresh
-    /// period. A second frame of the same member asks nothing more.
+    /// period. A second sample of the same member asks nothing more.
     #[test]
-    fn a_frame_shows_its_member_online_and_a_newcomer_is_answered_once() {
+    fn a_sample_shows_its_member_online_and_a_newcomer_is_answered_once() {
         let (mut state, ui, sync) = harness();
         let bob = UserId::new();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
-        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         let members = last_members(&drain(&ui)).expect("a member list");
         assert_eq!(members[0].presence, Presence::Online);
-        assert_eq!(frames(&drain(&sync)).len(), 1, "one answer");
+        assert_eq!(samples(&drain(&sync)).len(), 1, "one answer");
 
-        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         assert!(drain(&ui).is_empty());
-        assert!(frames(&drain(&sync)).is_empty());
+        assert!(samples(&drain(&sync)).is_empty());
     }
 
-    /// A member whose last frame is older than the expiry shows offline at
-    /// the next tick, and each tick sends this user's frame.
+    /// A member whose last sample is older than the expiry shows offline at
+    /// the next tick, and each tick sends this user's sample.
     #[test]
-    fn a_member_with_no_frame_within_the_expiry_shows_offline() {
+    fn a_member_with_no_sample_within_the_expiry_shows_offline() {
         let (mut state, ui, sync) = harness();
         let bob = UserId::new();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
-        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         let _ = (drain(&ui), drain(&sync));
 
         let tick = |state: &mut LogicState, offset: u64| {
@@ -1263,17 +1266,17 @@ mod tests {
         };
         tick(&mut state, PRESENCE_EXPIRY_MS);
         assert!(last_members(&drain(&ui)).is_none(), "Bob is still online");
-        assert_eq!(frames(&drain(&sync)).len(), 1);
+        assert_eq!(samples(&drain(&sync)).len(), 1);
 
         tick(&mut state, PRESENCE_EXPIRY_MS + 1);
         let members = last_members(&drain(&ui)).expect("a member list");
         assert_eq!(members[0].presence, Presence::Offline);
-        assert_eq!(frames(&drain(&sync)).len(), 1);
+        assert_eq!(samples(&drain(&sync)).len(), 1);
     }
 
     /// The relay's word that a member left turns them offline at once. The
     /// departure of another tab of this user turns no
-    /// one offline: this tab answers with its frame.
+    /// one offline: this tab answers with its sample.
     #[test]
     fn a_departure_turns_its_member_offline_and_another_tab_of_this_user_answers() {
         let (mut state, ui, sync) = harness();
@@ -1285,7 +1288,7 @@ mod tests {
             &sync,
             vec![member(me, "Me"), member(bob, "Bob")],
         );
-        frame_from(&mut state, space_id, bob, ambre_murmure::presence_frame());
+        sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         let _ = (drain(&ui), drain(&sync));
 
         state.handle_logic_event(LogicEvent::PeerLeft {
@@ -1302,17 +1305,17 @@ mod tests {
             user_id: me,
         });
         assert!(drain(&ui).is_empty());
-        assert_eq!(frames(&drain(&sync)).len(), 1, "this tab answers");
+        assert_eq!(samples(&drain(&sync)).len(), 1, "this tab answers");
     }
 
-    /// A frame that is no presence frame is dropped without an error, and
-    /// changes nothing.
+    /// An ephemeral that is no presence sample is dropped without an error,
+    /// and changes nothing.
     #[test]
-    fn a_frame_that_does_not_decode_is_dropped() {
+    fn a_sample_that_does_not_decode_is_dropped() {
         let (mut state, ui, sync) = harness();
         let bob = UserId::new();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
-        frame_from(&mut state, space_id, bob, vec![9, 9, 9]);
+        sample_from(&mut state, space_id, bob, vec![9, 9, 9]);
         assert!(drain(&ui).is_empty());
         assert!(drain(&sync).is_empty());
     }

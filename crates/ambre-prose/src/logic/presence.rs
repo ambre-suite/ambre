@@ -54,13 +54,13 @@ impl ProseState {
                 ProseOutcome::ephemeral_only(bytes)
             }
             Err(e) => {
-                tracing::warn!("Prose: the presence frame could not be encoded: {e}");
+                tracing::warn!("Prose: the presence sample could not be encoded: {e}");
                 ProseOutcome::nothing()
             }
         }
     }
 
-    /// The frame that tells the other sessions this one is open: the last one
+    /// The sample that tells the other sessions this one is open: the last one
     /// sent, or a caret at the start of the first block. Sent once the document
     /// is ready, so a session that never moves its caret still counts as
     /// running (`PROSE-121`).
@@ -93,7 +93,7 @@ impl ProseState {
         self.live.contains(user_id)
     }
 
-    /// Apply a remote presence frame.
+    /// Apply a remote presence sample.
     ///
     /// The author is the Sync-resolved `from_user_id`, never read from the
     /// payload. Nothing here touches the document, its history or the export
@@ -105,7 +105,7 @@ impl ProseState {
         let frame: PresencePayload = match postcard::from_bytes(payload) {
             Ok(frame) => frame,
             Err(e) => {
-                tracing::warn!("Prose: a presence frame was malformed: {e}");
+                tracing::warn!("Prose: a presence sample was malformed: {e}");
                 return Vec::new();
             }
         };

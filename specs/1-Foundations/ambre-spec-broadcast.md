@@ -44,9 +44,10 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 |---|---|---|---|---|---|---|
 | `SRV-010` | `FAIL` | A frame larger than its cap MUST be refused with no partial effect. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::oversized_delta_writes_no_pending` -- the queue stays empty and a 413 comes back; `ws::handler::message::ephemeral_binding_tests::oversized_ephemeral_writes_no_presence` -- the same emptiness on the presence path, the socket refusing a frame past the outer envelope before any handler runs | none | verified |
 | `SRV-044` | `FAIL` | One connection MUST NOT exceed the message rate the deployment declares. | this spec section 3 | `ambre_server::ws::handler::token_bucket::tests::starts_full_and_allows_a_full_burst`; `::refills_at_the_configured_rate`; `::refill_is_capped_at_capacity`; `::sustained_rate_below_refill_is_never_rejected` -- the one that matters in production, where a legitimate client must never be caught | none | verified |
-| `SRV-087` | `FAIL` | A refused presence frame MUST be dropped in silence. | this spec section 3; `SRV-044` | type-level -- `handle_ephemeral` is handed no outbound queue, so no refusal on that path has anything to answer with. Presence arrives about ten times a minute per peer, and an error frame per refusal would be a second flood on the path the cap exists to bound | none | verified |
-| `SRV-042` | `FAIL` | A frame MUST be accepted only for a document this connection has subscribed to. | this spec section 3 | `ambre_server::ws::handler::message::access_tests::a_frame_for_an_unsubscribed_document_is_refused` -- a write, a presence frame and a replay, each refused before any store is touched | none | verified |
+| `SRV-087` | `FAIL` | A refused presence sample MUST be dropped in silence. | this spec section 3; `SRV-044` | type-level -- `handle_ephemeral` is handed no outbound queue, so no refusal on that path has anything to answer with. Presence arrives about ten times a minute per peer, and an error frame per refusal would be a second flood on the path the cap exists to bound | none | verified |
+| `SRV-042` | `FAIL` | A frame MUST be accepted only for a document this connection has subscribed to. | this spec section 3 | `ambre_server::ws::handler::message::access_tests::a_frame_for_an_unsubscribed_document_is_refused` -- a write, a presence sample and a replay, each refused before any store is touched | none | verified |
 | `SRV-043` | `FAIL` | A member removed while connected MUST stop being served within thirty seconds. | audit `H8`; this spec section 3 | `ambre_server::ws::handler::message::access_tests::a_member_removed_mid_session_is_no_longer_served` -- once the mark passes, the next write is refused and the subscription dropped | none | verified |
+
 ### 1.4 An accepted frame is fanned out
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -61,7 +62,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | `SRV-072` | `POST` | A presence entry MUST expire on its own. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::presence_field_self_expires` -- the field is gone after its own life runs out, on the database tier, so a person who disappears without a clean exit prunes themselves | none | verified |
 | `SRV-097` | `POST` | A person who stops watching a document MUST be dropped from its presence entries, whether they left cleanly or their connection died. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the entry itself, on the database tier | none | verified |
 | `SRV-099` | `POST` | The others watching MUST be told when a person stops watching a document. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- a clean close and a dropped connection each reach the remaining peer as a departure naming the author key, database tier | none | verified |
-| `SRV-089` | `FRAME` | Recording a presence entry MUST NOT touch the document's history: it MUST take no number and reach no store the replay reads. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | `ambre_server::ws::handler::message::access_tests::a_presence_frame_leaves_the_history_untouched` -- the frame is recorded, and takes no number, no clock, no pending entry and no row the replay reads | none | verified |
+| `SRV-089` | `FRAME` | Recording a presence entry MUST NOT touch the document's history: it MUST take no number and reach no store the replay reads. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | `ambre_server::ws::handler::message::access_tests::a_presence_frame_leaves_the_history_untouched` -- the sample is recorded, and takes no number, no clock, no pending entry and no row the replay reads | none | verified |
 
 ### 1.6 A channel is subscribed and relayed
 
@@ -104,7 +105,7 @@ Two peers with one document open, over two connections that may be served by two
 
 ## 3. MODEL
 
-**CRDT containers.** none. Every payload here is a sealed frame the relay moves whole.
+**CRDT containers.** none. Every payload here is a sealed envelope the relay moves whole.
 
 **One socket per session.** It is opened at sign-in and closed at sign-out, and every document a
 person opens is subscribed on it. The token travels in the address, because a browser socket carries
@@ -122,10 +123,11 @@ no header of ours (`ambre-spec-session.md`, `SRV-031`).
 | a message allowance, refilling | the per-connection rate (`SRV-044`) |
 | one outbound queue | everything the fan-out hands this connection |
 
-**What a connection may say.** The frames of the document plane, and each one is gated before it
-is acted on. A channel adds no frame of its own (`SRV-102`).
+**What a connection may say.** A wire message is one message on the socket, in either direction.
+A client sends the wire messages of the document plane, and each one is gated before it is acted
+on. A channel adds no wire message of its own (`SRV-102`).
 
-| Frame | Gate |
+| Wire message | Gate |
 |---|---|
 | subscribe to a document | the membership, read from the register |
 | unsubscribe | none: it only removes |
@@ -223,7 +225,7 @@ The socket has no surface of its own. What a person meets of it is four things.
 | The socket is bidirectional, and its frames are binary | a server-sent event stream | the client sends as much as it receives, so a server-to-client stream carries half the traffic and needs a second connection for the other half. |
 | The socket is bidirectional, and its frames are binary | a textual encoding on the socket | a frame per keystroke burst is what the format has to be affordable for, and a textual body inflates every one of them. The frames are a version byte and a compact encoding instead. |
 | The frame shapes live in one crate | declaring the shapes again inside the relay, beside the handlers that read them | two definitions of one wire shape diverge silently, and the first divergence found was a key declared as a bounded array on one side and an unbounded one on the other. One crate is the definition and both ends depend on it. |
-| A presence frame carries a signature | an unsigned presence frame | it is what the shape carried first: any connection could claim any author key and write that member's presence entry, which is both an attribution and a way to fill the entry hash. The signature is what makes the author binding checkable rather than declared (`SRV-007`). |
+| A presence sample carries a signature | an unsigned presence sample | it is what the shape carried first: any connection could claim any author key and write that member's presence entry, which is both an attribution and a way to fill the entry hash. The signature is what makes the author binding checkable rather than declared (`SRV-007`). |
 | The fan-out rides the ephemeral store | a dedicated message broker between the instances | it adds an operational component for one publish-subscribe topic per document, with a durability nobody here needs -- the durable copy is the index. The store is already a dependency, already multiplexed, and already holds every other piece of live state. |
 
 ---

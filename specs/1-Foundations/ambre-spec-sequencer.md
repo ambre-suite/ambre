@@ -134,7 +134,7 @@ Two peers over one document. Every row is about order, which is the only thing t
 
 ## 3. MODEL
 
-**CRDT containers.** none. What is ordered here is a sealed frame; what converges inside it is the
+**CRDT containers.** none. What is ordered here is a sealed envelope; what converges inside it is the
 client's business (`ambre-spec-delta-order.md`).
 
 **Two counters, one indivisible step.** The relay keeps a clock per author and a number per
@@ -355,7 +355,7 @@ sees is how long a document takes to open.
 |---|---|
 | Why a client waits for a parent, and what it holds meanwhile | `ambre-spec-delta-order.md` |
 | What a client puts inside the frame this document numbers | `ambre-spec-sealed-envelope.md` |
-| Where a sealed frame is stored, and under which name | `ambre-spec-object-store.md` |
+| Where a sealed envelope is stored, and under which name | `ambre-spec-object-store.md` |
 | Who receives the frame live, and over what | `ambre-spec-broadcast.md` |
 | Who may write at all | `ambre-spec-server.md`, `SRV-008` |
 | The signature the frame carries | `ambre-spec-server.md`, `SRV-007` |

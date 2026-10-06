@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-121` | `INV` | The typing and presence indicators MUST ride the ephemeral frames of the `meta` document. | this spec section 3; `ambre-spec-presence.md` | not built | unbuilt -- lands with the `Typing and presence in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-121` | `INV` | The typing and presence indicators MUST ride the ephemerals of the `meta` document. | this spec section 3; `ambre-spec-presence.md` | not built | unbuilt -- lands with the `Typing and presence in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-122` | `INV` | Both indicators MUST be on by default. | this spec section 3 | not built | unbuilt -- lands with the `Typing and presence in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-123` | `INV` | Both indicators MUST reach the members of the channel alone. | this spec section 3; `SRV-047` | not built | unbuilt -- lands with the `Typing and presence in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -39,11 +39,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-296` | `POST` | Turning the indicators off MUST stop the client from sending typing and presence frames. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Presence settings` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-296` | `POST` | Turning the indicators off MUST stop the client from sending typing and presence samples. | this spec section 3; `SETTINGS-004` | not built | unbuilt -- lands with the `Presence settings` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-297` | `FRAME` | Turning the indicators off MUST NOT hide the indicators of other members. | this spec section 3 | not built | unbuilt -- lands with the `Presence settings` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the presence write of `ambre-spec-budgets.md section 3`, per heartbeat.
-* **Boundary.** both indicators are sealed ephemeral frames (`ZK-005`). The relay learns when a
+* **Boundary.** both indicators are sealed ephemerals (`ZK-005`). The relay learns when a
   member is active, which it knows from the connection anyway.
 * **Verification.** 9 `unimplemented`: no channel presence exists in the code.
 
@@ -61,11 +61,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 ## 3. MODEL
 
-**CRDT containers.** none. Both indicators are ephemeral frames of the `meta` document, with the
+**CRDT containers.** none. Both indicators are ephemerals of the `meta` document, with the
 expiry of `ambre-spec-presence.md`.
 
 **The setting that turns them off** lives in the `presence` map of the user settings. With it off,
-the client sends no typing and no presence frame, on any device (`MURMURE-296`). The relay then
+the client sends no typing and no presence sample, on any device (`MURMURE-296`). The relay then
 learns nothing of when the member is active. The member still sees the others (`MURMURE-297`).
 
 **Code.** not built.

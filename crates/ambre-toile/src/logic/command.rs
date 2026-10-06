@@ -74,10 +74,10 @@ impl ToileOutcome {
         }
     }
 
-    /// An outcome with local display events plus an optional ephemeral frame and
-    /// no CRDT delta. Used by the playback commands when "Follow presenter"
+    /// An outcome with local display events plus an optional ephemeral and no
+    /// CRDT delta. Used by the playback commands when "Follow presenter"
     /// broadcasting is on. The local `SlideChanged` repaints this viewer, while
-    /// the ephemeral frame carries the active index to followers.
+    /// the ephemeral carries the active index to followers.
     pub fn display_and_ephemeral(display: Vec<ToileEvent>, ephemeral: Option<Vec<u8>>) -> Self {
         Self {
             display,

@@ -95,7 +95,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-222` | `POST` | One outcome MUST reach the three destinations it names: the display events to the drawing thread, the delta and the presence frame to the Sync worker, the service requests to the service plane. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::toile_upload_request_lowers_with_doc_id_and_records_route` -- the service-request leg alone, the others being held by the dispatcher's own belt (`ambre-spec-architecture.md section 2`) | none | verified |
+| `TOILE-222` | `POST` | One outcome MUST reach the three destinations it names: the display events to the drawing thread, the delta and the presence sample to the Sync worker, the service requests to the service plane. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::toile_upload_request_lowers_with_doc_id_and_records_route` -- the service-request leg alone, the others being held by the dispatcher's own belt (`ambre-spec-architecture.md section 2`) | none | verified |
 | `TOILE-223` | `FRAME` | Fanning an outcome out MUST NOT let a session or a connection event reach the board state, except the canonical user id the session seeds. | this spec section 3; `ambre-spec-membership.md` | type-level -- the only session-shaped entry point on the state is the user-id seed, no connection type appears in any signature of `ToileState`, and the absence is the proof | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`, plus the board holder of section 6. The rows:
@@ -145,7 +145,7 @@ document restates no part of the format.
 | `loro` | the single-board CRDT | `LoroMap` for the elements, `LoroMovableList` for the one paint order, `LoroText` for a frame's notes |
 | `rstar` | the element R-tree | the visible set in O(log N + k), and the first pass of a pick |
 | `kurbo` | the plane geometry | a rectangle, an affine transform and a path, shared with the render side through `ambre-draw` |
-| `postcard` | the style register, the clipboard payload and the presence frame | compact, and the encoding the Logic-to-Sync hop already uses |
+| `postcard` | the style register, the clipboard payload and the presence sample | compact, and the encoding the Logic-to-Sync hop already uses |
 
 **There is no dependency graph.** An element carries its own coordinates and nothing derives from
 another element's value, so a write invalidates no one else. That is the whole difference from a
@@ -223,7 +223,7 @@ compares them at a generated camera that culls (`TOILE-206`). A removal descends
    (`features/ambre-spec-toile-undo.md`, `TOILE-014`);
 2. **update** the derived caches for what the write touched (section 3.B);
 3. **derive** the visible set against the last reported viewport, before returning (`TOILE-002`);
-4. **return** the outcome: the display events, the delta, the presence frame, the service requests.
+4. **return** the outcome: the display events, the delta, the presence sample, the service requests.
 
 | Trigger | What runs |
 |:---|:---|
@@ -262,7 +262,7 @@ impl ToileState {
     /// delta.
     pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent>;
 
-    /// A remote presence frame. The author is the Sync-resolved user id and
+    /// A remote presence sample. The author is the Sync-resolved user id and
     /// never a self-asserted one (`ambre-spec-membership.md`, `SYNC-014`).
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ToileEvent>;
 
@@ -275,7 +275,7 @@ impl ToileState {
 ```
 
 The dispatcher routes by document id, calls one of the five, then explodes the result. The display events go
-to the UI, the delta and the presence frame to Sync, the requests to the service plane (`TOILE-222`). Its
+to the UI, the delta and the presence sample to Sync, the requests to the service plane (`TOILE-222`). Its
 routing is normative in `ambre-spec-message-bus.md`. A session or a connection event never reaches the state,
 except that the session seeds the canonical user id (`TOILE-223`).
 

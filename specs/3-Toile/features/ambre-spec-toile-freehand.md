@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
   again at every derivation, so its real budget is the frame. It is inside the visible-set walk of
   `features/ambre-spec-toile-board-rendering.md`, and no bench measures either.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
-  seals (`ZK-001`). What streams during the gesture is an ephemeral frame, sealed the same way
+  seals (`ZK-001`). What streams during the gesture is an ephemeral, sealed the same way
   (`ZK-005`).
 * **Verification.** 12 `verified`. What holds is the committed stroke and the stroke in flight. The
   tests read the samples, the box a stroke spans, the minimum area of a dot, and the abandoned

@@ -76,9 +76,11 @@
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
 | peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
+| presence sample | one peer's presence, as last sent | presence frame | `1-Foundations/ambre-spec-presence.md` |
 | avatar | the picture or the initials that stand for a user | profile picture | `1-Foundations/ambre-spec-profile.md` |
-| ephemeral | a message kept by nothing after delivery | | `1-Foundations/ambre-spec-broadcast.md` |
+| ephemeral | a message kept by nothing after delivery | ephemeral frame | `1-Foundations/ambre-spec-broadcast.md` |
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
+| wire message | one message on the socket between a client and the relay | inbound frame | `1-Foundations/ambre-spec-broadcast.md` |
 | sequencer | the relay half that numbers deltas | | `1-Foundations/ambre-spec-sequencer.md` |
 | seq | the number the sequencer assigns | | `1-Foundations/ambre-spec-sequencer.md` |
 | membership | who may open a document, and as what | | `1-Foundations/ambre-spec-membership.md` |
@@ -95,7 +97,7 @@
 | Term | Definition | Forbidden | Reference |
 | :--- | :--- | :--- | :--- |
 | seal | encrypt, and bind the ciphertext to its context | | `1-Foundations/ambre-spec-sealed-envelope.md` |
-| sealed envelope | the shape every encrypted message takes | | `1-Foundations/ambre-spec-sealed-envelope.md` |
+| sealed envelope | the shape every encrypted message takes | sealed frame | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | commitment tag | the tag binding a ciphertext to one key | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | Alice | an honest member in a scenario, like Bob and Carol | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | Mallory | a malicious member in a scenario, holding a legitimate key | | `1-Foundations/ambre-spec-zero-knowledge.md` |

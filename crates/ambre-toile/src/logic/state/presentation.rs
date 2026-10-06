@@ -198,9 +198,9 @@ impl ToileState {
         )
     }
 
-    /// Postcard-encode an ephemeral presence frame carrying the current active
-    /// slide index, but only when broadcasting is on ("Follow presenter"). The
-    /// frame carries `present_slide: Some(active)` and no cursor / selection. It
+    /// Postcard-encode a presence sample carrying the current active slide
+    /// index, but only when broadcasting is on ("Follow presenter"). The
+    /// sample carries `present_slide: Some(active)` and no cursor / selection. It
     /// transiently clears this presenter's cursor halo on followers until the
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
     /// continuously). `None` when not broadcasting or on an encode failure.
@@ -251,7 +251,7 @@ impl ToileState {
     /// Follow the presenter `who` (or stop with `None`), a local role only. No CRDT
     /// delta. If `Some(u)` and a broadcast slide from `u` is already known, snap to
     /// it at once (glide via `SlideChanged`). Otherwise the follower snaps on the
-    /// next inbound frame.
+    /// next inbound sample.
     pub(super) fn follow_presenter(&mut self, who: Option<UserId>) -> ToileOutcome {
         self.following = who;
         let mut display = vec![ToileEvent::FollowingChanged(who)];
@@ -549,7 +549,7 @@ impl ToileState {
     }
 }
 
-/// A presence frame carrying no slide: what a viewer sends when it stops
+/// A presence sample carrying no slide: what a viewer sends when it stops
 /// broadcasting (`TOILE-UI-315`). The peers read the whole live set, so a
 /// sample naming no slide is what drops this viewer from the presenters.
 fn silent_presence_frame() -> Option<Vec<u8>> {

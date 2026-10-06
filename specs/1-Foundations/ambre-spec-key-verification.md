@@ -152,7 +152,7 @@ possible, and it is deliberately not the easy path.
 
 **What is pinned, and what is not.** The exchange key is the one that receives wrapped document
 keys, so substituting it breaks confidentiality; it is pinned. The signing key authenticates
-ephemeral presence frames, where spoofing forges a cursor rather than a key; it is not.
+presence samples, where spoofing forges a cursor rather than a key; it is not.
 
 **Code:** `crates/ambre-crypto/src/hash.rs` computes the fingerprint.
 `crates/ambre-sync/src/sharing.rs` holds both phases and the comparison before the wrap, and
@@ -192,7 +192,7 @@ and writes the pin.
 | A key change is a modal, never a toast | a badge in the share dialog | it is passive and appears only where the user was already heading, so a key change is reported to whoever happens to look. Nothing stops a share from being sent past it. |
 | Refusal is the default action | confirming as the default, with refusal beside it | a changed key has a boring cause most of the time, which is precisely why the confirming action must not be the reflex. The user has to choose the unsafe branch deliberately. |
 | The limit is stated in the prompt | a tooltip, a help page, or a footnote | trust on first use protects nothing at all unless the fingerprint is compared out of band, and a user who does not know that believes they are protected. A protection that overstates itself is worse than none, and all three of these are read after the decision or never. |
-| Only the exchange key is pinned | pinning both keys | it doubles the prompts for a threat that forges a cursor. The exchange key is the one that receives wrapped document keys, so substituting it is what breaks confidentiality; the signing key authenticates presence frames, where a substitution reads nothing. |
+| Only the exchange key is pinned | pinning both keys | it doubles the prompts for a threat that forges a cursor. The exchange key is the one that receives wrapped document keys, so substituting it is what breaks confidentiality; the signing key authenticates presence samples, where a substitution reads nothing. |
 | The fingerprint is computed where the keys are | computing it in the chrome from a key handed up | the thread that holds keys is the only crypto consumer, and it is what keeps every other thread free of a crypto dependency. The chrome receives a string it cannot have computed. |
 
 ---
@@ -231,4 +231,4 @@ and writes the pin.
 | The modal itself, and the frame loop it pauses | `ambre-spec-chrome.md`, `CHROME-011` |
 | Why an alert is a modal rather than a live region | `ambre-spec-accessibility.md` |
 | The browser database this store shares with the snapshots | `ambre-spec-architecture.md section 2` |
-| Who a peer is, and what a presence frame proves | `ambre-spec-presence.md` |
+| Who a peer is, and what a presence sample proves | `ambre-spec-presence.md` |

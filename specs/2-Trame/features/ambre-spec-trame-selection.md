@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
   no selection operation. Painting it sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** `TRAME-UI-019` is the one exception. Another user's selection travels as an
-  ephemeral frame, which `ZK-005` seals with the `DocumentKey`. The relay is left `document_id`,
+  ephemeral, which `ZK-005` seals with the `DocumentKey`. The relay is left `document_id`,
   `pub_key` and `counter` alone. The local selection stops at the Logic thread, which holds it in
   memory to resolve the parameterless intents (`TRAME-UI-032`).
 * **Verification.** 10 `verified`, 1 `unimplemented`. What holds is the intent path, plus three
@@ -163,7 +163,7 @@ An anchor holds uids because a remote cursor must follow its cell through the in
 sorts a collaborator makes. A position would make it jump while the frame is in flight
 (`PRESENCE-007`). An anchor that resolves to no live sheet, row or column is dropped in silence
 (`PRESENCE-008`). The cursor reappears on its own once the delta arrives. The four steps an
-inbound frame takes are `1-Foundations/ambre-spec-presence.md section 3` and are not restated. The
+inbound sample takes are `1-Foundations/ambre-spec-presence.md section 3` and are not restated. The
 fourth is this application's, and paints each peer's cell border and name badge in the peer
 colour.
 

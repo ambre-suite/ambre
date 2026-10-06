@@ -51,7 +51,7 @@ pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // Bound the inbound frame so the server never buffers an oversized message
+    // Bound the inbound message so the server never buffers an oversized one
     // (axum defaults to 64 MiB). The delta ciphertext cap is enforced per-message
     // in `handle_update`. This is the outer envelope guard, sized with headroom
     // for the wire framing (version byte, postcard tag, public_data) around a

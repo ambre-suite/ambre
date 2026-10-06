@@ -4,7 +4,7 @@
 **Implementation:** partial -- the three message types take one pipeline. The document name and a
 media blob take the same envelope as standalone objects.
 
-> Nothing a user writes leaves the browser readable. What the relay carries is a sealed frame. It
+> Nothing a user writes leaves the browser readable. What the relay carries is a sealed envelope. It
 > can route it, count it and drop it. It can never open it, move it to another document, or replay
 > it.
 
@@ -42,13 +42,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::pipeline::tests::the_activity_summary_is_sealed_inside_the_ciphertext` -- the relay's readable part is the same with or without a summary, and holds no mentioned member's bytes | none | verified |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | `ambre_sync::pipeline::tests::the_compression_version_is_sealed_inside_the_ciphertext` -- the version byte is read back from the opened plaintext and from no public field | none | verified |
 
-### 1.3 An inbound frame is opened
+### 1.3 An inbound envelope is opened
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-019` | `POST` | Each of the three checks an inbound frame passes -- the signature, the commitment tag and the cipher -- MUST refuse that frame on its own. | this spec section 2 | `ambre_crypto::tests::invalid_signature_rejected` -- the signature refusal; `::commitment_tag_wrong_aad_rejected` -- the tag refusal; `::tampered_ciphertext_fails` -- the cipher refusal, so no check can be silently skipped without a test going red | none | verified |
+| `SYNC-019` | `POST` | Each of the three checks an inbound sealed envelope passes -- the signature, the commitment tag and the cipher -- MUST refuse that envelope on its own. | this spec section 2 | `ambre_crypto::tests::invalid_signature_rejected` -- the signature refusal; `::commitment_tag_wrong_aad_rejected` -- the tag refusal; `::tampered_ciphertext_fails` -- the cipher refusal, so no check can be silently skipped without a test going red | none | verified |
 | `SYNC-005` | `FAIL` | A message sealed under a different document key MUST be rejected, never applied. | this spec section 2 | `ambre_sync::pipeline::tests::wrong_document_key_rejected` -- a sealed update opened under a foreign key answers the error; `ambre_crypto::tests::tampered_ciphertext_fails`; `::prop_single_byte_mutation_fails`; `::invalid_signature_rejected` -- the byte-level refusals under it | none | verified |
-| `SYNC-008` | `FAIL` | An ephemeral frame whose counter is not greater than the last one seen for its author and document MUST be dropped. | this spec section 2 | `ambre_sync::ephemeral_tests::monotonic_counter_accepted_replay_dropped` -- an equal and a lower counter are both refused, and forward progress resumes, and the check has one hole the rule does not state, an author evicted by `SYNC-088`'s cap losing the baseline the rule reads and replaying once | none | verified |
+| `SYNC-008` | `FAIL` | An ephemeral whose counter is not greater than the last one seen for its author and document MUST be dropped. | this spec section 2 | `ambre_sync::ephemeral_tests::monotonic_counter_accepted_replay_dropped` -- an equal and a lower counter are both refused, and forward progress resumes, and the check has one hole the rule does not state, an author evicted by `SYNC-088`'s cap losing the baseline the rule reads and replaying once | none | verified |
 | `SYNC-009` | `FAIL` | Decompression MUST be refused past a size ceiling drawn from the compressed length. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_bomb_rejected` -- 8 MiB compressed answers the typed refusal; `::decompress_within_ceiling_ok` -- a legitimate payload is untouched by the bound, the half that keeps the ceiling from being a denial of service of its own | none | verified |
 | `SYNC-090` | `FAIL` | An unknown compression version MUST be refused, never guessed. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_unknown_version_rejected` -- the version byte is echoed in a typed error rather than falling through to a default codec | none | verified |
 | `SYNC-138` | `FAIL` | A document name or a media blob of a layout the reader does not know MUST be refused by that layout, before any other part of it is read. | this spec section 2; `ambre-spec-media.md` | `ambre_sync::pipeline::tests::an_unknown_object_layout_is_refused_before_any_check` -- a later layout is named in a typed error by the open and by the key read, and one byte alone is enough to refuse | none | verified |
@@ -77,14 +77,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 **CRDT containers.** none. The envelope wraps a payload and reads none of it.
 
-**One pipeline, three messages.** A delta, a snapshot and a presence frame differ by their public
+**One pipeline, three messages.** A delta, a snapshot and a presence sample differ by their public
 metadata and by their transport. The seal and the open are the same code for all three.
 
 | Message | Carries | Travels by | Metadata the relay reads |
 |---|---|---|---|
 | an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock |
 | a snapshot | a full CRDT state | a presigned upload, straight to object storage | the same, plus the parent proof |
-| an ephemeral frame | a presence sample | the socket | the document, the author key, the key identifier, the counter |
+| an ephemeral | a presence sample | the socket | the document, the author key, the key identifier, the counter |
 
 **The seal, in steps.** The output is one message of the three shapes above.
 

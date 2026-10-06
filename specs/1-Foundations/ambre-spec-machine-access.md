@@ -241,12 +241,12 @@ document never holds it. The oplog is sealed under the document key, which the m
 | A machine is a sealed client | a REST API on the relay | the relay links no crate that can open a payload (`ZK-004`), so the API could serve only ciphertext. Giving it a key makes the relay a reader, which ends the zero-knowledge pillar |
 | A machine is a sealed client | a bridge service that holds the document key and exposes webhooks | the bridge is a member that every integration trusts at once. One breach reads every document it bridges, and the owner sees one member where many programs read |
 | A machine is a sealed client | scheduled scripts that run on the relay | the relay cannot run a script on content it cannot open |
-| The client library seals every frame | a library where the seal is optional | one caller that skips the seal writes plaintext to the relay, and the relay cannot tell a sealed frame from an unsealed one |
+| The client library seals every frame | a library where the seal is optional | one caller that skips the seal writes plaintext to the relay, and the relay cannot tell a sealed envelope from plaintext |
 | Three classes, the member class opt-in | every machine a full member | a program that only posts, or only answers a command, would read every edit and its whole history. Each such program would also cost a rotation on removal |
 | The inbox is asymmetric | a symmetric inbox key shared with the writers | a writer holding the key could open every other post. Removing it would then cost a rotation of the inbox key |
 | Access is per document | a key per range, per sheet or per page | a Loro document is one oplog under one key. Splitting it into several keys means several documents, and every cross-range formula or link breaks |
 | The addressed machine answers through the inbox | an answer sealed with the addressed key | members would need a second merge path for the same kind of post |
-| Filtering happens by key | filtering on the relay, by event kind | the relay cannot read the kind of a sealed frame. Exposing the kind to filter on it is a new leak |
+| Filtering happens by key | filtering on the relay, by event kind | the relay cannot read the kind of a sealed envelope. Exposing the kind to filter on it is a new leak |
 
 ---
 

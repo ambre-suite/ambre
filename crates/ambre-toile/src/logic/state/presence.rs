@@ -3,7 +3,7 @@
 //! Presence (cursors, in-flight strokes, laser points, selections) is relayed as
 //! **ephemeral** Sync payloads. It never enters the CRDT, never persists, and is
 //! not an undo item. Outbound, a local `Presence` sample is postcard-encoded
-//! into an ephemeral frame. Inbound, a frame is keyed by the sender's canonical
+//! into an ephemeral. Inbound, a sample is keyed by the sender's canonical
 //! `UserId`. That id is resolved from the authenticated `pub_key` in
 //! `ambre-sync` before it reaches this thread, so a peer cannot spoof another
 //! user's cursor. The render side is `toile-presence`'s overlay pass.
@@ -12,7 +12,7 @@
 //! entry (`PRESENCE-009`), so no departure signal is needed anywhere. This
 //! thread ages its peers and hands the view the set that is still live, which
 //! the view adopts whole (`TOILE-185`, `TOILE-UI-075`). One event per inbound
-//! frame with a receiver-side accumulation is what this used to do, and it
+//! sample with a receiver-side accumulation is what this used to do, and it
 //! painted a peer who left for ever.
 //!
 //! **Why the clock rides the command.** This thread has none. Every local sample
@@ -34,7 +34,7 @@ use super::ToileState;
 pub const PRESENCE_TTL_MS: i64 = 10_000;
 
 impl ToileState {
-    /// Encode the local peer's presence sample into an ephemeral frame to
+    /// Encode the local peer's presence sample into an ephemeral to
     /// broadcast, and age the peers this client knows about against `now_ms`.
     ///
     /// The local display name is stamped on the outbound payload here rather

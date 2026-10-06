@@ -1368,11 +1368,11 @@ fn sample_at(x: f64, y: f64) -> PresencePayload {
     }
 }
 
-/// Broadcast `payload` from `st` at `now_ms` and return the ephemeral frame.
+/// Broadcast `payload` from `st` at `now_ms` and return the ephemeral.
 fn presence_frame(st: &mut ToileState, payload: PresencePayload, now_ms: i64) -> Vec<u8> {
     st.handle_command(ToileCommand::Presence { payload, now_ms })
         .ephemeral
-        .expect("presence broadcasts an ephemeral frame")
+        .expect("presence broadcasts an ephemeral")
 }
 
 #[test]
@@ -1454,7 +1454,7 @@ fn presence_command_broadcasts_ephemeral_only() {
     assert!(out.update.is_none(), "presence is never a CRDT delta");
     assert!(
         out.ephemeral.is_some(),
-        "presence must broadcast an ephemeral frame"
+        "presence must broadcast an ephemeral"
     );
     // `TOILE-183`: the sample pushed no undo item. The first undo takes back
     // the sticky, the last edit before it.
@@ -1601,7 +1601,7 @@ fn a_sample_replaces_the_peers_presence_whole() {
 
 #[test]
 fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
-    // #2 / DoD: an inbound presence frame yields a PeerPresence keyed by the
+    // #2 / DoD: an inbound presence sample yields a PeerPresence keyed by the
     // resolved UserId and mutates neither the doc nor its history.
     let mut sender = ToileState::new();
     let payload = PresencePayload {
@@ -1649,7 +1649,7 @@ fn apply_ephemeral_drops_a_malformed_frame() {
     let events = rx.apply_ephemeral(UserId::new(), &[0xFF, 0x00, 0x13, 0x37]);
     assert!(
         events.is_empty(),
-        "a malformed presence frame yields no event"
+        "a malformed presence sample yields no event"
     );
 }
 
@@ -3663,10 +3663,10 @@ fn playback_is_not_synced() {
 // Follow presenter: ephemeral slide broadcast (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
-/// Decode a broadcast slide index out of an outcome's ephemeral frame, if any.
+/// Decode a broadcast slide index out of an outcome's ephemeral, if any.
 fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
     let bytes = out.ephemeral.as_ref()?;
-    let p: PresencePayload = postcard::from_bytes(bytes).expect("decodable presence frame");
+    let p: PresencePayload = postcard::from_bytes(bytes).expect("decodable presence sample");
     p.present_slide
 }
 
@@ -3719,7 +3719,7 @@ fn concurrent_first_decks_converge_on_one_list() {
 
 #[test]
 fn broadcast_frame_carries_active_slide() {
-    // While broadcasting, a navigation additionally emits an ephemeral frame
+    // While broadcasting, a navigation additionally emits an ephemeral
     // carrying the new active index -- and never a CRDT delta.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
@@ -3730,14 +3730,14 @@ fn broadcast_frame_carries_active_slide() {
     assert_eq!(
         broadcast_slide(&out),
         Some(1),
-        "the ephemeral frame carries the new active index"
+        "the ephemeral carries the new active index"
     );
     assert!(out.update.is_none(), "playback is never a CRDT delta");
 }
 
 #[test]
 fn no_broadcast_frame_when_not_broadcasting() {
-    // With broadcasting off, navigation stays purely local: no ephemeral frame.
+    // With broadcasting off, navigation stays purely local: no ephemeral.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
     let out = st.handle_command(ToileCommand::NextSlide);

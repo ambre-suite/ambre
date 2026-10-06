@@ -52,7 +52,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-137` | `POST` | A frame of a newer wire version MUST reach the rest of the client once as an update to install, and the socket MUST NOT reopen in that session. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-166` | `ambre_protocol::tests::only_a_newer_wire_version_calls_for_an_update` -- an older version and an empty frame do not; `ambre_sync::websocket::tests::a_newer_wire_version_reaches_logic_as_an_update_and_closes_for_good` -- once, with no error, and no close, timer or renewal reopens; `ambre_logic::dispatch::tests::a_newer_relay_reaches_the_ui_as_an_update` -- the logic thread relays it | none | verified |
 | `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | `ambre_sync::lifecycle::tests::an_error_backs_off_as_a_close_does` -- an error reads as a close with no code, and arms the same wait | none | verified |
 | `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_grows_while_no_frame_arrives` -- each close doubles the wait up to its cap; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the worker reopens only once its clock reaches the wait | none | verified |
-| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_resets_on_a_frame_alone` -- a reopen with no frame keeps the wait growing, and a frame resets it; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the same through the worker, after an open with no frame | none | verified |
+| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound wire message, and never on a bare open. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_resets_on_a_frame_alone` -- a reopen with no frame keeps the wait growing, and a frame resets it; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the same through the worker, after an open with no frame | none | verified |
 | `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-026` | `ambre_bus::conduit::tests::a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low` -- the Main side asks once at each mark, never in between; `ambre_sync::websocket::tests::a_held_inbound_reopens_only_on_release_and_catches_up` -- no close, timer or renewal reopens a held socket, and the release pulls from the last sequence then sends the edit kept | none | verified |
 
 ### 1.4 A request is made
@@ -95,7 +95,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 ## 2. MODEL
 
 **CRDT containers.** none. This worker compiles no CRDT at all (`SYNC-011`). What it carries across
-the boundary is opaque bytes in one direction and sealed frames in the other.
+the boundary is opaque bytes in one direction and sealed envelopes in the other.
 
 **Where it runs.** Two instances, two heaps. The rest of the client -- the screen and the document
 logic -- shares one. This worker has its own, and the two meet only over posted messages

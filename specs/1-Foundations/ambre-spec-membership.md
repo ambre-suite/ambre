@@ -52,13 +52,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | `ambre_sync::updates::tests::a_failed_members_request_is_not_an_absent_document` -- a transport failure is classified apart from an absence, and the open reports it instead of making the document local | none | verified |
 | `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | `ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing` -- a tampered key row fails the open, and no key comes out in its place | none | verified |
 
-### 1.4 An ephemeral frame is attributed
+### 1.4 An ephemeral is attributed
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-014` | `POST` | An ephemeral frame MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`; `::list_members_refreshes_the_presence_directory` -- the directory the resolution reads | none | verified |
+| `SYNC-014` | `POST` | An ephemeral MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`; `::list_members_refreshes_the_presence_directory` -- the directory the resolution reads | none | verified |
 | `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` -- the members answer replaces it | none | verified |
-| `SYNC-015` | `FAIL` | An ephemeral frame whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
+| `SYNC-015` | `FAIL` | An ephemeral whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
 | `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` -- a key that resolved before the rebuild resolves to nothing after it, where a merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | none | verified |
 
 ### 1.5 A membership change is recorded
@@ -120,7 +120,7 @@ rule.
 |---|---|---|
 | the wrapped document key | which key opens this document, for this client | `SYNC-012`, `SYNC-034` |
 | the wrapper's exchange key | whose key to run the exchange against | `SYNC-034` |
-| the signing key | which member authored an ephemeral frame | `SYNC-014`, `SYNC-015` |
+| the signing key | which member authored an ephemeral | `SYNC-014`, `SYNC-015` |
 | the role | what this client may do, and what to show for each member | `SYNC-016`, `SYNC-017` |
 
 **The wrap.** The document key is sealed under a key derived from an X25519 exchange between the
@@ -283,7 +283,7 @@ authority: the role here hides what the relay would refuse anyway.
 | The trust step before a key is wrapped, and what a fingerprint is | `ambre-spec-key-verification.md` |
 | What a revoke rotates, and what a rotation leaves behind | `ambre-spec-key-rotation.md` |
 | How a frame is signed, and what refuses a forged author | `ambre-spec-sealed-envelope.md` |
-| What a presence frame carries, and what it paints | `ambre-spec-presence.md` |
+| What a presence sample carries, and what it paints | `ambre-spec-presence.md` |
 | What the relay stores per member, and which role may do what | `ambre-spec-server.md` |
 | Where the role gate is applied on a command | `ambre-spec-message-bus.md` |
 | Which key opens the document once it is unwrapped, and who holds it | `ambre-spec-sync.md`, `SYNC-002` |

@@ -9,7 +9,7 @@
 //! `ambre-toile`.
 //!
 //! * Pure data only: block identity, the typed block initializer, the paragraph
-//!   style register, the presence frame, and the command / event enums.
+//!   style register, the presence sample, and the command / event enums.
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 //!
 //! **Why [`BlockId`] and not `loro::TreeID`.** A block's identity is the id the
@@ -346,7 +346,7 @@ pub struct CursorPosition {
     pub anchor: Option<(BlockId, u32)>,
 }
 
-/// The peer-authored presence frame.
+/// The peer-authored presence sample.
 ///
 /// It carries a position and a self-asserted, cosmetic name, and no user id. The
 /// canonical identity is the Sync-resolved one delivered out of band, so a peer

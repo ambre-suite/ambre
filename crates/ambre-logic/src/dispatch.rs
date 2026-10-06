@@ -642,10 +642,10 @@ mod tests {
     /// `PROSE-062`: one outcome, three destinations.
     ///
     /// The display events reach the UI thread. The delta reaches the Sync
-    /// worker under the document id the registry keyed, and the presence frame
-    /// reaches it as an ephemeral. An engine answers a value and sends nothing,
-    /// so this fan-out is the dispatcher's whole job and no engine-side test
-    /// can reach it.
+    /// worker under the document id the registry keyed, and the presence
+    /// sample reaches it as an ephemeral. An engine answers a value and sends
+    /// nothing, so this fan-out is the dispatcher's whole job and no
+    /// engine-side test can reach it.
     #[test]
     fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
         let (mut state, ui, sync) = harness();
@@ -759,7 +759,7 @@ mod tests {
         );
     }
 
-    /// The other half of `PROSE-062`: the presence frame leaves as an
+    /// The other half of `PROSE-062`: the presence sample leaves as an
     /// ephemeral, and a caret produces no CRDT delta.
     #[test]
     fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
@@ -784,7 +784,7 @@ mod tests {
         assert!(
             sent.iter()
                 .any(|cmd| matches!(cmd, SyncCommand::SendEphemeral { document_id: id, .. } if *id == document_id)),
-            "the presence frame reached the Sync worker"
+            "the presence sample reached the Sync worker"
         );
         assert!(
             !sent

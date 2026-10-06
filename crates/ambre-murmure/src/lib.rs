@@ -32,7 +32,8 @@ mod unread_tests;
 pub use channel::{ChannelState, Named, Sent};
 pub use error::MurmureError;
 pub use members::{
-    PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_frame, presence_frame,
+    PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,
+    presence_sample,
 };
 pub use opening::{Opening, OpeningChannel};
 pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};

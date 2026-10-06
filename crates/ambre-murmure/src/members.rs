@@ -2,44 +2,44 @@
 //! (`features/ambre-spec-murmure-members.md section 3`).
 //!
 //! The member rows come from the relay's table of the space document
-//! (`MURMURE-031`). The presence of each member rides the ephemeral frames of
-//! that document (`MURMURE-444`). The engine reads no clock: the view's tick
-//! stamps every frame heard since the tick before, so a frame is dated to
-//! within one refresh period.
+//! (`MURMURE-031`). The presence of each member rides the ephemerals of that
+//! document (`MURMURE-444`). The engine reads no clock: the view's tick stamps
+//! every sample heard since the tick before, so a sample is dated to within one
+//! refresh period.
 
 use std::collections::HashMap;
 
 use ambre_bus::{MemberView, Presence, Timestamp};
 use ambre_core::UserId;
 
-/// How often a client that holds a space open sends its presence frame, in
+/// How often a client that holds a space open sends its presence sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
 pub const REFRESH_PERIOD_MS: u64 = 60_000;
 
-/// How long a presence frame keeps its member online, in milliseconds
+/// How long a presence sample keeps its member online, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Three refresh periods: one for the
-/// tick that dates a frame, one for a frame lost on the way, and one for the
-/// timers of two clients drifting apart.
+/// tick that dates a sample, one for a sample lost on the way, and one for
+/// two drifting timers.
 pub const PRESENCE_EXPIRY_MS: u64 = 3 * REFRESH_PERIOD_MS;
 
-/// The first byte of a presence frame. Another frame of the space document
-/// takes another tag, so neither reads as the other.
-const FRAME_TAG: u8 = 0x50;
+/// The first byte of a presence sample. Another ephemeral of the space
+/// document takes another tag, so neither reads as the other.
+const SAMPLE_TAG: u8 = 0x50;
 
 /// The state byte of an online member.
 const ONLINE: u8 = 1;
 
-/// The presence frame of a space: its tag, then the state, and nothing else.
+/// The presence sample of a space: its tag, then the state, and nothing else.
 /// It names no channel, so it cannot show which channel a member reads
 /// (`MURMURE-446`).
-pub fn presence_frame() -> Vec<u8> {
-    vec![FRAME_TAG, ONLINE]
+pub fn presence_sample() -> Vec<u8> {
+    vec![SAMPLE_TAG, ONLINE]
 }
 
-/// Whether `payload` is a presence frame of a space. A frame that does not
+/// Whether `payload` is a presence sample of a space. A sample that does not
 /// decode is dropped without an error (`PRESENCE-013`).
-pub fn is_presence_frame(payload: &[u8]) -> bool {
-    payload == [FRAME_TAG, ONLINE]
+pub fn is_presence_sample(payload: &[u8]) -> bool {
+    payload == [SAMPLE_TAG, ONLINE]
 }
 
 /// The members of `members` whose display name answers `query`, in the order
@@ -61,8 +61,8 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
 pub struct Roster {
     /// The relay's member rows: each member and their display name.
     members: Vec<(UserId, String)>,
-    /// The members heard from, with the tick that dates their last frame.
-    /// `None` for a frame heard before the first tick: the next tick dates
+    /// The members heard from, with the tick that dates their last sample.
+    /// `None` for a sample heard before the first tick: the next tick dates
     /// it.
     heard: HashMap<UserId, Option<Timestamp>>,
     /// The latest tick of the view, `None` before the first.
@@ -81,7 +81,7 @@ impl Roster {
     }
 
     /// Replace the member rows with the relay's answer. A member outside it
-    /// shows nowhere, whatever frame came from them (`MURMURE-440`).
+    /// shows nowhere, whatever sample came from them (`MURMURE-440`).
     pub fn set_members(&mut self, members: impl IntoIterator<Item = (UserId, String)>) {
         self.members = members.into_iter().collect();
     }
@@ -91,9 +91,9 @@ impl Roster {
         self.me = Some(me);
     }
 
-    /// A presence frame came from `user`. Returns whether they were offline
+    /// A presence sample came from `user`. Returns whether they were offline
     /// before, so the caller can answer a member who just came online with
-    /// its own frame: a newcomer then sees who is online without waiting a
+    /// its own sample: a newcomer then sees who is online without waiting a
     /// refresh period.
     pub fn heard(&mut self, user: UserId) -> bool {
         self.heard.insert(user, self.now).is_none()
@@ -105,8 +105,8 @@ impl Roster {
         self.heard.remove(&user).is_some()
     }
 
-    /// The view's tick: date the frames heard since the tick before, and turn
-    /// offline every member whose last frame is older than the expiry
+    /// The view's tick: date the samples heard since the tick before, and turn
+    /// offline every member whose last sample is older than the expiry
     /// (`MURMURE-445`). Returns whether a member turned offline.
     pub fn tick(&mut self, now: Timestamp) -> bool {
         self.now = Some(now);
@@ -119,7 +119,7 @@ impl Roster {
     }
 
     /// The presence of `user`: this user is online, and every other member
-    /// while a frame of theirs has not expired.
+    /// while a sample of theirs has not expired.
     pub fn presence(&self, user: UserId) -> Presence {
         if Some(user) == self.me || self.heard.contains_key(&user) {
             Presence::Online
@@ -173,7 +173,7 @@ mod tests {
         roster
     }
 
-    /// The list holds the relay's rows and no one else: a frame from a user
+    /// The list holds the relay's rows and no one else: a sample from a user
     /// outside them adds no one (`MURMURE-440`).
     #[test]
     fn the_list_holds_the_member_rows_and_no_one_else() {
@@ -185,10 +185,10 @@ mod tests {
         assert!(view.iter().all(|m| m.user_id != mallory));
     }
 
-    /// A frame turns its member online, and the expiry passed with no frame
+    /// A sample turns its member online, and the expiry passed with no sample
     /// turns them offline again (`MURMURE-445`).
     #[test]
-    fn a_member_turns_offline_once_no_frame_refreshes_them_within_the_expiry() {
+    fn a_member_turns_offline_once_no_sample_refreshes_them_within_the_expiry() {
         let bob = UserId::new();
         let mut roster = roster(&[(bob, "Bob")]);
         assert_eq!(roster.presence(bob), Presence::Offline);
@@ -203,8 +203,8 @@ mod tests {
         assert_eq!(roster.presence(bob), Presence::Offline);
     }
 
-    /// A frame refreshed each period keeps its member online across many
-    /// periods, even when every frame lands just before the next tick.
+    /// A sample refreshed each period keeps its member online across many
+    /// periods, even when every sample lands just before the next tick.
     #[test]
     fn a_member_refreshed_each_period_stays_online() {
         let bob = UserId::new();
@@ -216,10 +216,10 @@ mod tests {
         }
     }
 
-    /// A frame heard before the first tick is dated by that tick, not by the
+    /// A sample heard before the first tick is dated by that tick, not by the
     /// epoch, so it does not expire at once.
     #[test]
-    fn a_frame_before_the_first_tick_is_dated_by_it() {
+    fn a_sample_before_the_first_tick_is_dated_by_it() {
         let bob = UserId::new();
         let mut roster = Roster::new(None);
         roster.set_members([(bob, "Bob".to_owned())]);
@@ -245,7 +245,7 @@ mod tests {
     /// Only a new member answers true, so a client answers a newcomer once
     /// and two clients never answer each other forever.
     #[test]
-    fn only_the_first_frame_of_a_member_reads_as_new() {
+    fn only_the_first_sample_of_a_member_reads_as_new() {
         let bob = UserId::new();
         let mut roster = roster(&[(bob, "Bob")]);
         assert!(roster.heard(bob));
@@ -271,17 +271,17 @@ mod tests {
         assert!(view[2..].iter().all(|m| m.presence == Presence::Offline));
     }
 
-    /// The frame holds its tag and the state alone: no channel, no name, no
+    /// The sample holds its tag and the state alone: no channel, no name, no
     /// identifier (`MURMURE-446`). It decodes, and nothing else does.
     #[test]
-    fn the_frame_holds_the_state_alone() {
-        let frame = presence_frame();
-        assert_eq!(frame.len(), 2);
-        assert!(is_presence_frame(&frame));
-        assert!(!is_presence_frame(&[]));
-        assert!(!is_presence_frame(&[FRAME_TAG]));
-        assert!(!is_presence_frame(&[FRAME_TAG, ONLINE, 0]));
-        assert!(!is_presence_frame(&[0, ONLINE]));
+    fn the_sample_holds_the_state_alone() {
+        let sample = presence_sample();
+        assert_eq!(sample.len(), 2);
+        assert!(is_presence_sample(&sample));
+        assert!(!is_presence_sample(&[]));
+        assert!(!is_presence_sample(&[SAMPLE_TAG]));
+        assert!(!is_presence_sample(&[SAMPLE_TAG, ONLINE, 0]));
+        assert!(!is_presence_sample(&[0, ONLINE]));
     }
 
     /// The filter keeps the members whose name holds what the user types,

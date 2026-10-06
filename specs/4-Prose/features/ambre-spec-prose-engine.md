@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | `ambre_prose::logic::text::tests::an_offset_past_the_body_is_refused`; `ambre_prose::logic::marks::tests::an_empty_range_is_refused` | none | verified |
-| `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence frame it built. | this spec section 3 | type-level -- `ambre_prose::events::ProseOutcome` is the one return type of `handle_command`, and it carries the three; `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
+| `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence sample it built. | this spec section 3 | type-level -- `ambre_prose::events::ProseOutcome` is the one return type of `handle_command`, and it carries the three; `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-105` | `POST` | A refusal MUST name the command that drew it. | this spec section 3 | `ambre_prose::logic::tests::a_refusal_names_the_command_it_refused`; `ambre_prose::logic::tests::two_commands_refused_for_one_reason_name_themselves_apart` -- the second refuses two commands for one reason and requires the two names to differ, so a refusal that named the reason alone fails it | none | verified |
 | `PROSE-106` | `POST` | A refusal MUST carry its reason as a value the view can tell from every other reason. | this spec section 3 | `ambre_prose::logic::tests::a_mark_value_the_grammar_refuses_is_not_a_range_failure` -- it requires the mark-value refusal, which used to travel as the range failure, so a reason folded into a neighbour fails it | none | verified |
@@ -87,7 +87,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_frame_naming_a_block_this_peer_does_not_hold_is_dropped`; `::a_malformed_frame_is_dropped_rather_than_raised` | none | verified |
 | `PROSE-130` | `POST` | A session that has not placed its caret MUST announce itself without drawing a caret on a peer's screen. | this spec section 3; `ambre-spec-prose-schema.md`, `PROSE-121` | not built | unbuilt -- lands with the `An announced session draws no caret it did not place` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `PROSE-058` | `FRAME` | Applying a presence frame MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
+| `PROSE-058` | `FRAME` | Applying a presence sample MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 
 ### 1.8 Take in a decrypted picture
 
@@ -109,7 +109,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker`; `::a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta` | none | verified |
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence sample to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker`; `::a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta` | none | verified |
 | `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | exhaustive-match -- `ambre_prose::logic::ProseState::handle_command` matches a closed `ProseCommand`, which declares no connection, sharing or membership variant | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
@@ -181,7 +181,7 @@ converts at its own boundary, so the value is one identity and not two.
 | `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
 | `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). The page painter draws through it, and a test drives it on the recording surface |
 | `ambre-bus` | the UI-to-Logic queue the view sends on, `ambre_bus::conduit` | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
-| `postcard` | the presence frame alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
+| `postcard` | the presence sample alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
 | `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre-bus`, and the one error event of section 3.C carries them |
 
@@ -206,7 +206,7 @@ thread leaves as a return value (`PROSE-024`).
 | the local history | the undo manager, opened over the document (`features/ambre-spec-prose-undo.md`) | never: it dies with the session |
 | the sync cursor | the last version vector exported to Sync | advanced after every export |
 | the session identity | the canonical `UserId` and the display name, seeded from `SessionReady` | per session, never in the document |
-| the peer set | every remote peer's last resolved caret, keyed by that `UserId` (`PROSE-058`) | from each inbound frame; it dies with the session |
+| the peer set | every remote peer's last resolved caret, keyed by that `UserId` (`PROSE-058`) | from each inbound sample; it dies with the session |
 
 The layout and the tracking flag are declared and unbuilt: each lands with its own feature's Story.
 
@@ -229,7 +229,7 @@ pub struct ProseState {
 
 /// What a content command returns. The Logic dispatcher explodes it: the display events
 /// become `AppEvent::Prose`, the delta becomes `SyncCommand::SendUpdate`, the presence
-/// frame becomes `SyncCommand::SendEphemeral` under the document id Logic holds.
+/// sample becomes `SyncCommand::SendEphemeral` under the document id Logic holds.
 pub struct ProseOutcome {
     pub display:   Vec<ProseEvent>,
     pub update:    Option<Vec<u8>>,
@@ -247,7 +247,7 @@ impl ProseState {
     /// (`PROSE-126`).
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent>;
 
-    /// A remote presence frame. The author is the **Sync-resolved `from_user_id`**, never
+    /// A remote presence sample. The author is the **Sync-resolved `from_user_id`**, never
     /// read from the payload (`PRESENCE-003`, `ambre-spec-membership.md`).
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent>;
 
@@ -591,8 +591,8 @@ command they name.
 
 ### D. What Prose puts on the wire
 
-Two shapes, and they are the only Prose values that carry `serde`: they are the presence frame the
-Sync worker seals and sends. The event payload built from an arriving frame carries none.
+Two shapes, and they are the only Prose values that carry `serde`: they are the presence sample the
+Sync worker seals and sends. The event payload built from an arriving sample carries none.
 
 ```rust
 /// Where a caret is on **this** replica: the block, and the absolute offset resolved
@@ -779,7 +779,7 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 | Attributes are typed per block type, never a key-value pair | a generic `SetBlockAttr { key, value }` | it is what every one of the typed commands above replaces. A stringly-typed attribute setter cannot be validated by the compiler, so every wrong key is a runtime defect in a document the user cannot repair; one variant per type costs a line and moves the whole class to compile time |
 | A suggestion is a mark, never a branch | a Loro branch per suggestion | forking the whole document per suggestion costs memory proportional to the document times the number of open suggestions. A pair of marks costs the range it covers (`features/ambre-spec-prose-track-changes.md`) |
 | The UI thread is handed the layout, never the document | linking the CRDT into the view so it can read what it needs | it is the second model `PROSE-UI-001` exists to forbid. The thread that paints must not hold a second model, and a page layout is a fraction of the document's size; handing the layout also keeps the CRDT off a thread that can block on a frame |
-| The presence frame carries no user id | trusting the author field of the frame | it makes impersonation a matter of editing a payload. A peer that asserts its own identity can assert anyone's; the frame carries a position and a cosmetic name, and the canonical identity is the one Sync resolved on the inbound path (`PRESENCE-002`, `PRESENCE-003`) |
+| The presence sample carries no user id | trusting the author field of the sample | it makes impersonation a matter of editing a payload. A peer that asserts its own identity can assert anyone's; the sample carries a position and a cosmetic name, and the canonical identity is the one Sync resolved on the inbound path (`PRESENCE-002`, `PRESENCE-003`) |
 
 ---
 

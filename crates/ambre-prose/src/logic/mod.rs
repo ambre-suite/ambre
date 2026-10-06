@@ -119,7 +119,7 @@ pub struct ProseState {
     /// The canonical per-user identifier, seeded from `SessionReady` by the
     /// dispatcher. A stable `UserId`, never the per-session peer id.
     my_user_id: Option<UserId>,
-    /// This session's display name, stamped on every outbound presence frame.
+    /// This session's display name, stamped on every outbound presence sample.
     /// Cosmetic: it decides neither identity nor colour (`PRESENCE-004`).
     my_name: Option<String>,
     /// The threads the last whole-text walk found with no mark. A keystroke
