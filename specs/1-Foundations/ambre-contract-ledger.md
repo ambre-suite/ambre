@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3359 rows: 2432 shipped, of which 102 partial and 597 loose. 927 unbuilt.**
+**3360 rows: 2437 shipped, of which 102 partial and 595 loose. 923 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 316 | 256 | 564 | 597 |  | 1733 |
+| `verified` | 316 | 263 | 564 | 597 |  | 1740 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 3 | 6 | 12 | 2 |  | 23 |
+| `failing` | 3 | 4 | 12 | 2 |  | 21 |
 | `untested` | 231 | 129 | 189 | 2 |  | 551 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
-| `unimplemented` | 288 | 61 | 28 | 111 | 439 | 927 |
+| `unimplemented` | 288 | 57 | 28 | 111 | 439 | 923 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -86,7 +86,7 @@
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 4 |  | 6 |  |
 | `ambre-spec-trame-engine.md` | 16 | 16 | 12 | 1 | 3 |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 5 |  | 1 |  |
-| `ambre-spec-trame-formula-engine.md` | 43 | 38 | 34 |  | 4 | 5 |
+| `ambre-spec-trame-formula-engine.md` | 44 | 43 | 40 |  | 3 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 7 | 2 | 9 | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 4 |  | 5 |  |
@@ -95,7 +95,7 @@
 | `ambre-spec-trame-number-formats.md` | 12 | 11 | 9 |  | 2 | 1 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  |  | 3 |
 | `ambre-spec-trame-resize.md` | 10 | 10 | 3 | 1 | 6 |  |
-| `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 16 |  | 4 |  |
+| `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 17 |  | 3 |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 8 |  | 2 | 1 |
 | `ambre-spec-trame-shared-filter.md` | 35 | 32 | 27 | 1 | 4 | 3 |
 | `ambre-spec-trame-sheets.md` | 18 | 17 | 10 |  | 7 | 1 |
@@ -302,7 +302,7 @@
 | `ambre-spec-trame-context-menu.md` | TRAME-UI-085..090,117..120 |
 | `ambre-spec-trame-engine.md` | TRAME-001..002,015,023..024,166..169; TRAME-FEAT-001; TRAME-UI-001..002,006,014,141..142 |
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |
-| `ambre-spec-trame-formula-engine.md` | TRAME-005..009,011..013,021,032..048,208..220,226..229 |
+| `ambre-spec-trame-formula-engine.md` | TRAME-005..009,011..013,021,032..048,208..220,226..230 |
 | `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207 |
 | `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123 |

@@ -3,6 +3,7 @@ pub mod compile;
 pub mod dag;
 pub mod engine;
 pub mod functions;
+pub mod identity;
 pub mod parser;
 pub mod render;
 pub mod shift;

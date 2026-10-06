@@ -6,8 +6,66 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::SheetQualifier;
+use crate::formula::identity::{self, LineAxis, LineEdit};
 
 impl TrameState {
+    /// Carry every formula that reads the active sheet across one structural
+    /// edit of it. The lists already hold the new layout and `self.index`
+    /// still the old one. Ranges keep their rectangle through a reorder
+    /// (`TRAME-227`), widen on an insert inside them (`TRAME-171`) and shrink
+    /// on a delete (`TRAME-230`). Runs before the commit, so the rewrite and
+    /// the edit are one undo step. Only a formula whose text changes is
+    /// written. Returns whether any was.
+    pub(super) fn reanchor_formulas(&self, axis: Axis, edit: LineEdit) -> bool {
+        let active = &self.active_sheet;
+        let new = self.build_sheet_index(active);
+        let axis = match axis {
+            Axis::Row => LineAxis::Row,
+            Axis::Col => LineAxis::Col,
+        };
+        let mut rewritten = false;
+        for sheet in &self.sheets_by_idx {
+            let map = self.doc.get_map(cells_map_name(sheet));
+            let LoroValue::Map(cells) = map.get_value() else {
+                continue;
+            };
+            let edited = |q: Option<&SheetQualifier>| match q {
+                None => sheet == active,
+                Some(SheetQualifier::Id(id)) => id == active,
+                Some(SheetQualifier::Name(name)) => {
+                    self.sheet_name_to_u16
+                        .get(name)
+                        .and_then(|idx| self.sheets_by_idx.get(*idx as usize))
+                        == Some(active)
+                }
+            };
+            for (key, value) in cells.iter() {
+                let LoroValue::String(text) = value else {
+                    continue;
+                };
+                let Some(body) = text.strip_prefix('=') else {
+                    continue;
+                };
+                // Another sheet's formula reads this one only through a qualifier.
+                if sheet != active && !body.contains('#') {
+                    continue;
+                }
+                let Ok(ast) = parse_formula(body) else {
+                    continue;
+                };
+                let before = render::render(&ast);
+                let after = identity::reanchor(ast, &edited, axis, &self.index, &new, edit);
+                let after = render::render(&after);
+                if after != before {
+                    let _ = map.insert(key, format!("={after}").as_str());
+                    rewritten = true;
+                }
+            }
+        }
+        rewritten
+    }
+
     /// Insert a blank row/column at grid position `at`, shifting later elements
     /// down/right. One `LoroMovableList` op; cells keyed by stable id pairs
     /// follow their element automatically. A no-op past the materialized used
@@ -36,20 +94,28 @@ impl TrameState {
         {
             return TrameOutcome::display_only(vec![]);
         }
+        self.reanchor_formulas(
+            axis,
+            LineEdit::Insert {
+                at: at as u32,
+                n: 1,
+            },
+        );
         self.doc.commit();
         self.after_structural()
     }
 
     /// Delete the row/column at grid position `at`, shifting later elements
-    /// up/left and purging the removed element's cells and formatting. Any
-    /// formula whose referenced cell was below the deletion now reads the
-    /// shifted (or emptied) position -- references are not rewritten
-    /// (`trame-formula-engine`). Full id-based `#REF!` on delete is a
-    /// separate broken-references story. A no-op in virtual space.
+    /// up/left and purging the removed element's cells and formatting. A
+    /// reference names its line, so one to a deleted line reads `#REF!`
+    /// (`TRAME-008`). One below it follows its cell up, and a range shrinks
+    /// ([`reanchor_formulas`](Self::reanchor_formulas)). A no-op in virtual
+    /// space.
     pub(super) fn delete_axis(&mut self, at: u32, axis: Axis) -> TrameOutcome {
         let Some(filter_dropped) = self.remove_line(at, axis) else {
             return TrameOutcome::display_only(vec![]);
         };
+        self.reanchor_formulas(axis, LineEdit::Delete { at, n: 1 });
         self.doc.commit();
         self.after_line_removal(filter_dropped)
     }
@@ -90,10 +156,10 @@ impl TrameState {
     /// Move the row/column at grid position `from` to grid position `to`
     /// (Excel-style drag reorder), realized as a single `LoroMovableList::mov` on
     /// `rows_/cols_{sheet}`. Cells keyed by the move-invariant `(row_uid, col_uid)`
-    /// pair travel with their line for free. The formula engine is NOT reseeded, so
-    /// every reference resolves to its line's new position (`after_reorder`,
-    /// `trame-formula-engine`). A no-op if `from == to` or either index is outside
-    /// the materialized used range (virtual lines carry nothing to move).
+    /// pair travel with their line for free. So does every reference to a
+    /// cell, while a range keeps its rectangle (`after_reorder`, `TRAME-227`). A no-op
+    /// if `from == to` or either index is outside the materialized used range
+    /// (virtual lines carry nothing to move).
     pub(super) fn move_axis(&mut self, from: u32, to: u32, axis: Axis) -> TrameOutcome {
         let used = match axis {
             Axis::Row => self.index.row_len(),
@@ -110,8 +176,9 @@ impl TrameState {
         if self.doc.get_movable_list(list_name).mov(from, to).is_err() {
             return TrameOutcome::display_only(vec![]);
         }
+        let rewritten = self.reanchor_formulas(axis, LineEdit::Reorder);
         self.doc.commit();
-        self.after_reorder()
+        self.after_reorder(rewritten)
     }
 
     /// Delete every row/column spanned by the current selection rectangle,
@@ -136,6 +203,9 @@ impl TrameState {
         if removals.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
+        // The removed lines are the materialized run from `start`.
+        let n = removals.len() as u32;
+        self.reanchor_formulas(axis, LineEdit::Delete { at: start, n });
         self.doc.commit();
         self.after_line_removal(removals.contains(&true))
     }
@@ -249,8 +319,9 @@ impl TrameState {
     }
 
     /// Shared tail of every structural op. It rebuilds the position <-> id
-    /// cache, since positions shifted. It reseeds the positional formula
-    /// engine and the formatting sets from the new layout. It then flushes
+    /// cache, since positions shifted. It reseeds the formula engine, which
+    /// reads each stored line at its new position, and the formatting sets
+    /// from the new layout. It then flushes
     /// the CRDT delta and asks the UI to re-fetch its viewport.
     pub(super) fn after_structural(&mut self) -> TrameOutcome {
         self.rebuild_index();

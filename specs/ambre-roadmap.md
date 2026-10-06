@@ -205,7 +205,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Incremental remote apply | -- | a remote change costs the cells it touched, and the UI re-fetches the range that changed instead of the whole viewport |
 | `[ ]` Cached sheet indexes | -- | a scroll on one sheet no longer rebuilds every other sheet's index |
 | `[ ]` Stable engine sheet indexes | -- | switching a tab no longer resets the engine |
-| `[ ]` References stored by identity | MVP | a formula stores the rows and columns it names, so an insert widens a range, a delete breaks a reference into `#REF!`, and a reseed or a concurrent edit keeps each one on its cells. Done when `TRAME-008`, `TRAME-171` and `TRAME-226` to `TRAME-229` read `verified` |
+| `[x]` References stored by identity | MVP | a formula stores the rows and columns it names, so an insert widens a range, a delete breaks a reference into `#REF!`, and a reseed or a concurrent edit keeps each one on its cells. Done when `TRAME-008`, `TRAME-171` and `TRAME-226` to `TRAME-229` read `verified` |
 | `[ ]` A recompute bounded by what changed | -- | the cycle check and the topological walk cover the cells that changed, not the whole graph |
 | `[ ]` Engine completion | V1 | whole-column ranges, reference-preserving functions, the advanced function set, convergent deletion of the last sheet |
 | `[ ]` Data tools | V1 | personal filter views, conditional formatting, data validation, and a total that skips filtered rows |

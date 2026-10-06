@@ -67,9 +67,12 @@ impl TrameState {
     /// **Formula cells carry both representations** -- the stored source and the
     /// evaluated result. Dumping only the source would let an evaluation
     /// regression pass unnoticed; dumping only the result would hide a change in
-    /// what is persisted.
+    /// what is persisted. The source is dumped at its positions: the stored
+    /// form names rows and columns by their ids, which two routes mint apart
+    /// (`TRAME-228`).
     pub fn canonical_dump(&self) -> String {
         let mut out = String::from("trame\n");
+        let lines = self.sheet_lines();
         for sheet in self.fixture_sheet_ids() {
             let name = self
                 .sheet_id_to_name
@@ -118,6 +121,7 @@ impl TrameState {
                                 .engine
                                 .evaluated_text(cell)
                                 .unwrap_or_else(|| "<unevaluated>".to_owned());
+                            let raw = self.formula_source(raw, &sheet, &lines);
                             format!("  {label} raw={raw} text={text}\n")
                         }
                         _ => format!("  {label} {raw}\n"),

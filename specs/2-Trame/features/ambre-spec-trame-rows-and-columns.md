@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-080` | `POST` | Inserting a line MUST move every line after it, with the values on it. | this spec section 3 | `ambre_trame::logic::tests::group2::insert_row_shifts_cells_down`; `::insert_and_delete_column_shift_cells` | none | verified |
 | `TRAME-087` | `POST` | An insert from a menu or a header MUST land relative to the cell the user is on. | this spec section 4 | `ambre_trame::logic::tests::group2::insert_intents_land_relative_to_active_cell` | none | verified |
 | `TRAME-086` | `FRAME` | An insert past the end of the used range MUST write nothing. | this spec section 3 | `ambre_trame::logic::tests::group2::insert_beyond_used_range_is_noop` -- it asserts neither an event nor a delta comes out | none | verified |
-| `TRAME-171` | `FRAME` | Inserting a line inside a block a formula adds up MUST NOT push the last line of that block out of it. | this spec section 5 | none | fails -- the insert reseeds the engine, which re-binds every reference by position, so `=SUM(A1:A10)` still covers ten positions and the value that was on the tenth is now on the eleventh, outside the sum. Section 5 claims the two products agree here, and they do not; lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | failing |
+| `TRAME-171` | `FRAME` | Inserting a line inside a block a formula adds up MUST NOT push the last line of that block out of it. | this spec section 5 | `ambre_trame::logic::tests::group8::an_insert_inside_a_range_widens_it` | none | verified |
 
 ### 1.3 Delete a line
 
@@ -78,10 +78,9 @@ status values are normative in `ambre-spec-template.md`.
   for. No bench measures it.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 16 `verified`, 1 `failing`, 3 `untested`. What holds is the single-line gesture
-  and the frame conditions around it. What is loose is the metrics that follow a line, the drag that
-  lands on its own slot and the guard past the used range. The failure matters: an insert in a
-  summed block pushes its last line out of the sum (`TRAME-171`).
+* **Verification.** 17 `verified`, 3 `untested`. What holds is the single-line gesture, the frame
+  conditions around it, and the summed block an insert widens. What is loose is the metrics that
+  follow a line, the drag that lands on its own slot and the guard past the used range.
 
 ---
 
@@ -169,19 +168,15 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | The lists are dense over the used range only | a run-length encoding of the empty stretches | it buys back the storage but loses the direct index: reaching a position means walking the runs, on the path every viewport fill takes |
 | A write far past the used range is dropped | materializing whatever is asked | one accidental keystroke in the row-number box would otherwise materialize tens of thousands of lines on every peer, for one value |
 | A write far past the used range is dropped | clamping the write to the high-water mark | it silently lands the value on a line the user did not name, which is worse than not landing it: the sheet looks written and the number is in the wrong row |
-| A move does not reseed the engine | reseeding after every structural operation, as a delete does | every reference resolves through the position cache, and a move only permutes it. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid |
+| A move reseeds the engine only when it re-anchored a range | reseeding after every structural operation, as a delete does | a cell reference resolves through the position cache, and a move only permutes it. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid |
 | A delete purges the removed line's cells | leaving the entries and filtering them at read time | a cell keyed by a deleted identity is unreachable and would ride in the document and every sync payload for ever |
 | An insert from any surface goes through one intent | each surface computing a grid position and sending it | the menu, the header affordance and a future keyboard chord then resolve the position in one place, and cannot disagree about what "above" means |
-| An insert rewrites no formula | rewriting every dependent formula at insert time, as Excel does | Excel's implicit rewrite of `=SUM(A1:A10)` into `=SUM(A1:A11)` is not idempotent: two users inserting into the same range at once apply two rewrites and converge on a formula neither wrote. A range endpoint is positional, so the new line falls inside the block and is counted with no edit at all -- and the block's old last line falls out of it, which is where the two products part (`TRAME-171`) |
+| An insert keeps each range corner on its line | a positional range, which counts the new line with no edit | the block's old last line then falls out of it, and the total changes for an operation that wrote no value. A corner names its line, so the range widens over what is inserted inside it (`TRAME-171`), and two concurrent inserts widen it twice, which is what both users meant |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **An insert inside a summed block drops the block's last line** (`TRAME-171`). The insert reseeds
-  the engine, and the reseed re-binds `=SUM(A1:A10)` against the new layout by position. The new
-  line joins the sum, and the value that was on the tenth line, now on the eleventh, leaves it. The
-  total changes by two lines' worth for an operation that wrote none.
 * **Nothing reads a metric after a structural operation** (`TRAME-170`, `TRAME-173`). A height, a
   width and a hidden mark are keyed by the line's identity. The argument that they follow the line
   is the argument that the cells do, and the cells have tests. A drag released on its own
@@ -189,10 +184,6 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 * **The materialization cap is a branch nothing enters** (`TRAME-089`). Ten thousand lines past the
   used range, the write is dropped with a log line. No test, no event, and nothing tells the user
   their value did not land.
-* **A row delete does not break the formulas that read it.** The delete path rebinds every formula
-  from its text, so a reference to the deleted line reads the shifted cell rather than an error. It
-  is the divergence recorded as `TRAME-008` in `features/ambre-spec-trame-formula-engine.md`, and
-  this is the operation that produces it.
 * **Nothing inserts or deletes more than one line at a time.** There is no "insert three rows", only
   three inserts. The multi-line delete removes its lines in one commit, so it is one undo item and
   one delta (`TRAME-088`, `TRAME-175`).

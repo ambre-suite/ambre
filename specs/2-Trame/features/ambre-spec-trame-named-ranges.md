@@ -136,3 +136,7 @@ and the name is the unit two concurrent writers race for.
 
 * **No user can define a name.** The commands exist and the resolution works; the surface does not.
   Whoever builds it also has to decide what a name manager shows for the four rules above.
+* **A name's reference is positional.** A formula reference names its row and column
+  (`TRAME-228`), but a name stores `A1` text, read again on each reseed. An insert above its target
+  moves the name off the cells it named, and a delete does not break it. Whether a name follows
+  its cells is not ruled; storing it in the formula's form would make it so.

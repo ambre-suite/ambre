@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use crate::formula::identity::LineEdit;
 
 impl TrameState {
     /// Single-column sort of a row range (`trame-sort`).
@@ -202,30 +203,33 @@ impl TrameState {
             let u = cur.remove(src);
             cur.insert(dst, u);
         }
+        let rewritten = self.reanchor_formulas(Axis::Row, LineEdit::Reorder);
         self.doc.commit();
 
-        let mut outcome = self.after_reorder();
+        let mut outcome = self.after_reorder(rewritten);
         outcome.display.push(TrameEvent::SortComplete);
         outcome
     }
 
     /// Shared tail of any whole-line reorder (sort, drag move): refresh the position<->uid
     /// cache and the position-keyed derived caches (merges, formatting, filter) for the new
-    /// order. Crucially, do NOT reseed (re-parse) the formula engine. The compiled bytecode
-    /// is uid-anchored, so preserving it and merely recomputing lets every reference resolve
-    /// to its row/column's NEW position. References follow the moved data, the
-    /// `trame-formula-engine` guarantee. A full reseed would re-bind each `A1` against the
-    /// post-move index and collapse the engine back to positional semantics.
-    pub(super) fn after_reorder(&mut self) -> TrameOutcome {
+    /// order. The compiled bytecode is uid-anchored, so a cell reference already follows
+    /// its moved data, and recomputing is enough. A formula whose range was re-anchored
+    /// (`rewritten`, `TRAME-227`) changed its text, so the engine is reseeded from it.
+    pub(super) fn after_reorder(&mut self, rewritten: bool) -> TrameOutcome {
         self.rebuild_index();
         let mut display = self.rebuild_merges();
         self.reseed_styles();
         // The hidden set is keyed by row uid, so it follows the rows across the
         // permutation -- remap positions, do not recompute.
         self.rebuild_filter();
-        let indices = self.engine_indices();
-        self.engine.mark_all_dirty();
-        self.engine.compute_all_dirty(&indices);
+        if rewritten {
+            self.reseed_engine();
+        } else {
+            let indices = self.engine_indices();
+            self.engine.mark_all_dirty();
+            self.engine.compute_all_dirty(&indices);
+        }
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
         TrameOutcome {

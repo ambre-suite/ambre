@@ -137,10 +137,11 @@ fn compile_into(
             });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
-        // compilation. Reaching here means the caller skipped resolution; emit a
-        // harmless empty so a misuse degrades to a blank value rather than a panic.
-        Expr::SheetRef { .. } | Expr::Name(_) => {
-            debug_assert!(false, "unresolved SheetRef/Name reached compile()");
+        // compilation, and the stored forms by `identity::unbind` before it.
+        // Reaching here means the caller skipped a pass; emit a harmless empty
+        // so a misuse degrades to a blank value rather than a panic.
+        Expr::SheetRef { .. } | Expr::Name(_) | Expr::StoredCell(_) | Expr::StoredRange(..) => {
+            debug_assert!(false, "unresolved reference reached compile()");
             ops.push(Op::PushEmpty);
         }
     }

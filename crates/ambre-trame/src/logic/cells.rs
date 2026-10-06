@@ -5,7 +5,11 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use std::cell::OnceCell;
+
 use super::*;
+use crate::formula::SheetQualifier;
+use crate::formula::identity;
 
 impl TrameState {
     /// Display text for a cell. The formula evaluation result if it's a formula
@@ -49,25 +53,39 @@ impl TrameState {
         String::new()
     }
 
-    /// Rewrite user-entered formula text into its canonical CRDT form: each
-    /// cross-sheet qualifier is bound to the stable `sheet_id` (`Sheet2!A1` ->
-    /// `#s0!A1`). A later rename/reorder then never invalidates the reference
-    /// (`trame-sheets`). Plain text, formulas without a qualifier, and formulas
-    /// that fail to parse are stored verbatim (the user's exact input).
+    /// The text of an active-sheet cell with a formula's references at their
+    /// positions ([`formula_source`](Self::formula_source)). A fill or a copy
+    /// shifts this text, never the stored one (`TRAME-228`).
+    pub(super) fn cell_source(&self, row: u32, col: u32) -> String {
+        self.formula_source(
+            &self.cell_raw(row, col),
+            &self.active_sheet,
+            &self.sheet_lines(),
+        )
+    }
+
+    /// Rewrite user-entered formula text into its canonical CRDT form, for a
+    /// cell of `sheet_id`. Each cross-sheet qualifier is bound to the stable
+    /// `sheet_id` (`Sheet2!A1` -> `#s0!A1`), so a rename or a reorder never
+    /// invalidates it (`trame-sheets`). Each position is bound to the row and
+    /// column now at it, so an insert or a delete never moves it
+    /// (`TRAME-228`). Plain text, and formulas that fail to parse, are stored
+    /// verbatim (the user's exact input).
     ///
     /// # Errors
     ///
     /// The display name of a sheet the formula qualifies and no tab carries
     /// (`TRAME-211`). Stored by name, it would resolve the day such a sheet
     /// appears and break the day that sheet is renamed.
-    pub(super) fn canonicalize_input(&self, text: &str) -> Result<String, String> {
+    pub(super) fn canonicalize_input(
+        &self,
+        text: &str,
+        sheet_id: &str,
+        lines: &SheetLines<'_>,
+    ) -> Result<String, String> {
         let Some(body) = text.strip_prefix('=') else {
             return Ok(text.to_string());
         };
-        // A cross-sheet reference always carries a `!`; nothing else to rewrite.
-        if !body.contains('!') {
-            return Ok(text.to_string());
-        }
         let name_to_id = |name: &str| {
             self.sheet_name_to_u16
                 .get(name)
@@ -78,25 +96,60 @@ impl TrameState {
             return Ok(text.to_string());
         };
         let canonical = render::canonicalize(ast, &name_to_id);
-        match render::first_name_qualifier(&canonical) {
-            Some(unknown) => Err(unknown),
-            None => Ok(format!("={}", render::render(&canonical))),
+        if let Some(unknown) = render::first_name_qualifier(&canonical) {
+            return Err(unknown);
         }
+        let bound = identity::bind(canonical, &|q| lines.of(sheet_id, q));
+        Ok(format!("={}", render::render(&bound)))
     }
 
-    /// Reconstruct the formula-bar text for a stored CRDT value: canonical `#id`
-    /// qualifiers are rendered through the current `sheet_id -> name` map
-    /// (`#s0!A1` -> `Data!A1`). A rename is then reflected immediately, with no
-    /// CRDT mutation. A deleted target stays in `#id` form, signalling the
-    /// dangling reference. Plain text and formulas without an id qualifier pass
-    /// through.
-    pub(super) fn formula_display(&self, stored: &str) -> String {
+    /// The source of a stored formula with each reference back at its position
+    /// in today's layout, its qualifiers still sheet ids (`#s0!A2`). A line
+    /// that is gone reads `#REF!` (`TRAME-008`). This is the text a paste or a
+    /// fill shifts, and what a copy carries. Plain text passes through.
+    pub(super) fn formula_source(
+        &self,
+        stored: &str,
+        sheet_id: &str,
+        lines: &SheetLines<'_>,
+    ) -> String {
         let Some(body) = stored.strip_prefix('=') else {
             return stored.to_string();
         };
-        // The canonical id qualifier is the only `#` we persist in `v`.
-        if !body.contains('#') {
+        // A stored line is the only `{` the canonical form writes outside a
+        // string; a formula without one is already positional.
+        if !body.contains('{') {
             return stored.to_string();
+        }
+        match parse_formula(body) {
+            Ok(ast) => format!(
+                "={}",
+                render::render(&identity::unbind(ast, &|q| lines.of(sheet_id, q)))
+            ),
+            Err(_) => stored.to_string(),
+        }
+    }
+
+    /// Reconstruct the formula-bar text for a stored CRDT value of a cell of
+    /// `sheet_id`. Each line is rendered at its position
+    /// ([`formula_source`](Self::formula_source)), and each `#id` qualifier
+    /// through the current `sheet_id -> name` map (`#s0!A1` -> `Data!A1`). A
+    /// rename or an insert is then reflected immediately, with no CRDT
+    /// mutation. A deleted sheet stays in `#id` form, signalling the dangling
+    /// reference. Plain text passes through.
+    pub(super) fn formula_display(
+        &self,
+        stored: &str,
+        sheet_id: &str,
+        lines: &SheetLines<'_>,
+    ) -> String {
+        let source = self.formula_source(stored, sheet_id, lines);
+        let Some(body) = source.strip_prefix('=') else {
+            return source;
+        };
+        // The canonical id qualifier is the only other `#` we persist in `v`.
+        if !body.contains('#') {
+            return source;
         }
         let id_to_name = |id: &str| self.sheet_id_to_name.get(id).cloned();
         match parse_formula(body) {
@@ -104,7 +157,16 @@ impl TrameState {
                 "={}",
                 render::render(&render::to_display_form(ast, &id_to_name))
             ),
-            Err(_) => stored.to_string(),
+            Err(_) => source,
+        }
+    }
+
+    /// The row and column order of every sheet, built on first use (see
+    /// [`SheetLines`]).
+    pub(super) fn sheet_lines(&self) -> SheetLines<'_> {
+        SheetLines {
+            state: self,
+            built: self.sheets_by_idx.iter().map(|_| OnceCell::new()).collect(),
         }
     }
 
@@ -252,21 +314,29 @@ impl TrameState {
             };
             self.engine.on_cell_changed(cell, "", &indices, &ctx);
         } else {
-            // Persist the canonical (`sheet_id`-bound) form so cross-sheet
-            // references survive rename/reorder (`trame-sheets`).
-            let stored = match self.canonicalize_input(text) {
-                Ok(stored) => stored,
-                Err(sheet) => {
-                    self.write_refusals.push(WriteRefusal::UnknownSheet(sheet));
-                    return;
-                }
-            };
+            // Persist the canonical form: sheet ids, so cross-sheet references
+            // survive rename/reorder (`trame-sheets`), and lines, so references
+            // survive an insert or a delete (`TRAME-228`).
+            let sheet = self.active_sheet.clone();
+            let refused = self
+                .canonicalize_input(text, &sheet, &self.sheet_lines())
+                .err();
+            if let Some(unknown) = refused {
+                self.write_refusals
+                    .push(WriteRefusal::UnknownSheet(unknown));
+                return;
+            }
             let Some((rl, cl)) = self.materialize(row, col) else {
                 // Beyond the materialization cap: the write is refused, and
                 // `finish_cell_writes` says so (`TRAME-UI-164`).
                 self.write_refusals.push(WriteRefusal::BeyondCap);
                 return;
             };
+            // Bound once the cell's own lines exist, so a reference to its row
+            // or column names that line rather than a position.
+            let stored = self
+                .canonicalize_input(text, &sheet, &self.sheet_lines())
+                .unwrap_or_else(|_| text.to_string());
             let _ = self
                 .doc
                 .get_map(cells_map_name(&self.active_sheet))
@@ -338,5 +408,34 @@ impl TrameState {
             message: format!("no sheet is named \"{name}\": the formula was not written"),
         }));
         events
+    }
+}
+
+/// The row and column order of every sheet, for the rewrites between a stored
+/// formula and its positions (`TRAME-228`). The active sheet reads the
+/// maintained index. Another sheet's index is built from its lists on first
+/// read, then kept for the life of this value.
+pub(super) struct SheetLines<'a> {
+    state: &'a TrameState,
+    built: Vec<OnceCell<SheetIndex>>,
+}
+
+impl SheetLines<'_> {
+    /// The index a reference of a formula on `sheet_id` reads: its qualifier's
+    /// sheet, else the formula's own. `None` for a sheet that does not exist.
+    pub(super) fn of(&self, sheet_id: &str, q: Option<&SheetQualifier>) -> Option<&SheetIndex> {
+        let state = self.state;
+        let idx = match q {
+            None => state.sheet_id_to_u16.get(sheet_id),
+            Some(SheetQualifier::Id(id)) => state.sheet_id_to_u16.get(id),
+            Some(SheetQualifier::Name(name)) => state.sheet_name_to_u16.get(name),
+        }
+        .copied()?;
+        if idx == 0 {
+            return Some(&state.index);
+        }
+        let id = state.sheets_by_idx.get(idx as usize)?;
+        let cell = self.built.get(idx as usize)?;
+        Some(cell.get_or_init(|| state.build_sheet_index(id)))
     }
 }

@@ -409,12 +409,11 @@ fn move_column_carries_cells() {
     assert_eq!(read_cell(&mut state, 0, 2), "y");
 }
 
-/// References are positional and never rewritten (`trame-formula-engine`).
-/// After deleting the row that held a formula's source, the formula reads
-/// whatever now sits at that grid position -- here an emptied cell. (Full
-/// id-based `#REF!` on delete is a separate broken-references story.)
+/// A reference names its row and column, so deleting the row that held a
+/// formula's source breaks it to `#REF!`. It never reads the cell that slid
+/// up into the position (`TRAME-008`).
 #[test]
-fn formula_reference_is_positional_after_delete() {
+fn a_reference_to_a_deleted_row_reads_ref() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
         row: 1,
@@ -432,10 +431,16 @@ fn formula_reference_is_positional_after_delete() {
         "B1 reads A2 before delete"
     );
 
-    // Delete row 1 (the source A2). B1 stays at row 0; A2 is now empty, so
-    // the positional reference reads an empty cell.
+    // Something sits below the source, ready to slide into its position.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 2,
+        col: 0,
+        text: "9".to_owned(),
+    });
+    // Delete row 1 (the source A2): B1 breaks, it does not read the 9.
     state.handle_command(TrameCommand::DeleteRow { at: 1 });
-    assert_eq!(read_cell(&mut state, 0, 1), "", "positional ref now empty");
+    assert_eq!(read_cell(&mut state, 0, 1), "#REF!", "deleted source");
+    assert_eq!(read_raw(&mut state, 0, 1), "=#REF!", "the bar shows it");
 }
 
 /// Inserting past the materialized used range is a no-op: virtual rows are

@@ -230,6 +230,14 @@ impl TrameState {
             return false;
         }
         let is_formula = raw.starts_with('=');
+        // A formula is searched and rewritten in its positional source, the
+        // text the user reads (`TRAME-228`); the write binds it again.
+        let raw = if is_formula {
+            let active = self.active_sheet.clone();
+            self.formula_source(&raw, &active, &self.sheet_lines())
+        } else {
+            raw
+        };
         if is_formula && !in_formulas {
             return false;
         }
@@ -270,6 +278,8 @@ impl TrameState {
         let (rows, cols) = (index.row_len(), index.col_len());
         let map = self.doc.get_map(cells_map_name(sheet_id));
         let mut edits: Vec<((Uid, Uid), Option<String>)> = Vec::new();
+        let mut refusals = Vec::new();
+        let lines = self.sheet_lines();
         for row in 0..rows {
             for col in 0..cols {
                 let Some((rl, cl)) = index.resolve(row, col) else {
@@ -283,6 +293,11 @@ impl TrameState {
                 if is_formula && !in_formulas {
                     continue;
                 }
+                let raw = if is_formula {
+                    self.formula_source(&raw, sheet_id, &lines)
+                } else {
+                    raw
+                };
                 // Formula cells (with `in_formulas`) match on their raw formula
                 // text; plain cells match on the engine's displayed value.
                 let haystack = if is_formula {
@@ -308,10 +323,10 @@ impl TrameState {
                     let stored = if new_raw.is_empty() {
                         None
                     } else {
-                        match self.canonicalize_input(&new_raw) {
+                        match self.canonicalize_input(&new_raw, sheet_id, &lines) {
                             Ok(stored) => Some(stored),
                             Err(sheet) => {
-                                self.write_refusals.push(WriteRefusal::UnknownSheet(sheet));
+                                refusals.push(WriteRefusal::UnknownSheet(sheet));
                                 continue;
                             }
                         }
@@ -320,6 +335,8 @@ impl TrameState {
                 }
             }
         }
+        drop(lines);
+        self.write_refusals.extend(refusals);
         let count = edits.len() as u32;
         for ((rl, cl), stored) in edits {
             match stored {

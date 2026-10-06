@@ -471,6 +471,49 @@ pub struct CellBytecode {
 }
 
 // -----------------------------------------------------------------------------
+// Stored references -- the identity form a formula is kept in
+// -----------------------------------------------------------------------------
+
+/// One axis of a stored reference (`TRAME-228`): the row or column it was typed
+/// against, or a position when that line did not exist yet.
+///
+/// A position past the used range has no line to name, so it stays positional
+/// and reads empty (`TRAME-006`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StoredAxis {
+    /// The line with this identity, wherever it now sits. `#REF!` once deleted.
+    Line(Uid),
+    /// A zero-based position with no line behind it when the formula was stored.
+    At(u32),
+}
+
+/// A cell reference in stored form: one [`StoredAxis`] per axis. Written
+/// `{row|col}` in the stored text, each axis either a uid or a position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StoredCell {
+    pub row: StoredAxis,
+    pub col: StoredAxis,
+}
+
+impl StoredCell {
+    /// The stored form of a positional cell, with no line behind either axis.
+    pub const fn at(cell: CellRef) -> Self {
+        Self {
+            row: StoredAxis::At(cell.row),
+            col: StoredAxis::At(cell.col),
+        }
+    }
+
+    /// The positional cell, when neither axis names a line.
+    pub fn as_position(&self) -> Option<CellRef> {
+        match (self.row, self.col) {
+            (StoredAxis::At(row), StoredAxis::At(col)) => Some(CellRef::new(row, col)),
+            _ => None,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Expr -- AST produced by the parser
 // -----------------------------------------------------------------------------
 
@@ -480,12 +523,19 @@ pub struct CellBytecode {
 /// parser and removed by [`resolve_refs`](super::parser::resolve_refs) before
 /// compilation. The resolver rewrites them into [`Expr::CellRef`] /
 /// [`Expr::Range`] carrying the resolved sheet index. The compiler therefore
-/// never sees them.
+/// never sees them. [`Expr::StoredCell`] and [`Expr::StoredRange`] are the
+/// stored text's references; [`unbind`](super::identity::unbind) turns them
+/// back into positions before resolution.
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(CellValue),
     CellRef(CellRef),
     Range(RangeDep),
+    /// A cell named by the lines it was typed against (`TRAME-228`).
+    StoredCell(StoredCell),
+    /// A range whose two corners are named by their lines. A corner may sit
+    /// above or left of the other: the range is the rectangle between them.
+    StoredRange(StoredCell, StoredCell),
     /// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2` /
     /// `#s0_a1b2!A1`. `inner` is always a [`Expr::CellRef`] or [`Expr::Range`];
     /// the resolver stamps the resolved sheet index onto it.

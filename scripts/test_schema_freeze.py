@@ -120,6 +120,12 @@ class RepositoryTest(unittest.TestCase):
         self.commit(HEADER + V1 + V2)
         self.assertEqual(self.run_check("HEAD~1"), 0)
 
+    def test_a_section_appended_after_a_blank_line_is_free(self):
+        # The blank line is the separator every shape file writes between two
+        # sections; it closes the body above and does not edit it.
+        self.commit(HEADER + V1 + "\n" + V2)
+        self.assertEqual(self.run_check("HEAD~1"), 0)
+
     def test_a_published_section_edited_is_refused(self):
         self.commit(HEADER + V1.replace("i64", "f64"))
         self.assertEqual(self.run_check("HEAD~1"), 1)

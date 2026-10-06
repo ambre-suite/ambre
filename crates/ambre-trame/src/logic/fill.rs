@@ -123,7 +123,7 @@ impl TrameState {
             while left + bw - 1 <= sc2 {
                 let sources: Vec<String> = (sr1..=sr2)
                     .step_by(bh as usize)
-                    .map(|top| self.cell_raw(top, left))
+                    .map(|top| self.cell_source(top, left))
                     .collect();
                 let series = series_params(mode, &sources);
                 let k = sources.len() as i64;
@@ -146,7 +146,7 @@ impl TrameState {
             while top + bh - 1 <= sr2 {
                 let sources: Vec<String> = (sc1..=sc2)
                     .step_by(bw as usize)
-                    .map(|left| self.cell_raw(top, left))
+                    .map(|left| self.cell_source(top, left))
                     .collect();
                 let series = series_params(mode, &sources);
                 let k = sources.len() as i64;
@@ -242,7 +242,7 @@ impl TrameState {
     ) {
         let span = (sr2 - sr1 + 1) as i64;
         for col in sc1..=sc2 {
-            let sources: Vec<String> = (sr1..=sr2).map(|r| self.cell_raw(r, col)).collect();
+            let sources: Vec<String> = (sr1..=sr2).map(|r| self.cell_source(r, col)).collect();
             let series = series_params(mode, &sources);
             for row in dr1..=dr2 {
                 if row >= sr1 && row <= sr2 {
@@ -268,7 +268,7 @@ impl TrameState {
     ) {
         let span = (sc2 - sc1 + 1) as i64;
         for row in sr1..=sr2 {
-            let sources: Vec<String> = (sc1..=sc2).map(|c| self.cell_raw(row, c)).collect();
+            let sources: Vec<String> = (sc1..=sc2).map(|c| self.cell_source(row, c)).collect();
             let series = series_params(mode, &sources);
             for col in dc1..=dc2 {
                 if col >= sc1 && col <= sc2 {

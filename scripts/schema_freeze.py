@@ -48,20 +48,25 @@ MARK = "== "
 
 
 def sections(text: str) -> dict[str, str]:
-    """The body of each `== vN` section, keyed by its marker line."""
+    """The body of each `== vN` section, keyed by its marker line.
+
+    The blank lines that close a body are the separator before the next
+    marker, not part of the section: appending a section must not read as an
+    edit of the one above it.
+    """
     out: dict[str, str] = {}
     name = None
     body: list[str] = []
     for line in text.splitlines():
         if line.startswith(MARK):
             if name is not None:
-                out[name] = "\n".join(body)
+                out[name] = "\n".join(body).rstrip("\n")
             name = line.strip()
             body = []
         elif name is not None:
             body.append(line)
     if name is not None:
-        out[name] = "\n".join(body)
+        out[name] = "\n".join(body).rstrip("\n")
     return out
 
 

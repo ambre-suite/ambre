@@ -413,6 +413,9 @@ impl TrameState {
     ) -> Vec<DisplayCell> {
         let mut cells =
             Vec::with_capacity(((row_end - row_start + 1) * (col_end - col_start + 1)) as usize);
+        // One set of sheet layouts for the whole window: a cross-sheet formula
+        // builds its sheet's index once, not once per cell.
+        let lines = self.sheet_lines();
 
         for row in row_start..=row_end {
             for col in col_start..=col_end {
@@ -438,9 +441,10 @@ impl TrameState {
                     raw: if is_covered {
                         String::new()
                     } else {
-                        // Reconstruct cross-sheet qualifiers from the
-                        // stable id to the display name (`trame-sheets`).
-                        self.formula_display(&self.cell_raw(row, col))
+                        // Reconstruct positions from the stored lines, and
+                        // cross-sheet qualifiers from the stable id to the
+                        // display name (`TRAME-228`, `trame-sheets`).
+                        self.formula_display(&self.cell_raw(row, col), &self.active_sheet, &lines)
                     },
                     bold: self.bold.contains(&(row, col)),
                     italic: self.italic.contains(&(row, col)),

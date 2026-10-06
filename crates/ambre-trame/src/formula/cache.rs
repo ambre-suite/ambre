@@ -9,8 +9,9 @@ use std::collections::{HashMap, HashSet};
 
 use super::compile::{SheetIndices, compile};
 use super::dag::DependencyGraph;
+use super::identity::unbind;
 use super::parser::{parse_formula, resolve_refs};
-use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError};
+use super::types::{CellBytecode, CellId, CellValue, FormulaCtx, FormulaError, SheetQualifier};
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
 pub struct BytecodeCache {
@@ -101,11 +102,21 @@ impl BytecodeCache {
         }
 
         let formula_text = &raw[1..]; // Strip leading '='.
-        // Parse (context-free) then resolve sheet-qualified refs and named
-        // ranges against the host context; unqualified refs land on the
+        // Parse (context-free), then give each stored line its position in
+        // today's layout (`TRAME-228`). Then resolve sheet-qualified refs and
+        // named ranges against the host context; unqualified refs land on the
         // formula's own sheet (`cell.sheet`). Positional `A1` is bound to a
         // row/column `Uid` by `compile` against `indices`.
-        let parsed = parse_formula(formula_text).and_then(|ast| resolve_refs(ast, cell.sheet, ctx));
+        let index_of = |q: Option<&SheetQualifier>| {
+            let sheet = match q {
+                None => Some(cell.sheet),
+                Some(SheetQualifier::Id(id)) => ctx.resolve_sheet_id(id),
+                Some(SheetQualifier::Name(name)) => ctx.resolve_sheet(name),
+            };
+            indices.get(&sheet?)
+        };
+        let parsed = parse_formula(formula_text)
+            .and_then(|ast| resolve_refs(unbind(ast, &index_of), cell.sheet, ctx));
         self.compiles += 1;
         self.sources.remove(&cell);
         match parsed {

@@ -5,7 +5,7 @@
 
 use nom::Parser;
 use nom::branch::alt;
-use nom::bytes::complete::tag;
+use nom::bytes::complete::{tag, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, one_of};
 use nom::combinator::{map, map_res, opt, recognize, value};
 use nom::multi::{many0, many1, separated_list0};
@@ -13,8 +13,9 @@ use nom::sequence::{delimited, preceded};
 
 use super::types::{
     BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, NameTarget, RangeDep,
-    SheetQualifier, UnaryOpKind, alpha_to_col,
+    SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
+use crate::model::Uid;
 
 // -----------------------------------------------------------------------------
 // Whitespace
@@ -121,16 +122,53 @@ fn cell_ref(input: &str) -> nom::IResult<&str, CellRef> {
     Ok((input, CellRef::new(row, col)))
 }
 
-/// Parse a range like `A1:B10`. Returns `Expr::Range`.
+/// A line identity as the stored text writes it: lowercase hex, `_`, lowercase
+/// hex (`3fa1_2`). Lowercase keeps it apart from column letters.
+fn line_uid(input: &str) -> nom::IResult<&str, Uid> {
+    let hex = |c: char| c.is_ascii_digit() || ('a'..='f').contains(&c);
+    map_res(
+        recognize((take_while1(hex), char('_'), take_while1(hex))),
+        |s: &str| Uid::parse(s).ok_or(()),
+    )
+    .parse(input)
+}
+
+/// A cell in stored form, `{row|col}` (`TRAME-228`). Each axis is a line
+/// identity, or the position it held when no line stood there: a 1-based row
+/// number, column letters.
+fn stored_cell(input: &str) -> nom::IResult<&str, StoredCell> {
+    let row = alt((
+        map(line_uid, StoredAxis::Line),
+        map(row_number, StoredAxis::At),
+    ));
+    let col = alt((
+        map(line_uid, StoredAxis::Line),
+        map_res(col_letters, |s: &str| alpha_to_col(s).map(StoredAxis::At)),
+    ));
+    let (input, (_, row, _, col, _)) = (char('{'), row, char('|'), col, char('}')).parse(input)?;
+    Ok((input, StoredCell { row, col }))
+}
+
+/// One corner of a reference: the stored form, or a typed `A1`.
+fn endpoint(input: &str) -> nom::IResult<&str, StoredCell> {
+    alt((stored_cell, map(cell_ref, StoredCell::at))).parse(input)
+}
+
+/// Parse a range like `A1:B10`. Two positional corners make an `Expr::Range`,
+/// normalized so its start is above and left of its end. A corner named by a
+/// line makes an `Expr::StoredRange`, ordered once its lines have positions.
 fn range(input: &str) -> nom::IResult<&str, Expr> {
-    let (input, start) = cell_ref.parse(input)?;
+    let (input, start) = endpoint.parse(input)?;
     let (input, _colon) = char(':').parse(input)?;
-    let (input, end) = cell_ref.parse(input)?;
+    let (input, end) = endpoint.parse(input)?;
+    let (Some(start_at), Some(end_at)) = (start.as_position(), end.as_position()) else {
+        return Ok((input, Expr::StoredRange(start, end)));
+    };
     let dep = RangeDep::new(
-        start.row.min(end.row),
-        start.row.max(end.row),
-        start.col.min(end.col),
-        start.col.max(end.col),
+        start_at.row.min(end_at.row),
+        start_at.row.max(end_at.row),
+        start_at.col.min(end_at.col),
+        start_at.col.max(end_at.col),
     );
     Ok((input, Expr::Range(dep)))
 }
@@ -140,7 +178,11 @@ fn cell_or_range(input: &str) -> nom::IResult<&str, Expr> {
     if let Ok(result) = range(input) {
         return Ok(result);
     }
-    map(cell_ref, Expr::CellRef).parse(input)
+    map(endpoint, |cell| match cell.as_position() {
+        Some(at) => Expr::CellRef(at),
+        None => Expr::StoredCell(cell),
+    })
+    .parse(input)
 }
 
 /// A sheet name preceding a `!`: a bareword identifier (`Sheet2`) or a
@@ -447,18 +489,23 @@ pub const MAX_FORMULA_OPERATORS: usize = 512;
 /// Refuse, before any recursion, a formula that could nest deeper than the
 /// stack holds (`TRAME-013`). One linear scan; text between double quotes is
 /// skipped, and a quoted sheet name is counted, which can only over-estimate.
+///
+/// A stored reference between braces counts as no character: it renders as a
+/// few-character `A1`, and the limit is on what the user typed. Nothing between
+/// braces nests or adds an operator.
 fn within_bounds(input: &str) -> Result<(), String> {
-    if input.chars().count() > MAX_FORMULA_CHARS {
-        return Err(format!(
-            "formula longer than {MAX_FORMULA_CHARS} characters"
-        ));
-    }
     let (mut depth, mut deepest, mut operators) = (0_usize, 0_usize, 0_usize);
-    let mut quoted = false;
+    let (mut quoted, mut braced, mut chars) = (false, false, 0_usize);
     for c in input.chars() {
+        if !braced {
+            chars += 1;
+        }
         match c {
-            '"' => quoted = !quoted,
+            '"' if !braced => quoted = !quoted,
             _ if quoted => {}
+            '{' => braced = true,
+            '}' => braced = false,
+            _ if braced => {}
             '(' => {
                 depth += 1;
                 deepest = deepest.max(depth);
@@ -467,6 +514,11 @@ fn within_bounds(input: &str) -> Result<(), String> {
             '+' | '-' | '*' | '/' | '^' | '&' | '=' | '<' | '>' => operators += 1,
             _ => {}
         }
+    }
+    if chars > MAX_FORMULA_CHARS {
+        return Err(format!(
+            "formula longer than {MAX_FORMULA_CHARS} characters"
+        ));
     }
     if deepest > MAX_FORMULA_NESTING {
         return Err(format!(
@@ -587,6 +639,11 @@ pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Res
             Ok(Expr::FnCall { name, args })
         }
         lit @ Expr::Literal(_) => Ok(lit),
+        // `unbind` gives every stored reference a position before resolution.
+        // One left here names a sheet the host has no index for.
+        Expr::StoredCell(_) | Expr::StoredRange(..) => {
+            Ok(Expr::Literal(CellValue::Error(FormulaError::BrokenRef)))
+        }
     }
 }
 

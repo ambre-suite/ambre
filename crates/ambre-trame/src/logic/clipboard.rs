@@ -125,7 +125,7 @@ impl TrameState {
         let (r1, c1, r2, c2) = self.selection_bounds();
         let mut cells = Vec::new();
         for (row, col) in self.selected_cells() {
-            let raw = self.cell_raw(row, col);
+            let raw = self.cell_source(row, col);
             if raw.is_empty() {
                 continue;
             }

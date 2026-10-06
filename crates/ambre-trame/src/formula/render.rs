@@ -14,8 +14,10 @@
 //! and Sheets reformat typed formulas the same way).
 
 use super::types::{
-    BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, UnaryOpKind, col_to_alpha,
+    BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, StoredAxis, StoredCell,
+    UnaryOpKind, col_to_alpha,
 };
+use crate::model::Uid;
 
 // -----------------------------------------------------------------------------
 // Qualifier rewriting
@@ -137,6 +139,10 @@ fn render_node(expr: &Expr) -> String {
         Expr::Literal(v) => render_literal(v),
         Expr::CellRef(r) => render_cell(r),
         Expr::Range(r) => render_range(r),
+        Expr::StoredCell(c) => render_stored(c),
+        Expr::StoredRange(start, end) => {
+            format!("{}:{}", render_stored(start), render_stored(end))
+        }
         Expr::Name(n) => n.clone(),
         Expr::SheetRef { sheet, inner } => {
             format!("{}!{}", render_qualifier(sheet), render_node(inner))
@@ -214,6 +220,29 @@ fn render_range(r: &RangeDep) -> String {
         col_to_alpha(r.col_end),
         r.row_end + 1
     )
+}
+
+/// A stored cell as `{row|col}`, each axis a line uid or a position. A cell with
+/// no line on either axis is a plain `A1`. So a reference past the used range is
+/// stored as the user typed it.
+fn render_stored(c: &StoredCell) -> String {
+    if let Some(at) = c.as_position() {
+        return render_cell(&at);
+    }
+    let row = match c.row {
+        StoredAxis::Line(uid) => render_uid(uid),
+        StoredAxis::At(row) => (u64::from(row) + 1).to_string(),
+    };
+    let col = match c.col {
+        StoredAxis::Line(uid) => render_uid(uid),
+        StoredAxis::At(col) => col_to_alpha(col),
+    };
+    format!("{{{row}|{col}}}")
+}
+
+/// A line uid in its shortest form, lowercase hex with no leading zero.
+fn render_uid(uid: Uid) -> String {
+    format!("{:x}_{:x}", uid.peer, uid.counter)
 }
 
 fn render_qualifier(q: &SheetQualifier) -> String {

@@ -27,9 +27,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-013` | `INV` | No text typed into a cell MUST make the engine panic. | this spec section 3 | `ambre_trame::formula::prop_tests::parser_never_panics_on_arbitrary_text`; `::parser_never_panics_on_formula_noise`; `::compile_emits_balanced_bytecode`; `::vm_is_total_and_deterministic` -- four proptests; `ambre_trame::formula::parser::tests::a_formula_past_a_bound_is_refused_before_it_recurses`; `::the_worst_admitted_formula_fits_a_small_stack`; cargo-fuzz -- `fuzz/fuzz_targets/formula.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-021` | `INV` | A formula result MUST NOT depend on what the reader is looking at. | this spec section 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum`; `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | none | verified |
 | `TRAME-034` | `INV` | A reference to another sheet MUST survive that sheet being renamed. | this spec section 3 | `ambre_trame::formula::render::tests::canonicalize_name_to_id`; `::display_id_to_name`; `ambre_trame::formula::parser::tests::id_qualified_cell_resolves_index`; `::sheet_qualified_resolves_index` | none | verified |
-| `TRAME-228` | `INV` | A stored formula MUST name each reference by the row and column identities it was typed against, never by a position. | this spec section 5 | not built | unbuilt -- lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-229` | `CONC` | A reference typed while a peer inserts or deletes a line MUST read, after the merge, the cell it was typed against. | this spec section 5 | not built | unbuilt -- lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-226` | `IO` | A workbook storing positional references MUST open with each one reading the cell it read when saved. | this spec section 5; `TRAME-025` | not built | unbuilt -- lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-228` | `INV` | A stored formula MUST name each reference by the row and column identities it was typed against, never by a position. | this spec section 5 | `ambre_trame::formula::identity::tests::a_stored_formula_names_lines_and_reads_back_as_typed`; `::a_position_past_the_used_range_stays_a_position`; `::a_stored_reference_reparses_to_itself`; `ambre_trame::logic::tests::group8::a_stored_formula_names_its_lines` | none | verified |
+| `TRAME-229` | `CONC` | A reference typed while a peer inserts or deletes a line MUST read, after the merge, the cell it was typed against. | this spec section 5 | `ambre_trame::logic::tests::group8::a_reference_typed_during_a_concurrent_insert_keeps_its_cell`; `ambre_trame::logic::tests::group8::a_reference_typed_during_a_concurrent_delete_keeps_its_cell` | none | verified |
+| `TRAME-226` | `IO` | A workbook storing positional references MUST open with each one reading the cell it read when saved. | this spec section 5; `TRAME-025` | `ambre_trame::logic::tests::group8::a_positional_workbook_migrates_onto_its_cells` | none | verified |
 | `TRAME-036` | `INV` | Operators MUST bind in the order a spreadsheet user expects. | this spec section 4 | `ambre_trame::formula::parser::tests::arithmetic_precedence`; `::parens_override_precedence`; `::comparison_chain`; `ambre_trame::formula::vm::tests::precedence` | none | verified |
 | `TRAME-037` | `INV` | The power operator MUST group to the right. | this spec section 4 | `ambre_trame::formula::parser::tests::power_right_associative`; `ambre_trame::formula::render::tests::pow_right_associative` | none | verified |
 | `TRAME-038` | `INV` | A cell holding plain text MUST hold no compiled formula and no dependency. | audit `H7`; this spec section 3 | `ambre_trame::formula::cache::tests::non_formula_clears_cache`; `ambre_trame::formula::dag::tests::clear_deps_drops_the_formula_and_its_now_orphan_node` | none | verified |
@@ -62,10 +62,11 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-008` | `POST` | A row or column delete MUST propagate `#REF!` to every formula that read the deleted line. | this spec section 6 | none | fails -- the delete path rebinds every formula from its raw text, so the reference lands positionally on the shifted grid. `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` asserts `=A2` reads empty after deleting row 1; lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | failing |
+| `TRAME-008` | `POST` | A row or column delete MUST propagate `#REF!` to every formula that read the deleted line. | this spec section 3 | `ambre_trame::logic::tests::group2::a_reference_to_a_deleted_row_reads_ref` | none | verified |
+| `TRAME-230` | `POST` | A row or column delete MUST shrink a range that loses a corner line to the lines left inside it, and break it to `#REF!` when none is left. | this spec section 3 | `ambre_trame::logic::tests::group8::a_delete_shrinks_a_range_then_breaks_it` | none | verified |
 | `TRAME-009` | `POST` | Deleting a sheet MUST break the references that read it. | this spec section 3 | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete`; `ambre_trame::formula::parser::tests::deleted_sheet_id_yields_broken_ref` | none | verified |
 | `TRAME-214` | `FRAME` | Renaming or reordering a sheet MUST NOT break a reference that reads it. | this spec section 3 | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete`; `ambre_trame::logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename`; `::rename_sheet_keeps_id_and_cells`; `::move_sheet_reorders_tabs` | none | verified |
-| `TRAME-215` | `FRAME` | A row or column delete MUST NOT rewrite the raw text of a formula. | this spec section 3 | `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` -- it reads the shifted grid through unchanged text, and `shift_formula` is reachable only from the paste and fill paths | none | verified |
+| `TRAME-215` | `FRAME` | A row or column delete MUST NOT rewrite the stored text of a reference to a cell whose lines survive it. | this spec section 3 | `ambre_trame::logic::tests::group8::a_delete_leaves_a_cell_reference_untouched` -- it compares the stored text before and after | none | verified |
 
 ### 1.4 Sort a range
 
@@ -73,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-005` | `POST` | A single-cell reference MUST follow its row through a sort or a move. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` | none | verified |
 | `TRAME-216` | `FRAME` | A sort MUST NOT move the endpoints of a range: the range stays the positional block it was. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_sum_block_is_stable_under_internal_sort` | none | verified |
-| `TRAME-227` | `FRAME` | A sort or a line move MUST re-anchor each range endpoint it moves to the identity now at the endpoint's position, so the range keeps covering the same positions. | this spec section 5 | not built | unbuilt -- lands with the `References stored by identity` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-227` | `FRAME` | A sort or a line move MUST re-anchor each range endpoint it moves to the identity now at the endpoint's position, so the range keeps covering the same positions. | this spec section 5 | `ambre_trame::logic::tests::group8::a_sort_keeps_the_range_and_moves_the_cell` | none | verified |
 
 ### 1.5 Paste or fill a formula
 
@@ -90,11 +91,10 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 34 `verified`, 1 `failing`, 3 `untested`, 5 `unimplemented`. What holds is the
-  graph and its recompute, the best-covered engine of the workspace. What is loose is weight rather
-  than behaviour: nothing measures what a range allocates. The failure is a rule the code
-  contradicts, how a reference follows a delete (`TRAME-008`); its insert twin is `TRAME-171`.
-  Beside them is the dynamic half of cycle detection, which nothing drives.
+* **Verification.** 40 `verified`, 3 `untested`, 1 `unimplemented`. What holds is the graph and its
+  recompute, the best-covered engine of the workspace, and the stored form a structural edit
+  carries. What is loose is weight rather than behaviour: nothing measures what a range allocates.
+  Beside it is the dynamic half of cycle detection, which nothing drives.
 
 ---
 
@@ -103,7 +103,8 @@ status values are normative in `ambre-spec-template.md`.
 | A does | B does | Converged document | What each user sees | Test |
 |---|---|---|---|---|
 | types `=SUM(A1:A3)` into `C1` | types `5` into `A2` | both writes, on their own cells | the same total on both screens | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` |
-| types `=A1+1` into `B2` | deletes row 1 | the formula, rebound to the shifted grid | both read the same value, and neither reads `#REF!` (`TRAME-008`) | `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` |
+| types `=A1+1` into `B2` | deletes row 1 | the formula, still naming row 1 | both read `#REF!` (`TRAME-008`) | `ambre_trame::logic::tests::group2::a_reference_to_a_deleted_row_reads_ref` |
+| types `=A2` into `B1` | inserts a row above row 2 | the formula, naming the row it was typed against | both read that row, now row 3 (`TRAME-229`) | `ambre_trame::logic::tests::group8::a_reference_typed_during_a_concurrent_insert_keeps_its_cell` |
 | types `=Sheet2!A1` | renames `Sheet2` | the reference, stored by sheet id | both keep reading the value (`TRAME-034`) | `ambre_trame::logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename` |
 | types `=Sheet2!A1` | deletes `Sheet2` | the reference, with no sheet to reach | both read `#REF!` (`TRAME-009`) | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete` |
 | sorts the range under a total | edits a cell inside it | the rows permuted, the edit on its own row | both read the same total (`TRAME-005`) | the same property, whose op set carries `Sort` and `SetText` |
@@ -120,12 +121,14 @@ the document on load. Named ranges are the exception, and are a feature of their
 **The pipeline**, from typed text to displayed value:
 
 1. `parse_formula` reads the text into an AST. It knows nothing of the document.
-2. `resolve_refs` stamps the formula's own sheet onto unqualified references, resolves a qualifier
+2. `identity::unbind` gives each stored row and column its position in today's layout. A line that
+   is gone reads `#REF!` (`TRAME-008`).
+3. `resolve_refs` stamps the formula's own sheet onto unqualified references, resolves a qualifier
    to a sheet index, and expands a name into its target.
-3. `compile` walks the AST and emits bytecode, binding each reference against the sheet index.
-4. `DependencyGraph::update` records what the formula reads, and refuses a static cycle.
-5. `collect_dirty` gathers every cell downstream of the edit (`TRAME-040`).
-6. `compute_all_dirty` walks the dirty set in dependency order and evaluates each cell on the stack
+4. `compile` walks the AST and emits bytecode, binding each reference against the sheet index.
+5. `DependencyGraph::update` records what the formula reads, and refuses a static cycle.
+6. `collect_dirty` gathers every cell downstream of the edit (`TRAME-040`).
+7. `compute_all_dirty` walks the dirty set in dependency order and evaluates each cell on the stack
    machine.
 
 **Reference identity.** A position is what the user types; a uid is what the engine keeps.
@@ -150,11 +153,24 @@ pub enum RangeEndpoint {
 }
 ```
 
-**The stored form.** The cell's register holds one canonical text, in which each reference names
-the uids it was typed against. The editor and the formula bar render it back to `A1`, and a typed
-formula is turned into it before the write. So a formula and its references stay one register, and
-one write replaces both. The sheet qualifier already works this way (`TRAME-034`). A workbook that
-stored positions converts each one to the uid at that position in a schema step (`TRAME-226`).
+**The stored form.** The cell's register holds one canonical text. Each reference in it names the
+uids it was typed against: `={row|col}`, each axis a uid written `peer_counter` in hex. The editor
+and the formula bar render it back to `A1`, and a typed formula is turned into it before the write
+(`identity::bind`). So a formula and its references stay one register, and one write replaces
+both. The sheet qualifier works the same way (`TRAME-034`).
+
+A position past the used range names no line and stays a position (`TRAME-006`). A workbook that
+stored positions converts each one to the uid at that position in the `2 -> 3`
+schema step (`TRAME-226`).
+
+**A structural edit** rewrites only what it must, in the commit of the edit, so one undo reverts
+both (`identity::reanchor`). A reference to a cell follows its lines, so its text does not change
+(`TRAME-215`). A range is a rectangle of positions. A sort or a move re-anchors each corner to the
+line now at its position (`TRAME-227`). An insert keeps each corner's line, so lines inserted inside
+widen it (`TRAME-171`). A delete moves a lost corner inward, and a range with no line left reads
+`#REF!` (`TRAME-230`).
+
+A paste or a fill shifts the positional source, never the stored text.
 
 **The two levels.** Cell-to-cell edges live in a `petgraph` DAG, where a cycle is a static error. A
 range is not expanded into edges: it is stored whole against the formula that reads it, and a write
@@ -209,6 +225,7 @@ cell's displayed text (`features/ambre-spec-trame-engine.md`, `TRAME-UI-014`).
 **Code.**
 
 * `formula/parser/` -- the grammar and `resolve_refs`;
+* `formula/identity.rs` -- the stored form, and what a structural edit does to it (`TRAME-228`);
 * `formula/render.rs` -- rendering back, and the two qualifier rewrites (`TRAME-032`, `TRAME-034`);
 * `formula/compile.rs`, `formula/cache.rs` -- binding and incremental compilation;
 * `formula/dag.rs` -- the two levels and the cycle search;
@@ -283,11 +300,14 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The delete rule and the code disagree** (`TRAME-008`). A row delete rebuilds the sheet index and
-  rebinds every formula from its raw text, so nothing survives holding the deleted uid. `=A2` after
-  deleting row 1 reads the shifted cell, not `#REF!`. The broken-reference machinery is real and
-  tested at the instruction level, and unreachable from this path. The decision is made
-  (section 5): references are stored by identity (`TRAME-228`), and a deleted line reads `#REF!`.
+* **A range typed during a concurrent sort or delete.** Only the peer that sorts or deletes
+  re-anchors ranges, and only those it holds. A range another peer types meanwhile keeps the lines
+  it was typed against, so after the merge it covers wherever those lines went. It reads a sound
+  rectangle, but not always the block its author saw. No rule covers it yet.
+* **Every structural edit parses every formula that reads its sheet.** The re-anchoring pass costs
+  what a reseed already costs, which the edit pays too. No budget row covers either.
+* **A defined name stays positional.** A name stores `A1` text, re-read on each reseed, so an insert
+  above its target moves it (`features/ambre-spec-trame-named-ranges.md`).
 * **Whole-column and whole-row ranges** (`TRAME-048`). `RangeEndpoint::EntireAxis` exists in the type
   and every resolver handles it; the grammar never emits it, so `A:A` parses as a name and fails.
   The interactive cousin, a whole-column selection, ships.

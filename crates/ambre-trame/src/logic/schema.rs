@@ -12,6 +12,7 @@
 // become.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,9 @@ use ambre_core::schema::{
 };
 
 use super::op_from_str;
-use crate::model::Uid;
+use crate::formula::parser::parse_formula;
+use crate::formula::{SheetQualifier, identity, render};
+use crate::model::{SheetIndex, Uid};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -178,8 +181,9 @@ pub(crate) enum Axis {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record. `1 -> 2` folds the flat filter keys into one register
 /// ([`FilterRecord`]), which obliges the [`MIGRATIONS`] row carrying an existing
-/// workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 2;
+/// workbook across it (`SCHEMA-009`). `2 -> 3` stores each formula reference
+/// by the row and column it names (`TRAME-226`).
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -230,6 +234,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 ///
 /// `1 -> 2` folds `filters_{sheet}` from five flat keys into the one whole
 /// register ([`FILTER_KEY`] holding a [`FilterRecord`]).
+///
+/// `2 -> 3` names each formula reference by its row and column
+/// ([`stored_reference_step`]).
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -240,6 +247,11 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         from: 1,
         to: 2,
         apply: filter_register_step,
+    },
+    SchemaMigration {
+        from: 2,
+        to: 3,
+        apply: stored_reference_step,
     },
 ];
 
@@ -265,6 +277,64 @@ fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
     }
     // Stamp the new version inside the same commit as the shape change
     // (`SCHEMA-018`).
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The `2 -> 3` step: name each reference of each stored formula by the row
+/// and column at its position today (`TRAME-226`).
+///
+/// Version 2 stored `=A2`, so an insert above row 2 moved the formula onto
+/// another cell. Version 3 stores `={row|col}` (`TRAME-228`). The positions are
+/// read in the layout the workbook was saved with. So each formula reads the
+/// same cell before and after the step. A position past a sheet's
+/// used range stays a position, and a formula that does not parse is left as
+/// typed.
+fn stored_reference_step(doc: &LoroDoc) -> Result<(), String> {
+    let mut sheets: Vec<String> = match doc.get_map(SHEETS_MAP).get_value() {
+        LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
+        _ => Vec::new(),
+    };
+    if !sheets.iter().any(|s| s == DEFAULT_SHEET) {
+        sheets.push(DEFAULT_SHEET.to_owned());
+    }
+    let indices: HashMap<&str, SheetIndex> = sheets
+        .iter()
+        .map(|s| {
+            let index = SheetIndex::build(
+                &doc.get_movable_list(rows_list_name(s)),
+                &doc.get_movable_list(cols_list_name(s)),
+            );
+            (s.as_str(), index)
+        })
+        .collect();
+    for sheet in &sheets {
+        let map = doc.get_map(cells_map_name(sheet));
+        let LoroValue::Map(cells) = map.get_value() else {
+            continue;
+        };
+        // A stored qualifier is a sheet id; a name one was never written.
+        let index_of = |q: Option<&SheetQualifier>| match q {
+            None => indices.get(sheet.as_str()),
+            Some(SheetQualifier::Id(id)) => indices.get(id.as_str()),
+            Some(SheetQualifier::Name(_)) => None,
+        };
+        for (key, value) in cells.iter() {
+            let LoroValue::String(text) = value else {
+                continue;
+            };
+            let Some(Ok(ast)) = text.strip_prefix('=').map(parse_formula) else {
+                continue;
+            };
+            let before = render::render(&ast);
+            let after = render::render(&identity::bind(ast, &index_of));
+            if after != before {
+                map.insert(key, format!("={after}").as_str())
+                    .map_err(|e| format!("rewriting a formula failed: {e:?}"))?;
+            }
+        }
+    }
     stamp(doc);
     doc.commit();
     Ok(())
