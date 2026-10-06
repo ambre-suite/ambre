@@ -15,8 +15,33 @@
 // on no UI framework. Lives on the UI thread only, so it stays `!Send`.
 // ============================================================================
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+
+/// Messages the view asks the shell to show the user. The view queues one
+/// when something it was doing failed in a way the board cannot show. The
+/// shell takes the queue once per frame and raises each as a warning notice.
+/// Cheap to clone (shared `Rc<RefCell>`).
+#[derive(Clone, Default)]
+pub struct NoticePublisher {
+    queue: Rc<RefCell<Vec<String>>>,
+}
+
+impl NoticePublisher {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Queue one message for the shell.
+    pub fn publish(&self, message: impl Into<String>) {
+        self.queue.borrow_mut().push(message.into());
+    }
+
+    /// Take every queued message, oldest first, leaving the queue empty.
+    pub fn take(&self) -> Vec<String> {
+        std::mem::take(&mut *self.queue.borrow_mut())
+    }
+}
 
 /// One-slot, take-once signal: the view raises the flag (`publish`), the chrome
 /// consumes it once per frame (`take`, which resets it). Cheap to clone (shared

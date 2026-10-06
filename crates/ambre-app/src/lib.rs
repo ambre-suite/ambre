@@ -594,6 +594,10 @@ pub fn main() {
     // a reason. One publisher covers the session: an embedded child sends on the
     // same signal as its host board, so both meet the same saturation.
     let busy_pub = ambre_canvas::BusyPublisher::new();
+    // Canvas->DOM notices: what a board view must tell the user and cannot show
+    // on the board, such as an edit lost with its element. An embedded child
+    // queues on the same publisher as its host board.
+    let notice_pub = ambre_canvas::NoticePublisher::new();
 
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
@@ -1076,6 +1080,7 @@ pub fn main() {
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
+    let notice_pump = notice_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let persist_gone_frame = Rc::clone(&persist_gone);
     let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
@@ -1716,6 +1721,11 @@ pub fn main() {
             }
         }
 
+        // Raise what the view could not show on the board.
+        for message in notice_pump.take() {
+            toasts.warning(message);
+        }
+
         // Open the shared filter popover when the canvas raised the one-shot intent
         // (`trame-shared-filter`): a click on an in-canvas autofilter button. The
         // view already moved the active cell onto the button's column, so the anchor
@@ -1768,6 +1778,7 @@ pub fn main() {
     // An embedded child sends on its host board's UI->Logic queue, so the two
     // share one busy level rather than each holding a level nobody reads.
     let child_busy_pub = busy_pub.clone();
+    let child_notice_pub = notice_pub.clone();
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
@@ -1824,6 +1835,7 @@ pub fn main() {
                 true,
                 ambre_canvas::PerfPublisher::new(),
                 child_busy_pub.clone(),
+                child_notice_pub.clone(),
                 child_theme_ctl.clone(),
                 ch_toile_ctx_scope,
                 ch_toile_menu_cmd,
@@ -1897,6 +1909,7 @@ pub fn main() {
                     false,
                     perf_pub,
                     busy_pub,
+                    notice_pub,
                     theme_ctl,
                     toile_ctx_scope,
                     toile_menu_cmd,

@@ -273,10 +273,10 @@ the peers, because presence carries element ids -- section 6.
   right-click with an arrow selected would therefore offer group, lock, react and frame entries
   that do nothing to it. Rather than offer them, the right-click drops the arrow. Delete, the
   z-order and the style inspector reach it from the keyboard and the menu bar instead.
-* **A selected arrow that leaves the frame reads as deleted.** The view drops the selection when
-  the arrow leaves the display, which is right only because no pass culls a connector
-  (`TOILE-045`). The day that row holds, an arrow panned off screen would deselect itself, and this
-  has to ask the board instead of reading absence.
+* **A selected arrow that leaves the frame reads as deleted.** The view drops the selection, and
+  closes an open caption (`TOILE-UI-388`), when the arrow leaves the display. That is right only
+  because no pass culls a connector (`TOILE-045`). The day that row holds, an arrow panned off screen
+  would deselect itself and lose its caption, so both have to ask the board instead.
 * **The notice names no arrow** (`TOILE-044`). The shell says an arrow lost an end, and the board
   paints nothing the user can point at (`TOILE-166`). The repair is the re-aim, and reaching it
   means finding an arrow that is not drawn. No rule says how a surface offers that.

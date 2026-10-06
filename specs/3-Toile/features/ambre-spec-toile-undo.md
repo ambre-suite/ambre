@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 |---|---|---|---|---|---|---|
 | `TOILE-014` | `INV` | One command that mutates the board MUST become one undo item, however many writes it makes. | this spec section 2; architecture section 2.D | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item`; `::a_clamped_membership_change_is_one_undo_item`; `::duplicate_a_group_is_one_undo_item`; `::undo_reverts_group_as_one_item`; `::ungrouping_three_groups_is_one_undo_item` -- five commands driven through the command path, undo pressed once; `ambre_toile::state::elements::inner_tests::many_inner_creates_share_one_undo_item`; `::create_restyle_and_group_are_one_undo_item` -- these call the `_inner` helpers and commit by hand, so they hold that Loro groups a commit, not that a handler ends with one | none | verified |
 | `TOILE-094` | `INV` | One gesture the user performs once MUST become one undo item, however many commands the surface sends for it. | this spec section 2 | `ambre_toile::ui::menu::tests::ungrouping_a_selection_sends_one_command` -- the menu entry and the chord each send one command for three selected ids; `ambre_toile::logic::convergence_tests::ungrouping_three_groups_is_one_undo_item` -- that command over three groups, undone once; `ambre_toile::logic::convergence_tests::ungrouping_a_group_with_its_parent_unbinds_both` -- a nested pair in either order | none | verified |
-| `TOILE-097` | `INV` | `Ctrl+Y` MUST redo, the binding users of other applications reach for. | this spec section 3 | none | unheld -- it is the one chord the menu never renders, so even the chip test does not reach its name; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-097` | `INV` | `Ctrl+Y` MUST redo, the binding users of other applications reach for. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_undo_chords_reach_the_logic_thread` -- `Ctrl+Z`, `Ctrl+Shift+Z` and `Ctrl+Y` through the view send undo, redo and redo | none | verified |
 | `TOILE-098` | `INV` | The Undo and Redo menu entries MUST send the undo and redo intents. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` | none | verified |
 
 * **Budget.** none of its own: an undo replays one item and reseeds every cache, so it costs a full
@@ -26,10 +26,10 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   1`, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo writes reverting operations into the document, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 3 `verified`, 1 `untested`; what holds is the gesture. Five commands driven
+* **Verification.** 4 `verified`; what holds is the gesture and its triggers. Five commands driven
   through the command path become one item each, a clamped membership change and a multi-selection
-  ungroup included. What is loose is the four triggers of section 3, three of them chords no test
-  reads. The shared rules are `ambre-spec-undo.md`; Toile's gaps are section 5.
+  ungroup included. The three chords are driven through the view, and the menu entries are read.
+  The shared rules are `ambre-spec-undo.md`; Toile's gaps are section 5.
 
 ---
 
@@ -114,9 +114,6 @@ The shared gaps are in `ambre-spec-undo.md section 6`. Toile's own:
 
 * **Local-only is asserted nowhere** (`UNDO-001`). No test drives a remote change and presses undo.
   It is the cheapest gap here to close: the Trame test (`undo_local_only_not_remote`) transposes.
-* **The three chords are decoded by a function no test calls** (`UNDO-010` through `TOILE-097`).
-  `handle_key` is reached only from the event loop. The one test naming a chord reads the menu
-  chip beside the entry, not the decoder that would honour it.
 * **An undo costs a full rebuild.** Step 3 reseeds every cache. `Ctrl+Z` on a board of fifty
   thousand elements rebuilds all of them to revert one move (`ambre-roadmap.md`, "Engine and render
   optimization").

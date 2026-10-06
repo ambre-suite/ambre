@@ -19,7 +19,8 @@
 // WHERE it sits (caret follow), WHEN it has focus, and WHAT it announces through
 // the handle below.
 //
-// wasm32-only: it is pure web_sys DOM glue.
+// DOM glue on wasm32. A host test builds a detached pipe instead, so a view
+// that owns one can be driven without a browser.
 // ============================================================================
 
 use std::cell::Cell;
@@ -66,18 +67,34 @@ impl ContentKind {
 /// (element refs plus a shared flag); lives on the UI thread only, so `!Send`.
 #[derive(Clone)]
 pub struct TextInput {
-    textarea: HtmlTextAreaElement,
-    /// Visually-hidden `aria-live="polite"` region announcing the focused cell
-    /// to screen readers as the selection moves (`ambre-spec-accessibility.md`,
-    /// CHROME-023).
-    live: Element,
+    /// The DOM half. `None` for a detached pipe, which a host test builds:
+    /// every call that would touch the DOM is then a no-op.
+    dom: Option<Pipe>,
     /// True between `compositionstart` and `compositionend`. Shared with the
     /// host's `input` listener so it skips the half-formed value mid-composition
     /// (the canvas shows the preview from the composition events instead).
     composing: Rc<Cell<bool>>,
 }
 
+#[derive(Clone)]
+struct Pipe {
+    textarea: HtmlTextAreaElement,
+    /// Visually-hidden `aria-live="polite"` region announcing the focused cell
+    /// to screen readers as the selection moves (`ambre-spec-accessibility.md`,
+    /// CHROME-023).
+    live: Element,
+}
+
 impl TextInput {
+    /// A pipe with no DOM behind it, so a view can be built and driven by a
+    /// host test. Focus, clear, naming and announcing do nothing.
+    pub fn detached() -> Self {
+        Self {
+            dom: None,
+            composing: Rc::new(Cell::new(false)),
+        }
+    }
+
     /// Build the `<textarea class="ambre-input">` pipe and attach it under `parent`
     /// (the canvas's `position: relative` cell). Styling -- transparent
     /// text/caret/background, `pointer-events: none` -- lives in the app
@@ -128,15 +145,22 @@ impl TextInput {
         parent.append_child(&live).expect("attach a11y live region");
 
         Self {
-            textarea,
-            live,
+            dom: Some(Pipe { textarea, live }),
             composing: Rc::new(Cell::new(false)),
         }
     }
 
     /// The underlying element (host listeners attach here).
+    ///
+    /// # Panics
+    ///
+    /// On a [`detached`](Self::detached) pipe, which has no element to attach to.
     pub fn element(&self) -> &HtmlTextAreaElement {
-        &self.textarea
+        &self
+            .dom
+            .as_ref()
+            .expect("a detached pipe has no element")
+            .textarea
     }
 
     /// Shared composing flag, handed to the host's `input` listener.
@@ -148,7 +172,8 @@ impl TextInput {
     /// container, and size it to one text line. `transform` (never `top/left`)
     /// keeps it off the layout/paint path and is where the IME popup anchors.
     pub fn set_caret(&self, css_x: f64, css_y: f64, line_height: f64) {
-        let style = self.textarea.style();
+        let Some(dom) = &self.dom else { return };
+        let style = dom.textarea.style();
         let _ = style.set_property("height", &format!("{line_height}px"));
         let _ = style.set_property("transform", &format!("translate({css_x}px, {css_y}px)"));
     }
@@ -157,21 +182,26 @@ impl TextInput {
     /// canvas pointer handler (a click in the content focuses the pipe) and when
     /// an edit session opens.
     pub fn focus(&self) {
-        let _ = self.textarea.focus();
+        if let Some(dom) = &self.dom {
+            let _ = dom.textarea.focus();
+        }
     }
 
     /// Empty the buffer. The host clears after each committed `Text`, and an
     /// edit session clears on open, so the textarea never accumulates state.
     pub fn clear(&self) {
-        self.textarea.set_value("");
+        if let Some(dom) = &self.dom {
+            dom.textarea.set_value("");
+        }
     }
 
     /// Name the pipe after the kind of document the view holds (`CHROME-024`).
     /// The top-level view calls it once it owns the pipe. An embedded child
     /// never does, since the pipe still belongs to the document around it.
     pub fn name_content(&self, kind: ContentKind) {
-        let _ = self.textarea.set_attribute("aria-label", kind.label());
-        let _ = self
+        let Some(dom) = &self.dom else { return };
+        let _ = dom.textarea.set_attribute("aria-label", kind.label());
+        let _ = dom
             .textarea
             .set_attribute("aria-roledescription", kind.role_description());
     }
@@ -181,7 +211,9 @@ impl TextInput {
     /// edit commits (`ambre-spec-accessibility.md`). Replacing the text content
     /// of an `aria-live` region is what triggers the announcement.
     pub fn announce(&self, text: &str) {
-        self.live.set_text_content(Some(text));
+        if let Some(dom) = &self.dom {
+            dom.live.set_text_content(Some(text));
+        }
     }
 }
 

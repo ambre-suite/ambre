@@ -55,8 +55,8 @@ editor and not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-061` | `POST` | A double-click on a note or a text element MUST open its editor with the body kept. | this spec section 4 | none | unheld -- the two entries differ only in what the editor is seeded with, and no test opens either; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-197` | `POST` | A double-click MUST leave the caret at the end of the kept body, not select it. | this spec section 4 | none | unheld -- the shared core seeds the caret at the end on its first flush, and nothing drives the Toile entry; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-061` | `POST` | A double-click on a note or a text element MUST open its editor with the body kept. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_double_click_keeps_the_body_and_a_close_writes_it_once` -- a double-click through the view opens the editor seeded with the sticky's body | none | verified |
+| `TOILE-UI-197` | `POST` | A double-click MUST leave the caret at the end of the kept body, not select it. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_double_click_keeps_the_body_and_a_close_writes_it_once` -- two keystrokes after the open extend the body rather than replace it | none | verified |
 | `TOILE-UI-198` | `POST` | A click on an element that is already the whole selection MUST open its editor, so a second click edits what the first selected. | this spec section 4 | none | unheld -- the press arms a candidate and the release opens it, and no test drives a press and a release; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-199` | `FAIL` | Given a press that moved before its release, the click MUST NOT open an editor: a drag is a move, not an entry. | this spec section 4 | none | unheld -- the release compares the travel against the click slop, and no test drives a drag over a selected element; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-200` | `POST` | Opening an editor MUST make its element the whole selection, so the chrome tracks what is being typed into. | this spec section 4 | none | unheld -- the open overwrites the selection with the one id, and no test reads the selection after an open; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -76,15 +76,17 @@ editor and not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | none | unheld -- `Escape` closes the editor and the same key clears a selection when none is open, so the two behaviours share one handler and neither is driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_double_click_keeps_the_body_and_a_close_writes_it_once` -- two keystrokes, then `Escape` and a frame, leave as one `SetText` carrying the opened body as its base | none | verified |
 | `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the merge runs two character diffs per close, capped at 256 edit steps, and no bench measures it at the size the budget names; lands with the `A note close holds its budget` Story (`ambre-roadmap.md` E7) | untested |
 | `TOILE-UI-206` | `POST` | Leaving the editor MUST keep its element selected, so the next gesture acts on what was just typed into. | this spec section 4 | none | unheld -- the selection is set at the open and the close does not touch it, and no test reads it after a close; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-064` | `POST` | A body edit MUST be one undo item, however many keystrokes it took. | this spec section 3; `TOILE-014` | none | unheld -- the editor holds the buffer and sends one whole-body write when it closes, so the granularity holds by construction, and nothing drives an edit and counts the items; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | none | unheld -- the core answers nothing when the buffer matches the body it was seeded with, and no test closes an untouched editor; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | `ambre_toile::ui::view::view_tests::an_untouched_editor_closes_without_a_write` -- an editor opened and closed through the view sends no command | none | verified |
 | `TOILE-UI-208` | `FRAME` | A commit MUST NOT touch anything but the body: not the bounds, not the style, not the camera, not the tool. | this spec section 3 | none | unheld -- one command carries the id and the text, and no test reads what a close leaves alone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-209` | `FAIL` | Given a locked element, the screen MUST NOT show a body the write will be refused (`TOILE-033`). | this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_locked_element_refuses_a_text_write` -- it reads a locked sticky's body back unchanged after the write | none | verified |
 | `TOILE-UI-210` | `FAIL` | Given a pan that carries the edited element off screen, the editor MUST NOT close: scrolling is not leaving. | this spec section 4 | structural -- the editor resolves its target's geometry from the selection data Logic sends, off-screen included, so a culled element no longer reads as gone | none | verified |
-| `TOILE-UI-387` | `FAIL` | Given an element a peer deletes while the editor is open on it, the editor MUST close and tell the user the element is gone. | this spec section 4; `features/ambre-spec-toile-selection.md` (`TOILE-UI-385`) | none | fails -- the editor stays open, its close names an id the board lost, the Logic thread answers an unknown-element error and the typed text is lost in silence, section 6; lands with the `An editor closes on an element a peer deleted` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-387` | `FAIL` | Given an element a peer deletes while the editor is open on it, the editor MUST close and tell the user the element is gone. | this spec section 4; `features/ambre-spec-toile-selection.md` (`TOILE-UI-385`) | `ambre_toile::ui::view::view_tests::an_editor_on_an_element_a_peer_deleted_closes_without_a_write_and_says_so` -- the frame drops the element, the refetch answers it missing, and the editor closes with no write and one notice | none | verified |
+| `TOILE-UI-388` | `FAIL` | Given an arrow a peer deletes while its caption is open in the editor, the editor MUST close with no write and tell the user the arrow is gone. | this spec section 4; `features/ambre-spec-toile-connectors.md` (`TOILE-045`) | `ambre_toile::ui::view::view_tests::a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_so` -- the frame drops the arrow, and the editor closes with no write and one notice. It reads absence as deletion, which holds while no pass culls a connector | none | verified |
+| `TOILE-UI-389` | `FAIL` | Given a closing write the board refuses because its target is gone, the user MUST be told once that the edit was not saved. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_write_refused_for_its_lost_target_is_told_and_another_refusal_is_not` -- a body closed blind before the first selection answer: the refusal naming it raises one notice, a second raises none, and a refusal naming another id raises none | none | verified |
 
 * **Budget.** a keystroke to a draft under 2 ms and text layout of a dirty paragraph under 2 ms
   (`ambre-spec-budgets.md section 1` and section 5.B). The editor echoes locally and shapes at paint
@@ -92,11 +94,10 @@ editor and not restated here.
   No figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 13 `verified`, 1 `failing`, 25 `untested`, 1 `unimplemented`. What holds is the
-  body's look under edit, and a close that keeps a peer's edit, on the screen as in the document
-  (`TOILE-UI-381`, `TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or
-  closes the editor, and the shared-text substrate (`TOILE-065`). The failure is an editor on an element
-  a peer deleted.
+* **Verification.** 20 `verified`, 21 `untested`, 1 `unimplemented`. What holds is the body's look
+  under edit, and a double-click and a close driven through the view. A close keeps a peer's edit
+  (`TOILE-UI-381`, `TOILE-UI-382`). An editor whose target a peer deleted closes with a notice. What
+  is loose is the other entries and the shared-text substrate (`TOILE-065`).
 
 ---
 
@@ -108,8 +109,10 @@ editor and not restated here.
 | types "hello" into a note | types "world" into the same note | both words, merged character by character | the same body holding both words, once both edits arrive (`TOILE-030`) | `logic::convergence_tests::two_authors_typing_in_one_note_both_keep_their_words` |
 | types "please" into a note | has the same note open, and adds "and eggs" | both changes, merged from the body Bob opened on | both changes, from the moment Bob leaves the editor (`TOILE-UI-381`, `TOILE-UI-382`) | `logic::convergence_tests::an_open_editor_keeps_a_peers_edit` |
 | leaves the editor without changing anything | watches | nothing: an unchanged body is no write | no change, and no undo item | none -- section 6 |
-| deletes the note being edited elsewhere | is editing it | the deletion | Bob's editor closing on its own, and his half-typed body written back or refused | none, and the rule fails today -- section 6 |
-| pans the board while editing | watches | nothing | Alice's editor closing the moment the note leaves the screen (`TOILE-UI-210`) | none, and the rule fails today -- section 6 |
+| deletes the note being edited elsewhere | is editing it | the deletion | Bob's editor closing on its own, his half-typed body dropped, and a notice saying why (`TOILE-UI-387`) | `ui::view::view_tests::an_editor_on_an_element_a_peer_deleted_closes_without_a_write_and_says_so` |
+| deletes the arrow whose caption is being edited | is editing it | the deletion | Bob's editor closing on its own, with the same notice (`TOILE-UI-388`) | `ui::view::view_tests::a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_so` |
+| deletes the note before Bob's view has its data | has just opened it | the deletion | Bob's editor closing, its write refused, and the same notice (`TOILE-UI-389`) | `ui::view::view_tests::a_write_refused_for_its_lost_target_is_told_and_another_refusal_is_not` |
+| pans the board while editing | watches | nothing | Alice's editor staying open while the note is off screen (`TOILE-UI-210`) | structural |
 
 The second row is the only one with two writers: the body is a text they merge, not one value they
 race for. Every other row of this table is about one user's own editor.
@@ -197,9 +200,12 @@ text, then the typed one. Past 256 edit steps a side becomes one run between its
 | the space bar, in the same situation | pans instead: space is excluded from entry (`features/ambre-spec-toile-viewport.md`) |
 | `Escape` | commits and closes; the element stays selected (`TOILE-UI-062`, `TOILE-UI-206`) |
 | a click outside the element | commits and closes the same way |
-| a pan that carries the element off screen | closes the editor and commits, which it must not (`TOILE-UI-210`) |
+| a peer deletes the element under edit | closes with no write, and a warning notice says the edit was not saved (`TOILE-UI-387`) |
+| a peer deletes the arrow whose caption is under edit | closes with no write and the same notice (`TOILE-UI-388`) |
+| the board refuses the closing write because its target is gone | the same notice, once (`TOILE-UI-389`) |
+| a pan that carries the element off screen | keeps the editor open (`TOILE-UI-210`); a frame's title does not yet (`TOILE-UI-390`) |
 | copy, cut and paste with an editor open | act on the characters, not the elements (`features/ambre-spec-toile-clipboard.md`) |
-| a double-click on a connector | would open the same editor on its caption, and cannot: no connector is pickable (`TOILE-UI-035`) |
+| a double-click on a connector | opens the same editor on its caption (`TOILE-UI-035`) |
 
 **What the user sees.** A caret blinks on a one-second cycle, so the field reads as editable
 (`TOILE-UI-192`). The selection band and the glyphs are painted over the element in the overlay
@@ -233,18 +239,14 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
 * **A peer's edit still in flight at the close.** The echo merges the body the viewport shows. An edit
   Logic has applied but whose viewport has not reached the view yet is missing from the echo. It was
   never on screen, so nothing leaves it (`TOILE-UI-382` holds), and it appears with that viewport.
-* **An editor outlives its deleted element** (`TOILE-UI-387`). The selection drops an id a peer
-  deleted, but the editor does not watch that answer. Its close names the lost id, and the typed text
-  vanishes with no word to the user. The fix closes the editor on that answer and says why.
 * **A long clash duplicates text.** Past 256 edit steps, each side is one run. Two such runs that
   overlap keep both, with the base text they share written twice. A person must then delete one copy.
 * **Formatting applies to the element, not to a range** (`TOILE-UI-065`). Bold, italic, the family and
   the size live in the element's style register, so a word cannot be emphasized inside a sentence.
   The controls in the panel and the floating bar look like text controls and act on the whole element
   (`features/ambre-spec-toile-styles.md`).
-* **No gesture that opens or closes the editor has a test** (`TOILE-UI-059` to `TOILE-UI-062`,
-  `TOILE-UI-193` to `TOILE-UI-210`). Four entries, one exit, and nothing drives any of them: a
-  regression in the open path would ship silently. What is held is what the body looks like once it is
-  open, which is the half that does not involve the user.
+* **Three of the four entries have no test** (`TOILE-UI-059`, `TOILE-UI-060`, `TOILE-UI-193` to
+  `TOILE-UI-205`). The double-click and the exit are driven through the view. Placing a note, typing
+  over a selection and a second click are not, so a regression there would ship silently.
 * **A body has no wrap width of its own.** The editor wraps to the element's width, so narrowing a note
   reflows its body and nothing bounds the result: text can overflow the card.

@@ -20,14 +20,18 @@ use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
     DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
-    PresencePayload, StatsRequestKind, ThreadId, ToileCommand, ToileEvent, Viewport,
+    PresencePayload, StatsRequestKind, ThreadId, ToileCommand, ToileError, ToileEvent, Viewport,
 };
+
+/// What the user is told when an edit is lost with its target
+/// (`TOILE-UI-387`, `TOILE-UI-388`, `TOILE-UI-389`).
+const EDIT_LOST: &str = "Someone deleted what you were editing. Your edit was not saved.";
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
 };
 use ambre_canvas::{
-    BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
-    PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
+    BusyPublisher, ContentRepaint, FrameStats, InputEvent, NoticePublisher, OverlayRepaint,
+    PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl,
 };
 use ambre_draw::kinetic::Release;
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
@@ -222,6 +226,9 @@ pub struct ToileView {
     /// The busy level the chrome reads while the outbox holds anything
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
+    /// What the shell shows the user when the board cannot show it, such as
+    /// an edit lost with its element (`TOILE-UI-387`).
+    notices: NoticePublisher,
 
     /// The render-thread camera (world <-> screen), updated locally on pan/zoom.
     cam: ViewportTransform,
@@ -279,6 +286,9 @@ pub struct ToileView {
     /// input time and applies them during paint, when the `FontContext` is
     /// available (see `edit.rs`).
     editor: Option<InlineEditor>,
+    /// The target of the last write an editor sent, kept until the board
+    /// refuses it as gone (`TOILE-UI-389`).
+    edit_written: Option<EditTarget>,
     /// A freshly-created element (Sticky / Text tool) whose editor must open once
     /// the matching `DisplayViewport` has landed (nothing knows its geometry
     /// before then). Consumed at the end of `update`.
@@ -581,6 +591,7 @@ impl ToileView {
         embedded: bool,
         perf_pub: PerfPublisher,
         busy_pub: BusyPublisher,
+        notices: NoticePublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
@@ -610,6 +621,7 @@ impl ToileView {
             document_id,
             outbox: Outbox::new(to_logic.clone()),
             busy_pub,
+            notices,
             to_logic,
             from_logic,
             cam: ViewportTransform::new(canvas_width, canvas_height),
@@ -632,6 +644,7 @@ impl ToileView {
             find_focus: None,
             pending_find_focus: None,
             editor: None,
+            edit_written: None,
             edit_pending_open: None,
             edit_open_on_create: None,
             next_create_token: 1,
@@ -871,6 +884,7 @@ impl ToileView {
                 self.display = dv;
                 self.data_dirty = true;
                 self.request_missing_media();
+                self.drop_lost_caption_editor();
                 // A selected arrow that is no longer in the frame is a deleted
                 // arrow, so the selection goes with it. This reads absence as
                 // deletion, which holds only while the cull spares every
@@ -987,6 +1001,7 @@ impl ToileView {
                 // An element a peer deleted leaves the selection, so no later
                 // command names it (`TOILE-UI-385`).
                 super::tool::drop_missing(&mut self.selection, &missing);
+                self.drop_lost_editor(&missing);
                 self.selection_data = elements;
                 self.selection_framed = framed;
                 self.needs_full = true;
@@ -1013,6 +1028,7 @@ impl ToileView {
             }
             ToileEvent::Error(e) => {
                 tracing::warn!("Toile rejected: {e}");
+                self.notice_refused_edit(&e);
                 // A rejected transform never yields a new frame; drop the
                 // optimistic preview so the object reverts to its real (unchanged)
                 // geometry.
@@ -2976,6 +2992,66 @@ impl ToileView {
         self.text_input.focus();
     }
 
+    /// Close a body editor whose element the selection answer reports missing
+    /// (`TOILE-UI-387`). The body editor is the selection, so the refetch a
+    /// board change triggers covers it. A title editor clears the selection,
+    /// and is caught by the refusal instead (`TOILE-UI-389`).
+    fn drop_lost_editor(&mut self, missing: &[ElementId]) {
+        if self
+            .editor
+            .as_ref()
+            .and_then(|ed| ed.target().element())
+            .is_some_and(|id| missing.contains(id))
+        {
+            self.close_lost_editor();
+        }
+    }
+
+    /// Close a caption editor whose arrow left the frame (`TOILE-UI-388`).
+    /// Absence reads as deletion only while the cull spares every connector
+    /// (`TOILE-045`), the same bet the arrow selection makes.
+    fn drop_lost_caption_editor(&mut self) {
+        if self
+            .editor
+            .as_ref()
+            .and_then(|ed| ed.target().connector())
+            .is_some_and(|c| self.find_connector(c).is_none())
+        {
+            self.close_lost_editor();
+        }
+    }
+
+    /// Close the editor with no write, and have the shell say why. The
+    /// deferred close would name a target the board lost, and the typed text
+    /// would vanish in silence.
+    fn close_lost_editor(&mut self) {
+        self.editor = None;
+        self.edit_closing = false;
+        self.edit_pointer_down = false;
+        // Repaint content: the static pass no longer suppresses a body.
+        self.needs_full = true;
+        self.notices.publish(EDIT_LOST);
+    }
+
+    /// Tell the user when the board refuses the editor's last write because
+    /// its target is gone (`TOILE-UI-389`). This catches what the two drops
+    /// above cannot see: a title, or a delete that lands before the first
+    /// selection answer. It speaks once per write.
+    fn notice_refused_edit(&mut self, error: &ToileError) {
+        let named = match (&self.edit_written, error) {
+            (
+                Some(EditTarget::Element(id) | EditTarget::FrameTitle(id)),
+                ToileError::NoSuchElement(s),
+            ) => id.0 == *s,
+            (Some(EditTarget::ConnectorLabel(id)), ToileError::NoSuchConnector(s)) => id.0 == *s,
+            _ => false,
+        };
+        if named {
+            self.edit_written = None;
+            self.notices.publish(EDIT_LOST);
+        }
+    }
+
     /// Request a deferred commit + close: the buffer is written back as `SetText`
     /// on the next paint (after a final intent flush).
     fn request_close_editor(&mut self) {
@@ -3192,6 +3268,7 @@ impl ToileView {
                 // flash the pre-edit body for the frames before the CRDT
                 // round-trip returns a fresh viewport (`toile-viewport`). The
                 // incoming viewport carries the same text.
+                self.edit_written = Some(target.clone());
                 match target {
                     EditTarget::Element(id) => {
                         // A locked element's write is refused (`TOILE-033`). The
@@ -3462,9 +3539,9 @@ impl ToileView {
         }
     }
 
-    pub fn paint_content(
+    pub fn paint_content<S: ambre_draw::DrawSurface>(
         &mut self,
-        surface: &mut WgpuSurface<'_>,
+        surface: &mut S,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
         _strip: Option<Rect>,
@@ -3490,9 +3567,9 @@ impl ToileView {
         );
     }
 
-    pub fn paint_overlay(
+    pub fn paint_overlay<S: ambre_draw::DrawSurface>(
         &mut self,
-        surface: &mut WgpuSurface<'_>,
+        surface: &mut S,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
         stats: &FrameStats,
@@ -3982,6 +4059,10 @@ fn canvas_client_offset() -> (f64, f64) {
         })
         .unwrap_or((0.0, 0.0))
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod view_tests;
 
 #[cfg(test)]
 mod wheel_tests {

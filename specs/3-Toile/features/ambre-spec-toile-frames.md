@@ -62,17 +62,18 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-261` | `POST` | A double-click on a frame's title MUST open the editor on that title, carrying the title it replaces. | this spec section 4 | `ambre_toile::ui::tool::tests::a_double_click_on_a_frames_title_edits_that_title` -- the band routes the gesture to the title; `ambre_toile::ui::edit::tests::the_editor_opens_on_a_frames_title` -- the editor targets the title, not the frame's body | none | verified |
 | `TOILE-262` | `FRAME` | An edit that types nothing over a frame nobody named MUST rename nothing: the placeholder is never written. | this spec section 4 | `ambre_toile::ui::edit::tests::an_untouched_placeholder_commits_nothing` | none | verified |
+| `TOILE-UI-390` | `FAIL` | Given a pan that carries a frame off screen while its title is edited, the editor MUST NOT close: scrolling is not leaving. | this spec section 4; `features/ambre-spec-toile-text-editing.md` (`TOILE-UI-210`) | none | fails -- the title editor clears the selection, so it reads the frame from the culled set alone, and a culled frame reads as gone: the editor closes and renames, section 6; lands with the `A title editor survives a pan` Story (`ambre-roadmap.md` E7) | failing |
 
 * **Budget.** the membership change under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. The clamp re-materializes the whole paint order per moved
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 17 `verified`, 1 `partial`, 4 `untested`. What holds is membership as data, the
-  title beside it, and what a press or a double-click on it does. An element joins one frame,
-  detaches from its group and paints after it in one undo item, and the notes and the name converge.
-  What is loose is what the membership gesture refuses or skips, and the title's glyphs, which a
-  host with no font shapes none of.
+* **Verification.** 17 `verified`, 1 `partial`, 1 `failing`, 4 `untested`. What holds is membership
+  as data, the title beside it, and what a press or a double-click on it does. An element joins one
+  frame, detaches from its group and paints after it in one undo item, and the notes and the name
+  converge. What is loose is what the membership gesture refuses or skips, and the title's glyphs.
+  The failure is a title editor that closes on a pan.
 
 ---
 
@@ -153,6 +154,7 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 | the frame tool, dragged on the board | `CreateElement` with the frame kind (`features/ambre-spec-toile-tools.md`) |
 | a press on a frame's title | nothing: the selection is the view's own (`TOILE-254`, `TOILE-256`) |
 | a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-261`, `TOILE-262`) |
+| a pan that carries the frame off screen, its title under edit | closes the editor and renames, which it must not (`TOILE-UI-390`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
 | "Remove from frame", in the same menu | `RemoveFromFrames` naming the selection (`TOILE-UI-149`), offered when a frame holds part of it (`TOILE-UI-384`) |
 | typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
@@ -214,6 +216,10 @@ implied by position.
 * **The edited title does not hold its size through a zoom.** The editor's size is pinned when it
   opens, from the camera of that moment, while the painted band is screen space. Zooming mid-edit
   grows or shrinks the text being typed, and the committed title returns to the band's own size.
+* **A title editor closes on a pan** (`TOILE-UI-390`). The body editor reads its element from the
+  selection data, off screen included. The title editor clears the selection so a Delete cannot take
+  the frame, and so it reads the culled set alone. The fix fetches the edited frame whatever the
+  selection holds.
 * **A resized frame does not carry its members.** The members keep their world positions, so shrinking
   a frame leaves them outside it and nothing says whether they are still members. They are.
 * **Nesting a frame in a frame is neither allowed nor refused.** The handler refuses only the frame

@@ -91,7 +91,8 @@ crates, so it must sit downstream of them; the GPU primitives must sit upstream 
 
 **The driver method set.** Each variant of `AppView` exposes these as inherent methods, and
 `FrameHost` matches over the enum to call them. A view names `WgpuSurface` and no other GPU type,
-so an application tests its view on the host tier with no browser.
+so an application tests its view on the host tier with no browser. Toile's two paint passes take
+any `DrawSurface`, so its host tests paint them on a recording surface.
 
 ```rust
 // inherent methods on each app view (for example ambre_trame::ui::TrameView),

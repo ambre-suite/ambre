@@ -67,7 +67,7 @@ pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
-pub use intent::FilterOpenPublisher;
+pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};

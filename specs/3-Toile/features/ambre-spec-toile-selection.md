@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-226` | `INV` | The whole edge of the selection box MUST be grabbable, even though only the corners draw a square. | this spec section 3 | `ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses` | none | verified |
 | `TOILE-UI-227` | `INV` | A handle MUST answer a hover only when exactly one element is selected, the select tool is armed and no drag is in flight. | this spec section 3 | `ambre_toile::ui::tool::tests::hover_handle_only_for_a_single_select_at_rest` | none | verified |
 | `TOILE-UI-228` | `INV` | A selection MUST NOT reach any container: it is per user and per moment. | this spec section 4; `ambre-spec-toile-schema.md section 2` | structural -- the id list is a field on the view and the schema declares no container for it | none | verified |
-| `TOILE-UI-385` | `INV` | A selection MUST drop an element the board no longer holds, a peer's deletion included. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_data_names_the_ids_a_peer_deleted` -- a peer's delete applied, the selection's data names the lost id and only it; `ambre_toile::ui::tool::tests::a_selection_drops_the_ids_the_board_lost` -- the view's reduction drops those ids and keeps the others in order | none | verified |
+| `TOILE-UI-385` | `INV` | A selection MUST drop an element the board no longer holds, a peer's deletion included. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_data_names_the_ids_a_peer_deleted` -- a peer's delete applied, the selection's data names the lost id and only it; `ambre_toile::ui::tool::tests::a_selection_drops_the_ids_the_board_lost` -- the view's reduction drops those ids and keeps the others in order; `ambre_toile::ui::view::view_tests::a_peer_deletion_reaches_the_selection_through_update` -- that answer, drained by the frame, reaches the view's selection | none | verified |
 | `TOILE-UI-035` | `INV` | A connector MUST be pickable: a click on an arrow, on its line or on its caption, MUST be able to name it. | this spec section 2; `features/ambre-spec-toile-connectors.md section 3` | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow`; `ambre_toile::ui::label::tests::a_click_on_the_caption_picks_the_arrow`; `ambre_toile::ui::label::tests::the_top_most_arrow_wins` | none | verified |
 | `TOILE-UI-349` | `INV` | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 4` | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order`; `ambre_toile::ui::arrow::tests::a_release_over_a_shape_re_aims_that_end` -- together, what a selected arrow answers; structural -- the selection is its own field beside the element selection, exclusive with it (`TOILE-UI-354`), and an arrow has no box, so it joins no marquee, group or transform | none | verified |
 | `TOILE-UI-386` | `INV` | A selected arrow MUST stay selected wherever the camera moves, and leave the selection only when the board loses it. | this spec section 2 | none | unheld -- the view reads an arrow's absence from the culled set as its deletion, which holds only while the cull spares every connector (`TOILE-045`), section 5; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | untested |
@@ -44,8 +44,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-007` | `POST` | A click MUST resolve to the top-most enclosing group unless the user has entered that group's scope. | this spec section 2 | `ambre_toile::ui::tool::tests::click_on_group_member_selects_top_most_group`; `ambre_toile::ui::tool::tests::scoped_click_selects_the_member_inside_the_scope`; `ambre_toile::ui::tool::tests::ungrouped_element_resolves_to_itself`; `ambre_toile::ui::tool::tests::pointer_down_on_a_member_selects_the_group` | none | verified |
-| `TOILE-UI-232` | `POST` | A click on an element already selected MUST keep the whole selection, so a multi-selection drags as one. | this spec section 3 | none | unheld -- no test presses on a member of a selection it did not just make; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-233` | `POST` | A click on empty board MUST clear the selection. | this spec section 3 | none | unheld -- the press arms a marquee and clears nothing, so the selection survives until the release, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-232` | `POST` | A click on an element already selected MUST keep the whole selection, so a multi-selection drags as one. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_click_on_a_selected_element_keeps_the_whole_selection` -- a marquee takes two stickies, and a press then a release on one keeps both | none | verified |
+| `TOILE-UI-233` | `POST` | A click on empty board MUST clear the selection. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_click_selects_and_a_click_on_empty_board_clears` -- the view driven by a press and a release, the selection read after each click | none | verified |
 | `TOILE-UI-234` | `FRAME` | A press MUST NOT write to the document. | this spec section 4 | type-level -- the press returns a local selection or nothing, and the command variant is reachable only from a release that moved | none | verified |
 
 ### 1.3 Drag over empty board
@@ -63,7 +63,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | none | unheld -- nothing drives the double-click handler, which lives on the view; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | none | unheld -- nothing drives the key handler, and section 3 read as two presses until this row; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | `ambre_toile::ui::view::view_tests::escape_leaves_the_scope_and_clears_the_selection_in_one_press` -- one key event through the view empties both | none | verified |
 | `TOILE-UI-240` | `FRAME` | A double-click on an element in no group MUST NOT change the scope. | this spec section 3 | none | unheld -- nothing drives the double-click handler; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Select the whole board
@@ -81,10 +81,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 22 `verified`, 1 `failing`, 8 `untested`. What holds is the geometry and select-all with
-  the pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A marquee
-  returns a click's target and judges the rotated shape as drawn. What is loose is the gestures, and
-  the one failure is the hairline.
+* **Verification.** 25 `verified`, 1 `failing`, 5 `untested`. What holds is the geometry and
+  select-all with the pick's exclusions. A locked element wears no box, and a deleted one leaves the
+  selection. A click, a marquee and `Escape` are driven through the view. What is loose is the
+  double-click into a scope, and the one failure is the hairline.
 
 ---
 
@@ -192,17 +192,13 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 * **Nothing adds to a selection.** There is no modifier that extends it: a click replaces, and a
   marquee replaces. A user cannot select two elements far apart without a marquee that covers what
   lies between them.
-* **The group scope has no test and no visible state.** Entering and leaving it is a field on the
-  view, and nothing on screen says which level a click will reach.
+* **The group scope has no visible state, and entering it has no test.** It is a field on the view,
+  and nothing on screen says which level a click will reach.
 * **A selected arrow is dropped when it leaves the frame** (`TOILE-UI-386`). The view reads its absence
   from the culled set as its deletion. That holds while every connector ships at every camera. Once
   the cull drops off-screen arrows, the selection-data request must name the arrow and read its loss.
 * **A scope on a deleted group lingers.** A peer that deletes or ungroups the entered group leaves the
   scope naming an id the board lost. It is harmless: no hit lies inside it, so every click resolves to
   the top-most group, and `Escape` clears it.
-* **The view's wiring of a board change has no test** (`TOILE-UI-384`, `TOILE-UI-385`). The refetch and
-  the drop are pure reductions with tests, but the dispatch that calls them lives on the view, which
-  no test builds. The selection, its data, the stale flag, the arrow and the scope belong in one
-  state with pure methods a host test can drive.
 * **A rotate handle has no angle read-out and no constraint.** The design names neither a snap to
   fifteen degrees nor a displayed angle, so a user cannot rotate to a round value on purpose.
