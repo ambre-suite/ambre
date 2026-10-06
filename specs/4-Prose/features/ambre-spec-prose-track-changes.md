@@ -40,14 +40,14 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-FEAT-304` | `POST` | With suggestion mode off, text typed inside a suggestion MUST join no suggestion. | this spec section 3 | `ambre_prose::logic::suggestions::tests::plain_typing_inside_a_suggestion_joins_none` | none | verified |
 | `PROSE-FEAT-089` | `FRAME` | Turning suggestion mode on or off MUST leave every pending suggestion untouched: the command MUST NOT apply or cancel any of them. | this spec section 3 | `ambre_prose::logic::suggestions::tests::turning_the_mode_off_leaves_the_pending_ones_and_marks_nothing_new` | none | verified |
 | `PROSE-FEAT-300` | `POST` | With suggestion mode on, a command other than typing, deleting, a comment, a suggestion command or the history MUST be refused, never applied unrecorded. | this spec section 3 | `ambre_prose::logic::suggestions::tests::a_structure_command_is_refused_while_suggesting` | none | verified |
-| `PROSE-FEAT-301` | `POST` | A split, a join, a block command or a format change made while suggesting MUST be recorded as a suggestion the author accepts or rejects. | this spec section 6 | not built | unbuilt -- lands with the "Suggestions beyond typing" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-301` | `POST` | A split, a join, a block command or a format change made while suggesting MUST be recorded as a suggestion the author accepts or rejects. | this spec section 6 | not built | unbuilt -- lands with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Type while suggesting
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-265` | `POST` | Text typed while suggesting MUST be marked as a suggested insertion. | this spec section 3 | `ambre_prose::logic::suggestions::tests::typed_text_becomes_a_suggested_insertion_by_its_author` | none | verified |
-| `PROSE-FEAT-085` | `POST` | Consecutive edits by one peer MUST share an identity while they stay adjacent and inside the merge window. | this spec section 3 | not built | unbuilt -- lands with the "Suggestions beyond typing" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-085` | `POST` | Consecutive edits by one peer MUST share an identity while they stay adjacent and inside the merge window. | this spec section 3 | not built | unbuilt -- lands with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-086` | `POST` | A caret move to a non-adjacent position MUST start a new identity. | this spec section 3 | `ambre_prose::logic::suggestions::tests::a_keystroke_away_from_the_burst_starts_a_new_suggestion` | none | verified |
 | `PROSE-FEAT-266` | `FRAME` | Typing while suggesting MUST NOT alter the marks of any other identity, nor the text outside the range it inserted. | this spec section 3 | `ambre_prose::logic::suggestions::tests::typing_inside_another_suggestion_leaves_its_span_alone` | none | verified |
 | `PROSE-FEAT-302` | `POST` | An undo after an intercepted edit MUST take back its text, its mark and its entry together. | this spec section 3 | `ambre_prose::logic::suggestions::tests::an_undo_takes_back_the_whole_suggestion` | none | verified |
@@ -97,7 +97,7 @@ of this feature: the suggestion converges under one, and it is painted under the
   `ZK-001` seals every payload before it leaves the client.
 * **Verification.** 38 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
   on an undo interval no document defines. `PROSE-FEAT-301` is the structure a reviewer cannot
-  suggest yet. Both land with the "Suggestions beyond typing" Story (`ambre-roadmap.md` E5).
+  suggest yet. Both land with the `Suggestions beyond typing` Story (`ambre-roadmap.md` E5).
 
   `PROSE-FEAT-010` is also held by a property: any run of typing and deleting, then an accept-all,
   leaves the text the same edits made plainly would.

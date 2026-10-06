@@ -157,7 +157,7 @@ than read literally.
 The shared chords, the empty-query clear and the reveal are `ambre-spec-find.md section 4`; the
 reveal is the caret's own (`features/ambre-spec-prose-selection.md section 2`). The search panel is
 chrome (`ambre-spec-chrome.md`). One match session with a live cursor, in every application, is the
-"One find and replace" Story (`ambre-roadmap.md` E8).
+`One find and replace` Story (`ambre-roadmap.md` E8).
 
 ---
 

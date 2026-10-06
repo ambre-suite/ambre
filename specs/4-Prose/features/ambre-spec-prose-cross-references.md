@@ -193,4 +193,4 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
   is declared and unwritten (`ambre-spec-prose-schema.md section 3`), and the mark key is not
   declared at all. The generated list is a derived block like the table of contents rather than a
   reference.
-  Both designs are the "The later writing set" Story (`ambre-roadmap.md` POST-V1).
+  Both designs are the `The later writing set` Story (`ambre-roadmap.md` POST-V1).

@@ -190,6 +190,27 @@ class ShortNames(unittest.TestCase):
         self.assertEqual({}, spec_refs.short_names({"ambre-roadmap.md": Path("a")}))
 
 
+class QuotedStories(unittest.TestCase):
+    """A Story name is backticked, because a tool finds it by its backticks."""
+
+    def test_a_quoted_name_is_reported_on_its_line(self):
+        text = "row\nlands with the \"Images\" Story (`ambre-roadmap.md` E7)\n"
+        self.assertEqual([(2, "Images")], list(spec_refs.quoted_stories(text)))
+
+    def test_a_name_wrapped_onto_the_next_line_is_seen(self):
+        text = "Answered by the \"A board\n  costs what it shows\" Story."
+        self.assertEqual([(1, "A board\n  costs what it shows")],
+                         list(spec_refs.quoted_stories(text)))
+
+    def test_a_backticked_name_is_not_reported(self):
+        text = "lands with the `Images` Story (`ambre-roadmap.md` E7)"
+        self.assertEqual([], list(spec_refs.quoted_stories(text)))
+
+    def test_an_earlier_quotation_is_not_swallowed(self):
+        text = "a \"label\" names the `Images` Story, and the \"PDF export\" Story"
+        self.assertEqual([(1, "PDF export")], list(spec_refs.quoted_stories(text)))
+
+
 class Duplicates(unittest.TestCase):
     """One file name, one document, because a citation carries the name alone."""
 

@@ -148,7 +148,7 @@ depends on, and it depends on nothing.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing further is owed here.** Pinch and the zoom it carries belong to the "One zoom model"
+* **Nothing further is owed here.** Pinch and the zoom it carries belong to the `One zoom model`
   Story (`ambre-roadmap.md` V1).
 
 ---

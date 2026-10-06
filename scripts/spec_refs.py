@@ -72,7 +72,13 @@ number. The range is cut before the path is resolved, so a finding keeps both an
 only the half that rots is reported. A path carrying `*` is a shape rather than a
 file, and it resolves when it matches at least one.
 
-This resolves three namespaces and checks nothing else. It does not grade a
+**The Story name.** A gap binds a row to a roadmap Story by writing its name in
+backticks: `` lands with the `Images` Story (`ambre-roadmap.md` E7) ``. The
+same name in double quotes reads the same to a person and is invisible to a tool
+that parses the gap, so a row drops out of every count bound to its Story. The
+quoted form is refused in a document of the corpus, a record excepted.
+
+This resolves three namespaces, checks the form of a Story name, and nothing else. It does not grade a
 citation, rewrite it into a rule id, or read what the target says.
 
 `specs/reviews/` is out of the corpus, exactly as in `spec_code.py`. A dated
@@ -194,6 +200,18 @@ def code_citations(text: str):
             found = LINE_RANGE.search(head)
             path = (head[: found.start()] if found else head).rstrip("/")
             yield lineno, cited, path, found is not None
+
+
+# A Story name in double quotes. The name may wrap onto the next line, so the
+# class carries the newline; it stops at a quote or a backtick, so it cannot
+# reach back across an earlier quotation, and its length bounds a stray quote.
+QUOTED_STORY = re.compile(r'"([^"`]{1,120})"\s+Story\b')
+
+
+def quoted_stories(text: str):
+    """Yield `(line, name)` for each Story name written in double quotes."""
+    for found in QUOTED_STORY.finditer(text):
+        yield text.count("\n", 0, found.start()) + 1, found.group(1)
 
 
 def code_resolves(path: str) -> bool:
@@ -470,11 +488,16 @@ def main() -> int:
     dead_coords: dict[str, list[str]] = {}
     dead_paths: dict[str, list[str]] = {}
     ranged_paths: dict[str, list[str]] = {}
+    quoted: dict[str, list[str]] = {}
     names = coords = paths = 0
     for path in sources():
         rel = path.relative_to(ROOT)
         text = path.read_text()
         record = is_record(path)
+        if path.suffix == ".md" and not record:
+            for lineno, story in quoted_stories(text):
+                quoted.setdefault(" ".join(story.split()), []).append(
+                    f"{rel}:{lineno}")
         for lineno, cited, target, ranged in code_citations(text):
             paths += 1
             if not code_resolves(target):
@@ -524,6 +547,7 @@ def main() -> int:
     report(dead_coords, "no such section")
     report(dead_paths, "no such file")
     report(ranged_paths, "a line range outside a record")
+    report(quoted, "a Story name in double quotes")
     for name in sorted(shared):
         print(f"\n`{name}` -- one file name, {len(shared[name])} documents")
         for path in shared[name]:
@@ -532,7 +556,7 @@ def main() -> int:
           f"{paths} code paths, {len(known)} documents, "
           f"{len(dead_names)} dead names, {len(dead_coords)} dead coordinates, "
           f"{len(dead_paths)} dead paths, {len(ranged_paths)} line ranges, "
-          f"{len(shared)} shared file names")
+          f"{len(quoted)} quoted Story names, {len(shared)} shared file names")
     if check and shared:
         print(
             "\nERROR: two documents carry one file name, and a citation carries "
@@ -563,6 +587,14 @@ def main() -> int:
             "coordinate (ambre-spec-template.md section 1.G). A range is exact "
             "the day it is written and wrong at the next edit: name the file, and "
             "the symbol where the citation needs one.",
+            file=sys.stderr,
+        )
+        return 1
+    if check and quoted:
+        print(
+            "\nERROR: a Story name is written in double quotes "
+            "(ambre-spec-template.md section 1). A tool reading the gap finds the "
+            "Story by its backticks alone: write the name as `Name` Story.",
             file=sys.stderr,
         )
         return 1

@@ -2,7 +2,7 @@
 
 **Type:** Vertical (feature)
 **Implementation:** implemented -- the shared session the
-"One find and replace" Story (`ambre-roadmap.md` E8) wants is not.
+`One find and replace` Story (`ambre-roadmap.md` E8) wants is not.
 
 > A user looks for a value in a sheet of 100 000 rows. The search runs where the document is, not
 > where the screen is, so a match twenty thousand rows down is found and scrolled to.

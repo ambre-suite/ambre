@@ -300,7 +300,7 @@ parameterized command has no caller (section 6).
   is the re-entrant continuation the recompute already uses.
 * **The three applications name the same events differently.** Trame reports `ImportComplete` and
   `ExportComplete`, Prose reports `ImportCompleted` and `ExportReady`, and only Prose carries a
-  conversion report and a progress model. The "One interop vocabulary" Story (`ambre-roadmap.md` E8)
+  conversion report and a progress model. The `One interop vocabulary` Story (`ambre-roadmap.md` E8)
   unifies them on Prose's names, and this document keeps Trame's until it does.
 * **The performance targets are not benchmarks.** Import and export carry numbers in
   `ambre-spec-budgets.md` with no `criterion` bench behind them, so nothing fails

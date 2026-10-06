@@ -26,8 +26,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-219` | `IO` | A paste of HTML MUST keep its headings, paragraphs, lists, to-do items, code blocks, links and character formatting, Google Docs and Word fragments included. | this spec section 3 | `ambre_prose::logic::clipboard::tests::each_html_fixture_pastes_as_its_golden_says` -- a Word, a Google Docs, a web page and a PDF viewer fixture, each against a golden text | none | verified |
 | `PROSE-UI-220` | `INV` | A paste of HTML MUST insert only text and the formatting this document knows: no script, style, hidden content, embedded object or link outside http, https and mailto MUST reach the document. | this spec section 5 | `ambre_prose::logic::clipboard::html_read::tests::hostile_markup_leaves_only_its_text` | none | verified |
 | `PROSE-UI-224` | `INV` | A paste of HTML MUST NOT turn a page's theme into marks: the style of an element holding blocks, and a body ink black or near it, MUST set no mark. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_web_page_keeps_its_formatting_and_drops_its_theme` | none | verified |
-| `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | not built | unbuilt -- lands with the "Rich paste: tables and pictures" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the "Rich paste: tables and pictures" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the `Rich paste: tables and pictures` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Copy
 
@@ -214,7 +214,7 @@ their chord lists, and decodes none of them itself.
 * **A paste from another Ambre application is not ruled on.** The rich half carries this
   application's own shape, so a paste from the whiteboard or the spreadsheet falls back to plain
   text. Making that structure survive is the
-  "Cross-app rich paste" Story (`ambre-roadmap.md` POST-V1).
+  `Cross-app rich paste` Story (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on the size of a payload.** A copy of a whole document builds it in memory
   twice, once as text and once as bytes. No rule caps it or says what happens when the system
   clipboard refuses it.

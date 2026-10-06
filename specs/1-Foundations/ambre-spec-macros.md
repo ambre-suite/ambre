@@ -144,7 +144,7 @@ version whole (`MACRO-044`). Its runs do not sync: each user runs it alone.
 **Containers.** one per document: a map of macros in the document metadata, sealed like content
 (`MACRO-001`). Each entry is one value that a save replaces whole, never a text that merges
 (`MACRO-044`). Approvals and secret values live in the user's own settings, never in the document.
-Those settings land with the "User settings" Story (`ambre-roadmap.md` E6).
+Those settings land with the `User settings` Story (`ambre-roadmap.md` E6).
 
 **Two parties to a macro.**
 
@@ -366,16 +366,16 @@ local edit came between them; then it takes a step of its own (`MACRO-052`).
 * **An approved call is an exit.** A macro with an approved domain sends what it chooses in clear.
   The approval names the domain, and nothing checks what the macro sends there.
 * **User settings do not exist.** Approvals and secret values need a sealed store that follows a user
-  across devices. It lands with the "User settings" Story (`ambre-roadmap.md` E6).
+  across devices. It lands with the `User settings` Story (`ambre-roadmap.md` E6).
 * **The marketplace is not ruled.** Who hosts it, who vets a publisher, and how a stolen publisher key
-  is revoked all belong to the "Macro marketplace" Story (`ambre-roadmap.md` post-V1).
+  is revoked all belong to the `Macro marketplace` Story (`ambre-roadmap.md` post-V1).
 * **`MACRO-004` inherits the relay's authority on roles.** A lying relay can raise the bound of a
   macro to its running user's role, which it could already grant. The approval, held on the client,
   still bounds the macro. That is why an organization catalog needs a trust anchor and this row does
   not.
 * **Organization catalogs are not ruled.** An organization could approve macros for its members, and
   restrict them to that list. Its signature is worth nothing while the relay decides who its admins
-  are. The catalog waits on the "Organization trust anchor" Story (`ambre-roadmap.md` post-V1).
+  are. The catalog waits on the `Organization trust anchor` Story (`ambre-roadmap.md` post-V1).
 * **A policy binds a client, not a person.** The relay cannot see a macro, so only the client enforces
   a catalog. It stops a mistake or a lure, and it does not stop a member who changes their client.
 * **A run computes on a state that can be stale.** A total read from the fork is written after a peer

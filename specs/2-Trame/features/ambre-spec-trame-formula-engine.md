@@ -310,4 +310,4 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   pass is held behind a `RefCell` that results staged before write-back make redundant. It
   produces no wrong number; it is a cost nothing weighs. The walk and the cycle check are the
   other half, in `features/ambre-spec-trame-engine.md section 6`. Answered by the
-  "A recompute bounded by what changed" Story (`ambre-roadmap.md` E6).
+  `A recompute bounded by what changed` Story (`ambre-roadmap.md` E6).

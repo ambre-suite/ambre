@@ -152,7 +152,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 * **Version history is designed and unbuilt.** The stack dies with the session, and the answer across
   sessions is a named version, not a longer stack. Prose carries a design and Trame carries none, so
   the shape is open -- per document or per application, a write or a fork. It is the
-  "The later writing set" Story (`ambre-roadmap.md` POST-V1), and it stays each application's
+  `The later writing set` Story (`ambre-roadmap.md` POST-V1), and it stays each application's
   until then.
 
 ---
@@ -166,4 +166,4 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 | Where the caret lands after an undo | `4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-UI-045` |
 | The one bounded undo depth | `ambre-spec-ui.md`, `UI-THREAD-016` |
 | Which chords mean undo and redo | `ambre-spec-commands.md` |
-| A named version restored after the session | each application's undo document; the "The later writing set" Story (`ambre-roadmap.md` POST-V1) |
+| A named version restored after the session | each application's undo document; the `The later writing set` Story (`ambre-roadmap.md` POST-V1) |

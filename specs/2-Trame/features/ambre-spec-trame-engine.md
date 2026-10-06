@@ -323,22 +323,22 @@ Each viewport answer carries a version, and the UI drops one older than the last
   recomputes that cell, and a `rows_{sheet}` or `cols_{sheet}` list diff calls the incremental
   methods of section 3.B. A derived cache is rebuilt for the container that changed. The full
   reseed stays the fallback for a snapshot import and for a diff the incremental path cannot
-  classify. Answered by the "Incremental remote apply" Story (`ambre-roadmap.md` E6).
+  classify. Answered by the `Incremental remote apply` Story (`ambre-roadmap.md` E6).
 * **The UI re-fetches the whole viewport on every batch.** A per-batch `DataReset` tells it to,
   where an invalidated-range event would name what changed. Answered by the
-  "Incremental remote apply" Story (`ambre-roadmap.md` E6).
+  `Incremental remote apply` Story (`ambre-roadmap.md` E6).
 * **The sheet indexes are state here and a rebuild in the code.** The active sheet's index is cloned
   and every other sheet's is reconstructed from its full lists, once per write and once per scroll.
   A scroll on one sheet therefore rebuilds every other sheet's index, against the P1 budget on any
   multi-sheet document. **The target materializes the map as state**, invalidated per sheet by a
   structural write or an import. The active entry is shared by borrow rather than by clone.
-  Answered by the "Cached sheet indexes" Story (`ambre-roadmap.md` E6).
+  Answered by the `Cached sheet indexes` Story (`ambre-roadmap.md` E6).
 * **A tab switch resets the engine.** The active sheet is pinned to engine index 0, so which sheet
   is displayed -- a view state -- decides engine identity. Every bound reference therefore has to
   carry a sheet id rather than an index, as a name's definition now does
   (`ambre-spec-trame-named-ranges.md`). **The target interns a sheet index at first sight**, stable
   for the document lifetime. A tab switch then rebuilds the active sheet's display caches alone and
-  resets no engine. Answered by the "Stable engine sheet indexes" Story (`ambre-roadmap.md` E6).
+  resets no engine. Answered by the `Stable engine sheet indexes` Story (`ambre-roadmap.md` E6).
 * **The recompute walks the whole graph.** The cycle check and the topological walk both cover every
   formula cell rather than the dirty closure.
 

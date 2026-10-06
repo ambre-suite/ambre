@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 | `TOILE-137` | `POST` | A pasted frame MUST carry its speaker notes. | this spec section 3; `TOILE-051` | `ambre_toile::logic::convergence_tests::a_pasted_frame_carries_its_notes_and_takes_an_element` -- the notes read back off the copy, and two peers' first edits of them converging, which a scalar field would not | none | verified |
 | `TOILE-138` | `POST` | A pasted frame MUST be able to take an element, as any frame can. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_pasted_frame_carries_its_notes_and_takes_an_element` -- the same frame, copied alone, taking an element afterwards | none | verified |
 | `TOILE-139` | `FRAME` | A paste MUST NOT touch what is already on the board. | this spec section 3 | structural -- every write of a paste goes under an identity minted from the peer and a counter that only grows, so no path reaches an element the board already holds | none | verified |
-| `TOILE-260` | `POST` | A plain paste MUST land the plain text as one text element at the pointer, whatever payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the "Paste as plain text in Toile" Story (`ambre-roadmap.md` E6). A paste with no payload returns before it writes anything, so text from outside lands nowhere | unimplemented |
+| `TOILE-260` | `POST` | A plain paste MUST land the plain text as one text element at the pointer, whatever payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the `Paste as plain text in Toile` Story (`ambre-roadmap.md` E6). A paste with no payload returns before it writes anything, so text from outside lands nowhere | unimplemented |
 | `TOILE-140` | `FRAME` | A paste of an empty payload MUST write nothing and reach nobody. | this spec section 3 | none | unheld -- the handler returns before it mints anything, and no test pastes an empty payload; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the paste under 1 ms, the transform-command row of
@@ -143,7 +143,7 @@ under the cursor (`TOILE-133`, `TOILE-135`). A duplicate uses a small fixed nudg
 | the browser copy event, with a selection | sends `CopyElements`, defers, and mirrors the answer to the clipboard next frame |
 | the browser cut event | the same, then `DeleteElements` on the same selection |
 | the browser paste event | sends `PasteElements` at the pointer's world position |
-| `Ctrl+Shift+V`, or its menu entry | `TOILE-260`, on the "Paste as plain text in Toile" Story (`ambre-roadmap.md` E6) |
+| `Ctrl+Shift+V`, or its menu entry | `TOILE-260`, on the `Paste as plain text in Toile` Story (`ambre-roadmap.md` E6) |
 | `Ctrl+D` | sends `DuplicateElements` with a small diagonal nudge |
 | Copy, Cut, Paste and Duplicate, in the edit and context menus | the same four paths (`features/ambre-spec-toile-menus.md`) |
 

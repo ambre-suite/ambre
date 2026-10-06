@@ -435,7 +435,7 @@ error rather than a silent drop (`TOILE-UI-101`).
   notice cover the gap. The peers are not diverged, only late, and nothing says how late.
 * **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a geometry write
   is a remove followed by an insert. So a drag at 60 frames a second walks the whole board 60 times a second.
-  Answered by the "A board costs what it shows and what changed" Story (`ambre-roadmap.md` E7).
+  Answered by the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7).
 * **A remote change rebuilds everything** (`TOILE-092`). One moved note from a collaborator clears
   the bounds map, bulk-loads the index and re-reads the paint order. The same rebuild runs on an
   undo and on a redo. Answered by the same Story.
@@ -443,11 +443,11 @@ error rather than a silent drop (`TOILE-UI-101`).
   the whole visible set. The engine could instead send the changed elements and the removals, which the UI
   applies onto the set it holds. The whole push stays as the fallback. The decision is the engine's, keyed on
   the size of the change. Nothing of it is built, and it lands with the
-  "Engine and render optimization" Story (`ambre-roadmap.md` E6).
+  `Engine and render optimization` Story (`ambre-roadmap.md` E6).
 * **A connector is never culled** (`TOILE-207`). Elements are resolved against the index and connectors are
   walked whole. So a board of a thousand arrows pays for all of them at every camera. The one test that names
-  the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the "A board
-  costs what it shows and what changed" Story (`ambre-roadmap.md` E7).
+  the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the `A board
+  costs what it shows and what changed` Story (`ambre-roadmap.md` E7).
 * **No budget is measured.** Not one of the Toile rows of `ambre-spec-budgets.md` has
   a benchmark, so every cost above is a claim about a number nothing weighs. Two of those rows are
   already known to be false.

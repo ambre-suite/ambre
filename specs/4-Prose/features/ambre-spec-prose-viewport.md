@@ -26,11 +26,11 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-123` | `INV` | The visible page range MUST NOT name a page the layout does not have. | this spec section 2 | `ambre_prose::view::column::tests::the_visible_range_is_never_inverted_and_names_only_pages_the_layout_has` | none | verified |
 | `PROSE-UI-022` | `INV` | Every document position inside the column MUST resolve to a page; only a layout with no page at all MUST resolve to none. | this spec section 2 | `ambre_prose::view::column::tests::every_position_resolves_to_a_page_unless_there_is_none`; `ambre_prose::view::column::tests::a_layout_with_no_page_resolves_nothing` | none | verified |
 | `PROSE-UI-124` | `INV` | A position falling in a gutter MUST resolve to the nearer of the two page edges it lies between. | this spec section 2 | `ambre_prose::view::column::tests::a_position_in_a_gutter_goes_to_the_nearer_page_edge` | none | verified |
-| `PROSE-UI-023` | `INV` | A document point and a screen point MUST map to each other exactly: converting one to the other and back MUST return the point it started from. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-023` | `INV` | A document point and a screen point MUST map to each other exactly: converting one to the other and back MUST return the point it started from. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Scroll the column
 
@@ -47,8 +47,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-128` | `POST` | A zoom about a point MUST leave the document point that was under it there: the anchor MUST keep its screen position. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-129` | `FRAME` | A zoom MUST NOT move the caret, MUST NOT change the selection and MUST NOT write to the document: the factor, the column's left edge and the scroll offset are all it moves. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-128` | `POST` | A zoom about a point MUST leave the document point that was under it there: the anchor MUST keep its screen position. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-129` | `FRAME` | A zoom MUST NOT move the caret, MUST NOT change the selection and MUST NOT write to the document: the factor, the column's left edge and the scroll offset are all it moves. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.4 Resize the canvas
 
@@ -71,7 +71,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Verification.** 14 `verified`, 7 `unimplemented`. The state rows are property tests over the
   column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
   the view. `PROSE-UI-025` and the zoom rows wait on the
-  "One zoom model" Story (`ambre-roadmap.md` E8). The flick rows drive the ticks by hand, as the
+  `One zoom model` Story (`ambre-roadmap.md` E8). The flick rows drive the ticks by hand, as the
   host does once a frame.
 
 ---
@@ -217,7 +217,7 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The zoom is Prose's own, and the shared model is a Story.** The clamp, the anchor and the
-  centring are specified here. The "One zoom model" Story (`ambre-roadmap.md` E8) exists to make
+  centring are specified here. The `One zoom model` Story (`ambre-roadmap.md` E8) exists to make
   them one implementation across the applications. Until it lands, the spreadsheet has no keyboard
   zoom at all.
 * **The zoom does not survive a reload.** It is view state and nothing writes it anywhere. A

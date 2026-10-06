@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** design-only -- no document carries a locale today, and every consumer that needs
-one names the gap. The register lands with the "One document locale" Story (`ambre-roadmap.md` E8).
+one names the gap. The register lands with the `One document locale` Story (`ambre-roadmap.md` E8).
 
 > A document carries one language tag, so two collaborators on differently configured machines read
 > the same number, the same currency and the same date. What the reader sees in the menus stays the
@@ -138,7 +138,7 @@ The reader's own interface language is set outside the document, and no document
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **No document carries a locale.** The register, the picker and the resolution order are a design
-  bound to the "One document locale" Story (`ambre-roadmap.md` E8), not code.
+  bound to the `One document locale` Story (`ambre-roadmap.md` E8), not code.
 * **Prose declares the same register under another name.** `meta.lang`, a BCP 47 tag, is in
   `4-Prose/ambre-spec-prose-schema.md` and unwritten. When this register lands, the two are one key:
   either Prose's `lang` becomes the shared name, or it is dropped for `locale`. The schema owns that

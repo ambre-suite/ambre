@@ -46,8 +46,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-093` | `POST` | The command the chosen item resolves to MUST be sent once. | this spec section 3 | `ambre_prose::input_tests::enter_erases_the_query_then_sends_one_command` | none | verified |
 | `PROSE-UI-175` | `POST` | Choosing an item MUST close the menu. | this spec section 3 | `ambre_prose::input_tests::enter_erases_the_query_then_sends_one_command` | none | verified |
 | `PROSE-UI-193` | `POST` | A remote edit before the slash MUST move the recorded offset with the text, so the deletion takes the slash and the query and nothing else. | this spec section 3; `PROSE-UI-060` | `ambre_prose::input_tests::a_remote_insertion_before_the_slash_moves_the_origin` | none | verified |
-| `PROSE-UI-195` | `POST` | A picture, a footnote, a cross reference, a comment and an equation MUST each be reachable from an item. | `features/ambre-spec-prose-images.md section 4` | not built | unbuilt -- lands with the "The slash menu's other items" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-196` | `POST` | Every heading level the document model carries MUST be reachable from an item. | `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "The slash menu's other items" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-195` | `POST` | A picture, a footnote, a cross reference, a comment and an equation MUST each be reachable from an item. | `features/ambre-spec-prose-images.md section 4` | not built | unbuilt -- lands with the `The slash menu's other items` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-196` | `POST` | Every heading level the document model carries MUST be reachable from an item. | `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the `The slash menu's other items` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-094` | `FRAME` | Inserting MUST NOT touch any block other than the origin, and MUST NOT remove text the author typed before the slash. | derived | `ambre_prose::input_tests::an_item_touches_the_origin_block_alone` | none | verified |
 
 ### 1.4 Close the menu

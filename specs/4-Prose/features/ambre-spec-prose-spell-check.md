@@ -23,36 +23,36 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-019` | `INV` | The spell check MUST run on the reader's own machine. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-102` | `INV` | The checker MUST NOT send document text out of the client, to a spelling service or to anything else. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-041` | `INV` | The check MUST run at the lowest priority the Logic thread offers, behind every command, every layout and every synchronization. | this spec section 2 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-103` | `INV` | A check in progress MUST NOT delay a keystroke, a layout or a synchronization. | this spec section 2; derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-042` | `INV` | A dictionary MUST be fetched as its own asset, on the first check of its language. | this spec section 2 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-104` | `INV` | The main binary MUST NOT carry a dictionary. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-105` | `INV` | A reported error MUST carry at most five suggestions. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-106` | `INV` | The document MUST NOT hold the errors: they are derived from its text, on each reader's machine. | this spec section 2; derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-019` | `INV` | The spell check MUST run on the reader's own machine. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-102` | `INV` | The checker MUST NOT send document text out of the client, to a spelling service or to anything else. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-041` | `INV` | The check MUST run at the lowest priority the Logic thread offers, behind every command, every layout and every synchronization. | this spec section 2 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-103` | `INV` | A check in progress MUST NOT delay a keystroke, a layout or a synchronization. | this spec section 2; derived | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-042` | `INV` | A dictionary MUST be fetched as its own asset, on the first check of its language. | this spec section 2 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-104` | `INV` | The main binary MUST NOT carry a dictionary. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-105` | `INV` | A reported error MUST carry at most five suggestions. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-106` | `INV` | The document MUST NOT hold the errors: they are derived from its text, on each reader's machine. | this spec section 2; derived | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.2 Add a word to the dictionary
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-043` | `POST` | After the command, the word MUST be in the reader's own encrypted settings. | this spec section 2 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-107` | `POST` | After the command, that word MUST NOT be reported as an error again for this reader, in this document or in another. | this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-108` | `FRAME` | Adding a word MUST NOT touch the document, so no peer receives anything. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-043` | `POST` | After the command, the word MUST be in the reader's own encrypted settings. | this spec section 2 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-107` | `POST` | After the command, that word MUST NOT be reported as an error again for this reader, in this document or in another. | this spec section 3 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-108` | `FRAME` | Adding a word MUST NOT touch the document, so no peer receives anything. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.3 Choose a suggestion
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-109` | `POST` | After the command, the misspelled word MUST read as the suggestion chosen, as an ordinary edit that peers receive. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-110` | `FRAME` | Accepting a suggestion MUST NOT touch text outside the error's range, nor the reader's own dictionary. | derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-109` | `POST` | After the command, the misspelled word MUST read as the suggestion chosen, as an ordinary edit that peers receive. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-110` | `FRAME` | Accepting a suggestion MUST NOT touch text outside the error's range, nor the reader's own dictionary. | derived | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.4 Choose the language
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-111` | `POST` | After the language is set, the document MUST be checked again against that language's dictionary. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `PROSE-FEAT-112` | `FRAME` | Setting the language MUST NOT touch the text of the document. | derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-111` | `POST` | After the language is set, the document MUST be checked again against that language's dictionary. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `PROSE-FEAT-112` | `FRAME` | Setting the language MUST NOT touch the text of the document. | derived | not built | unbuilt -- lands with the `The spell checker` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 * **Budget.** the spell check, a row of `ambre-spec-budgets.md section 1`. It is the one
   operation of this application that is allowed to be slow, which is what the priority rule buys.

@@ -3,7 +3,7 @@
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
 **Implementation:** partial -- the three applications search the whole document, and Trame and
-Prose replace in it. The one live session the "One find and replace" Story (`ambre-roadmap.md` E8)
+Prose replace in it. The one live session the `One find and replace` Story (`ambre-roadmap.md` E8)
 wants is unbuilt everywhere.
 
 > A user types a word and the application takes them to it, wherever it is -- including far past the
@@ -153,7 +153,7 @@ nothing on the UI thread can disagree with the document. Which chord opens find 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The one live shared session is unbuilt.** Each application runs its own Logic-thread walk. The
-  "One find and replace" Story (`ambre-roadmap.md` E8) replaces the three with one match session and
+  `One find and replace` Story (`ambre-roadmap.md` E8) replaces the three with one match session and
   one live cursor. This document states the model they already share; which of each application's
   own rules survive that move is open until it lands.
 * **A stale highlight.** The hit list is a snapshot. A local edit, or a remote one, can empty the

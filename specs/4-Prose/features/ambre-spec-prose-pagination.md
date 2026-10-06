@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-108` | `INV` | A family label MUST resolve to one shipped face by the label alone: the resolution MUST NOT read the faces a context holds. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | type-level -- `ambre_prose::layout::fonts::resolve` takes a label and no context, so no device can reach it; `ambre_prose::layout::fonts::tests::resolution_reads_the_label_and_nothing_else` | none | verified |
 | `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
 | `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
-| `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5), the first output that carries a page number off the screen | unimplemented |
+| `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5), the first output that carries a page number off the screen | unimplemented |
 
 ### 1.2 Lay the whole document out again
 
@@ -409,7 +409,7 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
 * **A note costs every edit something.** Each reflow reads the text of every note to check the
   notes still hold. An edit to one note's text lays the whole document out again. No budget row
   charges either.
-  It lands with the "A note edit reflows only its page" Story (`ambre-roadmap.md` E5).
+  It lands with the `A note edit reflows only its page` Story (`ambre-roadmap.md` E5).
 * **A page whose footnotes are taller than the page is not ruled.** The constraint order says a
   footnote is never separated from its reference and that the notes push the content down. A page
   whose notes alone exceed the body height has nowhere left to push, and no row says what gives.
@@ -424,5 +424,5 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   would change what a page is. `meta/line_numbers` and `meta/pageless` are containers the schema
   carries as deferred, and a section break would make the page box vary within one document. Two
   or three columns would make the phases below place blocks across a column set rather than down
-  one. All four are the "The later writing set" Story (`ambre-roadmap.md` POST-V1), and none has
+  one. All four are the `The later writing set` Story (`ambre-roadmap.md` POST-V1), and none has
   a block type or an attribute in `ambre-spec-prose-schema.md section 3`.
