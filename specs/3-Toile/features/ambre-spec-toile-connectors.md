@@ -118,7 +118,7 @@ status values are normative in `ambre-spec-template.md`.
 | deletes a shape | joins that shape to another, at the same moment | the arrow, bound to a shape nobody holds | nothing painted on either board, and both are told (`TOILE-165`) | `logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` |
 | drags a shape an arrow ends at, for a second | watches | the shape's new position, and no connector write at all | the arrow re-routed on every frame (`TOILE-164`) | none |
 | types `unit cost` on an arrow's caption | types `cost in EUR` on the same caption, offline | one caption holding both edits, merged character by character | the same caption on both screens, neither user's typing dropped (`TOILE-047`) | `logic::convergence_tests::concurrent_captions_converge` |
-| types `unit cost` on an arrow's caption | has that caption open, and adds `in EUR` | both changes, merged from the caption Bob opened on | Bob's typed caption for a moment (`TOILE-UI-382`), then both changes (`TOILE-263`) | `logic::convergence_tests::an_open_caption_editor_keeps_a_peers_edit` |
+| types `unit cost` on an arrow's caption | has that caption open, and adds `in EUR` | both changes, merged from the caption Bob opened on | both changes, from the moment Bob leaves the editor (`TOILE-263`, `TOILE-UI-382`) | `logic::convergence_tests::an_open_caption_editor_keeps_a_peers_edit` |
 
 ---
 
@@ -182,7 +182,8 @@ the char-CRDT.
 
 The command also names the caption the editor opened on. The handler merges the change from that
 base into the stored caption, as a note body does (`TOILE-UI-381`). A peer's edit that landed while
-the editor was open therefore survives the close (`TOILE-263`).
+the editor was open therefore survives the close (`TOILE-263`). The view echoes the same merge, so
+those words stay painted through the close (`TOILE-UI-382`).
 
 The handler seeds the `label` container **at the connector's birth**, not on the first caption.
 Seeding at creation puts the same container on every peer, inside the creation delta, before anyone

@@ -347,40 +347,6 @@ pub(super) fn body_text_or_seed(m: &LoroMap) -> Option<LoroText> {
     m.insert_container(BODY, LoroText::new()).ok()
 }
 
-/// The text that keeps both the change an editor made, from `base` to `typed`,
-/// and the change `stored` carries since `base`. It serves a note body
-/// (`TOILE-UI-381`) and a caption (`TOILE-263`). The merge replays both diffs as two peers of a
-/// scratch document that share `base`. So it resolves the way the shared text
-/// would, character by character. The peer ids are fixed, so every replica
-/// computes the same text.
-pub(super) fn merge_text(base: &str, stored: &str, typed: &str) -> String {
-    if stored == base || stored == typed {
-        return typed.to_owned();
-    }
-    if typed == base {
-        return stored.to_owned();
-    }
-    let seed = loro::LoroDoc::new();
-    let _ = seed.set_peer_id(1);
-    let _ = seed.get_text(BODY).insert(0, base);
-    seed.commit();
-    let side = |peer, text: &str| {
-        let doc = seed.fork();
-        let _ = doc.set_peer_id(peer);
-        let _ = doc
-            .get_text(BODY)
-            .update(text, loro::UpdateOptions::default());
-        doc.commit();
-        doc
-    };
-    let theirs = side(2, stored);
-    let mine = side(3, typed);
-    if let Ok(update) = theirs.export(loro::ExportMode::all_updates()) {
-        let _ = mine.import(&update);
-    }
-    mine.get_text(BODY).to_string()
-}
-
 pub(super) fn str_of(m: &LoroMap, k: &str) -> String {
     match m.get(k).map(|v| v.into_value()) {
         Some(Ok(LoroValue::String(s))) => s.to_string(),

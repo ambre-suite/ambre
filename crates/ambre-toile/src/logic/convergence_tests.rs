@@ -215,6 +215,58 @@ fn an_open_editor_keeps_a_peers_edit() {
     );
 }
 
+/// `TOILE-UI-382`: the view echoes a close as `merge_text` over the body it
+/// opened on, the body its viewport shows, and the typed body. On a note and
+/// on a caption, that echo is the very text Logic then writes, so a peer's
+/// words never leave the screen.
+#[test]
+fn a_close_echo_paints_what_the_document_keeps() {
+    use crate::logic::text_merge::merge_text;
+
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let id = create_sticky(&mut a, Point::ZERO, "buy milk");
+    let c = create_connector(&mut a);
+    a.handle_command(ToileCommand::SetConnectorLabel {
+        id: c.clone(),
+        base: String::new(),
+        text: "cost".into(),
+    });
+    b.apply_remote(&a.export_snapshot());
+
+    let da = set_body(&mut a, &id, "buy milk", "please buy milk")
+        .update
+        .expect("A's edit broadcasts a delta");
+    b.apply_remote(&da);
+    let shown = body_of(&b, &id).expect("a body");
+    let echo = merge_text("buy milk", &shown, "buy milk and eggs");
+    set_body(&mut b, &id, "buy milk", "buy milk and eggs");
+    assert_eq!(echo, "please buy milk and eggs", "the echo lost A's words");
+    assert_eq!(
+        body_of(&b, &id),
+        Some(echo),
+        "the echo is not what Logic wrote"
+    );
+
+    let da = a
+        .handle_command(ToileCommand::SetConnectorLabel {
+            id: c.clone(),
+            base: "cost".into(),
+            text: "unit cost".into(),
+        })
+        .update
+        .expect("A's caption broadcasts a delta");
+    b.apply_remote(&da);
+    let echo = merge_text("cost", &caption(&b, &c), "cost in EUR");
+    b.handle_command(ToileCommand::SetConnectorLabel {
+        id: c.clone(),
+        base: "cost".into(),
+        text: "cost in EUR".into(),
+    });
+    assert_eq!(echo, "unit cost in EUR", "the echo lost A's caption words");
+    assert_eq!(caption(&b, &c), echo, "the echo is not what Logic wrote");
+}
+
 /// `TOILE-030`: a pasted note is born with a body two authors share, and a
 /// pasted arrow keeps its caption. Both are texts on the board, which the
 /// copy carries as their string.

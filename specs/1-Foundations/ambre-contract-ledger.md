@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3349 rows: 2416 shipped, of which 102 partial and 607 loose. 933 unbuilt.**
+**3349 rows: 2416 shipped, of which 102 partial and 606 loose. 933 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 308 | 257 | 545 | 597 |  | 1707 |
+| `verified` | 308 | 257 | 546 | 597 |  | 1708 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 5 | 2 | 17 |  |  | 24 |
+| `failing` | 5 | 2 | 16 |  |  | 23 |
 | `untested` | 231 | 131 | 196 | 2 |  | 560 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -126,7 +126,7 @@
 | `ambre-spec-toile-selection.md` | 29 | 29 | 21 |  | 8 |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 |  | 5 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 22 |  | 8 |  |
-| `ambre-spec-toile-text-editing.md` | 39 | 38 | 12 |  | 26 | 1 |
+| `ambre-spec-toile-text-editing.md` | 39 | 38 | 13 |  | 25 | 1 |
 | `ambre-spec-toile-tools.md` | 30 | 30 | 23 | 1 | 6 |  |
 | `ambre-spec-toile-undo.md` | 4 | 4 | 1 |  | 3 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 4 | 1 | 7 | 1 |

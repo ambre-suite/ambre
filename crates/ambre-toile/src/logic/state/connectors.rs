@@ -11,7 +11,9 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
 };
 
-use super::codec::{connector_label_or_seed, encode_anchor, map_str, merge_text, write_connector};
+use crate::logic::text_merge::merge_text;
+
+use super::codec::{connector_label_or_seed, encode_anchor, map_str, write_connector};
 use super::{CONNECTORS, LAYERS, ToileState};
 
 impl ToileState {

@@ -21,6 +21,7 @@ pub mod model;
 pub mod schema;
 pub mod state;
 pub mod stroke;
+pub mod text_merge;
 
 pub use align::align_deltas;
 pub use animate::{AnimatedElement, FrameSnapshot, SnapElement, ease_in_out_cubic, smart_animate};

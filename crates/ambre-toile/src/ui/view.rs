@@ -33,6 +33,7 @@ use ambre_draw::kinetic::Release;
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
+use crate::logic::text_merge::merge_text;
 
 use super::arrow;
 #[cfg(target_arch = "wasm32")]
@@ -2728,8 +2729,10 @@ impl ToileView {
     /// Optimistically set an element's body text in the local display. The
     /// static render then matches a just-committed value before the model
     /// round-trip delivers a fresh viewport (avoids a one-frame flash of the
-    /// old body, `toile-text-editing`).
-    fn patch_element_text(&mut self, id: &ElementId, text: &str) {
+    /// old body, `toile-text-editing`). The displayed body may carry a peer's
+    /// edit since the editor opened on `base`. So the echo is the merge Logic
+    /// computes, and those words stay on screen (`TOILE-UI-382`).
+    fn patch_element_text(&mut self, id: &ElementId, base: &str, text: &str) {
         if let Some(DisplayNode::Element(e)) = self
             .display
             .nodes
@@ -2737,7 +2740,7 @@ impl ToileView {
             .find(|n| matches!(n, DisplayNode::Element(e) if &e.id == id))
         {
             match &mut e.geom {
-                DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => *t = text.to_owned(),
+                DisplayGeom::Sticky(t) | DisplayGeom::Text(t) => *t = merge_text(base, t, text),
                 _ => {}
             }
         }
@@ -2835,15 +2838,16 @@ impl ToileView {
     }
 
     /// Optimistically set a connector's caption in the local display, the
-    /// counterpart of [`patch_element_text`](Self::patch_element_text).
-    fn patch_connector_label(&mut self, id: &ConnectorId, text: &str) {
+    /// counterpart of [`patch_element_text`](Self::patch_element_text), and
+    /// merged the same way (`TOILE-UI-382`).
+    fn patch_connector_label(&mut self, id: &ConnectorId, base: &str, text: &str) {
         if let Some(DisplayNode::Connector(c)) = self
             .display
             .nodes
             .iter_mut()
             .find(|n| matches!(n, DisplayNode::Connector(c) if &c.id == id))
         {
-            c.label = text.to_owned();
+            c.label = merge_text(base, &c.label, text);
         }
     }
 
@@ -3162,20 +3166,20 @@ impl ToileView {
                         // A locked element's write is refused (`TOILE-033`). The
                         // local echo must not paint a body the write will refuse
                         // (`TOILE-UI-209`): the screen keeps the committed body.
-                        let locked = self.find_element(&id).is_some_and(|e| e.locked);
-                        if !locked {
-                            self.patch_element_text(&id, &text);
-                        }
                         // The base lets Logic keep a peer's edit that landed
                         // while the editor was open (`TOILE-UI-381`).
                         let base = self.editor.as_ref().unwrap().opened_text().to_owned();
+                        let locked = self.find_element(&id).is_some_and(|e| e.locked);
+                        if !locked {
+                            self.patch_element_text(&id, &base, &text);
+                        }
                         self.send_edit(ToileCommand::SetText { id, base, text });
                     }
                     EditTarget::ConnectorLabel(id) => {
-                        self.patch_connector_label(&id, &text);
                         // The base keeps a peer's caption edit that landed
                         // while the editor was open (`TOILE-263`).
                         let base = self.editor.as_ref().unwrap().opened_text().to_owned();
+                        self.patch_connector_label(&id, &base, &text);
                         self.send_edit(ToileCommand::SetConnectorLabel { id, base, text });
                     }
                     // A title commits as a rename, and the engine trims it and

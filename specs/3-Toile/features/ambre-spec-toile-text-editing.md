@@ -38,7 +38,7 @@ editor and not restated here.
 | `TOILE-UI-191` | `OBS` | The committed body MUST NOT be painted under the editor: one body is on screen, not two. | this spec section 3 | none | unheld -- every test of the content pass passes no element under edit, so the branch that drops it is never taken; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-192` | `OBS` | An open editor MUST show a caret blinking on a one-second cycle, so the element reads as editable. | this spec section 4 | none | unheld -- the blink is a frame-clock parity in the paint pass, and no test drives two frames a half-cycle apart; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-381` | `CONC` | A close MUST keep a peer's edit to the same body that arrived while the editor was open. | this spec section 3; `TOILE-030` | `ambre_toile::logic::convergence_tests::an_open_editor_keeps_a_peers_edit` -- a peer's edit lands between the open and the close, and both writers' words survive on both replicas; structural -- the close sends the body the editor opened on as the base (`ambre_toile::ui::edit::InlineEditor::opened_text`) | none | verified |
-| `TOILE-UI-382` | `OBS` | Leaving the editor, on a note body or on an arrow's caption, MUST NOT take off the screen, even for a frame, a peer's words the document keeps. | this spec section 3; `TOILE-UI-381`; `TOILE-263` | none | fails -- the local echo paints the typed text, which lacks a peer's edit that landed while the editor was open, and the words come back one round trip later. A note and a caption echo alike. It lands with the `A text close never hides a peer's words` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-382` | `OBS` | Leaving the editor, on a note body or on an arrow's caption, MUST NOT take off the screen, even for a frame, a peer's words the document keeps. | this spec section 3; `TOILE-UI-381`; `TOILE-263` | `ambre_toile::logic::convergence_tests::a_close_echo_paints_what_the_document_keeps` -- on a note and on a caption, the echo merged from the opened, shown and typed texts keeps the peer's words and is the text Logic writes; `ambre_toile::logic::text_merge::tests::a_diff_rebuilds_its_target` -- the merge's diff is exact; structural -- both echoes call `ambre_toile::logic::text_merge::merge_text`, the function Logic writes through | none | verified |
 | `TOILE-UI-065` | `OBS` | Formatting MUST be applicable to a range inside one body, not to the element alone. | this spec section 3 | not built | unbuilt -- lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Place a note or a text element
@@ -77,7 +77,7 @@ editor and not restated here.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | none | unheld -- `Escape` closes the editor and the same key clears a selection when none is open, so the two behaviours share one handler and neither is driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the merge builds a scratch document per close, cheap for a note, and no bench measures it at the size the budget names; lands with the `A note close holds its budget` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the merge runs two character diffs per close, capped at 256 edit steps, and no bench measures it at the size the budget names; lands with the `A note close holds its budget` Story (`ambre-roadmap.md` E7) | untested |
 | `TOILE-UI-206` | `POST` | Leaving the editor MUST keep its element selected, so the next gesture acts on what was just typed into. | this spec section 4 | none | unheld -- the selection is set at the open and the close does not touch it, and no test reads it after a close; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-064` | `POST` | A body edit MUST be one undo item, however many keystrokes it took. | this spec section 3; `TOILE-014` | none | unheld -- the editor holds the buffer and sends one whole-body write when it closes, so the granularity holds by construction, and nothing drives an edit and counts the items; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | none | unheld -- the core answers nothing when the buffer matches the body it was seeded with, and no test closes an untouched editor; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -91,10 +91,10 @@ editor and not restated here.
   No figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 12 `verified`, 1 `failing`, 25 `untested`, 1 `unimplemented`. What holds is the
-  body's look under edit, and a close keeps a peer's edit (`TOILE-UI-381`). The local echo hides
-  those words for a frame (`TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or
-  closes the editor, and the shared-text substrate (`TOILE-065`).
+* **Verification.** 13 `verified`, 25 `untested`, 1 `unimplemented`. What holds is the body's look
+  under edit, and a close that keeps a peer's edit, on the screen as in the document (`TOILE-UI-381`,
+  `TOILE-UI-382`). What is loose is the gestures: every entry and exit that opens or closes the
+  editor, and the shared-text substrate (`TOILE-065`).
 
 ---
 
@@ -104,7 +104,7 @@ editor and not restated here.
 |---|---|---|---|---|
 | types into a note | watches | nothing until Alice leaves the editor | Alice's letters locally, and Bob's screen unchanged until the commit | none -- section 6 |
 | types "hello" into a note | types "world" into the same note | both words, merged character by character | the same body holding both words, once both edits arrive (`TOILE-030`) | `logic::convergence_tests::two_authors_typing_in_one_note_both_keep_their_words` |
-| types "please" into a note | has the same note open, and adds "and eggs" | both changes, merged from the body Bob opened on | Bob's typed body for a moment, then both changes (`TOILE-UI-381`) | `logic::convergence_tests::an_open_editor_keeps_a_peers_edit` |
+| types "please" into a note | has the same note open, and adds "and eggs" | both changes, merged from the body Bob opened on | both changes, from the moment Bob leaves the editor (`TOILE-UI-381`, `TOILE-UI-382`) | `logic::convergence_tests::an_open_editor_keeps_a_peers_edit` |
 | leaves the editor without changing anything | watches | nothing: an unchanged body is no write | no change, and no undo item | none -- section 6 |
 | deletes the note being edited elsewhere | is editing it | the deletion | Bob's editor closing on its own, and his half-typed body written back or refused | none, and the rule fails today -- section 6 |
 | pans the board while editing | watches | nothing | Alice's editor closing the moment the note leaves the screen (`TOILE-UI-210`) | none, and the rule fails today -- section 6 |
@@ -161,8 +161,16 @@ visible set does not carry opens nothing, silently (`TOILE-UI-195`).
 unchanged (`TOILE-UI-207`). One whole-body write is sent for a real change (`TOILE-UI-064`). It
 names the body the core opened on, so the handler merges it into the stored body (`TOILE-UI-381`). The
 local painted body is updated at the same moment, so the committed look does not flash the old value
-for a frame. A locked element is not echoed: the typed body is not shown, because the write will
-refuse it (`TOILE-UI-209`).
+for a frame.
+
+The echo is the same merge, over the body the viewport shows. A peer's words that landed while the
+editor was open therefore stay painted (`TOILE-UI-382`). A locked element is not echoed: the
+typed body is not shown, because the write will refuse it (`TOILE-UI-209`).
+
+**The merge** (`logic/text_merge.rs`) is pure and holds no document, so the UI thread may run it
+(`UI-THREAD-051`). It diffs the base against each side by character (Myers), past a common prefix and
+suffix. Runs the two sides change apart both apply. A run both replace differently keeps the stored
+text, then the typed one. Past 256 edit steps a side becomes one run between its prefix and suffix.
 
 **Code:**
 
@@ -220,9 +228,11 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The local echo shows the typed text for a moment.** A close paints what was typed at once, on a
-  note body or an arrow's caption. A peer's words that landed while the editor was open reappear one
-  round trip later (`TOILE-UI-382`). The document never loses them; only that frame does.
+* **A peer's edit still in flight at the close.** The echo merges the body the viewport shows. An edit
+  Logic has applied but whose viewport has not reached the view yet is missing from the echo. It was
+  never on screen, so nothing leaves it (`TOILE-UI-382` holds), and it appears with that viewport.
+* **A long clash duplicates text.** Past 256 edit steps, each side is one run. Two such runs that
+  overlap keep both, with the base text they share written twice. A person must then delete one copy.
 * **Formatting applies to the element, not to a range** (`TOILE-UI-065`). Bold, italic, the family and
   the size live in the element's style register, so a word cannot be emphasized inside a sentence.
   The controls in the panel and the floating bar look like text controls and act on the whole element

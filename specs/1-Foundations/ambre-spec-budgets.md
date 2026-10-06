@@ -46,7 +46,7 @@
 | Toile index update, one element | < 50 us | -- | Logic | a drag mutates one element per input event -- **none exists**, and the code walks the whole index (`TOILE-091`) |
 | Toile remote change, delta < 32 KB | < 2 ms | -- | Logic | keeps the client share of the < 300 ms inter-user budget -- **none exists**, and the code rebuilds every cache (`TOILE-092`) |
 | Toile transform command (move, restyle) | < 1 ms | -- | Logic | one register write, one index update, one derivation -- **none exists** |
-| Toile body commit, a 4 KB body merged from its base | < 1 ms | -- | Logic | one scratch document, two diffs and one import per close (`TOILE-UI-381`) -- **none exists** |
+| Toile body commit, a 4 KB body merged from its base | < 1 ms | -- | Logic | two character diffs capped at 256 edit steps, then one diff into the body, per close (`TOILE-UI-381`). The UI echo runs the same two diffs inside its frame (`TOILE-UI-382`) -- **none exists** |
 | Toile slide transition, 500 elements per frame | < 4 ms | -- | Logic | leaves room to paint inside the frame during a transition -- **none exists** |
 | Toile layout solve, 200 children | < 1 ms | -- | Logic | runs at derivation on every child edit -- **none exists**, and nothing calls the solver (`TOILE-FEAT-029`) |
 | Toile reaction tally | < 0.1 ms typical | -- | Logic | one scan of the reactions map on read, never stored -- **none exists** |

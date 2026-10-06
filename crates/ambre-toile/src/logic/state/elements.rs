@@ -14,10 +14,10 @@ use crate::logic::index::ElementBounds;
 use crate::logic::model::{
     ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
 };
+use crate::logic::text_merge::merge_text;
 
 use super::codec::{
-    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, merge_text,
-    stroke_aabb,
+    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
 };
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
