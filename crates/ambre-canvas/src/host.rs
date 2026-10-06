@@ -102,8 +102,7 @@ impl RafControl {
 /// leaks a closure per frame. At 240 Hz that grows the JS heap and makes
 /// Firefox throttle rAF down to 60 Hz as self-protection.
 pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl) {
-    #[allow(clippy::type_complexity)]
-    let cb: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
+    let cb: Rc<FrameSlot> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
@@ -112,18 +111,31 @@ pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl)
         }
         // Always reschedule: a paused frame is just a flag check, and keeping
         // the loop alive is what lets `resume` take effect without re-arming.
-        web_sys::window()
-            .expect("no window")
-            .request_animation_frame(cb_clone.borrow().as_ref().unwrap().as_ref().unchecked_ref())
-            .expect("rAF");
+        request_frame(&cb_clone);
     }));
-
-    web_sys::window()
-        .expect("no window")
-        .request_animation_frame(cb.borrow().as_ref().unwrap().as_ref().unchecked_ref())
-        .expect("rAF");
+    request_frame(&cb);
 
     std::mem::forget(cb);
+}
+
+/// The one rAF closure the loop reuses, empty only while it is being built.
+type FrameSlot = RefCell<Option<Closure<dyn FnMut(f64)>>>;
+
+/// Schedule `slot`'s closure for the next frame. A worker has no window and
+/// a refused request schedules nothing: the loop stops and says why, rather
+/// than panicking the whole module.
+fn request_frame(slot: &FrameSlot) {
+    let Some(window) = web_sys::window() else {
+        tracing::error!("rAF loop stopped: no window");
+        return;
+    };
+    let slot = slot.borrow();
+    let Some(closure) = slot.as_ref() else {
+        return;
+    };
+    if let Err(e) = window.request_animation_frame(closure.as_ref().unchecked_ref()) {
+        tracing::error!("rAF loop stopped: {e:?}");
+    }
 }
 
 // -----------------------------------------------------------------------------
