@@ -166,7 +166,7 @@ PeerID. Two writers never share one, which is the invariant a Loro document need
 1. The Logic thread exports the operations of its own PeerID since the last export.
 2. The first delta of the session carries the registry entry, written at the open. The entry alone
    never sends, and the undo stack never sees it.
-3. The Sync worker seals the nonce and the delta together, and signs the frame.
+3. The Sync worker seals the nonce and the delta together, and signs the envelope.
 
 **Receive a delta.**
 

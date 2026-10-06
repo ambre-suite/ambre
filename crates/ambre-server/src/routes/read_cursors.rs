@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(
             active_of(&answer, unread),
             Some(true),
-            "no cursor, three frames"
+            "no cursor, three deltas"
         );
         assert_eq!(
             active_of(&answer, flushed),

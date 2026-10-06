@@ -22,7 +22,7 @@
 //! - [`text`] -- typing, deleting, the cross-paragraph join and the split
 //! - [`blocks`] -- the block lifecycle, the nesting guard and the styles
 //! - [`marks`] -- the inline mark registry's write path
-//! - [`presence`] -- the ephemeral cursor frame, outbound and inbound
+//! - [`presence`] -- the cursor's presence sample, outbound and inbound
 //! - [`tables`] -- the grid, its column widths and its merged regions
 //! - [`derived`] -- the tables of contents and the word count, read and never
 //!   stored

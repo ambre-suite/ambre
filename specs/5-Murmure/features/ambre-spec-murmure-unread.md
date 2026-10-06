@@ -151,8 +151,8 @@ so the relay moves its cursor to its own last number, and the client need not lo
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The client counts | a frame kind the relay reads | one more field in front of the relay, for a count the client computes itself |
-| Messages alone count | every frame counts | a reaction would make a channel unread, which users of every chat product refuse |
+| The client counts | a wire message kind the relay reads | one more field in front of the relay, for a count the client computes itself |
+| Messages alone count | every delta counts | a reaction would make a channel unread, which users of every chat product refuse |
 
 ---
 

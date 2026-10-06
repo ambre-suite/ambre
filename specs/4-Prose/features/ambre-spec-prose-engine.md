@@ -182,7 +182,7 @@ converts at its own boundary, so the value is one identity and not two.
 | `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). The page painter draws through it, and a test drives it on the recording surface |
 | `ambre-bus` | the UI-to-Logic queue the view sends on, `ambre_bus::conduit` | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence sample alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
-| `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
+| `serde` | the derives that sample needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
 | `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre-bus`, and the one error event of section 3.C carries them |
 
 **There is no dependency graph.** A block carries its own content and derives from no other block, so
@@ -466,7 +466,7 @@ pub enum ProseCommand {
     ExportDocument { format: ExportFormat, options: ExportOptions },
 
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
-    /// The handler builds the wire frame of section 3.D and returns it as the outcome's
+    /// The handler builds the presence sample of section 3.D and returns it as the outcome's
     /// ephemeral half. No user id is ever put on the wire.
     UpdateCursor { pos: CursorPosition },
 
@@ -605,7 +605,7 @@ pub struct CursorPosition {
     pub anchor:   Option<(BlockId, u32)>,
 }
 
-/// The peer-authored frame. A position and a self-asserted, cosmetic name -- and
+/// The peer-authored sample. A position and a self-asserted, cosmetic name -- and
 /// deliberately no user id: the canonical identity is the Sync-resolved one delivered out
 /// of band, so a peer cannot forge another user's (`PRESENCE-002`, `PRESENCE-003`).
 ///
@@ -613,7 +613,7 @@ pub struct CursorPosition {
 /// names a different character on a peer that has applied an insertion this one has not. A
 /// cursor rides the operation it was taken against, so after convergence every peer
 /// resolves it to the same absolute position. The block is named beside the bytes, so a
-/// frame naming a block this peer does not hold is dropped without decoding the cursor
+/// sample naming a block this peer does not hold is dropped without decoding the cursor
 /// (`PROSE-057`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PresencePayload {

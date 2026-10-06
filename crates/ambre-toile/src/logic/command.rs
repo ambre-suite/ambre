@@ -62,7 +62,7 @@ impl ToileOutcome {
         }
     }
 
-    /// An outcome that only broadcasts an ephemeral (presence) frame: no display
+    /// An outcome that only broadcasts a presence sample: no display
     /// event and no CRDT delta. The local cursor is drawn by the UI itself, so a
     /// `Presence` command produces nothing for the local UI to repaint.
     pub fn ephemeral_only(ephemeral: Vec<u8>) -> Self {

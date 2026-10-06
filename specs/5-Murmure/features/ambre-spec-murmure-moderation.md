@@ -68,12 +68,12 @@ removal against the role its signer held at the time.
 **A removal, checked in two places.**
 
 1. The relay refuses a removal from a member whose standing it has revoked (`MURMURE-308`,
-   `SRV-157`). The relay orders every frame, so a revoke and a removal at once have one answer.
+   `SRV-157`). The relay orders every delta, so a revoke and a removal at once have one answer.
 2. Each client reads the entry the removal cites (`MURMURE-312`). It accepts the removal only when
    that entry gave the signer the standing (`MURMURE-307`). Every client reads the same log, so
    every client agrees (`MURMURE-079`).
 
-A hide is within the power of the relay already, since the relay can withhold any frame. So letting
+A hide is within the power of the relay already, since the relay can withhold any wire message. So letting
 it check the standing adds no power it did not hold.
 
 **The authorship check makes room for it.** The check of `features/ambre-spec-murmure-messages.md`

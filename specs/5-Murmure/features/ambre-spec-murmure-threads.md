@@ -80,7 +80,7 @@ there as in the channel, with no second renderer.
 **The first reply.** The relay creates the thread document, as it creates the successor of a
 segment. Two first replies at once receive the same document (`MURMURE-108`).
 
-**A thread not open.** The client is not subscribed to it. A frame on it makes the relay publish a
+**A thread not open.** The client is not subscribed to it. A delta on it makes the relay publish a
 signal on the topic of the channel. The client then fetches the new deltas and reads their sealed
 summaries alone (`MURMURE-260`). A mention in a reply thus counts on the channel, and can notify
 (`MURMURE-261`). It reloads the head of the thread only if the root is on screen.

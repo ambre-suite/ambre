@@ -63,7 +63,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** the authorship check reads each received delta with no document, a row of
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
-  summary (`SYNC-113`). The relay never learns whether a frame is a message, an edit or a delete.
+  summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
 * **Verification.** 2 `verified`, 19 `unimplemented`: the send is built, and no edit, delete or
   authorship check exists.
 

@@ -169,7 +169,7 @@ impl ToileState {
     /// Build the outcome for a manual navigation from `old` to the just-updated
     /// `playback.active`. Emit the `SlideChanged` glide, clear any active
     /// follow first ("take control", prepending `FollowingChanged(None)`), and
-    /// attach a broadcast frame when broadcasting.
+    /// attach a broadcast sample when broadcasting.
     fn manual_nav_outcome(&mut self, old: usize) -> ToileOutcome {
         let mut display = Vec::new();
         if self.following.is_some() {
@@ -225,7 +225,7 @@ impl ToileState {
     /// role only, no CRDT delta. When turning on while in present mode, the
     /// current slide is broadcast immediately so followers snap without waiting
     /// for the next navigation.
-    /// Turning it off broadcasts one last frame carrying no slide. The peers
+    /// Turning it off broadcasts one last sample carrying no slide. The peers
     /// then stop offering this viewer to follow at once, rather than at the
     /// presence timeout (`TOILE-UI-315`).
     pub(super) fn set_present_broadcast(&mut self, on: bool) -> ToileOutcome {

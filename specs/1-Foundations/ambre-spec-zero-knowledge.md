@@ -95,7 +95,7 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   a given instant. That is the metadata of the table above, read as a pattern.
 * **Accepted:** the membership graph. The relay knows which public keys are members of which
   document, readers included. For a Murmure channel, that graph shows who talks with whom.
-  * The relay needs the graph to route a frame and to refuse a non-member.
+  * The relay needs the graph to route a wire message and to refuse a non-member.
   * A subscription reveals the graph anyway, so a sealed membership list would hide nothing.
   * The leak stops at the graph. A document identifier is a UUID v7 minted on the client: a
     timestamp and random bits, never derived from a name.
@@ -130,7 +130,7 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 * The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
   because a structured clone stays inside the user's own browser process. The Main instance compiles
   no cryptography, so the keys live only in the Sync worker's own memory.
-* Presence and cursor frames are sealed before they leave, exactly like a delta (`ZK-005`).
+* Presence and cursor samples are sealed before they leave, exactly like a delta (`ZK-005`).
 
 **The primitives** all execute in the Sync worker, the sole consumer of `ambre-crypto`.
 XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement. BLAKE2b for
@@ -205,7 +205,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
-| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse a frame under a stale key nor keep the links of a key chain in order |
+| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse an envelope under a stale key nor keep the links of a key chain in order |
 
 ---
 

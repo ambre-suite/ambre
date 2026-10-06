@@ -3826,7 +3826,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
 }
 
 /// `TOILE-UI-315`: a viewer that stops broadcasting says so on the wire. The
-/// peers read the whole live set. A frame naming no slide is what drops this
+/// peers read the whole live set. A sample naming no slide is what drops this
 /// viewer from the presenters the panel offers to follow.
 #[test]
 fn stopping_a_broadcast_sends_a_frame_naming_no_slide() {
@@ -3890,7 +3890,7 @@ fn follower_adopts_presenter_slide() {
 
 #[test]
 fn non_follower_ignores_broadcast() {
-    // Not following anyone: a broadcast frame updates presence but never moves us.
+    // Not following anyone: a broadcast sample updates presence but never moves us.
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(true));

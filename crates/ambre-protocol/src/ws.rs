@@ -4,7 +4,7 @@
 // Endpoint: GET /api/ws -> upgrade WebSocket
 // One connection carries messages for ALL open documents. Demux by
 // document_id in each message. A Murmure channel travels as its documents and
-// has no frame of its own (`SRV-102`).
+// has no wire message of its own (`SRV-102`).
 // ============================================================================
 
 use crate::messages::{Clock, Seq, Signature};
@@ -158,7 +158,7 @@ pub enum WsServerMsg {
 
     /// A delta refused for its key: the document owes a rotation, and every key
     /// it held is one a departed member holds too (`ambre-spec-server.md`,
-    /// `SRV-123`). Sent to the author alone. The frame took no sequence number
+    /// `SRV-123`). Sent to the author alone. The delta took no sequence number
     /// and consumed no clock (`SRV-125`). So the author seals it again under
     /// the next key, at the same clock, and sends it again (`SYNC-129`).
     KeyRefused {

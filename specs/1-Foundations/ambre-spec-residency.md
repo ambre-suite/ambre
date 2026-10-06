@@ -182,7 +182,7 @@ Residency has no control of its own.
 | Memory holds what a view shows | a memory cache within a byte budget | a closed document reopens from the local store in one read, and a cache buys little for a budget no one has measured |
 | A byte budget for the local store | a cap on the number of documents | documents differ in size by orders of magnitude, so a count holds no byte budget |
 | Counters from a sealed summary | decoding each background delta | a Loro delta decodes only against its document, so every active document would stay in memory |
-| Counters from a sealed summary | a frame kind the relay reads | one more field outside the `ZK-007` set, for a count the client computes itself |
+| Counters from a sealed summary | a wire message kind the relay reads | one more field outside the `ZK-007` set, for a count the client computes itself |
 | A light subscription | the full Sync state for every document | the full state runs up to 1 MB, and hundreds of documents break the memory budget |
 | Immutable documents leave first | least recently viewed alone | an immutable document reloads with no loss, so it is the cheapest to drop |
 | A refused write evicts, then retries | stopping the document | the relay holds every acknowledged change, so losing the local copy costs a download, never data |

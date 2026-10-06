@@ -27,13 +27,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MACH`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MACH-001` | `INV` | A machine member MUST hold the document key through the same wrap as a human member. | `1-Foundations/ambre-spec-membership.md section 3` (`SYNC-010`) | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACH-002` | `INV` | A machine MUST reach a document only through the client library that seals every frame. | `ZK-001`; this spec section 3 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). A library that let a caller skip the seal would put one plaintext frame on the relay, and that frame is the leak | unimplemented |
+| `MACH-002` | `INV` | A machine MUST reach a document only through the client library that seals every envelope. | `ZK-001`; this spec section 3 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). A library that let a caller skip the seal would put one plaintext message on the relay, and that message is the leak | unimplemented |
 | `MACH-003` | `OBS` | The member list MUST mark each machine as a machine. | this spec section 4 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-004` | `OBS` | The member list MUST show the host each machine declares. | this spec section 4 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). The declaration is the operator's word, and section 6 says why nothing can check it | unimplemented |
 | `MACH-005` | `INV` | The relay MUST bucket the requests of a machine apart from those of the human members. | `1-Foundations/ambre-spec-server.md section 1` (`SRV-019`) | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). A machine that polls in a loop would otherwise drain the bucket its owner types into | unimplemented |
 | `MACH-006` | `INV` | An inbox writer MUST hold no key that opens the document. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-007` | `CONC` | Two members merging one inbox concurrently MUST apply each post once. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). Both clients are online, both see the post, and neither knows the other merges | unimplemented |
-| `MACH-008` | `INV` | An addressed machine MUST hold no key that opens an unaddressed frame. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACH-008` | `INV` | An addressed machine MUST hold no key that opens an unaddressed envelope. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-009` | `INV` | An addressed key MUST derive from the current document key. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1). A key derived from a retired document key would survive the rotation that removed a member | unimplemented |
 | `MACH-010` | `INV` | An addressed machine MUST answer through the document inbox, as an inbox writer. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -91,20 +91,20 @@ A member client opens the pending posts and writes them into the document as ord
 | `MACH-033` | `FAIL` | A post whose writer is missing from the sealed machine records MUST be set aside, whatever the relay accepted. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). A relay that added a writer of its own to its registry would otherwise write into the document | unimplemented |
 | `MACH-026` | `FAIL` | A post that fails to open or to parse MUST be set aside and reported, never merged. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
-### 1.7 Address a frame to a machine
+### 1.7 Address an envelope to a machine
 
-A user sends a command or a message to one machine. Only that frame reaches it.
+A user sends a command or a message to one machine. Only that envelope reaches it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MACH-027` | `POST` | A frame addressed to a machine MUST be sealed with the addressed key of that machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACH-027` | `POST` | An envelope addressed to a machine MUST be sealed with the addressed key of that machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-028` | `FRAME` | Addressing a frame MUST seal no other frame with the addressed key. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-029` | `FRAME` | Addressing a frame MUST NOT send the document key to the machine. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-030` | `FAIL` | Addressing a removed machine MUST be refused before any sealing. | this spec section 3 | not built | unbuilt -- lands with the `Addressed machines` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.8 Remove an addressed machine
 
-The owner removes the machine. It keeps the frames it already opened, and it receives no other.
+The owner removes the machine. It keeps the envelopes it already opened, and it receives no other.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
@@ -144,7 +144,7 @@ of the document, sealed under the document key (`ambre-spec-sealed-envelope.md`)
 | :--- | :--- | :--- | :--- | :--- |
 | machine member | the wrapped document key | the whole document, its history included | what its role allows | a rotation (`MACH-015`) |
 | inbox writer | its own signing key | nothing | posts, merged by a member | a registry update (`MACH-022`) |
-| addressed machine | an addressed key, wrapped for it | the frames addressed to it | posts, as an inbox writer | a registry update (`MACH-032`) |
+| addressed machine | an addressed key, wrapped for it | the envelopes addressed to it | posts, as an inbox writer | a registry update (`MACH-032`) |
 
 **The shapes.**
 
@@ -178,7 +178,7 @@ pub struct InboxPost {
 }
 ```
 
-**The client.** One Rust library, `ambre-client`, with no interface. It seals every frame, and it
+**The client.** One Rust library, `ambre-client`, with no interface. It seals every envelope, and it
 exposes no path that skips the seal (`MACH-002`). One feature per class keeps each build small:
 
 | Feature | Pulls in | Serves |
@@ -215,7 +215,7 @@ A second merge of the same post finds its id in the document and writes nothing 
 3. the member wraps the result for the exchange key of the machine, as a membership wrap;
 4. after a rotation, a member derives and wraps again from the new document key (`MACH-009`).
 
-An addressed frame is not an edit. It travels on a stream of its own beside the oplog, and the
+An addressed envelope is not an edit. It travels on a stream of its own beside the oplog, and the
 document never holds it. The oplog is sealed under the document key, which the machine lacks.
 
 **Code.** not built -- the three classes land with their Stories (`ambre-roadmap.md` post-V1).
@@ -229,7 +229,7 @@ document never holds it. The oplog is sealed under the document key, which the m
 | "Add a machine" in the share dialog | the class, the role and the host are asked; the host is shown and the fingerprint confirmed (`MACH-011`, `MACH-014`) |
 | the member list | a machine badge and the declared host beside each machine (`MACH-003`, `MACH-004`) |
 | the inbox settings of a document | register or revoke a writer by its public key (`MACH-021`) |
-| a Murmure slash command, or a command palette entry in an editor | the frame is addressed to one machine (`MACH-027`) |
+| a Murmure slash command, or a command palette entry in an editor | the envelope is addressed to one machine (`MACH-027`) |
 | a post set aside | a notice names the writer and the reason (`MACH-026`) |
 
 ---
@@ -241,7 +241,7 @@ document never holds it. The oplog is sealed under the document key, which the m
 | A machine is a sealed client | a REST API on the relay | the relay links no crate that can open a payload (`ZK-004`), so the API could serve only ciphertext. Giving it a key makes the relay a reader, which ends the zero-knowledge pillar |
 | A machine is a sealed client | a bridge service that holds the document key and exposes webhooks | the bridge is a member that every integration trusts at once. One breach reads every document it bridges, and the owner sees one member where many programs read |
 | A machine is a sealed client | scheduled scripts that run on the relay | the relay cannot run a script on content it cannot open |
-| The client library seals every frame | a library where the seal is optional | one caller that skips the seal writes plaintext to the relay, and the relay cannot tell a sealed envelope from plaintext |
+| The client library seals every envelope | a library where the seal is optional | one caller that skips the seal writes plaintext to the relay, and the relay cannot tell a sealed envelope from plaintext |
 | Three classes, the member class opt-in | every machine a full member | a program that only posts, or only answers a command, would read every edit and its whole history. Each such program would also cost a rotation on removal |
 | The inbox is asymmetric | a symmetric inbox key shared with the writers | a writer holding the key could open every other post. Removing it would then cost a rotation of the inbox key |
 | Access is per document | a key per range, per sheet or per page | a Loro document is one oplog under one key. Splitting it into several keys means several documents, and every cross-range formula or link breaks |
@@ -261,8 +261,8 @@ document never holds it. The oplog is sealed under the document key, which the m
   set `ZK-007` allows. Each needs a row in the boundary table, or a sealed form the relay stores blind.
 * **A machine member reads the history.** The document key opens the whole oplog, edits made before
   the machine joined included. A shallow snapshot that would hide the older edits is not ruled.
-* **The stream of addressed frames is not ruled.** Where the relay keeps it, and for how long, has no
-  rule yet.
+* **The stream of addressed envelopes is not ruled.** Where the relay keeps it, and for how long,
+  has no rule yet.
 * **The host declaration is unverifiable.** It records what the operator says; nothing proves where
   the program runs.
 * **The content a post maps to is per application.** A row in Trame, a card in Toile, a paragraph in
@@ -283,7 +283,7 @@ document never holds it. The oplog is sealed under the document key, which the m
 | How a document key is wrapped for a member, and what a role allows | `ambre-spec-membership.md` |
 | When and how a document key rotates | `ambre-spec-key-rotation.md` |
 | How a fingerprint is shown and confirmed | `ambre-spec-key-verification.md` |
-| How a frame is sealed | `ambre-spec-sealed-envelope.md` |
+| How an envelope is sealed | `ambre-spec-sealed-envelope.md` |
 | What the relay may learn | `ambre-spec-zero-knowledge.md` |
 | How the relay limits the request rate | `ambre-spec-server.md` |
 | The figure for any rate or cost | `ambre-spec-budgets.md` |

@@ -868,10 +868,10 @@ impl SyncState {
     /// this method receives the already-decoded message.
     #[allow(dead_code)]
     pub(crate) fn handle_ws_message(&mut self, server_msg: WsServerMsg) {
-        // Any frame from the server proves the connection is authenticated and
+        // Any wire message from the server proves the connection is authenticated and
         // live, so the reconnect backoff resets. A bare `onopen` is NOT enough:
         // an auth-rejected upgrade still returns 101 (then the server drops it),
-        // firing `onopen` without ever sending a frame. Resetting on `onopen`
+        // firing `onopen` without ever sending a message. Resetting on `onopen`
         // there would spin a tight reconnect loop (storm). A rejected connection
         // never reaches this point, so its backoff keeps growing as intended.
         self.lifecycle.frame();
@@ -917,8 +917,8 @@ impl SyncState {
                 // Ed25519 key before delivery so a peer cannot spoof another
                 // user's cursor. The client-side key directory (member signing
                 // keys / trusted-keys) is not wired yet. An unattributable
-                // frame is dropped rather than shown under a guessed identity.
-                // Presence is best-effort; a dropped frame is corrected by the
+                // sample is dropped rather than shown under a guessed identity.
+                // Presence is best-effort; a dropped sample is corrected by the
                 // next one.
                 let Some(from_user_id) = doc_state.resolve_ephemeral_author(author_pk) else {
                     tracing::debug!(

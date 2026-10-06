@@ -196,9 +196,9 @@ fn version_check() {
     assert!(check_version(other_version).is_err());
 }
 
-/// `SRV-100`: a frame that does not decode is a typed error on either side
+/// `SRV-100`: a wire message that does not decode is a typed error on either side
 /// of the socket. The cases are no bytes, a foreign version, and every
-/// truncation of a valid frame.
+/// truncation of a valid wire message.
 #[test]
 fn a_frame_that_does_not_decode_is_a_typed_error() {
     use crate::ws::{

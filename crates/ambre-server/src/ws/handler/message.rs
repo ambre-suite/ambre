@@ -474,7 +474,7 @@ pub(crate) async fn handle_update(
 }
 
 /// The pauses between the attempts of an index write: three retries, a third
-/// of a second in all. That bounds how long one frame holds its connection.
+/// of a second in all. That bounds how long one delta holds its connection.
 const INDEX_WRITE_BACKOFF: [Duration; 3] = [
     Duration::from_millis(20),
     Duration::from_millis(80),
@@ -484,7 +484,7 @@ const INDEX_WRITE_BACKOFF: [Duration; 3] = [
 /// Writes the index row of delta `seq`. A small delta lives in its row, in the
 /// same write as the row, and takes no other path (`SRV-148`). A large one, or
 /// one that meets a full inline tail, keeps an object of its own (`SRV-149`,
-/// `SRV-150`). Returns whether the row holds the frame. Both inserts ignore a
+/// `SRV-150`). Returns whether the row holds the delta. Both inserts ignore a
 /// row already written, so a retry never doubles one.
 async fn store_index_row(
     state: &Arc<AppState>,
@@ -2543,7 +2543,7 @@ mod channel_gate_tests {
         assert_eq!(conn.doc_write_allowed.get(&segment), Some(&true));
     }
 
-    /// `SRV-048`: a frame on a segment passes the write gate of any document.
+    /// `SRV-048`: a wire message on a segment passes the write gate of any document.
     /// A viewer of the channel is refused a delta before any durable write.
     #[sqlx::test]
     #[cfg_attr(

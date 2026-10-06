@@ -357,7 +357,7 @@ pub struct CursorPosition {
 /// insertion this one has not. A cursor rides the operation it was taken
 /// against, so every peer resolves it to the same place once the two converge.
 /// The bytes are opaque to this plane, which is why the block is named beside
-/// them. A frame whose block this peer does not hold is dropped, and the cursor
+/// them. A sample whose block this peer does not hold is dropped, and the cursor
 /// is never decoded (`PROSE-057`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PresencePayload {
@@ -1065,7 +1065,7 @@ pub enum ProseCommand {
     },
 
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
-    /// The handler builds the wire frame and returns it as the outcome's
+    /// The handler builds the presence sample and returns it as the outcome's
     /// ephemeral half. No user id is ever put on the wire.
     UpdateCursor {
         pos: CursorPosition,

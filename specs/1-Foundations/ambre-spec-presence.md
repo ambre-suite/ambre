@@ -96,13 +96,13 @@ identity rule: what a peer may assert about itself, and what the receiver has es
 | the payload | this peer to the relay, and back from every other | an anchor, and a self-asserted display name |
 | the resolved sample | the Logic thread to the view | the resolved `UserId`, the name, the colour, the anchor resolved to a position |
 
-The payload is postcard bytes inside an `Ephemeral` frame, so it is one of the few types in the
+The payload is postcard bytes inside an `Ephemeral` wire message, so it is one of the few types in the
 suite that keeps `serde`. The resolved sample never leaves the process: it moves by value on
 an `ambre_bus::conduit` queue, and carries none.
 
 **The identity rule, stated once.** The payload carries no `user_id` (`PRESENCE-002`). The canonical
 one arrives out of band, on `LogicEvent::RemoteEphemeral { from_user_id }`, resolved by `ambre-sync`
-from the key that signed the frame (`PRESENCE-003`). The name inside the payload labels a position
+from the key that signed the envelope (`PRESENCE-003`). The name inside the payload labels a position
 and decides nothing (`PRESENCE-004`). So a peer who writes another member's name into the payload
 relabels their own cursor, and nothing else.
 
@@ -117,7 +117,7 @@ relabels their own cursor, and nothing else.
 4. the whole live set travels to the view, which replaces its own (`PRESENCE-009`).
 
 **Why the set travels whole.** Presence is a stream of samples, not a stream of changes. A lost
-frame must cost one late position, never a position that stays on the screen for good. A full set
+sample must cost one late position, never a position that stays on the screen for good. A full set
 makes the departure of a peer the absence of an entry, which no dropped message can corrupt.
 
 **How a departure travels** (`PRESENCE-014`). The relay is the one party that knows a peer stopped
@@ -210,7 +210,7 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
 | The payload carries no user identifier | an author field in the sample | it lets any member paint a cursor under any other member's name. Anything a peer writes about itself is something it can write about anyone else; leaving the field out means there is nothing to forge, and the only identity is the one resolved from the key that signed the frame (`PRESENCE-002`). |
 | Keyed by `UserId`, never by peer or device | keying by the sending peer | it doubles a collaborator every time they open a second tab. A peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours; the `UserId` is the person (`PRESENCE-005`). |
 | The colour is hashed from the `UserId` by the shared helper | a per-application palette assigned in join order | it gives one user a different colour per document and swaps two users' colours on a reconnect. One person with three colours is three people to the reader; the helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`). |
-| The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the frame is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
+| The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the sample is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
 | An unresolvable anchor is dropped, silently | queueing the sample until the target resolves | it holds a cursor at a position the peer has already left. The sample is one of a stream whose next one is on its way, and the target is missing because a delta is in flight: there is nothing for the user to do and nothing for the log to say (`PRESENCE-008`). |
 | The event carries the whole live set | one event per peer with a receiver-side accumulation | it needs a removal path, a timeout or a leave message, and leaves a ghost until whichever one is written. It is what Toile built, and `TOILE-UI-075` is the ghost cursor it produces. The whole live set makes a departure the absence of an entry, so no application needs a departure signal, and none of the three has one (`PRESENCE-009`). |
 | A non-adjacent move snaps | interpolating every move | it is one rule fewer and shows a false path. The interpolation exists to hide 100 ms of latency on a cursor that moved one step; applied to a jump, it draws a path through content the peer never visited, which is a lie the reader cannot detect (`PRESENCE-010`). |
@@ -227,8 +227,8 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
   socket closed. A peer whose network stalls without dropping the socket is named by nobody. They
   leave on the client's own timeout, ten seconds after their last sample, and blink back on the
   next one.
-* **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the frame
-  budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
+* **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the
+  per-frame budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
   a coalescing rule and not a rate.
 * **Nothing rules on a viewer against an editor.** Every peer paints the same overlay whatever their
   role (`ambre-spec-membership.md`).

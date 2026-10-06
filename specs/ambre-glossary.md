@@ -112,7 +112,7 @@
 | machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox writer | a program that posts to an inbox and reads nothing | | `1-Foundations/ambre-spec-machine-access.md` |
-| addressed key | the key that opens only the frames sent to one machine | | `1-Foundations/ambre-spec-machine-access.md` |
+| addressed key | the key that opens only the envelopes sent to one machine | | `1-Foundations/ambre-spec-machine-access.md` |
 | macro | code stored in a document, run by a member client after approval | | `1-Foundations/ambre-spec-macros.md` |
 | integrator | the member who put one version of a macro in one document | | `1-Foundations/ambre-spec-macros.md` |
 | publisher | whoever wrote a macro; a third party signs the package it publishes | | `1-Foundations/ambre-spec-macros.md` |

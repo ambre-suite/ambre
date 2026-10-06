@@ -544,7 +544,7 @@ struct SyncDocumentState {
     /// ephemeral author's verifying key to their canonical `UserId`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
     /// rebuilt when membership changes. A key absent here is not resolved, so the
-    /// frame is dropped rather than attributed to a guessed identity.
+    /// sample is dropped rather than attributed to a guessed identity.
     ///
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
@@ -578,7 +578,7 @@ struct SyncDocumentState {
     /// every delta the relay kept. It is checked then (`AUTHOR-022`).
     held_snapshot: Option<HeldSnapshot>,
     /// The Logic thread evicted the document at this horizon. The session
-    /// becomes a light subscription once every frame sent is acknowledged
+    /// becomes a light subscription once every delta sent is acknowledged
     /// (`RESID-009`).
     released: Option<Seq>,
 }
@@ -748,7 +748,7 @@ impl SyncDocumentState {
     /// members directory, on this trusted side.
     ///
     /// `None` means the author is not a known member of this document (or the
-    /// directory has not been filled yet). The caller drops the frame: presence
+    /// directory has not been filled yet). The caller drops the sample: presence
     /// is best-effort, so showing nothing is preferable to attributing a cursor
     /// to a guessed identity.
     fn resolve_ephemeral_author(&self, author_pk: [u8; 32]) -> Option<UserId> {
@@ -1577,7 +1577,7 @@ mod ephemeral_tests {
         d.set_signing_keys([([7u8; 32], UserId::new())]);
 
         // A non-member (or a document whose directory is not filled yet) must not
-        // be attributed to anyone. The caller drops the frame rather than showing
+        // be attributed to anyone. The caller drops the sample rather than showing
         // a cursor under a guessed identity.
         assert_eq!(d.resolve_ephemeral_author([9u8; 32]), None);
         assert_eq!(doc_state().resolve_ephemeral_author([7u8; 32]), None);

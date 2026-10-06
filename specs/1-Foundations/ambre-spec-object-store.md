@@ -4,7 +4,7 @@
 **Implementation:** partial -- the layout, the links, the caps and the removal of a deleted
 document's objects all ship. Nothing collects a picture a document stopped using.
 
-> Everything too large for a frame lives in object storage, sealed. The relay never carries those
+> Everything too large for a wire message lives in object storage, sealed. The relay never carries those
 > bytes: it checks who is asking and hands out a link that works once, for a quarter of an hour.
 
 This document owns the object layout, the two links that reach it, and the caps a blob is held to.
@@ -115,7 +115,7 @@ final segment adds one object, its sealed search index.
 
 | Kind | Reaches storage by | Cap | Named by |
 |---|---|---|---|
-| a delta | the relay's own flush (`ambre-spec-sequencer.md`) | 4 MiB, on the frame (`SRV-010`) | its sequence number |
+| a delta | the relay's own flush (`ambre-spec-sequencer.md`) | 4 MiB, on the wire message (`SRV-010`) | its sequence number |
 | a snapshot | the client, on a presigned link | 50 MiB | an identifier the client mints |
 | a picture or a file | the client, on a presigned link | 100 MiB | a hash of its plaintext, keyed by the document key (`SRV-059`) |
 

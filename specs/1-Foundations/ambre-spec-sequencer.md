@@ -49,14 +49,14 @@ sequence has already moved.
 |---|---|---|---|---|---|---|
 | `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` -- the second acquirer is refused while the first holds it, on the database tier | none | verified |
 | `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_refused_index_write_is_retried_until_the_row_lands` -- a trigger refuses the first two inserts, and the row lands on the third attempt with nothing dead-lettered | none | verified |
-| `SRV-034` | `POST` | A delta given a number MUST reach durable storage: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained; `ambre_server::ws::handler::message::delivery_tests::a_refused_queue_leaves_the_frame_in_its_row` -- a large delta whose queue refuses every push takes its frame into its index row, and a replay delivers it | none | verified |
-| `SRV-082` | `POST` | A durable write that failed MUST leave the whole frame where an operator can replay it. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::an_index_write_that_never_lands_leaves_the_whole_frame` -- past every retry, the dead letter holds the number, the object key and the signed frame byte for byte, and its signature verifies | none | verified |
+| `SRV-034` | `POST` | A delta given a number MUST reach durable storage: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained; `ambre_server::ws::handler::message::delivery_tests::a_refused_queue_leaves_the_frame_in_its_row` -- a large delta whose queue refuses every push takes its bytes into its index row, and a replay delivers it | none | verified |
+| `SRV-082` | `POST` | A durable write that failed MUST leave the whole delta where an operator can replay it. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::an_index_write_that_never_lands_leaves_the_whole_frame` -- past every retry, the dead letter holds the number, the object key and the signed delta byte for byte, and its signature verifies | none | verified |
 | `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | `ambre_server::s3::tests::a_partial_flush_trims_only_what_it_stored` -- a batch failing at its fourth entry trims three, the unreadable one among them, and keeps the rest | none | verified |
-| `SRV-148` | `POST` | A delta under the inline size MUST be stored in its index row, in the same write as the row. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a small signed delta leaves its frame in its row and no pending entry, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-148` | `POST` | A delta under the inline size MUST be stored in its index row, in the same write as the row. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a small signed delta leaves its bytes in its row and no pending entry, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-149` | `POST` | A delta over the inline size MUST be stored as an object of its own, which its index row names. | this spec section 3; `ambre-spec-object-store.md` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a delta past the inline size gets a row naming its object, and the pending entry the flush writes it from | none | verified |
 | `SRV-151` | `POST` | Past the inline cap, the relay MUST move the oldest inline deltas of the document into one batch object, and point their rows at it. | this spec section 3; `SRV-150` | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- of two hundred inline deltas the oldest 136 move to one batch their rows name, and the newest 64 stay; `ambre_server::hot_tail::tests::a_move_starts_at_three_quarters_of_either_bound` -- the move starts before the cap; `ambre_server::hot_tail::tests::a_move_keeps_a_quarter_of_the_cap` -- what stays | none | verified |
 | `SRV-152` | `POST` | A document with no write for the idle delay MUST have its inline deltas moved into one batch object. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::hot_tail::db_tests::an_idle_tail_moves_whole` -- a tail written a day ago moves whole, and one written since stays | none | verified |
-| `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- the batch holds each number with its frame unchanged; `ambre_server::hot_tail::tests::a_batch_keeps_each_number_and_frame` -- the encoding round trip; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- a replay after a move sends the bytes it sent before | none | verified |
+| `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- the batch holds each number with its bytes unchanged; `ambre_server::hot_tail::tests::a_batch_keeps_each_number_and_frame` -- the encoding round trip; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- a replay after a move sends the bytes it sent before | none | verified |
 
 ### 1.4 A history is folded and trimmed
 
@@ -109,8 +109,8 @@ snapshot, and the relay arbitrates who writes it.
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
-  `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
-  `SRV-001` keeps the frame out of the logs.
+  `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
+  `SRV-001` keeps the delta out of the logs.
 * **Verification.** 38 `verified`, 9 `unimplemented`. What holds is the ordering, where each
   delta lives, and the replay. The recovery paths are driven through real failures: a register
   that refuses inserts, a queue that refuses pushes, an index that cannot be read.
@@ -123,7 +123,7 @@ Two peers over one document. Every row is about order, which is the only thing t
 | Alice does | Bob does | The relay holds | Each user sees | Test |
 |---|---|---|---|---|
 | edits twice | edits once | three deltas, three numbers, one order | the same document, in the same order, on both screens (`SRV-006`) | `redis_ops::lua_tests::independent_clients_have_independent_clocks` |
-| edits, and her frame is replayed by an attacker | watches | one delta | the replayed frame is refused: its clock is already spent (`SRV-006`) | `redis_ops::lua_tests::duplicate_clock_rejected` |
+| edits, and her delta is replayed by an attacker | watches | one delta | the replayed delta is refused: its clock is already spent (`SRV-006`) | `redis_ops::lua_tests::duplicate_clock_rejected` |
 | edits while Bob is offline | reconnects | every delta, indexed | Bob gets exactly what he missed, in order (`SRV-041`, `SRV-084`) | `ws::handler::message::delivery_tests::a_page_read_out_of_order_is_sent_in_order` |
 | edits nothing while Bob is away | reconnects with a current snapshot | nothing new | Bob's document opens rather than spinning (`SRV-040`) | `ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` |
 | edits for a year | opens the document | every delta since the first (`SRV-038`) | both wait through the whole history, every time | none, and it fails -- section 6 |
@@ -148,7 +148,7 @@ given a document, an author key and an incoming clock:
 4. return the document's next number, incremented
 ```
 
-The step runs inside the ephemeral store, so no two frames can interleave between the check and the
+The step runs inside the ephemeral store, so no two deltas can interleave between the check and the
 increment (`SRV-080`). The exact script is in the source.
 
 **Two sessions of one author.** Two tabs or devices of one user sign with one key, so they share one
@@ -171,10 +171,10 @@ them un-assigns the number.
 
 | Step | On failure |
 |---|---|
-| the number is assigned | the frame is refused, and nothing has moved (`SRV-006`) |
-| the durable index gains a row | tried three more times, a third of a second in all (`SRV-033`); past that, the whole frame goes to a dead-letter list for an operator (`SRV-082`) |
-| a frame without an inline home is queued for object storage, and the document marked unflushed | the frame moves into its index row, which drops the object key, and goes to the same dead-letter list (`SRV-034`, `SRV-082`) |
-| the frame is fanned out live | logged; a reconnecting client replays it from the index (`ambre-spec-broadcast.md`) |
+| the number is assigned | the delta is refused, and nothing has moved (`SRV-006`) |
+| the durable index gains a row | tried three more times, a third of a second in all (`SRV-033`); past that, the whole delta goes to a dead-letter list for an operator (`SRV-082`) |
+| a delta without an inline home is queued for object storage, and the document marked unflushed | the delta moves into its index row, which drops the object key, and goes to the same dead-letter list (`SRV-034`, `SRV-082`) |
+| the delta is fanned out live | logged; a reconnecting client replays it from the index (`ambre-spec-broadcast.md`) |
 
 **Where a delta lives.** A delta is a few hundred bytes, so one object per delta costs a request for
 almost nothing. A delta under the inline size lives in its index row (`SRV-148`), and a replay
@@ -248,9 +248,9 @@ horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
 
 1. refuse, and answer nothing, on three counts: no subscription, a replay under a second old
    (`SRV-086`), or a membership that no longer holds (`SRV-085`);
-2. load the still-queued deltas once, as a map from number to frame;
+2. load the still-queued deltas once, as a map from number to delta;
 3. read the index in pages, in order;
-4. take each page's inline frames from its rows, and fetch once each batch object and oversized
+4. take each page's inline deltas from its rows, and fetch once each batch object and oversized
    delta it names (`SRV-155`). Fall back to the map for what has not flushed yet, and re-sort the
    page by number;
 5. send one answer per page, and one empty answer when the first page is empty (`SRV-040`);
@@ -275,7 +275,7 @@ paging: the earlier pages already released the client.
 
 ## 4. SURFACE
 
-The sequencer has no surface of its own: it is reached by a frame or by a request. What a person
+The sequencer has no surface of its own: it is reached by a delta or by a request. What a person
 sees is how long a document takes to open.
 
 | Trigger | Behaviour |
@@ -296,7 +296,7 @@ sees is how long a document takes to open.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The ordering check and the numbering are one step in the ephemeral store | checking in the process and numbering in the store | it is the same code with a race in it: two round trips leave a window in which a second frame from the same author passes the same check, and the whole anti-replay property rests on that window not existing. One script closes it without a transaction on the durable store |
+| The ordering check and the numbering are one step in the ephemeral store | checking in the process and numbering in the store | it is the same code with a race in it: two round trips leave a window in which a second delta from the same author passes the same check, and the whole anti-replay property rests on that window not existing. One script closes it without a transaction on the durable store |
 | The author clock hash is never expired | a lifetime on the hash | it trades an unbounded key for a permanent lockout: a reset to zero locks a legitimate author out of its own document for ever, because its own clock only moves forward. The hash is bounded by the membership, so the growth is bounded already |
 | The number is assigned before the delta is durable | assigning after the durable write | it makes every store failure a client failure with no retry, because a client cannot retry at the same clock. Assigning first and dead-lettering a failure keeps the sequence intact and turns a durability failure into an operator's task |
 | One flush task per instance, over a marked set | a task per active document | it is a thousand idle tasks on a thousand open documents |
@@ -304,7 +304,7 @@ sees is how long a document takes to open.
 | The drain takes a lock per document | letting both instances drain | it is safe until the second instance exists: two instances draining one queue both trim by their own count, which removes entries a client queued in between, so a delta already numbered and already acknowledged would be gone. The write path never takes the lock, so collaboration is untouched |
 | The replay is paged, and each page is fetched together | one batch with a hard cap | it silently truncated any client further behind than the cap: it applied the batch, declared itself hydrated and never asked again |
 | The replay is paged, and each page is fetched together | one object fetch at a time | the serial round trip dominated a cold open. Fetching a page's objects together removes it |
-| A replay is throttled per document | no throttle | it makes the cheapest frame the most expensive request: a request for everything since the first delta is one small frame that costs the relay the whole history from object storage. One replay per reconnect is the real need, and a second within the same second is not one |
+| A replay is throttled per document | no throttle | it makes the cheapest wire message the most expensive request: a request for everything since the first delta is one small message that costs the relay the whole history from object storage. One replay per reconnect is the real need, and a second within the same second is not one |
 | A pending snapshot moves no trim | trimming as soon as a snapshot lands | a false snapshot would replace the signed deltas that could prove it false |
 | The deltas of a final segment wait for a confirmation | purging them after a delay | a false snapshot nobody checked in time would become the only record, and every cold open would trust it |
 | The relay offers a snapshot for confirmation | waiting for the next cold open | a document whose other members keep it open would never be confirmed, and its deltas would pile up |
@@ -333,7 +333,7 @@ sees is how long a document takes to open.
   retryable refusal names it. Nothing restores a delta the object store lost after accepting it,
   so every retry meets the same gap. `SRV-041` binds what the relay holds, and no rule says what
   a client does with a hole that never closes.
-* **The dead-letter list is written and never read.** It holds the whole signed frame, so a replay
+* **The dead-letter list is written and never read.** It holds the whole signed delta, so a replay
   is possible (`SRV-082`). Nothing drains it, counts it or exposes it over a route, so that replay
   is an operator reading the ephemeral store by hand.
 * **The client does not act on a replay refusal.** It logs the retryable refusal and waits for the
@@ -354,10 +354,10 @@ sees is how long a document takes to open.
 | Question | Owner |
 |---|---|
 | Why a client waits for a parent, and what it holds meanwhile | `ambre-spec-delta-order.md` |
-| What a client puts inside the frame this document numbers | `ambre-spec-sealed-envelope.md` |
+| What a client puts inside the delta this document numbers | `ambre-spec-sealed-envelope.md` |
 | Where a sealed envelope is stored, and under which name | `ambre-spec-object-store.md` |
-| Who receives the frame live, and over what | `ambre-spec-broadcast.md` |
+| Who receives the delta live, and over what | `ambre-spec-broadcast.md` |
 | Who may write at all | `ambre-spec-server.md`, `SRV-008` |
-| The signature the frame carries | `ambre-spec-server.md`, `SRV-007` |
-| What the relay may learn from an ordered frame | `ambre-spec-zero-knowledge.md`, `ZK-007` |
+| The signature the delta carries | `ambre-spec-server.md`, `SRV-007` |
+| What the relay may learn from an ordered delta | `ambre-spec-zero-knowledge.md`, `ZK-007` |
 | What is verified where, and by which tier | `ambre-spec-testing.md` |

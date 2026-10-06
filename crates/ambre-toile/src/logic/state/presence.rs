@@ -60,10 +60,10 @@ impl ToileState {
         sample_outcome(display, &sample)
     }
 
-    /// Apply a decrypted remote ephemeral (presence) frame, keyed by the sender's
+    /// Apply a decrypted remote presence sample, keyed by the sender's
     /// canonical `UserId` (resolved in `ambre-sync`). Records the peer's latest
     /// presence and returns the live set for the overlay to adopt whole. Never
-    /// mutates the CRDT or history; a malformed frame is dropped.
+    /// mutates the CRDT or history; a malformed sample is dropped.
     ///
     /// The sample is stamped with the last clock a local command carried, which
     /// is what later ages it. A client that has never sent one stamps zero, and
@@ -79,9 +79,9 @@ impl ToileState {
         let present_slide = presence.present_slide;
         self.presence.insert(from_user_id, (presence, self.now_ms));
         let mut events = vec![self.live_presence_event()];
-        // "Follow presenter": if we follow this sender and the frame carries
+        // "Follow presenter": if we follow this sender and the sample carries
         // a broadcast slide, adopt it -- clamp to the deck and glide via
-        // `SlideChanged`. A frame from anyone else, or without `present_slide`,
+        // `SlideChanged`. A sample from anyone else, or without `present_slide`,
         // never moves us. Purely local: no CRDT / history mutation.
         if self.following == Some(from_user_id)
             && let Some(idx) = present_slide
@@ -128,7 +128,7 @@ impl ToileState {
     }
 
     /// The whole live peer set, in a stable order, as the event the view adopts
-    /// (`PRESENCE-009`). Sorted by id so two frames of an unchanged set are the
+    /// (`PRESENCE-009`). Sorted by id so two passes over an unchanged set are the
     /// same event, and the overlay's paint order never depends on a hash walk.
     fn live_presence_event(&self) -> ToileEvent {
         let mut peers: Vec<PresenceUpdate> = self

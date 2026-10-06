@@ -136,7 +136,7 @@ exists anywhere in the workspace.
 2. it sends it when it differs from the last one sent, or when the heartbeat is due. That heartbeat keeps this
    client in the others' live set, and it advances the Logic thread's only clock (`TOILE-UI-073`);
 3. the Logic thread stamps the session's display name on it (`TOILE-UI-076`), ages its own peers
-   against the clock, and hands the frame to Sync.
+   against the clock, and hands the sample to Sync.
 
 **Steps, when a peer leaves** (`PRESENCE-014`):
 
@@ -150,15 +150,15 @@ before the message existed. No peer is kept for good either way.
 
 **Steps, when a peer's sample arrives:**
 
-1. the frame is decoded and keyed by the `UserId` the transport resolved, never by anything the
+1. the sample is decoded and keyed by the `UserId` the transport resolved, never by anything the
    payload carries (`TOILE-177`);
 2. it replaces that peer's presence whole and is stamped with the local clock (`TOILE-178`);
 3. the whole live set travels to the view, which replaces its mirror with it, trails included
    (`TOILE-185`).
 
-**Steps, when a frame arrives:**
+**Steps, when an ephemeral arrives:**
 
-1. decode the sample, and drop the frame on a decode failure -- presence is best effort
+1. decode the sample, and drop the ephemeral on a decode failure -- presence is best effort
    (`TOILE-181`);
 2. record it under the sender's `UserId`, replacing that peer's previous sample;
 3. emit the event, and fold it into the render thread's mirror -- where the whole live set should
@@ -206,8 +206,8 @@ nothing hands it the display name the member list already carries (`TOILE-UI-076
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | The anchor is a world point for the pointer and an `ElementId` set for the ghosts | one anchor for both | it either drops the pointer to the nearest element or makes a ghost a rectangle that stops following its shape. The two halves answer two questions: a pointer is between elements as often as on one, so it has no identity to name and a world point is already invariant under everything but a pan, which is the viewer's own; a ghost outlines elements, which do have identities, and those survive a move, a restyle and a regroup (`PRESENCE-007`) |
-| A sample is the peer's whole presence, and a missing field means absent | a per-field patch | it needs one presence-or-absence flag per field and makes the receiver's state depend on the order frames arrive in, so two peers can disagree about which of two samples cleared what. Replacing costs the sender the fields that did not change, and buys a state that is exactly the last sample received |
-| The trail is accumulated by the receiver | streaming the whole trail in each sample | one point per frame is a fixed sample cost whatever the trail length, and a lost frame shortens the trail instead of breaking it |
+| A sample is the peer's whole presence, and a missing field means absent | a per-field patch | it needs one presence-or-absence flag per field and makes the receiver's state depend on the order samples arrive in, so two peers can disagree about which of two samples cleared what. Replacing costs the sender the fields that did not change, and buys a state that is exactly the last sample received |
+| The trail is accumulated by the receiver | streaming the whole trail in each sample | one point per frame is a fixed sample cost whatever the trail length, and a lost sample shortens the trail instead of breaking it |
 | The highlighter never becomes an element | committing the trail as a stroke | it is a pointing gesture during a discussion; an element would enter the history, the undo stack and every export |
 
 ---

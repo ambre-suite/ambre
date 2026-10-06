@@ -106,7 +106,7 @@ delta and its activity summary, and the view a `MurmureEvent::Messages`.
 
 **A remote delta, in steps.**
 
-1. The Sync worker opens the frame and forwards the delta, the nonce, the summary and the signer.
+1. The Sync worker opens the envelope and forwards the delta, the nonce, the summary and the signer.
 2. The engine finds the document by its `document_id` (`MURMURE-024`).
 3. The authorship check of the messages feature runs on a fork (`MURMURE-029`).
 4. The delta is imported, and the view is told which messages changed.

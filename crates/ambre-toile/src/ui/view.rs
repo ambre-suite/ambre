@@ -2219,7 +2219,7 @@ impl ToileView {
                     .collect()
             }),
             laser: self.machine.laser(),
-            // The presentation broadcast rides its own frame, emitted by the
+            // The presentation broadcast rides its own sample, emitted by the
             // Logic thread on a slide change (`toile-presentation`).
             present_slide: None,
         }

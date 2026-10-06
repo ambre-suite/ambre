@@ -145,7 +145,7 @@ the first shared document, which is why the rule is stated rather than left to t
 5. post the wrapped copy. The relay pushes a notice to the invitee, who is not yet subscribed to
    the document.
 
-**The directory is membership, not trust.** It answers "which member wrote this frame", trusting the
+**The directory is membership, not trust.** It answers "which member wrote this envelope", trusting the
 relay's mapping of keys to people. Detecting a relay that substitutes a member's key is the
 trusted-key store's job (`ambre-spec-key-verification.md`), and presence does not wait on it.
 
@@ -241,7 +241,7 @@ authority: the role here hides what the relay would refuse anyway.
 | The recipient unwraps against the wrapper's key | unwrapping against the member's own key | it happens to work for a single-member document and fails silently on the first shared one. The exchange is symmetric, so only one of the two public keys yields the secret, and the relay is the only party that knows which member wrapped |
 | The directory maps signing keys, and lives in the Sync worker | resolving in the Logic thread | it would need the keys to cross the boundary `SYNC-039` closes. The resolution has to happen where signatures are verified, which is this worker and nowhere else |
 | An unresolvable author is dropped | trusting an identifier in the payload | an identity guessed from the payload is a peer's own claim, which is exactly what keying on a resolved identity exists to refuse |
-| An unresolvable author is dropped | attributing the frame to the first member | it puts a name on a frame nobody can vouch for, and it is wrong silently. Presence is best-effort and self-correcting instead: the next frame arrives a moment later |
+| An unresolvable author is dropped | attributing the envelope to the first member | it puts a name on an envelope nobody can vouch for, and it is wrong silently. Presence is best-effort and self-correcting instead: the next sample arrives a moment later |
 | An unresolvable role is the read-only one | defaulting to the owning role | offering an affordance the relay refuses costs a confusing error after the edit, where hiding one the user has costs a click through a menu. The role is a user-experience gate, so the failure directions are asymmetric |
 | An unresolvable role is the read-only one | refusing the open | it turns a gate on affordances into a gate on reading, for a value that is missing rather than denied |
 | A failed unwrap stops the open | opening with a fresh key and repairing later | it was the behaviour audit `H3` found: a random key opens the document and then poisons it, because this client seals its edits under a key nobody else holds, and every peer sees a commitment failure on content that looks like ordinary history |
@@ -282,7 +282,7 @@ authority: the role here hides what the relay would refuse anyway.
 |---|---|
 | The trust step before a key is wrapped, and what a fingerprint is | `ambre-spec-key-verification.md` |
 | What a revoke rotates, and what a rotation leaves behind | `ambre-spec-key-rotation.md` |
-| How a frame is signed, and what refuses a forged author | `ambre-spec-sealed-envelope.md` |
+| How an envelope is signed, and what refuses a forged author | `ambre-spec-sealed-envelope.md` |
 | What a presence sample carries, and what it paints | `ambre-spec-presence.md` |
 | What the relay stores per member, and which role may do what | `ambre-spec-server.md` |
 | Where the role gate is applied on a command | `ambre-spec-message-bus.md` |

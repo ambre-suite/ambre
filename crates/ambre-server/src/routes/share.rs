@@ -276,7 +276,7 @@ pub async fn revoke_from_document(
     let text = body.as_ref().and_then(|Json(body)| body.entry.as_deref());
     let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
-    // mirror is raised first: no frame slips in between the commit and it.
+    // mirror is raised first: no delta slips in between the commit and it.
     crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
     let sweep_due = crate::deletion::sweep_due_stored(&state);
     let removed =

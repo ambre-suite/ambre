@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-390` | `POST` | A slash command MUST be completed on the client, from the `commands` map, and sent as a frame addressed to its bot. | this spec section 3; `MACH-027` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-390` | `POST` | A slash command MUST be completed on the client, from the `commands` map, and sent as an envelope addressed to its bot. | this spec section 3; `MACH-027` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-391` | `POST` | The answer of a bot MUST reach the channel as a message it signs, or as a post a member merges. | this spec section 3; `MACH-024` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-392` | `FRAME` | Running a slash command MUST NOT show its text to the other members. | this spec section 3; `MACH-008` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-393` | `POST` | A click on an action of a bot message MUST send a frame addressed to that bot, naming the action. | this spec section 3; `MACH-027` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-393` | `POST` | A click on an action of a bot message MUST send an envelope addressed to that bot, naming the action. | this spec section 3; `MACH-027` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-394` | `FAIL` | Given an action whose bot has left the channel, the client MUST disable it. | this spec section 3 | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-395` | `FRAME` | Clicking an action MUST NOT change the message that carries it. | this spec section 3 | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 * **Budget.** none of its own: a bot is a client, and a post is merged as `ambre-spec-machine-access.md`
   bounds it.
-* **Boundary.** every bot frame is sealed (`ZK-001`). A webhook bridge seals what it receives and
+* **Boundary.** every bot message is sealed (`ZK-001`). A webhook bridge seals what it receives and
   never holds the channel key (`MURMURE-398`), so the relay stores only sealed posts.
 * **Verification.** 12 `unimplemented`: no bot exists in the code.
 
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | The bot does | The channel holds | Every member sees | Test |
 |---|---|---|---|---|
-| types `/deploy staging` | reads the addressed frame, deploys | the answer of the bot | the answer, with the machine badge (`MURMURE-387`) | none |
+| types `/deploy staging` | reads the addressed envelope, deploys | the answer of the bot | the answer, with the machine badge (`MURMURE-387`) | none |
 | -- | a CI bridge receives a failed build | a merged post | the alert, marked as coming from the bridge (`MURMURE-397`) | none |
 | clicks "Approve" on a bot message | receives the action | the bot's follow-up | the follow-up; the message itself unchanged (`MURMURE-395`) | none |
 
@@ -73,14 +73,14 @@ the `machine` origin of a merged post, in `ambre-spec-murmure-schema.md section 
 | Use | Class of `ambre-spec-machine-access.md` | What the bot reads |
 |---|---|---|
 | a bot that reads the channel and answers | machine member | the whole channel |
-| a slash command, a button | addressed machine | the frames addressed to it alone |
+| a slash command, a button | addressed machine | the envelopes addressed to it alone |
 | a webhook | inbox writer, through an encrypting bridge | nothing |
 
 **Commands are listed by a member.** An addressed bot holds no key of the channel, so it cannot write
 `meta`. The member who adds it writes its commands there (`MURMURE-389`).
 
 **A slash command stays between the member and the bot.** The client completes it from the
-`commands` map, then sends it as an addressed frame (`MURMURE-390`). The other members see the
+`commands` map, then sends it as an addressed envelope (`MURMURE-390`). The other members see the
 answer, not the command (`MURMURE-392`).
 
 **A webhook is merged, not written.** A bridge receives the JSON of GitHub or Stripe, seals it to
