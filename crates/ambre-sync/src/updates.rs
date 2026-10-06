@@ -2071,6 +2071,51 @@ mod tests {
         );
     }
 
+    /// The relay's word that the members changed makes Sync list them again,
+    /// so a newcomer's key resolves without a view asking (`SYNC-037`). Two
+    /// listings may cross: the answer to the older one changes nothing.
+    #[test]
+    fn a_change_of_members_reads_the_directory_again_and_a_crossed_answer_changes_nothing() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
+        assert_eq!(
+            state.documents[&doc].directory_asked, 2,
+            "each word lists again"
+        );
+        drain(&rx);
+
+        let carol = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 2,
+            document_id: doc,
+            members: Vec::new(),
+            signing_keys: vec![([2u8; 32], carol)],
+        });
+        let bob = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            members: Vec::new(),
+            signing_keys: vec![([1u8; 32], bob)],
+        });
+
+        let keys = &state.documents[&doc].signing_keys;
+        assert_eq!(keys.get(&[2u8; 32]), Some(&carol), "the newer answer holds");
+        assert!(
+            !keys.contains_key(&[1u8; 32]),
+            "the crossed answer changes nothing"
+        );
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::Rest { .. })),
+            "a refresh of the directory alone answers no request"
+        );
+    }
+
     /// A server document opened over a live WS is only fully hydrated once its
     /// post-open catch-up replay (`MissingUpdates`) lands. The snapshot does not
     /// cover deltas committed after it, and a delta-only document has NO snapshot

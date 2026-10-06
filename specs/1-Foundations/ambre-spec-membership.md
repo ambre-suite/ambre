@@ -57,7 +57,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-014` | `POST` | An ephemeral MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`; `::list_members_refreshes_the_presence_directory` -- the directory the resolution reads | none | verified |
-| `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` -- the members answer replaces it | partial -- the directory is rebuilt only when a view asks for the member list. On the relay's word that the members changed (`SRV-178`), only an open space asks again; an open document of another application keeps a stale directory until its next open, so a newcomer's cursor goes unattributed; lands with the `The member directory follows the relay` Story (`ambre-roadmap.md` E7) | partial |
+| `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` -- the members answer replaces it; `ambre_sync::updates::tests::a_change_of_members_reads_the_directory_again_and_a_crossed_answer_changes_nothing` -- the relay's word (`SRV-178`) lists again, and a crossed older answer changes nothing | none | verified |
+| `SYNC-150` | `POST` | A change of members committed while a document opens MUST reach the directory that open builds. | this spec section 3; `SRV-178` | none | fails -- Sync heeds the relay's word only for a document already open. A change committed after the open read its members, and before Sync heeds the word for that document, is lost: the directory keeps the members the open read until the next change or the next open; lands with the `A change of members during an open is kept` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-151` | `FRAME` | The relay's word that the members changed MUST NOT cost an open document more than one member request. | this spec section 3; `SRV-178` | none | fails -- Sync lists the members again for its directory, and an open space asks for them again for its view, so an open space pays two requests per change where one answer could serve both; lands with the `One member request per change` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-015` | `FAIL` | An ephemeral whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
 | `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` -- a key that resolved before the rebuild resolves to nothing after it, where a merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | none | verified |
 
@@ -86,9 +88,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 29 `verified`, 1 `partial`. Every pure transform holds, out of the browser:
-  the wrap, the weak key, the pin, the directory, the role and the log walk. What is loose is the
-  branches that only run against a live relay, and the directory a change of members leaves stale.
+* **Verification.** 30 `verified`, 2 `failing`. Every pure transform holds, out of the browser: the
+  wrap, the weak key, the pin, the directory, the role and the log walk. What is loose is the
+  branches that only run against a live relay. The failures are a change of members during an open,
+  and the second request an open space pays per change.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -224,6 +227,7 @@ which is `SYNC-040`.
 | a share entry in a document's menu | phase 1: the invitee is resolved and their fingerprint shown |
 | confirming the fingerprint | phase 2: the key is wrapped and posted (`SYNC-036`) |
 | opening a member list | the list is refetched, and the directory is rebuilt from it (`SYNC-037`) |
+| the relay's word that the members changed | the list of each open document is refetched, and the directory rebuilt from it (`SYNC-037`) |
 | changing a member's role | the relay is asked, and the answer refreshes the list |
 | receiving a share notice | the document list refreshes, and the user is told, with no reload |
 | opening a document | the key, the directory and the role all arrive on one answer |
@@ -261,9 +265,13 @@ authority: the role here hides what the relay would refuse anyway.
 * **Nothing states what a role change does to an open document.** The relay answers the request and
   the list refreshes. The role carried on the ready signal was read at open and is not revisited, so
   a demotion takes effect on the next open.
-* **The directory is only rebuilt when someone asks for the list.** An invite or a revoke that this
-  client learns about another way leaves the directory as it was. A new member's cursor does not
-  appear until something refetches.
+* **A change of members during an open is lost.** Sync heeds the relay's word only for a document
+  already open. A change that lands between the open's read of the members and that moment leaves
+  the directory stale. A new member's cursor goes unattributed until the next change
+  (`SYNC-150`).
+* **An open space reads its members twice per change.** Sync reads them for the directory and the
+  space reads them for its view (`SYNC-151`). Changes are rare, so the cost is a request, not a
+  budget.
 * **No test drives an open.** The whole open path runs in a browser: the members request, the
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **A document created before the log has no first entry.** Its rows stay unverified for ever, and

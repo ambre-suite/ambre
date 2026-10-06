@@ -769,23 +769,30 @@ impl SyncState {
             }
             SyncEvent::DocumentMembersReady {
                 id,
+                asked,
                 document_id,
                 members,
                 signing_keys,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
-                // rebuilds the directory from scratch.
-                if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                // rebuilds the directory from scratch. An answer older than the
+                // directory held changes nothing (`SYNC-037`).
+                if let Some(doc_state) = self.documents.get_mut(&document_id)
+                    && asked > doc_state.directory_held
+                {
+                    doc_state.directory_held = asked;
                     doc_state.set_signing_keys(signing_keys);
                 }
-                self.reply(
-                    id,
-                    RestEvent::DocumentMembers {
-                        document_id,
-                        members,
-                    },
-                );
+                if let Some(id) = id {
+                    self.reply(
+                        id,
+                        RestEvent::DocumentMembers {
+                            document_id,
+                            members,
+                        },
+                    );
+                }
             }
             SyncEvent::UserSearchReady { id, users } => {
                 self.reply(id, RestEvent::UserSearchResults { users });
@@ -1056,9 +1063,13 @@ impl SyncState {
             }
 
             WsServerMsg::MembersChanged { document_id } => {
-                // Only an open document has a view to refresh; the next open
-                // reads the rows from scratch.
+                // Only an open document holds a directory and a view; the next
+                // open reads the rows from scratch. The directory is read
+                // again here, whatever application holds the document, so a
+                // newcomer's samples resolve (`SYNC-037`). A view that shows
+                // the members asks for them on its own.
                 if self.documents.contains_key(&document_id) {
+                    self.handle_list_document_members(None, document_id);
                     self.send_to_logic(LogicEvent::MembersChanged { document_id });
                 }
             }

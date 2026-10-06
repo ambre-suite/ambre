@@ -382,7 +382,10 @@ enum SyncEvent {
     /// Member list for a document has been fetched from the server (decoded,
     /// plaintext names/emails).
     DocumentMembersReady {
-        id: RequestId,
+        /// The request to answer, `None` for a refresh of the directory alone.
+        id: Option<RequestId>,
+        /// Which listing of this document answered (`SYNC-037`).
+        asked: u64,
         document_id: DocumentId,
         members: Vec<MemberInfo>,
         /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
@@ -550,6 +553,12 @@ struct SyncDocumentState {
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
     signing_keys: HashMap<[u8; 32], UserId>,
+    /// How many member listings of this document were asked, and which one
+    /// the directory holds. Two listings can cross on the way, and the answer
+    /// to the older one changes nothing. It cannot bring back the key of a
+    /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
+    directory_asked: u64,
+    directory_held: u64,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
     /// because `DocumentReady` fires from two places: immediately for a
@@ -633,6 +642,8 @@ impl SyncDocumentState {
             chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
+            directory_asked: 0,
+            directory_held: 0,
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
@@ -1351,7 +1362,7 @@ impl SyncState {
                 self.handle_leave_document(id, document_id);
             }
             RestCommand::ListDocumentMembers { document_id } => {
-                self.handle_list_document_members(id, document_id);
+                self.handle_list_document_members(Some(id), document_id);
             }
             RestCommand::UpdateDocumentMemberRole {
                 document_id,

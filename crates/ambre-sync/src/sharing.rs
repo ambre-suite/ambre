@@ -1045,7 +1045,11 @@ pub(crate) async fn settle_task<H: ShareHttp>(
 
 /// Inputs for [`list_members_task`].
 pub(crate) struct ListMembersParams {
-    pub id: RequestId,
+    /// The request to answer, `None` for a refresh of the directory alone.
+    pub id: Option<RequestId>,
+    /// Which listing of this document this is, so an answer older than the
+    /// directory held changes nothing (`SYNC-037`).
+    pub asked: u64,
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
     pub api_base: String,
@@ -1082,17 +1086,20 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
+                asked: p.asked,
                 document_id: p.document_id,
                 members,
                 signing_keys,
             });
         }
-        Err(e) => {
-            let _ = event_tx.send(SyncEvent::HttpError {
-                id: p.id,
-                message: e,
-            });
-        }
+        Err(e) => match p.id {
+            Some(id) => {
+                let _ = event_tx.send(SyncEvent::HttpError { id, message: e });
+            }
+            // No one waits on a refresh of the directory alone: the
+            // directory it held stays, and the next change asks again.
+            None => tracing::warn!("Sync: the members could not be read again: {e}"),
+        },
     }
 }
 
@@ -1965,7 +1972,8 @@ mod tests {
 
     fn list_params() -> ListMembersParams {
         ListMembersParams {
-            id: RequestId::next(),
+            id: Some(RequestId::next()),
+            asked: 1,
             document_id: DocumentId::new(),
             url_scheme: "https",
             api_base: "api.test".into(),
