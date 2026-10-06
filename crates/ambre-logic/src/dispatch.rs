@@ -152,7 +152,10 @@ impl LogicState {
             }
             LogicCommand::CloseDocument { document_id } => {
                 // The last edits of the pass are saved before the state goes,
-                // so closing a document never loses them (`ARCH-017`).
+                // so closing a document never loses them (`ARCH-017`). A running
+                // import lands whole first, so the save never holds half of it
+                // (`ARCH-031`).
+                self.settle_import(document_id);
                 self.answer_document(document_id, true);
                 self.docs.remove(&document_id);
                 // Drop any in-flight service routes for this document. A response

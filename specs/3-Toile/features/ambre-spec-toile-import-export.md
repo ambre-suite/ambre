@@ -33,13 +33,13 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-IO-020` | `POST` | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), two canvas listeners and one `<input type="file">`, whose every decidable part is a row of its own: what the board reads (`TOILE-IO-098`), where the file lands (`TOILE-IO-023`) and what the user is told (`TOILE-IO-022`) | none | qa-manual |
 | `TOILE-IO-098` | `FAIL` | A file of a type no converter reads MUST be refused with a word, and MUST NOT be read into memory. | this spec section 4 | `ambre_toile::ui::interop::tests::a_format_no_converter_reads_is_refused`; `ambre_toile::ui::interop::tests::every_format_a_converter_reads_is_accepted`; `ambre_toile::ui::interop::tests::the_picker_offers_only_what_the_gate_accepts` -- it holds the picker's filter against the same gate, so a file the dialog offers is never one the board then drops | none | verified |
-| `TOILE-IO-001` | `POST` | The whole file MUST become one undoable batch: one undo MUST take the import back. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` -- it undoes a five-element import in one step; `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` -- a three-element one carrying two groups; `ambre_toile::logic::state::import::tests::svg_import_takes_the_fast_path` -- it reads the single delta | none | verified |
+| `TOILE-IO-001` | `POST` | The whole file MUST become one undoable batch: one undo MUST take the import back. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` -- it undoes a five-element import in one step; `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` -- a three-element one carrying two groups; `ambre_toile::logic::state::import::tests::svg_import_takes_the_fast_path` -- it reads the single delta; `ambre_toile::logic::state::import::tests::undo_removes_a_sliced_import_whole` -- a file of several slices | none | verified |
 | `TOILE-IO-002` | `POST` | An import MUST NOT trust foreign geometry: every coordinate MUST be clamped to the world. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`; `ambre_toile::logic::interop::limits::tests::rect_clamp_keeps_non_negative_extent`; `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | none | verified |
 | `TOILE-IO-072` | `POST` | A coordinate that is not a number MUST become zero, never poison the geometry it lands in. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes` -- it reads a NaN and an infinity both collapsing to zero | none | verified |
 | `TOILE-IO-070` | `POST` | An import MUST say how many elements it created. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` -- it reads the count back against the file; `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` -- it reads a count of the three elements and not of the two groups the import rebuilt | none | verified |
 | `TOILE-IO-022` | `POST` | An import report MUST reach the user: a construct dropped in silence MUST NOT be the outcome. | this spec section 4 | `ambre_toile::tests::chrome_ui::an_import_report_reaches_the_user` -- it reads the toast a lossy import raises; `ambre_toile::tests::chrome_ui::a_refused_file_reaches_the_user` -- the one a file that never mapped raises; `ambre_toile::ui::interop::message_tests::a_clean_import_reports_its_count` -- the wording; `ambre_toile::ui::interop::message_tests::a_lossy_import_names_what_it_dropped`; `ambre_toile::ui::interop::message_tests::a_long_list_of_dropped_constructs_is_counted` | none | verified |
 | `TOILE-IO-023` | `POST` | An imported file MUST land where the user put it, never at a fixed point of the world. | this spec section 4 | `ambre_toile::logic::state::import::tests::an_import_lands_on_the_drop_point`; `ambre_toile::logic::interop::tests::a_batch_lands_with_its_corner_on_the_drop_point` -- the placement itself; `ambre_toile::logic::interop::tests::placing_a_batch_that_creates_nothing_is_a_no_op` | none | verified |
-| `TOILE-IO-028` | `POST` | A large import MUST NOT freeze the Logic thread: it MUST apply in bounded batches that yield. | this spec section 3; `ambre-spec-budgets.md` | none | fails -- the whole batch is applied in one synchronous pass, and no progress event exists, section 6; lands with the `A large board import does not freeze the board` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-028` | `POST` | A large import MUST NOT freeze the Logic thread: it MUST apply in bounded batches that yield. | this spec section 3; `ambre-spec-budgets.md`; `ARCH-030`; `ARCH-031` | `ambre_toile::logic::state::import::tests::a_large_import_lands_one_slice_at_a_time` -- one slice per call, a delta each; `ambre_toile::logic::state::import::tests::a_camera_move_does_not_wait_for_the_import`; `ambre_toile::logic::state::import::tests::an_edit_lands_the_import_first_in_one_delta`; `ambre_toile::logic::state::import::tests::undo_removes_a_sliced_import_whole`; `ambre_toile::logic::state::import::tests::undo_mid_import_removes_it_whole` | none | verified |
 | `TOILE-IO-071` | `FRAME` | An import MUST NOT change an element the board already held. | this spec section 3 | none | unheld -- every test of the apply pass starts from an empty board, so nothing holds the rule on a populated one, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-IO-073` | `FAIL` | A file the converter cannot read MUST import nothing, and MUST leave the board as it was. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board`; `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse` | none | verified |
 | `TOILE-IO-074` | `FAIL` | A file past the count, the depth or the picture-size bound MUST be refused whole, never in part. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::element_count_guard`; `ambre_toile::logic::interop::limits::tests::depth_guard`; `ambre_toile::logic::interop::limits::tests::image_dim_guard`; `ambre_toile::logic::interop::tests::too_many_elements_aborts_atomically`; `ambre_toile::logic::interop::tests::too_deep_nesting_aborts_atomically` | none | verified |
@@ -108,17 +108,16 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-095` | `FRAME` | A showcase bundle MUST NOT contact the relay to render. | this spec section 3 | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** the SVG import of 5 000 nodes under 500 ms, a row of
-  `ambre-spec-budgets.md section 1`. The conversion has a caller at last, and nothing measures it
-  (`TOILE-IO-028`).
+  `ambre-spec-budgets.md section 1`. The `import` bench of `ambre-toile` reads the whole import and
+  its longest slice (`TOILE-IO-028`).
 * **Boundary.** a local file, in both directions, and nothing else. No converter opens a socket, and
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 35 `verified`, 1 `partial`, 1 `failing`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`.
-  What holds is the drop point, the reader's structure, the writer's own, and the report, each
-  carrying a test of its own. The two `qa-manual` rows are the DOM glue underneath, which no belt
-  reaches. What is loose is four rules: one the code answers with something else, three it holds
-  in part.
+* **Verification.** 36 `verified`, 1 `partial`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`.
+  What holds is the drop point, the reader's structure, the writer's own, the report and the
+  sliced apply, each carrying a test of its own. The two `qa-manual` rows are the DOM glue
+  underneath, which no belt reaches. What is loose is three rules the code holds in part.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -154,8 +153,9 @@ and adds nothing to it.
 | `ToileEvent::ImportReport { imported, skipped }` | Logic to UI | how many elements the file yields, and what it drops |
 | `ToileEvent::ImportFailed(reason)` | Logic to UI | why the board is untouched |
 
-No command exports. The four import commands carry no drop point (`TOILE-IO-023`), and no event
-carries progress (`TOILE-IO-028`).
+No command exports. The four import commands carry no drop point (`TOILE-IO-023`). No event
+carries progress either: each slice of a large import repaints the board, and the drawing grows on
+screen (`TOILE-IO-028`).
 
 **The batch a converter produces.** A converter runs offline and cannot name an `ElementId`, which
 the engine mints only when a create is applied. So it speaks in slots, and the apply pass resolves
@@ -185,8 +185,13 @@ pub struct ImportBatch {
    real content hash returns (`features/ambre-spec-toile-media.md section 1`);
 3. create each slot, restyle it, build the groups innermost-first, then the connectors, then seed
    the media map;
-4. commit once, so the whole file is one undo item, and rebuild the derived caches;
-5. report how many elements the file created, and what it drops (`TOILE-IO-070`).
+4. apply step 3 in slices of a fixed count of units, one commit and one delta each. One Loro undo
+   group spans them, so the whole file is one undo item. The Logic thread applies one slice per
+   pass, and comes back without a message while one remains (`TOILE-IO-028`);
+5. land the rest at once before anything that writes or reads the board: an edit, an undo, an
+   export, a remote delta, or a close. Only a camera move, a cursor and slide navigation pass;
+6. rebuild the derived caches once the last slice lands, and report how many elements the file
+   created, and what it drops (`TOILE-IO-070`).
 
 Step 3 is ordered on purpose: a style is an independent register that cannot ride a create. A group needs the
 ids the creates mint.
@@ -319,10 +324,15 @@ view past its own gate.
 * **No test of the apply pass starts from a populated board** (`TOILE-IO-071`). Every one begins on a
   fresh state, so the rule that an import leaves alone what the board already held rests on reading
   the code.
-* **The responsiveness design has no code** (`TOILE-IO-028`). The corpus described bounded batches
-  that yield between chunks and an `ImportProgress` event, and contrasted them with Trame's single
-  synchronous pass. Toile's apply pass is a single synchronous pass, and no such event exists on the
-  bus. The claim was a plan written in the present tense.
+* **An edit made during an import waits for the rest of it** (`TOILE-IO-028`). The slices keep the
+  camera and the cursors live, not the pen. Interleaving an edit would put it inside the import's
+  undo group, or split the import into several undo items. The wait is bounded by the whole-import
+  budget row.
+* **A crash mid-import leaves part of the file on the board.** Each slice is saved and broadcast as
+  it lands, so the board a reload restores holds the slices applied before the crash. A close, an
+  export and a remote delta land the rest first, so only a crash shows it.
+* **The conversion is one synchronous step.** The slices cover the apply pass, not the parse. The
+  `import` bench reads both, and the slices hold most of the whole.
 * **The dependency table was a plan.** Two crates were declared for paths that do not exist and are
   absent from the manifest. The table above marks each one, because a dependency list is the most
   mechanically checkable paragraph in a spec.

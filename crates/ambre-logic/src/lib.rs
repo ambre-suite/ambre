@@ -622,12 +622,20 @@ impl LogicState {
     ///
     /// The pass takes only what waited when it began. A sender that never
     /// pauses therefore delays the answer by one queue's worth, not forever.
+    ///
+    /// A board whose import was running when the pass began then takes one
+    /// more slice of it (`ARCH-030`). An import the pass started already
+    /// applied its first slice, so no pass applies two.
     fn drain_pass(&mut self, from_ui: &Receiver<LogicCommand>, from_sync: &Receiver<LogicEvent>) {
+        let importing = self.boards_with_pending_work();
         for command in from_ui.try_iter().take(from_ui.len()) {
             self.handle_logic_command(command);
         }
         for event in from_sync.try_iter().take(from_sync.len()) {
             self.handle_logic_event(event);
+        }
+        for document_id in importing {
+            self.resume_import(document_id);
         }
         self.answer_pass();
     }
@@ -705,7 +713,9 @@ pub fn run(
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
 
     loop {
-        while from_ui.is_empty() && from_sync.is_empty() {
+        // A board still importing brings the loop back without a message: the
+        // next pass applies its next slice (`ARCH-030`).
+        while from_ui.is_empty() && from_sync.is_empty() && !state.has_pending_work() {
             if from_ui.is_disconnected() && from_sync.is_disconnected() {
                 // Re-check: a last message may have landed before the drop.
                 if from_ui.is_empty() && from_sync.is_empty() {
@@ -943,5 +953,168 @@ mod pass_tests {
         );
         assert!(!rig.state.docs.contains_key(&rig.document_id));
         assert_eq!(restored(writes).len(), before.len() + 1);
+    }
+
+    /// An SVG of `n` rectangles, more than one import slice holds.
+    fn drawing(n: usize) -> Vec<u8> {
+        let mut svg = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg">"#);
+        for i in 0..n {
+            svg.push_str(&format!(r#"<rect x="{i}" y="0" width="5" height="5"/>"#));
+        }
+        svg.push_str("</svg>");
+        svg.into_bytes()
+    }
+
+    /// A state with one open board, and the queues a pass drains.
+    struct Board {
+        state: LogicState,
+        document_id: DocumentId,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_ui: Receiver<LogicCommand>,
+        from_sync: Receiver<LogicEvent>,
+        persist: Receiver<(DocumentId, PersistWrite)>,
+    }
+
+    fn board() -> Board {
+        let (to_persist, persist) = test_link();
+        let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Toile,
+        });
+        state.answer_pass();
+        let (to_logic, from_ui) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
+        let (_to_logic_events, from_sync) =
+            ambre_bus::conduit::to_worker::<LogicEvent>(64, &Doorbell::new());
+        Board {
+            state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            persist,
+        }
+    }
+
+    fn import(document_id: DocumentId, n: usize) -> LogicCommand {
+        LogicCommand::App {
+            document_id,
+            command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::ImportSvg {
+                bytes: drawing(n),
+                at: kurbo::Point::ZERO,
+            }),
+        }
+    }
+
+    fn elements(state: &LogicState, document_id: DocumentId) -> usize {
+        match &state.docs[&document_id].state {
+            DocState::Toile(board) => board.element_count(),
+            other => panic!("the registry opened {other:?}"),
+        }
+    }
+
+    /// `ARCH-030`: a large import takes several passes, and the loop needs
+    /// no message to come back for the next slice. Each pass applies one slice,
+    /// so it ends long before the import does.
+    #[test]
+    fn a_large_import_lands_over_several_passes() {
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            ..
+        } = board();
+        to_logic
+            .try_send(import(document_id, 1_000))
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        let first = elements(&state, document_id);
+        assert!(first > 0 && first < 1_000, "one slice landed: {first}");
+        assert!(state.has_pending_work(), "the loop comes back unasked");
+        let mut passes = 1;
+        while state.has_pending_work() {
+            state.drain_pass(&from_ui, &from_sync);
+            passes += 1;
+        }
+        assert!(passes > 2, "the import took {passes} passes");
+        assert_eq!(elements(&state, document_id), 1_000);
+    }
+
+    /// `ARCH-031`: a board closed mid-import saves the whole import, never
+    /// half of it.
+    #[test]
+    fn a_board_closed_mid_import_saves_it_whole() {
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            persist,
+        } = board();
+        to_logic
+            .try_send(import(document_id, 1_000))
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(state.has_pending_work());
+        to_logic
+            .try_send(LogicCommand::CloseDocument { document_id })
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(!state.has_pending_work());
+        let snapshot = persist
+            .try_iter()
+            .filter_map(|(_, write)| match write {
+                PersistWrite::Snapshot(bytes) => Some(bytes),
+                PersistWrite::Delta(_) => None,
+            })
+            .last()
+            .expect("the close saves a snapshot");
+        let mut reopened = board();
+        reopened.state.apply_remote(reopened.document_id, &snapshot);
+        assert_eq!(elements(&reopened.state, reopened.document_id), 1_000);
+    }
+
+    /// `ARCH-031`: a peer's delta that arrives mid-import lands the import
+    /// first. Merged inside it, the delta would end the import's undo group,
+    /// and one Undo would no longer take the whole file back.
+    #[test]
+    fn a_remote_delta_mid_import_lands_the_import_first() {
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            ..
+        } = board();
+        to_logic
+            .try_send(import(document_id, 1_000))
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(state.has_pending_work());
+        let mut peer = ambre_toile::ToileState::new();
+        let delta = peer
+            .handle_command(ambre_bus::app::toile::ToileCommand::ImportSvg {
+                bytes: drawing(1),
+                at: kurbo::Point::new(-50.0, 0.0),
+            })
+            .update
+            .expect("the peer's delta");
+        state.apply_remote(document_id, &delta);
+        assert!(!state.has_pending_work(), "the import landed first");
+        assert_eq!(elements(&state, document_id), 1_001);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::Undo),
+        });
+        assert_eq!(
+            elements(&state, document_id),
+            1,
+            "one Undo takes the file back"
+        );
     }
 }

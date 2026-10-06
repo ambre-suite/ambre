@@ -23,6 +23,7 @@ impl LogicState {
     /// export compiled in and a session whose fonts have not landed answer by
     /// name. So do a board with nothing to draw and a serializer that gave up.
     fn export_toile_pdf(&mut self, document_id: DocumentId) {
+        self.settle_import(document_id);
         let Self {
             docs, export_cx, ..
         } = self;
@@ -60,6 +61,7 @@ impl LogicState {
     /// (`DOCFILE-007`), so the only per-app value is the event that carries the
     /// bytes out, which [`DocState::ambre_file_event`] mints.
     fn export_ambre_file(&mut self, document_id: DocumentId) {
+        self.settle_import(document_id);
         let Some(answer) = self
             .docs
             .get(&document_id)
@@ -85,6 +87,7 @@ impl LogicState {
     /// every hop that drops it wipes it, and it prints as nothing in a log
     /// line.
     fn export_ambre_file_sealed(&mut self, document_id: DocumentId, passphrase: SecretBytes) {
+        self.settle_import(document_id);
         let Some(doc) = self.docs.get(&document_id) else {
             tracing::warn!("Logic: sealed .ambre export asked of a document that is not open");
             return;
@@ -265,6 +268,69 @@ impl LogicState {
         }
     }
 
+    /// The boards an import is still being applied to (`ARCH-030`).
+    pub(crate) fn boards_with_pending_work(&self) -> Vec<DocumentId> {
+        self.docs
+            .iter()
+            .filter(|(_, doc)| matches!(&doc.state, DocState::Toile(s) if s.has_pending_work()))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Whether any board still has an import to apply, so the loop must come
+    /// back without waiting for a message (`ARCH-030`).
+    pub(crate) fn has_pending_work(&self) -> bool {
+        self.docs
+            .values()
+            .any(|doc| matches!(&doc.state, DocState::Toile(s) if s.has_pending_work()))
+    }
+
+    /// Apply the next slice of a board's running import and fan it out
+    /// (`ARCH-030`). A document with nothing running answers nothing.
+    pub(crate) fn resume_import(&mut self, document_id: DocumentId) {
+        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        if !state.has_pending_work() {
+            return;
+        }
+        let outcome = state.resume();
+        self.dispatch_toile_outcome(document_id, outcome);
+    }
+
+    /// Land a board's running import whole, now (`ARCH-031`). Called
+    /// before what reads the board here rather than in the engine: the exports
+    /// this thread serves itself, a remote delta, and a close. A remote delta
+    /// merged mid-import would also end the import's undo group in Loro.
+    pub(crate) fn settle_import(&mut self, document_id: DocumentId) {
+        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        if !state.has_pending_work() {
+            return;
+        }
+        let outcome = state.settle();
+        self.dispatch_toile_outcome(document_id, outcome);
+    }
+
+    fn dispatch_toile_outcome(
+        &mut self,
+        document_id: DocumentId,
+        outcome: ambre_toile::ToileOutcome,
+    ) {
+        let persist = outcome.update.is_some();
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Toile).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            persist,
+            outcome.requests,
+        );
+    }
+
     /// Fan an already-typed outcome out to the UI Thread (display events), to
     /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence, which
     /// logs the same delta. Shared by every `AppCommand` arm; the arm only
@@ -397,6 +463,7 @@ impl LogicState {
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
     pub(crate) fn apply_remote(&mut self, document_id: DocumentId, payload: &[u8]) {
+        self.settle_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote for unopened doc {document_id} ({} bytes), dropping",
@@ -439,6 +506,7 @@ impl LogicState {
     /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
     /// [`apply_remote`] for the local-persist and viewport-forward tail.
     pub(crate) fn apply_remote_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
+        self.settle_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
                 "Logic: apply_remote_batch for unopened doc {document_id} ({} delta(s)), dropping",

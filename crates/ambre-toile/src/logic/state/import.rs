@@ -1,10 +1,12 @@
 //! Atomic foreign-file import into [`ToileState`](super::ToileState)
 //! (`toile-import-export`). An [`ImportBatch`](crate::logic::interop::ImportBatch)
-//! produced by a pure converter is applied here as ONE undo group. Every
-//! `CreateElement`, style, group, connector and media seed shares a single
-//! `doc.commit()` via the commit-free `*_inner` helpers. The pass order resolves
-//! every slot / group reference before it is used. It is creates -> styles ->
-//! groups -> connectors -> media -> one commit -> `rebuild_caches`.
+//! produced by a pure converter is applied here as ONE undo group. The pass
+//! order resolves every slot / group reference before it is used. It is
+//! creates -> styles -> groups -> connectors -> media -> `rebuild_caches`.
+//!
+//! A large batch is applied in slices of [`IMPORT_SLICE`] units, one commit
+//! each, so the Logic thread answers other messages between them
+//! (`TOILE-IO-028`). One Loro undo group spans every slice.
 
 use std::collections::HashMap;
 
@@ -16,10 +18,10 @@ use crate::logic::command::{
     InitContent, RequestId, ToileCommand, ToileEvent, ToileOutcome, ToileRequest,
 };
 use crate::logic::interop::{
-    ContentHash, ImportBatch, ImportError, ImportRef, ImportReport, Limits, MediaBlob,
-    import_raster, import_svg, place_batch_at,
+    ContentHash, ImportBatch, ImportConnector, ImportError, ImportGroup, ImportRef, ImportReport,
+    Limits, MediaBlob, import_raster, import_svg, place_batch_at,
 };
-use crate::logic::model::ElementId;
+use crate::logic::model::{ElementId, ElementStyle};
 
 use super::{MEDIA, ToileState};
 
@@ -52,6 +54,55 @@ pub(super) struct PendingImport {
     batch: ImportBatch,
     /// Outstanding `UploadMedia` request -> the `batch.media` index it fills.
     outstanding: HashMap<RequestId, usize>,
+}
+
+/// How many units one slice of an import applies (`TOILE-IO-028`). A unit is
+/// one create, one style, one group or one connector. The `import` bench reads
+/// the cost of a slice against the keystroke pass row of
+/// `ambre-spec-budgets.md`.
+pub(super) const IMPORT_SLICE: usize = 64;
+
+/// An import being applied one slice at a time (`TOILE-IO-028`). The Logic
+/// thread resumes it between its messages, so a large file never holds the
+/// board's other commands back for longer than one slice.
+pub(super) struct ImportJob {
+    /// The creates not applied yet, in slot order.
+    commands: std::vec::IntoIter<ToileCommand>,
+    /// How many creates the batch carried.
+    creates: usize,
+    styles: Vec<Option<ElementStyle>>,
+    groups: Vec<ImportGroup>,
+    connectors: Vec<ImportConnector>,
+    media: Vec<MediaBlob>,
+    report: ImportReport,
+    /// The element each create slot minted, `None` when it was rejected.
+    slot_ids: Vec<Option<ElementId>>,
+    /// The group each group entry built, `None` when it was not.
+    group_ids: Vec<Option<ElementId>>,
+    /// Units applied so far, across the four phases in order.
+    done: usize,
+}
+
+impl ImportJob {
+    fn new(batch: ImportBatch) -> Self {
+        let creates = batch.commands.len();
+        Self {
+            commands: batch.commands.into_iter(),
+            creates,
+            styles: batch.styles,
+            group_ids: Vec::with_capacity(batch.groups.len()),
+            groups: batch.groups,
+            connectors: batch.connectors,
+            media: batch.media,
+            report: batch.report,
+            slot_ids: Vec::with_capacity(creates),
+            done: 0,
+        }
+    }
+
+    fn total(&self) -> usize {
+        self.creates + self.styles.len() + self.groups.len() + self.connectors.len()
+    }
 }
 
 impl ToileState {
@@ -111,15 +162,123 @@ impl ToileState {
         }
     }
 
-    /// Apply a fully-resolved batch and wrap the [`ImportReport`] into a display
-    /// event alongside the repaint viewport.
+    /// Start applying a fully-resolved batch, and apply its first slice now
+    /// (`TOILE-IO-028`). A batch of one slice or less lands whole in this
+    /// call; a larger one leaves a job the Logic thread resumes between its
+    /// messages.
+    ///
+    /// An import already running is finished first, so two imports never share
+    /// an undo group. One Loro undo group spans every slice, which keeps the
+    /// whole file one undo step (`TOILE-IO-001`).
     fn finish_import(&mut self, batch: ImportBatch) -> ToileOutcome {
-        let (report, mut outcome) = self.apply_import(batch);
-        outcome.display.push(ToileEvent::ImportReport {
-            imported: report.imported,
-            skipped: report.skipped,
-        });
-        outcome
+        self.start_import(batch, IMPORT_SLICE)
+    }
+
+    /// Open the import's undo group and apply its first `budget` units.
+    fn start_import(&mut self, batch: ImportBatch, budget: usize) -> ToileOutcome {
+        let mut display = self.finish_running_import();
+        if let Err(e) = self.undo.group_start() {
+            tracing::warn!("[Toile] the import could not open its undo group: {e:?}");
+        }
+        self.import_job = Some(Box::new(ImportJob::new(batch)));
+        display.extend(self.run_import(budget));
+        self.emit_with_update(display)
+    }
+
+    /// Apply a batch whole, in one call, and hand back its report: the tests'
+    /// way past the media round trip and the slicing.
+    #[cfg(test)]
+    pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
+        let outcome = self.start_import(batch, usize::MAX);
+        let report = outcome
+            .display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::ImportReport { imported, skipped } => Some(ImportReport {
+                    imported: *imported,
+                    skipped: skipped.clone(),
+                }),
+                _ => None,
+            })
+            .expect("a whole import closes with its report");
+        (report, outcome)
+    }
+
+    /// Whether an import is still being applied (`TOILE-IO-028`). The Logic
+    /// thread reads it to come back to this board without waiting for a
+    /// message.
+    #[must_use]
+    pub fn has_pending_work(&self) -> bool {
+        self.import_job.is_some()
+    }
+
+    /// Apply the next slice of the running import: at most [`IMPORT_SLICE`]
+    /// units, one commit and one delta (`TOILE-IO-028`). The last slice closes
+    /// the import and carries its report. With no import running it answers
+    /// nothing.
+    pub fn resume(&mut self) -> ToileOutcome {
+        if self.import_job.is_none() {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let display = self.run_import(IMPORT_SLICE);
+        let outcome = self.emit_with_update(display);
+        self.announce_write(outcome)
+    }
+
+    /// Apply the rest of a running import at once, without flushing its delta.
+    ///
+    /// Called before a command that writes the board, and before a second
+    /// import. The command's own flush then carries both, in one delta. An
+    /// edit therefore never lands inside the import's undo group, and never
+    /// between two of its slices.
+    pub(super) fn finish_running_import(&mut self) -> Vec<ToileEvent> {
+        if self.import_job.is_none() {
+            return Vec::new();
+        }
+        self.run_import(usize::MAX)
+    }
+
+    /// Apply up to `budget` units of the running import, then commit. The
+    /// caller flushes the delta. A slice short of the end repaints, and the
+    /// last one closes the import.
+    fn run_import(&mut self, budget: usize) -> Vec<ToileEvent> {
+        let Some(mut job) = self.import_job.take() else {
+            return Vec::new();
+        };
+        let end = job.done.saturating_add(budget).min(job.total());
+        while job.done < end {
+            self.apply_unit(&mut job);
+            job.done += 1;
+        }
+        self.doc.commit();
+        if job.done < job.total() {
+            self.import_job = Some(job);
+            return vec![self.viewport_event()];
+        }
+        self.close_import(*job)
+    }
+
+    /// The import's last step: the media map, the commit that ends the undo
+    /// group, and one rebuild of every derived cache.
+    fn close_import(&mut self, job: ImportJob) -> Vec<ToileEvent> {
+        let ImportJob {
+            media,
+            mut report,
+            slot_ids,
+            ..
+        } = job;
+        self.seed_media(&media);
+        self.doc.commit();
+        self.undo.group_end();
+        self.rebuild_caches();
+        report.imported = slot_ids.iter().filter(|s| s.is_some()).count();
+        vec![
+            self.viewport_event(),
+            ToileEvent::ImportReport {
+                imported: report.imported,
+                skipped: report.skipped,
+            },
+        ]
     }
 
     /// Handle a service-plane response routed back to this document
@@ -181,76 +340,61 @@ impl ToileState {
         self.pending_imports.len()
     }
 
-    /// Apply a converted [`ImportBatch`] as ONE atomic undo group
-    /// (`toile-import-export`). The pass is strictly ordered so every slot / group
-    /// reference resolves before it is used:
+    /// Apply one unit of the running import. The units run in a strict order,
+    /// so every slot or group reference resolves before it is used:
     ///
     /// 1. **creates** -> `create_element_inner`, minting an [`ElementId`] per slot;
     /// 2. **styles** -> `restyle_inner` on the slot's fresh element (style is an
     ///    independent LWW register, so it cannot ride the create);
     /// 3. **groups** -> `group_inner`, innermost-first, so a `Group(i)` member
     ///    always resolves to an already-built group;
-    /// 4. **connectors** -> `create_connector_inner`, endpoints resolved by ref;
-    /// 5. **media** -> `seed_media` (dedup);
-    /// 6. a single `doc.commit()` + one `rebuild_caches`.
+    /// 4. **connectors** -> `create_connector_inner`, endpoints resolved by ref.
     ///
-    /// Returns the finalized [`ImportReport`] and a [`ToileOutcome`]. The report's
-    /// `imported` count is the number of elements actually created; the outcome
-    /// carries the one CRDT delta plus the repaint viewport. A create that
-    /// unexpectedly fails is recorded in the report and its slot left unresolved,
-    /// so any group / connector referencing it is skipped. A trusted converter
-    /// should never emit one.
-    pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
-        let ImportBatch {
-            commands,
-            styles,
-            groups,
-            connectors,
-            media,
-            mut report,
-        } = batch;
-
-        // 1. Creates -> one ElementId per slot (None = the create was rejected).
-        let mut slot_ids: Vec<Option<ElementId>> = Vec::with_capacity(commands.len());
-        for (i, cmd) in commands.into_iter().enumerate() {
-            match cmd {
-                ToileCommand::CreateElement {
+    /// The media map and the cache rebuild follow in
+    /// [`close_import`](Self::close_import). A create that unexpectedly fails is
+    /// recorded in the report and its slot left unresolved, so any group or
+    /// connector referencing it is skipped. A trusted converter should never
+    /// emit one.
+    fn apply_unit(&mut self, job: &mut ImportJob) {
+        let mut unit = job.done;
+        if unit < job.creates {
+            let created = match job.commands.next() {
+                Some(ToileCommand::CreateElement {
                     kind,
                     at,
                     size,
                     content,
                     fill,
                     ..
-                } => match self.create_element_inner(kind, at, size, content, fill) {
-                    Ok(id) => slot_ids.push(Some(id)),
-                    Err(_) => {
-                        report.skip(format!("element slot {i}: rejected by the engine"));
-                        slot_ids.push(None);
-                    }
-                },
-                _ => {
-                    // The batch contract is creates-only; anything else is a
-                    // converter bug. Drop it rather than corrupt slot indices.
-                    report.skip(format!("import slot {i}: non-create command dropped"));
-                    slot_ids.push(None);
+                }) => self
+                    .create_element_inner(kind, at, size, content, fill)
+                    .map_err(|_| format!("element slot {unit}: rejected by the engine")),
+                // The batch contract is creates-only; anything else is a
+                // converter bug. Drop it rather than corrupt slot indices.
+                _ => Err(format!("import slot {unit}: non-create command dropped")),
+            };
+            match created {
+                Ok(id) => job.slot_ids.push(Some(id)),
+                Err(reason) => {
+                    job.report.skip(reason);
+                    job.slot_ids.push(None);
                 }
             }
+            return;
         }
-
-        // 2. Styles, index-aligned with the create slots.
-        for (slot, style) in styles.iter().enumerate() {
-            if let (Some(Some(id)), Some(style)) = (slot_ids.get(slot), style) {
+        unit -= job.creates;
+        if unit < job.styles.len() {
+            if let (Some(Some(id)), Some(style)) = (job.slot_ids.get(unit), &job.styles[unit]) {
                 self.restyle_inner(std::slice::from_ref(id), style);
             }
+            return;
         }
-
-        // 3. Groups, innermost-first: resolve each member ref, then build.
-        let mut group_ids: Vec<Option<ElementId>> = Vec::with_capacity(groups.len());
-        for group in &groups {
-            let members: Vec<ElementId> = group
+        unit -= job.styles.len();
+        if unit < job.groups.len() {
+            let members: Vec<ElementId> = job.groups[unit]
                 .members
                 .iter()
-                .filter_map(|r| self.resolve_ref(*r, &slot_ids, &group_ids))
+                .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
                 .collect();
             let built = if members.len() < 2 {
                 None
@@ -263,52 +407,41 @@ impl ToileState {
                 // (bounds-keyed) before the final `rebuild_caches`.
                 self.recompute_groups();
             }
-            group_ids.push(built);
+            job.group_ids.push(built);
+            return;
         }
-
-        // 4. Connectors: both endpoints resolved by ref, else dropped.
-        for conn in &connectors {
-            let (Some(from), Some(to)) = (
-                self.resolve_ref(conn.from, &slot_ids, &group_ids),
-                self.resolve_ref(conn.to, &slot_ids, &group_ids),
-            ) else {
-                report.skip("connector: endpoint did not resolve");
-                continue;
-            };
-            self.create_connector_inner(
-                from,
-                conn.from_anch,
-                to,
-                conn.to_anch,
-                conn.path_type,
-                conn.arrows,
-            );
-        }
-
-        // 5. Media map (content-addressed dedup).
-        self.seed_media(&media);
-
-        // 6. One commit = one undo item; then reseed every derived cache once.
-        self.doc.commit();
-        self.rebuild_caches();
-
-        report.imported = slot_ids.iter().filter(|s| s.is_some()).count();
-        let outcome = self.emit_with_update(vec![self.viewport_event()]);
-        (report, outcome)
+        unit -= job.groups.len();
+        let conn = &job.connectors[unit];
+        let (Some(from), Some(to)) = (
+            self.resolve_ref(conn.from, &job.slot_ids, &job.group_ids),
+            self.resolve_ref(conn.to, &job.slot_ids, &job.group_ids),
+        ) else {
+            job.report.skip("connector: endpoint did not resolve");
+            return;
+        };
+        self.create_connector_inner(
+            from,
+            conn.from_anch,
+            to,
+            conn.to_anch,
+            conn.path_type,
+            conn.arrows,
+        );
     }
 
-    /// Resolve an [`ImportRef`] to a live [`ElementId`], or `None` if its slot /
-    /// group was not created.
+    /// Resolve an [`ImportRef`] to a live [`ElementId`], or `None` if its slot or
+    /// group was not created, or a peer deleted it between two slices.
     fn resolve_ref(
         &self,
         r: ImportRef,
         slot_ids: &[Option<ElementId>],
         group_ids: &[Option<ElementId>],
     ) -> Option<ElementId> {
-        match r {
+        let id = match r {
             ImportRef::Slot(i) => slot_ids.get(i).cloned().flatten(),
             ImportRef::Group(i) => group_ids.get(i).cloned().flatten(),
-        }
+        }?;
+        self.bounds.contains_key(&id).then_some(id)
     }
     /// Populate the `media` root map from a batch's plaintext blobs
     /// (`toile-elements`), **without** committing. Each blob's `hash` (the real
@@ -692,5 +825,108 @@ mod tests {
         assert!(out.display.is_empty());
         assert!(out.update.is_none());
         assert_eq!(st.element_count(), 0);
+    }
+
+    // -- slicing (`TOILE-IO-028`) -------------------------------------------
+
+    /// Elements a large import carries: three slices and a bit.
+    const LARGE: usize = super::IMPORT_SLICE * 3 + 7;
+
+    fn large_import() -> ToileCommand {
+        let mut svg = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg">"#);
+        for i in 0..LARGE {
+            svg.push_str(&format!(r#"<rect x="{i}" y="0" width="5" height="5"/>"#));
+        }
+        svg.push_str("</svg>");
+        ToileCommand::ImportSvg {
+            bytes: svg.into_bytes(),
+            at: Point::ZERO,
+        }
+    }
+
+    /// A large import applies one slice in the command, and the rest one slice
+    /// per `resume`. Each slice is a delta of its own, and only the last one
+    /// reports.
+    #[test]
+    fn a_large_import_lands_one_slice_at_a_time() {
+        let mut st = ToileState::new();
+        let first = st.handle_command(large_import());
+        assert!(first.update.is_some(), "the first slice is broadcast");
+        assert!(!has_report(&first), "the import is not over");
+        assert_eq!(st.element_count(), super::IMPORT_SLICE);
+        assert!(st.has_pending_work());
+        let mut resumes = 0;
+        let mut last = None;
+        while st.has_pending_work() {
+            let out = st.resume();
+            assert!(out.update.is_some(), "every slice is broadcast");
+            resumes += 1;
+            last = Some(out);
+        }
+        // A unit is a create or a style, and the SVG converter styles every slot.
+        assert_eq!(resumes, (2 * LARGE).div_ceil(super::IMPORT_SLICE) - 1);
+        assert!(has_report(&last.expect("a last slice")));
+        assert_eq!(st.element_count(), LARGE);
+        assert!(st.resume().update.is_none(), "nothing left to resume");
+    }
+
+    /// A camera move passes a running import: it reads nothing the import is
+    /// still writing, and the board stays responsive.
+    #[test]
+    fn a_camera_move_does_not_wait_for_the_import() {
+        let mut st = ToileState::new();
+        st.handle_command(large_import());
+        let out = st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
+            center: Point::ZERO,
+            zoom: 0.5,
+            size: Size::new(800.0, 600.0),
+        }));
+        assert!(out.update.is_none());
+        assert_eq!(st.element_count(), super::IMPORT_SLICE);
+        assert!(st.has_pending_work());
+    }
+
+    /// A command that writes the board lands the import whole first. Its one
+    /// delta carries the rest of the import and the edit, and a peer that
+    /// applies the deltas in order holds both.
+    #[test]
+    fn an_edit_lands_the_import_first_in_one_delta() {
+        let mut st = ToileState::new();
+        let mut peer = ToileState::new();
+        let first = st.handle_command(large_import());
+        peer.apply_remote(&first.update.expect("first slice"));
+        let edit = st.handle_command(rect_cmd(-100.0));
+        assert!(!st.has_pending_work(), "the edit finished the import");
+        assert!(has_report(&edit), "the edit's answer closes the import");
+        peer.apply_remote(&edit.update.expect("one delta"));
+        assert_eq!(st.element_count(), LARGE + 1);
+        assert_eq!(peer.element_count(), LARGE + 1);
+    }
+
+    /// One Undo removes a sliced import whole: every slice shares one undo
+    /// group (`TOILE-IO-001`).
+    #[test]
+    fn undo_removes_a_sliced_import_whole() {
+        let mut st = ToileState::new();
+        st.handle_command(rect_cmd(-100.0));
+        st.handle_command(large_import());
+        while st.has_pending_work() {
+            st.resume();
+        }
+        assert_eq!(st.element_count(), LARGE + 1);
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), 1, "the earlier rect stays");
+    }
+
+    /// An Undo that arrives mid-import lands the import first, then removes
+    /// it whole, never half of it.
+    #[test]
+    fn undo_mid_import_removes_it_whole() {
+        let mut st = ToileState::new();
+        st.handle_command(rect_cmd(-100.0));
+        st.handle_command(large_import());
+        st.handle_command(ToileCommand::Undo);
+        assert!(!st.has_pending_work());
+        assert_eq!(st.element_count(), 1);
     }
 }

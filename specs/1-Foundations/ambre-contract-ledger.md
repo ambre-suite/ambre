@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3360 rows: 2437 shipped, of which 102 partial and 594 loose. 923 unbuilt.**
+**3362 rows: 2439 shipped, of which 102 partial and 593 loose. 923 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 317 | 263 | 564 | 597 |  | 1741 |
+| `verified` | 319 | 263 | 565 | 597 |  | 1744 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 2 | 4 | 12 | 2 |  | 20 |
+| `failing` | 2 | 4 | 11 | 2 |  | 19 |
 | `untested` | 231 | 129 | 189 | 2 |  | 551 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -40,7 +40,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 5 |  | 8 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 |  | 7 | 1 |
-| `ambre-spec-architecture.md` | 29 | 29 | 13 | 3 | 13 |  |
+| `ambre-spec-architecture.md` | 31 | 31 | 15 | 3 | 13 |  |
 | `ambre-spec-broadcast.md` | 24 | 18 | 9 |  | 9 | 6 |
 | `ambre-spec-chrome.md` | 23 | 20 | 9 | 1 | 10 | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
@@ -115,7 +115,7 @@
 | `ambre-spec-toile-frames.md` | 23 | 23 | 17 | 1 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 12 | 12 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-groups.md` | 25 | 25 | 12 |  | 13 |  |
-| `ambre-spec-toile-import-export.md` | 53 | 41 | 35 | 1 | 5 | 12 |
+| `ambre-spec-toile-import-export.md` | 53 | 41 | 36 | 1 | 4 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 5 | 7 |  |  |
 | `ambre-spec-toile-media.md` | 29 | 29 | 25 |  | 4 |  |
 | `ambre-spec-toile-menus.md` | 53 | 53 | 39 |  | 14 |  |
@@ -168,7 +168,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..029 |
+| `ambre-spec-architecture.md` | ARCH-001..031 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |

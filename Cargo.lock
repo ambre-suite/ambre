@@ -347,6 +347,7 @@ dependencies = [
  "ambre-draw",
  "ambre-pdf",
  "base64 0.22.1",
+ "criterion",
  "i_overlay",
  "icondata",
  "image",

@@ -182,6 +182,10 @@ pub struct ToileState {
     /// undo group. Rare and short-lived; dies with the `DocState`. See
     /// `state::import`.
     pending_imports: Vec<import::PendingImport>,
+    /// The import being applied in slices (`TOILE-IO-028`). The Logic thread
+    /// resumes it one slice per pass; a command that writes the board lands it
+    /// whole first. `None` while no import runs.
+    import_job: Option<Box<import::ImportJob>>,
     /// A read met a register this build cannot decode (`SCHEMA-003`). The decode
     /// helpers set it, and every import drains it. A `Cell`, because a caller
     /// reads a board through `&self` and the read is where the failure surfaces.
@@ -287,6 +291,7 @@ impl ToileState {
             broadcasting: false,
             following: None,
             pending_imports: Vec::new(),
+            import_job: None,
             undecodable: std::cell::Cell::new(false),
         }
     }
@@ -348,8 +353,39 @@ impl ToileState {
     /// the duplicate.
     /// A command that wrote also announces [`BoardChanged`](ToileEvent::BoardChanged),
     /// ahead of that refresh.
+    ///
+    /// A command that writes or reads the board waits for a running import to
+    /// land whole first (`TOILE-IO-028`). Its delta then carries the rest of
+    /// the import, and the import stays one undo step. A camera move does not
+    /// wait.
     pub fn handle_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
+        let landed = if waits_for_import(&cmd) {
+            self.finish_running_import()
+        } else {
+            Vec::new()
+        };
         let mut outcome = self.dispatch_command(cmd);
+        if !landed.is_empty() {
+            outcome.display.splice(0..0, landed);
+            if outcome.update.is_none() {
+                outcome.update = self.flush_delta();
+            }
+        }
+        self.announce_write(outcome)
+    }
+
+    /// Land a running import whole, now, and answer its last delta
+    /// (`TOILE-IO-028`). For the exports the Logic thread serves itself, which
+    /// never reach [`handle_command`](Self::handle_command).
+    pub fn settle(&mut self) -> ToileOutcome {
+        let display = self.finish_running_import();
+        let outcome = self.emit_with_update(display);
+        self.announce_write(outcome)
+    }
+
+    /// Append [`BoardChanged`](ToileEvent::BoardChanged) and the undo state to
+    /// an outcome that wrote the board.
+    pub(super) fn announce_write(&self, mut outcome: ToileOutcome) -> ToileOutcome {
         if outcome.update.is_none() {
             return outcome;
         }
@@ -1059,6 +1095,21 @@ impl ToileState {
         ids.sort();
         ids
     }
+}
+
+/// Whether a command must wait for a running import to land whole
+/// (`TOILE-IO-028`). Only a camera move, a cursor and slide navigation pass:
+/// they read nothing the import is still writing. Every other command writes
+/// the board or reads it, and a half-applied import would answer it wrongly.
+fn waits_for_import(cmd: &ToileCommand) -> bool {
+    !matches!(
+        cmd,
+        ToileCommand::SetViewport(_)
+            | ToileCommand::Presence { .. }
+            | ToileCommand::NextSlide
+            | ToileCommand::PrevSlide
+            | ToileCommand::GotoSlide(_)
+    )
 }
 
 #[cfg(test)]

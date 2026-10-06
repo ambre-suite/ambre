@@ -36,6 +36,8 @@ prefix is `ARCH`.
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the `The launcher holds no application logic` Story (`ambre-roadmap.md` E8) | failing |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound queues, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
 | `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot` | none | verified |
+| `ARCH-030` | `INV` | A document whose engine holds unfinished work MUST take one bounded step of it per pass, without waiting for a message. | this spec section 2; `TOILE-IO-028` | `ambre_logic::pass_tests::a_large_import_lands_over_several_passes` | none | verified |
+| `ARCH-031` | `INV` | The Logic thread MUST finish a document's unfinished work before it merges a remote delta into that document or closes it. | this spec section 2; `TOILE-IO-028` | `ambre_logic::pass_tests::a_board_closed_mid_import_saves_it_whole`; `ambre_logic::pass_tests::a_remote_delta_mid_import_lands_the_import_first` | none | verified |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a queue it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the queue crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the queues | none | verified |
 | `ARCH-021` | `INV` | A queue end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
 | `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | none | unheld -- about 330 sites across the workspace, most of them indexing in Trame, Toile and the canvas, and no lint refuses a new one; lands with the `No panic path outside the tests` Story (`ambre-roadmap.md` E9) | untested |
@@ -79,12 +81,10 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 13 `verified`, 3 `partial`, 1 `failing`, 12 `untested`. What holds is what the build can
+* **Verification.** 15 `verified`, 3 `partial`, 1 `failing`, 12 `untested`. What holds is what the build can
   refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
-  a lock on a client queue. Host tests hold the Logic loop's one answer per pass, and the
-  wake, the full queue and the disconnection of each queue.
-  Everything else, the failure path and the tab model included, is held by the code having been
-  written that way.
+  a lock on a client queue. Host tests hold the Logic loop's pass, its unfinished work, the wake,
+  the full queue and the disconnection of each queue. The rest is held by the code alone.
 
 ---
 
@@ -163,12 +163,12 @@ signal: it parks, and the relay's next pop wakes it (`ARCH-023`). The UI thread 
 drops a lossy message and holds a lossless one for a later frame. The two classes and what each owes
 are `ambre-spec-message-bus.md`.
 
-**The Logic loop.** It parks until a message is queued, then applies every message already queued
-on both queues. Each document the pass wrote is owed its layout and its save, and gets them once
-when the pass ends (`ARCH-017`). A burst of keystrokes costs one layout, so the lag stays one pass
-whatever the typing rate. A pass takes only what waited when it began, so a sender that never
-pauses cannot hold the answer back. A document closed during the pass is answered first, so its
-last edit is saved (`ARCH-019`).
+**The Logic loop.** It parks while no message is queued and no work is unfinished (`ARCH-030`),
+then applies every message already queued on both queues. Each document the pass wrote is owed
+its layout and its save, and gets them once when the pass ends (`ARCH-017`). A burst of keystrokes
+costs one layout, so the lag stays one pass whatever the typing rate. A pass takes only what waited
+when it began, so a sender that never pauses cannot hold the answer back. A document closed during
+the pass is answered first, so its last edit is saved (`ARCH-019`).
 
 **The save.** The layout leaves first, since the keystroke waits on it. The save is the delta each
 edit wrote, logged after the document's snapshot. A whole snapshot costs an export of the document.

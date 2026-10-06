@@ -106,6 +106,13 @@ wasm-bindgen = { workspace = true }
 # host-testable, so gate it to the host target like ambre-trame does.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget
+# registry. Host-only, as the other benches of the workspace are.
+criterion = { workspace = true }
+
+[[bench]]
+name = "import"
+harness = false
 
 [lints]
 workspace = true
