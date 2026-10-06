@@ -380,6 +380,13 @@ impl SyncState {
                         return;
                     }
                 };
+                // The chain opens what was sealed before the last rotation,
+                // the snapshot among it (`SYNC-117`, `SYNC-119`).
+                let links = if server_created {
+                    http::fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await
+                } else {
+                    Vec::new()
+                };
                 // Download the latest snapshot (when one exists) so the open
                 // seeds from compacted state instead of replaying every delta
                 // since genesis. Two server round-trips: `GET /snapshot` for the
@@ -446,6 +453,7 @@ impl SyncState {
                     signing_keys,
                     role,
                     rotation_owed,
+                    links,
                 });
             });
         } else {
@@ -680,11 +688,20 @@ impl SyncState {
 
     /// Installs `new_key` as the document's current key, then sends what the
     /// owed rotation held back. A key this client already holds as current is
-    /// not pushed into the cache a second time.
-    pub(crate) fn install_key(&mut self, document_id: DocumentId, new_key: DocumentKey) {
+    /// not pushed into the cache a second time. `links` join the chain, so a
+    /// key the cache drops still opens through them (`SYNC-119`).
+    pub(crate) fn install_key(
+        &mut self,
+        document_id: DocumentId,
+        new_key: DocumentKey,
+        links: impl IntoIterator<Item = ambre_protocol::KeyLink>,
+    ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
+        for link in links {
+            doc_state.chain.push(document_id, link);
+        }
         if doc_state.doc_key.id() != new_key.id() {
             doc_state.rotate_key(new_key);
         }
@@ -695,8 +712,16 @@ impl SyncState {
 
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
     pub(crate) fn start_settle(&mut self, document_id: DocumentId) {
-        let (Some(tx), Some(exchange_key)) = (self.event_tx.clone(), self.exchange_key.clone())
-        else {
+        let previous = self
+            .documents
+            .get(&document_id)
+            .map(|doc_state| doc_state.doc_key.clone());
+        let (Some(tx), Some(exchange_key), Some(signing_key), Some(previous)) = (
+            self.event_tx.clone(),
+            self.exchange_key.clone(),
+            self.signing_key.clone(),
+            previous,
+        ) else {
             if let Some(doc_state) = self.documents.get_mut(&document_id) {
                 doc_state.rekey.payment_failed();
             }
@@ -707,6 +732,8 @@ impl SyncState {
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
             exchange_key,
+            previous,
+            signing_key,
         };
         let http = crate::sharing::GlooHttp {
             auth: self.auth_context(),
@@ -1035,7 +1062,7 @@ mod tests {
         assert_eq!(doc_state.open_update_named(&under(&new_key)).unwrap(), b"d");
         assert_eq!(doc_state.open_update_named(&under(&old_key)).unwrap(), b"d");
         assert_eq!(
-            doc_state.key_named(old_key.id()).map(DocumentKey::id),
+            doc_state.key_named(old_key.id()).map(|key| key.id()),
             Some(old_key.id())
         );
 
@@ -1044,6 +1071,51 @@ mod tests {
             doc_state.open_update_named(&under(&stranger)),
             Err(pipeline::PipelineError::WrongKey)
         ));
+    }
+
+    /// A document opened twelve rotations after its snapshot, past the
+    /// ten-key cache, opens the snapshot and an old frame through the chain
+    /// the relay served. The current key stays the one the open installed
+    /// (`SYNC-119`, `SYNC-122`).
+    #[test]
+    fn an_open_walks_the_chain_to_a_snapshot_older_than_the_cache() {
+        let (mut state, rx, doc, first, sk, _snap) = setup();
+        state.documents.remove(&doc);
+        let mut keys = vec![first];
+        keys.extend((0..12).map(|_| DocumentKey::generate()));
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| pipeline::seal_link(doc, &pair[0], &pair[1], &sk).unwrap())
+            .collect();
+        let current = keys.last().unwrap().clone();
+        let snapshot_id = SnapshotId::new();
+        let blob = snapshot_blob(doc, snapshot_id, b"snap", &keys[0], &sk);
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: current.clone(),
+            snapshot_payload: Some(blob),
+            snapshot_id,
+            covered_seq: Seq(3),
+            doc_type: DocType::Trame,
+            server_created: true,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: false,
+            links,
+        });
+        let opened = drain(&rx).into_iter().any(
+            |e| matches!(e, LogicEvent::RemoteSnapshot { ref payload, .. } if payload == b"snap"),
+        );
+        assert!(opened, "the snapshot opens under a key the chain recovers");
+
+        let doc_state = &state.documents[&doc];
+        let old = make_update(doc, snapshot_id, 1, b"d", &keys[1], &sk);
+        assert_eq!(doc_state.open_update_named(&old).unwrap(), b"d");
+        assert_eq!(doc_state.doc_key.id(), current.id());
+        assert!(
+            doc_state.old_keys.is_empty(),
+            "a recovered key is not cached"
+        );
     }
 
     /// The blob object storage holds for a snapshot of `document_id`.
@@ -1175,6 +1247,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
+            links: Vec::new(),
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -1213,6 +1286,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
+            links: Vec::new(),
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq(0));
@@ -1304,6 +1378,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
+            links: Vec::new(),
         });
         let at_open = drain(&rx);
         assert!(
@@ -1362,6 +1437,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Owner,
             rotation_owed: false,
+            links: Vec::new(),
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),
@@ -1400,6 +1476,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Viewer,
             rotation_owed: false,
+            links: Vec::new(),
         });
         let _ = drain(&rx);
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -1425,6 +1502,7 @@ mod tests {
             signing_keys: Vec::new(),
             role: Role::Editor,
             rotation_owed: false,
+            links: Vec::new(),
         });
         assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
     }
@@ -1590,9 +1668,11 @@ mod tests {
         assert!(drain_ws(&ws_rx).is_empty(), "nothing leaves before the key");
 
         let k2 = DocumentKey::generate();
+        let link = pipeline::seal_link(doc, &k1, &k2, state.signing_key.as_ref().unwrap()).unwrap();
         state.handle_sync_event(SyncEvent::DebtSettled {
             document_id: doc,
             new_doc_key: k2.clone(),
+            link,
         });
         assert_eq!(
             sent_updates(&ws_rx, &[&k1, &k2]),
@@ -1622,6 +1702,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::KeyRotated {
             document_id: doc,
             new_doc_key: k2.clone(),
+            links: Vec::new(),
         });
         let _ = drain_ws(&ws_rx);
 
@@ -1657,6 +1738,7 @@ mod tests {
                 signing_keys: Vec::new(),
                 role,
                 rotation_owed: true,
+                links: Vec::new(),
             });
             let _ = drain_ws(&ws_rx);
             state.handle_send_update(doc, b"a".to_vec());

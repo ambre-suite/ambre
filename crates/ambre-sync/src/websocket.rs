@@ -501,12 +501,14 @@ impl SyncState {
                 signing_keys,
                 role,
                 rotation_owed,
+                links,
             } => {
                 self.documents.insert(
                     document_id,
                     SyncDocumentState::new(document_id, doc_key, doc_type, server_created),
                 );
                 let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
+                doc_state.chain = crate::chain::Chain::new(document_id, links);
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.role = role;
                 // A writer pays an owed rotation before its first frame; a
@@ -678,8 +680,9 @@ impl SyncState {
                 id,
                 document_id,
                 new_doc_key,
+                link,
             } => {
-                self.install_key(document_id, new_doc_key);
+                self.install_key(document_id, new_doc_key, [link]);
                 self.reply(id, RestEvent::RevocationComplete { document_id });
             }
             SyncEvent::DocumentLeft { id, document_id } => {
@@ -698,7 +701,8 @@ impl SyncState {
             SyncEvent::DebtSettled {
                 document_id,
                 new_doc_key,
-            } => self.install_key(document_id, new_doc_key),
+                link,
+            } => self.install_key(document_id, new_doc_key, [link]),
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
             SyncEvent::DebtUnsettled {
                 document_id,
@@ -750,11 +754,12 @@ impl SyncState {
             SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,
+                links,
             } => {
                 // Swap the local key cache. This is the remaining-member path: a
                 // rotation is not a revocation. Nothing is reported as a member
                 // loss here; a revoked user is told via `DocumentRevoked`.
-                self.install_key(document_id, new_doc_key);
+                self.install_key(document_id, new_doc_key, links);
             }
             SyncEvent::MediaUploaded {
                 id,
@@ -1043,7 +1048,11 @@ impl SyncState {
         wasm_bindgen_futures::spawn_local(async move {
             let members_url =
                 format!("{url_scheme}://{api_base}/api/documents/{document_id}/members");
-            let resp = match http::get_json_auth::<http::MembersResponse>(&members_url, auth).await
+            let resp = match http::get_json_auth::<http::MembersResponse>(
+                &members_url,
+                auth.clone(),
+            )
+            .await
             {
                 Ok(resp) => resp,
                 Err(e) => {
@@ -1103,9 +1112,13 @@ impl SyncState {
                 }
             };
 
+            // The link the rotator left reaches back from the new key
+            // (`SYNC-117`).
+            let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,
+                links,
             });
         });
     }

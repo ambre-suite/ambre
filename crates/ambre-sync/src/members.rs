@@ -146,12 +146,28 @@ impl SyncState {
             self.reply(id, RestEvent::RevocationComplete { document_id });
             return;
         };
-        let Some(exchange_key) = exchange_key else {
+        let (Some(exchange_key), Some(signing_key)) = (exchange_key, self.signing_key.clone())
+        else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: "RevokeFromDocument".into(),
                 code: 401,
                 message: "Not authenticated".into(),
+            });
+            return;
+        };
+        // The revoke seals the current key under the new one, so it runs
+        // from an open document only (`SYNC-116`).
+        let Some(previous) = self
+            .documents
+            .get(&document_id)
+            .map(|doc_state| doc_state.doc_key.clone())
+        else {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
+                request: "RevokeFromDocument".into(),
+                code: 404,
+                message: "the document is not open".into(),
             });
             return;
         };
@@ -166,6 +182,8 @@ impl SyncState {
             url_scheme,
             api_base,
             exchange_key,
+            previous,
+            signing_key,
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {

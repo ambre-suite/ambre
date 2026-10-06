@@ -613,6 +613,9 @@ pub(crate) struct InviteResponse {
 #[derive(Serialize)]
 pub(crate) struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
+    /// The link to the key this rotation replaces, as [`encode_link`] writes
+    /// it (`SYNC-118`).
+    pub link: String,
 }
 
 /// One revoke: the member removed and the new key wrapped for everyone who
@@ -621,6 +624,54 @@ pub(crate) struct RotateKeyRequest {
 pub(crate) struct RevokeRequest {
     pub user_id: String,
     pub keys: Vec<RotateKeyEntry>,
+    /// The link to the key this revoke replaces (`SYNC-118`).
+    pub link: String,
+}
+
+/// The links of one document's chain, oldest first (`SYNC-117`).
+#[derive(Deserialize)]
+pub(crate) struct KeyLinksResponse {
+    pub links: Vec<String>,
+}
+
+/// The form a link takes in a request: its postcard bytes, in base64.
+pub(crate) fn encode_link(link: &ambre_protocol::KeyLink) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = link.encode().map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::URL_SAFE.encode(bytes))
+}
+
+/// The links a response carries. One that does not decode is dropped: the
+/// walk then stops before it, and the keys past it stay out of reach.
+pub(crate) fn decode_links(resp: KeyLinksResponse) -> Vec<ambre_protocol::KeyLink> {
+    use base64::Engine as _;
+    resp.links
+        .iter()
+        .filter_map(|text| {
+            let bytes = base64::engine::general_purpose::URL_SAFE
+                .decode(text)
+                .ok()?;
+            ambre_protocol::KeyLink::decode(&bytes).ok()
+        })
+        .collect()
+}
+
+/// The links of `document_id`, or none when the relay cannot serve them: the
+/// frames sealed under a key older than the cache then stay closed.
+pub(crate) async fn fetch_key_links(
+    url_scheme: &str,
+    api_base: &str,
+    document_id: ambre_core::DocumentId,
+    auth: AuthContext,
+) -> Vec<ambre_protocol::KeyLink> {
+    let url = format!("{url_scheme}://{api_base}/api/documents/{document_id}/key-links");
+    match get_json_auth::<KeyLinksResponse>(&url, auth).await {
+        Ok(resp) => decode_links(resp),
+        Err(e) => {
+            tracing::warn!("Sync: key links of {document_id:?} unavailable: {e}");
+            Vec::new()
+        }
+    }
 }
 
 #[derive(Serialize)]

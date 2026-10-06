@@ -41,6 +41,20 @@ fn open_blob(
     Ok(data)
 }
 
+/// Opens a downloaded blob with the one key it names: the current key, a
+/// cached one, or one the chain recovers (`SYNC-042`, `SYNC-045`).
+fn open_blob_named(
+    blob: &[u8],
+    content_hash: &str,
+    keyring: &crate::chain::Keyring,
+) -> Result<Vec<u8>, String> {
+    let wanted = pipeline::object_key(blob).map_err(|e| e.to_string())?;
+    let key = keyring
+        .find(wanted)
+        .ok_or_else(|| "the blob names a key out of reach".to_owned())?;
+    open_blob(blob, keyring.document_id, content_hash, &key)
+}
+
 impl SyncState {
     // -- Media (upload / download via presigned S3 URLs) -----------------------
 
@@ -188,10 +202,9 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
-        let doc_key = self
-            .documents
-            .get(&document_id)
-            .map(|ds| ds.doc_key.clone());
+        // A blob sealed before a rotation names an older key, which the
+        // chain recovers (`SYNC-042`, `SYNC-119`).
+        let keyring = self.documents.get(&document_id).map(|ds| ds.keyring());
 
         let Some(tx) = event_tx else {
             self.reply(
@@ -204,7 +217,7 @@ impl SyncState {
             );
             return;
         };
-        let Some(doc_key) = doc_key else {
+        let Some(keyring) = keyring else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
                 request: "DownloadMedia".into(),
@@ -252,7 +265,7 @@ impl SyncState {
                 }
             };
 
-            let data = match open_blob(&blob, document_id, &content_hash, &doc_key) {
+            let data = match open_blob_named(&blob, &content_hash, &keyring) {
                 Ok(d) => d,
                 Err(e) => {
                     let _ = logic_tx.send(LogicEvent::ApiError {
@@ -313,6 +326,31 @@ mod tests {
         let address = ambre_crypto::commitment::media_address(key, data);
         let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
         (blob, hex::encode(address))
+    }
+
+    /// A picture sealed before two rotations opens with the current key and
+    /// the chain, and not without it (`SYNC-042`).
+    #[test]
+    fn a_blob_sealed_before_a_rotation_opens_through_the_chain() {
+        let document_id = DocumentId::new();
+        let signing = SigningKey::from_bytes(&[0x07; 32]);
+        let keys: Vec<_> = (0..3).map(|_| DocumentKey::generate()).collect();
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &signing).unwrap())
+            .collect();
+        let (blob, address) = sealed(b"a picture", document_id, &keys[0]);
+        let keyring = |links| crate::chain::Keyring {
+            document_id,
+            current: keys[2].clone(),
+            previous: Vec::new(),
+            chain: crate::chain::Chain::new(document_id, links),
+        };
+        assert_eq!(
+            open_blob_named(&blob, &address, &keyring(links)).unwrap(),
+            b"a picture"
+        );
+        assert!(open_blob_named(&blob, &address, &keyring(Vec::new())).is_err());
     }
 
     /// A blob sealed for one document does not open under another, even one

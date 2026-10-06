@@ -13,53 +13,51 @@ impl SyncState {
             let exchange_key = self.exchange_key.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("{url_scheme}://{api_base}/api/documents");
-                match http::get_json_auth::<http::DocumentListResponse>(&url, auth).await {
+                match http::get_json_auth::<http::DocumentListResponse>(&url, auth.clone()).await {
                     Ok(resp) => {
-                        let docs: Vec<DocumentSummary> = resp
-                            .documents
-                            .into_iter()
-                            .map(|e| {
-                                let document_id = DocumentId::parse_str(&e.id)
-                                    .unwrap_or_else(|_| DocumentId::new());
-                                // E2EE: the name arrives as `name_enc`. Decrypt it
-                                // here (Sync) so the Logic/UI threads only ever see
-                                // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
-                                // failed unwrap/decrypt renders as `None` ("Untitled").
-                                let name = e.name_enc.as_deref().and_then(|name_enc| {
-                                    exchange_key.as_ref().and_then(|ek| {
-                                        Self::decrypt_document_name(
-                                            document_id,
-                                            ek,
-                                            &e.doc_key_enc,
-                                            &e.wrapper_exchange_pub_key,
-                                            name_enc,
-                                        )
-                                    })
-                                });
-                                DocumentSummary {
-                                    document_id,
-                                    doc_type: match e.doc_type.as_str() {
-                                        "prose" => DocType::Prose,
-                                        "toile" => DocType::Toile,
-                                        "murmure" => DocType::Murmure,
-                                        _ => DocType::Trame,
-                                    },
-                                    name,
-                                    role: match e.role.as_str() {
-                                        "editor" => Role::Editor,
-                                        "viewer" => Role::Viewer,
-                                        _ => Role::Owner,
-                                    },
-                                    // RFC3339 -> epoch ms via the JS Date parser
-                                    // (NaN -> 0 when the server timestamp is absent).
-                                    updated_at: {
-                                        let ms = js_sys::Date::parse(&e.updated_at);
-                                        if ms.is_nan() { 0 } else { ms as u64 }
-                                    },
-                                    member_count: e.member_count.max(1),
+                        let mut docs = Vec::with_capacity(resp.documents.len());
+                        for e in resp.documents {
+                            let document_id =
+                                DocumentId::parse_str(&e.id).unwrap_or_else(|_| DocumentId::new());
+                            // E2EE: the name arrives as `name_enc`. Decrypt it
+                            // here (Sync) so the Logic/UI threads only ever see
+                            // plaintext (`ambre-spec-launcher.md`, CHROME-044). A
+                            // failed unwrap/decrypt renders as `None` ("Untitled").
+                            let name = match (e.name_enc.as_deref(), exchange_key.as_ref()) {
+                                (Some(name_enc), Some(ek)) => {
+                                    let listed = ListedName {
+                                        document_id,
+                                        doc_key_enc: &e.doc_key_enc,
+                                        wrapper_exchange_pub_key: &e.wrapper_exchange_pub_key,
+                                        name_enc,
+                                    };
+                                    listed.open(ek, url_scheme, &api_base, &auth).await
                                 }
-                            })
-                            .collect();
+                                _ => None,
+                            };
+                            docs.push(DocumentSummary {
+                                document_id,
+                                doc_type: match e.doc_type.as_str() {
+                                    "prose" => DocType::Prose,
+                                    "toile" => DocType::Toile,
+                                    "murmure" => DocType::Murmure,
+                                    _ => DocType::Trame,
+                                },
+                                name,
+                                role: match e.role.as_str() {
+                                    "editor" => Role::Editor,
+                                    "viewer" => Role::Viewer,
+                                    _ => Role::Owner,
+                                },
+                                // RFC3339 -> epoch ms via the JS Date parser
+                                // (NaN -> 0 when the server timestamp is absent).
+                                updated_at: {
+                                    let ms = js_sys::Date::parse(&e.updated_at);
+                                    if ms.is_nan() { 0 } else { ms as u64 }
+                                },
+                                member_count: e.member_count.max(1),
+                            });
+                        }
                         let _ = tx.send(SyncEvent::DocumentList {
                             id,
                             documents: docs,
@@ -89,44 +87,6 @@ impl SyncState {
         }
     }
 
-    /// Unwraps the DocumentKey from `doc_key_enc` (ECDH with the wrapper's
-    /// exchange pubkey) and decrypts `name_enc` to plaintext. All inputs are
-    /// base64 (keys) / base64 (name) blobs of `nonce || ciphertext`; the wrapper
-    /// pubkey is hex, empty meaning "self-wrapped" (fall back to our own key).
-    /// Returns `None` on any decode/crypto failure (the launcher shows "Untitled").
-    pub(crate) fn decrypt_document_name(
-        document_id: DocumentId,
-        exchange_key: &x25519_dalek::StaticSecret,
-        doc_key_enc: &str,
-        wrapper_exchange_pub_key: &str,
-        name_enc: &str,
-    ) -> Option<String> {
-        // 1. ECDH-unwrap the DocumentKey.
-        let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(doc_key_enc)
-            .ok()?;
-        if wrapped_bytes.len() < 24 {
-            return None;
-        }
-        let nonce: [u8; 24] = wrapped_bytes[..24].try_into().ok()?;
-        let wrapped = ambre_crypto::WrappedKey {
-            nonce,
-            ciphertext: wrapped_bytes[24..].to_vec(),
-        };
-        let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
-            // Self-wrapped owner row: the DH peer is our own public key.
-            hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
-        } else {
-            wrapper_exchange_pub_key.to_owned()
-        };
-        let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
-        let doc_key =
-            ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()?;
-
-        // 2. Open the name under the envelope, bound to its own document.
-        Self::open_document_name(document_id, &doc_key, name_enc)
-    }
-
     /// Seals a document name with the full envelope, bound to its document
     /// (`SYNC-018`, `SYNC-068`), and encodes it as base64 for the relay.
     pub(crate) fn seal_document_name(
@@ -142,21 +102,6 @@ impl SyncState {
             signing_key,
         )?;
         Ok(base64::engine::general_purpose::URL_SAFE.encode(sealed))
-    }
-
-    /// Opens what [`Self::seal_document_name`] sealed. `None` on any failure:
-    /// a name sealed for another document, a forged author, a wrong key.
-    pub(crate) fn open_document_name(
-        document_id: DocumentId,
-        doc_key: &DocumentKey,
-        name_enc: &str,
-    ) -> Option<String> {
-        let bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(name_enc)
-            .ok()?;
-        let plaintext =
-            pipeline::open_object(&bytes, &pipeline::name_aad(document_id), doc_key).ok()?;
-        String::from_utf8(plaintext).ok()
     }
 
     /// The document a create answer names, refused unless the client minted
@@ -387,9 +332,115 @@ impl SyncState {
     }
 }
 
+/// One sealed name of the document list, with the wrapped key that opens it.
+/// Keys are base64 of `nonce || ciphertext`; the wrapper's exchange key is
+/// hex, empty for a self-wrapped owner row.
+struct ListedName<'a> {
+    document_id: DocumentId,
+    doc_key_enc: &'a str,
+    wrapper_exchange_pub_key: &'a str,
+    name_enc: &'a str,
+}
+
+impl ListedName<'_> {
+    /// The plaintext name. A name sealed before the last rotation names an
+    /// older key, which the chain recovers (`SYNC-042`, `SYNC-119`). `None` on
+    /// any decode or crypto failure: the launcher shows "Untitled".
+    async fn open(
+        &self,
+        exchange_key: &x25519_dalek::StaticSecret,
+        url_scheme: &str,
+        api_base: &str,
+        auth: &http::AuthContext,
+    ) -> Option<String> {
+        let current = self.unwrap_key(exchange_key)?;
+        let bytes = self.sealed()?;
+        // One request more, and only for a name older than the current key.
+        let links = if pipeline::object_key(&bytes).ok()? == current.id() {
+            Vec::new()
+        } else {
+            http::fetch_key_links(url_scheme, api_base, self.document_id, auth.clone()).await
+        };
+        open_name(self.document_id, &current, &bytes, links)
+    }
+
+    /// The current key, ECDH-unwrapped against the wrapper's exchange key.
+    fn unwrap_key(&self, exchange_key: &x25519_dalek::StaticSecret) -> Option<DocumentKey> {
+        let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(self.doc_key_enc)
+            .ok()?;
+        if wrapped_bytes.len() < 24 {
+            return None;
+        }
+        let nonce: [u8; 24] = wrapped_bytes[..24].try_into().ok()?;
+        let wrapped = ambre_crypto::WrappedKey {
+            nonce,
+            ciphertext: wrapped_bytes[24..].to_vec(),
+        };
+        let wrapper_hex = if self.wrapper_exchange_pub_key.is_empty() {
+            // Self-wrapped owner row: the DH peer is our own public key.
+            hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
+        } else {
+            self.wrapper_exchange_pub_key.to_owned()
+        };
+        let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
+        ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+    }
+
+    fn sealed(&self) -> Option<Vec<u8>> {
+        base64::engine::general_purpose::URL_SAFE
+            .decode(self.name_enc)
+            .ok()
+    }
+}
+
+/// Opens a sealed name with the key it names: `current`, or one the chain
+/// `links` reach from it. `None` on any failure: a name sealed for another
+/// document, a forged author, a key out of reach.
+fn open_name(
+    document_id: DocumentId,
+    current: &DocumentKey,
+    bytes: &[u8],
+    links: Vec<ambre_protocol::KeyLink>,
+) -> Option<String> {
+    let chain = crate::chain::Chain::new(document_id, links);
+    let wanted = pipeline::object_key(bytes).ok()?;
+    let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
+    let plaintext = pipeline::open_object(bytes, &pipeline::name_aad(document_id), &key).ok()?;
+    String::from_utf8(plaintext).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_crypto::MasterSeed;
+
+    /// A name sealed three rotations ago opens with the current key and the
+    /// chain, and stays closed without the chain (`SYNC-042`).
+    #[test]
+    fn a_name_sealed_before_a_rotation_opens_through_the_chain() {
+        let document_id = DocumentId::new();
+        let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let keys: Vec<_> = (0..4).map(|_| DocumentKey::generate()).collect();
+        let links: Vec<_> = keys
+            .windows(2)
+            .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &signing_key))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let name =
+            SyncState::seal_document_name(document_id, &keys[0], &signing_key, "Budget").unwrap();
+        let bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(name)
+            .unwrap();
+        let current = &keys[3];
+        assert_eq!(
+            open_name(document_id, current, &bytes, links.clone()).as_deref(),
+            Some("Budget")
+        );
+        assert_eq!(open_name(document_id, current, &bytes, Vec::new()), None);
+        // Another document's chain opens nothing here.
+        assert_eq!(open_name(DocumentId::new(), current, &bytes, links), None);
+    }
 
     /// A create answer that names another document, or no document, fails:
     /// only the minted id opens the name sealed under it (`SYNC-136`).

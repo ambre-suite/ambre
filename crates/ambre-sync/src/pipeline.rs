@@ -275,25 +275,23 @@ pub fn seal_snapshot(
     Ok(snapshot)
 }
 
-/// Decode a stored snapshot blob, the serialized [`Snapshot`] object storage
-/// holds, and open it for `document_id`. A snapshot sealed for another document
-/// is refused before any decryption.
+/// Decodes a stored snapshot blob, the serialized [`Snapshot`] object storage
+/// holds, refusing another document's before any decryption. The caller
+/// reads the key it names before opening it (`SYNC-045`, `SYNC-119`).
 ///
 /// # Errors
 ///
-/// [`PipelineError::Postcard`] for bytes that are not a snapshot,
-/// [`PipelineError::WrongDocument`] for another document's, and every error of
-/// [`open_snapshot`].
-pub fn open_snapshot_blob(
+/// [`PipelineError::Postcard`] for bytes that are not a snapshot, and
+/// [`PipelineError::WrongDocument`] for another document's.
+pub fn decode_snapshot_blob(
     blob: &[u8],
     document_id: ambre_bus::DocumentId,
-    doc_key: &DocumentKey,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<Snapshot, PipelineError> {
     let snapshot: Snapshot = postcard::from_bytes(blob).map_err(|_| PipelineError::Postcard)?;
     if snapshot.public_data.document_id != document_id {
         return Err(PipelineError::WrongDocument);
     }
-    open_snapshot(&snapshot, doc_key)
+    Ok(snapshot)
 }
 
 /// Verifies, decrypts and decompresses a [`Snapshot`] back to its CRDT payload.
@@ -441,6 +439,12 @@ pub fn seal_object(
 ) -> Result<Vec<u8>, PipelineError> {
     let key_id = doc_key.id();
     let sealed = envelope::seal(plaintext, &object_aad(key_id, aad), doc_key, signing_key)?;
+    Ok(object_bytes(key_id, signing_key, &sealed))
+}
+
+/// Lays out a sealed object: `layout || key id || author key || signature ||
+/// commitment tag || nonce || ciphertext`.
+fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Vec<u8> {
     let mut out = Vec::with_capacity(OBJECT_HEADER_LEN + sealed.ciphertext.len());
     out.push(OBJECT_LAYOUT);
     out.extend_from_slice(key_id.as_array());
@@ -449,24 +453,15 @@ pub fn seal_object(
     out.extend_from_slice(&sealed.commitment_tag);
     out.extend_from_slice(&sealed.nonce);
     out.extend_from_slice(&sealed.ciphertext);
-    Ok(out)
+    out
 }
 
-/// Opens what [`seal_object`] sealed, in the envelope's order: the signature,
-/// then the commitment tag, then the cipher.
-///
-/// # Errors
-///
-/// * [`PipelineError::UnknownLayout`] when the first byte names a layout this
-///   build does not read.
-/// * [`PipelineError::ShortObject`] when the bytes cannot hold the header.
-/// * [`PipelineError::WrongKey`] when the header names another key.
-/// * [`PipelineError::Crypto`] when any of the three checks fails.
-pub fn open_object(
+/// Splits what [`object_bytes`] laid out, refusing a key other than
+/// `doc_key` before any cryptography (`SYNC-125`).
+fn object_parts(
     bytes: &[u8],
-    aad: &[u8],
     doc_key: &DocumentKey,
-) -> Result<Vec<u8>, PipelineError> {
+) -> Result<(KeyId, [u8; AUTHOR_KEY_LEN], Sealed), PipelineError> {
     check_layout(bytes)?;
     if bytes.len() < OBJECT_HEADER_LEN {
         return Err(PipelineError::ShortObject);
@@ -486,12 +481,99 @@ pub fn open_object(
             .map_err(|_| PipelineError::ShortObject)?,
     };
     let author: [u8; AUTHOR_KEY_LEN] = author.try_into().map_err(|_| PipelineError::ShortObject)?;
+    Ok((key_id, author, sealed))
+}
+
+/// Opens what [`seal_object`] sealed, in the envelope's order: the signature,
+/// then the commitment tag, then the cipher.
+///
+/// # Errors
+///
+/// * [`PipelineError::UnknownLayout`] when the first byte names a layout this
+///   build does not read.
+/// * [`PipelineError::ShortObject`] when the bytes cannot hold the header.
+/// * [`PipelineError::WrongKey`] when the header names another key.
+/// * [`PipelineError::Crypto`] when any of the three checks fails.
+pub fn open_object(
+    bytes: &[u8],
+    aad: &[u8],
+    doc_key: &DocumentKey,
+) -> Result<Vec<u8>, PipelineError> {
+    let (key_id, author, sealed) = object_parts(bytes, doc_key)?;
     Ok(envelope::open(
         &sealed,
         &object_aad(key_id, aad),
         doc_key,
         &author,
     )?)
+}
+
+// -- Key links -----------------------------------------------------------------
+
+/// Domain of a key link. The document id and the identifier of the key it
+/// seals follow it, so a link opens for its own document and key only.
+const LINK_DOMAIN: &[u8] = b"ambre-key-link-v1";
+
+/// The additional data of a link: the domain, the document id, then the
+/// identifier of the key it seals.
+fn link_aad(document_id: ambre_core::DocumentId, previous: KeyId) -> Vec<u8> {
+    let mut aad = LINK_DOMAIN.to_vec();
+    aad.extend_from_slice(document_id.as_bytes());
+    aad.extend_from_slice(previous.as_array());
+    aad
+}
+
+/// Seals `previous` under `next` and signs it: the link a rotation leaves
+/// (`SYNC-116`). The sealed bytes take the layout of a standalone object, so
+/// their header names `next` and the rotator.
+///
+/// # Errors
+///
+/// [`PipelineError::Crypto`] from the envelope.
+pub fn seal_link(
+    document_id: ambre_core::DocumentId,
+    previous: &DocumentKey,
+    next: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<ambre_protocol::KeyLink, PipelineError> {
+    let key = next.id();
+    let aad = object_aad(key, &link_aad(document_id, previous.id()));
+    let sealed = next.seal_previous(previous, &aad, signing_key)?;
+    Ok(ambre_protocol::KeyLink {
+        document_id,
+        key,
+        previous: previous.id(),
+        sealed: object_bytes(key, signing_key, &sealed),
+    })
+}
+
+/// Opens the key `link` seals, with `next`, the key it starts from. The key
+/// that opens must hash to the identifier the link names (`SYNC-120`).
+///
+/// # Errors
+///
+/// * [`PipelineError::WrongDocument`] for another document's link.
+/// * [`PipelineError::WrongKey`] when `next` is not the key the link starts
+///   from, or when what opens is not the key it names.
+/// * [`PipelineError::Crypto`] when the signature, the tag or the cipher
+///   fails.
+pub fn open_link(
+    link: &ambre_protocol::KeyLink,
+    document_id: ambre_core::DocumentId,
+    next: &DocumentKey,
+) -> Result<DocumentKey, PipelineError> {
+    if link.document_id != document_id {
+        return Err(PipelineError::WrongDocument);
+    }
+    check_key(link.key, next)?;
+    let (key_id, author, sealed) = object_parts(&link.sealed, next)?;
+    let aad = object_aad(key_id, &link_aad(document_id, link.previous));
+    let previous = next.open_previous(&sealed, &aad, &author)?;
+    if previous.id() == link.previous {
+        Ok(previous)
+    } else {
+        Err(PipelineError::WrongKey)
+    }
 }
 
 /// The key a sealed object names, read from its header without opening it.

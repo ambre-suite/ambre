@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: KEY ROTATION
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- a revoke lands whole, and a departure leaves a rotation owed. The
-rotation re-keys the deltas alone.
+**Implementation:** partial -- a revoke lands whole, and a departure leaves a rotation owed. Every
+older key is reached from the current one through a chain of links; their signer is not yet checked.
 
 > Taking someone off a document means they cannot read what is written after it. The document gets
 > a new key, sealed again for everyone who stays, and the person removed keeps only what they
@@ -28,8 +28,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
 | `SYNC-045` | `INV` | An inbound frame MUST be opened with the key it names, never by trying every key in turn. | this spec section 3; `SYNC-125` | `ambre_sync::updates::tests::a_frame_opens_with_the_key_it_names_and_no_other` -- a frame under the current key or a cached one opens with it, and a frame naming a key never held is refused before any open | none | verified |
 | `SYNC-115` | `INV` | Every document key MUST be named by an identifier derived from the key itself. | this spec section 3 | `ambre_crypto::tests::a_key_id_is_derived_from_the_key` -- one key gives one identifier, another key another, and the key's bytes are not in it | none | verified |
-| `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-116` | `INV` | Every rotation MUST leave a link that seals the previous key under the new one, except a rotation that records a history boundary. | this spec section 3 | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the revoke's link opens under the new key to the key it replaced; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does the link of a paid debt; `ambre_crypto::tests::a_previous_key_opens_under_the_next_one_and_no_other` -- the seal opens under the next key alone | none | verified |
+| `SYNC-117` | `INV` | The relay MUST keep every link of a document for as long as the document exists. | this spec section 3; `ZK-007` | `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- three rotations leave three links, served back to a member in the order they landed | none | verified |
 
 ### 1.2 Remove a member
 
@@ -39,13 +39,13 @@ and every copy in one request, so the revoke lands whole or not at all.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the new key is wrapped for everyone but the member removed; `ambre_sync::sharing::tests::a_refused_revoke_swaps_no_key` -- a refused revoke installs no key; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay removes the member and stores every copy together | none | verified |
-| `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | none | fails -- the document name and every media blob stay sealed under the previous key. Each names that key, and nothing brings it back, so a revoke silently blanks the name and every picture; lands with the `The key chain` Story (`ambre-roadmap.md` E5) | failing |
+| `SYNC-042` | `POST` | A rotation MUST leave everything sealed before it openable by every member who stays. | this spec section 3; `SYNC-119`, `SYNC-125` | `ambre_sync::documents::tests::a_name_sealed_before_a_rotation_opens_through_the_chain` -- a name sealed three rotations back opens with the current key and the chain, and not without it; `ambre_sync::media::tests::a_blob_sealed_before_a_rotation_opens_through_the_chain` -- so does a picture | none | verified |
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the `A snapshot follows each rotation` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. `SYNC-042` holds through the chain and seals nothing again, so the name and the blobs keep their bytes; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed`; `ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` -- the rotation names each member it could not re-wrap for, and the revoke reports them | none | verified |
-| `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the one revoke post carries the link; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does a payment; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay stores it with the copies; `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- a rotation without its link, with another document's, or chained from a stale key changes nothing | none | verified |
 | `SYNC-126` | `POST` | A revoke MUST post the removal and the wrapped copies in one request. | this spec section 3; `SYNC-041` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- one read of the members, then one post that names the member and carries every copy; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay applies the one request whole and leaves no debt | none | verified |
 
 ### 1.3 Take on a rotation
@@ -63,10 +63,10 @@ A client that lacks the key a frame or a snapshot names walks the chain back fro
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | `ambre_sync::chain::tests::the_current_key_walks_back_to_every_older_key` -- past the tenth rotation, the current key reaches every older key and none newer; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open recovers the key of a snapshot and of a frame twelve rotations back | none | verified |
+| `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | `ambre_sync::chain::tests::a_link_naming_another_key_stops_the_walk_there` -- a link sealing another key than it names ends the walk, and every key past it stays out of reach; `ambre_sync::chain::tests::a_link_tampered_or_misfiled_opens_nothing` -- a re-sealed link and another document's open nothing | none | verified |
 | `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | `ambre_sync::chain::tests::a_recovered_key_never_becomes_the_current_one` -- the walk hands the key back and leaves the current one; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- after the open, the current key is the one installed and the cache holds nothing recovered | none | verified |
 
 ### 1.5 Leave on one's own
 
@@ -85,11 +85,10 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
   A step back along the chain costs one small open and one signature check.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
-  metadata `ambre-spec-zero-knowledge.md` accepts. It also holds each link and each key
-  identifier, and opens neither.
-* **Verification.** 11 `verified`, 1 `failing`, 5 `untested`, 8 `unimplemented`. What holds is the
-  relay half, the key wipe, the open by name, the revoke in one request and the debt a departure
-  leaves. The client side is loose: the rotation reaches the deltas alone.
+  metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
+* **Verification.** 18 `verified`, 5 `untested`, 2 `unimplemented`. The relay half holds, as do the
+  key wipe, the open by name, the one-request revoke, the departure's debt and the chain. The
+  client's two rotation paths are loose: no test drives a notice through to the key held.
 
 ---
 
@@ -104,7 +103,7 @@ verification.
 | removes Carol, and the revoke fails | Bob edits | Bob's edit under the same key | Alice is told, Carol stays a member, and nothing changed (`SYNC-041`) | `sharing::tests::a_refused_revoke_swaps_no_key` |
 | -- | Carol leaves; Bob edits | Bob's edit under a key Bob chose | Bob's client rotates before its edit leaves, and Carol cannot read it (`SYNC-127`, `SYNC-128`) | `updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` |
 | -- | Carol leaves while Bob's edit is in flight | Bob's edit, refused, then sent again under the new key | Bob sees nothing happen; Carol cannot read the edit (`SYNC-129`) | `updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` |
-| removes Carol | Bob reopens the document | Alice's content, and a name nobody can open | the document is called nothing, and every picture in it is missing (`SYNC-042`) | none, and it fails -- section 5 |
+| removes Carol | Bob reopens the document | Alice's content, a name and pictures under the previous key | the name and every picture, opened through the chain (`SYNC-042`) | `documents::tests::a_name_sealed_before_a_rotation_opens_through_the_chain` |
 | removes Carol, whose row Bob's relay serves malformed | Bob reopens | Alice's content | Alice is told the rotation could not reach Bob, by name (`SYNC-043`) | `sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` |
 | removes Carol while Bob's edit is in flight | Bob's edit arrives sealed under the previous key | Bob's edit | Alice reads it: the previous key is cached (`SYNC-044`) | none -- section 5 |
 
@@ -172,16 +171,17 @@ keys the same way.
 
 ```rust
 pub struct KeyId([u8; 16]);         // BLAKE2b("ambre-key-id-v1" || key), truncated
-pub struct SealedKey(Vec<u8>);      // one document key, sealed under another
 pub struct KeyLink {
-    pub document: DocumentId,
+    pub document_id: DocumentId,
     pub key: KeyId,                 // the key the link starts from
     pub previous: KeyId,            // the key it seals
-    pub sealed: SealedKey,          // `previous`, sealed under `key`
-    pub author: UserId,             // the rotator
-    pub signature: Signature,
+    pub sealed: Vec<u8>,            // `previous` as a sealed object under `key`
 }
 ```
+
+The seal is a standalone object of the sealed envelope. Its header names `key` and the rotator's
+signing key, and carries the signature. Its additional data binds the document and `previous`, so
+a link opens for its own document and key only.
 
 A link is checked twice. The key it unseals must hash to the identifier it names (`SYNC-120`), and
 its signer must be a verified member (`SYNC-121`). A recovered key opens history, and never seals
@@ -189,9 +189,20 @@ anything new (`SYNC-122`).
 
 **Why the chain stands before the log.** The seal and the identifier carry the chain alone. To forge
 a link, the relay would have to seal under a key it never holds. The hash binds what opens to the
-key it names. The signature adds attribution, and attribution means something only against the
-signed membership log. Until that log lands, a link's signature is checked against the signing key
-the relay serves for its author (`SYNC-121`).
+key it names.
+
+The signature adds attribution, and attribution means something only against the signed
+membership log. Until it lands, a signature is checked against the author key its own
+header carries. That proves the seal whole, and names no one (`SYNC-121`).
+
+**The relay chains one rotation at a time.** It stores a link in the transaction that stores the
+wrapped copies, under a lock on the document. A link that does not start from the last key chained
+is refused with a conflict, and nothing of its rotation lands. Two rotations racing from one key
+thus leave one link, never a fork.
+
+**Where the links come from.** The open fetches every link of the document with the members answer.
+A rotation this client posts adds its own link, and a rotation it is told of fetches them again. A
+name in the document list that names an older key fetches its document's links alone.
 
 **A history boundary is a rotation with no link.** The chain stops there. A member who joined after
 it holds no key before it, and no walk reaches one.
@@ -207,8 +218,8 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 |---|---|
 | every delta and every snapshot, from now on | yes, by construction: they are sealed after it |
 | the document name | no. It stays under the previous key, which it names, and the chain opens it (`SYNC-042`) |
-| every media blob already uploaded | no. Same: it names its key, and nothing re-seals it |
-| a snapshot uploaded before the rotation | no, and that is correct: it is history, and the cache opens it while it lasts |
+| every media blob already uploaded | no. Same: it names its key, and the chain opens it |
+| a snapshot uploaded before the rotation | no, and that is correct: it is history, and the cache or the chain opens it |
 
 **Code.**
 
@@ -216,8 +227,11 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   re-wrap for each member;
 * `crates/ambre-sync/src/rekey.rs` -- the updates kept until their echo, and the debt;
 * `crates/ambre-sync/src/websocket.rs` -- the notice, the fetch, the unwrap, the swap and the refusal;
-* `crates/ambre-sync/src/lib.rs` -- the cache of previous keys, and the two opens by name;
-* `crates/ambre-server/src/db/members.rs` -- the transaction, and the wrapper of record.
+* `crates/ambre-sync/src/lib.rs` -- the cache of previous keys, and the opens by name;
+* `crates/ambre-sync/src/chain.rs` -- the walk back from the current key;
+* `crates/ambre-sync/src/pipeline.rs` -- the seal and the open of one link;
+* `crates/ambre-protocol/src/key_link.rs` -- the link as the relay stores it;
+* `crates/ambre-server/src/db/members.rs` -- the transaction, the wrapper of record and the link.
 
 ---
 
@@ -251,9 +265,6 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A member added during a revoke keeps the previous key.** The members are read before the post,
   and a member invited between the two gets no copy of the new key. The `A member invited during a
   revoke gets the new key` Story (`ambre-roadmap.md` E7) closes it.
-* **Nothing brings back the key a name or a blob names.** Both stay sealed under the key of their
-  time, and each names it (`SYNC-125`). That is correct once the chain opens it. Until then every
-  revoke leaves the document unnamed and its pictures unreadable (`SYNC-042`, `SYNC-119`).
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).
@@ -262,8 +273,13 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   exists for. Refusing a frame under the key a removal left behind is the relay's job (`SRV-123`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
-* **The key chain is not built.** Past the tenth rotation an older key leaves the cache, and nothing
-  brings it back until the chain lands (`SYNC-119`).
+* **A link's signer is not checked against the log.** Its signature holds against the key its own
+  header carries, which proves the seal and names no one. The signer is checked (`SYNC-121`) by
+  the `Signed membership log` Story (`ambre-roadmap.md` E5).
+* **The relay can withhold a link.** It cannot forge one, and a link it drops ends the walk there: the
+  history before it reads as closed, not as wrong. Nothing tells the user it was withheld.
+* **A revoke runs from an open document only.** It seals the current key under the new one, and the
+  worker holds the current key only while the document is open.
 * **A rotation is invisible while a document is closed.** Only a client that has the document open acts on
   the notice. Another one picks the new key up at its next open, which is correct and stated nowhere
   else.

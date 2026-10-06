@@ -56,4 +56,12 @@ pub enum ValidationError {
     /// The same public key appears twice in `parent_snapshot_update_clocks`.
     #[error("duplicate public key in parent snapshot update clocks")]
     DuplicatePublicKey,
+
+    /// A key link's seal exceeds the bound one sealed key needs.
+    #[error("key link seal too large")]
+    OversizedKeyLink,
+
+    /// A key link names one key as both its start and the key it seals.
+    #[error("key link seals its own key")]
+    SelfLink,
 }

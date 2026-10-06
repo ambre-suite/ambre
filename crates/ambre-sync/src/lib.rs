@@ -124,6 +124,7 @@ fn as_setup_owed(event: LogicEvent) -> LogicEvent {
 }
 
 mod auth;
+mod chain;
 mod channels;
 mod docfile;
 mod documents;
@@ -277,6 +278,9 @@ enum SyncEvent {
         role: Role,
         /// The members answer says the document owes a rotation (`SYNC-128`).
         rotation_owed: bool,
+        /// The document's key chain, as the relay serves it (`SYNC-117`).
+        /// Empty for a local-only open.
+        links: Vec<ambre_protocol::KeyLink>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -327,6 +331,9 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         new_doc_key: DocumentKey,
+        /// The link the revoke left, from `new_doc_key` back to the key it
+        /// replaced (`SYNC-116`).
+        link: ambre_protocol::KeyLink,
     },
     /// Member list for a document has been fetched from the server (decoded,
     /// plaintext names/emails).
@@ -357,6 +364,9 @@ enum SyncEvent {
     KeyRotated {
         document_id: DocumentId,
         new_doc_key: DocumentKey,
+        /// The document's chain as the relay serves it after the rotation
+        /// (`SYNC-117`).
+        links: Vec<ambre_protocol::KeyLink>,
     },
     /// This user's departure landed: the relay removed their own share
     /// (`SYNC-127`). The document closes locally.
@@ -374,6 +384,8 @@ enum SyncEvent {
     DebtSettled {
         document_id: DocumentId,
         new_doc_key: DocumentKey,
+        /// The link the rotation left (`SYNC-116`).
+        link: ambre_protocol::KeyLink,
     },
     /// The debt was paid by someone else before this client could. Their key
     /// is fetched like any other rotation's.
@@ -463,6 +475,9 @@ struct SyncDocumentState {
     /// them opens under it: it was sealed before its author learned of the
     /// rotation.
     old_keys: Vec<DocumentKey>,
+    /// The links the rotations left: a key older than the cache opens through
+    /// them, walked back from the active key (`SYNC-119`).
+    chain: chain::Chain,
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
@@ -528,6 +543,7 @@ impl SyncDocumentState {
             quarantine: HashMap::new(),
             gap_requested: false,
             old_keys: Vec::new(),
+            chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             role: Role::Owner,
@@ -542,12 +558,27 @@ impl SyncDocumentState {
         self.quarantine.values().map(Vec::len).sum()
     }
 
-    /// The key a frame names: the active key, or one in the [`old_keys`]
-    /// cache. `None` when this client holds no such key (`SYNC-045`).
-    fn key_named(&self, id: KeyId) -> Option<&DocumentKey> {
-        std::iter::once(&self.doc_key)
-            .chain(&self.old_keys)
-            .find(|key| key.id() == id)
+    /// The key a frame names: the active key, one in the [`old_keys`] cache,
+    /// or one the chain reaches from the active key. `None` when this client
+    /// reaches no such key (`SYNC-045`, `SYNC-119`).
+    fn key_named(&self, id: KeyId) -> Option<DocumentKey> {
+        chain::find_key(
+            self.document_id,
+            &self.doc_key,
+            &self.old_keys,
+            &self.chain,
+            id,
+        )
+    }
+
+    /// The keys of this document, for a task that opens a blob later.
+    fn keyring(&self) -> chain::Keyring {
+        chain::Keyring {
+            document_id: self.document_id,
+            current: self.doc_key.clone(),
+            previous: self.old_keys.clone(),
+            chain: self.chain.clone(),
+        }
     }
 
     /// Opens an ephemeral with the one key it names, and with no other
@@ -559,7 +590,7 @@ impl SyncDocumentState {
         let key = self
             .key_named(eph.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
-        pipeline::open_ephemeral(eph, key)
+        pipeline::open_ephemeral(eph, &key)
     }
 
     /// Anti-replay gate for an inbound ephemeral. Returns `true` if `counter` is
@@ -621,9 +652,14 @@ impl SyncDocumentState {
         self.signing_keys.get(&author_pk).copied()
     }
 
-    /// Opens a snapshot blob with the active key.
+    /// Opens a snapshot blob with the one key it names: a snapshot sealed
+    /// before a rotation opens with a key the chain recovers (`SYNC-119`).
     fn open_snapshot_blob(&self, blob: &[u8]) -> Result<Vec<u8>, pipeline::PipelineError> {
-        pipeline::open_snapshot_blob(blob, self.document_id, &self.doc_key)
+        let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
+        let key = self
+            .key_named(snapshot.public_data.key_id)
+            .ok_or(pipeline::PipelineError::WrongKey)?;
+        pipeline::open_snapshot(&snapshot, &key)
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -635,7 +671,7 @@ impl SyncDocumentState {
         let key = self
             .key_named(update.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
-        pipeline::open_update(update, key)
+        pipeline::open_update(update, &key)
     }
 
     /// Replaces the active document key with `new_key`, pushing the previous

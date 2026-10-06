@@ -64,6 +64,10 @@ mod handler_tests {
                 axum::routing::post(routes::rotate_document_key),
             )
             .route(
+                "/documents/{id}/key-links",
+                axum::routing::get(routes::list_key_links),
+            )
+            .route(
                 "/documents/{id}/media",
                 axum::routing::post(routes::media_confirm_upload),
             )
@@ -658,6 +662,7 @@ mod handler_tests {
         let new_key = base64_encode(&[0xABu8; 32]);
         let rotate_body = serde_json::json!({
             "keys": [ { "user_id": owner_id, "doc_key_enc": new_key } ],
+            "link": link_text(&doc_id, 2, 1),
         });
         let resp = app
             .clone()
@@ -785,6 +790,18 @@ mod handler_tests {
     fn base64_encode(data: &[u8]) -> String {
         use base64::Engine;
         base64::engine::general_purpose::URL_SAFE.encode(data)
+    }
+
+    /// A rotation's link from key `key` back to key `previous`, as a client
+    /// posts it. The relay opens nothing, so the seal is filler.
+    fn link_text(doc_id: &str, key: u8, previous: u8) -> String {
+        let link = ambre_protocol::KeyLink {
+            document_id: ambre_core::DocumentId::parse_str(doc_id).unwrap(),
+            key: ambre_core::KeyId::from_array([key; 16]),
+            previous: ambre_core::KeyId::from_array([previous; 16]),
+            sealed: vec![key; 200],
+        };
+        base64_encode(&link.encode().unwrap())
     }
 
     async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
@@ -1799,6 +1816,7 @@ mod handler_tests {
 
         let rotate_body = serde_json::json!({
             "keys": [ { "user_id": editor_uid, "doc_key_enc": base64_encode(&[0xABu8; 32]) } ],
+            "link": link_text(&doc_id, 2, 1),
         });
         let resp = app
             .clone()
@@ -1929,6 +1947,7 @@ mod handler_tests {
 
         let keys = serde_json::json!({
             "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 32]) } ],
+            "link": link_text(&doc_id, 2, 1),
         });
         let rotate = Request::post(format!("/api/documents/{doc_id}/rotate-key"));
         assert_eq!(
@@ -1972,17 +1991,117 @@ mod handler_tests {
         let body = serde_json::json!({
             "user_id": revokee_uid,
             "keys": [ { "user_id": owner_uid, "doc_key_enc": new_key } ],
+            "link": link_text(&doc_id, 2, 1),
         });
         let revoke = Request::post(format!("/api/documents/{doc_id}/revoke"));
         assert_eq!(
             status_of(&app, revoke, &owner, Some(body)).await,
             StatusCode::OK
         );
+        assert_eq!(
+            key_links(&app, &owner, &doc_id).await,
+            vec![link_text(&doc_id, 2, 1)],
+            "the link lands with the copies"
+        );
         let members = list_members(&app, &owner, &doc_id).await;
         assert_eq!(members.len(), 1, "the member is removed");
         assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
         assert!(!owes_rotation(&app, &owner, &doc_id).await);
         assert!(!debt_mirrored(&state, &doc_id).await);
+    }
+
+    /// The links a member reads back, oldest first.
+    async fn key_links(app: &Router, auth: &str, doc_id: &str) -> Vec<String> {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/documents/{doc_id}/key-links"))
+                    .header("authorization", auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// `SYNC-117`, `SYNC-118`: every rotation's link is kept, in the order
+    /// the rotations landed. Three rotations are refused whole, with no copy
+    /// changed. One link does not chain from the last key, one belongs to
+    /// another document, and one is missing. A non-member reads no link.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_relay_keeps_every_link_in_rotation_order(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let owner_uid = list_members(&app, &owner, &doc_id).await[0]["user_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let rotation = |copy: u8, link: String| {
+            serde_json::json!({
+                "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[copy; 32]) } ],
+                "link": link,
+            })
+        };
+        let rotate = || Request::post(format!("/api/documents/{doc_id}/rotate-key"));
+
+        for (copy, key, previous) in [(0xA1, 2, 1), (0xA2, 3, 2), (0xA3, 4, 3)] {
+            let body = rotation(copy, link_text(&doc_id, key, previous));
+            assert_eq!(
+                status_of(&app, rotate(), &owner, Some(body)).await,
+                StatusCode::OK
+            );
+        }
+        let chained = vec![
+            link_text(&doc_id, 2, 1),
+            link_text(&doc_id, 3, 2),
+            link_text(&doc_id, 4, 3),
+        ];
+        assert_eq!(key_links(&app, &owner, &doc_id).await, chained);
+
+        // A rotation racing one that landed first chains from a stale key.
+        let stale = rotation(0xB1, link_text(&doc_id, 5, 3));
+        assert_eq!(
+            status_of(&app, rotate(), &owner, Some(stale)).await,
+            StatusCode::CONFLICT
+        );
+        let other_doc = create_test_doc(&app, &owner).await;
+        let misfiled = rotation(0xB2, link_text(&other_doc, 5, 4));
+        assert_eq!(
+            status_of(&app, rotate(), &owner, Some(misfiled)).await,
+            StatusCode::BAD_REQUEST
+        );
+        let bare = serde_json::json!({
+            "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[0xB3; 32]) } ],
+        });
+        assert!(
+            status_of(&app, rotate(), &owner, Some(bare))
+                .await
+                .is_client_error()
+        );
+        assert_eq!(key_links(&app, &owner, &doc_id).await, chained);
+        let members = list_members(&app, &owner, &doc_id).await;
+        assert_eq!(members[0]["doc_key_enc"], base64_encode(&[0xA3; 32]));
+
+        let stranger = setup_named(&app, "stranger@test.com", 76).await;
+        let read = Request::get(format!("/api/documents/{doc_id}/key-links"));
+        assert_eq!(
+            status_of(&app, read, &stranger, None).await,
+            StatusCode::FORBIDDEN
+        );
     }
 
     /// #6 regression: LIKE wildcards in the search query are escaped, so a bare

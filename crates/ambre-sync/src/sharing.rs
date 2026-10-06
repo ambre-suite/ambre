@@ -13,6 +13,7 @@
 
 use ambre_crypto::DocumentKey;
 use base64::Engine;
+use ed25519_dalek::SigningKey;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
@@ -402,6 +403,10 @@ pub(crate) struct RevokeParams {
     pub url_scheme: &'static str,
     pub api_base: String,
     pub exchange_key: StaticSecret,
+    /// The key the revoke replaces, sealed under the new one (`SYNC-116`).
+    pub previous: DocumentKey,
+    /// Signs the link the revoke leaves.
+    pub signing_key: SigningKey,
 }
 
 /// Revoke orchestration: fetch the members, generate a fresh `DocumentKey` and
@@ -442,6 +447,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
 
     let new_doc_key = DocumentKey::generate();
     let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &staying);
+    let link = match link_to(p.document_id, &p.previous, &new_doc_key, &p.signing_key) {
+        Ok(link) => link,
+        Err(e) => return api_error(logic_tx, "RevokeFromDocument", 500, e),
+    };
     let revoke_url = format!(
         "{}://{}/api/documents/{}/revoke",
         p.url_scheme, p.api_base, p.document_id
@@ -449,6 +458,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     let body = http::RevokeRequest {
         user_id: p.user_id.to_string(),
         keys,
+        link: link.1,
     };
     if let Err(e) = http
         .post_json::<_, serde_json::Value>(&revoke_url, &body)
@@ -466,6 +476,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         id: p.id,
         document_id: p.document_id,
         new_doc_key,
+        link: link.0,
     });
     // The rotation went through for everyone else. A member it could not
     // re-wrap for has lost the document; the user who revoked is told who
@@ -523,6 +534,23 @@ pub(crate) struct SettleParams {
     pub url_scheme: &'static str,
     pub api_base: String,
     pub exchange_key: StaticSecret,
+    /// The key the rotation replaces, sealed under the new one (`SYNC-116`).
+    pub previous: DocumentKey,
+    /// Signs the link the rotation leaves.
+    pub signing_key: SigningKey,
+}
+
+/// The link from `next` back to `previous`, and the text a request carries.
+fn link_to(
+    document_id: DocumentId,
+    previous: &DocumentKey,
+    next: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<(ambre_protocol::KeyLink, String), String> {
+    let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)
+        .map_err(|e| format!("Seal key link failed: {e}"))?;
+    let text = http::encode_link(&link)?;
+    Ok((link, text))
 }
 
 /// Pays a rotation the document owes (`SYNC-128`). It fetches the members and,
@@ -565,11 +593,15 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             unwrapped.len()
         );
     }
+    let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
+        Ok(link) => link,
+        Err(e) => return unsettled(e),
+    };
     let rotate_url = format!(
         "{}://{}/api/documents/{}/rotate-key",
         p.url_scheme, p.api_base, document_id
     );
-    let body = http::RotateKeyRequest { keys };
+    let body = http::RotateKeyRequest { keys, link: text };
     match http
         .post_json::<_, serde_json::Value>(&rotate_url, &body)
         .await
@@ -578,6 +610,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             let _ = event_tx.send(SyncEvent::DebtSettled {
                 document_id,
                 new_doc_key,
+                link,
             });
         }
         Err(e) => unsettled(format!("Rotate key failed: {e}")),
@@ -1031,7 +1064,18 @@ mod tests {
             url_scheme: "https",
             api_base: "api.test".into(),
             exchange_key: my_xk.clone(),
+            previous: DocumentKey::generate(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
         }
+    }
+
+    /// The link a request carried, read back as the relay would.
+    fn posted_link(body: &serde_json::Value) -> ambre_protocol::KeyLink {
+        let text = body["link"].as_str().expect("the request carries a link");
+        let bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(text)
+            .unwrap();
+        ambre_protocol::KeyLink::decode(&bytes).unwrap()
     }
 
     /// A members row, for the revoke and the debt tests.
@@ -1053,6 +1097,8 @@ mod tests {
         let (_c_xk, c_pub) = keypair(3);
         let params = revoke_params(&my_xk);
         let removed = params.user_id.to_string();
+        let document_id = params.document_id;
+        let previous = params.previous.id();
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
@@ -1064,11 +1110,17 @@ mod tests {
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, params, &etx, &sink).await;
 
-        assert!(matches!(
-            erx.try_recv().expect("RevocationComplete"),
-            SyncEvent::RevocationComplete { .. }
-        ));
+        let SyncEvent::RevocationComplete {
+            new_doc_key, link, ..
+        } = erx.try_recv().expect("RevocationComplete")
+        else {
+            panic!("expected RevocationComplete");
+        };
         assert!(lrx.try_recv().is_err());
+        // The link the revoke posted seals the key it replaced under the new
+        // one, and the client keeps the same link (`SYNC-116`, `SYNC-118`).
+        let opened = crate::pipeline::open_link(&link, document_id, &new_doc_key).unwrap();
+        assert_eq!(opened.id(), previous);
 
         let calls = http.calls();
         assert_eq!(calls.len(), 2, "one read, then one write");
@@ -1080,6 +1132,7 @@ mod tests {
                 let keys = body["keys"].as_array().unwrap();
                 assert_eq!(keys.len(), 1, "no copy for the member removed");
                 assert_eq!(keys[0]["user_id"], "11111111-1111-1111-1111-111111111111");
+                assert_eq!(posted_link(body), link);
             }
             other => panic!("expected the revoke POST, got {other:?}"),
         }
@@ -1138,6 +1191,8 @@ mod tests {
             url_scheme: "https",
             api_base: "api.test".into(),
             exchange_key: my_xk.clone(),
+            previous: DocumentKey::generate(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
         }
     }
 
@@ -1155,15 +1210,22 @@ mod tests {
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
         let (etx, erx, _sink, _lrx) = channels();
-        settle_task(&http, settle_params(&my_xk), &etx).await;
-        assert!(matches!(
-            erx.try_recv().expect("DebtSettled"),
-            SyncEvent::DebtSettled { .. }
-        ));
+        let params = settle_params(&my_xk);
+        let (document_id, previous) = (params.document_id, params.previous.id());
+        settle_task(&http, params, &etx).await;
+        let SyncEvent::DebtSettled {
+            new_doc_key, link, ..
+        } = erx.try_recv().expect("DebtSettled")
+        else {
+            panic!("expected DebtSettled");
+        };
+        let opened = crate::pipeline::open_link(&link, document_id, &new_doc_key).unwrap();
+        assert_eq!(opened.id(), previous, "the rotation leaves its link");
         match &http.calls()[1] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/rotate-key"));
                 assert_eq!(body["keys"].as_array().unwrap().len(), 2);
+                assert_eq!(posted_link(body), link);
             }
             other => panic!("expected the rotate POST, got {other:?}"),
         }

@@ -189,6 +189,8 @@ pub async fn revoke_from_document(
 pub struct RevokeRequest {
     pub user_id: String,
     pub keys: Vec<RotateKeyEntry>,
+    /// The link back to the key the revoke replaces (`SYNC-118`).
+    pub link: String,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -209,7 +211,8 @@ pub async fn revoke_and_rotate(
         return Err(AppError::Forbidden);
     }
     let keys = decode_keys(&req.keys)?;
-    db::revoke_and_rotate(&state.db, &doc_id, &target, &s.user_id, &keys).await?;
+    let link = decode_link(&req.link, doc_id)?;
+    db::revoke_and_rotate(&state.db, &doc_id, &target, &s.user_id, &keys, &link).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
@@ -275,11 +278,53 @@ fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Ve
         .collect()
 }
 
+/// Decodes a rotation's link and refuses one the relay must not store: a
+/// malformed one, one past the size bound, one of another document.
+fn decode_link(
+    text: &str,
+    doc_id: ambre_core::DocumentId,
+) -> Result<ambre_protocol::KeyLink, AppError> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(text)
+        .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
+    let link = ambre_protocol::KeyLink::decode(&bytes)
+        .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
+    link.validate()
+        .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
+    if link.document_id != doc_id {
+        return Err(AppError::BadRequest("link: another document's".into()));
+    }
+    Ok(link)
+}
+
+/// Every link of a document, oldest first, for a member to walk back from
+/// the key it holds (`SYNC-117`, `SYNC-119`).
+pub async fn list_key_links(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(document_id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    use base64::Engine;
+    let doc_id = parse_doc_id(&document_id)?;
+    db::get_document_member(&state.db, &doc_id, &auth.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    let links: Vec<String> = db::document_key_links(&state.db, &doc_id)
+        .await?
+        .iter()
+        .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        .collect();
+    Ok(axum::Json(serde_json::json!({ "links": links })))
+}
+
 /// Request to rotate the Document Key after revoking a member.
 /// Contains new `doc_key_enc` values for each remaining member.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
+    /// The link back to the key the rotation replaces (`SYNC-118`).
+    pub link: String,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
@@ -315,7 +360,8 @@ pub async fn rotate_document_key(
     }
 
     let keys = decode_keys(&req.keys)?;
-    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys).await?;
+    let link = decode_link(&req.link, doc_id)?;
+    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &link).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;

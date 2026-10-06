@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod key_link;
 pub mod messages;
 pub mod public_data;
 pub mod signaling;
@@ -19,6 +20,7 @@ pub mod ws;
 
 // Re-exports for convenient consumption.
 pub use error::Error;
+pub use key_link::KeyLink;
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 pub use signaling::{SignalingClientMsg, SignalingServerMsg};

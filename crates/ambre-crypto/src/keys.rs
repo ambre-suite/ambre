@@ -133,6 +133,46 @@ impl DocumentKey {
         id.copy_from_slice(&digest[..KEY_ID_LEN]);
         KeyId::from_array(id)
     }
+
+    /// Seals `previous` under this key and signs it: one link of the key
+    /// chain (`SYNC-116`). The full envelope, so the link opens only under this
+    /// key and names its author.
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::EncryptionFailed`] from the AEAD, which a 32-byte
+    /// plaintext never reaches.
+    pub fn seal_previous(
+        &self,
+        previous: &DocumentKey,
+        aad: &[u8],
+        signing_key: &SigningKey,
+    ) -> Result<crate::Sealed, CryptoError> {
+        crate::envelope::seal(&previous.0, aad, self, signing_key)
+    }
+
+    /// Opens what [`Self::seal_previous`] sealed, against the author's key.
+    /// The caller still checks the key against the identifier the link names
+    /// (`SYNC-120`). This proves who sealed it under which key, not which key
+    /// it is.
+    ///
+    /// # Errors
+    ///
+    /// Every error of [`crate::envelope::open`], and
+    /// [`CryptoError::InvalidKeyLength`] when what opens is not a key.
+    pub fn open_previous(
+        &self,
+        sealed: &crate::Sealed,
+        aad: &[u8],
+        author: &[u8; 32],
+    ) -> Result<DocumentKey, CryptoError> {
+        let mut bytes = crate::envelope::open(sealed, aad, self, author)?;
+        let key = <[u8; 32]>::try_from(bytes.as_slice())
+            .map(DocumentKey)
+            .map_err(|_| CryptoError::InvalidKeyLength);
+        bytes.zeroize();
+        key
+    }
 }
 
 /// A 32-byte symmetric key derived from a passphrase, scoped to a single sealed

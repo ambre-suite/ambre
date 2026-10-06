@@ -240,6 +240,32 @@ fn a_key_id_is_derived_from_the_key() {
     );
 }
 
+/// A previous key sealed under the next one opens under that key alone, for
+/// its author alone, and comes back as the same key (`SYNC-116`).
+#[test]
+fn a_previous_key_opens_under_the_next_one_and_no_other() {
+    let previous = DocumentKey::from_array([0x21; 32]);
+    let next = fixed_doc_key();
+    let author = fixed_seed().derive_signing_key();
+    let sealed = next.seal_previous(&previous, b"link", &author).unwrap();
+    let author_pub = author.verifying_key().to_bytes();
+
+    let opened = next.open_previous(&sealed, b"link", &author_pub).unwrap();
+    assert_eq!(opened.id(), previous.id());
+    assert!(
+        previous
+            .open_previous(&sealed, b"link", &author_pub)
+            .is_err()
+    );
+    assert!(next.open_previous(&sealed, b"other", &author_pub).is_err());
+    let stranger = MasterSeed::from_array([0x33; 32]).derive_signing_key();
+    let stranger_pub = stranger.verifying_key().to_bytes();
+    assert_eq!(
+        next.open_previous(&sealed, b"link", &stranger_pub).err(),
+        Some(CryptoError::InvalidSignature)
+    );
+}
+
 // -- Media address -----------------------------------------------------------
 
 /// One address per plaintext under one key, and another under any other key.

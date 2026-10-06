@@ -97,6 +97,10 @@ pub fn api_router(
             axum::routing::post(rotate_document_key),
         )
         .route(
+            "/documents/{id}/key-links",
+            axum::routing::get(list_key_links),
+        )
+        .route(
             "/documents/{id}/media/upload-url",
             axum::routing::post(media_upload_url),
         )

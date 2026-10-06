@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-333` | `OBS` | An archived channel MUST show as archived, with no composer. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a private channel

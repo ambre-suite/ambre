@@ -208,13 +208,87 @@ pub async fn revoke_and_rotate(
     user_id: &ambre_core::UserId,
     rotated_by: &ambre_core::UserId,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
+    // The document row first, as every rotation takes it: two rotations of one
+    // document queue on it instead of deadlocking on the member rows.
+    lock_document(&mut tx, did).await?;
     delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
-    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys).await?;
+    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, link).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// Locks the document row for the rest of the transaction. A rotation reads
+/// the last link under this lock, so two rotations cannot both chain from it.
+async fn lock_document(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+) -> Result<(), AppError> {
+    let found: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM documents WHERE id = $1 FOR UPDATE")
+            .bind(document_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    found.map(|_| ()).ok_or(AppError::NotFound {
+        resource: "document",
+    })
+}
+
+/// Appends a rotation's link, inside the caller's transaction and under the
+/// document lock (`SYNC-118`). A link that does not start from the last key
+/// chained is refused: another rotation landed first, and its key is the one
+/// to replace.
+async fn append_link(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    link: &ambre_protocol::KeyLink,
+) -> Result<(), AppError> {
+    let last: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT key_id FROM document_key_links WHERE document_id = $1 ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(document_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if last.is_some_and(|last| last != link.previous.as_array()) {
+        return Err(AppError::Conflict {
+            detail: "the key this rotation replaces is no longer the current one".into(),
+        });
+    }
+    let bytes = link
+        .encode()
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let stored = sqlx::query(
+        "INSERT INTO document_key_links (document_id, key_id, previous_key_id, link) \
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+    )
+    .bind(document_id)
+    .bind(link.key.as_array().as_slice())
+    .bind(link.previous.as_array().as_slice())
+    .bind(bytes)
+    .execute(&mut **tx)
+    .await?;
+    if stored.rows_affected() == 0 {
+        return Err(AppError::Conflict {
+            detail: "a link from this key is already stored".into(),
+        });
+    }
+    Ok(())
+}
+
+/// Every link of a document, in the order the rotations landed (`SYNC-117`).
+pub async fn document_key_links(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Vec<Vec<u8>>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT link FROM document_key_links WHERE document_id = $1 ORDER BY seq",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_all(pool)
+    .await?)
 }
 
 /// Whether the document owes a rotation (`SRV-122`).
@@ -304,27 +378,27 @@ pub async fn rotate_document_keys(
     document_id: &ambre_core::DocumentId,
     rotated_by: &ambre_core::UserId,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
-    rewrap_members(
-        &mut tx,
-        id_to_uuid(*document_id),
-        id_to_uuid(*rotated_by),
-        keys,
-    )
-    .await?;
+    lock_document(&mut tx, did).await?;
+    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, link).await?;
     tx.commit().await?;
     Ok(())
 }
 
-/// Writes each member's new wrapped copy and clears the document's debt
-/// (`SRV-124`), inside the caller's transaction.
+/// Stores the rotation's link and writes each member's new wrapped copy. It
+/// clears the document's debt (`SRV-124`, `SYNC-118`), inside the caller's
+/// transaction and under its document lock.
 async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
     rotator: uuid::Uuid,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
+    append_link(tx, document_id, link).await?;
     // The rotator re-wrapped every key with ITS exchange key, so it becomes the
     // new wrapper of record. Update `invited_by` alongside `doc_key_enc`, or
     // the ECDH unwrap would later use the stale inviter's key.
