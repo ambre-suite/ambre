@@ -330,6 +330,7 @@ fn a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_s
     assert!(rig.view.editor.is_some());
     rig.type_text("!");
     rig.paint();
+    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("c".to_owned())]));
     rig.show(Vec::new());
     rig.paint();
     assert!(rig.view.editor.is_none());
@@ -340,6 +341,31 @@ fn a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_s
         "no write names the lost arrow"
     );
     assert_eq!(rig.notices.take().len(), 1, "the user is told once");
+}
+
+/// `TOILE-UI-386`: a selected arrow, and a caption editor open on it, outlive
+/// the arrow leaving the frame. Only the board's word that it lost the arrow
+/// drops them, and another arrow's loss drops neither.
+#[test]
+fn a_selected_arrow_outlives_the_frame_and_leaves_with_the_board() {
+    let mut rig = Rig::new();
+    rig.show(vec![DisplayNode::Connector(arrow("c"))]);
+    rig.click(200.0, 300.0);
+    assert_eq!(rig.view.arrow, Some(ConnectorId("c".to_owned())));
+    rig.view.open_label_editor(ConnectorId("c".to_owned()));
+    rig.show(Vec::new());
+    rig.paint();
+    assert_eq!(
+        rig.view.arrow,
+        Some(ConnectorId("c".to_owned())),
+        "culled, not deleted"
+    );
+    assert!(rig.view.editor.is_some(), "the caption editor stays open");
+    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("d".to_owned())]));
+    assert!(rig.view.arrow.is_some() && rig.view.editor.is_some());
+    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("c".to_owned())]));
+    assert_eq!(rig.view.arrow, None, "the board lost it");
+    assert!(rig.view.editor.is_none());
 }
 
 #[test]

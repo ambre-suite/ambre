@@ -122,6 +122,20 @@ pub struct ToileState {
     /// holds, so finding an element's container never walks the board
     /// (`TOILE-056`).
     parents: HashMap<ElementId, Vec<ElementId>>,
+    /// The reverse of `parents`: what each container's `children` list names.
+    /// A remote change to a list relinks its container from it (`TOILE-092`).
+    members: HashMap<ElementId, Vec<ElementId>>,
+    /// What the document was written since the caches last read it, noted by
+    /// the subscription below.
+    touched: caches::TouchedSink,
+    /// Held so the subscription lives as long as the state.
+    _watch: loro::Subscription,
+    /// Every arrow's ends and reach, for the cull (`TOILE-045`). Brought in
+    /// step on read from what the subscription noted, hence the `RefCell`:
+    /// the derivation that reads it takes `&self`.
+    wires: std::cell::RefCell<HashMap<ConnectorId, connectors::Wire>>,
+    /// The arrows the cache dropped since the last answer named them.
+    wires_gone: std::cell::RefCell<Vec<ConnectorId>>,
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
@@ -270,12 +284,18 @@ impl ToileState {
         // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
         // reverts what the user drew, never a message a teammate has read.
         undo.add_exclude_origin_prefix(COMMENT_ORIGIN);
+        let (touched, watch) = caches::watch(&doc);
         Self {
             doc,
             index: SpatialIndex::default(),
             bounds: HashMap::new(),
             layers: Vec::new(),
             parents: HashMap::new(),
+            members: HashMap::new(),
+            touched,
+            _watch: watch,
+            wires: std::cell::RefCell::default(),
+            wires_gone: std::cell::RefCell::default(),
             board_walks: Cell::new(0),
             counter: 0,
             peer,
@@ -371,6 +391,10 @@ impl ToileState {
                 outcome.update = self.flush_delta();
             }
         }
+        // First, so the undo state stays the answer's last event (`UNDO-006`).
+        if let Some(gone) = self.arrows_gone() {
+            outcome.display.insert(0, gone);
+        }
         self.announce_write(outcome)
     }
 
@@ -378,7 +402,8 @@ impl ToileState {
     /// (`TOILE-IO-028`). For the exports the Logic thread serves itself, which
     /// never reach [`handle_command`](Self::handle_command).
     pub fn settle(&mut self) -> ToileOutcome {
-        let display = self.finish_running_import();
+        let mut display = self.finish_running_import();
+        display.extend(self.arrows_gone());
         let outcome = self.emit_with_update(display);
         self.announce_write(outcome)
     }
@@ -556,22 +581,24 @@ impl ToileState {
     // -- remote / persistence --------------------------------------------
 
     /// Apply a remote delta batch or full snapshot (`doc.import` accepts both),
-    /// rebuild the derived caches, and return the display events to repaint. A
-    /// remote import is never re-broadcast.
+    /// refresh the derived caches it touched (`TOILE-092`), and return the
+    /// display events to repaint. A remote import is never re-broadcast.
     pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
+        self.forget_touched();
         if let Err(e) = self.doc.import(update) {
             tracing::warn!("Toile: remote import failed: {e}");
             return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }
         self.absorb_imported();
-        self.rebuild_caches();
+        self.refresh_caches();
         let mut events = vec![self.viewport_event(), ToileEvent::BoardChanged];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
+        events.extend(self.arrows_gone());
         // A delta can carry a register this build cannot decode just as a
         // snapshot can, and the user deserves the same word (`SCHEMA-003`).
         events.extend(self.undecodable_notice());
@@ -579,10 +606,10 @@ impl ToileState {
     }
 
     /// Apply a batch of remote deltas (a server history replay on open) as one
-    /// `import` sweep plus a single cache rebuild. The UI therefore repaints
+    /// `import` sweep plus a single cache refresh. The UI therefore repaints
     /// once instead of once per delta. Mirrors
     /// [`apply_remote`](Self::apply_remote) but amortizes the derived-cache
-    /// rebuild over the whole batch. A delta that fails to import is skipped,
+    /// refresh over the whole batch. A delta that fails to import is skipped,
     /// and the batch then reports the failure instead of answering success
     /// (`TOILE-215`).
     pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent> {
@@ -594,6 +621,7 @@ impl ToileState {
         let dangling_before = self.dangling_connectors();
         let mut any_ok = false;
         let mut any_failed = false;
+        self.forget_touched();
         for update in updates {
             match self.doc.import(update) {
                 Ok(_) => any_ok = true,
@@ -607,11 +635,12 @@ impl ToileState {
             return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }
         self.absorb_imported();
-        self.rebuild_caches();
+        self.refresh_caches();
         let mut events = vec![self.viewport_event(), ToileEvent::BoardChanged];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
+        events.extend(self.arrows_gone());
         if any_failed {
             events.push(ToileEvent::Error(ToileError::RemoteImportFailed));
         }
@@ -675,6 +704,7 @@ impl ToileState {
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
         events.extend(self.newly_dangling(&dangling_before));
+        events.extend(self.arrows_gone());
         events.extend(self.undecodable_notice());
         Ok(events)
     }
@@ -1004,6 +1034,42 @@ impl ToileState {
     /// How many times the whole element map has been resolved. Test helper.
     pub fn board_walks(&self) -> u64 {
         self.board_walks.get()
+    }
+
+    /// Every derived cache, in an order that does not depend on how it was
+    /// filled: bounds, leaves, both membership maps and the paint order. Two
+    /// states whose caches agree print the same text. Test helper.
+    #[cfg(test)]
+    pub(crate) fn debug_caches(&self) -> String {
+        fn sorted<K: Ord + std::fmt::Debug, V: std::fmt::Debug>(
+            it: impl Iterator<Item = (K, V)>,
+        ) -> Vec<String> {
+            let mut v: Vec<(K, V)> = it.collect();
+            v.sort_by(|a, b| a.0.cmp(&b.0));
+            v.into_iter().map(|(k, v)| format!("{k:?}={v:?}")).collect()
+        }
+        let lists = |m: &HashMap<ElementId, Vec<ElementId>>| {
+            sorted(m.iter().map(|(k, v)| {
+                let mut v = v.clone();
+                v.sort();
+                (k.clone(), v)
+            }))
+        };
+        let mut leaves: Vec<ElementId> = self.index.ids().collect();
+        leaves.sort();
+        format!(
+            "bounds {:?}\nleaves {leaves:?}\nparents {:?}\nmembers {:?}\nlayers {:?}",
+            sorted(self.bounds.iter().map(|(k, r)| (k.clone(), *r))),
+            lists(&self.parents),
+            lists(&self.members),
+            self.layers,
+        )
+    }
+
+    /// How many times a call walked every leaf of the spatial index. Test helper.
+    #[cfg(test)]
+    pub(crate) fn index_walks(&self) -> usize {
+        self.index.walks()
     }
 
     /// Materialized paint order. Test helper.

@@ -114,5 +114,10 @@ criterion = { workspace = true }
 name = "import"
 harness = false
 
+# Holds the "Toile index update" and "Toile remote change" rows.
+[[bench]]
+name = "board_cost"
+harness = false
+
 [lints]
 workspace = true

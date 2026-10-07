@@ -13,6 +13,7 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 #[cfg(target_arch = "wasm32")]
@@ -289,6 +290,9 @@ pub struct ToileView {
     /// The target of the last write an editor sent, kept until the board
     /// refuses it as gone (`TOILE-UI-389`).
     edit_written: Option<EditTarget>,
+    /// The world box of the caption under edit, as last read on screen. A
+    /// culled arrow keeps its editor at this box (`TOILE-UI-386`).
+    edit_caption_box: Cell<Option<Rect>>,
     /// A freshly-created element (Sticky / Text tool) whose editor must open once
     /// the matching `DisplayViewport` has landed (nothing knows its geometry
     /// before then). Consumed at the end of `update`.
@@ -645,6 +649,7 @@ impl ToileView {
             pending_find_focus: None,
             editor: None,
             edit_written: None,
+            edit_caption_box: Cell::new(None),
             edit_pending_open: None,
             edit_open_on_create: None,
             next_create_token: 1,
@@ -884,21 +889,6 @@ impl ToileView {
                 self.display = dv;
                 self.data_dirty = true;
                 self.request_missing_media();
-                self.drop_lost_caption_editor();
-                // A selected arrow that is no longer in the frame is a deleted
-                // arrow, so the selection goes with it. This reads absence as
-                // deletion, which holds only while the cull spares every
-                // connector (`TOILE-045`). The day it stops, an arrow panned
-                // off screen would deselect itself, and this must ask the
-                // board instead.
-                if self
-                    .arrow
-                    .as_ref()
-                    .is_some_and(|c| arrow::path_of(&self.display, c).is_none())
-                {
-                    self.arrow = None;
-                    self.arrow_drag = None;
-                }
                 // The recomputed frame now carries the committed transform, so drop
                 // the optimistic post-release preview (`toile-tools`): the
                 // real geometry takes over seamlessly, with no snap-back flicker.
@@ -1008,6 +998,17 @@ impl ToileView {
                 if std::mem::take(&mut self.announce_next_data) {
                     self.announce_selection();
                 }
+            }
+            // Arrows the board lost. A selected arrow leaves the selection and
+            // a caption editor on one closes; an arrow merely culled from the
+            // frame keeps both (`TOILE-UI-386`, `TOILE-UI-388`).
+            ToileEvent::ArrowsGone(gone) => {
+                if self.arrow.as_ref().is_some_and(|c| gone.contains(c)) {
+                    self.arrow = None;
+                    self.arrow_drag = None;
+                    self.needs_full = true;
+                }
+                self.drop_lost_caption_editor(&gone);
             }
             // Every element id on the board, for select-all (`TOILE-UI-033`).
             ToileEvent::BoardIds(ids) => {
@@ -2834,7 +2835,16 @@ impl ToileView {
                 Some((origin, wrap_w, sb, rot))
             }
             EditTarget::ConnectorLabel(id) => {
-                let world = label::label_rect(&self.find_connector(id)?.path)?;
+                // A culled arrow is still on the board: the caption keeps the
+                // box it last read, until the board says the arrow is gone
+                // (`TOILE-UI-386`).
+                let live = self
+                    .find_connector(id)
+                    .and_then(|c| label::label_rect(&c.path));
+                if live.is_some() {
+                    self.edit_caption_box.set(live);
+                }
+                let world = live.or(self.edit_caption_box.get())?;
                 let (origin, wrap_w, sb) = self.edit_geometry_of(world);
                 Some((origin, wrap_w, sb, 0.0))
             }
@@ -2905,6 +2915,7 @@ impl ToileView {
             return;
         };
         let text = c.label.clone();
+        self.edit_caption_box.set(label::label_rect(&c.path));
         self.editor = Some(InlineEditor::open_label(id, &text, self.theme.palette()));
         // A caption is not an element: nothing is selected while it is edited,
         // and the previous selection would otherwise take the next Delete.
@@ -3007,15 +3018,15 @@ impl ToileView {
         }
     }
 
-    /// Close a caption editor whose arrow left the frame (`TOILE-UI-388`).
-    /// Absence reads as deletion only while the cull spares every connector
-    /// (`TOILE-045`), the same bet the arrow selection makes.
-    fn drop_lost_caption_editor(&mut self) {
+    /// Close a caption editor whose arrow the board lost (`TOILE-UI-388`).
+    /// The board names the arrows it lost, so one panned out of the frame
+    /// keeps its editor (`TOILE-UI-386`).
+    fn drop_lost_caption_editor(&mut self, gone: &[ConnectorId]) {
         if self
             .editor
             .as_ref()
             .and_then(|ed| ed.target().connector())
-            .is_some_and(|c| self.find_connector(c).is_none())
+            .is_some_and(|c| gone.contains(c))
         {
             self.close_lost_editor();
         }

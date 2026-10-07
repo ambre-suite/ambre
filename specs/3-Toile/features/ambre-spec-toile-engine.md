@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | none | unheld -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` probes one viewport covering the whole populated area, and both `ToileState` proptests derive under `wide_viewport`, whose comment says it culls nothing. The equivalence is held over the population, never over a cull; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-005` | `INV` | The visible set MUST be resolved from the spatial index. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | none | verified |
 | `TOILE-240` | `INV` | The visible set MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen` -- what the viewport meets and what it does not | none | verified |
-| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none | fails -- the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it reads, so no test can see it; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled` | none | verified |
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- the same operations in two interleavings; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react | none | verified |
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction tallies and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe` today, but its root carries no `#![forbid(unsafe_code)]`, so nothing refuses the next one (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -48,7 +48,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none | fails -- the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_move_walks_no_board`; `ambre_toile::logic::convergence_tests::a_remote_refresh_matches_a_full_rebuild` | none | verified |
+| `TOILE-265` | `POST` | A remote change MUST import at the cost of the change, even before the reader has sent its first write. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- every peer writes the board scaffolding under its own identity on open, so a reader that has sent nothing holds a history concurrent with each change it receives. The engine then imports each change against the whole history: 48 ms for one move on a board of 5 000 elements, against 0.7 ms once the scaffolding is shared; lands with the `A remote change costs the change, not the history` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
@@ -77,7 +78,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::index::tests::a_drag_and_a_delete_walk_no_index` | none | verified |
 | `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws a removal branch and compares against a rebuild | none | verified |
 | `TOILE-221` | `FRAME` | Updating one element's leaf MUST NOT change another element's. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an interleaved upsert and remove stream over eight keys and reads it against a model map, so a leaf touched in place of another diverges from the rebuild | none | verified |
 
@@ -99,12 +100,11 @@ status values are normative in `ambre-spec-template.md`.
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`, plus the board holder of section 6. The rows:
   the visible-set query under 1 ms at 50 000 elements, the index update under 50 us. Then a remote change
-  under 2 ms, a transform command under 1 ms. None has a benchmark; two are rules the code breaks
-  (`TOILE-091`, `TOILE-092`).
+  under 2 ms, a transform command under 1 ms. A reader yet to send breaks the third (`TOILE-265`).
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 31 `verified`, 3 `failing`, 4 `untested`. What holds is the pair no other
+* **Verification.** 34 `verified`, 1 `failing`, 4 `untested`. What holds is the pair no other
   application holds: the index equivalence and the convergence of every derived cache. Both under
   one property test, neither at a culling camera (`TOILE-206`). What is loose is four rules nothing
   exercises and `TOILE-023`, a measurement; ten verified rows are structural.
@@ -215,9 +215,7 @@ answer. The stored coordinates are the truth; the box is derived, which is `TOIL
 **The two paths that maintain it must agree**, and unlike Trame that equivalence is held. One property test
 drives an operation stream through the incremental path and compares the result to a rebuild. It is held over
 the population and over one probe that covers the whole populated area. So what is compared is which elements
-exist, never which ones a camera keeps (`TOILE-206`). What is not held is the cost: `remove` finds its leaf by
-walking every leaf, and `update` is a remove followed by an insert. So the index that exists to make a frame
-O(log N) makes a drag step O(N) (`TOILE-091`).
+exist, never which ones a camera keeps (`TOILE-206`). A removal descends to its leaf alone (`TOILE-091`).
 
 ### C. What one command costs
 
@@ -233,7 +231,7 @@ O(log N) makes a drag step O(N) (`TOILE-091`).
 |:---|:---|
 | a viewport command | no mutation and no delta: store the camera, derive, answer with one visible set |
 | a mutating command | the four steps above. The UI has already drawn the gesture, so there is no acknowledgement |
-| a remote change | import, **rebuild every derived cache**, derive, answer. The diff-driven path is `TOILE-092` |
+| a remote change | import, refresh the derived caches the change touched (`TOILE-092`), derive, answer |
 | a presence sample | encode and hand it to Sync. No display event: the UI draws its own cursor |
 
 ### D. The seam
@@ -433,24 +431,11 @@ error rather than a silent drop (`TOILE-UI-101`).
   offered again on the next flush -- which is the next local edit. A board nobody is editing
   therefore holds its unsent operations until someone touches it, and no timer, no backoff and no
   notice cover the gap. The peers are not diverged, only late, and nothing says how late.
-* **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a geometry write
-  is a remove followed by an insert. So a drag at 60 frames a second walks the whole board 60 times a second.
-  Answered by the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7).
-* **A remote change rebuilds everything** (`TOILE-092`). One moved note from a collaborator clears
-  the bounds map, bulk-loads the index and re-reads the paint order. The same rebuild runs on an
-  undo and on a redo. Answered by the same Story.
 * **The differential answer is deferred.** A remote change that touches a few visible elements still pushes
   the whole visible set. The engine could instead send the changed elements and the removals, which the UI
   applies onto the set it holds. The whole push stays as the fallback. The decision is the engine's, keyed on
   the size of the change. Nothing of it is built, and it lands with the
   `Engine and render optimization` Story (`ambre-roadmap.md` E6).
-* **A connector is never culled** (`TOILE-207`). Elements are resolved against the index and connectors are
-  walked whole. So a board of a thousand arrows pays for all of them at every camera. The one test that names
-  the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the `A board
-  costs what it shows and what changed` Story (`ambre-roadmap.md` E7).
-* **No budget is measured.** Not one of the Toile rows of `ambre-spec-budgets.md` has
-  a benchmark, so every cost above is a claim about a number nothing weighs. Two of those rows are
-  already known to be false.
 * **The engine has no queue seam, and needs none.** Trame drives its Logic-to-Sync boundary through
   a mock sink. Toile asserts on the returned outcome instead, which is stronger: the value is the
   contract, and a test that reads it cannot miss a send. Three sections of the corpus named the mock

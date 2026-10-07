@@ -6,6 +6,8 @@
 //! rebuild must yield the same visible set as the incremental path -- the
 //! index-equivalence invariant, proven by the property test at the bottom.
 
+use std::collections::HashMap;
+
 use kurbo::{Point, Rect};
 use rstar::{AABB, RTree, RTreeObject};
 
@@ -44,16 +46,30 @@ impl RTreeObject for ElementBounds {
 
 /// R-tree wrapper. `remove` / `update` keep the tree in step with local and
 /// remote mutations; `query_visible` / `query_point` read it.
+///
+/// `rstar` removes a leaf by geometric match, so the wrapper keeps each id's
+/// current leaf beside the tree. A removal then descends only the nodes whose
+/// envelope holds that leaf, and never walks the index (`TOILE-091`).
 #[derive(Default)]
 pub struct SpatialIndex {
     tree: RTree<ElementBounds>,
+    leaves: HashMap<ElementId, ElementBounds>,
+    /// How many times a call walked every leaf. A test probe: a drag step
+    /// or a deletion must leave it at zero.
+    #[cfg(test)]
+    walks: std::cell::Cell<usize>,
 }
 
 impl SpatialIndex {
     /// O(N) bulk build at load; asserted identical to the incremental path.
+    /// A repeated id keeps its last leaf.
     pub fn build(elems: impl Iterator<Item = ElementBounds>) -> Self {
+        let leaves: HashMap<ElementId, ElementBounds> = elems.map(|b| (b.id.clone(), b)).collect();
         Self {
-            tree: RTree::bulk_load(elems.collect()),
+            tree: RTree::bulk_load(leaves.values().cloned().collect()),
+            leaves,
+            #[cfg(test)]
+            walks: std::cell::Cell::new(0),
         }
     }
 
@@ -77,24 +93,31 @@ impl SpatialIndex {
             .map(|e| e.id.clone())
     }
 
+    /// Add the leaf for `b.id`, replacing the one it already had.
     pub fn insert(&mut self, b: ElementBounds) {
-        self.tree.insert(b);
+        self.update(b);
     }
 
-    /// Remove the leaf carrying `id`, if present.
+    /// Remove the leaf carrying `id`, if present. O(log N) for leaves that do
+    /// not overlap much: the descent follows the leaf's own envelope.
     pub fn remove(&mut self, id: &ElementId) {
-        // rstar removes by geometric match, and we cannot locate by id alone. So
-        // we find the leaf whose id matches. A linear scan is acceptable: remove
-        // is rare relative to culling, and the tree stores only current elements.
-        let found = self.tree.iter().find(|e| &e.id == id).cloned();
-        if let Some(found) = found {
-            self.tree.remove(&found);
+        let Some(leaf) = self.leaves.remove(id) else {
+            return;
+        };
+        if self.tree.remove(&leaf).is_none() {
+            // A leaf whose corners are not numbers fails every envelope test,
+            // so the descent cannot find it. Drop it by walking the tree: the
+            // one path that does, and only for a leaf that was never drawable.
+            self.walked();
+            let rest: Vec<ElementBounds> = self.tree.drain().filter(|e| &e.id != id).collect();
+            self.tree = RTree::bulk_load(rest);
         }
     }
 
     /// Replace the leaf for `b.id` (remove then insert) -- the geometry changed.
     pub fn update(&mut self, b: ElementBounds) {
         self.remove(&b.id);
+        self.leaves.insert(b.id.clone(), b.clone());
         self.tree.insert(b);
     }
 
@@ -109,7 +132,22 @@ impl SpatialIndex {
 
     /// Every id in the tree, unordered. Test / rebuild helper.
     pub fn ids(&self) -> impl Iterator<Item = ElementId> + '_ {
+        self.walked();
         self.tree.iter().map(|e| e.id.clone())
+    }
+
+    #[cfg(test)]
+    fn walked(&self) {
+        self.walks.set(self.walks.get() + 1);
+    }
+
+    #[cfg(not(test))]
+    fn walked(&self) {}
+
+    /// How many calls walked every leaf so far. Test probe.
+    #[cfg(test)]
+    pub(crate) fn walks(&self) -> usize {
+        self.walks.get()
     }
 }
 
@@ -148,6 +186,50 @@ mod tests {
         idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
         idx.remove(&ElementId("a".to_owned()));
         assert!(idx.is_empty());
+    }
+
+    /// `TOILE-091`: a drag step and a deletion find their leaf by its own
+    /// envelope. Over a board of 5 000 leaves, neither walks the index, and the
+    /// tree still holds exactly what the moves left.
+    #[test]
+    fn a_drag_and_a_delete_walk_no_index() {
+        let grid = |i: usize, dx: f64| {
+            bounds(
+                &format!("e{i}"),
+                (i % 100) as f64 * 20.0 + dx,
+                (i / 100) as f64 * 20.0,
+                10.0,
+                10.0,
+            )
+        };
+        let mut idx = SpatialIndex::build((0..5_000).map(|i| grid(i, 0.0)));
+        for i in (0..5_000).step_by(50) {
+            idx.update(grid(i, 3.0));
+        }
+        for i in (25..5_000).step_by(50) {
+            idx.remove(&ElementId(format!("e{i}")));
+        }
+        assert_eq!(idx.walks(), 0, "no call walked the index");
+        assert_eq!(idx.len(), 4_900);
+        let moved = Viewport {
+            center: Point::new(8.0, 5.0),
+            zoom: 1.0,
+            size: Size::new(2.0, 2.0),
+        };
+        let hit: Vec<_> = idx.query_visible(&moved).collect();
+        assert_eq!(hit, vec![ElementId("e0".to_owned())], "the leaf moved");
+    }
+
+    /// A leaf with corners that are not numbers still leaves the index on its
+    /// removal, through the one walk kept for it.
+    #[test]
+    fn a_leaf_that_is_not_a_number_still_leaves() {
+        let mut idx = SpatialIndex::default();
+        idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
+        idx.insert(bounds("nan", f64::NAN, 0.0, 10.0, 10.0));
+        idx.remove(&ElementId("nan".to_owned()));
+        assert_eq!(idx.len(), 1);
+        assert_eq!(idx.walks(), 1);
     }
 }
 

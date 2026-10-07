@@ -44,19 +44,19 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer, section 6; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_delete_rewrites_no_other_layer_entry` | none | verified |
 | `TOILE-129` | `FRAME` | Removing a node MUST NOT drop an entry it was not asked to remove. | this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_delete_preserves_an_undecodable_layer_entry` -- it forges an entry with an unknown tag, deletes an unrelated element, and reads the raw list back to see the entry survive | none | verified |
 
 * **Budget.** a remote change under 2 ms, a row of `ambre-spec-budgets.md section 1`.
-  `TOILE-061` is what breaks it. A delete on a large board produces a change proportional to the
-  board rather than to the deletion, and no bench measures it.
+  A delete removes only its own entries, so the change it sends is proportional to the deletion
+  (`TOILE-061`).
 * **Boundary.** none of its own: the order is a list in the Logic thread's document and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 7 `verified`, 1 `failing`, 8 `untested`. What holds is the order as data: the
-  list, the agreed walk, and the fallback painting an omitted element last, by id. What is loose is
-  everything the reorder does: the four targets nobody drives, the neighbours it may not disturb.
-  The write it owes nobody and the refusal that reads as a no-op are loose too. The one failure is
-  the cost of a removal.
+* **Verification.** 8 `verified`, 8 `untested`. What holds is the order as data: the list, the
+  agreed walk, and the fallback painting an omitted element last, by id. The cost of a removal holds
+  too. What
+  is loose is everything the reorder does: the four targets nobody drives, the neighbours it may not
+  disturb. The write it owes nobody and the refusal that reads as a no-op are loose too.
 
 ---
 
@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`.
 | brings a shape to the front | brings another shape to the front | both moves, in the order they converged | the same stacking on both screens (`TOILE-123`) | `logic::convergence_tests::two_peers_converge` |
 | sends a shape to the back | deletes that shape | the deletion | the shape gone, and no gap in the order (`TOILE-124`, `TOILE-057`) | `logic::convergence_tests::reorder_to_back_moves_node`, `::delete_drops_owned_connectors` |
 | adds a shape to a frame | sends that shape to the back | the membership, and the order clamped so the child stays above its frame | the shape above its frame (`TOILE-011`) | `logic::convergence_tests::frame_children_paint_after_their_frame` |
-| deletes one element on a board of many | watches | the deletion, and a rewritten order | the same board, at the cost of a change proportional to the board (`TOILE-061`) | none -- section 6 |
+| deletes one element on a board of many | watches | the deletion, and the order minus its entry | the same board, at the cost of a change proportional to the deletion (`TOILE-061`) | `logic::state::elements::inner_tests::a_delete_rewrites_no_other_layer_entry` |
 
 ---
 
@@ -97,11 +97,10 @@ sequence the paint walk and the pick walk both use, front being the end (`TOILE-
 drops the entries it cannot paint: a connector it cannot route (`TOILE-059`) and an element the
 document no longer holds (`TOILE-120`).
 
-**How a node is removed.** The delete handler rewrites the list: it collects the survivors, deletes
-every entry, and pushes the survivors back. That is where `TOILE-061` fails, and it is the reason a
-delete is the most expensive change on the board. The survivors are the entries that decode, so the
-rewrite also drops the ones it cannot read, which is where `TOILE-129` fails. What a removal owes the
-order itself is `TOILE-034` (`features/ambre-spec-toile-elements.md`).
+**How a node is removed.** The delete handler finds the entries it removes and deletes each of them,
+from the back. The rest of the list is never written (`TOILE-061`). An entry it cannot decode is
+never one it removes, so it survives (`TOILE-129`). What a removal owes the order itself is `TOILE-034`
+(`features/ambre-spec-toile-elements.md`).
 
 **The frame clamp.** A child of a frame is kept above it, so a frame paints as a background rather
 than over its own contents. The rule and its cost are
@@ -149,10 +148,6 @@ sends.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A delete rewrites the whole order** (`TOILE-061`). The removal deletes every entry and re-pushes
-  the survivors. Deleting one element on a board of fifty thousand nodes produces fifty thousand
-  list operations, encrypted and broadcast to every peer. The next delete does it again
-  (`ambre-roadmap.md`, "A board costs what it shows and what changed").
 * **Nothing stops a duplicate reaching the document** (`TOILE-060`, `TOILE-122`). The materialization
   hides one, so a duplicate is invisible until something counts the list, and the paint walk would
   otherwise paint the node twice.

@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-385` | `INV` | A selection MUST drop an element the board no longer holds, a peer's deletion included. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_data_names_the_ids_a_peer_deleted` -- a peer's delete applied, the selection's data names the lost id and only it; `ambre_toile::ui::tool::tests::a_selection_drops_the_ids_the_board_lost` -- the view's reduction drops those ids and keeps the others in order; `ambre_toile::ui::view::view_tests::a_peer_deletion_reaches_the_selection_through_update` -- that answer, drained by the frame, reaches the view's selection | none | verified |
 | `TOILE-UI-035` | `INV` | A connector MUST be pickable: a click on an arrow, on its line or on its caption, MUST be able to name it. | this spec section 2; `features/ambre-spec-toile-connectors.md section 3` | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow`; `ambre_toile::ui::label::tests::a_click_on_the_caption_picks_the_arrow`; `ambre_toile::ui::label::tests::the_top_most_arrow_wins` | none | verified |
 | `TOILE-UI-349` | `INV` | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 4` | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order`; `ambre_toile::ui::arrow::tests::a_release_over_a_shape_re_aims_that_end` -- together, what a selected arrow answers; structural -- the selection is its own field beside the element selection, exclusive with it (`TOILE-UI-354`), and an arrow has no box, so it joins no marquee, group or transform | none | verified |
-| `TOILE-UI-386` | `INV` | A selected arrow MUST stay selected wherever the camera moves, and leave the selection only when the board loses it. | this spec section 2 | none | unheld -- the view reads an arrow's absence from the culled set as its deletion, which holds only while the cull spares every connector (`TOILE-045`), section 5; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-UI-386` | `INV` | A selected arrow MUST stay selected wherever the camera moves, and leave the selection only when the board loses it. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_selected_arrow_outlives_the_frame_and_leaves_with_the_board` | none | verified |
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
 | `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
 | `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -81,7 +81,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 25 `verified`, 1 `failing`, 5 `untested`. What holds is the geometry and
+* **Verification.** 26 `verified`, 1 `failing`, 4 `untested`. What holds is the geometry and
   select-all with the pick's exclusions. A locked element wears no box, and a deleted one leaves the
   selection. A click, a marquee and `Escape` are driven through the view. What is loose is the
   double-click into a scope, and the one failure is the hairline.
@@ -194,9 +194,6 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
   lies between them.
 * **The group scope has no visible state, and entering it has no test.** It is a field on the view,
   and nothing on screen says which level a click will reach.
-* **A selected arrow is dropped when it leaves the frame** (`TOILE-UI-386`). The view reads its absence
-  from the culled set as its deletion. That holds while every connector ships at every camera. Once
-  the cull drops off-screen arrows, the selection-data request must name the arrow and read its loss.
 * **A scope on a deleted group lingers.** A peer that deletes or ungroups the entered group leaves the
   scope naming an id the board lost. It is harmless: no hit lies inside it, so every click resolves to
   the top-most group, and `Escape` clears it.

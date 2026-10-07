@@ -1596,6 +1596,11 @@ pub enum ToileEvent {
     /// state, never synced and never an undo item.
     FindResults(FindResults),
     DanglingConnector(ConnectorId),
+    /// The arrows the board just lost, whoever deleted them. The view drops a
+    /// selection or a caption editor on one of them. It never reads an arrow's
+    /// absence from the culled frame that way, since panning one off screen
+    /// is not deleting it (`TOILE-UI-386`, `TOILE-UI-388`).
+    ArrowsGone(Vec<ConnectorId>),
     /// The whole live peer set to render, each entry keyed by the canonical
     /// `UserId` (`toile-presence`, `PRESENCE-009`). Ephemeral, never persisted.
     ///

@@ -781,6 +781,33 @@ mod inner_tests {
         );
     }
 
+    /// `TOILE-061`: deleting one element of a board of 200 changes the order
+    /// by one entry. The change a peer receives holds a handful of operations,
+    /// not one per surviving node, and the survivors keep their order.
+    #[test]
+    fn a_delete_rewrites_no_other_layer_entry() {
+        let mut st = ToileState::new();
+        let ids: Vec<_> = (0..200)
+            .map(|i| rect(&mut st, i as f64 * 20.0, 0.0, 10.0))
+            .collect();
+        let before = st.debug_raw_layers();
+        let ops = st.doc.len_ops();
+
+        st.handle_command(ToileCommand::DeleteElements {
+            ids: vec![ids[100].clone()],
+        });
+
+        let gone = NodeId::Element(ids[100].clone()).encode();
+        let expected: Vec<_> = before.into_iter().filter(|s| s != &gone).collect();
+        assert_eq!(
+            st.debug_raw_layers(),
+            expected,
+            "the survivors keep their order"
+        );
+        let spent = st.doc.len_ops() - ops;
+        assert!(spent < 10, "one delete costs {spent} operations");
+    }
+
     /// `TOILE-UI-174`: a whole-selection restyle overwrites only the fields a
     /// surface shows; each member keeps its own corner radius, shadow and
     /// non-bold weight.

@@ -19,7 +19,7 @@
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | implemented | 31 | 5 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | implemented | 33 | 4 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 44 | 8 |
-| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 38 | 7 |
+| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 39 | 5 |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 6 |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 23 | 5 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 | 5 |
@@ -29,15 +29,15 @@
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 53 | 14 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 28 | 4 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 | 4 |
-| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 31 | 6 |
+| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 31 | 5 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 5 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 8 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 6 |
 | `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 4 |  |
-| `toile-z-order` | What overlaps what. | implemented | 16 | 9 |
+| `toile-z-order` | What overlaps what. | implemented | 16 | 8 |
 | `toile-auto-layout` | A frame lays its children out by a rule instead of by their coordinates. | partial | 27 | 4 |
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 | 4 |
-| `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 46 | 14 |
+| `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 46 | 13 |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 53 | 4 |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 | 7 |
@@ -45,4 +45,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 | 7 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 11 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 827 contract rows, 203 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 198 loose.**

@@ -43,8 +43,8 @@
 | Trame `SheetIndex` rebuild, 10k rows | < 10 ms | -- | Logic | at load time -- **none exists** |
 | Trame `range_index` scan, 1k range formulas | < 1 ms | -- | Logic | linear scan at the MVP, an interval tree later -- **none exists** |
 | Toile visible-set query, 50 000 elements | < 1 ms | -- | Logic | must fit inside a frame with margin for tessellation -- **none exists** |
-| Toile index update, one element | < 50 us | -- | Logic | a drag mutates one element per input event -- **none exists**, and the code walks the whole index (`TOILE-091`) |
-| Toile remote change, delta < 32 KB | < 2 ms | -- | Logic | keeps the client share of the < 300 ms inter-user budget -- **none exists**, and the code rebuilds every cache (`TOILE-092`) |
+| Toile index update, one element | < 50 us | -- | Logic | a drag mutates one element per input event -- criterion `ambre-toile` `index_update_one_of_50000`: 1.3 us on a desktop in native code (`TOILE-091`) |
+| Toile remote change, delta < 32 KB | < 2 ms | -- | Logic | keeps the client share of the < 300 ms inter-user budget -- criterion `ambre-toile` `remote_change_5000`: one move costs 0.7 ms on a desktop in native code once the reader's scaffolding is shared, and 48 ms before (`TOILE-265`) |
 | Toile transform command (move, restyle) | < 1 ms | -- | Logic | one register write, one index update, one derivation -- **none exists** |
 | Toile body commit, a 4 KB body merged from its base | < 1 ms | -- | Logic | two character diffs capped at 256 edit steps, then one diff into the body, per close (`TOILE-UI-381`). The UI echo runs the same two diffs inside its frame (`TOILE-UI-382`) -- **none exists** |
 | Toile slide transition, 500 elements per frame | < 4 ms | -- | Logic | leaves room to paint inside the frame during a transition -- **none exists** |

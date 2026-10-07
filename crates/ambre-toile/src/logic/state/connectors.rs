@@ -2,19 +2,34 @@
 //! retarget, delete, plus the map handle and the "which connectors touch these
 //! elements" query used by element deletion. Split out of `state/mod.rs`.
 
-use std::collections::HashSet;
+use std::cell::Ref;
+use std::collections::{HashMap, HashSet};
+use std::sync::PoisonError;
 
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::command::{End, ToileError, ToileEvent, ToileOutcome};
+use crate::logic::connector::Connector;
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
 };
 
 use crate::logic::text_merge::merge_text;
+use crate::ui::label::LABEL_W;
 
-use super::codec::{connector_label_or_seed, encode_anchor, map_str, write_connector};
+use super::codec::{
+    bin_of, connector_label_or_seed, encode_anchor, map_str, read_connector, write_connector,
+};
 use super::{CONNECTORS, LAYERS, ToileState};
+
+/// One arrow as the cull reads it: its ends, and how far its paint reaches
+/// past the box of its outline. The caption box rides the outline, so half
+/// its width is the widest reach.
+#[derive(Clone, Debug)]
+pub(super) struct Wire {
+    pub(super) conn: Connector,
+    pub(super) reach: f64,
+}
 
 impl ToileState {
     #[allow(clippy::too_many_arguments)]
@@ -162,21 +177,77 @@ impl ToileState {
 
     /// Every connector of the board whose endpoint the board no longer holds
     /// (`TOILE-165`). Read before and after a write this viewer did not make,
-    /// so the ones that just went dangling can be announced.
+    /// so the ones that just went dangling can be announced. It reads the
+    /// arrow cache, not the document.
     pub(super) fn dangling_connectors(&self) -> HashSet<ConnectorId> {
-        let mut out = HashSet::new();
-        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
-            for (key, v) in m.iter() {
-                if let LoroValue::Map(f) = v {
-                    let from = ElementId(map_str(f, "from"));
-                    let to = ElementId(map_str(f, "to"));
-                    if !self.bounds.contains_key(&from) || !self.bounds.contains_key(&to) {
-                        out.insert(ConnectorId(key.clone()));
+        self.wires()
+            .iter()
+            .filter(|(_, w)| {
+                !self.bounds.contains_key(&w.conn.from) || !self.bounds.contains_key(&w.conn.to)
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// The arrow cache, first brought in step with every arrow the document
+    /// was written since the last read. The subscription notes each one, so
+    /// no write path keeps the cache by hand (`TOILE-045`).
+    pub(super) fn wires(&self) -> Ref<'_, HashMap<ConnectorId, Wire>> {
+        let noted = std::mem::take(
+            &mut self
+                .touched
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .wires,
+        );
+        if noted.unplaced || !noted.ids.is_empty() {
+            let mut wires = self.wires.borrow_mut();
+            let mut ids: Vec<ConnectorId> = noted.ids.into_iter().collect();
+            if noted.unplaced {
+                // Every arrow the cache held, and every one the map holds.
+                ids.extend(wires.keys().cloned());
+                ids.extend(
+                    self.doc
+                        .get_map(CONNECTORS)
+                        .keys()
+                        .map(|k| ConnectorId(k.to_string())),
+                );
+            }
+            let mut gone = self.wires_gone.borrow_mut();
+            for id in ids {
+                match self.read_wire(&id) {
+                    Some(w) => {
+                        wires.insert(id, w);
+                    }
+                    None => {
+                        if wires.remove(&id).is_some() {
+                            gone.push(id);
+                        }
                     }
                 }
             }
         }
-        out
+        self.wires.borrow()
+    }
+
+    /// The arrows the board lost since the last call, as one event, or none
+    /// (`TOILE-UI-386`). The cache is brought in step first, so a write no
+    /// derivation followed still counts.
+    pub(super) fn arrows_gone(&self) -> Option<ToileEvent> {
+        drop(self.wires());
+        let gone = std::mem::take(&mut *self.wires_gone.borrow_mut());
+        (!gone.is_empty()).then_some(ToileEvent::ArrowsGone(gone))
+    }
+
+    /// One arrow, read whole from the document, or `None` once it is gone.
+    fn read_wire(&self, id: &ConnectorId) -> Option<Wire> {
+        let cm = self.connector_map(id)?;
+        let conn = read_connector(id.clone(), &cm)?;
+        let stroke = f64::from(self.style_read(&bin_of(&cm, "style")).stroke_w.max(1.0));
+        Some(Wire {
+            conn,
+            reach: LABEL_W / 2.0 + stroke / 2.0,
+        })
     }
 
     /// Ids of every connector referencing one of `del` at either endpoint.

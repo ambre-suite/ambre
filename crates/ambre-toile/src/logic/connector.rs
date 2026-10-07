@@ -51,6 +51,83 @@ impl Connector {
     }
 }
 
+impl Connector {
+    /// A box the routed path never leaves, without routing it: the endpoints,
+    /// and for a curve its two control points too. `None` when an endpoint
+    /// element was deleted, like [`route`](Self::route).
+    pub fn hull(&self, bounds: &HashMap<ElementId, Rect>) -> Option<Rect> {
+        let a = anchor_point(bounds.get(&self.from)?, self.from_anch);
+        let b = anchor_point(bounds.get(&self.to)?, self.to_anch);
+        let ends = Rect::from_points(a, b);
+        Some(match self.path_type {
+            // The elbow's two breaks sit on the endpoints' own coordinates.
+            PathType::Straight | PathType::Elbow => ends,
+            PathType::Curved => {
+                let [c1, c2] = control_points(a, self.from_anch, b, self.to_anch);
+                ends.union_pt(c1).union_pt(c2)
+            }
+        })
+    }
+}
+
+/// Whether a routed outline enters `r`. The box of a diagonal arrow can meet a
+/// frame its line never crosses, so the cull asks this once the box has.
+pub fn outline_meets(path: &BezPath, r: Rect) -> bool {
+    let mut from: Option<Point> = None;
+    let mut hit = false;
+    // A quarter of a world unit: a curve flattened that finely strays from
+    // its outline by less than any stroke paints.
+    kurbo::flatten(path.iter(), 0.25, |el| {
+        if hit {
+            return;
+        }
+        match el {
+            kurbo::PathEl::MoveTo(p) => {
+                hit = r.contains(p);
+                from = Some(p);
+            }
+            kurbo::PathEl::LineTo(p) => {
+                if let Some(a) = from {
+                    hit = segment_meets(a, p, r);
+                }
+                from = Some(p);
+            }
+            _ => {}
+        }
+    });
+    hit
+}
+
+/// Whether the segment `a`-`b` enters `r`: Liang-Barsky clipping, which keeps
+/// the part of the segment inside each of the four half-planes in turn.
+fn segment_meets(a: Point, b: Point, r: Rect) -> bool {
+    let d = b - a;
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for (p, q) in [
+        (-d.x, a.x - r.x0),
+        (d.x, r.x1 - a.x),
+        (-d.y, a.y - r.y0),
+        (d.y, r.y1 - a.y),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return false; // parallel to this edge, and outside it
+            }
+            continue;
+        }
+        let t = q / p;
+        if p < 0.0 {
+            t0 = t0.max(t);
+        } else {
+            t1 = t1.min(t);
+        }
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
+}
+
 fn straight(a: Point, b: Point) -> BezPath {
     let mut p = BezPath::new();
     p.move_to(a);
@@ -82,14 +159,23 @@ fn elbow(a: Point, from: Anchor, b: Point, _to: Anchor) -> BezPath {
 /// outward normal by a third of the endpoint distance, giving a smooth S / C
 /// curve.
 fn curved(a: Point, from: Anchor, b: Point, to: Anchor) -> BezPath {
-    let dist = (b - a).hypot();
-    let reach = (dist / 3.0).max(1.0);
-    let c1 = a + anchor_normal(from) * reach;
-    let c2 = b + anchor_normal(to) * reach;
+    let [c1, c2] = control_points(a, from, b, to);
     let mut p = BezPath::new();
     p.move_to(a);
     p.curve_to(c1, c2, b);
     p
+}
+
+/// The curve's two control points: each endpoint pushed out along its anchor's
+/// normal by a third of the endpoint distance. A cubic stays inside the hull of
+/// its endpoints and these.
+fn control_points(a: Point, from: Anchor, b: Point, to: Anchor) -> [Point; 2] {
+    let dist = (b - a).hypot();
+    let reach = (dist / 3.0).max(1.0);
+    [
+        a + anchor_normal(from) * reach,
+        b + anchor_normal(to) * reach,
+    ]
 }
 
 fn anchor_is_horizontal(a: Anchor) -> bool {
@@ -154,6 +240,40 @@ mod tests {
         let b = two_boxes();
         for pt in [PathType::Straight, PathType::Elbow, PathType::Curved] {
             assert!(conn(pt).route(&b).is_some());
+        }
+    }
+
+    /// `TOILE-045`: the box the cull tests holds the whole routed outline, for
+    /// every path kind and every pair of sides, the bulging curve included.
+    #[test]
+    fn the_hull_holds_the_routed_path() {
+        use kurbo::Shape;
+        let mut b = two_boxes();
+        b.insert(ElementId("b".into()), rect(300.0, 250.0, 100.0, 100.0));
+        let sides = [
+            Anchor::Top,
+            Anchor::Bottom,
+            Anchor::Left,
+            Anchor::Right,
+            Anchor::Center,
+        ];
+        for pt in [PathType::Straight, PathType::Elbow, PathType::Curved] {
+            for from_anch in sides {
+                for to_anch in sides {
+                    let c = Connector {
+                        from_anch,
+                        to_anch,
+                        ..conn(pt)
+                    };
+                    let hull = c.hull(&b).unwrap().inflate(1e-9, 1e-9);
+                    let outline = c.route(&b).unwrap().bounding_box();
+                    assert_eq!(
+                        hull.union(outline),
+                        hull,
+                        "{pt:?} {from_anch:?} {to_anch:?}"
+                    );
+                }
+            }
         }
     }
 

@@ -27,6 +27,38 @@ use crate::logic::state::{PRESENCE_TTL_MS, ToileState};
 // Lifecycle unit tests
 // -----------------------------------------------------------------------------
 
+/// `TOILE-092`: a peer's move of one element on a board of 500 refreshes that
+/// element alone. The receiving board resolves no element map and walks no
+/// index, and the moved element lands where the peer put it.
+#[test]
+fn a_remote_move_walks_no_board() {
+    let mut a = ToileState::new();
+    let ids: Vec<ElementId> = (0..500)
+        .map(|i| {
+            create_rect(
+                &mut a,
+                Point::new(i as f64 * 20.0, 0.0),
+                Size::new(10.0, 10.0),
+            )
+        })
+        .collect();
+    let mut b = ToileState::new();
+    b.apply_remote(&a.export_snapshot());
+    let walks = b.board_walks();
+    let out = a.handle_command(ToileCommand::MoveElements {
+        ids: vec![ids[7].clone()],
+        delta: Vec2::new(0.0, 300.0),
+    });
+    b.apply_remote(&out.update.expect("a move writes"));
+    assert_eq!(
+        b.board_walks(),
+        walks,
+        "the refresh resolved no element map"
+    );
+    assert_eq!(b.index_walks(), 0, "the refresh walked no index");
+    assert_eq!(b.bounds_of(&ids[7]), a.bounds_of(&ids[7]));
+}
+
 fn created_id(out: &crate::logic::command::ToileOutcome) -> ElementId {
     out.display
         .iter()
@@ -2619,6 +2651,69 @@ fn viewport_culls_offscreen_nodes() {
     assert_eq!(painted, vec![near], "only the on-screen node is painted");
 }
 
+/// The arrows a derivation answers, by id.
+fn painted_arrows(st: &ToileState) -> Vec<ConnectorId> {
+    st.debug_viewport()
+        .nodes
+        .iter()
+        .filter_map(|n| match n {
+            DisplayNode::Connector(c) => Some(c.id.clone()),
+            DisplayNode::Element(_) => None,
+        })
+        .collect()
+}
+
+/// `TOILE-045`, `TOILE-207`: an arrow is culled like an element. One far
+/// away is not in the answer. One whose ends are both off screen but whose
+/// outline crosses the frame is, and so is a curve whose bulge alone reaches
+/// it. Moving an end off screen drops the arrow at the next camera.
+#[test]
+fn an_arrow_off_screen_is_culled() {
+    let mut st = ToileState::new();
+    let far_a = create_rect(&mut st, Point::new(5000.0, 5000.0), Size::new(10.0, 10.0));
+    let far_b = create_rect(&mut st, Point::new(5100.0, 5000.0), Size::new(10.0, 10.0));
+    let far = connect(&mut st, far_a, far_b);
+    // Both ends left and right of the default frame; the line crosses it.
+    let west = create_rect(&mut st, Point::new(-3000.0, 0.0), Size::new(10.0, 10.0));
+    let east = create_rect(&mut st, Point::new(3000.0, 0.0), Size::new(10.0, 10.0));
+    let across = connect(&mut st, west.clone(), east);
+    // Both ends above the frame and wide of it, facing down: only the bulge
+    // reaches into it.
+    let low_a = create_rect(&mut st, Point::new(-1500.0, -700.0), Size::new(10.0, 10.0));
+    let low_b = create_rect(&mut st, Point::new(1500.0, -700.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::CreateConnector {
+        from: low_a,
+        from_anch: Anchor::Bottom,
+        to: low_b,
+        to_anch: Anchor::Bottom,
+        path_type: PathType::Curved,
+        arrows: EndCaps {
+            start: false,
+            end: false,
+        },
+    });
+    let bulge = st.connector_ids().pop().expect("the curve exists");
+
+    let mut seen = painted_arrows(&st);
+    seen.sort();
+    let mut want = vec![across.clone(), bulge];
+    want.sort();
+    assert_eq!(
+        seen, want,
+        "only the arrows that meet the frame are answered"
+    );
+    assert!(!seen.contains(&far));
+
+    st.handle_command(ToileCommand::MoveElements {
+        ids: vec![west.clone()],
+        delta: Vec2::new(0.0, 9000.0),
+    });
+    assert!(
+        !painted_arrows(&st).contains(&across),
+        "the arrow left with its end"
+    );
+}
+
 // -----------------------------------------------------------------------------
 // Presentation: slide sequence CRDT + playback (`toile-presentation`)
 // -----------------------------------------------------------------------------
@@ -4999,6 +5094,27 @@ proptest! {
             format!("{:?}", b.debug_viewport()),
             "derived paint set diverged"
         );
+    }
+
+    /// `TOILE-092`: a peer that receives every change as a delta refreshes only
+    /// what each delta touched. It still holds the caches a full rebuild of the
+    /// same document gives.
+    #[test]
+    fn a_remote_refresh_matches_a_full_rebuild(
+        ops in proptest::collection::vec(op_strategy(), 0..40)
+    ) {
+        let mut a = ToileState::new();
+        a.set_user_id(UserId::new());
+        let mut b = ToileState::new();
+        b.apply_remote(&a.export_snapshot());
+        for op in &ops {
+            if let Some(d) = apply_local(&mut a, op) {
+                b.apply_remote(&d);
+            }
+        }
+        let mut c = ToileState::new();
+        c.import_snapshot(&b.export_snapshot()).expect("a board this build wrote");
+        prop_assert_eq!(b.debug_caches(), c.debug_caches(), "the refresh diverged");
     }
 
     /// The invariant beyond the isolated `SpatialIndex`. Every derived cache

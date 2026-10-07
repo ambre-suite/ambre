@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell raising its notice off this event, reached by deleting a shape a collaborator is joining to another | none | qa-manual |
 | `TOILE-165` | `OBS` | A connector that goes dangling because its endpoint left MUST be announced too, not only one re-aimed at a missing element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- a concurrent delete announcing the arrow on both peers, and the later delta that strands nothing announcing nothing | none | verified |
 | `TOILE-043` | `INV` | A connector MUST sit in the one paint order with the elements, so it can be placed behind one. | this spec section 3; `features/ambre-spec-toile-z-order.md` | `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- the reorder over the shared order; `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the four entries that drive a connector through it | partial -- no test runs the two ends together; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-045` | `INV` | A connector MUST be culled with the viewport, like an element. | this spec section 3 | none | fails -- the visible-set walk tests the culled set for an element and emits every connector on the board unconditionally, because no connector is in the spatial index, section 6; lands with the `A board costs what it shows and what changed` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-045` | `INV` | A connector MUST be culled with the viewport, like an element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled`; `ambre_toile::logic::connector::tests::the_hull_holds_the_routed_path` | none | verified |
 | `TOILE-046` | `INV` | A connector MUST carry its own style, so an arrow can be coloured and thickened. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_carries_its_own_style` -- it restyles one arrow of two and reads the second keeping the default: the register is per connector, not shared | none | verified |
 | `TOILE-167` | `INV` | Every path kind and every anchor the format stores MUST be reachable: a shape the document can hold is one a user can make. | this spec section 3 | not built | unbuilt -- lands with the `Every connector shape a user can make` Story (`ambre-roadmap.md` E6). Section 6 lists the shapes no gesture makes | unimplemented |
 | `TOILE-047` | `CONC` | A caption on a connector MUST converge character by character, like a note body. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_captions_converge` -- it holds two peers editing opposite ends of one caption and reads both surviving the merge | none | verified |
@@ -95,11 +95,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-176` | `POST` | A delete MUST take the connector out of the paint order as well as out of the map: an entry MUST NOT name a connector that is gone. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads an order holding one element node and nothing else | none | verified |
 
 * **Budget.** the routing pass is inside the visible-set derivation, budgeted by the visible-set row
-  of `ambre-spec-budgets.md section 1`. Because `TOILE-045` fails, the pass runs once per
-  connector on the board rather than once per visible connector, and no bench measures either.
+  of `ambre-spec-budgets.md section 1`. The cull tests each arrow's hull against the frame, then
+  routes only the arrows whose hull meets it (`TOILE-045`).
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 23 `verified`, 8 `partial`, 1 `failing`, 12 `untested`, 1 `qa-manual`, 1
+* **Verification.** 24 `verified`, 8 `partial`, 12 `untested`, 1 `qa-manual`, 1
   `unimplemented`. What holds is the pure geometry and what the surface paints back: which arrow a
   point lands on, and which end a press grabs. Held too are both ways an arrow goes dangling. What
   is loose is the paths between them, because the view is not host-constructible. Loose too are a
@@ -257,10 +257,6 @@ the peers, because presence carries element ids -- section 6.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No pass culls a connector** (`TOILE-045`). The spatial index holds no connector, and the
-  visible-set walk gates the element arm on the culled set and the connector arm on nothing. A board
-  of two thousand arrows therefore routes and ships two thousand outlines every frame, whatever the
-  camera holds.
 * **An arrow's selection is invisible to the others.** A presence sample carries element ids
   (`features/ambre-spec-toile-presence.md`), so a peer who selects an arrow shows a peer who
   selected nothing. The ghost the others paint is an element box, and an arrow has none.
@@ -273,10 +269,6 @@ the peers, because presence carries element ids -- section 6.
   right-click with an arrow selected would therefore offer group, lock, react and frame entries
   that do nothing to it. Rather than offer them, the right-click drops the arrow. Delete, the
   z-order and the style inspector reach it from the keyboard and the menu bar instead.
-* **A selected arrow that leaves the frame reads as deleted.** The view drops the selection, and
-  closes an open caption (`TOILE-UI-388`), when the arrow leaves the display. That is right only
-  because no pass culls a connector (`TOILE-045`). The day that row holds, an arrow panned off screen
-  would deselect itself and lose its caption, so both have to ask the board instead.
 * **The notice names no arrow** (`TOILE-044`). The shell says an arrow lost an end, and the board
   paints nothing the user can point at (`TOILE-166`). The repair is the re-aim, and reaching it
   means finding an arrow that is not drawn. No rule says how a surface offers that.

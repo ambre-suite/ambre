@@ -14,6 +14,7 @@ use crate::logic::command::{
     DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ToileEvent,
     Viewport,
 };
+use crate::logic::connector::outline_meets;
 use crate::logic::model::{
     ConnectorId, ElementId, ElementKind, ElementStyle, LinkTarget, ShapeKind, StrokePoint,
 };
@@ -43,6 +44,20 @@ impl ToileState {
     /// `ToileState` can be walked from any camera.
     pub(super) fn derive_viewport_at(&self, vp: Viewport) -> DisplayViewport {
         let visible: HashSet<ElementId> = self.index.query_visible(&vp).collect();
+        let frame = vp.to_world_rect();
+        let wires = self.wires();
+        // An arrow is culled like an element (`TOILE-045`). The box of its
+        // cached ends goes first, before the document is read. Then the
+        // routed outline decides, since a diagonal's box overstates it
+        // (`TOILE-207`). Its reach widens the frame, so a caption counts.
+        let meets = |id: &ConnectorId| {
+            wires.get(id).and_then(|w| {
+                let wide = frame.inflate(w.reach, w.reach);
+                let hull = w.conn.hull(&self.bounds)?;
+                let path = hull.overlaps(wide).then(|| w.conn.route(&self.bounds))??;
+                outline_meets(&path, wide).then_some(path)
+            })
+        };
         let mut nodes = Vec::new();
         // Every visible element the order lists, so the omitted remainder is the
         // difference, not a second pass over the element map (`TOILE-058`).
@@ -58,7 +73,9 @@ impl ToileState {
                     }
                 }
                 crate::logic::model::NodeId::Connector(id) => {
-                    if let Some(dc) = self.display_connector(id) {
+                    if let Some(path) = meets(id)
+                        && let Some(dc) = self.display_connector(id, path)
+                    {
                         nodes.push(DisplayNode::Connector(dc));
                     }
                 }
@@ -269,10 +286,10 @@ impl ToileState {
         link
     }
 
-    fn display_connector(&self, id: &ConnectorId) -> Option<DisplayConnector> {
+    /// The arrow `id` as the UI paints it, along the outline the cull routed.
+    fn display_connector(&self, id: &ConnectorId, path: BezPath) -> Option<DisplayConnector> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
-        let path = conn.route(&self.bounds)?; // dropped if an endpoint is gone
         Some(DisplayConnector {
             id: id.clone(),
             path,
