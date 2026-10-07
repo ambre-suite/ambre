@@ -26,7 +26,7 @@
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 25 | 13 |
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | implemented | 12 |  |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 29 | 4 |
-| `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 53 | 14 |
+| `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 53 | 12 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 28 | 4 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 | 4 |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 31 | 5 |
@@ -45,4 +45,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 | 7 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 11 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 196 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 194 loose.**

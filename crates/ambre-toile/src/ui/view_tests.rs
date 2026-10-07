@@ -528,3 +528,81 @@ fn the_ungroup_chord_sends_one_command_over_the_selection() {
         [ToileCommand::UngroupElements { groups }] if groups == &[eid("a"), eid("b")]
     ));
 }
+
+/// A board holding sticky `a` and the frame `f`, with `a` selected and its
+/// selection data in hand. `framed` lists the selected ids a frame holds.
+fn selected_in(frame_bounds: Rect, framed: &[&str]) -> Rig {
+    let frame = DisplayElement {
+        kind: ElementKind::Frame,
+        ..sticky("f", frame_bounds)
+    };
+    let mut rig = Rig::new();
+    rig.show(vec![
+        DisplayNode::Element(frame),
+        DisplayNode::Element(sticky("a", A)),
+    ]);
+    rig.click(50.0, 50.0);
+    rig.frame();
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![sticky("a", A)],
+        framed: framed.iter().map(|id| eid(id)).collect(),
+        missing: Vec::new(),
+    });
+    rig.sent();
+    rig
+}
+
+const AWAY: Rect = Rect::new(1000.0, 1000.0, 1100.0, 1100.0);
+const AROUND: Rect = Rect::new(-50.0, -50.0, 400.0, 400.0);
+
+#[test]
+fn add_to_frame_with_no_frame_around_says_so_and_sends_nothing() {
+    let mut rig = selected_in(AWAY, &[]);
+    rig.view.apply_menu_command(crate::ui::menu::ADD_TO_FRAME);
+    assert!(rig.sent().is_empty());
+    assert_eq!(rig.notices.take().len(), 1, "the user is told why");
+
+    let mut rig = selected_in(AROUND, &[]);
+    rig.view.apply_menu_command(crate::ui::menu::ADD_TO_FRAME);
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::SetFrameChildren { frame, add, .. }]
+            if frame == &eid("f") && add == &[eid("a")]
+    ));
+    assert!(rig.notices.take().is_empty(), "a done entry says nothing");
+}
+
+#[test]
+fn remove_from_frame_outside_any_frame_says_so_and_sends_nothing() {
+    let mut rig = selected_in(AWAY, &[]);
+    rig.view
+        .apply_menu_command(crate::ui::menu::REMOVE_FROM_FRAME);
+    assert!(rig.sent().is_empty());
+    assert_eq!(rig.notices.take().len(), 1, "the user is told why");
+
+    let mut rig = selected_in(AROUND, &["a"]);
+    rig.view
+        .apply_menu_command(crate::ui::menu::REMOVE_FROM_FRAME);
+    assert!(!rig.sent().is_empty(), "a framed selection is removed");
+    assert!(rig.notices.take().is_empty(), "a done entry says nothing");
+}
+
+#[test]
+fn zoom_to_selection_with_nothing_selected_says_so() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view
+        .apply_menu_command(crate::ui::menu_bar::ZOOM_TO_SELECTION);
+    assert!(rig.sent().is_empty());
+    assert_eq!(rig.notices.take().len(), 1, "the user is told why");
+
+    rig.click(50.0, 50.0);
+    rig.frame();
+    rig.sent();
+    rig.view
+        .apply_menu_command(crate::ui::menu_bar::ZOOM_TO_SELECTION);
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::RequestSelectionStats { ids, .. }] if ids == &[eid("a")]
+    ));
+    assert!(rig.notices.take().is_empty(), "a done entry says nothing");
+}

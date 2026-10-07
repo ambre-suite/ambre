@@ -27,6 +27,13 @@ use ambre_bus::app::toile::{
 /// What the user is told when an edit is lost with its target
 /// (`TOILE-UI-387`, `TOILE-UI-388`, `TOILE-UI-389`).
 const EDIT_LOST: &str = "Someone deleted what you were editing. Your edit was not saved.";
+/// What the user is told when a frame entry finds no frame to act on
+/// (`TOILE-UI-153`).
+const NO_FRAME_CONTAINS: &str = "No frame contains the selection, so nothing was added.";
+const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was removed.";
+/// What the user is told when a fit to the selection has nothing to fit
+/// (`TOILE-UI-160`).
+const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
 };
@@ -64,7 +71,6 @@ use super::viewport::ViewportTransform;
 // Context-menu bridge (`toile-menus`): the DOM `ContextMenu` reads the
 // published selection scope and writes back the chosen `CommandId`. Both ends
 // are leptos signals, so the handles and their access traits are wasm-only.
-#[cfg(target_arch = "wasm32")]
 use ambre_commands::CommandId;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
@@ -2293,9 +2299,12 @@ impl ToileView {
     /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all`
     /// are UI-only intents serviced here (the same-session clipboard / local
     /// selection). Every other id is resolved against the selection by
-    /// `menu::resolve_menu_command` and emitted. Wasm-only (reached only from
-    /// `drain_menu_cmd`).
-    #[cfg(target_arch = "wasm32")]
+    /// `menu::resolve_menu_command` and emitted. The shell reaches it through
+    /// `drain_menu_cmd` on wasm; the host tests call it directly.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the menu signal that calls it is wasm-only")
+    )]
     fn apply_menu_command(&mut self, id: CommandId) {
         use super::menu_bar as mb;
 
@@ -2350,7 +2359,9 @@ impl ToileView {
                 return;
             }
             mb::ZOOM_TO_SELECTION => {
-                if !self.selection.is_empty() {
+                if self.selection.is_empty() {
+                    self.notices.publish(NOTHING_TO_ZOOM);
+                } else {
                     self.pending_fit = true;
                     self.send_edit(ToileCommand::RequestSelectionStats {
                         ids: self.selection.clone(),
@@ -2403,6 +2414,17 @@ impl ToileView {
             }
             return;
         }
+        // A removal the selection's membership cannot honour says so, rather
+        // than send a command Logic would answer with nothing (`TOILE-UI-153`).
+        if id == super::menu::REMOVE_FROM_FRAME
+            && !self
+                .selection
+                .iter()
+                .any(|s| self.selection_framed.contains(s))
+        {
+            self.notices.publish(NO_FRAME_HOLDS);
+            return;
+        }
         // With an arrow selected the element selection is empty, so the ordinary
         // resolution would answer nothing. An arrow has a table of its own
         // (`toile-connectors`).
@@ -2424,6 +2446,10 @@ impl ToileView {
                 }
             },
         };
+        if id == super::menu::ADD_TO_FRAME && cmds.is_empty() {
+            self.notices.publish(NO_FRAME_CONTAINS);
+            return;
+        }
         for cmd in cmds {
             self.send_edit(cmd);
         }

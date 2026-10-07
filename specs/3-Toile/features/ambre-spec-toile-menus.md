@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-150` | `POST` | Where frames overlap, the frame the entries target MUST be the front-most one that contains the selection. | this spec section 2 | none | unheld -- the lookup scans the painted order backwards and takes the first container, and the frame test holds one frame, so the choice is never exercised; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-151` | `FRAME` | Resolving an entry MUST NOT change the selection. | this spec section 2 | type-level -- the resolver borrows the selection immutably and returns commands, so it has no way to write it back | none | verified |
 | `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | `ambre_toile::ui::menu::tests::an_unknown_id_is_refused_not_ui_only` -- an unknown id resolves to `None`, never the empty list a view-only intent returns | none | verified |
-| `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | none | fails -- both return an empty command list when the lookup finds no container, and no notice is raised. The entries are omitted in that scope, so this is reached only through the bar; lands with the `A board entry that does nothing says why` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::add_to_frame_with_no_frame_around_says_so_and_sends_nothing` -- one notice and no command, and a frame around the sticky gets the add with no notice; `ambre_toile::ui::view::view_tests::remove_from_frame_outside_any_frame_says_so_and_sends_nothing` -- the same for an unframed selection | none | verified |
 
 ### 1.4 Choose a menu-bar entry
 
@@ -92,18 +92,17 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-157` | `POST` | Zoom in, zoom out and zoom to 100 % MUST move the camera and queue a fresh cull. | this spec section 3 | none | unheld -- each writes the camera and queues a viewport request, and the wiring is wasm-only, so no test reads the camera back after an entry; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | none | unheld -- the view holds the culled set alone, so both fits arm a pending fit and request the stats, and no test drives the round trip; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | none | unheld -- each writes a view field and returns, and the wiring is wasm-only; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | none | fails -- the branch returns on an empty selection, raising no notice, and the View menu shows the entry whatever is selected; lands with the `A board entry that does nothing says why` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::zoom_to_selection_with_nothing_selected_says_so` -- one notice and no request, then a selected sticky asks for its extent with no notice | none | verified |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 39 `verified`, 2 `failing`, 12 `untested`. What holds is the entry set, the omission
+* **Verification.** 41 `verified`, 0 `failing`, 12 `untested`. What holds is the entry set, the omission
   of a locked element's move entries, and a scope read from the whole selection (`TOILE-UI-134`). An unknown
   id is refused rather than passed as a view-only intent. What is loose is the pointer: which scope a
-  right-click means, and what it does to the selection. The failures are the frame notice and the zoom
-  rule its test only half proves.
+  right-click means, and what it does to the selection. An entry that changes nothing says why.
 
 ---
 
@@ -240,10 +239,6 @@ This one restates none of them.
 * **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide list, and
   no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
   in (`features/ambre-spec-toile-comments.md section 4`).
-* **A refused command answers with nothing.** The board refuses some commands: a locked element ignores a
-  move. No rule states what the user is told when an entry produces no change. Two refusals here are still
-  silent: a frame entry with no enclosing frame (`TOILE-UI-153`) and a fit to the selection with nothing
-  selected (`TOILE-UI-160`).
 * **Add shows by geometry, with no test of two frames.** Add targets the front-most frame whose box
   contains the selection, and no test holds two (`TOILE-UI-150`). Remove shows by membership instead
   (`TOILE-UI-384`).
