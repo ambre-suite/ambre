@@ -9,7 +9,15 @@
 //! Every time is read on the UI thread, the confirmation included: it ends
 //! when the answer reaches the view. No clock crosses a thread.
 
+use ambre_bus::app::prose::ProseEvent;
+
 use crate::ui::DraftBuffer;
+
+/// Whether `event` lays the document out again, which is when a moved caret
+/// can first be drawn. The host passes the answer to [`KeyProbe::answered`].
+pub fn lays_out(event: &ProseEvent) -> bool {
+    matches!(event, ProseEvent::LayoutShaped { .. })
+}
 
 /// The name of the echo measure: input to draft updated.
 pub const ECHO: &str = "ambre:echo";

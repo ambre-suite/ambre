@@ -86,7 +86,6 @@
   {"edge": "cites-section", "from": "ARCH-014", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "lands-with", "from": "ARCH-014", "to": "The thread-separation belts"},
   {"edge": "cites-section", "from": "ARCH-018", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
-  {"edge": "lands-with", "from": "ARCH-018", "to": "The launcher holds no application logic"},
   {"edge": "cites-section", "from": "ARCH-017", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "ARCH-017", "to": "ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once"},
   {"edge": "cites-section", "from": "ARCH-027", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},

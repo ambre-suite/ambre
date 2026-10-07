@@ -344,7 +344,7 @@ owns the subsystem.
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[x]` One command registry | MVP | one description per command -- title, icon, category, chord -- with the menus, the keyboard and the command palette all derived from it instead of built beside it |
-| `[ ]` The launcher holds no application logic | MVP | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
+| `[x]` The launcher holds no application logic | MVP | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
 | `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Pinch belongs here, in every app, and a finger's pan and flick to the "One kinetic scroll" row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |

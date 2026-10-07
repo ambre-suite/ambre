@@ -35,6 +35,7 @@ mod formula_bar;
 mod handler;
 mod icons;
 mod popovers;
+mod relay;
 mod sheet_tabs;
 mod sort_dialog;
 mod status;
@@ -54,6 +55,7 @@ pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, Repla
 pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
 pub use popovers::{FilterPopover, FilterPopoverState};
+pub use relay::{TrameIntent, TrameRelay};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};
 pub use status::{SelStats, StatusBar};

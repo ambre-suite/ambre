@@ -1,0 +1,193 @@
+// ambre-trame/src/chrome/relay.rs
+// ============================================================================
+// What Trame's chrome learns from its events, and what its panels ask of the
+// sheet (`ARCH-018`).
+//
+// The launcher hands every event from the Logic thread here and names no
+// variant. The sheet tabs, the status band, the filter popover, the sort dialog
+// and the find counter read the signals this fills. The canvas view gets the
+// same events on its own queue.
+//
+// The other way, a panel's intent becomes a `TrameCommand` here. The launcher
+// only sends it to the routed document.
+// ============================================================================
+
+use ambre_bus::{AppCommand, AppEvent, FilterKind, StylePatch, TrameCommand, TrameEvent, UiEvent};
+use leptos::prelude::*;
+
+use super::find_replace::{FindQuery, ReplaceRequest};
+use super::popovers::FilterPopoverState;
+use super::sheet_tabs::ReorderSheet;
+use super::sort_dialog::{SortApply, SortDialogState};
+use super::status::SelStats;
+
+/// What one of Trame's panels asks of the sheet.
+pub enum TrameIntent {
+    /// Restyle the selection from the format bar (`trame-cell-styles`).
+    Style(StylePatch),
+    /// Filter the active column from the popover (`trame-shared-filter`).
+    Filter(FilterKind),
+    /// Sort the selection on the dialog's levels (`trame-sort`).
+    Sort(SortApply),
+    /// Step to the next match (`trame-find-replace`).
+    Find(FindQuery),
+    /// Replace the focused match.
+    Replace(ReplaceRequest),
+    /// Replace every match.
+    ReplaceAll(ReplaceRequest),
+    /// Show this sheet (`trame-sheets`).
+    ActivateSheet(String),
+    /// Add a sheet after the last one.
+    CreateSheet,
+    /// Rename a sheet, as `(id, name)`.
+    RenameSheet(String, String),
+    /// Delete a sheet.
+    DeleteSheet(String),
+    /// Move a sheet to another position.
+    ReorderSheet(ReorderSheet),
+}
+
+/// The chrome signals Trame's events fill. Each is `Copy`, so the relay is too.
+#[derive(Clone, Copy)]
+pub struct TrameRelay {
+    /// The sort dialog, opened over the range a sort would order
+    /// (`trame-sort`).
+    pub sort_dialog: RwSignal<Option<SortDialogState>>,
+    /// The filter popover, pinned to the column its values came from.
+    pub filter_popover: RwSignal<Option<FilterPopoverState>>,
+    /// The active column's distinct values (`trame-shared-filter`).
+    pub filter_values: RwSignal<Vec<String>>,
+    /// Whether the active sheet is filtered, which the context menu reads.
+    pub filter_active: RwSignal<bool>,
+    /// The sheet tabs, as `(id, name)` (`trame-sheets`).
+    pub sheets: RwSignal<Vec<(String, String)>>,
+    /// The active sheet's id.
+    pub active_sheet: RwSignal<String>,
+    /// The aggregates of a multi-cell selection (`trame-status-bar`).
+    pub sel_stats: RwSignal<Option<SelStats>>,
+    /// The find counter, as the focused match (one-based) and the total.
+    pub find_result: RwSignal<Option<(usize, usize)>>,
+}
+
+impl TrameRelay {
+    /// The command `intent` becomes. The Logic thread resolves the geometry
+    /// from the selection it tracks, and answers with the events above.
+    pub fn command(&self, intent: TrameIntent) -> AppCommand {
+        AppCommand::Trame(match intent {
+            TrameIntent::Style(patch) => TrameCommand::SetCellStyle { patch },
+            TrameIntent::Filter(kind) => TrameCommand::ApplyFilterToActiveColumn { kind },
+            // The dialog's snapshotted bounds only label its column picker, so
+            // the keys are range-relative, as the Logic thread reads them.
+            TrameIntent::Sort(req) => TrameCommand::SortSelectionMulti {
+                sort_keys: req.sort_keys,
+                has_header: req.has_header,
+            },
+            TrameIntent::Find(q) => TrameCommand::FindNext {
+                query: q.query,
+                match_case: q.match_case,
+                whole_cell: q.whole_cell,
+            },
+            TrameIntent::Replace(r) => TrameCommand::ReplaceOne {
+                query: r.query,
+                replacement: r.replacement,
+                match_case: r.match_case,
+                whole_cell: r.whole_cell,
+                in_formulas: r.in_formulas,
+            },
+            TrameIntent::ReplaceAll(r) => TrameCommand::ReplaceAll {
+                query: r.query,
+                replacement: r.replacement,
+                match_case: r.match_case,
+                whole_cell: r.whole_cell,
+                in_formulas: r.in_formulas,
+                all_sheets: r.all_sheets,
+            },
+            TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
+            TrameIntent::CreateSheet => TrameCommand::CreateSheet {
+                name: format!("Sheet{}", self.sheets.get_untracked().len() + 1),
+            },
+            TrameIntent::RenameSheet(sheet_id, name) => {
+                TrameCommand::RenameSheet { sheet_id, name }
+            }
+            TrameIntent::DeleteSheet(sheet_id) => TrameCommand::DeleteSheet { sheet_id },
+            TrameIntent::ReorderSheet(req) => TrameCommand::MoveSheet {
+                sheet_id: req.id,
+                to_index: req.to_index as u32,
+            },
+        })
+    }
+
+    /// Fill the chrome from `ev`. Any event not Trame's is a no-op.
+    pub fn absorb(&self, ev: &UiEvent) {
+        let UiEvent::Viewport {
+            event: AppEvent::Trame(te),
+            ..
+        } = ev
+        else {
+            return;
+        };
+        match te {
+            // A band selection has no extent the canvas knows. This reply to
+            // `RequestSortRange` is what opens the dialog.
+            TrameEvent::SortRange { r1, c1, r2, c2 } => {
+                self.sort_dialog.set(Some(SortDialogState {
+                    r1: *r1,
+                    c1: *c1,
+                    r2: *r2,
+                    c2: *c2,
+                }));
+            }
+            // The popover was opened on a provisional column. The reply pins
+            // it to the real one.
+            TrameEvent::ColumnValues { col, values } => {
+                self.filter_values.set(values.clone());
+                self.filter_popover.update(|st| {
+                    if let Some(st) = st {
+                        st.col = *col;
+                    }
+                });
+            }
+            // A filter took effect, or was cleared: the popover closes either
+            // way, and the flag follows.
+            TrameEvent::FilterApplied { .. } => {
+                self.filter_popover.set(None);
+                self.filter_active.set(true);
+            }
+            TrameEvent::FilterCleared => {
+                self.filter_popover.set(None);
+                self.filter_active.set(false);
+            }
+            TrameEvent::SheetList { sheets, active } => {
+                self.sheets.set(sheets.clone());
+                self.active_sheet.set(active.clone());
+            }
+            // The view clears the band on a single cell. The Logic thread's
+            // totals fill it here.
+            TrameEvent::SelectionStats {
+                sum,
+                avg,
+                count,
+                count_num,
+                min,
+                max,
+            } => self.sel_stats.set(Some(SelStats {
+                sum: *sum,
+                avg: *avg,
+                count: *count,
+                count_num: *count_num,
+                min: *min,
+                max: *max,
+            })),
+            // The canvas moves the active cell onto the focused match off the
+            // same event. Here only the counter is summarized.
+            TrameEvent::FindResult { matches, active } => {
+                let total = matches.len();
+                self.find_result.set(match active {
+                    Some(i) if total > 0 => Some((*i + 1, total)),
+                    _ => Some((0, total)),
+                });
+            }
+            _ => {}
+        }
+    }
+}

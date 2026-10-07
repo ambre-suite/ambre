@@ -33,7 +33,7 @@ prefix is `ARCH`.
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the one route change that is allowed to end it | partial -- nothing holds the lifetime across an ordinary route change; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a queue disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a queue, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the `The launcher holds no application logic` Story (`ambre-roadmap.md` E8) | failing |
+| `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a line of `ambre-app` naming a variant of an application's command or event, or one of its command ids | none | verified |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound queues, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
 | `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot` | none | verified |
 | `ARCH-030` | `INV` | A document whose engine holds unfinished work MUST take one bounded step of it per pass, without waiting for a message. | this spec section 2; `TOILE-IO-028` | `ambre_logic::pass_tests::a_large_import_lands_over_several_passes` | none | verified |
@@ -81,10 +81,11 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 15 `verified`, 3 `partial`, 1 `failing`, 12 `untested`. What holds is what the build can
-  refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
-  a lock on a client queue. Host tests hold the Logic loop's pass, its unfinished work, the wake,
-  the full queue and the disconnection of each queue. The rest is held by the code alone.
+* **Verification.** 16 `verified`, 3 `partial`, 0 `failing`, 12 `untested`. The build refuses a
+  cycle, a misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue.
+  It refuses application logic in the launcher too. Host tests hold the Logic loop's pass, its
+  unfinished work, the wake, the full queue and the disconnection of each queue. The rest is held
+  by the code alone.
 
 ---
 
@@ -211,10 +212,9 @@ separation is carried by what each crate is allowed to declare.
 | `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
 
-**What an application hands the shell.** One value implementing a trait of `ambre-chrome`: its
-command handler, its panels and its dialogs (`ARCH-018`). The shell routes a command to the handler
-of the application in front, and mounts what it is handed. It never matches on what a command of
-one application means.
+**What an application hands the shell.** A `CommandHandler` of `ambre-chrome`, its panels and
+dialogs, and a relay (`ARCH-018`). The handler says what a command id does. The relay fills the
+panels from each event and turns a panel's intent into a command. The launcher only sends.
 
 Two consequences follow and neither is obvious. The launcher sits **downstream** of every
 application, which is what lets the closed view registry name an application view without a cycle.

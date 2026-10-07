@@ -39,6 +39,13 @@ def scratch(tmp: str) -> Path:
     write(root, cb.CHROME, '[dependencies]\nambre-commands = { path = "../ambre-commands" }\n')
     for rel in cb.FIXTURE_MODULES:
         write(root, rel, "impl S {\n    fn read(&self) { self.doc.get_map(X); }\n}\n\nfn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n")
+    write(
+        root,
+        f"{cb.LAUNCHER}/lib.rs",
+        "// Fed by `TrameEvent::SheetList` (`ARCH-018`).\n"
+        "fn relay(ev: &UiEvent) { trame_relay.absorb(ev); }\n"
+        "fn keys() { register(trame_chrome::COMMANDS); }\n",
+    )
     return root
 
 
@@ -49,6 +56,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_client(errors)
             cb.check_generators(errors)
             cb.check_chrome(errors)
+            cb.check_launcher(errors)
             return errors
 
     def test_the_real_tree_is_clean(self):
@@ -102,6 +110,45 @@ class CrateBoundaries(unittest.TestCase):
             write(root, cb.CHROME, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n')
             errors = self.run_checks(root)
         self.assertTrue(any("depends on `ambre-bus`" in e for e in errors), errors)
+
+    def test_a_launcher_building_an_application_command_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                f"{cb.LAUNCHER}/shell/app_root.rs",
+                "fn bold() { send(AppCommand::Trame(TrameCommand::SetCellStyle { patch })); }\n",
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("`TrameCommand::SetCellStyle`" in e for e in errors), errors)
+
+    def test_a_launcher_matching_an_application_event_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                f"{cb.LAUNCHER}/lib.rs",
+                "fn relay() { if let AppEvent::Toile(ToileEvent::FindResults(fr)) = ev {} }\n",
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("`ToileEvent::FindResults`" in e for e in errors), errors)
+
+    def test_a_launcher_deciding_what_a_command_id_does_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                f"{cb.LAUNCHER}/platform.rs",
+                "fn run(id: CommandId) { if id == ambre_prose::commands::SAVE_FILE {} }\n",
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("`ambre_prose::commands::SAVE_FILE`" in e for e in errors), errors)
 
     def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
         import tempfile

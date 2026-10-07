@@ -22,6 +22,12 @@ CRDT container.
 no application crate, so a shared control has no whole-style type to emit and
 can only report the scalar it edits. That holds as long as the manifest says
 so.
+
+**The launcher holds no application logic** (`ARCH-018`). What a command does
+belongs to its application's crate. The launcher hands each event to the
+application, sends the commands the application builds, and routes a command
+id to the application's handler. So no line of `ambre-app` names a variant of
+an application's command or event, or one of its command ids.
 """
 
 from __future__ import annotations
@@ -52,6 +58,17 @@ CRDT_CALLS = re.compile(
 # The shared chrome toolkit, and the crates a whole-style type could come from.
 CHROME = "crates/ambre-chrome/Cargo.toml"
 APP_CRATES = ("ambre-bus", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-logic")
+
+# The launcher's source, and what naming an application's logic looks like
+# there: a variant of its command or event, or one of its command ids. The
+# id table itself (`COMMANDS`) is what the shell registers, so it stays legal.
+LAUNCHER = "crates/ambre-app/src"
+APP_VARIANT = re.compile(r"\b(?:Trame|Toile|Prose|Murmure)(?:Command|Event)::[A-Z]\w*")
+APP_COMMAND_ID = re.compile(
+    r"\b(?:trame_chrome|toile_chrome|prose_chrome|murmure_chrome"
+    r"|ambre_(?:trame|toile|prose|murmure)::(?:\w+::)*(?:commands|chrome))"
+    r"::(?!COMMANDS\b)[A-Z][A-Z0-9_]*\b"
+)
 
 
 def read(rel: str) -> str:
@@ -140,6 +157,27 @@ def check_chrome(errors: list[str]) -> int:
     return 1
 
 
+def code(line: str) -> str:
+    """The line without its comment, so a rule a comment cites is not a breach."""
+    return line.split("//", 1)[0]
+
+
+def check_launcher(errors: list[str]) -> int:
+    """`ARCH-018`: no line of the launcher names an application's logic."""
+    root = ROOT / LAUNCHER
+    files = sorted(root.rglob("*.rs"))
+    if not files:
+        errors.append(f"{LAUNCHER}: gone from the tree, so the launcher boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = APP_VARIANT.search(code(line)) or APP_COMMAND_ID.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: the launcher names application logic: `{found.group(0)}`")
+    return len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -149,10 +187,12 @@ def main() -> int:
     manifests = check_client(errors)
     generators = check_generators(errors)
     toolkits = check_chrome(errors)
+    launcher = check_launcher(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
-        f"{toolkits} shared toolkit read for an application dependency"
+        f"{toolkits} shared toolkit read for an application dependency, "
+        f"{launcher} launcher files read for application logic"
     )
     for line in errors:
         print(f"  {line}")
@@ -161,8 +201,9 @@ def main() -> int:
         print(
             "\nERROR: a crate boundary was crossed. Fixture machinery must stay "
             "out of the client build, a generator must drive `handle_command` "
-            "rather than the CRDT, and the shared chrome must name no "
-            "application type.",
+            "rather than the CRDT, the shared chrome must name no "
+            "application type, and the launcher must name no application's "
+            "command, event or command id.",
             file=sys.stderr,
         )
         return 1

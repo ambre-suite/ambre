@@ -92,7 +92,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         zoom,
         ctx_scope,
         filter_active,
-        sort_range,
         toile_ctx_scope,
         toile_active_tool,
         toile_cursor,
@@ -112,6 +111,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         active_sheet,
         commands,
         toile_dialogs,
+        trame_relay,
+        toile_relay,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -160,15 +161,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |()| raf.resume()
     });
 
-    // Open the sort dialog over the range the Logic thread resolved
-    // (`trame-sort`), the reply to the `RequestSortRange` sent by "Sort range...".
-    Effect::new(move |_| {
-        let Some((r1, c1, r2, c2)) = sort_range.get() else {
-            return;
-        };
-        sort_range.set(None);
-        sort_dialog.set(Some(trame_chrome::SortDialogState { r1, c1, r2, c2 }));
-    });
     // Follow the outbound half of a link the board handed back (`toile-links`).
     // The board decided; this only performs, which is why nothing here reads a
     // target or writes one.
@@ -289,219 +281,71 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |id: CommandId| commands.run(id)
     });
 
-    // Formatting toolbar: a control's `StylePatch` -> `SetCellStyle` over the
-    // tracked selection (`trame-cell-styles`). The Logic thread resolves the
-    // geometry from the selection it keeps via `SetActiveCell`.
+    // A panel's intent becomes its application's command in that application's
+    // crate (`ARCH-018`). The shell only sends it to the routed document.
+    let trame = {
+        let commands = commands.clone();
+        move |intent: trame_chrome::TrameIntent| commands.send(trame_relay.command(intent))
+    };
+    let toile = {
+        let commands = commands.clone();
+        move |intent: toile_chrome::ToileIntent| {
+            if let Some(command) = toile_relay.command(intent) {
+                commands.send(command);
+            }
+        }
+    };
+    use toile_chrome::ToileIntent;
+    use trame_chrome::TrameIntent;
     let on_style = Callback::new({
-        let tx = to_logic.clone();
-        move |patch: ambre_bus::StylePatch| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::SetCellStyle { patch }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |patch| trame(TrameIntent::Style(patch))
     });
-
-    // Apply the popover's chosen filter to the active column. The Logic thread
-    // resolves the sheet/column from the tracked active cell.
     let on_filter_apply = Callback::new({
-        let tx = to_logic.clone();
-        move |kind: ambre_bus::FilterKind| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::ApplyFilterToActiveColumn { kind }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |kind| trame(TrameIntent::Filter(kind))
     });
-    // Multi-column sort (`trame-sort`): the dialog emits the levels. Forward them
-    // as the parameterless `SortSelectionMulti`, like the single-column sort
-    // intents. The Logic thread resolves the range and active sheet from the
-    // tracked selection. The dialog's snapshotted bounds are used only to label
-    // its column picker, so the keys are range-relative and match Logic's view.
     let on_sort_apply = Callback::new({
-        let tx = to_logic.clone();
-        move |req: trame_chrome::SortApply| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::SortSelectionMulti {
-                        sort_keys: req.sort_keys,
-                        has_header: req.has_header,
-                    }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |req| trame(TrameIntent::Sort(req))
     });
-    // Find & Replace (`trame-find-replace`): the panel emits these requests; the Logic thread
-    // resolves the search origin from the tracked active cell.
     let on_find = Callback::new({
-        let tx = to_logic.clone();
-        move |q: trame_chrome::FindQuery| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::FindNext {
-                        query: q.query,
-                        match_case: q.match_case,
-                        whole_cell: q.whole_cell,
-                    }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |q| trame(TrameIntent::Find(q))
     });
-    // Toile Find (`toile-find`): the panel emits a `Find` with the query,
-    // options and resume point. Logic scans the whole board (off-screen matches
-    // included) and replies with `FindResults`. Find-only -- no Replace on a
-    // free-form canvas.
     let on_find_toile = Callback::new({
-        let tx = to_logic.clone();
-        move |q: toile_chrome::FindQuery| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::Find {
-                        query: q.query,
-                        options: q.options,
-                        from: q.from,
-                        backward: q.backward,
-                    }),
-                });
-            }
-        }
+        let toile = toile.clone();
+        move |q| toile(ToileIntent::Find(q))
     });
-    // Presenter overlay panel intents (toile-presentation): navigation maps to
-    // the local playback commands. Note edits target the active slide's frame,
-    // captured from the last SlideChanged into `presenter_frame`.
     let on_present_intent = Callback::new({
-        let tx = to_logic.clone();
-        move |intent: toile_chrome::PresenterIntent| {
-            let Some(document_id) = current_doc.get_untracked() else {
-                return;
-            };
-            use ambre_bus::app::toile::ToileCommand;
-            let command = match intent {
-                toile_chrome::PresenterIntent::Prev => ToileCommand::PrevSlide,
-                toile_chrome::PresenterIntent::Next => ToileCommand::NextSlide,
-                toile_chrome::PresenterIntent::Exit => ToileCommand::ExitPresent,
-                toile_chrome::PresenterIntent::EditNotes { base, delta } => {
-                    let Some(frame) = presenter_frame.get_untracked() else {
-                        return;
-                    };
-                    ToileCommand::EditNotes { frame, base, delta }
-                }
-                toile_chrome::PresenterIntent::ToggleBroadcast(on) => {
-                    ToileCommand::SetPresentBroadcast(on)
-                }
-                toile_chrome::PresenterIntent::Follow(who) => ToileCommand::FollowPresenter(who),
-            };
-            let _ = tx.try_send(LogicCommand::App {
-                document_id,
-                command: AppCommand::Toile(command),
-            });
-        }
+        let toile = toile.clone();
+        move |intent| toile(ToileIntent::Present(intent))
     });
     let on_replace = Callback::new({
-        let tx = to_logic.clone();
-        move |r: trame_chrome::ReplaceRequest| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::ReplaceOne {
-                        query: r.query,
-                        replacement: r.replacement,
-                        match_case: r.match_case,
-                        whole_cell: r.whole_cell,
-                        in_formulas: r.in_formulas,
-                    }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |r| trame(TrameIntent::Replace(r))
     });
     let on_replace_all = Callback::new({
-        let tx = to_logic.clone();
-        move |r: trame_chrome::ReplaceRequest| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::ReplaceAll {
-                        query: r.query,
-                        replacement: r.replacement,
-                        match_case: r.match_case,
-                        whole_cell: r.whole_cell,
-                        in_formulas: r.in_formulas,
-                        all_sheets: r.all_sheets,
-                    }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |r| trame(TrameIntent::ReplaceAll(r))
     });
-
-    // Sheet-tab strip (`trame-sheets`): each DOM intent maps onto its sheet
-    // `TrameCommand`. The Logic thread mints ids / resolves geometry and replies
-    // with a fresh `SheetList` that re-feeds the `sheets`/`active_sheet` signals.
     let on_sheet_activate = Callback::new({
-        let tx = to_logic.clone();
-        move |sheet_id: String| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::ActivateSheet { sheet_id }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |id| trame(TrameIntent::ActivateSheet(id))
     });
     let on_sheet_create = Callback::new({
-        let tx = to_logic.clone();
-        move |()| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let name = format!("Sheet{}", sheets.get_untracked().len() + 1);
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::CreateSheet { name }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |()| trame(TrameIntent::CreateSheet)
     });
     let on_sheet_rename = Callback::new({
-        let tx = to_logic.clone();
-        move |(sheet_id, name): (String, String)| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::RenameSheet { sheet_id, name }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |(id, name)| trame(TrameIntent::RenameSheet(id, name))
     });
     let on_sheet_delete = Callback::new({
-        let tx = to_logic.clone();
-        move |sheet_id: String| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::DeleteSheet { sheet_id }),
-                });
-            }
-        }
+        let trame = trame.clone();
+        move |id| trame(TrameIntent::DeleteSheet(id))
     });
-    let on_sheet_reorder = Callback::new({
-        let tx = to_logic.clone();
-        move |req: trame_chrome::ReorderSheet| {
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::MoveSheet {
-                        sheet_id: req.id,
-                        to_index: req.to_index as u32,
-                    }),
-                });
-            }
-        }
-    });
+    let on_sheet_reorder = Callback::new(move |req| trame(TrameIntent::ReorderSheet(req)));
 
     // The menu layout follows the right-click scope the view published
     // (`trame-context-menu`). A cell right-click gets the full menu, a header the

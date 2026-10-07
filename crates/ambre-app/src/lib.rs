@@ -39,7 +39,7 @@ use ambre_bus::conduit;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
-    Role, SyncCommand, TrameCommand, UiEvent, UserId,
+    Role, SyncCommand, UiEvent, UserId,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
@@ -388,11 +388,6 @@ struct Wiring {
     /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
     /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
     filter_active: RwSignal<bool>,
-    /// The range a sort would order `(r1, c1, r2, c2)`, set by the per-frame
-    /// relay on `TrameEvent::SortRange`. The shell opens the multi-column sort
-    /// dialog over it, so the dialog offers the columns the sort orders
-    /// (`trame-sort`).
-    sort_range: RwSignal<Option<(u32, u32, u32, u32)>>,
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
     /// Sheet-tab strip model (`trame-sheets`): `(id, name)` in display order.
@@ -411,6 +406,10 @@ struct Wiring {
     commands: shell::CommandPath,
     /// Toile's three choosers: a web embed, a document embed, a link.
     toile_dialogs: toile_chrome::ToileDialogs,
+    /// Trame's panels' state, and the commands their intents become.
+    trame_relay: trame_chrome::TrameRelay,
+    /// Toile's panels' state, and the commands their intents become.
+    toile_relay: toile_chrome::ToileRelay,
 }
 
 /// Header status + loading state, derived from two independent signals carried
@@ -648,10 +647,6 @@ pub fn main() {
     // Active-filter flag (`trame-shared-filter`), mirrored from the Logic thread's
     // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
     let filter_active = RwSignal::new(false);
-    // The range a sort would order (`trame-sort`), resolved by the Logic
-    // thread. The per-frame relay sets it and the Leptos shell opens the sort
-    // dialog over it. Created here so the two share the one signal.
-    let sort_range = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
     // selection scope on each right-click. The DOM menu reads it to build its
@@ -841,16 +836,8 @@ pub fn main() {
     let devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>> = Rc::new(RefCell::new(None));
     let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
         Rc::new(RefCell::new(None));
-    let filter_popover_slot: Rc<
-        RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>,
-    > = Rc::new(RefCell::new(None));
-    let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
+    let relays_slot: Rc<RefCell<Option<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>>> =
         Rc::new(RefCell::new(None));
-    let find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>> =
-        Rc::new(RefCell::new(None));
-    let find_result_toile_slot: Rc<
-        RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
-    > = Rc::new(RefCell::new(None));
     let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
     let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
         Rc::new(RefCell::new(None));
@@ -876,10 +863,7 @@ pub fn main() {
         Rc::clone(&members_slot),
         Rc::clone(&devmode_slot),
         Rc::clone(&current_doc_slot),
-        Rc::clone(&filter_popover_slot),
-        Rc::clone(&filter_values_slot),
-        Rc::clone(&find_result_slot),
-        Rc::clone(&find_result_toile_slot),
+        Rc::clone(&relays_slot),
         boot_is_toile,
         boot_is_prose,
         prose_figures,
@@ -906,7 +890,6 @@ pub fn main() {
         zoom,
         ctx_scope,
         filter_active,
-        sort_range,
         toile_ctx_scope,
         toile_menu_cmd,
         toile_active_tool,
@@ -957,25 +940,11 @@ pub fn main() {
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
-    // Shared filter popover signals (`trame-shared-filter`), created in the mount
-    // owner. They are read back here for the per-frame relay, which sets them on
-    // `TrameEvent::ColumnValues` / `FilterApplied` / `FilterCleared`.
-    let filter_popover = filter_popover_slot
-        .borrow()
-        .expect("filter_popover signal created during mount");
-    let filter_values = filter_values_slot
-        .borrow()
-        .expect("filter_values signal created during mount");
-    // Find result signals (`trame-find-replace`, `toile-find`), read back for
-    // the per-frame relay, which sets them on each application's find reply.
-    let find_result = find_result_slot
-        .borrow()
-        .expect("find_result signal created during mount");
-    let find_result_toile = find_result_toile_slot
-        .borrow()
-        .expect("find_result_toile signal created during mount");
+    // Each application's relay, read back for the per-frame relay, which hands
+    // it every event (`ARCH-018`).
+    let (trame_relay, toile_relay) = relays_slot.borrow().expect("relays created during mount");
     // Formatting-toolbar style state (`trame-cell-styles`), read back for the
-    // per-frame relay (which updates it on `TrameEvent::StyleApplied`).
+    // per-frame relay, which hands it every event.
     let style_state = style_slot
         .borrow()
         .expect("style state created during mount");
@@ -1259,6 +1228,10 @@ pub fn main() {
             toile_chrome::notify_event(&toasts, &ev);
             // Prose's conversion reports, the same way (`PROSE-IO-053`).
             ambre_prose::chrome::notify_event(&toasts, &ev);
+            // Each application fills its own panels from its own events
+            // (`ARCH-018`). The launcher names no variant.
+            trame_relay.absorb(&ev);
+            toile_relay.absorb(&ev);
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path. The session keeps running and
@@ -1491,185 +1464,6 @@ pub fn main() {
                 // Relayed service failures (for example unknown invitee) surface as a
                 // warning toast so the share action gives feedback.
                 UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
-                // Shared filter popover (`trame-shared-filter`): the distinct values of
-                // the active column landed. Populate the "by values" list, and pin the
-                // popover to the real column index.
-                // The range a sort would order landed (`trame-sort`): the shell
-                // opens the sort dialog over it.
-                UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::SortRange { r1, c1, r2, c2 }),
-                    ..
-                } => sort_range.set(Some((*r1, *c1, *r2, *c2))),
-                UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::ColumnValues { col, values }),
-                    ..
-                } => {
-                    filter_values.set(values.clone());
-                    filter_popover.update(|st| {
-                        if let Some(st) = st {
-                            st.col = *col;
-                        }
-                    });
-                }
-                // The filter took effect -> close the popover and flag the active
-                // sheet as filtered (drives the context menu's dynamic entry).
-                UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::FilterApplied { .. }),
-                    ..
-                } => {
-                    filter_popover.set(None);
-                    filter_active.set(true);
-                }
-                // The filter was cleared -> close the popover and drop the flag.
-                UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::FilterCleared),
-                    ..
-                } => {
-                    filter_popover.set(None);
-                    filter_active.set(false);
-                }
-                // Sheet-tab strip (`trame-sheets`): the list / active id changed ->
-                // mirror it to the DOM `SheetTabs` signals. The canvas no longer
-                // draws the tabs, so this is the only consumer now.
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Trame(ambre_bus::TrameEvent::SheetList {
-                            sheets: list,
-                            active,
-                        }),
-                    ..
-                } => {
-                    sheets.set(list.clone());
-                    active_sheet.set(active.clone());
-                }
-                // Status bar (`trame-status-bar`): aggregates for a multi-cell
-                // selection. The view clears the signal on a single cell; here we
-                // fill it from the Logic-computed totals.
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Trame(ambre_bus::TrameEvent::SelectionStats {
-                            sum,
-                            avg,
-                            count,
-                            count_num,
-                            min,
-                            max,
-                        }),
-                    ..
-                } => sel_stats.set(Some(trame_chrome::SelStats {
-                    sum: *sum,
-                    avg: *avg,
-                    count: *count,
-                    count_num: *count_num,
-                    min: *min,
-                    max: *max,
-                })),
-                // Find & Replace (`trame-find-replace`): summarize the match set
-                // for the panel's "k/n" counter. The view (canvas) consumes the
-                // same event to move the active cell onto the focused match and
-                // highlight the set.
-                UiEvent::Viewport {
-                    event: AppEvent::Trame(ambre_bus::TrameEvent::FindResult { matches, active }),
-                    ..
-                } => {
-                    let total = matches.len();
-                    find_result.set(match active {
-                        Some(i) if total > 0 => Some((*i + 1, total)),
-                        _ => Some((0, total)),
-                    });
-                }
-                // Toile Find: feed the panel's counter and step origin.
-                // The canvas view consumes the same event (forwarded below) to
-                // highlight the hits and recenter the camera on `focus`.
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FindResults(fr)),
-                    ..
-                } => find_result_toile.set(Some(fr.clone())),
-                // Toile status bar: selection aggregates for the band. The canvas
-                // view requests them on each selection change, and also receives
-                // this event (forwarded below). It consumes that event only for a
-                // pending Fit / find-focus recenter. Here we mirror count/bounds
-                // into the status-bar signal.
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SelectionStats(s)),
-                    ..
-                } => {
-                    // Only the band's own request updates the band: a fit or a
-                    // find focus also answers `SelectionStats`, and its bounds
-                    // belong to that request (`TOILE-UI-108`).
-                    if s.kind == ambre_bus::app::toile::StatsRequestKind::Band {
-                        sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
-                    }
-                }
-                // Presenter overlay panel: show / hide it with focus mode,
-                // and mirror the enriched slide payload into the panel signals.
-                // The canvas view consumes the same events (forwarded below) for
-                // the camera glide + Smart Animate pass.
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PresentModeChanged(on)),
-                    ..
-                } => present_toile.set(*on),
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SlideChanged(c)),
-                    ..
-                } => {
-                    presenter_index.set(c.index);
-                    presenter_count.set(c.count);
-                    presenter_notes.set(c.notes.clone());
-                    presenter_frame.set(c.frame.clone());
-                }
-                // A peer wrote into the note on screen, or a history step did
-                // (`TOILE-UI-316`). The editor is otherwise seeded by the slide
-                // event alone, so the writing would stay invisible until the
-                // slide changed.
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::NotesChanged {
-                            frame,
-                            notes,
-                        }),
-                    ..
-                } => {
-                    if presenter_frame.get_untracked().as_ref() == Some(frame) {
-                        presenter_notes.set(notes.clone());
-                    }
-                }
-                // "Follow presenter" role changes: reflect the local
-                // broadcast toggle and follow target in the panel signals.
-                UiEvent::Viewport {
-                    event:
-                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PresentBroadcastChanged(on)),
-                    ..
-                } => broadcasting_toile.set(*on),
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FollowingChanged(who)),
-                    ..
-                } => following_toile.set(*who),
-                // A peer broadcasting its playback position: remember it as
-                // the current presenter so the Follow affordance appears. The event
-                // still flows to the view below for the overlay pass.
-                // An arrow lost an end, here or under a peer's delete
-                // (`TOILE-044`, `TOILE-165`). It stops being painted, so the
-                // board cannot show it: the notice is the one surface that
-                // says the document still holds it.
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::DanglingConnector(_)),
-                    ..
-                } => toasts.warning("An arrow lost an end and is no longer drawn"),
-                UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PeerPresence(peers)),
-                    ..
-                } => {
-                    // The event is the whole live set (`PRESENCE-009`), so a
-                    // presenter who left it stops being offered to follow.
-                    presenter_peer_toile.set(
-                        peers
-                            .iter()
-                            .find(|p| p.presence.present_slide.is_some())
-                            .map(|p| p.user_id),
-                    );
-                }
                 _ => {}
             }
             // Content (and everything else) still flows to the view unchanged.

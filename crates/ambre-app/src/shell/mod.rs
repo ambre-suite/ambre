@@ -36,12 +36,7 @@ pub(crate) fn mount_shell(
     members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>>,
     devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>>,
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
-    filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>>,
-    filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
-    find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>>,
-    find_result_toile_slot: Rc<
-        RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
-    >,
+    relays_slot: Rc<RefCell<Option<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>>>,
     boot_is_toile: bool,
     boot_is_prose: bool,
     prose_figures: RwSignal<Option<[String; 5]>>,
@@ -68,7 +63,6 @@ pub(crate) fn mount_shell(
     zoom: RwSignal<f64>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     filter_active: RwSignal<bool>,
-    sort_range: RwSignal<Option<(u32, u32, u32, u32)>>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
@@ -117,15 +111,40 @@ pub(crate) fn mount_shell(
         let current_doc = RwSignal::new(boot_doc);
         *current_doc_slot.borrow_mut() = Some(current_doc);
         let filter_popover = RwSignal::new(None::<trame_chrome::FilterPopoverState>);
-        *filter_popover_slot.borrow_mut() = Some(filter_popover);
         let filter_values = RwSignal::new(Vec::<String>::new());
-        *filter_values_slot.borrow_mut() = Some(filter_values);
         let find_state = RwSignal::new(None::<trame_chrome::FindReplaceState>);
         let find_result = RwSignal::new(None::<(usize, usize)>);
-        *find_result_slot.borrow_mut() = Some(find_result);
         let find_state_toile = RwSignal::new(false);
         let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
-        *find_result_toile_slot.borrow_mut() = Some(find_result_toile);
+        // The multi-column sort dialog (`trame-sort`), which Trame's relay
+        // opens on the Logic thread's reply.
+        let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
+        // Each application fills its panels from its own events, and turns
+        // their intents into its own commands (`ARCH-018`). The per-frame relay
+        // reads both back through the slot.
+        let trame_relay = trame_chrome::TrameRelay {
+            sort_dialog,
+            filter_popover,
+            filter_values,
+            filter_active,
+            sheets,
+            active_sheet,
+            sel_stats,
+            find_result,
+        };
+        let toile_relay = toile_chrome::ToileRelay {
+            find_result: find_result_toile,
+            sel_stats: sel_stats_toile,
+            present: present_toile,
+            presenter_index,
+            presenter_count,
+            presenter_notes,
+            presenter_frame,
+            broadcasting: broadcasting_toile,
+            following: following_toile,
+            presenter_peer: presenter_peer_toile,
+        };
+        *relays_slot.borrow_mut() = Some((trame_relay, toile_relay));
         let style_state = trame_chrome::StyleState::new();
         *style_slot.borrow_mut() = Some(style_state);
         // Boot directly into a document => start hydrating; the landing route
@@ -136,9 +155,6 @@ pub(crate) fn mount_shell(
             connected: false,
         });
         *chrome_status_slot.borrow_mut() = Some(chrome_status);
-        // Multi-column sort dialog state (`trame-sort`): opened by `on_command`
-        // and rendered in `AppRoot`, both inside this owner, so it needs no slot.
-        let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
 
         // The command path (`ARCH-018`): the booted application's handler, and
         // what the shell needs to perform its answers. The keyboard listener
@@ -223,7 +239,6 @@ pub(crate) fn mount_shell(
             zoom,
             ctx_scope,
             filter_active,
-            sort_range,
             toile_ctx_scope,
             toile_active_tool,
             toile_cursor,
@@ -243,6 +258,8 @@ pub(crate) fn mount_shell(
             active_sheet,
             commands,
             toile_dialogs,
+            trame_relay,
+            toile_relay,
         });
 
         view! {

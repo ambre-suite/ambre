@@ -26,6 +26,8 @@ mod notify;
 pub use notify::notify_event;
 mod palette;
 mod presenter;
+mod relay;
+pub use relay::{ToileIntent, ToileRelay};
 mod status;
 mod style;
 

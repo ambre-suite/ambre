@@ -68,6 +68,12 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
                 "Some formatting in this board was written by a newer client and could not be read.",
             );
         }
+        // An arrow lost an end, here or under a peer's delete (`TOILE-044`,
+        // `TOILE-165`). It stops being painted, so the board cannot show it.
+        // The notice is the one surface that says the document still holds it.
+        ToileEvent::DanglingConnector(_) => {
+            toasts.warning("An arrow lost an end and is no longer drawn");
+        }
         _ => {}
     }
 }

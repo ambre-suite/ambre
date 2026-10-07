@@ -186,10 +186,7 @@ impl ProseView {
                         event: AppEvent::Prose(event),
                     },
                 ) if document_id == self.document_id => {
-                    let laid = matches!(
-                        event,
-                        ambre_bus::app::prose::ProseEvent::LayoutShaped { .. }
-                    );
+                    let laid = ambre_prose::probe::lays_out(&event);
                     self.state.apply_event(&event);
                     let answered =
                         self.probe
