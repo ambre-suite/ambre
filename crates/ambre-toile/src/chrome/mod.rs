@@ -11,6 +11,8 @@
 // (`ui::find`) stay in the always-compiled `ui` module so they are host-tested.
 // ============================================================================
 
+mod choosers;
+pub use choosers::{DocChoice, ToileChoosers};
 mod commands;
 mod comments;
 mod deck;

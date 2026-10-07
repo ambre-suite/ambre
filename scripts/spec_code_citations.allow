@@ -44,13 +44,8 @@ owner crates/ambre-app/src/shell/app_root.rs PROSE-UI-071
 owner crates/ambre-app/src/shell/app_root.rs PROSE-UI-153
 owner crates/ambre-app/src/shell/app_root.rs PROSE-UI-227
 owner crates/ambre-app/src/shell/app_root.rs TOILE-065
-owner crates/ambre-app/src/shell/app_root.rs TOILE-066
-owner crates/ambre-app/src/shell/app_root.rs TOILE-086
-owner crates/ambre-app/src/shell/app_root.rs TOILE-087
-owner crates/ambre-app/src/shell/app_root.rs TOILE-088
 owner crates/ambre-app/src/shell/app_root.rs TOILE-110
 owner crates/ambre-app/src/shell/app_root.rs TOILE-114
-owner crates/ambre-app/src/shell/app_root.rs TOILE-225
 owner crates/ambre-app/src/shell/app_root.rs TOILE-FEAT-026
 owner crates/ambre-app/src/shell/app_root.rs TOILE-UI-023
 owner crates/ambre-bus/src/logic.rs PROSE-115
