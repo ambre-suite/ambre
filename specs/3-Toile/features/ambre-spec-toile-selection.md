@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-223` | `INV` | Of the elements a point falls inside, the front-most MUST be the one picked. | this spec section 2 | `ambre_toile::ui::hit::tests::topmost_wins_front_to_back` | none | verified |
 | `TOILE-UI-006` | `INV` | A locked element MUST NOT be picked. | this spec section 2; `features/ambre-spec-toile-elements.md section 3` | `ambre_toile::ui::hit::tests::locked_never_hits` | none | verified |
 | `TOILE-UI-224` | `INV` | A group node MUST NOT be picked directly: it paints nothing, so a point inside it is a point on the space between its members. | this spec section 2; section 4 | `ambre_toile::ui::hit::tests::group_never_hits` | none | verified |
-| `TOILE-UI-225` | `INV` | A hairline MUST stay clickable at every zoom. | this spec section 2 | none | fails -- the pick floor is four world units, so it shrinks on screen as the user zooms out and swells as they zoom in: the rule holds at one zoom level, section 5; lands with the `A hairline stays clickable at every zoom` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-225` | `INV` | A hairline MUST stay clickable at every zoom. | this spec section 2 | `ambre_toile::ui::hit::tests::a_hairline_is_hit_within_the_same_screen_reach_at_every_zoom` | none | verified |
 | `TOILE-UI-226` | `INV` | The whole edge of the selection box MUST be grabbable, even though only the corners draw a square. | this spec section 3 | `ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses` | none | verified |
 | `TOILE-UI-227` | `INV` | A handle MUST answer a hover only when exactly one element is selected, the select tool is armed and no drag is in flight. | this spec section 3 | `ambre_toile::ui::tool::tests::hover_handle_only_for_a_single_select_at_rest` | none | verified |
 | `TOILE-UI-228` | `INV` | A selection MUST NOT reach any container: it is per user and per moment. | this spec section 4; `ambre-spec-toile-schema.md section 2` | structural -- the id list is a field on the view and the schema declares no container for it | none | verified |
@@ -81,10 +81,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 26 `verified`, 1 `failing`, 4 `untested`. What holds is the geometry and
+* **Verification.** 27 `verified`, 0 `failing`, 4 `untested`. What holds is the geometry and
   select-all with the pick's exclusions. A locked element wears no box, and a deleted one leaves the
-  selection. A click, a marquee and `Escape` are driven through the view. What is loose is the
-  double-click into a scope, and the one failure is the hairline.
+  selection. A click, a marquee and `Escape` are driven through the view, and a hairline answers
+  one screen reach at every zoom. What is loose is the double-click into a scope.
 
 ---
 
@@ -105,8 +105,9 @@ never synced.
 4. undo the element's rotation, then test the geometry in its unrotated frame. A rectangle
    contains, an ellipse tests its normalized radius, a triangle and a closed path test the winding.
    An open path and a freehand stroke test the distance to their outline against half the stroke
-   width, floored at a pick radius (`TOILE-UI-225`). That radius is four world units, so it is four
-   pixels on screen at one zoom level and a different count everywhere else;
+   width, floored at a pick radius (`TOILE-UI-225`). That radius is four screen pixels, divided by
+   the zoom at the press, so a hairline answers the same reach at every zoom. A marquee uses no
+   floor: it tests whether a corner lies on the outline;
 5. the first element that passes wins (`TOILE-UI-005`);
 6. resolve the hit against the group scope (`TOILE-UI-007`).
 
@@ -183,9 +184,6 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The pick radius is in world units** (`TOILE-UI-225`). The floor that keeps a hairline clickable
-  is four board units, not four pixels. It is four pixels at one zoom and a fortieth of one at
-  forty. Zoomed out, a thin line cannot be hit; zoomed in, a stroke grabs from far away.
 * **A double-click never leaves a scope** (`TOILE-UI-032`). It enters one level, and only `Escape`
   goes back out, taking the selection with it in the same press (`TOILE-UI-239`). A user cannot step
   out one level and keep what they had.

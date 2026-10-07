@@ -110,8 +110,12 @@ pub fn badge_rect(screen_bounds: Rect) -> Rect {
 
 /// The link of the top-most element under `world`, with its id. Locked and
 /// unlinked elements are skipped; nodes are back-to-front, so the walk runs in
-/// reverse.
-pub fn link_at(display: &DisplayViewport, world: Point) -> Option<(ElementId, LinkTarget)> {
+/// reverse. `pick` is the world reach of the screen pick floor.
+pub fn link_at(
+    display: &DisplayViewport,
+    world: Point,
+    pick: f64,
+) -> Option<(ElementId, LinkTarget)> {
     display
         .nodes
         .iter()
@@ -120,7 +124,7 @@ pub fn link_at(display: &DisplayViewport, world: Point) -> Option<(ElementId, Li
             DisplayNode::Element(e) => Some(e),
             DisplayNode::Connector(_) => None,
         })
-        .find(|e| e.link.is_some() && super::hit::exact_hit(e, world))
+        .find(|e| e.link.is_some() && super::hit::exact_hit(e, world, pick))
         .and_then(|e| e.link.clone().map(|l| (e.id.clone(), l)))
 }
 
@@ -211,13 +215,13 @@ mod tests {
             ),
             elem("over", Rect::new(0.0, 0.0, 100.0, 100.0), None),
         ]);
-        let hit = link_at(&display, Point::new(50.0, 50.0));
+        let hit = link_at(&display, Point::new(50.0, 50.0), crate::ui::hit::PICK_PX);
         assert_eq!(
             hit,
             Some((ElementId("under".into()), url)),
             "an unlinked element on top does not swallow the link below it"
         );
-        assert!(link_at(&display, Point::new(500.0, 500.0)).is_none());
+        assert!(link_at(&display, Point::new(500.0, 500.0), crate::ui::hit::PICK_PX).is_none());
     }
 
     /// A jump stays on the board; the other two leave it for the shell.

@@ -224,7 +224,8 @@ impl SelectTool {
         // chain to the selection target. That is the top-most enclosing group,
         // unless a scope has been entered, so a grouped element selects as its
         // group.
-        match title_hit.or_else(|| hit_topmost(&display.nodes, world)) {
+        let pick = super::hit::pick_floor(cam);
+        match title_hit.or_else(|| hit_topmost(&display.nodes, world, pick)) {
             Some(hit) => {
                 let id = resolve_group_target(hit, display, scope);
                 let changed = !selection.contains(&id);
@@ -551,6 +552,9 @@ pub struct ToolMachine {
     laser: Option<Point>,
     /// Last world cursor, for the pen's live segment preview.
     cursor: Point,
+    /// The pick floor in world units at the press (`hit::pick_floor`). The
+    /// release reuses it, so a gesture picks under one reach.
+    pick: f64,
 }
 
 impl Default for ToolMachine {
@@ -569,6 +573,7 @@ impl ToolMachine {
             pen_dragging: false,
             laser: None,
             cursor: Point::ZERO,
+            pick: super::hit::PICK_PX,
         }
     }
 
@@ -642,6 +647,7 @@ impl ToolMachine {
         scope: Option<&ElementId>,
     ) -> ToolOutcome {
         self.cursor = world;
+        self.pick = super::hit::pick_floor(cam);
         match self.tool {
             Tool::Select => map_select(
                 self.select
@@ -687,7 +693,7 @@ impl ToolMachine {
                 ToolOutcome::None
             }
             Tool::Connector => {
-                if let Some(id) = hit_topmost(&display.nodes, world) {
+                if let Some(id) = hit_topmost(&display.nodes, world, self.pick) {
                     let b = element_bounds(display, &id).unwrap_or_default();
                     let anch = nearest_anchor(b, world);
                     self.draft = Some(Draft::Connector {
@@ -772,7 +778,7 @@ impl ToolMachine {
                 }
                 Draft::Connector {
                     from, from_anch, ..
-                } => match hit_topmost(&display.nodes, world) {
+                } => match hit_topmost(&display.nodes, world, self.pick) {
                     Some(to) if to != from => {
                         let tb = element_bounds(display, &to).unwrap_or_default();
                         let to_anch = nearest_anchor(tb, world);
@@ -805,7 +811,7 @@ impl ToolMachine {
                     // The element under the release owns the pin, so it follows
                     // that element through every move (`TOILE-024`); an empty
                     // board keeps a free world point.
-                    let anchor = match hit_topmost(&display.nodes, world) {
+                    let anchor = match hit_topmost(&display.nodes, world, self.pick) {
                         Some(id) => CommentAnchor::Element(id),
                         None => CommentAnchor::Point { x: at.x, y: at.y },
                     };
@@ -1294,10 +1300,11 @@ pub fn double_click_edit(
         return Some(DoubleClickEdit::FrameTitle(frame));
     }
     let world = cam.screen_to_world() * screen;
-    match hit_topmost(nodes, world) {
+    let pick = super::hit::pick_floor(cam);
+    match hit_topmost(nodes, world, pick) {
         Some(hit) if editable(&hit) => Some(DoubleClickEdit::Body(hit)),
         Some(_) => None,
-        None => super::label::connector_at(nodes, world).map(DoubleClickEdit::Caption),
+        None => super::label::connector_at(nodes, world, pick).map(DoubleClickEdit::Caption),
     }
 }
 
@@ -1514,7 +1521,8 @@ mod tests {
         let screen = band.center();
         let world = cam.screen_to_world() * screen;
         // The press point is above the frame, so the board holds nothing there.
-        assert!(super::super::hit::hit_topmost(&disp.nodes, world).is_none());
+        let pick = super::super::hit::pick_floor(&cam);
+        assert!(super::super::hit::hit_topmost(&disp.nodes, world, pick).is_none());
 
         let mut tool = SelectTool::new();
         let out = tool.pointer_down(world, screen, &[], &disp, &cam, None);

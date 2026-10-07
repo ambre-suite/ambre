@@ -438,13 +438,15 @@ impl ToileState {
     }
 
     /// The group whose `children` contains `id`, if any. A node belongs to at
-    /// most one group; concurrent binds can break that, and the first found
-    /// wins. Read from the parent cache, never from a walk of the board
-    /// (`TOILE-056`).
+    /// most one group; concurrent binds can break that, and the smallest id
+    /// wins. The cache holds parents in arrival order, which differs per peer,
+    /// so the first entry would not converge (`TOILE-266`). Read from the
+    /// parent cache, never from a walk of the board (`TOILE-056`).
     pub(super) fn enclosing_group(&self, id: &ElementId) -> Option<ElementId> {
         self.parents_of(id)
             .iter()
-            .find(|p| self.is_group(p))
+            .filter(|p| self.is_group(p))
+            .min_by(|a, b| a.as_str().cmp(b.as_str()))
             .cloned()
     }
 

@@ -1503,6 +1503,11 @@ impl ToileView {
         self.frame_now_ms
     }
 
+    /// The pick floor in world units at the current zoom (`TOILE-UI-225`).
+    fn pick(&self) -> f64 {
+        super::hit::pick_floor(&self.cam)
+    }
+
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
@@ -1510,7 +1515,7 @@ impl ToileView {
         self.kinetic.stop();
         let screen = Point::new(x, y);
         let world = self.cam.screen_to_world() * screen;
-        let grabbable = hit_topmost(&self.display.nodes, world).is_some()
+        let grabbable = hit_topmost(&self.display.nodes, world, self.pick()).is_some()
             || self
                 .machine
                 .hover_handle(&self.selection, &self.display, &self.cam, screen)
@@ -1651,7 +1656,7 @@ impl ToileView {
             let world = self.cam.screen_to_world() * screen;
             let target = self.badge_at(screen).or_else(|| {
                 link::wants_follow(ctrl, self.present)
-                    .then(|| link::link_at(&self.display, world).map(|(_, l)| l))
+                    .then(|| link::link_at(&self.display, world, self.pick()).map(|(_, l)| l))
                     .flatten()
             });
             if let Some(link) = target {
@@ -1715,7 +1720,7 @@ impl ToileView {
         // is selected only where nothing else is (`toile-connectors`).
         if button == 0 && self.machine.tool() == Tool::Select {
             self.arrow = if self.selection.is_empty() {
-                label::connector_at(&self.display.nodes, world)
+                label::connector_at(&self.display.nodes, world, self.pick())
             } else {
                 None
             };
@@ -1786,7 +1791,7 @@ impl ToileView {
             return false;
         };
         self.preview = None;
-        if let Some(cmd) = arrow::retarget_on_release(&id, end, &self.display, world) {
+        if let Some(cmd) = arrow::retarget_on_release(&id, end, &self.display, world, self.pick()) {
             self.send_edit(cmd);
         }
         self.needs_full = true;
@@ -1808,7 +1813,7 @@ impl ToileView {
     /// and starts no gesture.
     fn handle_right_click(&mut self, screen: Point) {
         let world = self.cam.screen_to_world() * screen;
-        match hit_topmost(&self.display.nodes, world) {
+        match hit_topmost(&self.display.nodes, world, self.pick()) {
             Some(hit) => {
                 let target = resolve_group_target(hit, &self.display, self.group_scope.as_ref());
                 if !self.selection.contains(&target) {
@@ -2577,7 +2582,7 @@ impl ToileView {
         // tool produced nothing of its own, for example a pen finish.
         if matches!(out, ToolOutcome::None)
             && self.machine.tool() == Tool::Select
-            && let Some(hit) = hit_topmost(&self.display.nodes, world)
+            && let Some(hit) = hit_topmost(&self.display.nodes, world, self.pick())
         {
             let target =
                 resolve_group_target(hit.clone(), &self.display, self.group_scope.as_ref());

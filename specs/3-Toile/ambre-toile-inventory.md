@@ -23,13 +23,13 @@
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 6 |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 23 | 4 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 | 5 |
-| `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 25 | 13 |
+| `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 26 | 13 |
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | implemented | 12 |  |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 29 | 4 |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 53 | 12 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 28 | 4 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 | 3 |
-| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 31 | 5 |
+| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 31 | 4 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 5 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 8 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 6 |
@@ -45,4 +45,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 | 7 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 11 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 193 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 829 contract rows, 192 loose.**

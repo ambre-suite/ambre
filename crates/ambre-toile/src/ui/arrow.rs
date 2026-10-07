@@ -51,8 +51,9 @@ pub fn retarget_on_release(
     endpoint: End,
     display: &DisplayViewport,
     world: Point,
+    pick: f64,
 ) -> Option<ToileCommand> {
-    let to = super::hit::hit_topmost(&display.nodes, world)?;
+    let to = super::hit::hit_topmost(&display.nodes, world, pick)?;
     let bounds = super::tool::element_bounds(display, &to)?;
     Some(ToileCommand::RetargetConnector {
         id: id.clone(),
@@ -192,6 +193,7 @@ mod tests {
             End::To,
             &display,
             Point::new(50.0, 98.0),
+            crate::ui::hit::PICK_PX,
         );
         match cmd {
             Some(ToileCommand::RetargetConnector {
@@ -253,6 +255,7 @@ mod tests {
                 End::From,
                 &display,
                 Point::new(500.0, 500.0),
+                crate::ui::hit::PICK_PX,
             )
             .is_none()
         );

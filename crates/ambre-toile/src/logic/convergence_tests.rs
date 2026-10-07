@@ -1603,6 +1603,39 @@ fn derive_populates_the_group_edge_on_members() {
     assert_eq!(group_of(&g), Some(None));
 }
 
+/// `TOILE-266`: two peers bind one element into two groups at once. Each
+/// peer learns the two parents in its own order, and both name the same one.
+#[test]
+fn an_element_bound_into_two_groups_names_one_on_both_peers() {
+    let mut a = ToileState::with_peer(1);
+    let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let y = create_rect(&mut a, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let z = create_rect(&mut a, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
+    let mut b = ToileState::with_peer(2);
+    b.import_snapshot(&a.export_snapshot())
+        .expect("a snapshot this build wrote reads back at the current schema");
+
+    a.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), y],
+    });
+    b.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), z],
+    });
+    let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+
+    let group_of = |st: &ToileState| {
+        st.debug_viewport().nodes.iter().find_map(|n| match n {
+            DisplayNode::Element(e) if e.id == x => Some(e.group.clone()),
+            _ => None,
+        })
+    };
+    let on_a = group_of(&a);
+    assert!(matches!(on_a, Some(Some(_))), "x sits in a group: {on_a:?}");
+    assert_eq!(on_a, group_of(&b));
+}
+
 #[test]
 fn moving_a_group_translates_its_members() {
     let mut st = ToileState::new();

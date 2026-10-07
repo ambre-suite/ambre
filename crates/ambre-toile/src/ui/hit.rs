@@ -16,13 +16,20 @@ use kurbo::{ParamCurveNearest, Shape};
 
 use super::viewport::ViewportTransform;
 
-/// A shape at or above this world distance from a thin stroke's outline is a
-/// miss; below it, a hit. Keeps hair-thin lines and open paths clickable.
-pub(crate) const MIN_STROKE_PICK: f64 = 4.0;
+/// The screen distance within which a pointer reaches a thin stroke's
+/// outline. Keeps hair-thin lines and open paths clickable (`TOILE-UI-225`).
+pub(crate) const PICK_PX: f64 = 4.0;
 
-/// Exact hit-test of one element against a world-space point. `false` for a
-/// `Group` (it paints nothing; selection resolves through membership,).
-pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
+/// [`PICK_PX`] in world units under `cam`: the reach of a pointer at this
+/// zoom. Every pointer hit test takes it, so the reach holds on screen.
+pub fn pick_floor(cam: &ViewportTransform) -> f64 {
+    PICK_PX / cam.zoom.max(super::viewport::MIN_ZOOM)
+}
+
+/// Exact hit-test of one element against a world-space point. `pick` is the
+/// floor of a stroke's reach, in world units (see [`pick_floor`]). `false`
+/// for a `Group` (it paints nothing; selection resolves through membership,).
+pub fn exact_hit(elem: &DisplayElement, world_pt: Point, pick: f64) -> bool {
     if elem.locked {
         return false;
     }
@@ -38,8 +45,10 @@ pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
         | DisplayGeom::DocEmbed { .. } => elem.bounds.contains(local),
         DisplayGeom::Ellipse => ellipse_contains(elem.bounds, local),
         DisplayGeom::Triangle => path_contains(&triangle_path(elem.bounds), local),
-        DisplayGeom::Path(p) => path_hit(p, local, elem.style.stroke_w as f64),
-        DisplayGeom::Stroke(pts) => polyline_hit(pts, local, elem.style.stroke_w as f64),
+        DisplayGeom::Path(p) => path_hit(p, local, stroke_reach(elem.style.stroke_w, pick)),
+        DisplayGeom::Stroke(pts) => {
+            polyline_hit(pts, local, stroke_reach(elem.style.stroke_w, pick))
+        }
         DisplayGeom::Group => false,
     }
 }
@@ -86,13 +95,18 @@ pub fn triangle_path(bounds: Rect) -> BezPath {
     p
 }
 
-/// A closed path hits on fill; either open or closed also hits within
-/// `stroke_w/2` (clamped to a minimum pick distance) of its outline.
-fn path_hit(path: &BezPath, local: Point, stroke_w: f64) -> bool {
+/// How far from its outline a stroke of width `stroke_w` is hit: half its
+/// width, and never less than the pointer's reach `pick`.
+pub(crate) fn stroke_reach(stroke_w: f32, pick: f64) -> f64 {
+    (stroke_w as f64 / 2.0).max(pick)
+}
+
+/// A closed path hits on fill; either open or closed also hits within `tol`
+/// of its outline.
+fn path_hit(path: &BezPath, local: Point, tol: f64) -> bool {
     if path_contains(path, local) {
         return true;
     }
-    let tol = (stroke_w / 2.0).max(MIN_STROKE_PICK);
     path_outline_distance(path, local) <= tol
 }
 
@@ -109,12 +123,11 @@ pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> f64 {
         .sqrt()
 }
 
-/// A polyline (freehand stroke) hits within `stroke_w/2` of any of its segments.
-fn polyline_hit(pts: &[Point], local: Point, stroke_w: f64) -> bool {
+/// A polyline (freehand stroke) hits within `tol` of any of its segments.
+fn polyline_hit(pts: &[Point], local: Point, tol: f64) -> bool {
     if pts.is_empty() {
         return false;
     }
-    let tol = (stroke_w / 2.0).max(MIN_STROKE_PICK);
     if pts.len() == 1 {
         return pts[0].distance(local) <= tol;
     }
@@ -136,7 +149,8 @@ fn point_segment_distance(p: Point, a: Point, b: Point) -> f64 {
 
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last
 /// element that passes `exact_hit` wins (first hit walking front-to-back).
-pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point) -> Option<ElementId> {
+/// `pick` is the pointer's reach in world units (see [`pick_floor`]).
+pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point, pick: f64) -> Option<ElementId> {
     nodes
         .iter()
         .rev()
@@ -144,7 +158,7 @@ pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point) -> Option<ElementId> 
             DisplayNode::Element(e) => Some(e),
             DisplayNode::Connector(_) => None,
         })
-        .find(|e| exact_hit(e, world_pt))
+        .find(|e| exact_hit(e, world_pt, pick))
         .map(|e| e.id.clone())
 }
 
@@ -197,7 +211,8 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
                 // any corner of the AABB-overlap region that lies in the shape
                 // counts as a touch. So does the element center inside the rect.
                 let c = b.center();
-                rect.contains(c) || exact_hit(e, c)
+                // The box's own geometry decides, with no pointer reach.
+                rect.contains(c) || exact_hit(e, c, 0.0)
             } else {
                 false
             }
@@ -211,6 +226,11 @@ mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementKind, ElementStyle, ShapeKind};
     use ambre_draw::Affine;
+
+    /// A hit at zoom 1, where the pointer reaches `PICK_PX` world units.
+    fn hit(e: &DisplayElement, p: Point) -> bool {
+        exact_hit(e, p, PICK_PX)
+    }
 
     fn elem(geom: DisplayGeom, bounds: Rect, transform: Affine) -> DisplayElement {
         DisplayElement {
@@ -233,8 +253,8 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 50.0),
             Affine::IDENTITY,
         );
-        assert!(exact_hit(&e, Point::new(50.0, 25.0)));
-        assert!(!exact_hit(&e, Point::new(150.0, 25.0)));
+        assert!(hit(&e, Point::new(50.0, 25.0)));
+        assert!(!hit(&e, Point::new(150.0, 25.0)));
     }
 
     #[test]
@@ -244,8 +264,8 @@ mod tests {
         let t = Affine::rotate(std::f64::consts::FRAC_PI_2);
         let e = elem(DisplayGeom::Rect, bounds, t);
         // A point far along +y in world space maps back into the wide local rect.
-        assert!(exact_hit(&e, Point::new(0.0, 40.0)));
-        assert!(!exact_hit(&e, Point::new(40.0, 0.0)));
+        assert!(hit(&e, Point::new(0.0, 40.0)));
+        assert!(!hit(&e, Point::new(40.0, 0.0)));
     }
 
     #[test]
@@ -255,8 +275,8 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 100.0),
             Affine::IDENTITY,
         );
-        assert!(exact_hit(&e, Point::new(50.0, 50.0))); // center
-        assert!(!exact_hit(&e, Point::new(5.0, 5.0))); // corner outside the disc
+        assert!(hit(&e, Point::new(50.0, 50.0))); // center
+        assert!(!hit(&e, Point::new(5.0, 5.0))); // corner outside the disc
     }
 
     #[test]
@@ -266,8 +286,8 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 100.0),
             Affine::IDENTITY,
         );
-        assert!(exact_hit(&e, Point::new(50.0, 80.0))); // near the base center
-        assert!(!exact_hit(&e, Point::new(5.0, 5.0))); // top corner, outside apex
+        assert!(hit(&e, Point::new(50.0, 80.0))); // near the base center
+        assert!(!hit(&e, Point::new(5.0, 5.0))); // top corner, outside apex
     }
 
     #[test]
@@ -281,8 +301,8 @@ mod tests {
             Affine::IDENTITY,
         );
         e.style.stroke_w = 2.0;
-        assert!(exact_hit(&e, Point::new(50.0, 1.0))); // on the line
-        assert!(!exact_hit(&e, Point::new(50.0, 40.0))); // far from it
+        assert!(hit(&e, Point::new(50.0, 1.0))); // on the line
+        assert!(!hit(&e, Point::new(50.0, 40.0))); // far from it
     }
 
     #[test]
@@ -296,8 +316,33 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 50.0),
             Affine::IDENTITY,
         );
-        assert!(exact_hit(&e, Point::new(25.0, 25.0)));
-        assert!(!exact_hit(&e, Point::new(90.0, 45.0)));
+        assert!(hit(&e, Point::new(25.0, 25.0)));
+        assert!(!hit(&e, Point::new(90.0, 45.0)));
+    }
+
+    /// `TOILE-UI-225`: a hairline is hit three screen pixels off its line and
+    /// missed six pixels off, at every zoom the camera allows.
+    #[test]
+    fn a_hairline_is_hit_within_the_same_screen_reach_at_every_zoom() {
+        let mut line = BezPath::new();
+        line.move_to((0.0, 0.0));
+        line.line_to((1000.0, 0.0));
+        let mut e = elem(
+            DisplayGeom::Path(line),
+            Rect::new(0.0, 0.0, 1000.0, 0.0),
+            Affine::IDENTITY,
+        );
+        e.style.stroke_w = 0.5;
+        let mut cam = ViewportTransform::default();
+        use super::super::viewport::{MAX_ZOOM, MIN_ZOOM};
+        for zoom in [MIN_ZOOM, 0.5, 1.0, 4.0, MAX_ZOOM] {
+            cam.zoom = zoom;
+            let pick = pick_floor(&cam);
+            // `px` screen pixels off the line, in world units at this zoom.
+            let off = |px: f64| Point::new(500.0, px / zoom);
+            assert!(exact_hit(&e, off(3.0), pick), "3 px off at zoom {zoom}");
+            assert!(!exact_hit(&e, off(6.0), pick), "6 px off at zoom {zoom}");
+        }
     }
 
     #[test]
@@ -307,7 +352,7 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 100.0),
             Affine::IDENTITY,
         );
-        assert!(!exact_hit(&e, Point::new(50.0, 50.0)));
+        assert!(!hit(&e, Point::new(50.0, 50.0)));
     }
 
     #[test]
@@ -318,7 +363,7 @@ mod tests {
             Affine::IDENTITY,
         );
         e.locked = true;
-        assert!(!exact_hit(&e, Point::new(50.0, 25.0)));
+        assert!(!hit(&e, Point::new(50.0, 25.0)));
     }
 
     #[test]
@@ -343,7 +388,7 @@ mod tests {
         });
         let nodes = vec![back, front];
         assert_eq!(
-            hit_topmost(&nodes, Point::new(50.0, 50.0)),
+            hit_topmost(&nodes, Point::new(50.0, 50.0), PICK_PX),
             Some(ElementId("front".to_owned()))
         );
     }

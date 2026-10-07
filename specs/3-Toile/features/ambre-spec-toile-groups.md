@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none | unheld -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one, but no test drives a group to empty and asserts it is gone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_container_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
+| `TOILE-266` | `CONC` | When concurrent binds put one element in two groups, every peer MUST name the same enclosing group, the one with the smallest id. | this spec section 3; `TOILE-UI-119` | `ambre_toile::logic::convergence_tests::an_element_bound_into_two_groups_names_one_on_both_peers` | none | verified |
 | `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | none | unheld -- the derivation emits the group as a node with a derived box, and no test reads a group node's style back. What the user sees around it is the selection box, which another document owns; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Bind a selection into a group
@@ -71,7 +72,7 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 12 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
+* **Verification.** 13 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
   gesture, and the two refusals a chord over a single element or a non-group answers. A mixed
   ungroup unbinds its groups in silence. One row holds by construction: a group has no field a box
   could be authored into. What is loose is the re-parenting, the frame conditions and the nested
@@ -133,10 +134,13 @@ and writes each leaf's coordinates, then recomputes the group boxes bottom-up (`
 (`TOILE-UI-119`), and the UI walks that edge upward (`features/ambre-spec-toile-selection.md`).
 
 **How the parent is found.** The Logic thread keeps a derived map from each element to the containers
-whose membership list names it, one entry per occurrence. A read finds the first entry whose
-container is still a group, or any that is a frame, without walking the board (`TOILE-056`). Each
-write to a membership list updates the map in the same step. A remote change, an undo and an import
-reseed it in the pass that rebuilds the boxes, at no walk of its own.
+whose membership list names it, one entry per occurrence. Each write to a membership list updates
+the map in the same step. A remote change, an undo and an import reseed it in the pass that
+rebuilds the boxes, at no walk of its own.
+
+A read takes the smallest id among the entries still a group, or any that is a frame. It walks no
+board (`TOILE-056`). Entries arrive in a different order on each peer, so the first entry would
+not converge (`TOILE-266`).
 
 **Code:**
 
