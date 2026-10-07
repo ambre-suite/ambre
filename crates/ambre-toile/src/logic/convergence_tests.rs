@@ -27,6 +27,28 @@ use crate::logic::state::{PRESENCE_TTL_MS, ToileState};
 // Lifecycle unit tests
 // -----------------------------------------------------------------------------
 
+/// `TOILE-265`: a reader that opened a board and wrote nothing holds no
+/// history of its own. Each change it then receives follows the history it
+/// holds, so the engine imports it at the cost of the change.
+#[test]
+fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
+    let mut author = ToileState::new();
+    let id = create_rect(&mut author, Point::new(0.0, 0.0), Size::new(10.0, 10.0));
+    let mut reader = ToileState::new();
+    reader.apply_remote(&author.export_snapshot());
+    assert_eq!(
+        reader.history(),
+        author.history(),
+        "the scaffolding is shared"
+    );
+    let out = author.handle_command(ToileCommand::MoveElements {
+        ids: vec![id],
+        delta: Vec2::new(5.0, 0.0),
+    });
+    reader.apply_remote(&out.update.expect("a move writes"));
+    assert_eq!(reader.history(), author.history());
+}
+
 /// `TOILE-092`: a peer's move of one element on a board of 500 refreshes that
 /// element alone. The receiving board resolves no element map and walks no
 /// index, and the moved element lands where the peer put it.

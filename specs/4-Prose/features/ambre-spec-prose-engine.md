@@ -53,6 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-126` | `POST` | A remote change that brings no operation the document lacks, its own change echoed by the relay among them, MUST answer no event. | this spec section 3 | `ambre_prose::logic::convergence_tests::an_echo_of_this_peers_own_change_answers_nothing` | none | verified |
+| `PROSE-129` | `POST` | Opening a document MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- every peer writes the document scaffolding under its own identity on open, so a reader that has sent nothing holds a history concurrent with each change it receives. The engine then imports each change against the whole history, which `TOILE-265` measured at 48 ms on a board of 5 000 elements; lands with the `A remote change costs the change, not the history, in Trame and Prose` Story (`ambre-roadmap.md` E7) | failing |
 
 **Frame:** `SYNC-101`
 
@@ -115,10 +116,10 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 41 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
-  lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
-  yet: the image block, and the block under a table cell. Each is read through the format rather
-  than through a gesture. The fan-out is driven across the real dispatcher.
+* **Verification.** 41 `verified`, 1 `failing`, nothing else. Seven rows are compiler-held: the
+  crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a shape no
+  command builds yet: the image block, and the block under a table cell. Each is read through the
+  format rather than through a gesture. The fan-out is driven across the real dispatcher.
 
 ---
 

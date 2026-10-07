@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 10 | 6 |
 | `trame-context-menu` | A user right-clicks. | implemented | 10 | 6 |
-| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 16 | 3 |
+| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 17 | 4 |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 | 1 |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 | 5 |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 | 2 |
@@ -41,4 +41,4 @@
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 7 |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 10 implemented, 15 partial, 0 design-only. 466 contract rows, 138 loose.**
+**25 features: 10 implemented, 15 partial, 0 design-only. 467 contract rows, 139 loose.**

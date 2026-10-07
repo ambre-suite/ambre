@@ -19,7 +19,7 @@
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | implemented | 31 | 5 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | implemented | 33 | 4 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 44 | 8 |
-| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 39 | 5 |
+| `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 39 | 4 |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 6 |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 23 | 5 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 | 5 |
@@ -45,4 +45,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 | 7 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 11 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 198 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 828 contract rows, 197 loose.**

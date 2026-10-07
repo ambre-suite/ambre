@@ -212,6 +212,39 @@ pub struct ToileState {
     undecodable: std::cell::Cell<bool>,
 }
 
+/// The board scaffolding, which every peer writes on open, before any edit.
+fn write_scaffold(doc: &LoroDoc) {
+    let board = doc.get_map(BOARD);
+    let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
+    let _ = board.insert("grid_size", 32.0);
+    let _ = board.insert("grid_snap", false);
+    // The presentation defaults sit in a root map, so they are registers on
+    // a container every peer already addresses (`TOILE-029`).
+    presentation::seed_presentation_config(doc);
+    // The schema version is board scaffolding too, and it rides the same
+    // commit so no board ever persists without it (`SCHEMA-004`).
+    schema::stamp(doc);
+}
+
+/// The identity the scaffolding is written under: a hash of the scaffolding
+/// this build writes (`TOILE-265`). Two builds that scaffold alike share it,
+/// and two that differ never write two changes under one identifier.
+fn scaffold_identity() -> u64 {
+    static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *PEER.get_or_init(|| {
+        let scratch = LoroDoc::new();
+        scratch
+            .set_peer_id(0)
+            .expect("a fresh document takes a peer id");
+        write_scaffold(&scratch);
+        scratch.commit();
+        let bytes = scratch
+            .export(ExportMode::all_updates())
+            .expect("a fresh document exports");
+        ambre_core::schema::scaffold_peer(&bytes)
+    })
+}
+
 impl Default for ToileState {
     fn default() -> Self {
         Self::new()
@@ -236,8 +269,9 @@ impl ToileState {
     ///   merely its encoding.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
-    /// Both land before the board-scaffolding commit of [`new`](Self::new), so
-    /// `peer` owns that op like every op after it.
+    /// Both land before the board-scaffolding commit of [`new`](Self::new).
+    /// That commit alone runs under the shared scaffolding identity, and
+    /// `peer` owns every op after it (`TOILE-265`).
     ///
     /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
     /// mint conflicting `OpID`s and corrupt the history. This exists for
@@ -250,8 +284,7 @@ impl ToileState {
     /// recorded. No op precedes this call.
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
-        // `set_peer_id` before any op: this peer owns the board scaffolding, and
-        // every minted element id captures it.
+        // `set_peer_id` before any op: every minted element id captures it.
         doc.set_peer_id(peer)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
@@ -264,19 +297,17 @@ impl ToileState {
     /// board scaffolding and every derived cache, over a `LoroDoc` the caller has
     /// already configured.
     fn from_doc(doc: LoroDoc) -> Self {
-        // Board metadata is scaffolding; commit it before any user edit.
-        let board = doc.get_map(BOARD);
-        let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
-        let _ = board.insert("grid_size", 32.0);
-        let _ = board.insert("grid_snap", false);
-        // The presentation defaults sit in a root map, so they are registers on
-        // a container every peer already addresses (`TOILE-029`).
-        presentation::seed_presentation_config(&doc);
-        // The schema version is board scaffolding too, and it rides the same
-        // commit so no board ever persists without it (`SCHEMA-004`).
-        schema::stamp(&doc);
-        doc.commit();
         let peer = doc.peer_id();
+        // Every peer writes the scaffolding as one shared identity, so every
+        // copy is one change. Under the board's own identity, a reader that has
+        // sent nothing would import each change against the whole history
+        // (`TOILE-265`).
+        doc.set_peer_id(scaffold_identity())
+            .expect("a document outside a transaction takes a peer id");
+        write_scaffold(&doc);
+        doc.commit();
+        doc.set_peer_id(peer)
+            .expect("a document outside a transaction takes a peer id");
         // Create the undo manager AFTER the initial commit. The board
         // scaffolding is document setup, not a user edit, so it must not sit on
         // the stack.
@@ -1064,6 +1095,12 @@ impl ToileState {
             lists(&self.members),
             self.layers,
         )
+    }
+
+    /// The history this board holds, as a version vector. Test helper.
+    #[cfg(test)]
+    pub(crate) fn history(&self) -> VersionVector {
+        self.doc.oplog_vv()
     }
 
     /// How many times a call walked every leaf of the spatial index. Test helper.

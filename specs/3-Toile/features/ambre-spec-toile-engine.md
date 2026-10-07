@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_move_walks_no_board`; `ambre_toile::logic::convergence_tests::a_remote_refresh_matches_a_full_rebuild` | none | verified |
-| `TOILE-265` | `POST` | A remote change MUST import at the cost of the change, even before the reader has sent its first write. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- every peer writes the board scaffolding under its own identity on open, so a reader that has sent nothing holds a history concurrent with each change it receives. The engine then imports each change against the whole history: 48 ms for one move on a board of 5 000 elements, against 0.7 ms once the scaffolding is shared; lands with the `A remote change costs the change, not the history` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-265` | `POST` | Opening a board MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::convergence_tests::a_reader_that_sent_nothing_holds_no_history_of_its_own`; `ambre_toile::logic::state::docfile::tests::a_round_trip_keeps_the_history_whole` | none | verified |
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
@@ -100,11 +100,11 @@ status values are normative in `ambre-spec-template.md`.
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`, plus the board holder of section 6. The rows:
   the visible-set query under 1 ms at 50 000 elements, the index update under 50 us. Then a remote change
-  under 2 ms, a transform command under 1 ms. A reader yet to send breaks the third (`TOILE-265`).
+  under 2 ms (`TOILE-265`), a transform command under 1 ms.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 34 `verified`, 1 `failing`, 4 `untested`. What holds is the pair no other
+* **Verification.** 35 `verified`, 4 `untested`. What holds is the pair no other
   application holds: the index equivalence and the convergence of every derived cache. Both under
   one property test, neither at a culling camera (`TOILE-206`). What is loose is four rules nothing
   exercises and `TOILE-023`, a measurement; ten verified rows are structural.
@@ -291,7 +291,7 @@ construction (`TOILE-213`).
 that peer, so the same command sequence produces two different boards. `ToileState::with_peer` pins the peer
 and drops the commit clock before the scaffolding write. That is what makes a board reproducible for a fixture
 generator or a deterministic test (`ambre-spec-fixtures.md section 2`). It is never for a live document. Two
-writers sharing a peer mint colliding ids, the one hazard the minting argument rests on avoiding.
+writers sharing a peer mint colliding ids.
 
 **The delta is a cursor, not a drain.** The export reads from the last exported version vector, and the cursor
 advances **only** when that export succeeded (`TOILE-090`). A failure keeps the range, and the next flush
@@ -307,9 +307,9 @@ Three movements, and each is a different rule:
 | a restore from local storage | does not move (`TOILE-236`) |
 
 The second is what stops a peer from receiving its own work back. Its exception is the one Trame learned the
-hard way. A board opens by committing its scaffolding under a fresh random peer id, and the first import lands
-before any flush. So absorbing our own counter would make the next local delta depend on operations no peer
-holds. An unresolvable dependency is not an error a peer reports; it is an edit that never appears.
+hard way. A board may write before its first import and before any flush. So absorbing our own counter
+would make the next local delta depend on operations no peer holds. An unresolvable dependency is not an
+error a peer reports; it is an edit that never appears.
 
 The third is where Toile parts from Trame deliberately. A restore reads what this client wrote before it
 closed, which may have reached nobody, and a reopen mints a fresh peer id. So the exception above cannot save

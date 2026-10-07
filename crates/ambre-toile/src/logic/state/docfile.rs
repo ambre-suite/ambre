@@ -114,22 +114,22 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_is_byte_identical_on_a_bare_document() {
-        // I1 at its strictest: the same ops re-exported from a document that
-        // received nothing but this payload reproduce the file exactly. Asserted on
-        // a bare `LoroDoc` rather than a `ToileState`, because `ToileState::new`
-        // commits its own board scaffolding under a fresh random peer id. That op
-        // is a second peer's history, not a lost round trip.
-        let bytes = populated()
+    fn a_round_trip_keeps_the_history_whole() {
+        // I1 at its strictest: a board that opens the file holds the history it
+        // was written from, and not one operation more. Its own scaffolding is
+        // the one the file already carries (`TOILE-265`). The bytes are not
+        // compared: two identities encode in an order the engine does not fix.
+        let source = populated();
+        let bytes = source
             .export_ambre_plaintext(doc_id())
             .expect("the document reads");
-        let header = import_ambre_plaintext(&bytes).expect("a Toile container");
-        let reloaded = LoroDoc::new();
-        reloaded.import(&header.payload).expect("payload imports");
-        assert_eq!(
-            export_ambre_plaintext(&reloaded, doc_id()).expect("the document reads"),
-            bytes
-        );
+        let mut restored = ToileState::new();
+        restored
+            .import_ambre_plaintext(&bytes)
+            .expect("a Toile container");
+        assert_eq!(restored.doc.oplog_vv(), source.doc.oplog_vv());
+        assert_eq!(restored.doc.oplog_frontiers(), source.doc.oplog_frontiers());
+        assert_eq!(restored.doc.get_deep_value(), source.doc.get_deep_value());
     }
 
     #[test]

@@ -184,23 +184,63 @@ pub fn migrate_schema<D>(
 /// identity the CRDT engine reserves.
 #[must_use]
 pub fn migration_peer(frontiers: impl IntoIterator<Item = (u64, i32)>) -> u64 {
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
     let mut heads: Vec<(u64, i32)> = frontiers.into_iter().collect();
     heads.sort_unstable();
-    let mut hash = OFFSET;
-    let mut feed = |bytes: &[u8]| {
-        for byte in bytes {
-            hash ^= u64::from(*byte);
-            hash = hash.wrapping_mul(PRIME);
-        }
-    };
-    feed(b"ambre-schema-migration");
+    let mut hash = Fnv::new(b"ambre-schema-migration");
     for (peer, counter) in heads {
-        feed(&peer.to_le_bytes());
-        feed(&counter.to_le_bytes());
+        hash.feed(&peer.to_le_bytes());
+        hash.feed(&counter.to_le_bytes());
     }
-    if hash == u64::MAX { hash - 1 } else { hash }
+    hash.peer()
+}
+
+/// The peer identity a document's scaffolding is written under, derived from
+/// the scaffolding itself.
+///
+/// Every peer writes the same scaffolding when it opens a document. Under a
+/// random identity, each copy is a change no other peer holds. A reader that
+/// has sent nothing then holds a history concurrent with each change it
+/// receives. The CRDT engine imports each one against the whole history.
+/// Under this identity, every peer writes one change under one identifier, and
+/// the engine keeps a single copy.
+///
+/// `scaffold` is the scaffolding encoded as an update under a fixed identity.
+/// Two builds whose scaffolding differs hash apart, so they never write two
+/// different changes under one identifier. The hash and its reserved value are
+/// those of [`migration_peer`].
+#[must_use]
+pub fn scaffold_peer(scaffold: &[u8]) -> u64 {
+    let mut hash = Fnv::new(b"ambre-scaffold");
+    hash.feed(scaffold);
+    hash.peer()
+}
+
+/// FNV-1a over a domain tag, then the bytes fed to it.
+struct Fnv(u64);
+
+impl Fnv {
+    fn new(tag: &[u8]) -> Self {
+        let mut hash = Self(0xcbf2_9ce4_8422_2325);
+        hash.feed(tag);
+        hash
+    }
+
+    fn feed(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 ^= u64::from(*byte);
+            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+
+    /// The hash as a peer identity: never `u64::MAX`, which the CRDT engine
+    /// reserves.
+    fn peer(self) -> u64 {
+        if self.0 == u64::MAX {
+            self.0 - 1
+        } else {
+            self.0
+        }
+    }
 }
 
 #[cfg(test)]
@@ -313,6 +353,14 @@ mod tests {
         // Pinned: a peer on another build must derive the same identity.
         assert_eq!(migration_peer([]), migration_peer(Vec::new()));
         assert_eq!(migration_peer([(1, 0)]), 0xe0f9_c7c0_c2dd_425e);
+    }
+
+    /// One scaffolding derives one identity, and any other derives another.
+    #[test]
+    fn one_scaffolding_derives_one_peer() {
+        assert_eq!(scaffold_peer(b"board"), scaffold_peer(b"board"));
+        assert_ne!(scaffold_peer(b"board"), scaffold_peer(b"board!"));
+        assert_ne!(scaffold_peer(b""), migration_peer([]));
     }
 
     #[test]

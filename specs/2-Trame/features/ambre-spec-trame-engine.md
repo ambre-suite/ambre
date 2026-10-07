@@ -48,6 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-167` | `POST` | A batch of remote operations MUST repaint once, carrying the whole new state. | this spec section 3 | `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` -- it counts the resets and reads both cells back | none | verified |
 | `TRAME-168` | `FRAME` | Applying a remote delta MUST NOT re-broadcast it. | this spec section 3 | type-level -- `apply_remote` returns `Vec<TrameEvent>` and no outcome, so it has no shape to broadcast through | none | verified |
 | `TRAME-169` | `FRAME` | An import MUST NOT swallow the local peer's own operations before they have been broadcast. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::edit_after_reopen_broadcasts_causally_complete_delta` -- it drives two reopens and asserts the second replay carries both cells, the merge preserving this peer's entry in the export cursor and adopting every other | none | verified |
+| `TRAME-231` | `POST` | Opening a workbook MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 2; `ambre-spec-budgets.md section 1` | none | fails -- every peer writes the workbook scaffolding under its own identity on open, so a reader that has sent nothing holds a history concurrent with each change it receives. The engine then imports each change against the whole history, which `TOILE-265` measured at 48 ms on a board of 5 000 elements; lands with the `A remote change costs the change, not the history, in Trame and Prose` Story (`ambre-roadmap.md` E7) | failing |
 
 * **Budget.** five rows of `ambre-spec-budgets.md section 1`: the 10k-cell recompute, the
   sheet-index rebuild, the 50-cell batch, the viewport send and its render. The workbook and graph
@@ -55,11 +56,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 12 `verified`, 1 `partial`, 2 `untested`, 1 `qa-manual`. What holds is what a
-  compiler holds: a handler with no queue in reach, an apply that returns display events and
-  cannot broadcast. A dispatch is checked against 26 event variants. What is loose shows only in a
-  running thread: the refused send that must reach the log (`TRAME-UI-142`), broken at two call
-  sites. Section 6 names four divergences from the code.
+* **Verification.** 12 `verified`, 1 `partial`, 1 `failing`, 2 `untested`, 1 `qa-manual`. What
+  holds is what a compiler holds: a handler with no queue in reach, an apply that returns display
+  events and cannot broadcast. A dispatch is checked against 26 event variants. What is loose shows
+  only in a running thread: the refused send that must reach the log (`TRAME-UI-142`). Section 6
+  names four divergences from the code.
 
 ---
 

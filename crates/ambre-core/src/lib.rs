@@ -54,7 +54,7 @@ pub use public_key::PublicKey;
 pub use role::Role;
 pub use schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, migration_peer, verdict,
+    SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use uuid::Uuid;
 pub use version::Version;
