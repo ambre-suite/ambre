@@ -343,6 +343,67 @@ fn a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_s
     assert_eq!(rig.notices.take().len(), 1, "the user is told once");
 }
 
+/// `TOILE-UI-390`: a title editor fetches its frame on its own, so a pan that
+/// culls the frame keeps it open and writes no rename. The board's word that
+/// the frame is gone closes it with no write and one notice.
+#[test]
+fn a_title_editor_outlives_a_pan_and_leaves_with_the_board() {
+    let mut rig = Rig::new();
+    let mut frame = sticky("f", A);
+    frame.kind = ElementKind::Frame;
+    frame.geom = ambre_bus::app::toile::DisplayGeom::Frame("Plan".to_owned());
+    rig.show(vec![DisplayNode::Element(frame.clone())]);
+    rig.sent();
+    rig.view.open_frame_title_editor(eid("f"));
+    assert!(
+        rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::RequestSelectionData { ids } if ids == &[eid("f")])),
+        "the editor fetches its frame"
+    );
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![frame],
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    assert!(
+        rig.view.selection_data.is_empty(),
+        "the frame is not selected"
+    );
+    rig.type_text("!");
+    rig.paint();
+    rig.show(Vec::new());
+    rig.paint();
+    assert!(rig.view.editor.is_some(), "culled, not deleted");
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::RenameFrame { .. })),
+        "a pan renames nothing"
+    );
+    rig.answer(ToileEvent::BoardChanged);
+    assert!(
+        rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::RequestSelectionData { ids } if ids == &[eid("f")])),
+        "a board change fetches the frame again"
+    );
+    rig.answer(ToileEvent::SelectionData {
+        elements: Vec::new(),
+        framed: Vec::new(),
+        missing: vec![eid("f")],
+    });
+    rig.paint();
+    assert!(rig.view.editor.is_none(), "the board lost it");
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::RenameFrame { .. })),
+        "no write names the lost frame"
+    );
+    assert_eq!(rig.notices.take().len(), 1, "the user is told once");
+}
+
 /// `TOILE-UI-386`: a selected arrow, and a caption editor open on it, outlive
 /// the arrow leaving the frame. Only the board's word that it lost the arrow
 /// drops them, and another arrow's loss drops neither.

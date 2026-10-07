@@ -203,7 +203,7 @@ text, then the typed one. Past 256 edit steps a side becomes one run between its
 | a peer deletes the element under edit | closes with no write, and a warning notice says the edit was not saved (`TOILE-UI-387`) |
 | a peer deletes the arrow whose caption is under edit | closes with no write and the same notice (`TOILE-UI-388`) |
 | the board refuses the closing write because its target is gone | the same notice, once (`TOILE-UI-389`) |
-| a pan that carries the element off screen | keeps the editor open (`TOILE-UI-210`); a frame's title does not yet (`TOILE-UI-390`) |
+| a pan that carries the element off screen | keeps the editor open (`TOILE-UI-210`), a frame's title included (`TOILE-UI-390`) |
 | copy, cut and paste with an editor open | act on the characters, not the elements (`features/ambre-spec-toile-clipboard.md`) |
 | a double-click on a connector | opens the same editor on its caption (`TOILE-UI-035`) |
 

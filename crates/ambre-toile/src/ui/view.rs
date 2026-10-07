@@ -293,6 +293,10 @@ pub struct ToileView {
     /// The world box of the caption under edit, as last read on screen. A
     /// culled arrow keeps its editor at this box (`TOILE-UI-386`).
     edit_caption_box: Cell<Option<Rect>>,
+    /// The frame whose title is under edit, as the board last answered, off
+    /// screen included. The title editor clears the selection, so it fetches
+    /// its frame on its own, and a pan keeps it open (`TOILE-UI-390`).
+    edit_frame: Option<DisplayElement>,
     /// A freshly-created element (Sticky / Text tool) whose editor must open once
     /// the matching `DisplayViewport` has landed (nothing knows its geometry
     /// before then). Consumed at the end of `update`.
@@ -650,6 +654,7 @@ impl ToileView {
             editor: None,
             edit_written: None,
             edit_caption_box: Cell::new(None),
+            edit_frame: None,
             edit_pending_open: None,
             edit_open_on_create: None,
             next_create_token: 1,
@@ -984,7 +989,7 @@ impl ToileView {
             // (`TOILE-UI-070`, `TOILE-UI-134`): cache it for the menu scope, the
             // style surfaces and the inline editor.
             ToileEvent::SelectionData {
-                elements,
+                mut elements,
                 framed,
                 missing,
             } => {
@@ -992,6 +997,17 @@ impl ToileView {
                 // command names it (`TOILE-UI-385`).
                 super::tool::drop_missing(&mut self.selection, &missing);
                 self.drop_lost_editor(&missing);
+                // The frame whose title is under edit is not selected: its
+                // data is the editor's alone (`TOILE-UI-390`).
+                if let Some(frame) = self
+                    .editor
+                    .as_ref()
+                    .and_then(|ed| ed.target().frame_title())
+                    && !self.selection.contains(frame)
+                    && let Some(at) = elements.iter().position(|e| &e.id == frame)
+                {
+                    self.edit_frame = Some(elements.remove(at));
+                }
                 self.selection_data = elements;
                 self.selection_framed = framed;
                 self.needs_full = true;
@@ -1018,6 +1034,16 @@ impl ToileView {
             // frame. `update` asks again once (`TOILE-UI-384`).
             ToileEvent::BoardChanged => {
                 self.selection_stale = !self.selection.is_empty();
+                // The frame under a title editor may have moved or gone: ask
+                // again, so a peer's delete closes the editor (`TOILE-UI-390`).
+                if let Some(frame) = self
+                    .editor
+                    .as_ref()
+                    .and_then(|ed| ed.target().frame_title())
+                    .cloned()
+                {
+                    self.send_edit(ToileCommand::RequestSelectionData { ids: vec![frame] });
+                }
             }
             // Remote presence (`toile-presence`): adopt the whole live set, so
             // the overlay drops a peer absent from it with no departure signal
@@ -2853,7 +2879,12 @@ impl ToileView {
             // (`TOILE-261`). Padding rides outside it, so the caret sits where
             // the painted glyphs did.
             EditTarget::FrameTitle(id) => {
-                let e = self.find_element(id)?;
+                // A culled frame is still on the board: the editor reads it
+                // from its own fetch, until the board says it is gone
+                // (`TOILE-UI-390`).
+                let e = self
+                    .find_element(id)
+                    .or_else(|| self.edit_frame.as_ref().filter(|e| &e.id == id))?;
                 let band = self.frame_title_band(e);
                 let pad = InlineEditor::pad(self.cam.zoom);
                 let s2w = self.cam.screen_to_world();
@@ -2938,6 +2969,14 @@ impl ToileView {
             return;
         };
         let title = title.clone();
+        let frame = e.clone();
+        self.edit_frame = Some(frame);
+        // The selection is cleared below, so the frame is fetched on its own.
+        // The answer outlives a pan, and names a frame a peer deleted
+        // (`TOILE-UI-390`).
+        self.send_edit(ToileCommand::RequestSelectionData {
+            ids: vec![id.clone()],
+        });
         // The band is a screen size, and the editor's own size is world units
         // scaled by the zoom at paint. Dividing here opens the edited text at
         // the size the band reads today. A zoom during the edit then drifts,
@@ -3003,15 +3042,15 @@ impl ToileView {
         self.text_input.focus();
     }
 
-    /// Close a body editor whose element the selection answer reports missing
-    /// (`TOILE-UI-387`). The body editor is the selection, so the refetch a
-    /// board change triggers covers it. A title editor clears the selection,
-    /// and is caught by the refusal instead (`TOILE-UI-389`).
+    /// Close an editor whose element or frame the selection answer reports
+    /// missing (`TOILE-UI-387`). The body editor is the selection, so the
+    /// refetch a board change triggers covers it. A title editor clears the
+    /// selection and refetches its frame on its own (`TOILE-UI-390`).
     fn drop_lost_editor(&mut self, missing: &[ElementId]) {
         if self
             .editor
             .as_ref()
-            .and_then(|ed| ed.target().element())
+            .and_then(|ed| ed.target().element().or(ed.target().frame_title()))
             .is_some_and(|id| missing.contains(id))
         {
             self.close_lost_editor();

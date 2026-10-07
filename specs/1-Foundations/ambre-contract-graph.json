@@ -4437,7 +4437,7 @@
   {"edge": "cites-section", "from": "TOILE-UI-390", "section": "4", "to": "3-Toile/features/ambre-spec-toile-frames.md"},
   {"edge": "cites-document", "from": "TOILE-UI-390", "to": "features/ambre-spec-toile-text-editing.md"},
   {"edge": "cites-rule", "from": "TOILE-UI-390", "to": "TOILE-UI-210"},
-  {"edge": "lands-with", "from": "TOILE-UI-390", "to": "A title editor survives a pan"},
+  {"edge": "verified-by", "from": "TOILE-UI-390", "to": "ambre_toile::ui::view::view_tests::a_title_editor_outlives_a_pan_and_leaves_with_the_board"},
   {"edge": "cites-section", "from": "TOILE-008", "section": "3", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},
   {"edge": "verified-by", "from": "TOILE-008", "to": "ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing"},
   {"edge": "cites-section", "from": "TOILE-038", "section": "3", "to": "3-Toile/features/ambre-spec-toile-freehand.md"},
