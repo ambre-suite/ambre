@@ -238,11 +238,10 @@ jobs:
       - run: just test-db
 
   # ---------------------------------------------------------------------------
-  # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the Trame chrome: leptos
-  # CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned nightly +
-  # rust-src (rust-toolchain.toml) supply `-Z build-std` for multi-threaded wasm.
-  # Tests live in `crates/ambre-trame/tests/chrome_ui.rs` (Epic `ET`, Leptos UI
-  # tests, `ambre-spec-architecture.md` section 4).
+  # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:
+  # leptos CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned
+  # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std` for
+  # multi-threaded wasm. The crates it covers are listed in the `justfile`.
   # ---------------------------------------------------------------------------
   test-wasm:
     runs-on: ubuntu-latest

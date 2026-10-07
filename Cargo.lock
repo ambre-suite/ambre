@@ -250,6 +250,7 @@ dependencies = [
  "serde",
  "tracing",
  "unicode-segmentation",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 

@@ -27,8 +27,8 @@ use ambre_bus::app::prose::WordCount;
 use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, OverlayRepaint,
-    RepaintPlan, TextCache, TextInput, WgpuSurface,
+    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, NoticePublisher,
+    OverlayRepaint, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
@@ -92,6 +92,9 @@ pub struct ProseView {
     /// The edits' path out: a full channel holds them here (`BUS-011`).
     outbox: Outbox,
     busy_pub: BusyPublisher,
+    /// What the shell shows the user when the page cannot, such as a reply
+    /// lost with its thread (`PROSE-UI-232`).
+    notices: NoticePublisher,
     from_logic: ambre_bus::conduit::Receiver<UiEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
@@ -129,6 +132,7 @@ impl ProseView {
         figures: RwSignal<Option<[String; 5]>>,
         annotations: ProseSignals,
         busy_pub: BusyPublisher,
+        notices: NoticePublisher,
     ) -> Self {
         // A page is never embedded, so it always owns the pipe it is handed.
         text_input.name_content(ContentKind::Page);
@@ -140,6 +144,7 @@ impl ProseView {
             document_id,
             outbox: Outbox::new(to_logic.clone()),
             busy_pub,
+            notices,
             to_logic,
             from_logic,
             state,
@@ -208,6 +213,7 @@ impl ProseView {
         }
         // An accepted or rejected suggestion takes its popover along.
         self.publish_hover();
+        self.drop_lost_drafts();
         self.take_intent();
         self.take_format();
         self.take_ruler();
@@ -245,6 +251,14 @@ impl ProseView {
         }
         self.publish_hover();
         self.dirty = true;
+    }
+
+    /// Drop each reply draft whose thread a peer took out of the panel, and
+    /// tell the user of each that held text (`PROSE-UI-232`).
+    fn drop_lost_drafts(&self) {
+        for notice in self.annotations.drop_lost_drafts(&self.state) {
+            self.notices.publish(notice);
+        }
     }
 
     /// Act on the formatting id a control or a chord invoked. One that waits

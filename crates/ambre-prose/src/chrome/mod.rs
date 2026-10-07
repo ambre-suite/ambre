@@ -9,6 +9,9 @@
 // one `AnnotationIntent`: the DOM holds no command channel.
 // ============================================================================
 
+use std::collections::HashMap;
+
+use ambre_core::Uuid;
 use leptos::prelude::*;
 
 mod menu;
@@ -19,6 +22,7 @@ pub use notify::notify_event;
 use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};
+use crate::ui::ProseUiState;
 use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
 use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
@@ -30,6 +34,9 @@ use crate::view::toolbar::{ToolbarState, state_of};
 pub struct ProseSignals {
     /// The threads the panel lists, each at its anchor's height.
     pub threads: RwSignal<Vec<PanelThread>>,
+    /// The reply being typed in each thread's field, by thread. It outlives
+    /// the card, so a thread that moves keeps it (`PROSE-UI-231`).
+    pub drafts: RwSignal<HashMap<Uuid, String>>,
     /// The suggestion under the pointer, for the popover.
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
     /// What the chrome asked for, until the view drains it.
@@ -65,6 +72,7 @@ impl ProseSignals {
     pub fn new() -> Self {
         Self {
             threads: RwSignal::new(Vec::new()),
+            drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
             intent: RwSignal::new(None),
             over_link: RwSignal::new(false),
@@ -77,6 +85,23 @@ impl ProseSignals {
             ruler_release: RwSignal::new(None),
         }
     }
+
+    /// Drop each reply draft whose thread left the panel, and answer the
+    /// notice owed for each that held text (`PROSE-UI-232`).
+    pub fn drop_lost_drafts(&self, view: &ProseUiState) -> Vec<&'static str> {
+        let lost = self
+            .drafts
+            .with_untracked(|drafts| view.lost_drafts(drafts));
+        if lost.is_empty() {
+            return Vec::new();
+        }
+        self.drafts.update(|drafts| {
+            for (id, _) in &lost {
+                drafts.remove(id);
+            }
+        });
+        lost.into_iter().filter_map(|(_, notice)| notice).collect()
+    }
 }
 
 /// The width of the panel, in CSS pixels.
@@ -86,65 +111,93 @@ const POPOVER_LIFT_PX: f32 = 30.0;
 
 /// The comment panel, right of the page: each open thread at the height of
 /// its anchor. A click on a thread's text brings the anchor into view.
+///
+/// A card is keyed by its thread, so a move restyles it and never rebuilds
+/// it. The field keeps its focus, and its text lives in `drafts`
+/// (`PROSE-UI-231`).
 #[component]
 pub fn ProseCommentsPanel(signals: ProseSignals) -> impl IntoView {
-    let send = move |intent| signals.intent.set(Some(intent));
-    move || {
-        let threads = signals.threads.get();
-        (!threads.is_empty()).then(|| {
-            view! {
-                <div
-                    class="ambre-prose-comments"
-                    style=format!(
-                        "position: fixed; top: 0; right: 8px; bottom: 0; width: {PANEL_WIDTH_PX}px; \
-                         pointer-events: none; z-index: 60;"
-                    )
-                >
-                    {threads.into_iter().map(|entry| thread_card(entry, send)).collect_view()}
-                </div>
-            }
-        })
+    view! {
+        <div
+            class="ambre-prose-comments"
+            style=move || format!(
+                "position: fixed; top: 0; right: 8px; bottom: 0; width: {PANEL_WIDTH_PX}px; \
+                 pointer-events: none; z-index: 60;{}",
+                if signals.threads.with(Vec::is_empty) { " display: none;" } else { "" }
+            )
+        >
+            <For
+                each=move || signals.threads.get()
+                key=|entry| entry.thread.comment_id
+                children=move |entry| thread_card(entry.thread.comment_id, signals)
+            />
+        </div>
     }
 }
 
 /// One thread: its replies, a field to answer, and a button to resolve it.
-fn thread_card(
-    entry: PanelThread,
-    send: impl Fn(AnnotationIntent) + Copy + 'static,
-) -> impl IntoView {
-    let comment_id = entry.thread.comment_id;
-    let reply = RwSignal::new(String::new());
+/// It reads its thread from the published list, so a move or a new reply
+/// updates it in place.
+fn thread_card(comment_id: Uuid, signals: ProseSignals) -> impl IntoView {
+    let send = move |intent| signals.intent.set(Some(intent));
+    let entry = Memo::new(move |_| {
+        signals.threads.with(|threads| {
+            threads
+                .iter()
+                .find(|e| e.thread.comment_id == comment_id)
+                .cloned()
+        })
+    });
+    let take_draft = move || {
+        signals
+            .drafts
+            .try_update(|drafts| drafts.remove(&comment_id))
+            .flatten()
+            .unwrap_or_default()
+    };
     let post = move || {
-        let text = reply.get_untracked();
-        reply.set(String::new());
+        let text = take_draft();
         send(AnnotationIntent::Reply { comment_id, text });
     };
     view! {
         <div
             class="ambre-prose-thread"
-            style=format!(
+            style=move || format!(
                 "position: absolute; top: {}px; left: 0; right: 0; pointer-events: auto;",
-                entry.y_px
+                entry.with(|e| e.as_ref().map_or(0.0, |e| e.y_px))
             )
         >
             <button
                 class="ambre-prose-thread-focus"
                 on:click=move |_| send(AnnotationIntent::Focus { comment_id })
             >
-                {entry.thread.replies.iter().map(|r| view! {
-                    <div class="ambre-prose-reply">
-                        <span class="ambre-prose-reply-author">{r.author.clone()}</span>
-                        <p class="ambre-prose-reply-text">{r.text.clone()}</p>
-                    </div>
-                }).collect_view()}
+                {move || entry.with(|e| {
+                    e.iter().flat_map(|e| &e.thread.replies).map(|r| view! {
+                        <div class="ambre-prose-reply">
+                            <span class="ambre-prose-reply-author">{r.author.clone()}</span>
+                            <p class="ambre-prose-reply-text">{r.text.clone()}</p>
+                        </div>
+                    }).collect_view()
+                })}
             </button>
             <div class="ambre-prose-thread-actions">
                 <input
                     type="text"
                     class="ambre-prose-thread-input"
                     placeholder="Reply"
-                    prop:value=move || reply.get()
-                    on:input=move |ev| reply.set(event_target_value(&ev))
+                    prop:value=move || signals.drafts.with(|drafts| {
+                        drafts.get(&comment_id).cloned().unwrap_or_default()
+                    })
+                    on:input=move |ev| {
+                        let text = event_target_value(&ev);
+                        signals.drafts.update(|drafts| {
+                            if text.is_empty() {
+                                drafts.remove(&comment_id);
+                            } else {
+                                drafts.insert(comment_id, text);
+                            }
+                        });
+                    }
                     on:keydown=move |ev: web_sys::KeyboardEvent| {
                         if ev.key() == "Enter" {
                             ev.prevent_default();
@@ -155,7 +208,11 @@ fn thread_card(
                 <button class="ambre-prose-thread-send" on:click=move |_| post()>"Send"</button>
                 <button
                     class="ambre-prose-thread-resolve"
-                    on:click=move |_| send(AnnotationIntent::Resolve { comment_id })
+                    on:click=move |_| {
+                        // The user closes the thread: the draft goes with it.
+                        take_draft();
+                        send(AnnotationIntent::Resolve { comment_id });
+                    }
                 >
                     "Resolve"
                 </button>

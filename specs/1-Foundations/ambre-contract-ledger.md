@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3365 rows: 2442 shipped, of which 102 partial and 582 loose. 923 unbuilt.**
+**3365 rows: 2442 shipped, of which 102 partial and 580 loose. 923 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 319 | 268 | 573 | 598 |  | 1758 |
+| `verified` | 319 | 268 | 573 | 600 |  | 1760 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 2 |  | 5 | 2 |  | 9 |
+| `failing` | 2 |  | 5 |  |  | 7 |
 | `untested` | 231 | 129 | 188 | 2 |  | 550 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -134,7 +134,7 @@
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 8 |  | 8 |  |
 | `ambre-spec-prose-schema.md` | 26 | 25 | 25 |  |  | 1 |
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  |  | 2 |
-| `ambre-spec-prose-comments.md` | 38 | 38 | 36 |  | 2 |  |
+| `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |  |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |  |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |  |

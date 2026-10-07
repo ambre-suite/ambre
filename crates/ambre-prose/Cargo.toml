@@ -88,6 +88,11 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 # budget registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }
 
+# The chrome tests mount the panel in headless Chrome (`tests/chrome_panel.rs`,
+# `just test-wasm`), as ambre-trame's do.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
 [[bench]]
 name = "html_paste"
 harness = false

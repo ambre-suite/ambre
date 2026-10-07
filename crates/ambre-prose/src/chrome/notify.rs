@@ -10,9 +10,11 @@ use ambre_bus::{AppEvent, UiEvent};
 use ambre_chrome::Toasts;
 
 use crate::interop::report_message;
+use crate::view::annotate::REPLY_LOST_DELETED;
 
 /// Surface what a conversion lost, and a file that produced nothing, as a
-/// toast (`PROSE-IO-053`). A no-op for every other event.
+/// toast (`PROSE-IO-053`). A reply refused for its thread is told too
+/// (`PROSE-UI-232`). A no-op for every other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     let UiEvent::Viewport {
         event: AppEvent::Prose(event),
@@ -34,6 +36,14 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         },
         ProseEvent::Error(error) if matches!(error.reason, ProseRefusal::Interop(_)) => {
             toasts.warning(format!("Import failed: {}", error.reason));
+        }
+        // A reply sent as a peer deleted its thread (`PROSE-UI-232`).
+        // The name is `ProseCommand::name` of `ReplyToComment`.
+        ProseEvent::Error(error)
+            if matches!(error.reason, ProseRefusal::NoSuchComment(_))
+                && error.refused == "replying to the comment" =>
+        {
+            toasts.warning(REPLY_LOST_DELETED);
         }
         _ => {}
     }

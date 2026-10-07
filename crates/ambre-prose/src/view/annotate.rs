@@ -5,6 +5,8 @@
 //! The comment panel and the accept or reject popover are DOM chrome. They
 //! read the canvas positions from here and never from the paint pass.
 
+use std::collections::HashMap;
+
 use ambre_core::Uuid;
 
 use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
@@ -74,6 +76,14 @@ pub enum AnnotationIntent {
         suggestion_id: Uuid,
     },
 }
+
+/// What the user is told when a peer takes a thread out of the panel while
+/// its reply field holds text (`PROSE-UI-232`).
+pub const REPLY_LOST_DELETED: &str =
+    "A collaborator deleted the thread you were replying to. Your reply was not posted.";
+pub const REPLY_LOST_RESOLVED: &str =
+    "A collaborator resolved the thread you were replying to. Your reply was not posted.";
+pub const REPLY_LOST_ORPHANED: &str = "A collaborator deleted the text of the thread you were replying to. Your reply was not posted.";
 
 /// Push each height down until it keeps `room` from the one above it. The
 /// heights come in anchor order, so the first thread never moves.
@@ -223,6 +233,25 @@ impl ProseUiState {
                     thread: thread.clone(),
                     y_px,
                 })
+            })
+            .collect()
+    }
+
+    /// The reply drafts whose thread left the panel, each with the notice owed
+    /// when it held text (`PROSE-UI-232`). A draft whose thread is still open
+    /// stays, wherever the thread moved (`PROSE-UI-231`).
+    #[must_use]
+    pub fn lost_drafts(&self, drafts: &HashMap<Uuid, String>) -> Vec<(Uuid, Option<&'static str>)> {
+        drafts
+            .iter()
+            .filter_map(|(id, text)| {
+                let why = match self.comments.iter().find(|t| t.comment_id == *id) {
+                    None => REPLY_LOST_DELETED,
+                    Some(thread) if thread.resolved => REPLY_LOST_RESOLVED,
+                    Some(thread) if thread.orphaned => REPLY_LOST_ORPHANED,
+                    Some(_) => return None,
+                };
+                Some((*id, (!text.trim().is_empty()).then_some(why)))
             })
             .collect()
     }
@@ -493,6 +522,68 @@ mod tests {
         assert_eq!(
             ui.take_intent(AnnotationIntent::Reject { suggestion_id: id }, 5),
             Some(ProseCommand::RejectSuggestion { suggestion_id: id })
+        );
+    }
+
+    #[test]
+    fn a_draft_outlives_a_move_and_its_thread_leaving_is_told() {
+        use super::{REPLY_LOST_DELETED, REPLY_LOST_ORPHANED, REPLY_LOST_RESOLVED};
+        let mut ui = view(3);
+        let a = text_block(&ui, 0);
+        let thread = || CommentThread {
+            comment_id: Uuid::new(),
+            anchor_block: Some(a),
+            anchor_start: 4,
+            anchor_end: 9,
+            orphaned: false,
+            resolved: false,
+            replies: Vec::new(),
+        };
+        let (moved, gone, closed, cut, blank) = (thread(), thread(), thread(), thread(), thread());
+        let drafts: std::collections::HashMap<_, _> = [
+            (moved.comment_id, "half a reply".to_owned()),
+            (gone.comment_id, "lost".to_owned()),
+            (closed.comment_id, "lost".to_owned()),
+            (cut.comment_id, "lost".to_owned()),
+            (blank.comment_id, " ".to_owned()),
+        ]
+        .into();
+        let all = vec![
+            moved.clone(),
+            gone.clone(),
+            closed.clone(),
+            cut.clone(),
+            blank.clone(),
+        ];
+        ui.apply_event(&ProseEvent::CommentsUpdated {
+            threads: all.clone(),
+        });
+        assert!(ui.lost_drafts(&drafts).is_empty(), "every thread is open");
+
+        // A scroll and a peer's text above move the thread: its draft stays.
+        ui.scroll_by(120.0);
+        let mut shifted = all.clone();
+        shifted[0].anchor_start = 7;
+        ui.apply_event(&ProseEvent::CommentsUpdated { threads: shifted });
+        assert!(ui.lost_drafts(&drafts).is_empty(), "a move keeps the draft");
+
+        // A peer deletes one, resolves one and cuts the text of another.
+        let mut after = vec![moved.clone(), closed, cut];
+        after[1].resolved = true;
+        after[2].orphaned = true;
+        ui.apply_event(&ProseEvent::CommentsUpdated { threads: after });
+        let mut lost = ui.lost_drafts(&drafts);
+        lost.sort_by_key(|(id, _)| *id.as_bytes());
+        let mut expected = vec![
+            (gone.comment_id, Some(REPLY_LOST_DELETED)),
+            (all[2].comment_id, Some(REPLY_LOST_RESOLVED)),
+            (all[3].comment_id, Some(REPLY_LOST_ORPHANED)),
+            (blank.comment_id, None),
+        ];
+        expected.sort_by_key(|(id, _)| *id.as_bytes());
+        assert_eq!(
+            lost, expected,
+            "each departure is told, an empty field is not"
         );
     }
 

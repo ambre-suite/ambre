@@ -1897,6 +1897,7 @@ pub fn main() {
                     prose_figures,
                     prose_signals,
                     busy_pub.clone(),
+                    notice_pub.clone(),
                 ))
             } else if boot_is_toile {
                 AppView::Toile(ToileView::new(

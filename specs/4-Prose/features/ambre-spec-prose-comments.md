@@ -60,8 +60,8 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 | `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_lands_last_whatever_its_stamp` | none | verified |
 | `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_reopens_a_resolved_thread` | none | verified |
 | `PROSE-FEAT-191` | `FRAME` | Replying MUST NOT move the thread's mark, rewrite an earlier reply, or touch another thread. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_touches_nothing_but_its_own_list` | none | verified |
-| `PROSE-UI-231` | `FRAME` | A reply being typed MUST NOT be emptied when its thread moves in the panel. | this spec section 2; section 4 | none | fails -- the panel rebuilds every card each time the view publishes the list, and each card holds its draft in a signal of its own. A scroll, or a peer's text above the anchor, empties the field, section 6; lands with the `A reply draft survives the panel` Story (`ambre-roadmap.md` E7) | failing |
-| `PROSE-UI-232` | `FAIL` | Given a thread a peer deletes or resolves while its reply field holds text, the user MUST be told the reply was not posted. | this spec section 2; section 4 | none | fails -- the card leaves the panel with its field, and a reply sent into the race is refused as naming no thread, a refusal no view shows, section 6; lands with the `A reply draft survives the panel` Story (`ambre-roadmap.md` E7) | failing |
+| `PROSE-UI-231` | `FRAME` | A reply being typed MUST NOT be emptied when its thread moves in the panel. | this spec section 2; section 4 | `ambre_prose::view::annotate::tests::a_draft_outlives_a_move_and_its_thread_leaving_is_told`; `ambre_prose::tests::chrome_panel::a_reply_being_typed_survives_its_thread_moving` | none | verified |
+| `PROSE-UI-232` | `FAIL` | Given a thread a peer deletes or resolves while its reply field holds text, the user MUST be told the reply was not posted. | this spec section 2; section 4 | `ambre_prose::view::annotate::tests::a_draft_outlives_a_move_and_its_thread_leaving_is_told`; `ambre_prose::tests::chrome_panel::a_thread_deleted_under_a_draft_is_told`; `ambre_prose::tests::chrome_panel::a_reply_refused_for_its_thread_reaches_the_user` | none | verified |
 
 ### 1.4 Resolve or reopen a thread
 
@@ -112,10 +112,10 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 * **Boundary.** none of its own: a thread is content in the document, and `ZK-001` seals every
   payload before it leaves the client. The author field is stamped locally, a rule of this document
   rather than a boundary the relay sees.
-* **Verification.** 36 `verified`, 2 `failing`. The painted rows read a recording surface, and the
-  panel's heights are read off the view on the host. `PROSE-FEAT-009`, `PROSE-FEAT-078` and
+* **Verification.** 38 `verified`. The painted rows read a recording surface, and the panel's
+  heights are read off the view on the host. `PROSE-FEAT-009`, `PROSE-FEAT-078` and
   `PROSE-FEAT-297` need two peers. Each frame condition reads the fields the operation may not touch,
-  before and after. A reply draft is lost on a move or a peer's delete (`PROSE-UI-231`).
+  before and after. The reply field is mounted in headless Chrome (`PROSE-UI-231`).
 
 ---
 
@@ -132,8 +132,8 @@ Two peers over one thread. The last column names the test, or the row a painted 
 | replies to a thread Bob resolved | -- | the thread, open again | the thread back in the open list, on both screens | `a_reply_reopens_a_resolved_thread` |
 | edits Bob's reply | -- | Bob's reply, unchanged | a refusal on Alice's screen, and nothing on Bob's | `a_reply_is_edited_in_place_by_its_author_alone` |
 | deletes the opening reply of her own thread | replies to it at the same moment | no thread | the thread gone on both screens, and no highlight left | `a_reply_racing_the_deletion_of_its_thread_is_lost` |
-| types half a reply | types a line above the thread's anchor | the line, and no reply | Alice's field emptied as the thread moves down, which it must not be (`PROSE-UI-231`) | none -- section 6 |
-| types half a reply | deletes the thread | no thread | the card gone from Alice's panel with her text, and no word of it (`PROSE-UI-232`) | none -- section 6 |
+| types half a reply | types a line above the thread's anchor | the line, and no reply | Alice's field moved down, its text and its focus kept | `a_reply_being_typed_survives_its_thread_moving` |
+| types half a reply | deletes the thread | no thread | the card gone from Alice's panel, and a notice that her reply was not posted | `a_draft_outlives_a_move_and_its_thread_leaving_is_told`; `a_thread_deleted_under_a_draft_is_told` |
 
 ---
 
@@ -237,6 +237,10 @@ element to the right of the page, scrolled by the browser. Each thread is aligne
 position the view publishes for its anchor (`PROSE-UI-050`). Two anchors on one line stack, the
 first in place. A click on a thread brings its anchor into view.
 
+A card is keyed by its thread, and its draft lives in the panel's signals (`PROSE-UI-231`). A
+draft whose thread leaves the panel is dropped, and the shell says the reply was not posted
+(`PROSE-UI-232`).
+
 ---
 
 ## 5. REJECTED ALTERNATIVES
@@ -253,6 +257,7 @@ first in place. A click on a thread brings its anchor into view.
 | The author is stamped locally | trusting an author field on the command | it lets any member post under any other member's name. The name on a comment is what every reader judges it by, so it must not be a field the sender chooses; stamping it from the session identity leaves nothing to forge (`PROSE-FEAT-077`) |
 | A reply reopens a resolved thread | keeping the thread closed | it hides the reply from everyone but the reader who went looking in the resolved list. Someone replying to a closed discussion is reopening it, whatever the control they used; requiring a separate reopen first means a reply that lands in a list nobody reads (`PROSE-FEAT-079`) |
 | A reply is its author's, a thread is everyone's | one permission for both | it either lets a member rewrite another's reply or stops a reviewer resolving a thread they did not open. Rewriting someone else's words is the one operation with no honest use; closing a discussion is what a reviewer is there to do (`PROSE-FEAT-080`) |
+| A draft lives in the panel's signals, keyed by thread | a signal owned by each card | the panel maps the list to fresh cards on each change, so every scroll emptied every field. A draft keyed by thread outlives its card, and the view can tell when its thread leaves (`PROSE-UI-231`, `PROSE-UI-232`) |
 | The highlight is canvas and the panel is DOM | drawing the panel on the canvas | it reimplements scrolling, focus and accessibility for a list of text boxes. The highlight sits on the text, at a position only the layout knows, so it belongs to the page pass; the panel is a scrollable list of text fields, which the browser lays out, focuses and reads to a screen reader for free (`PROSE-UI-049`, `PROSE-UI-050`) |
 
 ---
@@ -267,11 +272,6 @@ first in place. A click on a thread brings its anchor into view.
 * **A refusal travels, and nothing shows it.** `PROSE-FEAT-080` requires the refusal to be
   reported. The engine names the command and the reason
   (`features/ambre-spec-prose-engine.md section 3`), and no view shows one yet.
-* **A reply draft lives in the card, and the card is rebuilt** (`PROSE-UI-231`, `PROSE-UI-232`).
-  The panel maps the published list to fresh cards on every change, and each card owns its field.
-  Any move of a thread empties every field in the panel. A thread a peer deletes or resolves takes
-  its card along, and a reply already sent is refused with nothing shown. The draft belongs to the
-  view, keyed by the thread id, so a thread's departure can be told.
 * **The panel's own state is named and never declared.**
   `features/ambre-spec-prose-engine.md section 3` gives the view a `CommentPanelState` field, and no
   document says what it holds. The open thread, the panel's scroll position and the orphaned
