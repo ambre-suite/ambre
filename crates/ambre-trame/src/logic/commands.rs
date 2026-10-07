@@ -80,6 +80,14 @@ impl TrameState {
                 self.write_cell(row, col, &text);
                 self.finish_cell_writes()
             }
+            TrameCommand::BeginCellEdit { session, row, col } => {
+                self.begin_cell_edit(session, row, col)
+            }
+            TrameCommand::CommitCellEdit { session, text } => {
+                tracing::info!("[Logic] CommitCellEdit session={session} text='{text:.80}'");
+                self.commit_cell_edit(session, &text)
+            }
+            TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),
             TrameCommand::SetCellsBatch { cells } => {
                 tracing::info!("[Logic] SetCellsBatch {} cells", cells.len());
                 // A multi-cell fill / clear (Ctrl+Enter, Delete over a range).

@@ -91,6 +91,7 @@ impl TrameState {
             SchemaError::PayloadRejected => DocFileError::PayloadRejected,
             other => DocFileError::PayloadSchema(other),
         })?;
+        let order = self.sheet_order_ids();
         self.doc.import(&payload).map_err(|e| {
             tracing::warn!("[Trame] .ambre payload rejected by the CRDT engine: {e:?}");
             DocFileError::PayloadRejected
@@ -98,7 +99,7 @@ impl TrameState {
         // Same tail as a snapshot restore: rebuild the derived caches and reseed
         // the formula engine so formula cells evaluate instead of showing their
         // source (`sync::import_snapshot`).
-        let events = self.reseed_after_merge("import_ambre_plaintext");
+        let events = self.reseed_after_merge("import_ambre_plaintext", &order);
         Ok((header.document_id, events))
     }
 }

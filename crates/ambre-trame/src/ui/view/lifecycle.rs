@@ -76,6 +76,7 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             zoom_sig,
             editor: None,
+            edit_session: 0,
             pending_commit: None,
             editor_text_drag: false,
             selecting_drag: false,
@@ -314,7 +315,9 @@ impl TrameView {
     /// pipe (clearing its buffer) and positions it on the cell.
     pub(crate) fn begin_edit(&mut self, seed: String) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
-        self.editor = Some(CellEditor::new(row, col, seed.clone()));
+        if !self.open_session(row, col, seed.clone()) {
+            return;
+        }
         self.editor_text_drag = false;
         self.text_input.clear();
         self.text_input.focus();
@@ -333,9 +336,63 @@ impl TrameView {
     pub(crate) fn begin_edit_external(&mut self) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
         let seed = self.cell_seed(row, col);
-        self.editor = Some(CellEditor::new(row, col, seed));
+        if !self.open_session(row, col, seed) {
+            return;
+        }
         self.editor_text_drag = false;
         self.reset_blink();
+    }
+
+    /// Open the editor on `(row, col)` under a fresh session token, once the
+    /// Logic thread has been asked to pin that cell (`TRAME-UI-160`). A session
+    /// Logic never heard of could not commit, so a refused request opens none.
+    fn open_session(&mut self, row: u32, col: u32, seed: String) -> bool {
+        self.edit_session += 1;
+        let session = self.edit_session;
+        let begin = TrameCommand::BeginCellEdit { session, row, col };
+        if self.send_command_lossless(begin).is_err() {
+            tracing::error!("Trame: the outbox is full, the edit session did not open");
+            return false;
+        }
+        let mut editor = CellEditor::new(row, col, seed);
+        editor.session = session;
+        self.editor = Some(editor);
+        true
+    }
+
+    /// Close session `session` with no write, because a peer deleted its cell
+    /// (`TRAME-UI-176`). The chrome toasts the loss; this side drops the editor
+    /// and announces it. A no-op once the session closed.
+    pub(crate) fn drop_lost_edit(&mut self, session: u64) {
+        if self.editor.as_ref().is_none_or(|e| e.session != session) {
+            return;
+        }
+        self.editor = None;
+        self.pending_commit = None;
+        self.edit_dirty = true;
+        self.needs_full = true;
+        self.text_input.clear();
+        self.text_input
+            .announce("A collaborator deleted the cell you were editing. Nothing was written.");
+        #[cfg(target_arch = "wasm32")]
+        self.show_formula_text(self.cell_seed(self.state.active_row(), self.state.active_col()));
+    }
+
+    /// Carry session `session` to `(row, col)`, where a peer moved its cell. The
+    /// editor and the active cell follow, so the cell on screen is the one the
+    /// commit reaches (`TRAME-UI-160`).
+    pub(crate) fn follow_moved_edit(&mut self, session: u64, row: u32, col: u32) {
+        if !self
+            .editor
+            .as_mut()
+            .is_some_and(|e| e.follow(session, row, col))
+        {
+            return;
+        }
+        self.edit_dirty = true;
+        self.needs_full = true;
+        let mv = self.state.move_to(row, col, false);
+        self.apply_cursor_move(mv);
     }
 
     /// Commit the current edit into the CRDT (via Logic) and update the local
@@ -346,16 +403,13 @@ impl TrameView {
         };
         let text = editor.text();
         tracing::info!(
-            "[UI] commit_edit -> sending SetCellText row={} col={} text='{:.80}'",
+            "[UI] commit_edit -> session {} at row={} col={} text='{:.80}'",
+            editor.session,
             editor.row,
             editor.col,
             text,
         );
-        let sent = self.send_command_lossless(TrameCommand::SetCellText {
-            row: editor.row,
-            col: editor.col,
-            text: text.clone(),
-        });
+        let sent = self.send_command_lossless(editor.commit_command(text.clone()));
         // Close the undo group on cell exit so the whole edit is one undo item
         // (`trame-cell-editing`). It travels only behind an edit that left: a
         // boundary around nothing would seal the previous group early.
@@ -411,6 +465,7 @@ impl TrameView {
         // SetCellText would be one undo item per cell).
         let batch = cells.iter().map(|&(r, c)| (r, c, text.clone())).collect();
         let sent = self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch });
+        self.end_session(editor.session);
         // The optimistic update mirrors the batch, so it runs only when the
         // batch is on its way (`BUS-018`).
         if sent.is_ok() {
@@ -426,9 +481,22 @@ impl TrameView {
         self.announce_active();
     }
 
+    /// Release session `session` on the Logic side with no write. A lost
+    /// release leaves Logic pinning a cell no editor shows, so a later delete
+    /// of it would report a session already closed.
+    fn end_session(&mut self, session: u64) {
+        if self
+            .send_command_lossless(TrameCommand::EndCellEdit { session })
+            .is_err()
+        {
+            tracing::error!("Trame: the outbox is full, the edit session release was dropped");
+        }
+    }
+
     /// Abandon the current edit without writing anything, then leave edit mode.
     pub(crate) fn cancel_edit(&mut self) {
-        if self.editor.take().is_some() {
+        if let Some(editor) = self.editor.take() {
+            self.end_session(editor.session);
             // Content is untouched; only the overlay field must be cleared. The
             // formula bar reverts to the (unchanged) active cell's stored value,
             // not blank. Blanking it would read as "user typed empty" next frame

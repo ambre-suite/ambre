@@ -120,6 +120,8 @@ impl CellData {
 pub struct CellEditor {
     pub row: u32,
     pub col: u32,
+    /// The token the Logic thread knows this session by (`TRAME-UI-160`).
+    pub session: u64,
     /// The shared editor core (drawn by `renderer::draw_edit`).
     pub(crate) core: TextEditor,
 }
@@ -141,8 +143,29 @@ impl CellEditor {
         Self {
             row,
             col,
+            session: 0,
             core: TextEditor::new(&text, style),
         }
+    }
+
+    /// The command that commits `text`. It names the session, never a
+    /// position, so the Logic thread writes to the cell the session opened on
+    /// (`TRAME-UI-160`).
+    pub fn commit_command(&self, text: String) -> crate::TrameCommand {
+        crate::TrameCommand::CommitCellEdit {
+            session: self.session,
+            text,
+        }
+    }
+
+    /// Carry the editor to `(row, col)` when `session` is its own, where a
+    /// peer moved its cell. Returns whether it moved.
+    pub fn follow(&mut self, session: u64, row: u32, col: u32) -> bool {
+        if session != self.session {
+            return false;
+        }
+        (self.row, self.col) = (row, col);
+        true
     }
 
     /// The currently selected substring, or empty when nothing is selected.

@@ -84,6 +84,12 @@ impl TrameView {
                 tracing::warn!("[UI] Trame rejected: {message}");
                 self.text_input.announce(&message);
             }
+            // A peer moved or deleted the cell an open session writes to
+            // (`TRAME-UI-160`, `TRAME-UI-176`).
+            TrameEvent::EditTargetMoved { session, row, col } => {
+                self.follow_moved_edit(session, row, col);
+            }
+            TrameEvent::EditTargetGone { session } => self.drop_lost_edit(session),
             // Both schema notices are the chrome's to toast. Announcing them here
             // too puts them on the a11y path, which is the only surface a
             // screen-reader user has for either (`SCHEMA-003`, `SCHEMA-008`).

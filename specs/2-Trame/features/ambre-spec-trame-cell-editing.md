@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-156` | `POST` | Opening a session on a cell that holds a formula MUST seed the buffer with the formula, never with its result. | this spec section 4 | none | unheld -- `cell_seed` reads the cache's `raw` field, which `TRAME-UI-011` keeps, and the seeding itself lives on `TrameView`, where no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-157` | `POST` | `Alt+Enter` MUST be the only way to put a newline inside a cell. | this spec section 4 | none | unheld -- `interact.rs` routes `Enter` with `alt` to the buffer's `newline` and every other `Enter` to a commit, and nothing drives either; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | none | unheld -- `begin_edit` sends no command and the only writes leave from `commit_edit` and `commit_edit_filled`, and no test states the absence; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | none | unheld -- `begin_edit` sends `BeginCellEdit`, whose handler only pins the cell, and the only writes leave from `commit_edit` and `commit_edit_filled`. No test states the absence; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-159` | `FRAME` | While a session is open, a key that edits the buffer MUST NOT move the grid selection. | this spec section 4 | none | unheld -- the edit-mode arm of `interact.rs` returns before the grid keymap for every buffer key, `Ctrl+A` included, and nothing asserts the grid stayed put; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-056` | `FRAME` | A composition in progress MUST NOT reach the document before it ends. | this spec section 4 | none | unheld -- `CompositionUpdate` writes only the editor preedit and `CompositionEnd` commits it into the buffer, and no test drives either; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -47,13 +47,13 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | none | unheld -- a grid commit parks a `PendingCommit` and the tail of `ui/view/frame.rs` drains it after `draw_edit` flushes, which holds by the order of two statements in one function. Nothing in the types forbids a second drain site, and no test reads the buffer at key time to show the difference; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | none | fails -- `commit_edit` sends `SetCellText` for the row and column the session opened on, and Logic resolves that position on arrival: a line a peer inserts above the cell moves the commit one cell up, section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_commit_past_the_used_range_follows_an_insert_above`; `ambre_trame::ui::grid::tests::session::a_commit_names_the_session_and_no_position`; `::only_its_own_session_moves_the_editor` | none | verified |
 | `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` -- it writes a value, then commits an empty `SetCellText`, and reads the cell back blank | none | verified |
 | `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item` | none | verified |
 | `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 2; section 3 | none | fails -- a commit after a peer inserts a row above the open cell overwrites the value the insert moved onto its position, with no word to either user (`TRAME-UI-160`), section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
-| `TRAME-UI-176` | `FAIL` | Given a sheet, row or column a peer deletes while a session is open on it, the session MUST close with no write and tell the user the cell is gone. | this spec section 2; `features/ambre-spec-trame-sheets.md` (`TRAME-075`) | none | fails -- the session stays open and its commit writes by position: to the line that moved onto it, or to a deleted sheet the tabs no longer list, section 6; lands with the `A cell edit lands on the cell it opened on` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write` | none | verified |
+| `TRAME-UI-176` | `FAIL` | Given a sheet, row or column a peer deletes while a session is open on it, the session MUST close with no write and tell the user the cell is gone. | this spec section 2; `features/ambre-spec-trame-sheets.md` (`TRAME-075`) | `ambre_trame::logic::tests::group9::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write`; `::a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another`; `::an_ended_session_writes_nothing`; `::a_commit_after_a_tab_switch_lands_on_the_session_sheet`; `ambre_trame::tests::chrome_ui::a_lost_edit_reaches_the_user` | none | verified |
 | `TRAME-UI-163` | `FAIL` | A commit the queue cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::the_hold_bound_refuses_rather_than_grows` | partial -- the tests hold the outbox: a full queue holds the commit and retries it, and a refusal is reported. `commit_edit` updating the cache only on an accepted send is wasm glue no host test reaches; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | `ambre_trame::logic::tests::group3::write_beyond_the_cap_is_refused_and_said` | none | verified |
 
@@ -112,9 +112,9 @@ status values are normative in `ambre-spec-template.md`.
   them reads **none exists**.
 * **Boundary.** none: the draft lives on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The committed text reaches the relay sealed (`ZK-001`).
-* **Verification.** 7 `verified`, 2 `partial`, 3 `failing`, 17 `untested`, 12 `unimplemented`. What
-  holds is the commit path into the document; what fails is where it lands once a peer moves the
-  lines under it. Most rows on what an edit MUST NOT touch have nothing watching them. The session
+* **Verification.** 10 `verified`, 2 `partial`, 17 `untested`, 12 `unimplemented`. What holds is
+  the commit path into the document, and where it lands once a peer moves or deletes the lines
+  under it. Most rows on what an edit MUST NOT touch have nothing watching them. The session
   lives on `TrameView`, which owns a canvas and Leptos signals, beyond the headless tier. Nine
   unbuilt rows are the gate of section 3, whose events ship and whose handlers do nothing.
 
@@ -128,8 +128,8 @@ status values are normative in `ambre-spec-template.md`.
 | types `=A1+1` into `B2` | deletes row 1 | the formula, its reference broken | both read `#REF!` in `B2` (`TRAME-007`) | the same property, whose op set carries `SetText` and `DeleteRow` |
 | types into `B2` | sorts the range | the text on its own row, wherever the sort moved it | both see the value follow its row (`TRAME-004`) | the same property, whose op set carries `SetText` and `Sort` |
 | is editing `B2`, uncommitted | writes `9` into `B2` | `9`, until A commits | A keeps typing over a value that already changed underneath, and nothing says so | none, and no rule covers it -- section 6 |
-| is editing `B4`, uncommitted | inserts a row above it | the commit on `B4`, which now holds what was `B3` | A's text overwrites the moved value, which it must not (`TRAME-UI-162`) | none -- section 6 |
-| is editing a cell of `Sheet2`, uncommitted | deletes `Sheet2` | the workbook without it | A's session stays open, and the commit lands on the deleted sheet (`TRAME-UI-176`) | none -- section 6 |
+| is editing `B4`, uncommitted | inserts a row above it | A's text on `B5`, where the insert moved the cell | A's editor follows the cell down, and `B4` keeps what was `B3` (`TRAME-UI-162`) | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above` |
+| is editing a cell of `Sheet2`, uncommitted | deletes `Sheet2` | the workbook without it | A lands on another tab, and the editor closes with a notice and no write (`TRAME-UI-176`) | `ambre_trame::logic::tests::group9::a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another` |
 
 ---
 
@@ -143,7 +143,12 @@ never enter it (`TRAME-010`).
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::SetCellText { row, col, text }` | UI to Logic | the raw text. An empty `text` clears the cell; there is no `ClearCell` |
+| `TrameCommand::BeginCellEdit { session, row, col }` | UI to Logic | the cell a session opens on. Logic pins its sheet and lines, and writes nothing |
+| `TrameCommand::CommitCellEdit { session, text }` | UI to Logic | the raw text, for the pinned cell. An empty `text` clears it; there is no `ClearCell` |
+| `TrameCommand::EndCellEdit { session }` | UI to Logic | nothing. It releases the pin after an Escape or a fill |
+| `TrameEvent::EditTargetMoved { session, row, col }` | Logic to UI | where a peer's structural edit carried the pinned cell |
+| `TrameEvent::EditTargetGone { session }` | Logic to UI | that a peer deleted the pinned cell's sheet, row or column, and the pin is gone |
+| `TrameCommand::SetCellText { row, col, text }` | UI to Logic | the raw text for a position, resolved on arrival. The clear path and the file paths send it |
 | `TrameCommand::SetCellsBatch { cells }` | UI to Logic | one text per cell, written as a single undo item |
 | `TrameCommand::CommitEdit` | UI to Logic | nothing. It closes the undo group the edit opened |
 
@@ -167,15 +172,24 @@ pub struct CellEditor {
 
 1. The key handler records the intent in `pending_commit` and marks the frame dirty.
 2. The paint flush applies every queued insertion, so the buffer is final.
-3. The drain reads the buffer, sends `SetCellText`, then `CommitEdit`.
-4. The local cache takes the raw text at once, so the cell reads back before the answer arrives.
-5. The selection moves in the committed direction: down for Enter, right for Tab, nowhere for a
+3. The drain reads the buffer, sends `CommitCellEdit` for the session, then `CommitEdit`.
+4. Logic locates the pinned cell where it stands now, and writes there.
+5. The local cache takes the raw text at once, so the cell reads back before the answer arrives.
+6. The selection moves in the committed direction: down for Enter, right for Tab, nowhere for a
    click outside.
+
+**The pin.** Each axis is pinned to its line id. A cell past the used range is pinned to the last
+line and its distance from it, so a peer's append moves nothing. Every merge locates the pin
+again: a new position moves the editor and the active cell, a lost line drops the pin. A commit
+that arrives after a tab switch is written on the session's own sheet. The session tokens count up
+on the view, so an event about a closed session matches no editor.
 
 **Code.**
 
-* `ui/view/lifecycle.rs` -- `begin_edit`, `begin_edit_external`, `commit_edit`, `commit_edit_filled`,
-  `cancel_edit`;
+* `ui/view/lifecycle.rs` -- `begin_edit`, `begin_edit_external`, `open_session`, `commit_edit`,
+  `commit_edit_filled`, `cancel_edit`, `follow_moved_edit`, `drop_lost_edit`;
+* `logic/edit_anchor.rs` -- the pin, `begin_cell_edit`, `commit_cell_edit`, `follow_edit_anchor`;
+* `chrome/commands.rs` -- the toast for a lost edit;
 * `ui/view/interact.rs` -- the whole edit-mode input routing;
 * `ui/grid/mod.rs` -- `CellEditor` and its delegation to the shared core;
 * `ui/view/frame.rs` -- the formula-bar mirror and the deferred commit drain.
@@ -293,6 +307,7 @@ at. A double-click inside selects the word.
 | The inline editor is a transparent DOM textarea over the cell | a canvas-only editor | it would have to reimplement composition. Over the DOM, IME, the OS text menu and the native clipboard events come for free, and the canvas paints only the cell behind it |
 | A grid commit is deferred to the paint flush | applying each edit synchronously | it needs a font context on the input path. The shared core applies queued edits when a font context is live, which is paint time; reading the buffer at key time would miss the last keystroke |
 | The raw text is the document, the value is derived | storing the computed value beside the text | two peers on different locales, and any future function set, must read one source. A computed value in the CRDT would be a second one |
+| A session pins its cell in the Logic thread | the UI sending the line ids with the commit | the UI holds positions, not ids, and a pin taken on the UI side would trail the merges by one frame. Paste and fill stay positional on purpose: they write the selection the user sees |
 | A refusal answers, and never stays silent | dropping the write with no reply | a write that vanishes teaches the user that the application is unreliable; a message naming the rule teaches the rule |
 | A remote delta is applied even when it violates a local rule | refusing the remote delta | it breaks convergence, leaving two peers on two documents, which costs more than a value out of range. So a rule is an input aid, never an integrity barrier, and the configuration surface must say so |
 | Protection is enforced by the client, not by the server | a server-side check | it would need the plaintext. The relay is blind and holds ciphertext, so it cannot read a range, let alone judge a write against one. A modified client can therefore bypass a protection, and the invitation surface must say so |
@@ -307,11 +322,6 @@ at. A double-click inside selects the word.
 * **An edit over a value that changed underneath.** The open buffer is local, so a remote write to
   the same cell lands in the cache while the user types. The commit overwrites it. Nothing warns
   the user and no rule says what should happen: the two-peer table's last row is the case.
-* **A commit names a position, not a cell** (`TRAME-UI-160`, `TRAME-UI-162`, `TRAME-UI-176`).
-  Cells are keyed by stable line identities, but `SetCellText` carries a row and a column, and
-  Logic resolves them on arrival. A peer's insert, delete or move above the open cell shifts the
-  commit onto a neighbour. A peer's delete of the sheet leaves it writing to a ghost. Paste and
-  fill stay positional on purpose: they write the selection the user sees.
 * **Autocompletion** (`TRAME-UI-057`, `TRAME-UI-058`). Neither exists in the code. There is no
   completion module, no static function list, no dropdown, and no function of either name anywhere
   in the workspace. What exists is a design, and the path it names is empty.

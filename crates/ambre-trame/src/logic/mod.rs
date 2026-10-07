@@ -212,6 +212,9 @@ pub struct TrameState {
     ///
     /// [`finish_cell_writes`]: Self::finish_cell_writes
     write_refusals: Vec<WriteRefusal>,
+    /// The open edit session's cell, held by identity so a peer's structural
+    /// change cannot move its commit (`TRAME-UI-160`). `None` with no session.
+    edit_anchor: Option<edit_anchor::EditAnchor>,
     /// Local undo/redo history (`trame-undo`). Subscribes to [`Self::doc`] and
     /// records one
     /// item per commit; each `TrameCommand` handler commits exactly once, so one
@@ -373,6 +376,7 @@ impl TrameState {
             sheet_id_to_name: HashMap::new(),
             named: HashMap::new(),
             write_refusals: Vec::new(),
+            edit_anchor: None,
             undo_manager,
             sheet_counter: 0,
             uid_counter: 0,
@@ -471,6 +475,7 @@ mod cells;
 mod clipboard;
 mod commands;
 pub mod docfile;
+mod edit_anchor;
 mod fill;
 mod filters;
 mod find;

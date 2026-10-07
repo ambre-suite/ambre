@@ -551,3 +551,28 @@ fn the_toolbar_announces_the_registry_labels() {
 
     container.remove();
 }
+
+/// A peer's delete of the cell under an open session reaches the user as a
+/// toast, not the log alone (`TRAME-UI-176`).
+#[wasm_bindgen_test]
+fn a_lost_edit_reaches_the_user() {
+    let owner = Owner::new();
+    owner.set();
+    let toasts = ambre_chrome::Toasts::new();
+    chrome::notify_event(
+        &toasts,
+        &UiEvent::Viewport {
+            document_id: DocumentId::new(),
+            event: AppEvent::Trame(TrameEvent::EditTargetGone { session: 1 }),
+        },
+    );
+    let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the loss is on screen, not in the log")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("deleted the cell you were editing"), "{text}");
+    root.remove();
+}

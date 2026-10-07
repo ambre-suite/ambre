@@ -109,10 +109,11 @@ impl TrameState {
     /// re-fetches its viewport. The original request may predate this import and
     /// show an empty grid.
     pub(super) fn import_and_reseed(&mut self, payload: &[u8], origin: &str) -> Vec<TrameEvent> {
+        let order = self.sheet_order_ids();
         if !self.merge_payload(payload, origin) {
             return Vec::new();
         }
-        self.reseed_after_merge(origin)
+        self.reseed_after_merge(origin, &order)
     }
 
     /// Apply a batch of decrypted remote deltas as a SINGLE merge+reseed, so the
@@ -123,6 +124,7 @@ impl TrameState {
     /// then reseeding once, renders the final state in a single repaint. A no-op
     /// (no display events) if nothing imported.
     pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<TrameEvent> {
+        let order = self.sheet_order_ids();
         let mut merged_any = false;
         for payload in payloads {
             merged_any |= self.merge_payload(payload, "apply_remote_batch");
@@ -130,7 +132,7 @@ impl TrameState {
         if !merged_any {
             return Vec::new();
         }
-        self.reseed_after_merge("apply_remote_batch")
+        self.reseed_after_merge("apply_remote_batch", &order)
     }
 
     /// Merge one decrypted Loro payload into the live document, returning whether
@@ -150,8 +152,12 @@ impl TrameState {
     /// Rebuild every derived cache from the merged document and emit the
     /// `DataReset` (+ sheet list, style state, conflicts) the UI needs to repaint.
     /// Shared tail of the single-delta [`import_and_reseed`] and the batched
-    /// [`apply_remote_batch`] / quarantine-release paths.
-    pub(super) fn reseed_after_merge(&mut self, origin: &str) -> Vec<TrameEvent> {
+    /// [`apply_remote_batch`] / quarantine-release paths. `order` is the tab
+    /// order before the merge, which a deleted active sheet falls back from.
+    pub(super) fn reseed_after_merge(&mut self, origin: &str, order: &[String]) -> Vec<TrameEvent> {
+        // A peer may have deleted the sheet this reader is on (`TRAME-075`).
+        // Leave it before any cache is rebuilt from it.
+        self.leave_a_deleted_sheet(order);
         // Rebuild the position <-> id cache first: the merged doc may carry rows
         // or columns this cache does not yet know about. Both the engine reseed
         // and the formatting reseed below resolve cell keys through it.
@@ -208,6 +214,8 @@ impl TrameState {
             self.style_state_event(),
         ];
         events.extend(conflicts);
+        // The open session's cell, moved or deleted by the merge (`TRAME-UI-176`).
+        events.extend(self.follow_edit_anchor());
         // A register the reseed could not decode is reported here rather than at
         // each import site. This is the one body every full-state read and every
         // remote delta passes through (`SCHEMA-003`).

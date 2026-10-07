@@ -581,16 +581,7 @@ impl TrameState {
         self.doc.commit();
 
         if self.active_sheet == sheet_id {
-            let pos = order.iter().position(|id| id == sheet_id).unwrap_or(0);
-            self.active_sheet = if pos > 0 {
-                order[pos - 1].clone()
-            } else {
-                order
-                    .iter()
-                    .find(|id| id.as_str() != sheet_id)
-                    .cloned()
-                    .unwrap_or_else(|| DEFAULT_SHEET.to_owned())
-            };
+            self.active_sheet = self.fallback_sheet(&order);
         }
 
         let mut display = self.reseed_active_sheet();
@@ -601,6 +592,32 @@ impl TrameState {
             display,
             update,
             ephemeral: None,
+        }
+    }
+
+    /// The sheet a reader lands on when the active sheet is deleted
+    /// (`TRAME-075`). It is the nearest live tab before it in `order`, else the
+    /// first live tab. `order` is the tab order the sheet was deleted from.
+    fn fallback_sheet(&self, order: &[String]) -> String {
+        let live = self.all_sheet_ids();
+        let pos = order
+            .iter()
+            .position(|id| *id == self.active_sheet)
+            .unwrap_or(0);
+        order[..pos]
+            .iter()
+            .rev()
+            .find(|id| live.contains(id))
+            .cloned()
+            .or_else(|| self.sheet_order_ids().into_iter().next())
+            .unwrap_or_else(|| DEFAULT_SHEET.to_owned())
+    }
+
+    /// Leave the active sheet when a merge deleted it (`TRAME-075`). `order` is
+    /// the tab order before the merge. The caller reseeds after.
+    pub(super) fn leave_a_deleted_sheet(&mut self, order: &[String]) {
+        if !self.all_sheet_ids().contains(&self.active_sheet) {
+            self.active_sheet = self.fallback_sheet(order);
         }
     }
 

@@ -67,6 +67,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::SheetList { .. }
             | TrameEvent::Error { .. }
+            | TrameEvent::EditTargetMoved { .. }
+            | TrameEvent::EditTargetGone { .. }
             | TrameEvent::DocumentRefused { .. }
             | TrameEvent::UndecodableRecords
             | TrameEvent::SortComplete
@@ -124,6 +126,11 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             toasts.warning(format!("Invalid value: {message}"));
         }
         TrameEvent::Error { message } => toasts.warning(message.clone()),
+        // A peer deleted the cell an open session was writing to, and the
+        // session closed with nothing written (`TRAME-UI-176`).
+        TrameEvent::EditTargetGone { .. } => toasts.warning(
+            "A collaborator deleted the cell you were editing. Your edit was not written.",
+        ),
         // The workbook was written by a newer client (`SCHEMA-008`). An error,
         // not a warning: nothing opened, and the remedy is not in this workbook.
         TrameEvent::DocumentRefused { reason } => toasts.error(reason.clone()),
@@ -198,6 +205,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         | TrameEvent::SelectRange { .. }
         | TrameEvent::UndoState { .. }
         | TrameEvent::SheetList { .. }
+        | TrameEvent::EditTargetMoved { .. }
         | TrameEvent::ColumnValues { .. }
         | TrameEvent::SortRange { .. }
         | TrameEvent::ColumnContent { .. }

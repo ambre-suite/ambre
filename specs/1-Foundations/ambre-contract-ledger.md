@@ -20,13 +20,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3365 rows: 2442 shipped, of which 102 partial and 586 loose. 923 unbuilt.**
+**3365 rows: 2442 shipped, of which 102 partial and 582 loose. 923 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 319 | 264 | 573 | 598 |  | 1754 |
+| `verified` | 319 | 268 | 573 | 598 |  | 1758 |
 | `partial` | 46 | 14 | 40 | 2 |  | 102 |
-| `failing` | 2 | 4 | 5 | 2 |  | 13 |
+| `failing` | 2 |  | 5 | 2 |  | 9 |
 | `untested` | 231 | 129 | 188 | 2 |  | 550 |
 | `human-review` | 9 |  |  |  |  | 9 |
 | `qa-manual` | 5 | 5 | 4 |  |  | 14 |
@@ -78,7 +78,7 @@
 | `ambre-spec-zero-knowledge.md` | 16 | 14 | 6 | 2 | 6 | 2 |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 1 | 6 |  |
-| `ambre-spec-trame-cell-editing.md` | 41 | 29 | 7 | 2 | 20 | 12 |
+| `ambre-spec-trame-cell-editing.md` | 41 | 29 | 10 | 2 | 17 | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 1 | 12 | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 3 |  | 6 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
@@ -98,7 +98,7 @@
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 17 |  | 3 |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 8 |  | 2 | 1 |
 | `ambre-spec-trame-shared-filter.md` | 35 | 32 | 27 | 1 | 4 | 3 |
-| `ambre-spec-trame-sheets.md` | 18 | 17 | 10 |  | 7 | 1 |
+| `ambre-spec-trame-sheets.md` | 18 | 17 | 11 |  | 6 | 1 |
 | `ambre-spec-trame-sort.md` | 24 | 24 | 14 | 1 | 9 |  |
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 7 | 1 | 3 |  |
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  |  | 4 |

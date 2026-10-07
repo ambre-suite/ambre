@@ -81,6 +81,23 @@ pub enum TrameCommand {
     /// optimistically, so no echo event is required.
     SetCellText { row: u32, col: u32, text: String },
 
+    /// Open edit session `session` on cell `(row, col)`. The Logic thread
+    /// resolves the position once, to the sheet and the two lines under it, and
+    /// writes nothing. A later commit reaches that cell wherever a peer moved it.
+    /// A new session replaces the previous one.
+    BeginCellEdit { session: u64, row: u32, col: u32 },
+
+    /// Commit session `session` with `text`, written to the cell it opened on.
+    /// A session the Logic thread no longer holds writes nothing: its cell is
+    /// gone, and [`EditTargetGone`](super::TrameEvent::EditTargetGone) said so.
+    /// Opens the undo group [`CommitEdit`](TrameCommand::CommitEdit) seals.
+    CommitCellEdit { session: u64, text: String },
+
+    /// Close session `session` with no write: an Escape, or a fill that writes
+    /// the selection instead. A no-op for a session the Logic thread no longer
+    /// holds.
+    EndCellEdit { session: u64 },
+
     /// Set the plaintext content of many cells in one shot, as `(row, col, text)`
     /// triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over a
     /// range (Delete on a selection). The Logic thread applies every write inside

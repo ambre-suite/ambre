@@ -114,6 +114,16 @@ pub enum TrameEvent {
     /// last remaining sheet). Purely informational; no CRDT mutation occurred.
     Error { message: String },
 
+    /// A peer's insert, delete or move carried the cell of edit `session` to
+    /// `(row, col)` on the active sheet. The open editor follows it, so the
+    /// cell it shows is the cell its commit reaches.
+    EditTargetMoved { session: u64, row: u32, col: u32 },
+
+    /// A peer deleted the sheet, row or column under edit `session`. The Logic
+    /// thread dropped the session, so its commit writes nothing; the editor
+    /// closes and the user is told the cell is gone.
+    EditTargetGone { session: u64 },
+
     /// The workbook was written by a newer client and was refused whole (`SCHEMA-008`).
     /// Nothing was applied, and the grid on screen is the one that was already open.
     /// Distinct from [`Error`](Self::Error), which reports a rejected *command*. This one

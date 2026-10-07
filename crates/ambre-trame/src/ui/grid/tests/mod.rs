@@ -3,6 +3,7 @@ mod editor_parity;
 mod group1;
 mod group2;
 mod kinetic;
+mod session;
 
 use super::{CellData, CellEditor, HeaderHit, SelKind, Selection, TrameUiState};
 

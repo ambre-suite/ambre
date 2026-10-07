@@ -18,6 +18,7 @@ mod group5;
 mod group6;
 mod group7;
 mod group8;
+mod group9;
 
 /// A bold patch over `bold: Some(true)`.
 fn bold_patch(on: bool) -> crate::StylePatch {
