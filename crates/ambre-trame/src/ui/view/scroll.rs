@@ -14,7 +14,7 @@ use crate::ui::grid::{COL_WIDTH, ROW_HEIGHT, TrameUiState};
 /// reads `performance.now()` for it.
 #[derive(Default)]
 pub(crate) struct GridScroll {
-    /// Sub-cell residue (physical px) carried between events, so slow touchpad
+    /// Sub-cell residue (logical px) carried between events, so slow touchpad
     /// scrolls still accumulate into whole rows and columns.
     accum_x: f64,
     accum_y: f64,

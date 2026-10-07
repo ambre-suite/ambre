@@ -153,12 +153,12 @@ pub(crate) fn row_heights_map_name(sheet: &str) -> String {
     format!("row_heights_{sheet}")
 }
 
-/// Uniform fallback metrics (physical px) for never-resized axes. Mirror the UI
+/// Uniform fallback metrics (logical px) for never-resized axes. Mirror the UI
 /// `COL_WIDTH` / `ROW_HEIGHT` defaults (`ui/grid.rs`); the viewport response
 /// fills unset columns/rows with these so the UI gets a complete slice.
 pub(crate) const DEFAULT_COL_WIDTH: f32 = 80.0;
 pub(crate) const DEFAULT_ROW_HEIGHT: f32 = 20.0;
-/// Lower clamp on a resize (physical px), matching the UI `MIN_COL_WIDTH` /
+/// Lower clamp on a resize (logical px), matching the UI `MIN_COL_WIDTH` /
 /// `MIN_ROW_HEIGHT`. The resize pins a drag that would shrink past this.
 pub(crate) const MIN_COL_WIDTH: f32 = 24.0;
 pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;

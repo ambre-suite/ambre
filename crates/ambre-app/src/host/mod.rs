@@ -40,7 +40,8 @@ use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
     ContentRepaint, FrameStats, GpuState, InputEvent, Layer, OverlayRepaint, RafControl,
-    RepaintPlan, TextCache, TextInput, WgpuSurface, bootstrap_gpu, fatal_message, start_raf_loop,
+    RepaintPlan, SurfaceSize, TextCache, TextInput, WgpuSurface, bootstrap_gpu, density_query,
+    fatal_message, size_backing_store, start_raf_loop,
 };
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect, Size,
@@ -258,7 +259,7 @@ impl AppView {
         }
     }
 
-    /// Canvas resized to `width` x `height` physical pixels.
+    /// Canvas resized to `width` x `height` logical pixels (`CANVAS-044`).
     fn resize(&mut self, width: u32, height: u32) {
         match self {
             AppView::Trame(v) => v.resize(width, height),
@@ -395,7 +396,7 @@ impl AppView {
         }
     }
 
-    /// Map a physical screen point into the focused embed's child pixel space
+    /// Map a logical screen point into the focused embed's child pixel space
     /// (`toile-embeds`). `None` off a Toile or when nothing is focused.
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
@@ -492,24 +493,6 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
         }
         None => false,
     }
-}
-
-/// Set a canvas backing store to its CSS layout size scaled by the device pixel
-/// ratio, so rendering is crisp on HiDPI displays. Returns the new physical
-/// `(width, height)` in device pixels, or `None` if the cell has zero area
-/// (detached / display:none). The caller then skips the resize.
-fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
-    let dpr = web_sys::window()
-        .map(|w| w.device_pixel_ratio())
-        .unwrap_or(1.0);
-    let w = (canvas.client_width() as f64 * dpr).round() as u32;
-    let h = (canvas.client_height() as f64 * dpr).round() as u32;
-    if w == 0 || h == 0 {
-        return None;
-    }
-    canvas.set_width(w);
-    canvas.set_height(h);
-    Some((w, h))
 }
 
 // -- Tests (wasm tier) -------------------------------------------------------

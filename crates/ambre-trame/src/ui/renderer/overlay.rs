@@ -3,7 +3,7 @@
 
 use super::*;
 
-/// Marching-ants dash geometry (physical px): 6px dash + 4px gap. The animation
+/// Marching-ants dash geometry (logical px): 6px dash + 4px gap. The animation
 /// crawls the dashes by advancing a phase across this period each frame.
 const MARCHING_DASH: f64 = 6.0;
 

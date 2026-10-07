@@ -35,7 +35,7 @@ pub struct GridLayout<'a> {
     pub header_width: f64,
     /// Height of the fixed column-letter strip on the top.
     pub header_height: f64,
-    /// Vertical offset (physical px) of the whole grid from the surface top.
+    /// Vertical offset (logical px) of the whole grid from the surface top.
     /// This is the height of any band reserved above the column-header
     /// strip: the formula bar on screen, `0.0` for PDF export.
     pub top: f64,
@@ -45,7 +45,7 @@ pub struct GridLayout<'a> {
     /// Default row height (content area), used for any row without an explicit
     /// entry in [`row_heights`](Self::row_heights).
     pub row_height: f64,
-    /// Per-column widths (physical px) keyed by absolute grid column. A column
+    /// Per-column widths (logical px) keyed by absolute grid column. A column
     /// with no entry (the common case, and PDF export with an empty map) falls
     /// back to the uniform [`col_width`](Self::col_width). Fed by the Logic
     /// thread's `col_widths_{sheet}` map (`trame-resize`).
@@ -89,7 +89,7 @@ impl GridLayout<'_> {
         self.hidden_rows.binary_search(&row).is_ok()
     }
 
-    /// Width (physical px) of column `col`: its per-column entry, else the
+    /// Width (logical px) of column `col`: its per-column entry, else the
     /// uniform [`col_width`](Self::col_width).
     pub fn col_w(&self, col: u32) -> f64 {
         self.col_widths
@@ -99,7 +99,7 @@ impl GridLayout<'_> {
             * self.zoom
     }
 
-    /// Height (physical px) of row `row`: its per-row entry, else the uniform
+    /// Height (logical px) of row `row`: its per-row entry, else the uniform
     /// [`row_height`](Self::row_height). A hidden row still reports its natural
     /// height (callers skip it explicitly).
     pub fn row_h(&self, row: u32) -> f64 {

@@ -105,8 +105,8 @@ pub enum InputEvent {
         x: f64,
         y: f64,
     },
-    /// Wheel / two-finger touchpad scroll. `dx`/`dy` are already scaled to
-    /// physical pixels (CSS px x dpr). `delta_mode` is the DOM `WheelEvent`
+    /// Wheel / two-finger touchpad scroll. `dx`/`dy` are logical pixels, the
+    /// DOM's CSS pixels (`CANVAS-032`). `delta_mode` is the DOM `WheelEvent`
     /// unit: 0 = pixel (touchpad, modern mice), 1 = line, 2 = page. The view
     /// normalises lines/pages to pixels before scrolling.
     Wheel {

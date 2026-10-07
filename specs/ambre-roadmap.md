@@ -353,7 +353,7 @@ owns the subsystem.
 | `[ ]` One resize command | V1 | one row and column resize primitive for both table models. No shared table object |
 | `[ ]` One media cache | V1 | every decoded image goes through one bounded cache, Toile and Trame included |
 | `[ ]` One repaint contract | V1 | Prose and Toile honour the shared partial-repaint modes instead of a parallel mechanism |
-| `[ ]` One high-density rule | MVP | the shared surface scales for a high-density display once, so no app spec restates it |
+| `[x]` One high-density rule | MVP | the shared surface scales for a high-density display once, so no app spec restates it |
 | `[x]` The export measures on the shipped faces | V1 | the PDF-export `FontContext` is a `parley::FontContext::new()`, which discovers the faces of the machine. Parley then falls back to one of them for any codepoint the asked family misses. It is the hole `PROSE-114` closed for pagination, still open for export. `PDF-004` pins two exports on one peer, and section 5 of `ambre-spec-pdf-export.md` wants one file out of two peers with no row holding it. Seal the export context the way `ambre_prose::layout::fonts::sealed_context` seals the measuring one, and write the row that says so. The same question is open for the UI context `ambre_canvas::fonts::font_context_from` builds |
 | `[ ]` One selectable PDF | V1 | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |

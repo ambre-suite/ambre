@@ -97,7 +97,7 @@ pub struct DrawStats {
 /// content_bg-coloured veil fades the optimistic value toward the background.
 const DIRTY_VEIL_ALPHA: f32 = 0.5;
 
-/// Leg length, in physical pixels, of the right-triangle error marker drawn in
+/// Leg length, in logical pixels, of the right-triangle error marker drawn in
 /// a cell's top-right corner.
 const ERROR_MARK_SIZE: f64 = 7.0;
 

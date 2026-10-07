@@ -35,7 +35,6 @@ impl TrameView {
     ) -> Self {
         let window = web_sys::window().expect("no window");
         let perf = window.performance().expect("no Performance API");
-        let dpr = window.device_pixel_ratio();
         let theme = theme_ctl.get();
 
         // Focus the pipe up front so the keyboard works without a click. Park it
@@ -54,7 +53,6 @@ impl TrameView {
             from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
             text_input,
-            dpr,
             anchor,
             last_anchor: None,
             perf_pub,
@@ -268,10 +266,7 @@ impl TrameView {
         let next = self
             .state
             .cell_pixel_rect(self.state.active_row(), self.state.active_col())
-            .map(|(x, y, w, _h)| Anchor {
-                x: (x + w / 2.0) / self.dpr,
-                y: y / self.dpr,
-            });
+            .map(|(x, y, w, _h)| Anchor { x: x + w / 2.0, y });
         if next != self.last_anchor {
             self.last_anchor = next;
             self.anchor.publish(next);
@@ -303,11 +298,10 @@ impl TrameView {
     }
 
     /// Slide the textarea pipe onto a cell (CSS px) so the IME popup anchors
-    /// there. The grid works in physical px; the DOM positions in CSS px.
+    /// there. The grid lays out in CSS px too (`CANVAS-032`).
     pub(crate) fn park_input_on(&self, row: u32, col: u32) {
         if let Some((x, y, _, h)) = self.state.cell_pixel_rect(row, col) {
-            self.text_input
-                .set_caret(x / self.dpr, y / self.dpr, h / self.dpr);
+            self.text_input.set_caret(x, y, h);
         }
     }
 

@@ -33,14 +33,14 @@ pub const HEADER_HEIGHT: f64 = 24.0;
 
 pub const HEADER_WIDTH: f64 = 50.0;
 
-/// Lower clamp on a column/row resize (physical px); mirrors the Logic-side
+/// Lower clamp on a column/row resize (logical px); mirrors the Logic-side
 /// `MIN_COL_WIDTH` / `MIN_ROW_HEIGHT` so the UI preview and the persisted value
 /// agree.
 pub const MIN_COL_WIDTH: f64 = 24.0;
 
 pub const MIN_ROW_HEIGHT: f64 = 12.0;
 
-/// Half-width (physical px) of the grab band straddling a header boundary that
+/// Half-width (logical px) of the grab band straddling a header boundary that
 /// arms a resize drag (`trame-resize`). A press within +/- this of a column's right
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
 pub const RESIZE_BAND: f64 = 4.0;
@@ -287,7 +287,7 @@ pub enum HeaderHit {
 }
 
 /// Live guide line shown while dragging a header boundary (`trame-resize`). A
-/// vertical guide at physical x for a column resize, a horizontal guide at y
+/// vertical guide at logical x for a column resize, a horizontal guide at y
 /// for a row resize.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ResizePreview {
@@ -487,7 +487,7 @@ pub struct TrameUiState {
     /// Number of full columns visible in the grid area.
     pub viewport_cols: u32,
 
-    /// Canvas physical size (CSS pixels x devicePixelRatio, set by ResizeObserver).
+    /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
     pub canvas_width: f64,
     pub canvas_height: f64,
 
@@ -540,13 +540,13 @@ pub struct TrameUiState {
     /// `GridLayout`. UI-only derived state.
     pub hidden_rows: Vec<u32>,
 
-    /// Per-column widths (physical px) keyed by absolute grid column, fed by the
+    /// Per-column widths (logical px) keyed by absolute grid column, fed by the
     /// Logic thread's `col_widths` viewport slice (`trame-resize`). A column
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
     pub col_widths: HashMap<u32, f32>,
-    /// Per-row heights (physical px) keyed by absolute grid row. Row analogue of
+    /// Per-row heights (logical px) keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
     pub row_heights: HashMap<u32, f32>,
 
@@ -564,7 +564,7 @@ pub struct TrameUiState {
 
     /// While a header boundary is being dragged (`trame-resize`), the live
     /// guide line position. `Col(x)` for a column resize (a vertical guide at
-    /// physical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
+    /// logical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
     /// when no resize is in progress. UI-only view state.
     pub resize_preview: Option<ResizePreview>,
 

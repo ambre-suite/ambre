@@ -611,7 +611,7 @@ impl TrameView {
         self.state.clipboard_anchor = None;
     }
 
-    /// Map a physical pointer position into the open editor's local (text-relative)
+    /// Map a logical pointer position into the open editor's local (text-relative)
     /// frame, for a pointer intent the shared core resolves against its layout.
     /// Single-line: the local y is 0 (line 0), so only x carries information.
     fn editor_local_point(&self, x: f64, _y: f64) -> Option<(f32, f32)> {
@@ -621,7 +621,7 @@ impl TrameView {
         Some(((x - (cx + pad)).max(0.0) as f32, 0.0))
     }
 
-    /// True when physical pixel `(x, y)` falls on the cell currently being
+    /// True when logical pixel `(x, y)` falls on the cell currently being
     /// edited -- the gate for in-cell mouse text selection vs. committing.
     pub(crate) fn pointer_in_editor(&self, x: f64, y: f64) -> bool {
         let Some(ed) = self.editor.as_ref() else {

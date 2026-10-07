@@ -46,6 +46,7 @@ def scratch(tmp: str) -> Path:
         "fn relay(ev: &UiEvent) { trame_relay.absorb(ev); }\n"
         "fn keys() { register(trame_chrome::COMMANDS); }\n",
     )
+    write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
     return root
 
 
@@ -57,6 +58,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_generators(errors)
             cb.check_chrome(errors)
             cb.check_launcher(errors)
+            cb.check_density(errors)
             return errors
 
     def test_the_real_tree_is_clean(self):
@@ -149,6 +151,37 @@ class CrateBoundaries(unittest.TestCase):
             )
             errors = self.run_checks(root)
         self.assertTrue(any("`ambre_prose::commands::SAVE_FILE`" in e for e in errors), errors)
+
+    def test_a_view_reading_the_density_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                "crates/ambre-trame/src/ui/view/lifecycle.rs",
+                "fn new() { let dpr = window.device_pixel_ratio(); }\n",
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("lifecycle.rs:1: reads the display density" in e for e in errors), errors)
+
+    def test_a_density_read_named_in_a_comment_is_not_a_breach(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-toile/src/ui/view.rs", "// No devicePixelRatio here (`CANVAS-043`).\n")
+            errors = self.run_checks(root)
+        self.assertEqual(errors, [])
+
+    def test_a_density_file_that_reads_nothing_is_an_error_not_a_pass(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, cb.DENSITY, "fn read() -> f64 { 1.0 }\n")
+            errors = self.run_checks(root)
+        self.assertTrue(any("reads no density" in e for e in errors), errors)
 
     def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
         import tempfile

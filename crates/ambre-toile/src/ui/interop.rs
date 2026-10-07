@@ -20,7 +20,7 @@ pub fn accepts(mime: &str) -> bool {
 }
 
 /// A file the shell read for the board (`TOILE-IO-020`). `at` is the drop point
-/// in physical pixels, or `None` when the picker started the import and there is
+/// in logical pixels, or `None` when the picker started the import and there is
 /// no point to speak of.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DroppedFile {

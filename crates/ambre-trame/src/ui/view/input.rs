@@ -700,7 +700,7 @@ impl TrameView {
     pub(crate) fn update_resize_preview(&mut self, x: f64, y: f64) {
         match self.resize_drag {
             Some(HeaderHit::ColBorder(c)) => {
-                // The guide is in physical px, so the minimum width is the base
+                // The guide is in logical px, so the minimum width is the base
                 // clamp scaled by the current zoom.
                 let min_x = self.state.col_x(c) + crate::ui::grid::MIN_COL_WIDTH * self.state.zoom;
                 self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
@@ -727,7 +727,7 @@ impl TrameView {
         };
         match (drag, preview) {
             (HeaderHit::ColBorder(c), crate::ui::grid::ResizePreview::Col(px)) => {
-                // The guide is in physical (zoomed) px; the stored width is BASE
+                // The guide is in logical (zoomed) px; the stored width is BASE
                 // px (zoom-independent content). Divide the on-screen extent
                 // back out by the zoom before persisting.
                 let width = ((px - self.state.col_x(c)) / self.state.zoom)

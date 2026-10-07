@@ -24,11 +24,23 @@ const ATLAS_SIZE: u32 = 2048;
 // 1-pixel padding between glyphs prevents bilinear bleed at atlas boundaries.
 const ATLAS_PAD: u32 = 1;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct GlyphKey {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) struct GlyphKey {
     font_id: u64, // Blob::id() -- stable identifier per registered font
     glyph_id: u16,
     size_x100: u32, // font_size * 100 to avoid floats in hash key
+}
+
+impl GlyphKey {
+    /// The key of a raster at `raster_size`, the size in device pixels. A
+    /// raster made for one density is never found for another (`CANVAS-034`).
+    pub(super) fn new(font_id: u64, glyph_id: u16, raster_size: f32) -> Self {
+        Self {
+            font_id,
+            glyph_id,
+            size_x100: (raster_size * 100.0) as u32,
+        }
+    }
 }
 
 /// Retained bitmap for a packed glyph, kept so the atlas can repack its working
@@ -297,11 +309,7 @@ impl GlyphAtlas {
         normalized_coords: &[swash::NormalizedCoord],
         glyph_id: u16,
     ) -> Option<AtlasSlot> {
-        let key = GlyphKey {
-            font_id: font_data.data.id(),
-            glyph_id,
-            size_x100: (font_size * 100.0) as u32,
-        };
+        let key = GlyphKey::new(font_data.data.id(), glyph_id, font_size);
 
         if let Some(cached) = self.cache.get_mut(&key) {
             cached.last_used = self.frame;

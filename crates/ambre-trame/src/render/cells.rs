@@ -11,7 +11,7 @@ use super::*;
 // draw_cells_on -- cell backgrounds + body text
 // -----------------------------------------------------------------------------
 
-/// Width (physical px) of the consecutive *empty* neighbour columns a non-wrapped
+/// Width (logical px) of the consecutive *empty* neighbour columns a non-wrapped
 /// overflowing cell may spill its text over. The walk starts at `col` and steps
 /// by `step` (`+1` right, `-1` left). It stops at whichever comes first: the
 /// first non-empty neighbour, the grid edge, or `need` pixels of spill covered

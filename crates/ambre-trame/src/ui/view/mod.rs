@@ -236,9 +236,6 @@ pub struct TrameView {
     /// Transparent textarea pipe (keyboard + IME + clipboard). The view focuses
     /// it on a content click and slides it to the caret during an edit session.
     text_input: TextInput,
-    /// devicePixelRatio: the grid works in physical pixels, the textarea
-    /// positions in CSS pixels, so caret coords are divided by this.
-    dpr: f64,
     /// Publishes the active cell's on-screen anchor (CSS px) so the chrome can
     /// transform-sync a floating selection toolbar onto it.
     anchor: AnchorPublisher,

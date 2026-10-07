@@ -11,12 +11,6 @@ use super::*;
 /// The container the shell mounts over the canvas for a board's web embeds
 /// (`TOILE-088`). `None` before the shell renders, and for a host page that does
 /// not carry one.
-/// CSS pixels per physical pixel. The board publishes screen geometry in
-/// physical pixels; the DOM lays out in CSS pixels.
-fn device_pixel_ratio() -> f64 {
-    web_sys::window().map_or(1.0, |w| w.device_pixel_ratio())
-}
-
 fn web_embed_layer() -> Option<web_sys::HtmlElement> {
     web_sys::window()?
         .document()?
@@ -121,7 +115,7 @@ pub struct FrameHost {
     /// resized one view against each other every frame. Only one of them was ever
     /// the right size for it.
     children: HashMap<ElementId, AppView>,
-    /// The last physical canvas size each child was resized to. A moved or zoomed
+    /// The last logical canvas size each child was resized to. A moved or zoomed
     /// embed only triggers a child `resize` when its box actually changes.
     child_sizes: HashMap<ElementId, (u32, u32)>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
@@ -287,7 +281,7 @@ impl FrameHost {
         let Some(layer) = web_embed_layer() else {
             return;
         };
-        self.web_frames.sync(&layer, &embeds, device_pixel_ratio());
+        self.web_frames.sync(&layer, &embeds);
         self.web_frames_empty = embeds.is_empty();
     }
 
@@ -335,35 +329,20 @@ impl FrameHost {
     }
 
     /// Reconfigure the GPU surface and notify the view of a canvas resize.
-    pub fn resize(&mut self, width: u32, height: u32) {
+    /// The view hears the logical size alone (`CANVAS-044`). A density change
+    /// keeps it, and still reaches the view so every layer repaints.
+    pub fn resize(&mut self, size: SurfaceSize) {
+        let (width, height) = size.logical();
         self.view.resize(width, height);
 
         let Some(gpu) = self.gpu.as_mut() else { return };
-        if gpu.width == width && gpu.height == height {
+        if gpu.size == size {
             return;
         }
         tracing::info!("GPU resize: {width}x{height}");
-
-        gpu.surface.configure(
-            &gpu.device,
-            &wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: gpu.surface_format,
-                width,
-                height,
-                present_mode: wgpu::PresentMode::AutoNoVsync,
-                desired_maximum_frame_latency: 2,
-                alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                view_formats: vec![],
-            },
-        );
         // Reallocate the ping-pong offscreens at the new size; previous content
         // is lost so the view's resize() must have flagged a full repaint.
-        gpu.quad_renderer
-            .resize_offscreens(&gpu.device, width, height);
-
-        gpu.width = width;
-        gpu.height = height;
+        gpu.configure(size);
     }
 
     /// Recover after the WebGL/WebGPU context was lost and restored. The GL
@@ -371,26 +350,11 @@ impl FrameHost {
     /// the surface and rebuild the ping-pong offscreens at the current size,
     /// then force a full repaint through the view. A plain `resize` to the same
     /// dimensions early-returns and would leave a blank canvas.
-    pub fn notify_context_restored(&mut self, width: u32, height: u32) {
+    pub fn notify_context_restored(&mut self, size: SurfaceSize) {
         let Some(gpu) = self.gpu.as_mut() else { return };
+        let (width, height) = size.logical();
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
-        gpu.surface.configure(
-            &gpu.device,
-            &wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: gpu.surface_format,
-                width,
-                height,
-                present_mode: wgpu::PresentMode::AutoNoVsync,
-                desired_maximum_frame_latency: 2,
-                alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                view_formats: vec![],
-            },
-        );
-        gpu.quad_renderer
-            .resize_offscreens(&gpu.device, width, height);
-        gpu.width = width;
-        gpu.height = height;
+        gpu.configure(size);
         // Force the view to invalidate every cached layer for a clean repaint.
         self.view.resize(width, height);
     }
@@ -469,7 +433,7 @@ impl FrameHost {
             let _ = self
                 .to_logic
                 .try_send(LogicCommand::LoadFonts { faces: new_faces });
-            if let Some((w, h)) = self.gpu.as_ref().map(|g| (g.width, g.height)) {
+            if let Some((w, h)) = self.gpu.as_ref().map(|g| g.size.logical()) {
                 self.view.resize(w, h);
             }
         }
@@ -490,6 +454,10 @@ impl FrameHost {
         // the board must recomposite even when otherwise idle.
         if self.sync_children(raf_timestamp) {
             plan.content = ContentRepaint::Full;
+        }
+        // The view shifted in logical pixels; the copy runs on the buffer.
+        if let Some(gpu) = self.gpu.as_ref() {
+            gpu.size.shift_in_physical(&mut plan);
         }
 
         // And the sandboxed frames behind the board's web embeds (`TOILE-088`).
@@ -518,8 +486,7 @@ impl FrameHost {
         // -- Build CPU batches for whichever layers are being rebuilt. --------
         let t_draw_ms = if any_dirty {
             gpu.text_cache.reset_frame_stats();
-            gpu.quad_renderer
-                .begin_frame(gpu.width as f32, gpu.height as f32);
+            gpu.quad_renderer.begin_frame(gpu.size);
             let t_draw_start = self.perf.now();
             {
                 let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
@@ -612,19 +579,7 @@ impl FrameHost {
             // dropped.
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                 tracing::warn!("surface lost/outdated, reconfiguring");
-                gpu.surface.configure(
-                    &gpu.device,
-                    &wgpu::SurfaceConfiguration {
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        format: gpu.surface_format,
-                        width: gpu.width,
-                        height: gpu.height,
-                        present_mode: wgpu::PresentMode::AutoNoVsync,
-                        desired_maximum_frame_latency: 2,
-                        alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                        view_formats: vec![],
-                    },
-                );
+                gpu.reconfigure_surface();
                 return;
             }
             Err(e) => {
@@ -665,8 +620,8 @@ impl FrameHost {
     fn render_fatal(&mut self, message: &str) {
         let Some(gpu) = self.gpu.as_mut() else { return };
 
-        let w = gpu.width as f32;
-        let h = gpu.height as f32;
+        let (w, h) = gpu.size.logical();
+        let (w, h) = (w as f32, h as f32);
 
         // Fixed colours (no theme dependency on the fatal path): a near-black
         // backdrop, a red title, and a dim grey body. ASCII strings only.
@@ -679,7 +634,7 @@ impl FrameHost {
         let col_w = (w * 0.8).min(640.0);
         let origin_x = ((w as f64) - col_w as f64) / 2.0;
 
-        gpu.quad_renderer.begin_frame(w, h);
+        gpu.quad_renderer.begin_frame(gpu.size);
         {
             let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
             surface.begin_layer(Layer::Content);

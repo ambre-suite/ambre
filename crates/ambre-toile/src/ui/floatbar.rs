@@ -114,19 +114,18 @@ impl StyleEdit {
 }
 
 /// The client CSS-pixel anchor for the bar: the selection's top-edge midpoint.
-/// It is mapped through the camera (physical screen px), then converted to CSS
-/// px by the device pixel ratio. A final shift by the canvas's client offset
-/// lands the `position: fixed` bar in viewport coordinates. Pure; `dpr` is 1.0
-/// and `offset` is `(0, 0)` in host tests.
+/// It is mapped through the camera into screen pixels, which are CSS pixels
+/// (`CANVAS-032`). A final shift by the canvas's client offset lands the
+/// `position: fixed` bar in viewport coordinates. Pure; `offset` is `(0, 0)` in
+/// host tests.
 pub fn top_center_anchor(
     world_bounds: Rect,
     cam: &ViewportTransform,
-    dpr: f64,
     offset: (f64, f64),
 ) -> (f64, f64) {
     let mid_top = Point::new((world_bounds.x0 + world_bounds.x1) / 2.0, world_bounds.y0);
     let screen = cam.world_to_screen() * mid_top;
-    (offset.0 + screen.x / dpr, offset.1 + screen.y / dpr)
+    (offset.0 + screen.x, offset.1 + screen.y)
 }
 
 /// Build the floating-bar model from the UI selection and the culled viewport, or
@@ -139,7 +138,6 @@ pub fn build_floatbar(
     selection: &[ElementId],
     selected: &[DisplayElement],
     cam: &ViewportTransform,
-    dpr: f64,
     offset: (f64, f64),
 ) -> Option<FloatBar> {
     if selection.is_empty() {
@@ -191,7 +189,7 @@ pub fn build_floatbar(
 
     // Nothing in the selection is present in the culled set: hide the bar.
     let union = union?;
-    let (x, y) = top_center_anchor(union, cam, dpr, offset);
+    let (x, y) = top_center_anchor(union, cam, offset);
     let fill = base.and_then(|b| if mixed.fill { None } else { b.fill });
     Some(FloatBar {
         x,
@@ -304,10 +302,7 @@ mod tests {
             false,
             None,
         )]);
-        assert_eq!(
-            build_floatbar(&[], &els(&dv), &cam(), 1.0, (0.0, 0.0)),
-            None
-        );
+        assert_eq!(build_floatbar(&[], &els(&dv), &cam(), (0.0, 0.0)), None);
     }
 
     #[test]
@@ -320,7 +315,7 @@ mod tests {
             None,
         )]);
         assert_eq!(
-            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), 1.0, (0.0, 0.0)),
+            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), (0.0, 0.0)),
             None
         );
     }
@@ -329,7 +324,7 @@ mod tests {
     fn anchor_is_top_edge_midpoint_in_screen_space() {
         // A 20-wide rect from (10,20)->(30,60): top-edge midpoint is (20, 20) in
         // world. With zoom 1 centered on origin, screen = world + size/2 =
-        // (20+500, 20+400) = (520, 420). dpr 1, no offset.
+        // (20+500, 20+400) = (520, 420). No offset.
         let dv = viewport(vec![elem(
             "a",
             ElementKind::Sticky,
@@ -337,7 +332,7 @@ mod tests {
             false,
             Some(0xff00_ff00),
         )]);
-        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert!((bar.x - 520.0).abs() < 1e-9);
         assert!((bar.y - 420.0).abs() < 1e-9);
         assert!(!bar.multi);
@@ -345,10 +340,9 @@ mod tests {
     }
 
     #[test]
-    fn dpr_and_offset_apply_to_the_anchor() {
-        // Same rect, dpr 2 halves the physical px, then the canvas client offset
-        // shifts into viewport coords: ((520/... )). Screen physical = (520, 420);
-        // /2 = (260, 210); + offset (40, 96) = (300, 306).
+    fn the_canvas_offset_applies_to_the_anchor() {
+        // Same rect: the canvas client offset shifts it into viewport coords.
+        // Screen = (520, 420); + offset (40, 96) = (560, 516).
         let dv = viewport(vec![elem(
             "a",
             ElementKind::Sticky,
@@ -356,9 +350,9 @@ mod tests {
             false,
             None,
         )]);
-        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), 2.0, (40.0, 96.0)).expect("bar");
-        assert!((bar.x - 300.0).abs() < 1e-9);
-        assert!((bar.y - 306.0).abs() < 1e-9);
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), (40.0, 96.0)).expect("bar");
+        assert!((bar.x - 560.0).abs() < 1e-9);
+        assert!((bar.y - 516.0).abs() < 1e-9);
     }
 
     #[test]
@@ -382,7 +376,7 @@ mod tests {
             ),
         ]);
         let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert!((bar.x - 540.0).abs() < 1e-9);
         assert!((bar.y - 410.0).abs() < 1e-9);
         assert!(bar.multi);
@@ -407,7 +401,7 @@ mod tests {
             ),
         ]);
         let bar =
-            build_floatbar(&[eid("g"), eid("l")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+            build_floatbar(&[eid("g"), eid("l")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert!(bar.has_group);
         assert!(bar.any_locked);
         assert!(bar.any_unlocked);
@@ -433,7 +427,7 @@ mod tests {
             ),
         ]);
         let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert_eq!(bar.fill, None);
     }
 
@@ -456,7 +450,7 @@ mod tests {
             ),
         ]);
         let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert_eq!(bar.fill, Some(0xff11_2233));
     }
 
@@ -560,7 +554,7 @@ mod tests {
         let shared_fill = a.fill;
         let dv = viewport(vec![styled_elem("a", a), styled_elem("b", b)]);
         let bar =
-            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), (0.0, 0.0)).expect("bar");
         assert!(bar.mixed.text_color);
         assert!(bar.mixed.font_family);
         assert!(bar.mixed.font_size);

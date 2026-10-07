@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: HIGH-DENSITY DISPLAYS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the content is sharp on a high-density screen. The scaling is done
-in three crates and no shared surface owns it.
+**Implementation:** implemented -- `ambre-canvas` reads the density once, and a view is handed
+logical pixels alone.
 
 > A screen with two or more physical pixels per CSS pixel. The content stays sharp on it. The
 > drawing buffer, the glyphs and the paths all agree on which of the two units they are
@@ -23,11 +23,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-031` | `INV` | The display density MUST be read by one component. | this spec section 2 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). `ambre-canvas`, the shared surface the rule names, reads it nowhere | unimplemented |
-| `CANVAS-043` | `INV` | An application MUST NOT read the display density. | this spec section 2; section 4, row 4 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). Three crates read `device_pixel_ratio` across eleven call sites, the launcher, Trame and Toile, and two of the three are applications | unimplemented |
-| `CANVAS-032` | `INV` | A view MUST reason in logical coordinates. | this spec section 2 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). Trame's grid works in physical pixels and divides by the density to place its caret | unimplemented |
-| `CANVAS-044` | `INV` | A physical size MUST NOT cross the boundary into a view. | this spec section 2 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). `resize` is handed the backing-store size in physical pixels, and the pointer path multiplies each event by the density before the view sees it | unimplemented |
-| `CANVAS-033` | `OBS` | A glyph MUST be rasterized at the physical resolution of the display, never at the logical one. | this spec section 2 | none | unheld -- the density is passed to the layout cache and on to the Parley builder, so a glyph is shaped and rasterized at the physical size. Nothing reads back a rendered glyph, and blurry text is what a regression looks like; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-031` | `INV` | The display density MUST be read by one component. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a Rust line outside `crates/ambre-canvas/src/density.rs` naming the browser's density | none | verified |
+| `CANVAS-043` | `INV` | An application MUST NOT read the display density. | this spec section 2; section 4, row 4 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a Rust line outside `crates/ambre-canvas/src/density.rs` naming the browser's density | none | verified |
+| `CANVAS-032` | `INV` | A view MUST reason in logical coordinates. | this spec section 2 | type-level -- `SurfaceSize` keeps the density private to `ambre-canvas`, so a view has no factor to scale by; ci-gate -- `scripts/crate_boundaries.py` refuses a second read of the density | none | verified |
+| `CANVAS-044` | `INV` | A physical size MUST NOT cross the boundary into a view. | this spec section 2 | type-level -- `SurfaceSize::physical` is crate-private, and `resize` takes the logical size | none | verified |
+| `CANVAS-033` | `OBS` | A glyph MUST be rasterized at the physical resolution of the display, never at the logical one. | this spec section 2 | `ambre_canvas::render::surface::tests::a_glyph_is_rasterized_at_the_physical_size` | partial -- the test reads the raster size and the box the surface asks for. Nothing reads a rendered glyph back; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.2 The display density changes
 
@@ -38,17 +38,17 @@ through a query that fires once and then stops matching.
 |---|---|---|---|---|---|---|
 | `CANVAS-035` | `POST` | A density change MUST resize the drawing buffer, even when the CSS size did not change. | this spec section 2 | none | unheld -- the launcher arms a `matchMedia` watch on the current density, because a `ResizeObserver` does not fire when only the density moves. No test drives the path; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-045` | `POST` | A density change MUST leave a watch armed on the new density. | this spec section 2, the resize path; section 4, row 3 | none | unheld -- the handler re-arms a fresh query for the new density, because the query that just fired no longer matches. The first implementation watched for the existence of the feature instead and fired never, and no test would have caught it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-034` | `POST` | A density change MUST invalidate every cached layout. | this spec section 2 | none | fails -- the density is a field set once when the cache is built, with no setter, and it is absent from the cache key. A window dragged to a second screen keeps every layout shaped for the first one; lands with the `One high-density rule` Story (`ambre-roadmap.md` E8) | failing |
-| `CANVAS-046` | `FRAME` | A density change MUST NOT change the logical geometry of anything a view laid out. | this spec section 2, the two units; derived | none | unheld -- a density change is a change of resolution and never of layout, and no test reads a logical size back across one. It is the rule the independent readers of `CANVAS-043` are most likely to break, each at its own moment; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-034` | `POST` | A density change MUST re-rasterize every glyph at the new density. | this spec section 2 | `ambre_canvas::render::surface::tests::a_density_change_asks_for_a_new_raster` | none | verified |
+| `CANVAS-046` | `FRAME` | A density change MUST NOT change the logical geometry of anything a view laid out. | this spec section 2, the two units; derived | `ambre_canvas::density::tests::a_density_change_keeps_the_logical_size`; type-level -- a view is handed `SurfaceSize::logical` alone | none | verified |
+| `CANVAS-071` | `POST` | A scroll shift that lands between two device pixels MUST repaint the content in full. | this spec section 2, the scroll copy | `ambre_canvas::density::tests::a_shift_between_two_device_pixels_repaints_in_full`; `::a_scroll_shift_is_copied_in_device_pixels` | none | verified |
 
 * **Budget.** none of its own. A denser display multiplies the pixels a frame covers. The cost
   lands on the phases of `ambre-spec-budgets.md section 2` and on the texture row of
   `ambre-spec-budgets.md section 6`, charged where they are budgeted. No row here adds a figure.
 * **Boundary.** none: the display density is read from the browser and never leaves the client. It
   is a fingerprinting signal the page already carries, and nothing here sends it anywhere.
-* **Verification.** 0 `verified`, 1 `failing`, 4 `untested`, 4 `unimplemented`. Nothing holds a
-  single row, and one of the five is known to be broken. The behaviour is correct on a static
-  display and undefined the moment the density moves, because no component owns it.
+* **Verification.** 7 `verified`, 1 `partial`, 2 `untested`. The two watches are driven by no test,
+  and no rendered glyph is read back.
 ---
 
 ## 2. MODEL
@@ -59,39 +59,36 @@ through a query that fires once and then stops matching.
 
 | Unit | What it counts | Who works in it |
 |---|---|---|
-| logical, or CSS pixel | what a layout is written against: a 14 pt font, a 24 px row | the document model, the chrome, the caret the `<textarea>` is placed at |
-| physical, or device pixel | what the GPU fills | the drawing buffer, the projection matrix, the glyph raster |
+| logical, or CSS pixel | what a layout is written against: a 14 pt font, a 24 px row | every view, the pointer events, the chrome, the caret the `<textarea>` is placed at |
+| physical, or device pixel | what the GPU fills | the drawing buffer, the offscreen pair, the glyph raster |
 
 `devicePixelRatio` is the factor between them. It is 1 on an ordinary screen, 2 on a typical
 high-density one, and a fraction on a scaled desktop.
 
-**Where the factor applies.** Four places, one rule each.
+**One reader.** `crates/ambre-canvas/src/density.rs` reads the factor and builds a `SurfaceSize`.
+That value carries both sizes. Only the logical one is readable outside `ambre-canvas`.
 
-| Surface | Rule | State |
-|---|---|---|
-| the drawing buffer | sized in physical pixels, so `canvas.width` is the CSS width times the density | built, in the launcher |
-| the projection | `QuadRenderer::begin_frame(w, h)` takes the physical size and builds the normalized-device matrix from it | built |
-| the glyphs | the density is passed to the layout cache and to the Parley builder, so a glyph is rasterized at its physical size (`CANVAS-033`) | built |
-| the vector paths | tessellated in model space and mapped through the projection, so they are sharp at any density with nothing to configure | built |
+**Where the factor applies.** Five places, all inside `ambre-canvas`.
+
+| Surface | Rule |
+|---|---|
+| the drawing buffer | sized in physical pixels: `canvas.width` is the CSS width times the density |
+| the projection | `QuadRenderer::begin_frame` maps the logical size onto the whole buffer |
+| the glyphs | rasterized at the font size times the density, and drawn back over their logical box (`CANVAS-033`) |
+| the vector paths | flattened at a tolerance divided by the density, so a curve stays smooth |
+| the scroll copy | a logical shift is copied in device pixels. One that lands between two of them repaints in full (`CANVAS-071`) |
 
 **The resize path.** Two events reach the same handler, because the browser separates them.
 
 1. the CSS box changed -- a `ResizeObserver` on the canvas fires;
 2. only the density changed. A `matchMedia` query on the current `dppx` fires, and the launcher
    arms a fresh query afterwards because the old one no longer matches (`CANVAS-045`);
-3. either way the backing store is resized, `FrameHost::resize` reconfigures the GPU surface and
-   reallocates the offscreen pair, and `AppView::resize` raises a full repaint.
+3. either way the backing store is resized and `GpuState::configure` reallocates the surface and
+   the offscreen pair. `AppView::resize` hears the logical size and raises a full repaint.
 
-**The target, and the distance to it.** `CANVAS-031` and `CANVAS-032` say that the shared surface
-scales once and hands a view logical coordinates. Today the launcher, Trame and Toile each read the
-density for themselves, across eleven call sites. `resize` carries physical pixels, and Trame's
-grid divides by the density again to place its caret. Every copy is correct and they are correct
-separately, which is what `One high-density rule` withdraws.
-
-**Code:** `crates/ambre-app/src/host/mod.rs` sizes the backing store,
-`crates/ambre-app/src/host/run.rs` arms both watches, and
-`crates/ambre-canvas/src/text_cache.rs` carries the density into the shaper. `ambre-canvas` itself
-reads the browser's density nowhere.
+**Code:** `crates/ambre-canvas/src/density.rs` reads the density and sizes the backing store,
+`crates/ambre-canvas/src/host.rs` configures the GPU, and `crates/ambre-app/src/host/run.rs` arms
+both watches.
 
 ---
 
@@ -101,9 +98,9 @@ The user touches nothing here. What they see is whether the content is sharp.
 
 | Trigger | Behaviour |
 |---|---|
-| the application opens on a high-density screen | text and vector content are sharp, at the screen's own resolution |
+| the application opens on a high-density screen | text and vector content are sharp, at the screen's own resolution, and laid out at the same size as on any other screen |
 | the browser page zoom is changed | the density changes, the buffer is resized, and the content repaints at the new resolution |
-| the window is dragged to a screen of another density | the buffer is resized; the text keeps the resolution of the first screen (`CANVAS-034`) |
+| the window is dragged to a screen of another density | the buffer is resized and every glyph is rasterized again for the new screen (`CANVAS-034`) |
 | the window is resized on one screen | the buffer follows the CSS box and the view repaints in full |
 
 ---
@@ -116,29 +113,18 @@ The user touches nothing here. What they see is whether the content is sharp.
 | A glyph is rasterized at the physical size | rasterizing once at the logical size and letting the transform scale it | a glyph is a bitmap in an atlas, so it is the one thing the projection cannot fix after the fact: scaling a 14 px raster to 28 px is blur, and nothing downstream recovers it |
 | The density is watched with a re-armed `matchMedia` query | a `ResizeObserver` alone | it does not fire when the CSS box is unchanged, which is the common case: the window keeps its logical size and only the backing scale moves |
 | The density is watched with a re-armed `matchMedia` query | one permanent resolution query | a `MediaQueryList` fires only when its own threshold is crossed, so a feature-existence query on `(resolution)` never fires at all -- which is what the first implementation did. The current density is the threshold, so each change needs a new query |
-| One component reads the density | each view reading the browser for itself, which is what the code does today | four independent readers are four chances to sample it at a different moment, and a value captured at view construction is stale for the rest of the session. It is also what makes a rule statable at all: with four readers there is nothing to point a test at |
+| One component reads the density | each view reading the browser for itself, which is what the code once did | four independent readers are four chances to sample it at a different moment, and a value captured at view construction is stale for the rest of the session. It is also what makes a rule statable at all: with four readers there is nothing to point a test at |
+| Views lay out in logical pixels | views laying out in physical pixels, scaled by the density they read | every metric becomes two numbers, and a view that forgets one draws its content at half size on a dense screen. That is what the code did until this document's rule landed |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The density is captured once per view.** Trame reads `device_pixel_ratio` when the view is
-  built and keeps the value. A density change after startup leaves the caret placement running on
-  the old factor. The same holds for the layout cache (`CANVAS-034`).
-* **`ambre-canvas` owns none of this.** The shared surface the rule names reads no density at all;
-  the launcher and two applications do. Until `One high-density rule` lands there is no component
-  for `CANVAS-031` to be verified against.
-* **The pointer path scales before the view sees it.** Each pointer event is multiplied by a density
-  captured when the listener was attached, so a view is handed physical coordinates. A density
-  change after startup leaves the factor stale (`CANVAS-044`).
-* **Nothing rules on a fractional density.** A scaled desktop reports values such as 1.25 and 1.5,
-  and the backing store is rounded. No row says what the half pixel does to a hairline or to a grid
-  line.
+* **Nothing rules on a hairline at a fractional density.** A scaled desktop reports values such as
+  1.25 and 1.5. A one-pixel logical rule then covers a pixel and a quarter, and no row says how it
+  is drawn.
 * **Nothing bounds the density.** A buffer at a density of 3 covers nine times the pixels of one at
   1. No budget row of `ambre-spec-budgets.md` is written per density.
-* **The chrome scales by itself.** The DOM side needs none of this: CSS is authored in logical
-  pixels and the browser rasterizes it. The two halves of the interface therefore reach a
-  high-density screen by two entirely different routes, and no document states that they agree.
 
 ---
 

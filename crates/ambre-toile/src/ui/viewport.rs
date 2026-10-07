@@ -27,7 +27,7 @@ pub const FIT_PAD: f64 = 0.08;
 
 /// The world <-> screen camera. `center` is the world point under the screen
 /// center; `zoom` is world-units-per... no: screen = (world - center) * zoom +
-/// size/2, so `zoom` is screen-pixels per world-unit. `size` is physical pixels.
+/// size/2, so `zoom` is screen-pixels per world-unit. `size` is logical pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ViewportTransform {
     pub center: Point,
@@ -46,7 +46,7 @@ impl Default for ViewportTransform {
 }
 
 impl ViewportTransform {
-    /// Build from a physical canvas size, centered on the world origin at 1x.
+    /// Build from a logical canvas size, centered on the world origin at 1x.
     pub fn new(width: f64, height: f64) -> Self {
         Self {
             center: Point::ZERO,
@@ -55,7 +55,7 @@ impl ViewportTransform {
         }
     }
 
-    /// The affine mapping a world point to a screen (physical-pixel) point:
+    /// The affine mapping a world point to a screen (logical-pixel) point:
     /// `screen = translate(size/2) * scale(zoom) * translate(-center)` applied to
     /// the world point (rightmost factor runs first, kurbo convention).
     pub fn world_to_screen(&self) -> Affine {
@@ -153,14 +153,14 @@ impl ViewportTransform {
         }
     }
 
-    /// Pan the camera by a screen-space delta. A drag of `delta` physical pixels
+    /// Pan the camera by a screen-space delta. A drag of `delta` logical pixels
     /// moves the content under the cursor by the same amount. The world center
     /// shifts against the drag, scaled down by the current zoom.
     pub fn pan_by_screen(&mut self, delta: Vec2) {
         self.center -= delta / self.zoom;
     }
 
-    /// Set the physical canvas size (on resize). Keeps center and zoom.
+    /// Set the logical canvas size (on resize). Keeps center and zoom.
     pub fn set_size(&mut self, width: f64, height: f64) {
         self.size = Size::new(width.max(1.0), height.max(1.0));
     }

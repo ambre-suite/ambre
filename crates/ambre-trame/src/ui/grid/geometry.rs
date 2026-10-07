@@ -43,7 +43,7 @@ impl TrameUiState {
         v
     }
 
-    /// Width (physical px) of column `col`: its resized entry, else [`COL_WIDTH`].
+    /// Width (logical px) of column `col`: its resized entry, else [`COL_WIDTH`].
     pub fn col_width_of(&self, col: u32) -> f64 {
         self.col_widths
             .get(&col)
@@ -52,7 +52,7 @@ impl TrameUiState {
             * self.zoom
     }
 
-    /// Height (physical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
+    /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
     pub fn row_height_of(&self, row: u32) -> f64 {
         self.row_heights
             .get(&row)
@@ -61,13 +61,13 @@ impl TrameUiState {
             * self.zoom
     }
 
-    /// Width (physical px) of the fixed row-number strip on the left, scaled by
+    /// Width (logical px) of the fixed row-number strip on the left, scaled by
     /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
     pub fn header_w(&self) -> f64 {
         HEADER_WIDTH * self.zoom
     }
 
-    /// Height (physical px) of the fixed column-letter strip on top, scaled by
+    /// Height (logical px) of the fixed column-letter strip on top, scaled by
     /// the current [`zoom`](Self::zoom).
     pub fn header_h(&self) -> f64 {
         HEADER_HEIGHT * self.zoom
@@ -112,7 +112,7 @@ impl TrameUiState {
         y
     }
 
-    /// Absolute grid column whose band contains physical x `px` (>= the row
+    /// Absolute grid column whose band contains logical x `px` (>= the row
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
     pub fn col_at_x(&self, px: f64) -> Option<u32> {
@@ -132,7 +132,7 @@ impl TrameUiState {
         None
     }
 
-    /// Insertion slot for a column reorder drop at physical x `px`: the column
+    /// Insertion slot for a column reorder drop at logical x `px`: the column
     /// index the grabbed column would land *before*. It snaps to the nearer
     /// vertical boundary: the left edge of the column under the cursor, or the
     /// next one past its midpoint. That last option keeps the final position
@@ -144,7 +144,7 @@ impl TrameUiState {
         Some(if px >= mid { col + 1 } else { col })
     }
 
-    /// Insertion slot for a row reorder drop at physical y `py`: the row index
+    /// Insertion slot for a row reorder drop at logical y `py`: the row index
     /// the grabbed row would land *above*. It snaps to the nearer horizontal
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
     pub fn row_drop_slot(&self, py: f64) -> Option<u32> {
@@ -153,7 +153,7 @@ impl TrameUiState {
         Some(if py >= mid { row + 1 } else { row })
     }
 
-    /// Absolute *visible* grid row whose band contains physical y `py` (>= the
+    /// Absolute *visible* grid row whose band contains logical y `py` (>= the
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
     pub fn row_at_y(&self, py: f64) -> Option<u32> {
@@ -190,7 +190,7 @@ impl TrameUiState {
         self.cell_at(x, y)
     }
 
-    /// The speed a drag held at `(x, y)` scrolls the grid at, in physical
+    /// The speed a drag held at `(x, y)` scrolls the grid at, in logical
     /// pixels per millisecond on each axis (`KINETIC-007`). Each edge is the
     /// cell area's, past the header strips; zero away from them.
     pub fn edge_scroll_speed(&self, x: f64, y: f64) -> (f64, f64) {
@@ -200,7 +200,7 @@ impl TrameUiState {
         (f64::from(sx), f64::from(sy))
     }
 
-    /// Cell `(row, col)` at physical pixel `(x, y)`, or `None` if the point is
+    /// Cell `(row, col)` at logical pixel `(x, y)`, or `None` if the point is
     /// in a header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
     pub fn cell_at(&self, x: f64, y: f64) -> Option<(u32, u32)> {
         let cells_top = self.header_h();
@@ -243,7 +243,7 @@ impl TrameUiState {
         Some((row, col))
     }
 
-    /// Resolve a pointer at physical `(x, y)` to a header zone
+    /// Resolve a pointer at logical `(x, y)` to a header zone
     /// (`trame-headers`), or `None` when the point is over the grid body (not a
     /// header strip). The resize bands (a +/- [`RESIZE_BAND`] zone around a
     /// boundary) take priority over the body so a grab on the edge resizes rather

@@ -158,8 +158,8 @@ impl CommandHandler for ToileHandler {
 /// (`TOILE-IO-020`, `TOILE-IO-023`). The listener is installed once the canvas element
 /// exists, and lives as long as the page.
 ///
-/// The drop point is converted to physical pixels, the space the canvas view
-/// works in, as the pointer path does.
+/// The drop point stays in CSS pixels, the logical space the canvas view works
+/// in, as the pointer path does.
 pub fn install_file_drop(dropped: RwSignal<Option<DroppedFile>>, toasts: Toasts) {
     Effect::new(move |_| {
         let Some(canvas) = document().get_element_by_id("ambre-canvas") else {
@@ -173,9 +173,6 @@ pub fn install_file_drop(dropped: RwSignal<Option<DroppedFile>>, toasts: Toasts)
         let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
         over.forget();
 
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
         let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
             e.prevent_default();
             let Some(file) = e
@@ -185,7 +182,7 @@ pub fn install_file_drop(dropped: RwSignal<Option<DroppedFile>>, toasts: Toasts)
             else {
                 return;
             };
-            let at = Point::new(e.offset_x() as f64 * dpr, e.offset_y() as f64 * dpr);
+            let at = Point::new(f64::from(e.offset_x()), f64::from(e.offset_y()));
             read_file_into(file, Some(at), dropped, toasts);
         });
         let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());

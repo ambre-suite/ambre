@@ -52,16 +52,16 @@ pub struct VisibleEmbed {
     /// and the id the child's own commands carry.
     pub document_id: DocumentId,
     pub doc_type: DocType,
-    /// Where to paint the child, in physical screen pixels. The axis-aligned
+    /// Where to paint the child, in screen pixels. The axis-aligned
     /// bounding box of the element's (possibly rotated) quad. `push_clip` is
     /// rect-only, so a rotated embed clips to its AABB -- accepted, see
     /// "Clip limitation".
     pub screen_rect: Rect,
-    /// The child's own canvas size in physical pixels. A child pixel is a
+    /// The child's own canvas size in logical pixels. A child pixel is a
     /// screen pixel by construction, since the camera's zoom scales both from
     /// world units. So this is the element's world size at the current zoom.
     pub child_size: Size,
-    /// Child pixels -> physical screen pixels: what a painter pushes before
+    /// Child pixels -> screen pixels: what a painter pushes before
     /// drawing the child, so a rotated embed paints its child rotated
     /// (`TOILE-UI-096`). The exact inverse of [`to_child_space`], which is what
     /// makes the paint and the pointer agree. Translating to `screen_rect`'s
@@ -109,7 +109,7 @@ pub fn to_screen(elem: &DisplayElement, cam: &ViewportTransform) -> Affine {
         * Affine::scale(1.0 / cam.zoom)
 }
 
-/// The child's canvas size in physical pixels at the current zoom.
+/// The child's canvas size in logical pixels at the current zoom.
 pub fn child_size(elem: &DisplayElement, cam: &ViewportTransform) -> Size {
     Size::new(
         elem.bounds.width() * cam.zoom,
@@ -197,7 +197,7 @@ pub enum EmbedTarget {
 }
 
 /// An embed the shell resolved and the view has yet to place (`TOILE-086`,
-/// `TOILE-087`). `at` is the drop point in physical pixels, or `None` when a
+/// `TOILE-087`). `at` is the drop point in logical pixels, or `None` when a
 /// menu entry started the placement and there is no point to speak of. The
 /// view then centres it on what the user is looking at, like a picker import.
 #[derive(Clone, Debug, PartialEq)]
@@ -355,7 +355,7 @@ pub struct VisibleWebEmbed {
     pub element: ElementId,
     /// The address, as stored: the placement normalized it already.
     pub url: String,
-    /// Where the frame goes, in physical screen pixels: the AABB of the
+    /// Where the frame goes, in screen pixels: the AABB of the
     /// element's quad, like a nested document's. What the board clips to.
     pub screen_rect: Rect,
     /// The frame's own layout size, in world units -- the element's size, and
@@ -366,9 +366,8 @@ pub struct VisibleWebEmbed {
     /// page inside it. Sizing the frame in screen pixels instead would re-run the
     /// page's layout on every wheel notch, at a cost the board does not control.
     pub layout_size: Size,
-    /// Layout units -> physical screen pixels: where the frame sits, turned by
-    /// the element's own rotation. A caller working in CSS pixels divides by the
-    /// device pixel ratio.
+    /// Layout units -> screen pixels: where the frame sits, turned by
+    /// the element's own rotation. Screen pixels are CSS pixels (`CANVAS-032`).
     pub to_screen: Affine,
     /// View-local focus, on the same arbitration as a nested document's: a click
     /// enters, a drag moves. Until the user enters it, the frame must let the
@@ -408,7 +407,7 @@ pub fn visible_web_embeds(
         .collect()
 }
 
-/// How far (physical pixels) the pointer may travel between press and release
+/// How far (logical pixels) the pointer may travel between press and release
 /// and still count as a click. A click focuses a `doc_embed`, and a longer
 /// travel is a drag that moves it ("Input focus").
 pub const CLICK_SLOP: f64 = 4.0;

@@ -12,7 +12,7 @@ use super::*;
 /// [`FrameHost`] on the requestAnimationFrame loop. DOM input and resize events
 /// are forwarded to it.
 ///
-/// `make_view` receives the canvas size in physical pixels plus the transparent
+/// `make_view` receives the canvas size in logical pixels plus the transparent
 /// [`TextInput`] pipe, so the view can focus it and follow it to the caret. It
 /// returns the [`AppView`] to drive. It runs on this (UI) thread before the GPU
 /// is ready.
@@ -63,7 +63,7 @@ where
     // size; left untouched it would default to 300x150. Reading `client_width`
     // forces the pending layout, so the dimensions are exact. Subsequent cell
     // resizes are handled by the resize listener below.
-    size_backing_store(&canvas);
+    let size = size_backing_store(&canvas).unwrap_or(SurfaceSize::UNSIZED);
 
     // The transparent <textarea> pipe (keyboard + IME + clipboard). Attached
     // under the canvas's positioned cell so a `transform` caret-follow is
@@ -75,11 +75,9 @@ where
         .expect("canvas parent is an Element");
     let text_input = TextInput::create(&document, &input_parent);
 
-    let view = make_view(
-        canvas.width() as f64,
-        canvas.height() as f64,
-        text_input.clone(),
-    );
+    // The view lays out in logical pixels (`CANVAS-032`).
+    let (width, height) = size.logical();
+    let view = make_view(f64::from(width), f64::from(height), text_input.clone());
     // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
     // can build a child view (`toile-embeds`) knowing nothing about the pipe. The
     // child reuses the one transparent textarea, but is constructed in embedded
@@ -112,7 +110,7 @@ where
         // active GPU frames from frame 1. Empty early frames make it lock to 60
         // Hz.
         wasm_bindgen_futures::spawn_local(async move {
-            if let Some(gpu) = bootstrap_gpu(canvas_c).await {
+            if let Some(gpu) = bootstrap_gpu(canvas_c, size).await {
                 host_c.borrow_mut().install_gpu(gpu);
             }
             // `pre_frame` is the route-independent relay: Logic<->Sync, the
@@ -436,8 +434,8 @@ where
         let canvas_c2 = canvas.clone();
         let cb = Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(
             move |_entries, _observer| {
-                if let Some((w, h)) = size_backing_store(&canvas_c2) {
-                    host_c.borrow_mut().resize(w, h);
+                if let Some(size) = size_backing_store(&canvas_c2) {
+                    host_c.borrow_mut().resize(size);
                 }
             },
         );
@@ -449,29 +447,27 @@ where
 
     // -- DPI change -> host (matchMedia). --------------------------------------
     // When the window moves between displays of different density, the canvas
-    // CSS size stays the same but devicePixelRatio changes. ResizeObserver does
-    // not fire in that case, so we watch resolution changes separately.
+    // CSS size stays the same but the density changes. ResizeObserver does not
+    // fire in that case, so we watch resolution changes separately.
     //
     // A `MediaQueryList` only fires `change` when it crosses ITS OWN threshold,
     // so the old `match_media("(resolution)")` -- a feature-existence query with
     // no threshold -- never fired. The correct pattern is to query the CURRENT
-    // `Ndppx` and re-arm a fresh listener after each change, since the new DPR
-    // needs a new query. `arm_dpi_watch` does exactly that.
+    // `Ndppx` and re-arm a fresh listener after each change, since the new
+    // density needs a new query. `arm_dpi_watch` does exactly that.
     fn arm_dpi_watch(host: Rc<RefCell<FrameHost>>, canvas: HtmlCanvasElement) {
         let Some(window) = web_sys::window() else {
             return;
         };
-        let dpr = window.device_pixel_ratio();
-        let query = format!("(resolution: {dpr}dppx)");
-        let Ok(Some(mql)) = window.match_media(&query) else {
+        let Ok(Some(mql)) = window.match_media(&density_query()) else {
             return;
         };
         let cb = Closure::once_into_js(move |_event: web_sys::MediaQueryListEvent| {
-            if let Some((w, h)) = size_backing_store(&canvas) {
-                host.borrow_mut().resize(w, h);
+            if let Some(size) = size_backing_store(&canvas) {
+                host.borrow_mut().resize(size);
             }
-            // Re-arm for the new device pixel ratio: this listener has fired and
-            // its query no longer matches the current DPR.
+            // Re-arm for the new density: this listener has fired and its
+            // query no longer matches.
             arm_dpi_watch(host.clone(), canvas.clone());
         });
         let _ = mql.add_event_listener_with_callback("change", cb.unchecked_ref());
@@ -498,8 +494,8 @@ where
         let canvas_c = canvas.clone();
         let cb = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event| {
             tracing::info!("webglcontextrestored");
-            if let Some((w, h)) = size_backing_store(&canvas_c) {
-                host_c.borrow_mut().notify_context_restored(w, h);
+            if let Some(size) = size_backing_store(&canvas_c) {
+                host_c.borrow_mut().notify_context_restored(size);
             }
         });
         let _ = canvas
@@ -510,11 +506,9 @@ where
     // -- Pointer events -> view. -----------------------------------------------
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
 
-        // A cancel carries no reliable position, so the last one stands in.
+        // Positions are CSS pixels, which is what a view lays out in
+        // (`CANVAS-032`). A cancel carries no reliable position, so the last one stands in.
         let mut last = (0.0, 0.0);
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
@@ -522,7 +516,7 @@ where
                 let (x, y) = if cancelled {
                     last
                 } else {
-                    (event.offset_x() as f64 * dpr, event.offset_y() as f64 * dpr)
+                    (f64::from(event.offset_x()), f64::from(event.offset_y()))
                 };
                 last = (x, y);
                 // A finger pans the view rather than selecting.
@@ -590,9 +584,6 @@ where
     // text is read; a dropped file is left to the browser (`PROSE-UI-204`).
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
         let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |event: web_sys::DragEvent| {
             let Some(data) = event.data_transfer() else {
                 return;
@@ -607,8 +598,8 @@ where
             if text.is_empty() {
                 return;
             }
-            let x = (event.offset_x() as f64 * dpr) as f32;
-            let y = (event.offset_y() as f64 * dpr) as f32;
+            let x = event.offset_x() as f32;
+            let y = event.offset_y() as f32;
             if host_c.borrow_mut().drop_text(x, y, text) {
                 event.prevent_default();
             }
@@ -624,18 +615,14 @@ where
     // -- Double-click -> view. ------------------------------------------------
     // A separate `dblclick` listener so the platform's own double-click timing
     // (the OS setting) decides what counts as a double-click -- no hand-rolled
-    // threshold. `MouseEvent::offset_*` is in CSS px; scale to physical like the
-    // pointer path.
+    // threshold. `MouseEvent::offset_*` is in CSS px, like the pointer path.
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
         let cb =
             Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
                 let ev = InputEvent::DoubleClick {
-                    x: event.offset_x() as f64 * dpr,
-                    y: event.offset_y() as f64 * dpr,
+                    x: f64::from(event.offset_x()),
+                    y: f64::from(event.offset_y()),
                 };
                 if host_c.borrow_mut().handle_input(&ev) {
                     event.prevent_default();
@@ -650,18 +637,15 @@ where
     // -- Wheel event -> view. -------------------------------------------------
     // The browser emits `wheel` for the mouse wheel *and* for two-finger
     // touchpad scrolling, so this single listener covers both. Deltas are in
-    // CSS px (pixel mode) or lines/pages; scale to physical px like the pointer
-    // path and forward `delta_mode` so the view can normalise lines/pages.
+    // CSS px (pixel mode) or lines/pages. Forward `delta_mode` so the view can
+    // normalise lines/pages.
     {
         let host_c = Rc::clone(&host);
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
         let cb =
             Closure::<dyn FnMut(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
                 let ev = InputEvent::Wheel {
-                    dx: event.delta_x() * dpr,
-                    dy: event.delta_y() * dpr,
+                    dx: event.delta_x(),
+                    dy: event.delta_y(),
                     delta_mode: event.delta_mode(),
                     ctrl_key: event.ctrl_key(),
                 };

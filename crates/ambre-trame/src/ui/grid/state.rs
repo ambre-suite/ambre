@@ -47,7 +47,7 @@ impl TrameUiState {
         self.recompute_viewport_dims();
     }
 
-    /// Bottom edge (physical px) of the scrollable grid area. The sheet-tab strip
+    /// Bottom edge (logical px) of the scrollable grid area. The sheet-tab strip
     /// moved to DOM chrome (`SheetTabs`), so the grid now fills the full canvas
     /// height. The DOM strip occupies its own shell row outside this surface.
     pub fn grid_bottom(&self) -> f64 {

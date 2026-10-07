@@ -51,15 +51,15 @@ pub enum Tool {
     Hand,
 }
 
-/// Screen-space pick radius (physical px) around a corner / rotate handle.
+/// Screen-space pick radius (logical px) around a corner / rotate handle.
 const HANDLE_PICK_PX: f64 = 9.0;
-/// Screen-space grab band (physical px) around a selection edge. The whole side
+/// Screen-space grab band (logical px) around a selection edge. The whole side
 /// resizes (with a directional cursor), even though only the corners draw a
 /// visual square (toile-tools).
 const EDGE_GRAB_PX: f64 = 6.0;
-/// Rotate handle offset above the selection's top edge (physical px).
+/// Rotate handle offset above the selection's top edge (logical px).
 pub const ROTATE_OFFSET_PX: f64 = 26.0;
-/// Drawn size of a square resize handle (physical px), used by the overlay.
+/// Drawn size of a square resize handle (logical px), used by the overlay.
 pub const HANDLE_SIZE_PX: f64 = 8.0;
 
 /// The cursor an in-flight Select gesture calls for: a directional
@@ -161,7 +161,7 @@ impl SelectTool {
         self.drag.is_some()
     }
 
-    /// Begin a gesture at a pointer press. `screen` is physical-pixel canvas
+    /// Begin a gesture at a pointer press. `screen` is logical-pixel canvas
     /// coordinates; `world` is `screen` mapped through `cam.screen_to_world()`.
     pub fn pointer_down(
         &mut self,

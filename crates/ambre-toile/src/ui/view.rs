@@ -112,7 +112,7 @@ fn send_session(
 /// One notch of the mouse wheel maps to this zoom factor (wheel / pinch).
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 
-/// A wheel `|dy|` at or above this (physical px, `delta_mode == pixel`) reads as
+/// A wheel `|dy|` at or above this (logical px, `delta_mode == pixel`) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
 const WHEEL_MOUSE_NOTCH_PX: f64 = 40.0;
@@ -328,7 +328,7 @@ pub struct ToileView {
     /// did not qualify.
     click_edit_candidate: Option<(ElementId, Point)>,
 
-    /// Last pointer position in screen (physical) pixels -- the zoom anchor.
+    /// Last pointer position in screen (logical) pixels -- the zoom anchor.
     last_pointer: Point,
     /// While panning (space-drag / Hand tool): the previous screen position.
     panning: Option<Point>,
@@ -1939,7 +1939,6 @@ impl ToileView {
                 &self.selection,
                 &self.selection_data,
                 &self.cam,
-                device_pixel_ratio(),
                 canvas_client_offset(),
             )
         };
@@ -2261,13 +2260,13 @@ impl ToileView {
         }
     }
 
-    /// A physical-pixel screen point in the CSS pixels a `position: fixed` DOM
-    /// overlay is placed in, the same mapping as the floating selection toolbar.
+    /// A canvas screen point in the viewport a `position: fixed` DOM overlay is
+    /// placed in, the same mapping as the floating selection toolbar. Both are
+    /// CSS pixels (`CANVAS-032`), so only the canvas offset applies.
     #[cfg(target_arch = "wasm32")]
     fn css_point(&self, screen: Point) -> Point {
-        let dpr = device_pixel_ratio();
         let (ox, oy) = canvas_client_offset();
-        Point::new(ox + screen.x / dpr, oy + screen.y / dpr)
+        Point::new(ox + screen.x, oy + screen.y)
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn css_point(&self, screen: Point) -> Point {
@@ -4091,37 +4090,19 @@ impl ToileView {
 
 /// Position the transparent `<textarea>` pipe at the editor caret so the IME
 /// candidate box anchors there (`toile-text-editing`). `origin` is the editor's
-/// text origin in physical screen pixels; `caret` is the caret box in the
-/// editor's local frame.
-/// The pipe wants CSS pixels, so both are divided by the device pixel ratio.
+/// text origin in screen pixels; `caret` is the caret box in the editor's local
+/// frame. Screen pixels are the CSS pixels the pipe wants (`CANVAS-032`).
 fn set_caret_pipe(pipe: &ambre_canvas::TextInput, origin: ambre_draw::Point, caret: BoundingBox) {
-    let dpr = device_pixel_ratio();
-    let css_x = (origin.x + caret.x0) / dpr;
-    let css_y = (origin.y + caret.y0) / dpr;
-    let line_h = ((caret.y1 - caret.y0) / dpr).max(1.0);
-    pipe.set_caret(css_x, css_y, line_h);
+    let line_h = (caret.y1 - caret.y0).max(1.0);
+    pipe.set_caret(origin.x + caret.x0, origin.y + caret.y0, line_h);
 }
 
-/// The browser device pixel ratio (physical px per CSS px), or 1.0 off the web.
 /// The author's wall clock in milliseconds, stamped on a comment command
 /// (`toile-comments` section 5). The Logic thread holds no clock, and nothing
 /// orders by this one (`TOILE-FEAT-012`): the reader sees it, and that is all.
 #[cfg(target_arch = "wasm32")]
 fn wall_clock_ms() -> i64 {
     js_sys::Date::now() as i64
-}
-
-#[cfg(target_arch = "wasm32")]
-fn device_pixel_ratio() -> f64 {
-    web_sys::window()
-        .map(|w| w.device_pixel_ratio())
-        .filter(|dpr| *dpr > 0.0)
-        .unwrap_or(1.0)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn device_pixel_ratio() -> f64 {
-    1.0
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

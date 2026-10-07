@@ -28,6 +28,11 @@ belongs to its application's crate. The launcher hands each event to the
 application, sends the commands the application builds, and routes a command
 id to the application's handler. So no line of `ambre-app` names a variant of
 an application's command or event, or one of its command ids.
+
+**One component reads the density** (`CANVAS-031`, `CANVAS-043`). Views lay
+out in logical pixels, and the factor to device pixels never leaves
+`ambre-canvas`. A second read of it anywhere is a second scale a view could
+apply on top of the renderer's. So no Rust line outside `density.rs` names it.
 """
 
 from __future__ import annotations
@@ -69,6 +74,12 @@ APP_COMMAND_ID = re.compile(
     r"|ambre_(?:trame|toile|prose|murmure)::(?:\w+::)*(?:commands|chrome))"
     r"::(?!COMMANDS\b)[A-Z][A-Z0-9_]*\b"
 )
+
+# The one file allowed to read the display density, and what reading it looks
+# like from Rust: the `web_sys` call or the JavaScript property it wraps.
+CRATES = "crates"
+DENSITY = "crates/ambre-canvas/src/density.rs"
+DENSITY_READ = re.compile(r"\bdevice_pixel_ratio\b|\bdevicePixelRatio\b")
 
 
 def read(rel: str) -> str:
@@ -178,6 +189,23 @@ def check_launcher(errors: list[str]) -> int:
     return len(files)
 
 
+def check_density(errors: list[str]) -> int:
+    """`CANVAS-031`: the density is read in `density.rs` and nowhere else."""
+    if not DENSITY_READ.search(read(DENSITY)):
+        errors.append(f"{DENSITY}: reads no density, so the density boundary holds nothing")
+        return 0
+    files = sorted((ROOT / CRATES).rglob("*.rs"))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == DENSITY or "/target/" in rel:
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = DENSITY_READ.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: reads the display density: `{found.group(0)}`")
+    return len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -188,11 +216,13 @@ def main() -> int:
     generators = check_generators(errors)
     toolkits = check_chrome(errors)
     launcher = check_launcher(errors)
+    density = check_density(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
         f"{toolkits} shared toolkit read for an application dependency, "
-        f"{launcher} launcher files read for application logic"
+        f"{launcher} launcher files read for application logic, "
+        f"{density} Rust files read for a density read"
     )
     for line in errors:
         print(f"  {line}")
@@ -202,8 +232,9 @@ def main() -> int:
             "\nERROR: a crate boundary was crossed. Fixture machinery must stay "
             "out of the client build, a generator must drive `handle_command` "
             "rather than the CRDT, the shared chrome must name no "
-            "application type, and the launcher must name no application's "
-            "command, event or command id.",
+            "application type, the launcher must name no application's "
+            "command, event or command id, and only density.rs may read the "
+            "display density.",
             file=sys.stderr,
         )
         return 1

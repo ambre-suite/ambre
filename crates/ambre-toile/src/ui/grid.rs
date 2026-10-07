@@ -17,7 +17,7 @@ use super::viewport::ViewportTransform;
 /// is the smallest step the adaptive grid shows.
 pub const BASE_GRID: f64 = 20.0;
 
-/// Comfortable on-screen spacing band (physical pixels): the adaptive step keeps
+/// Comfortable on-screen spacing band (logical pixels): the adaptive step keeps
 /// the line spacing at or above `MIN_SPACING_PX`, doubling the world step until
 /// it does.
 const MIN_SPACING_PX: f64 = 24.0;

@@ -58,7 +58,7 @@ impl WebFrames {
     /// Reconcile the mounted frames against the culled set: mount what entered,
     /// move what stayed, drop what left. `layer` is the positioned container the
     /// launcher put over the canvas.
-    pub fn sync(&mut self, layer: &web_sys::HtmlElement, embeds: &[VisibleWebEmbed], dpr: f64) {
+    pub fn sync(&mut self, layer: &web_sys::HtmlElement, embeds: &[VisibleWebEmbed]) {
         // Drop what is no longer drawn, taking its page with it.
         let live: std::collections::HashSet<&ElementId> =
             embeds.iter().map(|e| &e.element).collect();
@@ -91,7 +91,7 @@ impl WebFrames {
             // the board's own move and resize stay reachable. Entering it hands
             // the page its events directly (`TOILE-UI-091`, `TOILE-UI-324`).
             layer_click_through(&frame, e.focused);
-            place(&frame, e, dpr);
+            place(&frame, e);
         }
     }
 
@@ -135,23 +135,18 @@ fn layer_click_through(frame: &web_sys::HtmlIFrameElement, takes_input: bool) {
 /// Size and place one frame. The size is the element's world size, in CSS
 /// pixels, so the page is laid out once. The camera lives entirely in the
 /// transform, so a zoom moves the frame instead of reflowing the page.
-fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed, dpr: f64) {
+fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
     let style = frame.style();
     let _ = style.set_property("width", &format!("{}px", e.layout_size.width));
     let _ = style.set_property("height", &format!("{}px", e.layout_size.height));
-    // Physical screen pixels -> CSS pixels. The linear part carries the zoom and
-    // the element's rotation; only the translation is in device units.
+    // The board's screen space is logical, which is CSS pixels: the matrix
+    // carries over as is. Its linear part holds the zoom and the rotation.
     let c = e.to_screen.as_coeffs();
     let _ = style.set_property(
         "transform",
         &format!(
             "matrix({}, {}, {}, {}, {}, {})",
-            c[0] / dpr,
-            c[1] / dpr,
-            c[2] / dpr,
-            c[3] / dpr,
-            c[4] / dpr,
-            c[5] / dpr
+            c[0], c[1], c[2], c[3], c[4], c[5]
         ),
     );
 }

@@ -8,6 +8,7 @@
 // ============================================================================
 
 use super::*;
+use crate::SurfaceSize;
 use ambre_draw::{Color, ImageSource, Rect};
 use std::collections::HashMap;
 
@@ -129,8 +130,14 @@ pub struct QuadRenderer {
     current_offscreen_idx: usize,
 
     // -- Viewport state --
+    /// The logical size every push is written in. The projection maps it onto
+    /// the whole buffer, which is where the density applies (`CANVAS-032`).
     width: f32,
     height: f32,
+    /// The buffer in device pixels, which an offscreen copy counts in.
+    physical: (u32, u32),
+    /// Device pixels per logical pixel, which a glyph is rasterized at.
+    density: f32,
 }
 
 /// How much VRAM the uploaded pictures may hold together, mip chains included.
@@ -666,13 +673,18 @@ impl QuadRenderer {
             current_offscreen_idx: 0,
             width: 1.0,
             height: 1.0,
+            physical: (1, 1),
+            density: 1.0,
         }
     }
 
-    /// Resize the ping-pong offscreens. Call it whenever the canvas size
-    /// changes. Both offscreens get a fresh allocation and lose their content,
-    /// so the next frame must use `ContentRepaint::Full`.
-    pub fn resize_offscreens(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+    /// Resize the ping-pong offscreens to the buffer. Call it whenever the
+    /// canvas size changes. Both offscreens get a fresh allocation and lose
+    /// their content, so the next frame must use `ContentRepaint::Full`. Only
+    /// the wasm host has a surface to size.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn resize_offscreens(&mut self, device: &wgpu::Device, size: SurfaceSize) {
+        let (width, height) = size.physical();
         self.offscreens = [
             OffscreenTarget::new(
                 device,
@@ -712,14 +724,22 @@ impl QuadRenderer {
     /// Does NOT touch per-layer CPU batches. Call `begin_layer` to clear and
     /// arm a layer for rebuild this frame. A layer nobody begins keeps its last
     /// uploaded GPU state, and the pass can redraw it from cache (idle frames).
-    pub fn begin_frame(&mut self, width: f32, height: f32) {
+    pub fn begin_frame(&mut self, size: SurfaceSize) {
         self.atlas.begin_frame();
         // Advance the eviction clock so "least recently drawn" means a frame
         // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
-        self.width = width;
-        self.height = height;
+        let (width, height) = size.logical();
+        self.width = width as f32;
+        self.height = height as f32;
+        self.physical = size.physical();
+        self.density = size.density();
+    }
+
+    /// Device pixels per logical pixel for the frame being built.
+    pub(crate) fn density(&self) -> f32 {
+        self.density
     }
 
     /// Mark `layer` as rebuilding this frame. That clears its CPU batch and
@@ -1195,8 +1215,8 @@ impl QuadRenderer {
                 encoder,
                 src,
                 dst,
-                self.width as u32,
-                self.height as u32,
+                self.physical.0,
+                self.physical.1,
                 dx_px,
                 dy_px,
             );

@@ -28,7 +28,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use crate::{QuadRenderer, TextCache};
+use crate::{QuadRenderer, SurfaceSize, TextCache};
 
 // -----------------------------------------------------------------------------
 // GpuState
@@ -40,11 +40,53 @@ pub struct GpuState {
     pub queue: wgpu::Queue,
     pub surface: wgpu::Surface<'static>,
     pub surface_format: wgpu::TextureFormat,
-    pub width: u32,
-    pub height: u32,
+    /// The drawing buffer. Only its logical size is readable outside this
+    /// crate (`CANVAS-044`).
+    pub size: SurfaceSize,
     pub quad_renderer: QuadRenderer,
     pub font_cx: parley::FontContext,
     pub text_cache: TextCache,
+}
+
+impl GpuState {
+    /// Fit the surface and the offscreens to `size`, in device pixels.
+    pub fn configure(&mut self, size: SurfaceSize) {
+        let (width, height) = size.physical();
+        self.surface.configure(
+            &self.device,
+            &surface_config(self.surface_format, width, height),
+        );
+        self.quad_renderer.resize_offscreens(&self.device, size);
+        self.size = size;
+    }
+
+    /// Reconfigure a lost or outdated swapchain at the current size. The
+    /// offscreens survive, so no repaint is owed.
+    pub fn reconfigure_surface(&self) {
+        let (width, height) = self.size.physical();
+        self.surface.configure(
+            &self.device,
+            &surface_config(self.surface_format, width, height),
+        );
+    }
+}
+
+/// The swapchain configuration for a buffer of `width` x `height` pixels.
+fn surface_config(
+    format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+) -> wgpu::SurfaceConfiguration {
+    wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format,
+        width,
+        height,
+        present_mode: wgpu::PresentMode::AutoNoVsync,
+        desired_maximum_frame_latency: 2,
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        view_formats: vec![],
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -142,7 +184,8 @@ fn request_frame(slot: &FrameSlot) {
 // GPU bootstrap (async)
 // -----------------------------------------------------------------------------
 
-pub async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> Option<GpuState> {
+/// Bring the GPU up on `canvas`, whose backing store `size` describes.
+pub async fn bootstrap_gpu(canvas: HtmlCanvasElement, size: SurfaceSize) -> Option<GpuState> {
     // WebGPU on Mesa/Intel Firefox has a compositor bug. The render pipeline
     // produces correct pixels (confirmed via GPU readback), but the browser
     // compositor silently fails to display the canvas on screen.
@@ -161,7 +204,7 @@ pub async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> Option<GpuState> {
         wgpu::Backends::GL
     };
 
-    create_gpu_state(canvas, backends).await
+    create_gpu_state(canvas, size, backends).await
 }
 
 fn url_flag(flag: &str) -> bool {
@@ -174,9 +217,12 @@ fn url_flag(flag: &str) -> bool {
         .unwrap_or(false)
 }
 
-async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -> Option<GpuState> {
-    let width = canvas.width();
-    let height = canvas.height();
+async fn create_gpu_state(
+    canvas: HtmlCanvasElement,
+    size: SurfaceSize,
+    backends: wgpu::Backends,
+) -> Option<GpuState> {
+    let (width, height) = size.physical();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends,
@@ -234,25 +280,13 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         .copied()
         .unwrap_or(caps.formats[0]);
 
-    surface.configure(
-        &device,
-        &wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width,
-            height,
-            present_mode: wgpu::PresentMode::AutoNoVsync,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-        },
-    );
+    surface.configure(&device, &surface_config(format, width, height));
 
     let mut quad_renderer = QuadRenderer::new(&device, format);
     // Size the ping-pong offscreens to the initial canvas. ResizeObserver
     // doesn't fire on startup, so handle_resize would otherwise never
     // initialize them before the first render.
-    quad_renderer.resize_offscreens(&device, width, height);
+    quad_renderer.resize_offscreens(&device, size);
 
     // The base faces (Noto Sans + DejaVu) shared with every other text-capable
     // FontContext consumer; lazy scripts are fetched on demand at shape time.
@@ -270,8 +304,7 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
         queue,
         surface,
         surface_format: format,
-        width,
-        height,
+        size,
         quad_renderer,
         font_cx,
         text_cache: TextCache::new(1.0),

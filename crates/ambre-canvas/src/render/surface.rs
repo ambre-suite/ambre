@@ -17,10 +17,31 @@ use lyon::tessellation::{
     StrokeTessellator, StrokeVertex, VertexBuffers,
 };
 
-// Flattening tolerance in *screen* pixels. Divided by the active transform's
-// scale before tessellation, so a zoomed-in Toile path stays smooth. We
-// tessellate in model space, then map vertices to screen space.
+// Flattening tolerance in *device* pixels. Divided by the active transform's
+// scale and by the density before tessellation, so a zoomed-in Toile path and
+// a dense screen both stay smooth. We tessellate in model space, then map
+// vertices to screen space.
 const PATH_TOLERANCE_PX: f64 = 0.15;
+
+/// The size a glyph is rasterized at: its logical size times the density.
+///
+/// The atlas keys a raster by this size. A density change therefore never
+/// draws a raster made for the previous screen (`CANVAS-034`).
+fn raster_size(font_size: f32, density: f32) -> f32 {
+    font_size * density
+}
+
+/// A glyph bitmap's logical box, as `(left bearing, top bearing, width,
+/// height)`. The bitmap has one texel per device pixel. So each is divided by
+/// the density and the glyph covers the same logical area on every screen.
+fn glyph_box(slot: &AtlasSlot, density: f32) -> (f32, f32, f32, f32) {
+    (
+        slot.bearing_left as f32 / density,
+        slot.bearing_top as f32 / density,
+        slot.pixel_width as f32 / density,
+        slot.pixel_height as f32 / density,
+    )
+}
 
 // ============================================================================
 // WgpuSurface
@@ -72,6 +93,12 @@ impl<'r> WgpuSurface<'r> {
             .last()
             .copied()
             .unwrap_or(Affine::IDENTITY)
+    }
+
+    /// The flattening tolerance in model units under `t`.
+    fn tolerance(&self, t: Affine) -> f32 {
+        let scale = affine_scale(t) * f64::from(self.renderer.density());
+        (PATH_TOLERANCE_PX / scale.max(1e-6)) as f32
     }
 
     fn active_clip(&self) -> Option<Rect> {
@@ -204,6 +231,11 @@ impl DrawSurface for WgpuSurface<'_> {
         let rotated = coeffs[1].abs() > 1e-9 || coeffs[2].abs() > 1e-9;
         let linear = Affine::new([coeffs[0], coeffs[1], coeffs[2], coeffs[3], 0.0, 0.0]);
 
+        // The layout is logical, and the bitmap is not (`CANVAS-033`). A glyph
+        // is rasterized at the density, then drawn back at its logical size.
+        let density = self.renderer.density();
+        let raster = raster_size(font_size, density);
+
         let mut pen_x = 0.0f32;
         for glyph in run.glyphs() {
             let gx = pen_x + glyph.x;
@@ -212,7 +244,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
             let slot = match self.renderer.atlas.get_or_rasterize(
                 font_data,
-                font_size,
+                raster,
                 coords,
                 glyph.id as u16,
             ) {
@@ -230,8 +262,8 @@ impl DrawSurface for WgpuSurface<'_> {
             // Rotated run: emit a rotated quad (corners = origin + linear * local
             // offset) and skip the axis-aligned path below.
             if rotated {
-                let (bl, bt) = (slot.bearing_left as f64, slot.bearing_top as f64);
-                let (w, h) = (slot.pixel_width as f64, slot.pixel_height as f64);
+                let (bl, bt, w, h) = glyph_box(&slot, density);
+                let (bl, bt, w, h) = (bl as f64, bt as f64, w as f64, h as f64);
                 let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
                 let corners = local.map(|(ox, oy)| {
                     let v = linear * Point::new(ox, oy);
@@ -249,10 +281,9 @@ impl DrawSurface for WgpuSurface<'_> {
 
             // Bitmap top-left in screen space.
             // bearing_top is positive upward (font convention), so subtract.
-            let sx = origin.x as f32 + slot.bearing_left as f32;
-            let sy = origin.y as f32 - slot.bearing_top as f32;
-            let sw = slot.pixel_width as f32;
-            let sh = slot.pixel_height as f32;
+            let (bl, bt, sw, sh) = glyph_box(&slot, density);
+            let sx = origin.x as f32 + bl;
+            let sy = origin.y as f32 - bt;
 
             // Clip the glyph quad to the active clip rect. A glyph straddling an
             // edge must be *trimmed* (with its UVs remapped proportionally), not
@@ -360,7 +391,7 @@ impl DrawSurface for WgpuSurface<'_> {
         if self.path_outside_clip(path, t) {
             return;
         }
-        let tol = (PATH_TOLERANCE_PX / affine_scale(t).max(1e-6)) as f32;
+        let tol = self.tolerance(t);
         let lpath = build_lyon_path(path);
         let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
         let opts = FillOptions::tolerance(tol).with_fill_rule(FillRule::NonZero);
@@ -388,7 +419,7 @@ impl DrawSurface for WgpuSurface<'_> {
         if self.path_outside_clip_padded(path, t, stroke.width * 0.5) {
             return;
         }
-        let tol = (PATH_TOLERANCE_PX / affine_scale(t).max(1e-6)) as f32;
+        let tol = self.tolerance(t);
         let lpath = build_lyon_path(path);
         let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
         // Tessellate in model space: the line width is in model units. It
@@ -587,6 +618,47 @@ mod tests {
 
         assert!(!mesh.vertices.is_empty());
         assert_eq!(mesh.indices.len() % 3, 0);
+    }
+
+    fn slot(left: i32, top: i32, w: u32, h: u32) -> AtlasSlot {
+        AtlasSlot {
+            uv_min: [0.0; 2],
+            uv_max: [1.0; 2],
+            pixel_width: w,
+            pixel_height: h,
+            bearing_left: left,
+            bearing_top: top,
+            is_color: false,
+        }
+    }
+
+    /// A glyph is rasterized at the screen's resolution, and drawn back over
+    /// its logical box (`CANVAS-033`). A raster at the logical size would be
+    /// stretched over twice its texels on a dense screen.
+    #[test]
+    fn a_glyph_is_rasterized_at_the_physical_size() {
+        assert_eq!(raster_size(14.0, 2.0), 28.0);
+        // A bitmap of 20 x 30 device pixels at density 2.
+        assert_eq!(
+            glyph_box(&slot(2, 24, 20, 30), 2.0),
+            (1.0, 12.0, 10.0, 15.0)
+        );
+        assert_eq!(
+            glyph_box(&slot(2, 24, 20, 30), 1.0),
+            (2.0, 24.0, 20.0, 30.0)
+        );
+    }
+
+    /// The raster a density change asks for is a different raster
+    /// (`CANVAS-034`). The atlas keys by it, so no glyph made for the old
+    /// screen is drawn on the new one.
+    #[test]
+    fn a_density_change_asks_for_a_new_raster() {
+        use super::super::atlas::GlyphKey;
+        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, density));
+        assert_ne!(key(1.0), key(2.0));
+        assert_ne!(key(1.25), key(1.5));
+        assert_eq!(key(2.0), key(2.0));
     }
 
     /// The active transform scales tessellated positions into screen space.

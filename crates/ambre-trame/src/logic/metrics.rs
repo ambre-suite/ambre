@@ -15,7 +15,7 @@
 use super::*;
 
 impl TrameState {
-    /// Set column `col`'s width (physical px) on the active sheet, clamped to
+    /// Set column `col`'s width (logical px) on the active sheet, clamped to
     /// [`MIN_COL_WIDTH`]. Pins the column's identity (materializes it, like
     /// formatting a cell does) and writes its stable `Uid` -> width into
     /// `col_widths_{sheet}`. Undoable (a plain value commit under the default
@@ -47,7 +47,7 @@ impl TrameState {
         }
     }
 
-    /// Set row `row`'s height (physical px) on the active sheet, clamped to
+    /// Set row `row`'s height (logical px) on the active sheet, clamped to
     /// [`MIN_ROW_HEIGHT`]. Row analogue of [`resize_col`](Self::resize_col):
     /// writes `row_heights_{sheet}`.
     pub(super) fn resize_row(&mut self, sheet_id: &str, row: u32, height_px: f32) -> TrameOutcome {
@@ -111,7 +111,7 @@ impl TrameState {
         }
     }
 
-    /// Width (physical px) of column `col` on the active sheet: its resized value
+    /// Width (logical px) of column `col` on the active sheet: its resized value
     /// or the uniform [`DEFAULT_COL_WIDTH`]. Used to pack the viewport slice.
     pub(super) fn col_width(&self, col: u32) -> f32 {
         self.col_widths
@@ -119,7 +119,7 @@ impl TrameState {
             .copied()
             .unwrap_or(DEFAULT_COL_WIDTH)
     }
-    /// Height (physical px) of row `row`: its resized value or the uniform
+    /// Height (logical px) of row `row`: its resized value or the uniform
     /// [`DEFAULT_ROW_HEIGHT`].
     pub(super) fn row_height(&self, row: u32) -> f32 {
         self.row_heights

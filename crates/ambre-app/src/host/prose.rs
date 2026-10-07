@@ -61,22 +61,17 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
     }
 }
 
-/// From canvas pixels to CSS pixels of the window.
+/// From canvas pixels to CSS pixels of the window. A canvas pixel is a CSS
+/// pixel (`CANVAS-032`), so only the canvas offset applies.
 fn to_css(x: f32, y: f32) -> (f32, f32) {
-    let window = web_sys::window();
-    let dpr = window
-        .as_ref()
-        .map(|w| w.device_pixel_ratio())
-        .filter(|dpr| *dpr > 0.0)
-        .unwrap_or(1.0) as f32;
-    let (left, top) = window
+    let (left, top) = web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
         .map_or((0.0, 0.0), |el| {
             let r = el.get_bounding_client_rect();
             (r.left() as f32, r.top() as f32)
         });
-    (left + x / dpr, top + y / dpr)
+    (left + x, top + y)
 }
 
 fn rect_to_css(rect: ScreenRect) -> ScreenRect {

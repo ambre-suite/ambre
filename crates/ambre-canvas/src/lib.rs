@@ -28,6 +28,9 @@ pub mod editor;
 // -- Per-frame view value types (GPU-agnostic) -------------------------------
 pub mod view;
 
+// -- The display density, read once, and the two sizes of the buffer --------
+pub mod density;
+
 // -- Process-global fatal latch (canvas terminal screen on unrecoverable error)
 pub mod fatal;
 
@@ -63,6 +66,9 @@ pub mod request_registry;
 // -- Convenience re-exports --------------------------------------------------
 pub use anchor::{Anchor, AnchorPublisher};
 pub use busy::BusyPublisher;
+pub use density::SurfaceSize;
+#[cfg(target_arch = "wasm32")]
+pub use density::{density_query, size_backing_store};
 pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]
