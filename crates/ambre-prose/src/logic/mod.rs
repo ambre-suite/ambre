@@ -173,6 +173,32 @@ pub struct ProseState {
     catchup: catchup::CatchUp,
 }
 
+/// The document scaffolding, which every peer writes on open, before any edit.
+/// `None` when the CRDT engine refused a write.
+fn write_scaffold(doc: &LoroDoc) -> Option<()> {
+    doc::seed(doc)?;
+    // The version is scaffolding too, and rides the same commit, so no
+    // document ever persists without it (`SCHEMA-004`, `PROSE-028`).
+    schema::stamp(doc);
+    Some(())
+}
+
+/// The identity the scaffolding is written under: a hash of the scaffolding
+/// this build writes (`PROSE-129`). Two builds that scaffold alike share it,
+/// and two that differ never write two changes under one identifier.
+fn scaffold_identity() -> Option<u64> {
+    static PEER: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *PEER.get_or_init(|| {
+        let scratch = LoroDoc::new();
+        scratch.set_peer_id(0).ok()?;
+        ProseState::prepare(&scratch);
+        write_scaffold(&scratch)?;
+        scratch.commit();
+        let bytes = scratch.export(ExportMode::all_updates()).ok()?;
+        Some(ambre_core::schema::scaffold_peer(&bytes))
+    })
+}
+
 impl ProseState {
     /// A fresh document: the registers, the mark registry, and the one root
     /// paragraph the tree is never without (`PROSE-027`).
@@ -195,8 +221,9 @@ impl ProseState {
     #[must_use]
     pub fn with_peer(peer: u64) -> Option<Self> {
         let doc = LoroDoc::new();
-        // Before any operation: this peer owns the scaffolding, and every block
-        // the tree mints captures it.
+        // Before any operation: every block the tree mints captures it. The
+        // scaffolding is written under the identity every peer shares
+        // (`PROSE-129`), so it is the same bytes whatever `peer` is.
         doc.set_peer_id(peer).ok()?;
         // No wall clock in the operations: a recorded timestamp would differ
         // between two runs of the same generator.
@@ -209,12 +236,15 @@ impl ProseState {
     /// already configured.
     fn from_doc(doc: LoroDoc, ids: ids::IdSource) -> Option<Self> {
         Self::prepare(&doc);
-        doc::seed(&doc)?;
-        // The version is scaffolding too, and rides the same commit, so no
-        // document ever persists without it (`SCHEMA-004`, `PROSE-028`).
-        schema::stamp(&doc);
-        doc.commit();
         let peer = doc.peer_id();
+        // Every peer writes the scaffolding as one shared identity, so every
+        // copy is one change, the root paragraph included. Under the
+        // document's own identity, a reader that has sent nothing would import
+        // each change against the whole history (`PROSE-129`).
+        doc.set_peer_id(scaffold_identity()?).ok()?;
+        write_scaffold(&doc)?;
+        doc.commit();
+        doc.set_peer_id(peer).ok()?;
         // The undo manager opens after the scaffolding commit: seeding a
         // document is not a user edit and must not sit on the stack.
         let mut undo = UndoManager::new(&doc);
@@ -816,11 +846,16 @@ impl ProseState {
         // is dropped when it is still empty and still the only root: what
         // arrives brings its own. Every other block stays, because a snapshot
         // merges rather than overwrites and losing a local edit is the worse
-        // answer.
+        // answer. A paragraph the payload carries is not this peer's: it is
+        // the shared scaffolding, the author's own (`PROSE-129`).
+        let carried = LoroDoc::decode_import_blob_meta(&payload, false)
+            .map(|meta| meta.partial_end_vv)
+            .unwrap_or_default();
         let tree = doc::blocks(&self.doc);
         let roots = doc::roots(&tree);
         if roots.len() == 1
             && doc::grown_empty_roots(&self.doc, &tree) == roots
+            && !carried.includes_id(roots[0].id())
             && let Err(e) = tree.delete(roots[0])
         {
             tracing::warn!("Prose: the scaffolding paragraph could not be dropped: {e:?}");
@@ -1293,28 +1328,76 @@ mod tests {
         assert_eq!(replay.text_of(&block).as_deref(), Some("hello"));
     }
 
-    /// The reader's own scaffolding does not survive a snapshot
-    /// (`PROSE-055`). A peer that opened a document grew one paragraph for
-    /// want of any. What arrives brings its own, so the grown one is dropped
-    /// rather than left standing above the imported text.
+    /// A document written the way a build before `PROSE-129` wrote it: the
+    /// scaffolding under the author's own identity, so no reader shares it.
+    fn a_document_with_its_own_scaffolding(text: &str) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        ProseState::prepare(&doc);
+        let root = doc::seed(&doc).expect("the scaffolding is written");
+        schema::stamp(&doc);
+        doc.commit();
+        doc::get_block_text(&doc, &root)
+            .insert(0, text)
+            .expect("the text is written");
+        doc.commit();
+        doc.export(ExportMode::Snapshot).expect("a snapshot")
+    }
+
+    /// The reader's own scaffolding does not survive a snapshot that does
+    /// not carry it (`PROSE-055`). A peer that opened a document grew one
+    /// paragraph for want of any. A document an earlier build wrote brings
+    /// its own, so the grown one is dropped rather than left standing above
+    /// the imported text.
     #[test]
     fn an_imported_snapshot_drops_the_paragraph_the_reader_grew() {
-        let mut state = ProseState::new().expect("a document is built");
-        let block = state.root_blocks()[0];
-        state.handle_command(ProseCommand::InsertText {
-            block_id: block,
-            pos: 0,
-            text: "a paragraph".to_owned(),
-        });
-        let snapshot = state.export_snapshot();
-
+        let snapshot = a_document_with_its_own_scaffolding("a paragraph");
         let mut reader = ProseState::new().expect("a document is built");
         let grown = reader.root_blocks()[0];
         reader
             .import_snapshot(&snapshot)
             .expect("the snapshot imports");
         assert!(!reader.root_blocks().contains(&grown));
-        assert_eq!(reader.root_blocks(), state.root_blocks());
+        assert_eq!(reader.root_blocks().len(), 1);
+        assert_eq!(
+            reader.text_of(&reader.root_blocks()[0]).as_deref(),
+            Some("a paragraph")
+        );
+    }
+
+    /// `PROSE-129`: a reader that has sent nothing holds exactly its
+    /// author's history. The paragraph it grew is the author's own, so the
+    /// import drops nothing, and a later change finds no concurrent
+    /// operation to import against.
+    #[test]
+    fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
+        let mut author = ProseState::new().expect("a document is built");
+        let block = author.root_blocks()[0];
+        author.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a paragraph".to_owned(),
+        });
+        let mut reader = ProseState::new().expect("a document is built");
+        reader
+            .import_snapshot(&author.export_snapshot())
+            .expect("the snapshot imports");
+        assert_eq!(
+            reader.doc.oplog_vv(),
+            author.doc.oplog_vv(),
+            "the scaffolding is shared"
+        );
+        assert_eq!(reader.root_blocks(), vec![block]);
+        let delta = author
+            .handle_command(ProseCommand::InsertText {
+                block_id: block,
+                pos: 0,
+                text: "Still ".to_owned(),
+            })
+            .update
+            .expect("a delta");
+        reader.apply_remote(&delta);
+        assert_eq!(reader.doc.oplog_vv(), author.doc.oplog_vv());
+        assert_eq!(reader.text_of(&block).as_deref(), Some("Still a paragraph"));
     }
 
     /// A block the reader wrote in is not scaffolding (`PROSE-104`). A
@@ -1322,15 +1405,9 @@ mod tests {
     /// the whole document was still on its way.
     #[test]
     fn an_imported_snapshot_keeps_a_root_the_reader_wrote_in() {
-        let mut state = ProseState::new().expect("a document is built");
-        let block = state.root_blocks()[0];
-        state.handle_command(ProseCommand::InsertText {
-            block_id: block,
-            pos: 0,
-            text: "a paragraph".to_owned(),
-        });
-        let snapshot = state.export_snapshot();
-
+        // A snapshot that does not carry the reader's root: one it carries is
+        // the author's own block, and merges character by character.
+        let snapshot = a_document_with_its_own_scaffolding("a paragraph");
         let mut reader = ProseState::new().expect("a document is built");
         let mine = reader.root_blocks()[0];
         reader.handle_command(ProseCommand::InsertText {

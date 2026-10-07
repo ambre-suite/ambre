@@ -252,6 +252,36 @@ pub struct TrameState {
     undecodable: std::cell::Cell<bool>,
 }
 
+/// The workbook scaffolding, which every peer writes on open, before any edit.
+fn write_scaffold(doc: &LoroDoc) {
+    // Register the implicit default sheet's name (idempotent map insert, so
+    // a peer that also "creates" s0 converges to the same entry).
+    let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
+    // The schema version is workbook scaffolding too, and it is written in
+    // the same commit so a workbook is never persisted without it
+    // (`SCHEMA-004`).
+    schema::stamp(doc);
+}
+
+/// The identity the scaffolding is written under: a hash of the scaffolding
+/// this build writes (`TRAME-231`). Two builds that scaffold alike share it,
+/// and two that differ never write two changes under one identifier.
+fn scaffold_identity() -> u64 {
+    static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *PEER.get_or_init(|| {
+        let scratch = LoroDoc::new();
+        scratch
+            .set_peer_id(0)
+            .expect("a fresh document takes a peer id");
+        write_scaffold(&scratch);
+        scratch.commit();
+        let bytes = scratch
+            .export(ExportMode::all_updates())
+            .expect("a fresh document exports");
+        ambre_core::schema::scaffold_peer(&bytes)
+    })
+}
+
 impl TrameState {
     pub fn new() -> Self {
         Self::from_doc(LoroDoc::new())
@@ -271,8 +301,8 @@ impl TrameState {
     ///   semantic digest is no escape hatch for it.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
-    /// Set before the scaffolding commit of [`new`](Self::new), so the implicit
-    /// sheet's own op is attributed to `peer` like every op after it.
+    /// The scaffolding itself is written under the identity every peer shares
+    /// (`TRAME-231`), so it is the same bytes whatever `peer` is.
     ///
     /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
     /// mint conflicting `OpID`s and corrupt the history. This exists for
@@ -285,8 +315,7 @@ impl TrameState {
     /// recorded. No op precedes this call.
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
-        // `set_peer_id` before any op: it is the peer the scaffolding commit is
-        // attributed to, and Trame's sheet ids capture it.
+        // `set_peer_id` before any op: Trame's sheet ids capture it.
         doc.set_peer_id(peer)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
@@ -299,14 +328,17 @@ impl TrameState {
     /// document scaffolding and every derived cache, over a `LoroDoc` the caller
     /// has already configured.
     fn from_doc(doc: LoroDoc) -> Self {
-        // Register the implicit default sheet's name (idempotent map insert, so
-        // a peer that also "creates" s0 converges to the same entry).
-        let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
-        // The schema version is workbook scaffolding too, and it is written in
-        // the same commit so a workbook is never persisted without it
-        // (`SCHEMA-004`).
-        schema::stamp(&doc);
+        let peer = doc.peer_id();
+        // Every peer writes the scaffolding as one shared identity, so every
+        // copy is one change. Under the workbook's own identity, a reader that
+        // has sent nothing would import each change against the whole history
+        // (`TRAME-231`).
+        doc.set_peer_id(scaffold_identity())
+            .expect("a document outside a transaction takes a peer id");
+        write_scaffold(&doc);
         doc.commit();
+        doc.set_peer_id(peer)
+            .expect("a document outside a transaction takes a peer id");
         // Create the undo manager AFTER the initial commit. The implicit-sheet
         // registration is document scaffolding, not a user edit, so it must not
         // sit on the undo stack.

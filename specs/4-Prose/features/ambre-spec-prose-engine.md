@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-126` | `POST` | A remote change that brings no operation the document lacks, its own change echoed by the relay among them, MUST answer no event. | this spec section 3 | `ambre_prose::logic::convergence_tests::an_echo_of_this_peers_own_change_answers_nothing` | none | verified |
-| `PROSE-129` | `POST` | Opening a document MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- every peer writes the document scaffolding under its own identity on open, so a reader that has sent nothing holds a history concurrent with each change it receives. The engine then imports each change against the whole history, which `TOILE-265` measured at 48 ms on a board of 5 000 elements; lands with the `A remote change costs the change, not the history, in Trame and Prose` Story (`ambre-roadmap.md` E7) | failing |
+| `PROSE-129` | `POST` | Opening a document MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_prose::logic::tests::a_reader_that_sent_nothing_holds_no_history_of_its_own` -- the reader's version vector equals the author's after the snapshot and after a delta, and its one root is the author's | none | verified |
 
 **Frame:** `SYNC-101`
 
@@ -77,7 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-055` | `POST` | The root paragraph the reading peer grew MUST NOT survive an imported snapshot, while it is still empty, childless and the only root. | this spec section 3 | `ambre_prose::logic::tests::an_imported_snapshot_drops_the_paragraph_the_reader_grew` -- it reads the grown id out of the reader's roots and requires it gone, so a drop that kept it above the imported text fails | none | verified |
+| `PROSE-055` | `POST` | A root paragraph the reading peer grew and the snapshot does not carry MUST NOT survive the import, while it is still empty, childless and the only root. | this spec section 3 | `ambre_prose::logic::tests::an_imported_snapshot_drops_the_paragraph_the_reader_grew` -- it imports a document scaffolded under its author's own identity, reads the grown id out of the reader's roots and requires it gone | none | verified |
 | `PROSE-104` | `POST` | Every other root the reading peer holds MUST survive an imported snapshot. | this spec section 3 | `ambre_prose::logic::tests::an_imported_snapshot_keeps_a_root_the_reader_wrote_in` -- the reader types into its root before importing, and both the block and its text are required afterwards | none | verified |
 | `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta`; `::the_first_edit_after_an_import_exports_only_what_this_peer_wrote` | none | verified |
 
@@ -116,7 +116,7 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 41 `verified`, 1 `failing`, nothing else. Seven rows are compiler-held: the
+* **Verification.** 42 `verified`, nothing else. Seven rows are compiler-held: the
   crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a shape no
   command builds yet: the image block, and the block under a table cell. Each is read through the
   format rather than through a gesture. The fan-out is driven across the real dispatcher.
@@ -266,10 +266,10 @@ impl ProseState {
 }
 ```
 
-**A snapshot merges, so the reader's scaffolding is dropped by hand.** A peer that opens a
-document grows one root paragraph for want of any (`PROSE-094`). The whole document then arrives
-and brings its own roots. A merge keeps both, so the reader would read an empty paragraph above
-text it never wrote. The import drops that one root first (`PROSE-055`).
+**A snapshot merges, so a foreign scaffolding is dropped by hand.** A peer that opens a document
+grows one root paragraph, under the identity every peer shares (`PROSE-129`). A document this
+build wrote carries that same paragraph, and the import drops nothing. One an earlier build wrote
+brings its own root, and a merge would keep both. The import drops the reader's first (`PROSE-055`).
 
 * **Only the paragraph nothing was done to.** The drop reads the grown marker, an empty body and
   no child, and it runs only while that block is the single root. Anything else the reader holds

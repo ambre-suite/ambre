@@ -241,7 +241,18 @@ mod tests {
     #[test]
     fn a_frame_naming_a_block_this_peer_does_not_hold_is_dropped() {
         let mut alice = ProseState::new().expect("a document is built");
-        let block = alice.root_blocks()[0];
+        // A block Alice mints: the root paragraph is shared scaffolding, which
+        // every peer holds (`PROSE-129`).
+        let root = alice.root_blocks()[0];
+        alice.handle_command(ProseCommand::SplitBlock {
+            block_id: root,
+            pos: 0,
+        });
+        let block = alice
+            .root_blocks()
+            .into_iter()
+            .find(|b| *b != root)
+            .expect("the split mints a block");
         let frame = alice
             .handle_command(ProseCommand::UpdateCursor {
                 pos: CursorPosition {

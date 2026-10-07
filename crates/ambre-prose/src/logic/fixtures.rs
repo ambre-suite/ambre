@@ -41,7 +41,12 @@ impl ProseState {
             });
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
-            peers: fixture_peer_count(self.doc.oplog_vv().keys().copied()),
+            // `u64::MAX` is never a peer: without a scaffolding identity,
+            // nothing is subtracted.
+            peers: fixture_peer_count(
+                self.doc.oplog_vv().keys().copied(),
+                super::scaffold_identity().unwrap_or(u64::MAX),
+            ),
             body: ShapeBody::Prose { blocks, characters },
         }
     }

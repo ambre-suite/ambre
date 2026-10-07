@@ -176,7 +176,10 @@ impl TrameState {
     /// it on both engines' sync paths. The count drops the loader's own pinned
     /// peer, so a restored solo document still reports one author.
     fn fixture_peer_count(&self) -> u8 {
-        fixture_peer_count(self.doc.oplog_vv().keys().copied())
+        fixture_peer_count(
+            self.doc.oplog_vv().keys().copied(),
+            super::scaffold_identity(),
+        )
     }
 }
 

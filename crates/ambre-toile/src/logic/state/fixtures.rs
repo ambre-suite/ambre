@@ -51,7 +51,10 @@ impl ToileState {
         };
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
-            peers: fixture_peer_count(self.doc.oplog_vv().keys().copied()),
+            peers: fixture_peer_count(
+                self.doc.oplog_vv().keys().copied(),
+                super::scaffold_identity(),
+            ),
             body: ShapeBody::Toile {
                 elements,
                 frames,

@@ -159,6 +159,37 @@ fn batched_formatting_broadcasts_complete_delta() {
 /// If the export cursor is advanced past those never-broadcast local ops, a
 /// later edit's delta depends on them. That is a dangling causal dependency a
 /// third peer, the next reopen, cannot apply, so the edit silently vanishes.
+/// `TRAME-231`: a reader that has sent nothing holds exactly its author's
+/// history. Its scaffolding is the author's, so a later change finds no
+/// concurrent operation to import against.
+#[test]
+fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
+    let mut author = TrameState::new();
+    author.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "1".to_owned(),
+    });
+    let mut reader = TrameState::new();
+    reader.apply_remote(&author.export_snapshot());
+    assert_eq!(
+        reader.doc.oplog_vv(),
+        author.doc.oplog_vv(),
+        "the scaffolding is shared"
+    );
+    let delta = author
+        .handle_command(TrameCommand::SetCellText {
+            row: 1,
+            col: 0,
+            text: "2".to_owned(),
+        })
+        .update
+        .expect("a write produces a delta");
+    reader.apply_remote(&delta);
+    assert_eq!(reader.doc.oplog_vv(), author.doc.oplog_vv());
+    assert_eq!(read_cell(&mut reader, 1, 0), "2");
+}
+
 #[test]
 fn edit_after_reopen_broadcasts_causally_complete_delta() {
     // Original author creates the doc and writes A1.

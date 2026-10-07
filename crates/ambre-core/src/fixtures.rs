@@ -60,9 +60,10 @@ pub fn seeded_document_id(seed: u64) -> Uuid {
 
 /// The peer id a fixture loader pins on the state it imports into.
 ///
-/// An import needs a live state to receive it, and that state commits its own
-/// scaffolding first, under its own peer. Every restored fixture therefore
-/// carries one peer that belongs to the reader, not to the document. A random
+/// An import needs a live state to receive it. That state may write under its
+/// own peer: a Prose reader drops the root paragraph an older document does
+/// not carry. Such a fixture then carries one peer that belongs to
+/// the reader, not to the document. A random
 /// peer there would also make the restored state differ run to run, which the
 /// frozen comparison of `FIXTURE-019` reads back. A pinned value keeps the load
 /// deterministic and lets [`fixture_peer_count`] subtract one known id. The
@@ -72,14 +73,16 @@ pub const FIXTURE_IMPORT_PEER: u64 = 0x10AD_0000_0000_0001;
 
 /// Counts the *document's* own peers in `peers`, the oplog peer set.
 /// [`FIXTURE_IMPORT_PEER`] is the reader, not an author, so it does not count.
+/// Nor does `scaffold`, the identity every peer writes the scaffolding under
+/// ([`scaffold_peer`](crate::schema::scaffold_peer)).
 ///
 /// Takes bare ids rather than a CRDT type: `ambre-core` is upstream of the
 /// engines and does not depend on the CRDT library.
 #[must_use]
-pub fn fixture_peer_count(peers: impl IntoIterator<Item = u64>) -> u8 {
+pub fn fixture_peer_count(peers: impl IntoIterator<Item = u64>, scaffold: u64) -> u8 {
     let authors = peers
         .into_iter()
-        .filter(|peer| *peer != FIXTURE_IMPORT_PEER)
+        .filter(|peer| *peer != FIXTURE_IMPORT_PEER && *peer != scaffold)
         .count();
     u8::try_from(authors).unwrap_or(u8::MAX)
 }
