@@ -540,11 +540,14 @@ fn presenter_notes_edit_fires_minimal_delta() {
     type_into(&root, "Speaker notes", "abcd");
     assert_eq!(
         fired.get_untracked(),
-        Some(PresenterIntent::EditNotes(TextDelta {
-            at: 3,
-            delete: 0,
-            insert: "d".to_owned(),
-        }))
+        Some(PresenterIntent::EditNotes {
+            base: "abc".to_owned(),
+            delta: TextDelta {
+                at: 3,
+                delete: 0,
+                insert: "d".to_owned(),
+            },
+        })
     );
     root.remove();
 }
@@ -600,11 +603,8 @@ fn presenter_follow_button_fires_with_peer() {
     root.remove();
 }
 
-// Note: the "slide change re-seeds the textarea" path is a deferred `Effect` in
-// `PresenterPanel`. Asserting it needs the reactive executor to flush a post-mount
-// signal update. The bare wasm-bindgen-test harness does not drive that, since
-// `mount_to` installs no async spawner. So it is covered by the pure `notes_delta`
-// model + the app-level wiring rather than a flaky async DOM assertion here.
+// The tests that wait for an effect, the notes area's seeding among them, live
+// in `chrome_effects`.
 
 // -- The deck panel (`toile-presentation`) ------------------------------------
 
@@ -630,30 +630,6 @@ fn mount_deck(
         view! { <DeckPanel state=state view=view on_intent=on_intent /> }
     });
     (root, fired)
-}
-
-/// The deck reads in playback order, an unnamed frame by its rank
-/// (`TOILE-FEAT-026`).
-#[wasm_bindgen_test]
-fn deck_panel_lists_the_slides_in_order() {
-    let owner = Owner::new();
-    owner.set();
-    let (root, _fired) = mount_deck(
-        vec![deck_frame("a", "Agenda"), deck_frame("b", "")],
-        Vec::new(),
-    );
-    let names = root
-        .query_selector_all(".ambre-deck-list .ambre-deck-name")
-        .unwrap();
-    assert_eq!(names.length(), 2);
-    let field =
-        |i: u32| -> web_sys::HtmlInputElement { names.item(i).unwrap().dyn_into().unwrap() };
-    assert_eq!(field(0).value(), "Agenda");
-    // An unnamed frame reads by its rank, and the field stays empty so typing
-    // starts on a blank title rather than on the placeholder.
-    assert_eq!(field(1).value(), "");
-    assert_eq!(field(1).placeholder(), "Frame 2");
-    root.remove();
 }
 
 /// Adding, reordering and removing each leave the panel as one intent

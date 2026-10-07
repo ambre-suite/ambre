@@ -523,6 +523,7 @@ fn board_of_every_key() -> ToileState {
     });
     st.handle_command(ToileCommand::EditNotes {
         frame: frame.clone(),
+        base: String::new(),
         delta: TextDelta {
             at: 0,
             delete: 0,

@@ -17,11 +17,11 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::logic::command::TextDelta;
-use crate::ui::presenter::{notes_delta, slide_counter_label};
+use crate::ui::presenter::{caret_through, notes_delta, slide_counter_label};
 
 /// An intent emitted by the presenter panel. The launcher maps each variant to a
 /// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
-/// `Exit` -> `ExitPresent`, and `EditNotes` -> `EditNotes { frame, delta }`, the
+/// `Exit` -> `ExitPresent`, and `EditNotes` -> `EditNotes { frame, base, delta }`, the
 /// launcher supplying the active `frame` from the last slide change. Then
 /// `ToggleBroadcast` -> `SetPresentBroadcast`, and `Follow` -> `FollowPresenter`
 /// ("Follow presenter").
@@ -30,7 +30,11 @@ pub enum PresenterIntent {
     Prev,
     Next,
     Exit,
-    EditNotes(TextDelta),
+    /// A splice, and the note it was measured against (`TOILE-FEAT-088`).
+    EditNotes {
+        base: String,
+        delta: TextDelta,
+    },
     /// Toggle whether this viewer broadcasts its playback position to peers.
     ToggleBroadcast(bool),
     /// Follow the given presenter (`Some`) or stop following (`None`).
@@ -59,15 +63,23 @@ pub fn PresenterPanel(
     // The last value we pushed into the textarea. A slide change updates `notes`
     // and this effect writes it into the DOM node. Local keystrokes update the
     // same signal, so without a guard the effect would fight the caret. We only
-    // rewrite the node when the incoming value actually differs from what the
-    // element currently holds, that is on a fresh slide. Never on the user's own
-    // edit.
+    // rewrite the node when the incoming value differs from what it holds: on
+    // a fresh slide, or on a peer's write. Never on the user's own edit. A peer's write keeps the caret where the user left
+    // it (`TOILE-UI-316`).
     Effect::new(move |_| {
         let next = notes.get();
-        if let Some(area) = notes_ref.get()
-            && area.value() != next
-        {
-            area.set_value(&next);
+        if let Some(area) = notes_ref.get() {
+            let shown = area.value();
+            if shown != next {
+                let start = area.selection_start().ok().flatten();
+                let end = area.selection_end().ok().flatten();
+                area.set_value(&next);
+                if let (Some(start), Some(end)) = (start, end) {
+                    let start = caret_through(&shown, start, &next);
+                    let end = caret_through(&shown, end, &next);
+                    let _ = area.set_selection_range(start, end);
+                }
+            }
         }
     });
 
@@ -148,11 +160,12 @@ pub fn PresenterPanel(
                             let new = event_target_value(&ev);
                             // Diff against the last known value, untracked so the
                             // read does not re-run this handler. Then commit the
-                            // splice and adopt the new text as the baseline.
-                            let old = notes.get_untracked();
-                            if let Some(delta) = notes_delta(&old, &new) {
+                            // splice with the value it was measured against, and
+                            // adopt the new text as the baseline.
+                            let base = notes.get_untracked();
+                            if let Some(delta) = notes_delta(&base, &new) {
                                 notes.set(new);
-                                on_intent.run(PresenterIntent::EditNotes(delta));
+                                on_intent.run(PresenterIntent::EditNotes { base, delta });
                             }
                         }
                     ></textarea>

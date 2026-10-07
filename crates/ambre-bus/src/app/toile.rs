@@ -1105,9 +1105,13 @@ pub enum ToileCommand {
     /// Apply a char-CRDT edit to a frame's collaborative speaker notes
     /// (`toile-presentation`). Notes live in the frame element's payload as
     /// a LoroText, seeded on first edit. CRDT, convergent, one commit = one undo
-    /// item. A missing / non-frame id is a rejected no-op.
+    /// item. A missing / non-frame id is a rejected no-op. `delta` is measured
+    /// against `base`, the note the panel held. When a peer moved the note
+    /// since, the handler merges the change into the stored note instead
+    /// (`TOILE-FEAT-088`).
     EditNotes {
         frame: FrameId,
+        base: String,
         delta: TextDelta,
     },
     /// Set (or clear, with `None`) a frame's auto-layout spec

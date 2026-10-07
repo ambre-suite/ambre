@@ -27,6 +27,7 @@ use crate::logic::command::{
     ToileOutcome,
 };
 use crate::logic::model::{ElementId, FrameId, NodeId};
+use crate::logic::text_merge::merge_text;
 
 use super::codec::str_of;
 use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState};
@@ -361,7 +362,17 @@ impl ToileState {
     /// rejected. CRDT and undoable: one `doc.commit()` is one undo item. A missing
     /// element or a non-frame element (no `children` field) is a rejected no-op,
     /// mirroring `set_text`'s kind guard.
-    pub(super) fn edit_notes(&mut self, frame: &FrameId, delta: &TextDelta) -> ToileOutcome {
+    ///
+    /// The splice is measured against `base`, the note the panel held. When the
+    /// stored note is still `base`, the splice applies as sent. Otherwise a peer
+    /// wrote meanwhile: the typed note is merged into the stored one, and the
+    /// panel is told the merged note (`TOILE-FEAT-088`).
+    pub(super) fn edit_notes(
+        &mut self,
+        frame: &FrameId,
+        base: &str,
+        delta: &TextDelta,
+    ) -> ToileOutcome {
         let Some(em) = self.element_map(frame) else {
             return self.err_no_element(frame);
         };
@@ -377,6 +388,22 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let text = notes_text_or_seed(&em);
+        let stored = text.to_string();
+        if stored != base {
+            let typed = splice(base, delta);
+            let merged = merge_text(base, &stored, &typed);
+            if merged == stored {
+                return ToileOutcome::display_only(Vec::new());
+            }
+            let _ = text.update(&merged, loro::UpdateOptions::default());
+            self.doc.commit();
+            // The panel shows `typed`, and the note is now `merged`.
+            let told = (merged != typed).then(|| ToileEvent::NotesChanged {
+                frame: frame.clone(),
+                notes: merged,
+            });
+            return self.emit_with_update(told.into_iter().collect());
+        }
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
         let len = text.len_unicode();
@@ -539,6 +566,18 @@ pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
         let _ = cfg.insert("autoplay", false);
         let _ = cfg.insert("loop", false);
     }
+}
+
+/// `base` with `delta` applied, its offsets clamped to `base` the way the
+/// handler clamps them to the stored note.
+fn splice(base: &str, delta: &TextDelta) -> String {
+    let len = base.chars().count();
+    let at = delta.at.min(len);
+    let del = delta.delete.min(len - at);
+    let mut out: String = base.chars().take(at).collect();
+    out.push_str(&delta.insert);
+    out.extend(base.chars().skip(at + del));
+    out
 }
 
 /// The frame's `notes` LoroText, seeding an empty one on first use. The

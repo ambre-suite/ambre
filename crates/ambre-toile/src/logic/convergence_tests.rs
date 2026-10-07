@@ -2262,6 +2262,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::EditNotes {
         frame: frame.clone(),
+        base: String::new(),
         delta: TextDelta {
             at: 0,
             delete: 0,
@@ -2292,6 +2293,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     let da = st
         .handle_command(ToileCommand::EditNotes {
             frame: pasted[0].clone(),
+            base: "open on the budget".into(),
             delta: TextDelta {
                 at: 0,
                 delete: 0,
@@ -2303,6 +2305,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     let db = peer
         .handle_command(ToileCommand::EditNotes {
             frame: pasted[0].clone(),
+            base: "open on the budget".into(),
             delta: TextDelta {
                 at: 18,
                 delete: 0,
@@ -2949,6 +2952,7 @@ fn slide_change_carries_count_frame_and_notes() {
     });
     st.handle_command(ToileCommand::EditNotes {
         frame: b.clone(),
+        base: String::new(),
         delta: insert_notes(0, "Talk track for slide two"),
     });
 
@@ -3188,6 +3192,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
     let delta = a
         .handle_command(ToileCommand::EditNotes {
             frame: frame.clone(),
+            base: String::new(),
             delta: TextDelta {
                 at: 0,
                 delete: 0,
@@ -3461,6 +3466,7 @@ fn edit_notes_produces_delta_and_is_undoable() {
 
     let out = st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
+        base: String::new(),
         delta: insert_notes(0, "Intro slide"),
     });
     assert!(
@@ -3472,6 +3478,7 @@ fn edit_notes_produces_delta_and_is_undoable() {
     // A second splice appends " -- talk track" after the existing text.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
+        base: "Intro slide".into(),
         delta: insert_notes(11, " -- talk track"),
     });
     assert_eq!(st.notes(&f), "Intro slide -- talk track");
@@ -3487,24 +3494,94 @@ fn edit_notes_produces_delta_and_is_undoable() {
     );
 }
 
+/// `TOILE-FEAT-088`: the panel measured its keystroke against a note a peer
+/// has since moved. The keystroke lands where it was typed, and the panel is
+/// told the merged note, since it shows only its own.
+#[test]
+fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
+    let mut a = ToileState::new();
+    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    a.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        base: String::new(),
+        delta: insert_notes(0, "Hello world"),
+    });
+    let mut b = ToileState::new();
+    b.apply_remote(&a.export_snapshot());
+    let peer = b
+        .handle_command(ToileCommand::EditNotes {
+            frame: f.clone(),
+            base: "Hello world".into(),
+            delta: insert_notes(0, "Dear "),
+        })
+        .update
+        .expect("a delta");
+    a.apply_remote(&peer);
+
+    // A's panel still holds "Hello world" and appends "!" to it.
+    let out = a.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        base: "Hello world".into(),
+        delta: insert_notes(11, "!"),
+    });
+    assert_eq!(
+        a.notes(&f),
+        "Dear Hello world!",
+        "not \"Dear Hello !world\""
+    );
+    assert!(
+        out.display.iter().any(|e| matches!(
+            e,
+            ToileEvent::NotesChanged { frame, notes } if frame == &f && notes == "Dear Hello world!"
+        )),
+        "the panel is told the merged note"
+    );
+    b.apply_remote(&out.update.expect("a delta"));
+    assert_eq!(b.notes(&f), "Dear Hello world!");
+
+    // A splice measured against the note as stored says nothing more.
+    let out = a.handle_command(ToileCommand::EditNotes {
+        frame: f.clone(),
+        base: "Dear Hello world!".into(),
+        delta: insert_notes(17, "!"),
+    });
+    assert_eq!(a.notes(&f), "Dear Hello world!!");
+    assert!(
+        !out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::NotesChanged { .. })),
+        "the panel already shows it"
+    );
+    a.handle_command(ToileCommand::Undo);
+    a.handle_command(ToileCommand::Undo);
+    assert_eq!(
+        a.notes(&f),
+        "Dear Hello world",
+        "each keystroke is one undo"
+    );
+}
+
 #[test]
 fn edit_notes_clamps_out_of_range_splice() {
     let mut st = ToileState::new();
     let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
+        base: String::new(),
         delta: insert_notes(0, "abc"),
     });
     // The handler clamps an `at` past the end to the length, so the insert lands
     // at the tail instead of earning a refusal.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
+        base: "abc".into(),
         delta: insert_notes(999, "Z"),
     });
     assert_eq!(st.notes(&f), "abcZ");
     // The handler clamps an oversized deletion span to what remains.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
+        base: "abcZ".into(),
         delta: TextDelta {
             at: 0,
             delete: 999,
@@ -3522,6 +3599,7 @@ fn edit_notes_rejects_non_frame() {
     // A sticky carries no `children` field, so it is not a frame: rejected no-op.
     let out = st.handle_command(ToileCommand::EditNotes {
         frame: sticky.clone(),
+        base: String::new(),
         delta: insert_notes(0, "nope"),
     });
     assert!(out.update.is_none(), "a rejected EditNotes emits no delta");
@@ -3536,6 +3614,7 @@ fn edit_notes_rejects_non_frame() {
     // A missing element reports NoSuchElement.
     let out = st.handle_command(ToileCommand::EditNotes {
         frame: ElementId("ghost".to_owned()),
+        base: String::new(),
         delta: insert_notes(0, "nope"),
     });
     assert!(out.update.is_none());
@@ -3563,6 +3642,7 @@ fn concurrent_notes_edits_converge() {
     let da = a
         .handle_command(ToileCommand::EditNotes {
             frame: f.clone(),
+            base: String::new(),
             delta: insert_notes(0, "AAA"),
         })
         .update
@@ -3570,6 +3650,7 @@ fn concurrent_notes_edits_converge() {
     let db = b
         .handle_command(ToileCommand::EditNotes {
             frame: f.clone(),
+            base: String::new(),
             delta: insert_notes(0, "BBB"),
         })
         .update

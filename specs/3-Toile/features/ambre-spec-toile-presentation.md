@@ -29,13 +29,13 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-FEAT-076` | `INV` | The active index MUST name a slide of the deck, whatever asked for it. | this spec section 3 | `ambre_toile::logic::convergence_tests::playback_bounds`; `ambre_toile::logic::convergence_tests::adopted_slide_is_clamped_to_deck` | none | verified |
 | `TOILE-FEAT-008` | `CONC` | Concurrent speaker-notes edits MUST converge character by character, with no sentence lost. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-FEAT-027` | `INV` | The deck MUST hold only slides whose frame still exists. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_frame_drops_its_slide`; `ambre_toile::logic::convergence_tests::deleting_an_element_seeds_no_deck` | none | verified |
-| `TOILE-UI-342` | `OBS` | The deck panel MUST show the deck in playback order. | this spec section 4 | `ambre_toile::tests::chrome_ui::deck_panel_lists_the_slides_in_order`; `ambre_toile::tests::chrome_ui::deck_panel_empty_deck_invites_a_first_slide` | none | verified |
+| `TOILE-UI-342` | `OBS` | The deck panel MUST show the deck in playback order. | this spec section 4 | `ambre_toile::tests::chrome_effects::deck_panel_lists_the_slides_in_order`; `ambre_toile::tests::chrome_ui::deck_panel_empty_deck_invites_a_first_slide` | none | verified |
 | `TOILE-UI-368` | `OBS` | The deck panel MUST name a frame the user has not titled by its rank. | this spec section 4 | `ambre_toile::ui::deck::tests::an_unnamed_frame_reads_by_rank`; `ambre_toile::ui::deck::tests::a_named_frame_reads_by_name` | none | verified |
 | `TOILE-FEAT-098` | `OBS` | A deck that changed under this viewer -- by a peer, a history step or a deleted frame -- MUST reach the open panel. | this spec section 3 | none | unheld -- the engine emits `DeckChanged` on each of the four paths and the view re-reads on it, and no test drives that round trip, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-086` | `OBS` | The presenter panel MUST show the active slide's rank, the deck's length and that slide's notes. | this spec section 4 | `ambre_toile::ui::presenter::tests::counter_label_is_one_based`; `ambre_toile::ui::presenter::tests::counter_label_empty_deck`; `ambre_toile::tests::chrome_ui::presenter_panel_counter_is_one_based`; `ambre_toile::tests::chrome_ui::presenter_panel_hidden_when_closed` | none | verified |
 | `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance exactly when the presenter signal names a peer. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
 | `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_frame_naming_no_slide` -- the frame a presenter sends when it stops, and the silence of a viewer that was not broadcasting | partial -- the shell reads the name off the whole live set, so a peer that left it or aged out of it names nobody (`PRESENCE-009`), and no test drives that relay; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone | none | verified |
+| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone; `ambre_toile::tests::chrome_effects::a_peer_note_write_keeps_the_caret` -- the area shows the write, the caret shifted past the peer's prefix | none | verified |
 | `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds | partial -- the editing chrome stays mounted and the board stays live under the presentation, so a key that deletes still deletes, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | `ambre_toile::ui::present::tests::the_covering_cull_holds_both_ends_of_the_glide` -- the cull a transition asks for covers the camera it starts on and the one it lands on, so neither slide's elements leave the visible set while the fade runs | none | verified |
 
@@ -78,7 +78,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-088` | `POST` | A note edit MUST reach the document as the one smallest splice that explains it. | this spec section 4 | `ambre_toile::ui::presenter::tests::delta_none_on_no_change`; `ambre_toile::ui::presenter::tests::delta_pure_append`; `ambre_toile::ui::presenter::tests::delta_pure_prefix_insert`; `ambre_toile::ui::presenter::tests::delta_pure_delete`; `ambre_toile::ui::presenter::tests::delta_mid_string_replace`; `ambre_toile::ui::presenter::tests::delta_from_empty`; `ambre_toile::ui::presenter::tests::delta_to_empty`; `ambre_toile::ui::presenter::tests::delta_multibyte_indices_are_codepoints`; `ambre_toile::ui::presenter::tests::delta_multibyte_mid_replace`; `ambre_toile::ui::presenter::tests::delta_repeated_char_prefers_prefix`; `ambre_toile::tests::chrome_ui::presenter_notes_edit_fires_minimal_delta` | none | verified |
-| `TOILE-FEAT-088` | `PRE` | The caller MUST offer a splice measured against the note the document holds now. | this spec section 4 | none | fails -- nothing checks the precondition and the panel does not honour it, because `ui::presenter::notes_delta` diffs the typed value against a mirror the slide event alone refreshes, so a peer's edit between two keystrokes puts the offsets in the wrong place. `TOILE-FEAT-008` holds the merge, never the offsets, section 6; lands with the `A speaker note keeps its place under a peer's edit` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-FEAT-088` | `POST` | A splice measured against a note a peer has since moved MUST land where it was typed, and the panel MUST be told the merged note. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_splice_measured_against_a_moved_note_lands_where_it_was_typed` -- a keystroke after a peer's prefix lands at the end, the merged note is announced, and a splice on the stored note announces nothing | none | verified |
 | `TOILE-FEAT-089` | `FAIL` | A splice reaching past the end of the note MUST be clamped, not dropped. | this spec section 3 | `ambre_toile::logic::convergence_tests::edit_notes_clamps_out_of_range_splice` | none | verified |
 | `TOILE-FEAT-090` | `FAIL` | A note edit naming an element that is not a frame MUST be refused. | this spec section 3 | `ambre_toile::logic::convergence_tests::edit_notes_rejects_non_frame` | none | verified |
 | `TOILE-FEAT-091` | `FAIL` | A note edit made with no frame on screen MUST be refused before it reaches the document. | this spec section 4 | none | unheld -- the shell drops the intent when the panel names no frame, which is every keystroke on an empty deck, and nothing drives that path, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -110,11 +110,10 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
   ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 39 `verified`, 2 `partial`, 1 `failing`, 3 `untested`. What holds is the
+* **Verification.** 40 `verified`, 2 `partial`, 0 `failing`, 3 `untested`. What holds is the
   machinery, the best-covered subject of the application: convergence, playback, follow, the solver
   endpoints, the camera and both panels. What is loose is two rules the code holds and no test
-  drives, the presenter relay and the board still live under a presentation. One splice the panel
-  owes itself is the failure (`TOILE-FEAT-088`).
+  drives, the presenter relay and the board still live under a presentation.
 
 ---
 
@@ -130,11 +129,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | follows Alice, then steps herself | broadcasts | the order, unchanged | Alice takes control and stops following (`TOILE-FEAT-003`) | `logic::convergence_tests::manual_nav_breaks_follow` |
 | types a note on the front slide | types on the same note | both sentences, interleaved | one text, no sentence lost (`TOILE-FEAT-008`) | `logic::convergence_tests::concurrent_notes_edits_converge` |
 | deletes a frame the deck names | presents | the order, without that frame | one slide fewer, and one undo brings the frame and its slide back together (`TOILE-FEAT-027`) | `logic::convergence_tests::deleting_a_frame_drops_its_slide` |
-
-**What this table cannot see.** Every row is one peer's document beside another's, and one of the subject's
-rules is neither. The splice a keystroke sends is measured against a mirror only a slide change refreshes
-(`TOILE-FEAT-088`). The convergence row above cannot show it, because both writers there splice against the
-text they hold.
+| appends to a note her panel shows | prefixed the note a moment before | both edits, each where it was typed | Alice's keystroke at the end, and her panel told the merged note (`TOILE-FEAT-088`) | `logic::convergence_tests::a_splice_measured_against_a_moved_note_lands_where_it_was_typed` |
 
 ---
 
@@ -151,8 +146,9 @@ own state and reach no peer (`TOILE-FEAT-001`).
 
 **Commands** (`ambre-bus`): `SetSlideOrder { order }` writes the deck. `NextSlide`, `PrevSlide` and
 `GotoSlide(index)` move this viewer; `EnterPresent { focus }` and `ExitPresent` toggle the mode.
-`SetPresentBroadcast(on)` and `FollowPresenter(who)` set the two roles; `EditNotes { frame, delta }` splices
-one frame's notes.
+`SetPresentBroadcast(on)` and `FollowPresenter(who)` set the two roles; `EditNotes { frame, base, delta }`
+splices one frame's notes. `base` is the note the splice was measured against. Logic merges it into
+a note a peer moved meanwhile, and answers `NotesChanged` when the result differs from the panel's.
 
 **Events** (`ambre-bus`): `SlideChanged(SlideChange)`, `PresentModeChanged(bool)`,
 `PresentBroadcastChanged(bool)` and `FollowingChanged(Option<UserId>)`. The engine owns the board and
@@ -308,11 +304,6 @@ editing chrome stays mounted and the board stays live: a key that deletes still 
 * **The board stays live under a presentation** (`TOILE-UI-083`). The overlay paints no editing
   surface, and the editing chrome stays mounted. A key that deletes still deletes, and a click
   still selects what the audience cannot see selected.
-* **The splice is measured against a mirror, not against the note** (`TOILE-FEAT-088`). The panel diffs the
-  value the text area reports against the string it last received, and that string is refreshed only by a
-  slide change. A peer writing at the same moment moves the text under the diff. So the insert and the delete
-  land at offsets that no longer mean what they meant. Convergence survives -- the CRDT merges whatever it is
-  given -- and the sentence does not.
 * **A keystroke with no frame is dropped in silence** (`TOILE-FEAT-091`). On an empty deck the panel
   names no frame, so the shell drops the edit intent before it reaches the engine. Nothing tells
   the user that what they typed went nowhere, which is the same hole as entering an empty deck at

@@ -639,11 +639,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 toile_chrome::PresenterIntent::Prev => ToileCommand::PrevSlide,
                 toile_chrome::PresenterIntent::Next => ToileCommand::NextSlide,
                 toile_chrome::PresenterIntent::Exit => ToileCommand::ExitPresent,
-                toile_chrome::PresenterIntent::EditNotes(delta) => {
+                toile_chrome::PresenterIntent::EditNotes { base, delta } => {
                     let Some(frame) = presenter_frame.get_untracked() else {
                         return;
                     };
-                    ToileCommand::EditNotes { frame, delta }
+                    ToileCommand::EditNotes { frame, base, delta }
                 }
                 toile_chrome::PresenterIntent::ToggleBroadcast(on) => {
                     ToileCommand::SetPresentBroadcast(on)

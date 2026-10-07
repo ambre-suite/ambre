@@ -60,9 +60,54 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
     })
 }
 
+/// Where a caret sits once the text area turns from `before` to `after`
+/// under a write the user did not type (`TOILE-UI-316`). Offsets are UTF-16
+/// units, as a `<textarea>` counts them. A caret before the change stays, a
+/// caret after it shifts with it, and one inside a removed run lands after
+/// what replaced it.
+pub fn caret_through(before: &str, caret: u32, after: &str) -> u32 {
+    let Some(delta) = notes_delta(before, after) else {
+        return caret;
+    };
+    // UTF-16 to codepoints over `before`, then back over `after`.
+    let mut units = 0u32;
+    let pos = before
+        .chars()
+        .take_while(|c| {
+            units += c.len_utf16() as u32;
+            units <= caret
+        })
+        .count();
+    let inserted = delta.insert.chars().count();
+    let moved = if pos <= delta.at {
+        pos
+    } else if pos >= delta.at + delta.delete {
+        pos - delta.delete + inserted
+    } else {
+        delta.at + inserted
+    };
+    after
+        .chars()
+        .take(moved)
+        .map(|c| c.len_utf16() as u32)
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_caret_keeps_its_place_under_a_peer_write() {
+        // A prefix before the caret shifts it; a suffix after it does not.
+        assert_eq!(caret_through("Hello world", 5, "Dear Hello world"), 10);
+        assert_eq!(caret_through("Hello world", 5, "Hello world!"), 5);
+        // A caret inside a removed run lands after its replacement.
+        assert_eq!(caret_through("Hello world", 8, "Hello you"), 9);
+        // Offsets count UTF-16 units: an astral emoji is two.
+        assert_eq!(caret_through("\u{1f600}ab", 3, "x\u{1f600}ab"), 4);
+        assert_eq!(caret_through("same", 2, "same"), 2);
+    }
 
     #[test]
     fn counter_label_is_one_based() {

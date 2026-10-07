@@ -496,7 +496,9 @@ impl ToileState {
             ToileCommand::ExitPresent => self.exit_present(),
             ToileCommand::SetPresentBroadcast(on) => self.set_present_broadcast(on),
             ToileCommand::FollowPresenter(who) => self.follow_presenter(who),
-            ToileCommand::EditNotes { frame, delta } => self.edit_notes(&frame, &delta),
+            ToileCommand::EditNotes { frame, base, delta } => {
+                self.edit_notes(&frame, &base, &delta)
+            }
             ToileCommand::SetAutoLayout { frame, layout } => self.set_auto_layout(&frame, layout),
             ToileCommand::React { target, reaction } => self.react(&target, reaction),
             ToileCommand::CreateComment { anchor, body, ts } => {
