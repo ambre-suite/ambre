@@ -196,7 +196,8 @@ pub async fn oidc_login(
 /// Receives the authorization code and CSRF state from the client (obtained
 /// after the OIDC provider redirect). Validates the state against Redis,
 /// exchanges the code for tokens, and verifies the ID token. Upserts the
-/// user, creates a Redis session, and sets the session cookie.
+/// user, creates a Redis session, and returns the token pair in the response
+/// body. No cookie is set (`ambre-spec-sync.md`, `SYNC-060`).
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     Path(provider): Path<String>,

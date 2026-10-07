@@ -9,6 +9,7 @@ mod handler_tests {
     use crate::routes;
     use crate::state::{AppState, Config};
     use crate::ws;
+    use ambre_protocol::ws::{WsClientMsg, WsServerMsg, encode_client_msg};
 
     fn empty_oidc_clients() -> crate::oidc::OidcClients {
         Arc::new(std::collections::HashMap::new())
@@ -1190,26 +1191,122 @@ mod handler_tests {
         assert_eq!(first_close_code(state, "not-a-token").await, 4401);
     }
 
-    /// Serves the router on a loopback port, opens the socket with `token`, and
-    /// returns the code of the close frame the server sends first.
-    async fn first_close_code(state: Arc<AppState>, token: &str) -> u16 {
-        use futures_util::StreamExt;
+    /// `SRV-031`: the socket address is never read for a credential. A valid
+    /// token in its query, followed by any frame but `Authenticate`, opens no
+    /// session.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_token_in_the_socket_address_opens_no_session(pool: sqlx::PgPool) {
         use tokio_tungstenite::tungstenite::Message;
 
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let token = auth.trim_start_matches("Bearer ");
+        let subscribe = WsClientMsg::Subscribe {
+            document_id: ambre_core::DocumentId::new(),
+        };
+        let reply = first_reply(state, &format!("?token={token}"), &subscribe).await;
+        let Message::Close(Some(frame)) = reply else {
+            panic!("expected a close frame, got {reply:?}");
+        };
+        assert_eq!(u16::from(frame.code), 4401);
+    }
+
+    /// `SRV-031`: the token travels in the socket's first frame, and that frame
+    /// alone opens the session: the next frame is answered, not closed on.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_token_in_the_first_frame_opens_the_session(pool: sqlx::PgPool) {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let token = auth.trim_start_matches("Bearer ");
+        let mut socket = open_socket(state, "").await;
+        socket
+            .send(Message::Binary(authenticate(token).into()))
+            .await
+            .unwrap();
+        let subscribe = WsClientMsg::Subscribe {
+            document_id: ambre_core::DocumentId::new(),
+        };
+        socket
+            .send(Message::Binary(encode_client_msg(&subscribe).into()))
+            .await
+            .unwrap();
+        let reply = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server answers")
+            .expect("a frame before the stream ends")
+            .unwrap();
+        let Message::Binary(bytes) = reply else {
+            panic!("expected an answer, got {reply:?}");
+        };
+        let answer = ambre_protocol::ws::decode_server_msg(&bytes).unwrap();
+        assert!(
+            matches!(answer, WsServerMsg::Error { code: 403, .. }),
+            "{answer:?}"
+        );
+    }
+
+    /// The `Authenticate` frame for `token`, encoded.
+    fn authenticate(token: &str) -> Vec<u8> {
+        encode_client_msg(&WsClientMsg::Authenticate {
+            token: ambre_protocol::ws::AccessToken::new(token.to_owned()),
+        })
+    }
+
+    /// Serves the router on a loopback port and opens the socket at the address
+    /// followed by `query`.
+    async fn open_socket(
+        state: Arc<AppState>,
+        query: &str,
+    ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+    {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let app = build_test_router(state);
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let url = format!("ws://{addr}/api/ws{query}");
+        tokio_tungstenite::connect_async(url).await.unwrap().0
+    }
 
-        let url = format!("ws://{addr}/api/ws?token={token}");
-        let (mut socket, _) = tokio_tungstenite::connect_async(url).await.unwrap();
-        let first = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+    /// Opens the socket, sends `first` as its first frame, and returns the
+    /// frame the server answers with.
+    async fn first_reply(
+        state: Arc<AppState>,
+        query: &str,
+        first: &WsClientMsg,
+    ) -> tokio_tungstenite::tungstenite::Message {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let mut socket = open_socket(state, query).await;
+        socket
+            .send(Message::Binary(encode_client_msg(first).into()))
             .await
-            .expect("the server closes the socket")
-            .expect("a frame before the stream ends")
             .unwrap();
-        let Message::Close(Some(frame)) = first else {
-            panic!("expected a close frame, got {first:?}");
+        tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server answers")
+            .expect("a frame before the stream ends")
+            .unwrap()
+    }
+
+    /// Opens the socket, authenticates with `token`, and returns the code of
+    /// the close frame the server sends first.
+    async fn first_close_code(state: Arc<AppState>, token: &str) -> u16 {
+        use tokio_tungstenite::tungstenite::Message;
+
+        let first = WsClientMsg::Authenticate {
+            token: ambre_protocol::ws::AccessToken::new(token.to_owned()),
+        };
+        let reply = first_reply(state, "", &first).await;
+        let Message::Close(Some(frame)) = reply else {
+            panic!("expected a close frame, got {reply:?}");
         };
         u16::from(frame.code)
     }
@@ -1544,6 +1641,59 @@ mod handler_tests {
             post_json(&app, &owner, uri, body).await,
             StatusCode::NOT_FOUND
         );
+    }
+
+    // `ZK-008`: no presigned URL is signed before the document's access check.
+    // An outsider gets none of the four, a viewer gets neither upload URL.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_presigned_url_is_signed_only_after_the_access_check(pool: sqlx::PgPool) {
+        let state = test_app_state_presigning(pool).await;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &owner).await;
+        let viewer_email = "viewer@ambre.app";
+        let viewer = setup_named(&setup, viewer_email, 5).await;
+        invite(&setup, &owner, &doc_id, viewer_email, "viewer").await;
+        let outsider = setup_named(&setup, "outsider@ambre.app", 6).await;
+        let hash = "a".repeat(64);
+        let upload = [
+            (
+                "media/upload-url",
+                serde_json::json!({ "content_hash": hash, "size_bytes": 10 }),
+            ),
+            (
+                "snapshot/upload-url",
+                serde_json::json!({ "size_bytes": 10 }),
+            ),
+        ];
+        let download = [
+            (
+                "media/download-url",
+                serde_json::json!({ "content_hash": hash }),
+            ),
+            (
+                "snapshot/download-url",
+                serde_json::json!({ "snapshot_id": doc_id }),
+            ),
+        ];
+
+        for (path, body) in upload.iter().chain(download.iter()) {
+            let uri = format!("/api/documents/{doc_id}/{path}");
+            let status = post_json(&app, &outsider, uri, body.clone()).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "outsider, {path}");
+        }
+        for (path, body) in &upload {
+            let uri = format!("/api/documents/{doc_id}/{path}");
+            let status = post_json(&app, &viewer, uri.clone(), body.clone()).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "viewer, {path}");
+            assert_eq!(
+                post_json(&app, &owner, uri, body.clone()).await,
+                StatusCode::OK,
+                "{path}"
+            );
+        }
     }
 
     /// A snapshot's `author_pubkey` is bound to the session identity (the token's

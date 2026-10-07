@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
-| `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | `ambre_sync::seal_tests::a_payload_frame_built_outside_the_seal_never_reaches_the_socket` -- a payload frame reaches the socket only as a `SealedFrame`, which the seal alone builds | none | verified |
 | `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | `ambre_sync::pipeline::tests::a_sealed_object_carries_the_signature_and_the_tag` -- a name or a blob carries both, a flipped signature byte and a re-signed wrong tag each refuse; structural -- no Sync path calls the bare cipher under a document key | none | verified |
 | `SYNC-125` | `INV` | Every sealed payload MUST name, in its public metadata, the identifier of the key that sealed it. | this spec section 2; `SYNC-115` | `ambre_sync::pipeline::tests::a_frame_names_the_key_that_sealed_it` -- an update names its key, and a seal or an open under another key is refused; `ambre_sync::pipeline::tests::an_object_names_the_key_that_sealed_it` -- a name or a blob names its key in its header, and a header rewritten to name another fails to open. The snapshot and the ephemeral frame take the same check, which no test drives | none | verified |
 
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | none | unheld -- `ambre_sync::pipeline::tests::roundtrip_snapshot_large_compresses` and `::roundtrip_update_small` recover the version through the seal, which shows where it is today; nothing refuses a version byte moved into the public metadata, and a byte there tells the relay how compressible a document is; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | `ambre_sync::pipeline::tests::the_compression_version_is_sealed_inside_the_ciphertext` -- the version byte is read back from the opened plaintext and from no public field | none | verified |
 
 ### 1.3 An inbound frame is opened
 
@@ -66,7 +66,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 11 `verified`, 8 `untested`, 4 `unimplemented`. What holds is refusal: a
+* **Verification.** 13 `verified`, 6 `untested`, 4 `unimplemented`. What holds is refusal: a
   tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a replayed
   counter, a decompression bomb and an unknown codec. What is loose is every rule stated as an
   absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.

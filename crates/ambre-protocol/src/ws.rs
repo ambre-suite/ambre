@@ -56,6 +56,35 @@ pub enum WsClientMsg {
         channel_id: ChannelId,
         ephemeral: Ephemeral,
     },
+
+    /// The access token, as the first frame of the socket. The socket address
+    /// carries none, so no proxy record and no log line holds it
+    /// (`ambre-spec-session.md`, `SRV-031`). The relay reads nothing else
+    /// until this frame is accepted.
+    Authenticate { token: AccessToken },
+}
+
+/// An access token on the wire. `Debug` prints no byte of it, so a logged
+/// frame logs no token (`SRV-031`).
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct AccessToken(String);
+
+impl AccessToken {
+    /// Wraps the token text.
+    pub fn new(token: String) -> Self {
+        Self(token)
+    }
+
+    /// The token text, for the one call that verifies it.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for AccessToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AccessToken(<redacted>)")
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,9 @@ def scratch(tmp: str) -> Path:
         "fn keys() { register(trame_chrome::COMMANDS); }\n",
     )
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
+    write(root, "crates/ambre-sync/Cargo.toml", '[dependencies]\ngloo-net = { workspace = true }\n')
+    write(root, f"{cb.WORKER}/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
+    write(root, cb.NETWORK_EXCEPTIONS[0], "fn font() { window.fetch_with_str(url); }\n")
     return root
 
 
@@ -59,6 +62,9 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_chrome(errors)
             cb.check_launcher(errors)
             cb.check_density(errors)
+            cb.check_network(errors)
+            cb.check_storage(errors)
+            cb.check_passphrase(errors)
             return errors
 
     def test_the_real_tree_is_clean(self):
@@ -182,6 +188,85 @@ class CrateBoundaries(unittest.TestCase):
             write(root, cb.DENSITY, "fn read() -> f64 { 1.0 }\n")
             errors = self.run_checks(root)
         self.assertTrue(any("reads no density" in e for e in errors), errors)
+
+    def test_a_network_call_outside_the_worker_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                "crates/ambre-logic/src/dispatch.rs",
+                "fn leak() { let ws = web_sys::WebSocket::new(url); }\n",
+            )
+            errors = self.run_checks(root)
+        self.assertTrue(any("dispatch.rs:1: a network call outside" in e for e in errors), errors)
+
+    def test_a_transport_crate_outside_the_worker_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-trame/Cargo.toml", '[dependencies]\nreqwest = { workspace = true }\n')
+            errors = self.run_checks(root)
+        self.assertTrue(any("declares the transport crate `reqwest`" in e for e in errors), errors)
+
+    def test_the_worker_and_the_stated_reads_stay_free(self):
+        """The worker's transport and the font fetch are the rule, not a breach."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            errors = self.run_checks(root)
+        self.assertEqual(errors, [])
+
+    def test_a_worker_writing_to_browser_storage_is_refused(self):
+        import tempfile
+
+        for line in (
+            "fn keep(t: &str) { window.local_storage().set_item(\"token\", t); }\n",
+            "fn keep(t: &str) { document.set_cookie(t); }\n",
+            "fn keep(b: &[u8]) { scope.indexed_db(); }\n",
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = scratch(tmp)
+                write(root, f"{cb.WORKER}/auth.rs", line)
+                errors = self.run_checks(root)
+            self.assertTrue(any("reaches browser storage" in e for e in errors), (line, errors))
+
+    def test_a_request_carrying_a_passphrase_is_refused(self):
+        import tempfile
+
+        for text in (
+            "#[derive(Serialize)]\nstruct Body {\n    pub passphrase: String,\n}\n",
+            "#[derive(Debug, Serialize)]\n#[serde(rename_all = \"camelCase\")]\n"
+            "pub(crate) struct Body {\n    user_password: Vec<u8>,\n}\n",
+            "#[derive(Serialize)]\nstruct Body {\n    #[serde(rename = \"passphrase\")]\n    p: String,\n}\n",
+            "fn send() { let b = serde_json::json!({ \"passphrase\": p }); }\n",
+            "#[derive(Serialize)]\nstruct Body {\n    secret: Option<SecretBytes>,\n}\n",
+        ):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = scratch(tmp)
+                write(root, f"{cb.WORKER}/auth.rs", text)
+                errors = self.run_checks(root)
+            self.assertTrue(any("names a passphrase" in e for e in errors), (text, errors))
+
+    def test_a_passphrase_outside_a_request_body_stays_free(self):
+        """A handler parameter, a deserialized reply and a log line send nothing."""
+        import tempfile
+
+        text = (
+            "fn unlock(passphrase: SecretBytes) {\n"
+            "    tracing::warn!(\"wrong passphrase\");\n}\n"
+            "#[derive(Deserialize)]\nstruct Reply {\n    passphrase_hint: String,\n}\n"
+            "#[derive(Serialize)]\nstruct Body {\n    salt: Vec<u8>,\n}\n"
+            "fn later(passphrase: SecretBytes) {}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, f"{cb.WORKER}/auth.rs", text)
+            errors = self.run_checks(root)
+        self.assertEqual(errors, [])
 
     def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
         import tempfile

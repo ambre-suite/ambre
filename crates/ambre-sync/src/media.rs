@@ -10,8 +10,8 @@ fn seal_blob(
     address: &Address,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
-) -> Result<Vec<u8>, pipeline::PipelineError> {
-    pipeline::seal_object(
+) -> Result<pipeline::SealedBlob, pipeline::PipelineError> {
+    pipeline::object_blob(
         data,
         &pipeline::media_aad(document_id, address),
         doc_key,
@@ -116,8 +116,18 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let blob = seal_blob(&data, document_id, &address, &doc_key, &signing_key)
-                .expect("seal media");
+            let blob = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
+                Ok(blob) => blob,
+                Err(e) => {
+                    let _ = logic_tx.send(LogicEvent::ApiError {
+                        id: Some(id),
+                        request: "UploadMedia".into(),
+                        code: 500,
+                        message: format!("seal: {e}"),
+                    });
+                    return;
+                }
+            };
             let encrypted_size = blob.len() as u64;
 
             let upload_url_req =
@@ -147,7 +157,7 @@ impl SyncState {
 
             // S3 presigned PUT goes straight to object storage, not our API:
             // no session, no CSRF header.
-            if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
+            if let Err(e) = http::put_sealed(&upload_url, &blob).await {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     id: Some(id),
                     request: "UploadMedia".into(),
@@ -325,7 +335,7 @@ mod tests {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let address = ambre_crypto::commitment::media_address(key, data);
         let blob = seal_blob(data, document_id, &address, key, &signing).unwrap();
-        (blob, hex::encode(address))
+        (blob.as_bytes().to_vec(), hex::encode(address))
     }
 
     /// A picture sealed before two rotations opens with the current key and
@@ -389,12 +399,13 @@ mod tests {
         let address = ambre_crypto::commitment::media_address(&key, b"a picture");
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let forged = seal_blob(b"other bytes", document_id, &address, &key, &signing).unwrap();
+        let forged = forged.as_bytes();
         assert_eq!(
-            pipeline::open_object(&forged, &pipeline::media_aad(document_id, &address), &key)
+            pipeline::open_object(forged, &pipeline::media_aad(document_id, &address), &key)
                 .unwrap(),
             b"other bytes"
         );
-        assert!(open_blob(&forged, document_id, &wanted, &key).is_err());
-        assert!(open_blob(&forged, document_id, "not hex", &key).is_err());
+        assert!(open_blob(forged, document_id, &wanted, &key).is_err());
+        assert!(open_blob(forged, document_id, "not hex", &key).is_err());
     }
 }

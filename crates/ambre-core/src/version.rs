@@ -34,6 +34,9 @@ impl Version {
     /// Version 3 - the relay refuses a frame for its key while a rotation is owed.
     pub const V3: Self = Self(3);
 
+    /// Version 4 - the socket authenticates by its first frame, never by its address.
+    pub const V4: Self = Self(4);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

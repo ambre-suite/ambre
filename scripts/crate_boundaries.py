@@ -33,6 +33,24 @@ an application's command or event, or one of its command ids.
 out in logical pixels, and the factor to device pixels never leaves
 `ambre-canvas`. A second read of it anywhere is a second scale a view could
 apply on top of the renderer's. So no Rust line outside `density.rs` names it.
+
+**The network leaves from the Sync worker** (`ARCH-005`). The workspace hands
+every crate the browser's request and socket types, so the manifests prove
+nothing on their own. Two lines are read instead: a manifest naming a
+transport crate outside the worker and the relay, and a Rust line naming a
+network call outside them. The two reads `UI-THREAD-004` names, the font fetch
+and the sign-in configuration, are the stated exception, file by file.
+
+**The worker writes nothing to the browser's storage** (`SYNC-054`,
+`SYNC-060`). A decrypted blob and a session token both live in its memory, so
+no Rust line of `ambre-sync` names browser storage, the browser database, the
+cache or a cookie.
+
+**No request carries a passphrase** (`ZK-012`). The worker holds the
+passphrase in `SecretBytes`, which serializes so that it can cross the client
+bus. So no serialized struct of `ambre-sync` declares a secret-typed field or
+a field named for a passphrase or a password, and no JSON key or serde rename
+spells one.
 """
 
 from __future__ import annotations
@@ -80,6 +98,41 @@ APP_COMMAND_ID = re.compile(
 CRATES = "crates"
 DENSITY = "crates/ambre-canvas/src/density.rs"
 DENSITY_READ = re.compile(r"\bdevice_pixel_ratio\b|\bdevicePixelRatio\b")
+
+# The two crates a network call may leave from: the Sync worker, and the relay,
+# which is a server and not one of the two client instances.
+NETWORK_CRATES = ("crates/ambre-sync/", "crates/ambre-server/")
+# The two reads `UI-THREAD-004` names as its exception: the same-origin font
+# fetch and the pre-session sign-in configuration.
+NETWORK_EXCEPTIONS = ("crates/ambre-canvas/src/host.rs", "crates/ambre-app/src/platform.rs")
+TRANSPORT_CRATES = re.compile(
+    r"^\s*(gloo-net|reqwest|tungstenite|tokio-tungstenite|ewebsock|ws_stream_wasm)\s*=",
+    re.MULTILINE,
+)
+NETWORK_CALL = re.compile(
+    r"\bfetch_with_(?:request|str)\w*|\bWebSocket::new\w*|\bXmlHttpRequest\b|\bEventSource\b"
+    r"|\bsend_beacon\b|\bRtcPeerConnection\b|\bgloo_net\b|\breqwest\b"
+)
+
+# The Sync worker's source, and what reaching the browser's storage looks like
+# from it: web storage, the browser database, the cache, the private file
+# system or a cookie.
+WORKER = "crates/ambre-sync/src"
+STORAGE_CALL = re.compile(
+    r"\blocal_storage\b|\bsession_storage\b|\bStorage\b|\bindexed_db\b|\bIdb\w+"
+    r"|\bcaches\b|\bCacheStorage\b|\bStorageManager\b|\bget_directory\b|[Cc]ookie"
+)
+
+# What a passphrase in a request body looks like: a field of a serialized
+# struct, or a string that a JSON body or a serde rename uses as a key.
+SECRET_NAME = r"\w*(?:passphrase|password)\w*"
+SERIALIZE_DERIVE = re.compile(r"#\[derive\([^)]*\bSerialize\b")
+STRUCT_OPEN = re.compile(r"\bstruct\s+\w+[^;]*\{\s*$")
+SECRET_FIELD = re.compile(
+    rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:({SECRET_NAME})\s*:|\w+\s*:.*\b(Secret(?:Bytes|String))\b)",
+    re.IGNORECASE,
+)
+SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME})\"", re.IGNORECASE)
 
 
 def read(rel: str) -> str:
@@ -206,6 +259,78 @@ def check_density(errors: list[str]) -> int:
     return len(files)
 
 
+def check_network(errors: list[str]) -> int:
+    """`ARCH-005`: no transport crate and no network call outside the worker."""
+    held = 0
+    for path in sorted(ROOT.glob("crates/*/Cargo.toml")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(NETWORK_CRATES):
+            continue
+        for found in TRANSPORT_CRATES.finditer(path.read_text()):
+            errors.append(f"{rel}: declares the transport crate `{found.group(1)}`")
+        held += 1
+    files = sorted((ROOT / CRATES).rglob("*.rs"))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(NETWORK_CRATES) or rel in NETWORK_EXCEPTIONS or "/target/" in rel:
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = NETWORK_CALL.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: a network call outside the Sync worker: `{found.group(0)}`")
+        held += 1
+    if not held:
+        errors.append(f"{CRATES}: no crate read, so the network boundary holds nothing")
+    return held
+
+
+def check_storage(errors: list[str]) -> int:
+    """`SYNC-054`, `SYNC-060`: the worker names no browser storage."""
+    files = sorted((ROOT / WORKER).rglob("*.rs"))
+    if not files:
+        errors.append(f"{WORKER}: gone from the tree, so the storage boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = STORAGE_CALL.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: the Sync worker reaches browser storage: `{found.group(0)}`")
+    return len(files)
+
+
+def check_passphrase(errors: list[str]) -> int:
+    """`ZK-012`: no request body of the worker names a passphrase."""
+    files = sorted((ROOT / WORKER).rglob("*.rs"))
+    if not files:
+        errors.append(f"{WORKER}: gone from the tree, so the passphrase boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        derived = False
+        depth = 0
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            text = code(line)
+            found = SECRET_KEY.search(text)
+            if found:
+                key = found.group(1) or found.group(2)
+                errors.append(f"{rel}:{number}: a request key names a passphrase: `{key}`")
+            if depth:
+                field = SECRET_FIELD.match(text) if depth == 1 else None
+                if field:
+                    name = field.group(1) or field.group(2)
+                    errors.append(f"{rel}:{number}: a serialized field names a passphrase: `{name}`")
+                depth += text.count("{") - text.count("}")
+            elif SERIALIZE_DERIVE.search(text):
+                derived = True
+            elif derived and STRUCT_OPEN.search(text):
+                derived = False
+                depth = 1
+            elif derived and not text.strip().startswith("#["):
+                derived = False
+    return len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -217,12 +342,18 @@ def main() -> int:
     toolkits = check_chrome(errors)
     launcher = check_launcher(errors)
     density = check_density(errors)
+    network = check_network(errors)
+    storage = check_storage(errors)
+    secrets = check_passphrase(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
         f"{toolkits} shared toolkit read for an application dependency, "
         f"{launcher} launcher files read for application logic, "
-        f"{density} Rust files read for a density read"
+        f"{density} Rust files read for a density read, "
+        f"{network} manifests and Rust files read for a network call, "
+        f"{storage} worker files read for browser storage, "
+        f"{secrets} worker files read for a passphrase in a request"
     )
     for line in errors:
         print(f"  {line}")
@@ -233,8 +364,10 @@ def main() -> int:
             "out of the client build, a generator must drive `handle_command` "
             "rather than the CRDT, the shared chrome must name no "
             "application type, the launcher must name no application's "
-            "command, event or command id, and only density.rs may read the "
-            "display density.",
+            "command, event or command id, only density.rs may read the "
+            "display density, the network leaves from the Sync worker alone, "
+            "the worker writes nothing to browser storage, and no request "
+            "it sends names a passphrase.",
             file=sys.stderr,
         )
         return 1

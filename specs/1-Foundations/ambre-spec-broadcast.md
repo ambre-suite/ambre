@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | none | unheld -- the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
-| `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | none | unheld -- the relay stores the frame's ciphertext as it received it and decodes nothing, which is an absence rather than a check. The two `ephemeral_binding_tests` hold the entry a forged sender never gets, which is `SRV-007` and not this rule; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_presence_entry_is_the_ciphertext_as_received` -- the stored entry decodes to exactly the bytes the frame sealed, so the relay neither reads nor rewrites them | none | verified |
 | `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-166` | `INV` | A change to the shape of any frame MUST change the version byte every frame opens on. | this spec section 3; `ambre-spec-sync.md`, `SYNC-137` | `ambre_protocol::tests::the_wire_layout_is_frozen_under_its_version` -- a digest of one frame per message variant, frozen under the version byte, where the decoder counts the variants so that one with no sample fails | none | verified |
 
@@ -79,8 +79,8 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 9 `verified`, 9 `untested`, 6 `unimplemented`. What holds is what a handler test
-  drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
+* **Verification.** 10 `verified`, 8 `untested`, 6 `unimplemented`. What holds is what a handler
+  test drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
   everything about the connection rather than the message. Each needs a live socket, and two tests
   alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
 ---
@@ -261,7 +261,7 @@ The socket has no surface of its own. What a person meets of it is four things.
 | What the client does with a frame it receives | `ambre-spec-sync.md`, `ambre-spec-delta-order.md` |
 | What a presence payload contains, and who draws it | `ambre-spec-presence.md` |
 | How the payload is sealed and opened | `ambre-spec-sealed-envelope.md` |
-| What the token in the socket address is, and what refuses it | `ambre-spec-session.md` |
+| What the token in the socket's first frame is, and what refuses it | `ambre-spec-session.md` |
 | Who may write, and who may see a document at all | `ambre-spec-server.md` |
 | What a re-key notice makes the client do | `ambre-spec-key-rotation.md` |
 | What the relay may learn from a frame | `ambre-spec-zero-knowledge.md`, `ZK-007` |

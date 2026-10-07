@@ -108,6 +108,15 @@ pub fn format_s3_media_key(
     format!("{env_prefix}/documents/{document_id}/media/{content_hash}")
 }
 
+/// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
+pub const PRESIGNED_URL_MAX_TTL_SECS: u64 = 15 * 60;
+
+/// The lifetime a presigned URL is signed for: the configured one, held under
+/// the ceiling. A misconfigured day comes out as 15 minutes.
+fn presign_lifetime(ttl_secs: u64) -> Duration {
+    Duration::from_secs(ttl_secs.min(PRESIGNED_URL_MAX_TTL_SECS))
+}
+
 /// Generates a presigned S3 PUT URL valid for `ttl_secs`, bound to exactly
 /// `content_length` bytes.
 ///
@@ -124,7 +133,7 @@ pub async fn generate_presigned_upload_url(
     ttl_secs: u64,
     content_length: u64,
 ) -> Result<String, AppError> {
-    let config = PresigningConfig::expires_in(Duration::from_secs(ttl_secs))
+    let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.put_object()
@@ -144,7 +153,7 @@ pub async fn generate_presigned_download_url(
     key: &str,
     ttl_secs: u64,
 ) -> Result<String, AppError> {
-    let config = PresigningConfig::expires_in(Duration::from_secs(ttl_secs))
+    let config = PresigningConfig::expires_in(presign_lifetime(ttl_secs))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
     s3.get_object()
@@ -307,7 +316,7 @@ const FLUSH_LOCK_TTL_SECS: u64 = 60;
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
 pub fn late_write_window_secs(presigned_url_ttl_secs: u64) -> u64 {
-    presigned_url_ttl_secs + FLUSH_LOCK_TTL_SECS + 60
+    presign_lifetime(presigned_url_ttl_secs).as_secs() + FLUSH_LOCK_TTL_SECS + 60
 }
 
 /// Seconds since the Unix epoch, the clock the sweep schedule is scored in.
@@ -648,6 +657,27 @@ mod tests {
             signed.contains("content-length"),
             "content-length must be a signed header, got: {url}"
         );
+    }
+
+    /// `ZK-014`, `SRV-052`: a configured lifetime above 15 minutes is signed
+    /// as 15 minutes, on both the upload and the download URL.
+    #[tokio::test]
+    async fn a_presigned_url_never_outlives_fifteen_minutes() {
+        let s3 = test_s3_client();
+        let day = 24 * 3600;
+        let up = generate_presigned_upload_url(&s3, "bucket", "k", day, 1)
+            .await
+            .expect("presign");
+        let down = generate_presigned_download_url(&s3, "bucket", "k", day)
+            .await
+            .expect("presign");
+        for url in [up, down] {
+            assert!(url.contains("X-Amz-Expires=900"), "{url}");
+        }
+        let short = generate_presigned_download_url(&s3, "bucket", "k", 60)
+            .await
+            .expect("presign");
+        assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }
 
     #[test]

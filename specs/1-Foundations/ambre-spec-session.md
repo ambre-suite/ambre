@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | `ambre_server::routes::auth::tests::a_provider_account_without_keys_gets_no_signing_key`; `ambre_server::routes::auth::tests::a_stored_key_that_does_not_parse_mints_no_session`; `ambre_server::routes::tests::handler_tests::a_session_before_key_setup_carries_no_key`; `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a provider account without keys gets a session with no key, which only the setup routes take and the refresh keeps keyless. The socket closes on it. A stored key that does not parse is refused | none | verified |
 | `SRV-163` | `INV` | An account that has not registered its keys MUST NOT be offered as a recipient. | this spec section 3; `SRV-027` | `ambre_server::routes::tests::handler_tests::an_account_without_keys_is_offered_to_no_sharer`; `ambre_server::routes::tests::handler_tests::an_account_holds_both_keys_or_neither` -- the search, the key lookup and the invite pass over it until its keys are stored. A membership written before is left out of the list. The store refuses one key without the other | none | verified |
-| `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none | unheld -- the rule holds only outside this process: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`); lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | `ambre_server::routes::tests::handler_tests::a_token_in_the_socket_address_opens_no_session`; `::a_token_in_the_first_frame_opens_the_session` -- the socket takes its token in its first frame and never reads its address; `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::an_opened_socket_authenticates_before_it_subscribes` -- the client sends it before any subscription | none | verified |
 
 ### 1.2 A request is authenticated
 
@@ -61,9 +61,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   every request, and no row measures it.
 * **Boundary.** the relay stores the sealed master material, the sealed salt and both public keys,
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
-  token, and `SRV-012` refuses it every other cryptographic act. The one leak stated here is the
-  token in the socket address (`SRV-031`).
-* **Verification.** 9 `verified`, 2 `partial`, 6 `untested`. What holds is what a request test can
+  token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
+  first frame, so no address carries one (`SRV-031`).
+* **Verification.** 10 `verified`, 2 `partial`, 5 `untested`. What holds is what a request test can
   drive: the token gate, the address namespace, the one-shot key write and the refresh race. What is
   loose is every rule about a deployment rather than a request.
 ---
@@ -192,7 +192,7 @@ where each of those is drawn.
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.
 * **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
-  deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-008` states for the
+  deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-014` refuses for the
   presigned link.
 * **A sign-out revokes one token, and a person may hold several.** Each renewal mints a refresh
   token, and a sign-out revokes the one the client presents. A session opened on another device

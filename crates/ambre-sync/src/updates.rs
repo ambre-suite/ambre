@@ -649,13 +649,10 @@ impl SyncState {
             snapshot_id: doc_state.current_snapshot_id,
             clock: Clock(clock),
         };
-        match pipeline::seal_update(payload, public_data, &doc_state.doc_key, signing_key) {
-            Ok(update) => {
-                tracing::info!(
-                    "[Sync] seal_update ok doc={document_id} clock={clock} -> {} bytes ciphertext",
-                    update.ciphertext.0.len(),
-                );
-                self.ws_send(&WsClientMsg::Update(update));
+        match pipeline::update_frame(payload, public_data, &doc_state.doc_key, signing_key) {
+            Ok(frame) => {
+                tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
+                self.ws_send_sealed(&frame);
                 Some(key_id)
             }
             Err(e) => {
@@ -822,13 +819,15 @@ impl SyncState {
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot = match pipeline::seal_snapshot(
+        // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
+        // `decode_snapshot_blob` + `open_snapshot`).
+        let blob = match pipeline::snapshot_blob(
             &payload,
             public_data,
             &doc_state.doc_key,
             &signing_key,
         ) {
-            Ok(s) => s,
+            Ok(blob) => blob,
             Err(e) => {
                 tracing::error!("Sync: SendSnapshot seal failed for {document_id:?}: {e}");
                 return;
@@ -840,19 +839,9 @@ impl SyncState {
         let Some(tx) = self.event_tx.clone() else {
             tracing::info!(
                 "Sync: SendSnapshot {document_id:?} sealed ({} bytes), no event channel (test path)",
-                snapshot.ciphertext.0.len()
+                blob.len()
             );
             return;
-        };
-
-        // Serialize the full sealed `Snapshot` as the S3 blob (the inverse of the
-        // open-path `postcard::from_bytes::<Snapshot>` + `open_snapshot`).
-        let blob = match postcard::to_allocvec(&snapshot) {
-            Ok(b) => b,
-            Err(e) => {
-                tracing::error!("Sync: SendSnapshot serialize failed for {document_id:?}: {e}");
-                return;
-            }
         };
         // The snapshot folds in every delta this client had received, that is, up to
         // its high-water `last_seq`. The server stores it so other clients can
@@ -885,7 +874,7 @@ impl SyncState {
                 };
 
             // Presigned PUT goes straight to S3 (no session, no CSRF header).
-            if let Err(e) = http::put_bytes(&upload_url, &blob, "application/octet-stream").await {
+            if let Err(e) = http::put_sealed(&upload_url, &blob).await {
                 tracing::error!("Sync: SendSnapshot S3 PUT failed for {document_id:?}: {e}");
                 return;
             }
@@ -953,8 +942,8 @@ impl SyncState {
             key_id: doc_state.doc_key.id(),
             counter: Counter(doc_state.ephemeral_counter),
         };
-        match pipeline::seal_ephemeral(&payload, public_data, &doc_state.doc_key, &signing_key) {
-            Ok(ephemeral) => self.ws_send(&WsClientMsg::Ephemeral(ephemeral)),
+        match pipeline::ephemeral_frame(&payload, public_data, &doc_state.doc_key, &signing_key) {
+            Ok(frame) => self.ws_send_sealed(&frame),
             Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }
     }

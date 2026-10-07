@@ -236,9 +236,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api", routes::api_router(Arc::clone(&state)))
         .layer(cors)
         // Per-request access log (method, path, status, latency). The span
-        // records only the URI *path*, never the query string. The WS upgrade
-        // carries the access JWT as `?token=`, and the default `new_for_http`
-        // span would log the full URI (M15). Enable with `tower_http=debug`.
+        // records only the URI *path*, never the query string, so a query a
+        // caller adds stays out of the log (M15, `SRV-031`). The socket takes
+        // its token in its first frame, never in its address. Enable with
+        // `tower_http=debug`.
         .layer(TraceLayer::new_for_http().make_span_with(
             |req: &axum::http::Request<axum::body::Body>| {
                 tracing::debug_span!(

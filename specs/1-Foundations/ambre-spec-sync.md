@@ -29,8 +29,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate-graph -- `deny.toml` grants `loro` to the four application crates alone, so this worker fails the `deny` job on the line that would add it | none | verified |
 | `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | none | unheld -- the manifest declares neither the canvas nor `wgpu`, and no `deny.toml` entry refuses them here, unlike the CRDT and cryptography bans beside it. The rule is read off a manifest rather than enforced by a job; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | none | unheld -- the crate builds a standalone artifact and is loaded as a dedicated worker, which the build shape makes true, and nothing in continuous integration boots the pair to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | none | unheld -- the store is a field of this worker and the crate opens no storage handle, so the rule holds by absence, and nothing would fail the day a writer appeared; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::a_logged_socket_url_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token` -- the socket address and the token pair print with the token redacted, and the raw form is reachable only through `expose` | none | verified |
+| `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
+| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token` -- the socket address holds no token, and the token pair prints with the token redacted, and the raw form is reachable only through `expose` | none | verified |
 | `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | none | unheld -- none is possible on host: the property is about a browser event loop. The loop awaits two channels whose producers both live in this worker, which is what makes the historical freeze unreachable by construction; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -85,10 +85,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 12 `verified`, 17 `untested`. The crate graph holds the keys and the CRDT apart.
+* **Verification.** 13 `verified`, 16 `untested`. The crate graph holds the keys and the CRDT apart.
   Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
-  document. Each gap left is a browser property the wasm tier cannot boot,
-  `ambre-spec-testing.md section 9`.
+  document. A gate refuses browser storage in the worker. Each gap left is a browser property the
+  wasm tier cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL
@@ -132,8 +132,8 @@ lifecycle command stands apart. A request identifier is minted by the screen, ec
 echoed once more here.
 
 **The socket.** One per session, multiplexed: opened at sign-in, closed at sign-out, and every
-document subscribed on it. Its token travels as a query parameter, because a browser socket carries
-no header of ours (`SYNC-061`).
+document subscribed on it. A browser socket carries no header of ours, so its token travels as the
+first frame and never in the address (`SRV-031`, `SYNC-061`).
 
 | Event | Response |
 |---|---|

@@ -293,12 +293,18 @@ pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), Stri
     expect_ok("DELETE", url, resp).await
 }
 
+/// PUTs a sealed blob to a presigned object-storage URL. It takes what the seal
+/// built and nothing else, so no plaintext reaches object storage (`SYNC-049`,
+/// `ZK-001`).
 #[allow(dead_code)]
-pub(crate) async fn put_bytes(url: &str, data: &[u8], mime_type: &str) -> Result<(), String> {
+pub(crate) async fn put_sealed(
+    url: &str,
+    blob: &crate::pipeline::SealedBlob,
+) -> Result<(), String> {
     let resp = gloo_net::http::Request::put(url)
-        .header("Content-Type", mime_type)
+        .header("Content-Type", "application/octet-stream")
         .abort_signal(Some(&timeout_signal()))
-        .body(data.to_vec())
+        .body(blob.as_bytes().to_vec())
         .map_err(|e| format!("PUT {url}: body error: {e}"))?
         .send()
         .await

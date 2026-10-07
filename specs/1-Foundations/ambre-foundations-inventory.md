@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 31 | 12 |
+| `architecture` | How the client is split, and why. | implemented | 31 | 11 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 1 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 3 |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 1 |
@@ -24,16 +24,16 @@
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 | 2 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 11 |
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 2 |
-| `media` | A picture in a document travels apart from it. | implemented | 11 | 6 |
+| `media` | A picture in a document travels apart from it. | implemented | 11 | 4 |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 3 |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 | 1 |
-| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 | 6 |
-| `sync` | The one part of the client that talks to the network. | implemented | 29 | 17 |
+| `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 | 5 |
+| `sync` | The one part of the client that talks to the network. | implemented | 29 | 16 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 8 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
-| `broadcast` | One connection per person, carrying every document they have open. | partial | 24 | 9 |
+| `broadcast` | One connection per person, carrying every document they have open. | partial | 24 | 8 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 13 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | partial | 20 | 10 |
@@ -43,16 +43,16 @@
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 | 10 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 30 | 2 |
 | `message-bus` | The contract the three threads talk over. | partial | 28 | 11 |
-| `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 | 4 |
+| `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 | 3 |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 3 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 | 2 |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
-| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 23 | 8 |
+| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 23 | 6 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 8 |
 | `server` | The one process every client talks to. | partial | 50 | 7 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 6 |
 | `ui` | The page's own thread. | partial | 17 | 7 |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 16 | 6 |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 16 | 1 |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 16 implemented, 22 partial, 7 design-only. 901 contract rows, 243 loose.**
+**45 features: 16 implemented, 22 partial, 7 design-only. 901 contract rows, 229 loose.**

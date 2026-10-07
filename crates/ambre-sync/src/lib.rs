@@ -701,6 +701,18 @@ fn doc_type_to_api_string(doc_type: DocType) -> String {
     .into()
 }
 
+/// Whether a client frame carries a sealed payload, which only the seal may
+/// build (`SYNC-001`).
+fn carries_payload(msg: &WsClientMsg) -> bool {
+    matches!(
+        msg,
+        WsClientMsg::Update(_)
+            | WsClientMsg::Ephemeral(_)
+            | WsClientMsg::ChannelUpdate { .. }
+            | WsClientMsg::ChannelEphemeral { .. }
+    )
+}
+
 pub struct SyncState {
     /// Outbound sink: Sync -> Logic thread (postMessage in the worker).
     logic_tx: LogicSink,
@@ -926,6 +938,24 @@ impl SyncState {
         self.documents.len()
     }
 
+    /// Sends a control frame: a subscription or a catch-up request.
+    ///
+    /// A frame that carries a payload is refused and dropped here. Only the
+    /// seal builds one, and it reaches the socket through [`Self::ws_send_sealed`]
+    /// (`SYNC-001`).
+    fn ws_send(&self, msg: &WsClientMsg) {
+        if carries_payload(msg) {
+            tracing::error!("[Sync->Server] a payload frame that skipped the seal, dropped");
+            return;
+        }
+        self.push_frame(msg);
+    }
+
+    /// Sends a frame the seal built (`SYNC-001`).
+    fn ws_send_sealed(&self, frame: &pipeline::SealedFrame) {
+        self.push_frame(frame.message());
+    }
+
     /// Encode and push a client message onto the WebSocket.
     ///
     /// A missing socket or a failed `send` is a transient network condition, not
@@ -933,7 +963,7 @@ impl SyncState {
     /// would tear the Sync thread down silently. Callers already gate on
     /// `self.ws.is_some()`; this only logs if that race is lost. The reconnect
     /// path (onclose -> backoff) re-establishes the socket.
-    fn ws_send(&self, msg: &WsClientMsg) {
+    fn push_frame(&self, msg: &WsClientMsg) {
         let wire = encode_client_msg(msg);
         let Some(ws) = self.ws.as_ref() else {
             if let Some(tx) = &self.mock_ws_tx {
@@ -1385,5 +1415,102 @@ mod ephemeral_tests {
         d.set_signing_keys([([2u8; 32], kept)]);
         assert_eq!(d.resolve_ephemeral_author([1u8; 32]), None);
         assert_eq!(d.resolve_ephemeral_author([2u8; 32]), Some(kept));
+    }
+}
+
+#[cfg(test)]
+mod seal_tests {
+    use super::*;
+    use ambre_bus::SyncCommand;
+    use ambre_core::{KeyId, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Counter, Nonce, Signature};
+    use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
+    use ambre_protocol::ws::decode_client_msg;
+    use ambre_protocol::{Ephemeral, Update};
+
+    /// A worker with one open document and a socket that records what it is
+    /// handed.
+    fn with_socket() -> (SyncState, DocumentId, ambre_bus::conduit::Receiver<Vec<u8>>) {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.signing_key = Some(MasterSeed::generate().derive_signing_key());
+        let id = DocumentId::new();
+        let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
+        state.documents.insert(id, doc);
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        (state, id, wire)
+    }
+
+    /// The frames the socket was handed, decoded.
+    fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+        wire.try_iter()
+            .map(|bytes| decode_client_msg(&bytes).expect("decode"))
+            .collect()
+    }
+
+    /// A payload frame built by hand, its plaintext in the ciphertext field,
+    /// never reaches the socket. The same edit through the seal does, and the
+    /// socket never sees its plaintext (`SYNC-001`, `ZK-001`).
+    #[test]
+    fn a_payload_frame_built_outside_the_seal_never_reaches_the_socket() {
+        let (state, id, wire) = with_socket();
+        let typed = b"a sentence typed in the clear".to_vec();
+        let pub_key = PublicKey::from_array([2u8; 32]);
+        let key_id = KeyId::from_array([4u8; 16]);
+        state.ws_send(&WsClientMsg::Update(Update {
+            ciphertext: Ciphertext(typed.clone()),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: id,
+                pub_key: pub_key.clone(),
+                key_id,
+                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                clock: Clock(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }));
+        state.ws_send(&WsClientMsg::Ephemeral(Ephemeral {
+            ciphertext: Ciphertext(typed.clone()),
+            nonce: Nonce([0u8; 24]),
+            public_data: EphemeralPublicData {
+                document_id: id,
+                pub_key,
+                key_id,
+                counter: Counter(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }));
+        assert!(
+            sent(&wire).is_empty(),
+            "a hand-built payload reached the socket"
+        );
+
+        let mut state = state;
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: id,
+            payload: typed.clone(),
+        });
+        state.handle_command(SyncCommand::SendEphemeral {
+            document_id: id,
+            payload: typed.clone(),
+        });
+        let frames = sent(&wire);
+        assert_eq!(frames.len(), 2);
+        let key = &state.documents[&id].doc_key;
+        let WsClientMsg::Update(update) = &frames[0] else {
+            panic!("the first frame is not the update: {:?}", frames[0]);
+        };
+        assert_ne!(update.ciphertext.0, typed);
+        assert_eq!(pipeline::open_update(update, key).expect("opens"), typed);
+        let WsClientMsg::Ephemeral(ephemeral) = &frames[1] else {
+            panic!("the second frame is not the ephemeral: {:?}", frames[1]);
+        };
+        assert_eq!(
+            pipeline::open_ephemeral(ephemeral, key).expect("opens"),
+            typed
+        );
     }
 }

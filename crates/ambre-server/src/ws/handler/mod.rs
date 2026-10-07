@@ -45,25 +45,13 @@ pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
     format!("user:{user_id}")
 }
 
-/// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
-/// headers, so the access JWT travels in the `token` query parameter. It is
-/// verified at the handshake exactly like a `Authorization: Bearer` on REST.
-///
-/// Operational note (M15): this is a bearer credential in a URL. The server's
-/// `TraceLayer` span logs only the URI path (never the query), and the reverse
-/// proxy MUST strip `?token=` from its access logs. The short access-token TTL
-/// bounds the residual exposure. See `ambre-spec-session.md`, `SRV-031`.
-#[derive(serde::Deserialize)]
-pub struct WsQuery {
-    token: Option<String>,
-}
-
-/// HTTP upgrade handler. Authenticates via the `?token=<jwt>` access token, then
-/// hands off to `handle_ws` for the full lifecycle.
+/// HTTP upgrade handler. The socket address carries no credential. The access
+/// token arrives as the socket's first frame, so no proxy record, log line or
+/// URL holds it (`ambre-spec-session.md`, `SRV-031`). A query on the address
+/// is never read.
 pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-    axum::extract::Query(query): axum::extract::Query<WsQuery>,
 ) -> impl IntoResponse {
     // Bound the inbound frame so the server never buffers an oversized message
     // (axum defaults to 64 MiB). The delta ciphertext cap is enforced per-message
@@ -72,23 +60,36 @@ pub async fn ws_upgrade(
     // `delta_max_bytes` ciphertext.
     let max_frame = state.config.delta_max_bytes.saturating_add(64 * 1024);
     let ws = ws.max_message_size(max_frame).max_frame_size(max_frame);
-    let session = match query.token {
-        Some(token) => auth::authenticate_token(&state, &token),
-        None => Err(AppError::Unauthorized),
-    };
-    // The WS upgrade always returns 101, then `handle_ws` drops the connection
-    // if auth failed. So the error never reaches `AppError::into_response`, and
-    // would otherwise be invisible. Log it here, by severity: a rejected session
-    // is routine (client), a server fault (Redis/DB) must be loud.
-    if let Err(e) = &session {
-        match e {
-            AppError::Unauthorized | AppError::SessionExpired | AppError::SetupRequired => {
-                tracing::debug!("WS auth rejected: {e}")
+    ws.on_upgrade(move |socket| handle_ws(socket, state))
+}
+
+/// How long an open socket may wait for the frame that authenticates it.
+const AUTH_DEADLINE: Duration = Duration::from_secs(10);
+
+/// The session the socket's first frame opens. A first frame other than
+/// `Authenticate`, one that does not decode, or none before the deadline is
+/// refused as unauthorized.
+async fn authenticate_first_frame(
+    state: &AppState,
+    socket: &mut WebSocket,
+) -> Result<auth::AuthSession, AppError> {
+    let first = tokio::time::timeout(AUTH_DEADLINE, async {
+        loop {
+            match socket.recv().await {
+                Some(Ok(Message::Binary(data))) => return Some(data),
+                Some(Ok(Message::Close(_)) | Err(_)) | None => return None,
+                Some(Ok(_)) => continue,
             }
-            _ => tracing::error!("WS auth failed (server fault): {e}"),
         }
+    })
+    .await
+    .ok()
+    .flatten()
+    .ok_or(AppError::Unauthorized)?;
+    match decode_client_msg(&first) {
+        Ok(WsClientMsg::Authenticate { token }) => auth::authenticate_token(state, token.expose()),
+        _ => Err(AppError::Unauthorized),
     }
-    ws.on_upgrade(move |socket| handle_ws(socket, state, session))
 }
 
 /// How long a `Subscribe`-time membership check is trusted before `handle_update`
@@ -156,18 +157,21 @@ fn refusal_close(error: &AppError) -> (u16, &'static str) {
     }
 }
 
-async fn handle_ws(
-    socket: WebSocket,
-    state: Arc<AppState>,
-    session_result: Result<auth::AuthSession, AppError>,
-) {
-    let session = match session_result {
+async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
+    let session = match authenticate_first_frame(&state, &mut socket).await {
         Ok(s) => s,
         Err(e) => {
-            // Tell the client explicitly why the upgrade was refused, with an
+            // The refusal never reaches `AppError::into_response`, so log it here
+            // by severity: a rejected session is routine, a server fault is loud.
+            match e {
+                AppError::Unauthorized | AppError::SessionExpired | AppError::SetupRequired => {
+                    tracing::debug!("WS auth rejected: {e}")
+                }
+                _ => tracing::error!("WS auth failed (server fault): {e}"),
+            }
+            // Tell the client explicitly why the socket was refused, with an
             // application close code, instead of a generic network drop.
             let (code, reason) = refusal_close(&e);
-            let mut socket = socket;
             let _ = socket
                 .send(Message::Close(Some(axum::extract::ws::CloseFrame {
                     code,
@@ -338,6 +342,9 @@ async fn handle_ws(
                 }
                 handle_channel_ephemeral(&state, channel_id, ephemeral).await;
             }
+            // The session is bound once, by the first frame. A later token
+            // changes nothing on this connection.
+            WsClientMsg::Authenticate { .. } => {}
         }
     }
 

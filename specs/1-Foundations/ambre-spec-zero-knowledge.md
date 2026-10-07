@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE ZERO-KNOWLEDGE BOUNDARY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the capability bans, the key hierarchy and the sealed paths ship.
-The whitelist and the log discipline are held by review alone.
+**Implementation:** partial -- the capability bans, the key hierarchy, the sealed paths and the
+envelope whitelist ship. The log discipline is held by review alone.
 
 > What the relay is allowed to learn, and what it must never be able to learn. One line runs through
 > the whole product: the server stores what a user writes and can read none of it.
@@ -20,20 +20,20 @@ that component's prefix instead.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_update_small` -- the nominal path | partial -- nothing forbids an unsealed send; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | partial |
+| `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::seal_tests::a_payload_frame_built_outside_the_seal_never_reaches_the_socket` -- the socket send refuses a payload frame the pipeline did not seal; type-level -- a storage upload takes a `SealedBlob` alone, built by the pipeline, which `ambre_sync::pipeline::tests::a_blob_bound_for_storage_is_sealed` opens back | none | verified |
 | `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync` and `ambre-logic`, so the edit that would make a key type nameable fails CI | none | verified |
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | unheld -- no check reads a log line back, so the guarantee is worth what the review is worth | human-review |
-| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, key_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
-| `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | none | unheld -- no test asserts that a non-member asking for a URL is refused one; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
-| `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` -- the derivation is deterministic and the two domains are independent | partial -- it pins no vector, so a renamed domain keeps the test green and gives every existing account a different key pair; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | partial |
+| `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
+| `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
+| `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
 | `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | none | verified |
-| `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | none | unheld -- neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
-| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | none | unheld -- `ambre_server::ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence` holds the author binding, not the field set, and nothing compares what the frame carries to the three fields named here; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
-| `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | none | unheld -- the lifetime is one operational figure with a 900 s default, and no upper bound is enforced anywhere; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a serialized struct of the worker crates that names a passphrase field or carries a `Secret` type | none | verified |
+| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
+| `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `ZK-016` | `INV` | What the relay learns for a push notification MUST be limited to `{the push subscription of each device, the notification level of each member per channel, the members or the channel a message names}`. | this spec section 2; `5-Murmure/features/ambre-spec-murmure-notifications.md` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -42,7 +42,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 6 `verified`, 2 `partial`, 5 `untested`, 1 `human-review`, 2 `unimplemented`.
+* **Verification.** 13 `verified`, 1 `human-review`, 2 `unimplemented`.
   Every row is an `INV`. This document owns no gesture, so it declares no operation table, and each
   rule binds the boundary at every instant.
 
@@ -202,26 +202,14 @@ The boundary has no control of its own. What a user meets is what it costs them.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing refuses an unsealed send.** `ZK-001` is covered on the nominal path by one round-trip
-  test. A new call site that posts a payload without passing the pipeline compiles and ships.
-* **The whitelist has no test.** `ZK-007` names nine fields and nothing compares them to what the
-  wire types actually carry. A snapshot over `WsClientMsg` and `WsServerMsg` is the candidate
-  mechanism and does not exist.
-* **The derivation domains are pinned by nothing.** `ZK-009` is a constant with no golden vector. The
-  failure it guards against is silent and total: every account keeps its seed and loses its keys.
 * **The passphrase is copied into a transient buffer.** It crosses the bus in a self-wiping type
   (`ZK-010`), and the per-frame relay then postcard-encodes it into an ordinary buffer for
   `postMessage`. That buffer is not wiped, and no type stops it.
 * **The log rule is a comment.** `ZK-006` rests on one comment in `s3.rs` and on reviewer attention.
   No lint refuses a payload in a span field.
-* **The presigned URL has no upper bound.** `ZK-014` states 15 minutes; the code carries a 900 s
-  default that a deployment may raise. `ZK-008` is the other half: no test asserts that a
-  non-member asking for a URL is refused one.
-* **The ephemeral field set is not compared to anything.** `ZK-013` names three fields, and the
-  test on that path holds the author binding instead. A frame gaining a fourth field passes.
-* **The whitelist omits the member row.** `ZK-007` names nine fields. The member row adds a role
-  and an inviter. The relay reads the role and serves the inviter for the unwrap. The row must add
-  both, or name the membership graph as a separate accepted set.
+* **The membership graph has no whitelist.** `ZK-007` covers the sealed envelopes alone. The member
+  row adds a role and an inviter. The relay reads the role and serves the inviter for the unwrap. A
+  row must name the membership graph as a separate accepted set.
 
 ---
 

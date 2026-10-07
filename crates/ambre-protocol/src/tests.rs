@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (3, "eb3428568006b1866636db9c2c6f7bfd");
+const FROZEN_LAYOUT: (u8, &str) = (4, "2f94e9b1335e2ecf76caca243b93f196");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -300,6 +300,9 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::ChannelEphemeral {
             channel_id: channel,
             ephemeral: sample_ephemeral(40),
+        },
+        C::Authenticate {
+            token: crate::ws::AccessToken::new("t".into()),
         },
     ]
 }
@@ -411,5 +414,105 @@ fn the_wire_layout_is_frozen_under_its_version() {
     assert_eq!(
         digest, frozen,
         "the wire layout moved under an unchanged version byte: bump CURRENT_VERSION"
+    );
+}
+
+/// `ZK-007`, `ZK-013`: the fields a sealed envelope shows the relay. Each
+/// destructuring names every field and uses no `..`. A field added to an
+/// envelope fails to compile here until a writer weighs it against `ZK-007`.
+/// Beyond the payload and its nonce, the envelope carries the commitment tag
+/// and the signature, which bind it and open nothing.
+#[test]
+fn the_relay_reads_only_the_listed_fields() {
+    let doc = DocumentId::new();
+    let pk = PublicKey::from_array([5u8; 32]);
+    let kid = KeyId::from_array([8u8; 16]);
+    let update = Update {
+        ciphertext: Ciphertext(vec![1]),
+        nonce: Nonce([0u8; 24]),
+        public_data: UpdatePublicData {
+            document_id: doc,
+            pub_key: pk.clone(),
+            key_id: kid,
+            snapshot_id: SnapshotId::new(),
+            clock: Clock(1),
+        },
+        commitment_tag: CommitmentTag([6u8; 32]),
+        signature: Signature([7u8; 64]),
+    };
+    let snapshot = Snapshot {
+        ciphertext: Ciphertext(vec![1]),
+        nonce: Nonce([0u8; 24]),
+        public_data: SnapshotPublicData {
+            document_id: doc,
+            pub_key: pk.clone(),
+            key_id: kid,
+            snapshot_id: SnapshotId::new(),
+            parent_snapshot_proof: vec![],
+            parent_snapshot_update_clocks: vec![],
+        },
+        commitment_tag: CommitmentTag([6u8; 32]),
+        signature: Signature([7u8; 64]),
+    };
+    let ephemeral = Ephemeral {
+        ciphertext: Ciphertext(vec![1]),
+        nonce: Nonce([0u8; 24]),
+        public_data: EphemeralPublicData {
+            document_id: doc,
+            pub_key: pk.clone(),
+            key_id: kid,
+            counter: Counter(1),
+        },
+        commitment_tag: CommitmentTag([6u8; 32]),
+        signature: Signature([7u8; 64]),
+    };
+
+    let Update {
+        ciphertext: _,
+        nonce: _,
+        public_data,
+        commitment_tag: _,
+        signature: _,
+    } = update;
+    let UpdatePublicData {
+        document_id: _,
+        pub_key: _,
+        key_id: _,
+        snapshot_id: _,
+        clock: _,
+    } = public_data;
+    let Snapshot {
+        ciphertext: _,
+        nonce: _,
+        public_data,
+        commitment_tag: _,
+        signature: _,
+    } = snapshot;
+    let SnapshotPublicData {
+        document_id: _,
+        pub_key: _,
+        key_id: _,
+        snapshot_id: _,
+        parent_snapshot_proof: _,
+        parent_snapshot_update_clocks: _,
+    } = public_data;
+    let Ephemeral {
+        ciphertext: _,
+        nonce: _,
+        public_data,
+        commitment_tag: _,
+        signature: _,
+    } = ephemeral;
+    // An ephemeral frame shows its document, its sender, its key identifier
+    // and its counter, and nothing else.
+    let EphemeralPublicData {
+        document_id,
+        pub_key,
+        key_id,
+        counter,
+    } = public_data;
+    assert_eq!(
+        (document_id, pub_key, key_id, counter),
+        (doc, pk, kid, Counter(1))
     );
 }

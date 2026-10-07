@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | none | verified |
-| `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none | unheld -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-014` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- the signer caps any configured lifetime at 900 s, and the test reads the expiry back out of both links | none | verified |
 | `SRV-059` | `INV` | The relay MUST NOT hold an address it could compute from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | `ambre_sync::media::tests::an_upload_is_addressed_under_the_document_key` -- the relay stores the address the Sync worker names, and the worker names one keyed by the document key, which the relay never holds; `ambre_crypto::tests::a_media_address_needs_the_document_key` -- without that key, the bytes alone do not give it | none | verified |
 | `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -70,10 +70,10 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 7 `verified`, 1 `partial`, 0 `failing`, 4 `untested`, 6 `unimplemented`. What
-  holds is the name: the scoping, the shapes refused, and the size bound into an upload link. What
-  is loose is a link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor
-  the expiry has a test.
+* **Verification.** 8 `verified`, 1 `partial`, 3 `untested`, 6 `unimplemented`. What holds is the
+  name: the scoping, the shapes refused, and the size bound into an upload link. What is loose is a
+  link's lifetime and who may hold one -- neither the membership half of `SRV-002` nor the expiry
+  has a test.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -194,8 +194,6 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The link lifetime has a default and no ceiling.** Fifteen minutes is a figure of the deployment
-  and nothing refuses a day, which is what `ZK-008` states (`SRV-052`).
 * **A delta's object outlives its index row.** The trim removes the row and no pass removes the
   object, so a compacted document keeps every delta object it ever wrote. Today the trim never runs
   at all (`ambre-spec-sequencer.md`, `SRV-038`).

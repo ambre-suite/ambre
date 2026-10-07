@@ -26,7 +26,7 @@ prefix is `ARCH`.
 | `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | target-build -- the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | none | verified |
 | `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. A macro sandbox is a frame outside both, and it holds none of their memory. | this spec section 2; `1-Foundations/ambre-spec-macros.md section 3` | none | unheld -- the page loads two artefacts, and nothing refuses a third or a merge of the two; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none | unheld -- `ambre-logic` declares neither, and no capability ban refuses the line that would add one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`) | none | unheld -- the transport crates are declared by `ambre-sync` alone, and the launcher's same-origin reads are the stated exception of `UI-THREAD-004`; lands with the `The zero-knowledge boundary held` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`) | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a transport crate declared, or a network call written, outside the worker and the relay. The launcher's two reads of `UI-THREAD-004` are its stated exception | none | verified |
 | `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none | unheld -- both crates depend on `ambre-protocol` and neither redeclares a type, and nothing refuses a local copy; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync queue once per frame, before it draws. | this spec section 2 | none | unheld -- the relay runs in the per-frame hook, ahead of the gate that can freeze the render, and no test drives a frame; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip` -- the parsing the per-frame route poll rests on | partial -- nothing counts the constructions, so a second engine on the same session reads as the first; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
@@ -81,11 +81,11 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 16 `verified`, 3 `partial`, 0 `failing`, 12 `untested`. The build refuses a
-  cycle, a misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue.
-  It refuses application logic in the launcher too. Host tests hold the Logic loop's pass, its
-  unfinished work, the wake, the full queue and the disconnection of each queue. The rest is held
-  by the code alone.
+* **Verification.** 17 `verified`, 3 `partial`, 11 `untested`. The build refuses a cycle, a
+  misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue. It
+  refuses application logic in the launcher too. Host tests hold the Logic loop's pass, its
+  unfinished work, the wake, the full queue and the disconnection of each queue. The rest is held by
+  the code alone.
 
 ---
 
@@ -278,8 +278,6 @@ The stack has no control of its own. What a user meets is what it guarantees the
 * **The failure path has never been driven.** The panic hook, the page hook and the terminal screen
   are each wired, and no test crosses them. The one path a user meets on the worst day is the one
   path nothing exercises.
-* **Nothing refuses a transport crate in the wrong place.** `ARCH-005` holds because only the worker
-  declares one. The capability bans cover cryptography and the engine, not the network.
 * **The relay cadence is unmeasured.** `ARCH-007` states one drain per frame ahead of the draw, and
   the budget rows for both hops read that no measurement exists.
 * **Two tabs are never tested together.** `ARCH-011` rests on the convergence belt of each

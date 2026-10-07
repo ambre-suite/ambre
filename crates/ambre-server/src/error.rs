@@ -80,6 +80,33 @@ pub enum AppError {
     Oidc(String),
 }
 
+impl AppError {
+    /// Whether the error comes from a store or a dependency rather than from
+    /// the caller's request.
+    pub(crate) fn is_infrastructure(&self) -> bool {
+        matches!(
+            self,
+            AppError::Database(_)
+                | AppError::Redis(_)
+                | AppError::S3(_)
+                | AppError::Decode(_)
+                | AppError::Oidc(_)
+                | AppError::Internal(_)
+        )
+    }
+
+    /// The text a caller reads, on the request path and on the socket alike.
+    /// An infrastructure error says only that the server failed, and its cause
+    /// stays in the log (`SRV-096`).
+    pub(crate) fn caller_message(&self) -> String {
+        if self.is_infrastructure() {
+            "Internal server error".to_string()
+        } else {
+            self.to_string()
+        }
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
@@ -110,15 +137,7 @@ impl IntoResponse for AppError {
             tracing::debug!(error = %self, code = code);
         }
 
-        let message = match &self {
-            AppError::Database(_)
-            | AppError::Redis(_)
-            | AppError::S3(_)
-            | AppError::Decode(_)
-            | AppError::Oidc(_)
-            | AppError::Internal(_) => "Internal server error".to_string(),
-            other => other.to_string(),
-        };
+        let message = self.caller_message();
 
         (
             status,

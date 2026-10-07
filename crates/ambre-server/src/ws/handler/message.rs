@@ -57,6 +57,22 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
     }
 }
 
+/// The frame a refused subscription answers. A store failure reaches the
+/// client as a bare internal error, its cause kept to the log (`SRV-096`).
+pub(crate) fn subscribe_refusal(document_id: DocumentId, e: &AppError) -> WsServerMsg {
+    if e.is_infrastructure() {
+        tracing::error!("subscribe access check failed doc={document_id}: {e}");
+        return WsServerMsg::Error {
+            code: 500,
+            message: e.caller_message(),
+        };
+    }
+    WsServerMsg::Error {
+        code: 403,
+        message: e.caller_message(),
+    }
+}
+
 pub(crate) async fn handle_subscribe(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
@@ -66,10 +82,7 @@ pub(crate) async fn handle_subscribe(
     let role = match verify_document_access(&state.db, document_id, conn.user_id).await {
         Ok(role) => role,
         Err(e) => {
-            let err = encode_server_msg(&WsServerMsg::Error {
-                code: 403,
-                message: e.to_string(),
-            });
+            let err = encode_server_msg(&subscribe_refusal(document_id, &e));
             let _ = outbound_tx.send(err).await;
             return;
         }
@@ -969,7 +982,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x03);
+        assert_eq!(bytes[0], 0x04);
     }
 
     #[test]
@@ -1138,6 +1151,35 @@ mod ephemeral_binding_tests {
             "the session key must record exactly one presence entry"
         );
         assert!(after_valid.contains_key(&session_key.to_hex()));
+
+        let _ = state.redis.del([&presence_key]).await;
+    }
+
+    /// `SRV-050`: the presence entry is the frame's ciphertext, byte for byte.
+    /// The relay decodes, trims and adds nothing.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_presence_entry_is_the_ciphertext_as_received() {
+        use base64::Engine;
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
+        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let presence_key = format!("doc:{doc_id}:presence");
+        let _ = state.redis.del([&presence_key]).await;
+        let mut conn = conn_with(session_key.clone(), doc_id);
+
+        let sealed: Vec<u8> = (0..=255u8).rev().collect();
+        let eph = signed_ephemeral(&signing_key, &session_key, doc_id, sealed.clone());
+        handle_ephemeral(&state, &mut conn, eph).await;
+        let entries: std::collections::HashMap<String, String> =
+            state.redis.hgetall(&presence_key).await.unwrap();
+        let stored = base64::engine::general_purpose::URL_SAFE
+            .decode(&entries[&session_key.to_hex()])
+            .unwrap();
+        assert_eq!(stored, sealed);
 
         let _ = state.redis.del([&presence_key]).await;
     }
@@ -1672,6 +1714,25 @@ mod refusal_tests {
         for leaked in ["Redis", "redis", "refused", "clock validation"] {
             assert!(!message.contains(leaked), "{message}");
         }
+    }
+
+    /// `SRV-096`: a subscription refused on a store failure answers without the
+    /// store's text. A plain refusal still reads as forbidden.
+    #[test]
+    fn a_refused_subscription_carries_no_store_text() {
+        let doc = DocumentId::new();
+        let cause = AppError::Database(sqlx::Error::Protocol(
+            "relation \"document_members\" does not exist".into(),
+        ));
+        let WsServerMsg::Error { code, message } = subscribe_refusal(doc, &cause) else {
+            panic!("expected an error frame");
+        };
+        assert_eq!((code, message.as_str()), (500, "Internal server error"));
+
+        let WsServerMsg::Error { code, .. } = subscribe_refusal(doc, &AppError::Forbidden) else {
+            panic!("expected an error frame");
+        };
+        assert_eq!(code, 403);
     }
 
     /// `SRV-123`: a frame refused while a rotation is owed is answered by name.

@@ -1,45 +1,31 @@
 use super::*;
 use crate::rekey::Refusal;
-use zeroize::Zeroizing;
+use ambre_protocol::ws::AccessToken;
 
-/// The socket address, whose query carries the access token. Its `Display`
-/// and `Debug` print the address without the query, so logging it logs no
-/// token (`SYNC-061`), and the text is wiped when dropped.
-pub(crate) struct SocketUrl(Zeroizing<String>);
-
-impl SocketUrl {
-    /// `{scheme}://{api_base}/api/ws?token={token}`, the token already encoded.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn new(scheme: &str, api_base: &str, token: &str) -> Self {
-        Self(Zeroizing::new(format!(
-            "{scheme}://{api_base}/api/ws?token={token}"
-        )))
-    }
-
-    /// The whole address, for the one call that opens the socket.
-    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SocketUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let address = self
-            .0
-            .split_once('?')
-            .map_or(self.0.as_str(), |(address, _)| address);
-        write!(f, "{address}?token=<redacted>")
-    }
-}
-
-impl std::fmt::Debug for SocketUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self, f)
-    }
+/// The socket address. It carries no credential: the token travels in the
+/// socket's first frame, so no log line, proxy record or URL holds it
+/// (`SYNC-061`, `ambre-spec-session.md`, `SRV-031`).
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub(crate) fn socket_address(scheme: &str, api_base: &str) -> String {
+    format!("{scheme}://{api_base}/api/ws")
 }
 
 impl SyncState {
+    /// Sends the access token as the socket's first frame. The relay reads
+    /// nothing else until this frame opens the session (`SRV-031`).
+    pub(crate) fn authenticate_socket(&mut self) {
+        let Some(token) = self
+            .tokens
+            .borrow()
+            .as_ref()
+            .map(|t| AccessToken::new(t.access_token.expose().to_owned()))
+        else {
+            tracing::warn!("Sync: socket opened before the access token is ready");
+            return;
+        };
+        self.ws_send(&WsClientMsg::Authenticate { token });
+    }
+
     // -- WebSocket lifecycle ---------------------------------------------------
 
     /// Opens the session-level multiplexed WebSocket. Called after Unlock or
@@ -58,30 +44,20 @@ impl SyncState {
         } else {
             "wss"
         };
-        let Some(access_token) = self
-            .tokens
-            .borrow()
-            .as_ref()
-            .map(|t| t.access_token.clone())
-        else {
+        if self.tokens.borrow().is_none() {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
-        };
-        let token = Zeroizing::new(
-            js_sys::encode_uri_component(access_token.expose())
-                .as_string()
-                .unwrap_or_else(|| access_token.expose().to_owned()),
-        );
-        let url = SocketUrl::new(ws_scheme, &self.api_base, &token);
-        match WebSocket::new(url.expose()) {
+        }
+        let url = socket_address(ws_scheme, &self.api_base);
+        match WebSocket::new(&url) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
                 self.wire_ws_callbacks(&ws);
                 self.ws = Some(ws);
-                // Subscriptions are (re)sent from the `onopen` handler, NOT here.
-                // The socket is still CONNECTING at this point and `ws_send` would
-                // be dropped. The server would then have a connection but no
-                // subscription, and every later Update gets 403 "not subscribed".
+                // The token and the subscriptions are sent from the `onopen`
+                // handler, NOT here. The socket is still CONNECTING at this point
+                // and `ws_send` would be dropped. The server would then hold a
+                // socket that never authenticates, and close it.
                 tracing::info!("Sync: WebSocket connecting ({url})");
             }
             Err(e) => {
@@ -323,6 +299,7 @@ impl SyncState {
         match event {
             SyncEvent::WsMessage(msg) => self.handle_ws_message(msg),
             SyncEvent::WsOpened => {
+                self.authenticate_socket();
                 self.resubscribe_all();
                 self.flush_held_outbox();
             }
@@ -1150,7 +1127,7 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::SocketUrl;
+    use super::socket_address;
     use crate::http::{SecretToken, TokenPair};
     use crate::{
         LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState, WS_CLOSE_SETUP_REQUIRED,
@@ -1299,16 +1276,43 @@ mod tests {
         assert_eq!(sent.len(), 3);
     }
 
-    /// A logged socket address carries no token (`SYNC-061`), whichever way
-    /// it is formatted.
+    /// The socket address carries no query, so no log line, proxy record or
+    /// URL holds a token (`SYNC-061`, `SRV-031`).
     #[test]
-    fn a_logged_socket_url_carries_no_token() {
-        let url = SocketUrl::new("wss", "relay.example", "s3cr3t-token");
-        assert!(url.expose().ends_with("?token=s3cr3t-token"));
-        for shown in [format!("{url}"), format!("{url:?}")] {
-            assert!(!shown.contains("s3cr3t"), "{shown}");
-            assert!(shown.starts_with("wss://relay.example/api/ws"), "{shown}");
-        }
+    fn the_socket_address_carries_no_token() {
+        assert_eq!(
+            socket_address("wss", "relay.example"),
+            "wss://relay.example/api/ws"
+        );
+    }
+
+    /// An opened socket sends its token as its first frame, before any
+    /// subscription (`SRV-031`). The frame prints no byte of the token.
+    #[test]
+    fn an_opened_socket_authenticates_before_it_subscribes() {
+        use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
+
+        let (mut state, _rx) = with_open_document();
+        let id = *state.documents.keys().next().unwrap();
+        state.documents.get_mut(&id).unwrap().server_created = true;
+        *state.tokens.borrow_mut() = Some(TokenPair {
+            access_token: SecretToken::from("acc-s3cr3t".to_owned()),
+            refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
+            access_expires_in: 60,
+        });
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        state.handle_sync_event(SyncEvent::WsOpened);
+        let sent: Vec<WsClientMsg> = wire
+            .try_iter()
+            .map(|bytes| decode_client_msg(&bytes).expect("decode"))
+            .collect();
+        let WsClientMsg::Authenticate { token } = &sent[0] else {
+            panic!("the first frame is {:?}", sent[0]);
+        };
+        assert_eq!(token.expose(), "acc-s3cr3t");
+        assert!(!format!("{:?}", sent[0]).contains("s3cr3t"));
+        assert!(matches!(sent[1], WsClientMsg::Subscribe { document_id } if document_id == id));
     }
 
     /// A token pair logged by `Debug` prints neither token (`SYNC-061`).

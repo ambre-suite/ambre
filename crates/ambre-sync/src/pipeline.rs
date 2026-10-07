@@ -15,6 +15,7 @@ use ambre_core::{KEY_ID_LEN, KeyId};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
+use ambre_protocol::ws::WsClientMsg;
 use ambre_protocol::{Ephemeral, Snapshot, Update};
 use ed25519_dalek::SigningKey;
 use ruzstd::encoding::{CompressionLevel, compress_to_vec};
@@ -356,6 +357,105 @@ pub fn open_ephemeral(
     )
 }
 
+// -- What leaves the worker ----------------------------------------------------
+
+/// A socket frame that carries a payload, built by the seal and by nothing
+/// else. Its field is private to this module and no conversion fills it. So
+/// the socket sends a delta or a presence sample only through
+/// [`update_frame`] or [`ephemeral_frame`] (`SYNC-001`, `ZK-001`).
+#[derive(Debug)]
+pub struct SealedFrame(WsClientMsg);
+
+impl SealedFrame {
+    /// The message the frame carries, for the encoder.
+    pub(crate) fn message(&self) -> &WsClientMsg {
+        &self.0
+    }
+}
+
+/// Bytes bound for object storage, built by the seal and by nothing else. The
+/// presigned upload takes this type, so a snapshot or a media blob leaves the
+/// worker only sealed under the document key (`SYNC-049`, `ZK-001`).
+#[derive(Debug)]
+pub struct SealedBlob(Vec<u8>);
+
+impl SealedBlob {
+    /// The sealed bytes, as the upload sends them.
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// The size the relay is told, which is the sealed size.
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+/// Seals `payload` into an update frame, through [`seal_update`].
+///
+/// # Errors
+///
+/// Every error [`seal_update`] raises.
+pub fn update_frame(
+    payload: &[u8],
+    public_data: UpdatePublicData,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<SealedFrame, PipelineError> {
+    seal_update(payload, public_data, doc_key, signing_key)
+        .map(|update| SealedFrame(WsClientMsg::Update(update)))
+}
+
+/// Seals `payload` into an ephemeral frame, through [`seal_ephemeral`].
+///
+/// # Errors
+///
+/// Every error [`seal_ephemeral`] raises.
+pub fn ephemeral_frame(
+    payload: &[u8],
+    public_data: EphemeralPublicData,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<SealedFrame, PipelineError> {
+    seal_ephemeral(payload, public_data, doc_key, signing_key)
+        .map(|ephemeral| SealedFrame(WsClientMsg::Ephemeral(ephemeral)))
+}
+
+/// Seals `payload` into the snapshot blob object storage holds, through
+/// [`seal_snapshot`]: the serialized [`Snapshot`] that
+/// [`decode_snapshot_blob`] reads back.
+///
+/// # Errors
+///
+/// Every error [`seal_snapshot`] raises, and [`PipelineError::Postcard`] when
+/// the snapshot does not serialize.
+pub fn snapshot_blob(
+    payload: &[u8],
+    public_data: SnapshotPublicData,
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<SealedBlob, PipelineError> {
+    let snapshot = seal_snapshot(payload, public_data, doc_key, signing_key)?;
+    postcard::to_allocvec(&snapshot)
+        .map(SealedBlob)
+        .map_err(|_| PipelineError::Postcard)
+}
+
+/// Seals `plaintext` into a standalone object bound for object storage,
+/// through [`seal_object`].
+///
+/// # Errors
+///
+/// Every error [`seal_object`] raises.
+pub fn object_blob(
+    plaintext: &[u8],
+    aad: &[u8],
+    doc_key: &DocumentKey,
+    signing_key: &SigningKey,
+) -> Result<SealedBlob, PipelineError> {
+    seal_object(plaintext, aad, doc_key, signing_key).map(SealedBlob)
+}
+
 // -- Standalone objects: a document name, a media blob -------------------------
 
 /// The layout of a standalone object, its first byte (`SYNC-138`). The relay
@@ -645,6 +745,87 @@ mod tests {
         // Compressed ciphertext is far smaller than the 4 KiB plaintext.
         assert!(snapshot.ciphertext.0.len() < payload.len());
         assert_eq!(open_snapshot(&snapshot, &doc_key).unwrap(), payload);
+    }
+
+    /// The frame with its four sealed parts blanked: what the relay reads of
+    /// it, the public metadata and the shape around it.
+    fn readable_part(update: &Update) -> Vec<u8> {
+        let mut blank = update.clone();
+        blank.ciphertext = Ciphertext(Vec::new());
+        blank.nonce = Nonce([0u8; 24]);
+        blank.commitment_tag = CommitmentTag([0u8; 32]);
+        blank.signature = Signature([0u8; 64]);
+        postcard::to_allocvec(&blank).unwrap()
+    }
+
+    /// A compressed payload and a raw one leave the same readable bytes. The
+    /// version that tells them apart opens as the first plaintext byte
+    /// (`SYNC-020`). A version byte moved beside the ciphertext would tell the
+    /// relay how compressible a document is.
+    #[test]
+    fn the_compression_version_is_sealed_inside_the_ciphertext() {
+        let (doc_key, signing, author) = keys();
+        let pd = update_pd(author);
+        let raw = seal_update(b"short", pd.clone(), &doc_key, &signing).unwrap();
+        let packed = seal_update(&[0x7Au8; 4096], pd, &doc_key, &signing).unwrap();
+        assert_eq!(readable_part(&raw), readable_part(&packed));
+
+        for (update, version) in [
+            (&raw, CompressionVersion::Raw as u8),
+            (&packed, CompressionVersion::Zstd as u8),
+        ] {
+            let aad = aad_of(&update.public_data).unwrap();
+            let sealed = sealed_from(
+                &update.ciphertext,
+                &update.nonce,
+                &update.commitment_tag,
+                &update.signature,
+            );
+            let plaintext = envelope::open(
+                &sealed,
+                &aad,
+                &doc_key,
+                update.public_data.pub_key.as_array(),
+            )
+            .unwrap();
+            assert_eq!(plaintext[0], version);
+        }
+    }
+
+    /// What the upload sends holds no byte run of the plaintext. It opens
+    /// back to it, a snapshot blob and a media blob alike (`SYNC-049`,
+    /// `ZK-001`).
+    #[test]
+    fn a_blob_bound_for_storage_is_sealed() {
+        let (doc_key, signing, author) = keys();
+        let document_id = DocumentId::new();
+        let plaintext = b"a picture's bytes, or a document's whole state, in the clear";
+        let contains = |hay: &[u8]| {
+            hay.windows(16)
+                .any(|w| plaintext.windows(16).any(|p| p == w))
+        };
+
+        let pd = SnapshotPublicData {
+            document_id,
+            pub_key: author,
+            key_id: key_id(),
+            snapshot_id: SnapshotId::new(),
+            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_update_clocks: Vec::new(),
+        };
+        let snapshot = snapshot_blob(plaintext, pd, &doc_key, &signing).unwrap();
+        assert!(!contains(snapshot.as_bytes()));
+        let decoded = decode_snapshot_blob(snapshot.as_bytes(), document_id).unwrap();
+        assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);
+
+        let aad = name_aad(document_id);
+        let object = object_blob(plaintext, &aad, &doc_key, &signing).unwrap();
+        assert!(!contains(object.as_bytes()));
+        assert_eq!(object.len(), object.as_bytes().len());
+        assert_eq!(
+            open_object(object.as_bytes(), &aad, &doc_key).unwrap(),
+            plaintext
+        );
     }
 
     #[test]
