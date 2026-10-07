@@ -11,11 +11,10 @@
 // ============================================================================
 
 use ambre_bus::app::toile::Viewport;
+/// Minimum / maximum zoom: the bounds the culling type clamps to
+/// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
+pub use ambre_bus::app::toile::{MAX_ZOOM, MIN_ZOOM};
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
-
-/// Minimum / maximum zoom, matching the Logic-side clamp (`Viewport`,).
-pub const MIN_ZOOM: f64 = 0.1;
-pub const MAX_ZOOM: f64 = 10.0;
 
 /// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
 /// by this factor. A discrete notch, coarser than a wheel tick.

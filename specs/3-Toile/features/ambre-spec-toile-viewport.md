@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-010` | `OBS` | The grid spacing MUST stay legible across the whole zoom range. | this spec section 3 | `ambre_toile::ui::grid::tests::spacing_never_illegible_across_zoom_sweep` -- it sweeps the zoom over three decades and reads the floor at each | none | verified |
 | `TOILE-UI-279` | `OBS` | The grid step MUST stay a multiple of the board unit, never finer than it. | this spec section 3; section 5 | `ambre_toile::ui::grid::tests::step_is_power_of_two_multiple_of_base` -- it reads both at seven zooms | partial -- the unit it holds is the render module's constant, and the `board` register the schema declares is never read, so a board authored on another unit paints on the default one (section 5); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-280` | `OBS` | A grid line MUST stay one pixel wide at every zoom. | this spec section 3; `features/ambre-spec-toile-board-rendering.md section 3` | none | unheld -- the width is a literal passed to a screen-space stroke that no test observes, in a paint helper nothing exercises; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2; section 5 | none | fails -- the clamp is a private function of the camera, the culling type is three public fields with a default, and its one method divides by the zoom without a guard. Nothing on the Logic side clamps, though a comment says it does; lands with the `The culling rectangle carries a zoom it can divide by` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2 | `ambre_bus::app::toile::tests::any_zoom_culls_a_finite_rect` | none | verified |
 | `TOILE-UI-025` | `INV` | While the board asks for snapping, every committed geometry MUST sit on a multiple of the grid step. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Snap to the board grid` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TOILE-UI-030` | `INV` | The minimap MUST NOT write to the document: dragging its rectangle moves the camera alone. | this spec section 5 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -93,7 +93,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 16 `verified`, 6 `partial`, 1 `failing`, 10 `untested`, 2 `unimplemented`. What
+* **Verification.** 17 `verified`, 6 `partial`, 0 `failing`, 10 `untested`, 2 `unimplemented`. What
   holds is the geometry: the pure functions of the camera, over eighteen tests, and the kind
   token that names a fit's reply (`TOILE-UI-293`). What is loose is the handler layer above them:
   the wheel, the drag, the fit round trip and the resize. Loose too: every frame condition, the
@@ -123,8 +123,9 @@ never reports an empty extent (`TOILE-UI-298`).
 **Two types for one rectangle:** `ViewportTransform` is the render thread's camera; `Viewport` (`ambre-bus`)
 is the Logic thread's culling input. They carry the same three fields and are deliberately distinct. The
 camera is applied locally and immediately, and a copy of it is forwarded as a cull request the UI never waits
-on. Logic never pushes a camera back. The clamp lives on one side of that pair only. The culling type is three
-public fields, and the one thing the Logic thread does with it divides by the zoom (`TOILE-UI-281`).
+on. Logic never pushes a camera back. Both sides take the zoom range from `ambre-bus`. The culling type's
+fields are public, so its one division reads the zoom through a clamp, and a NaN reads as 1
+(`TOILE-UI-281`).
 
 **Commands and events** (`ambre-bus`):
 
@@ -221,10 +222,6 @@ pixel wide at every zoom (`features/ambre-spec-toile-board-rendering.md`).
   `TOILE-UI-029`). The second is the handler that picks a trackpad pan, whose direction is tested
   (`TOILE-UI-289`). The third is the cull request each of them queues (`TOILE-UI-283`,
   `TOILE-UI-296`).
-* **The clamp is claimed on both sides and written on one** (`TOILE-UI-281`). The camera clamps its
-  zoom and a comment says the culling type matches; it does not. That type is a public struct with a
-  default and one method, and the method divides by the zoom. Today the only producer in the app is
-  the camera, so nothing is wrong -- and nothing keeps it that way.
 * **Two refusals are half held.** A fit ignores a zero-area rectangle, which is tested, and a non-finite one,
   which is not (`TOILE-UI-291`). A canvas floors its extent at one pixel, which is the input that would make
   the mapping undefined, and nothing drives it (`TOILE-UI-298`).

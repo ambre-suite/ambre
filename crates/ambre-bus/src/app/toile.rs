@@ -474,12 +474,18 @@ pub struct EndCaps {
 // Viewport / camera (`toile-viewport`)
 // =============================================================================
 
+/// The smallest zoom the camera allows, and the floor every reader clamps to.
+pub const MIN_ZOOM: f64 = 0.1;
+/// The largest zoom the camera allows, and the ceiling every reader clamps to.
+pub const MAX_ZOOM: f64 = 10.0;
+
 /// The camera: a world-space center, a zoom factor, and the physical screen
 /// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Viewport {
     pub center: Point,
-    pub zoom: f64,  // 0.1 ..= 10.0
+    /// Read through [`clamped_zoom`](Viewport::clamped_zoom), never raw.
+    pub zoom: f64,
     pub size: Size, // screen size in physical pixels
 }
 
@@ -494,10 +500,21 @@ impl Default for Viewport {
 }
 
 impl Viewport {
+    /// The zoom inside `MIN_ZOOM ..= MAX_ZOOM`, so a reader can divide by it
+    /// (`TOILE-UI-281`). The fields are public, so the clamp sits on the read.
+    /// A NaN reads as 1.
+    pub fn clamped_zoom(&self) -> f64 {
+        if self.zoom.is_nan() {
+            1.0
+        } else {
+            self.zoom.clamp(MIN_ZOOM, MAX_ZOOM)
+        }
+    }
+
     /// The world-space rectangle currently visible: the screen box mapped back
     /// through the inverse view transform.
     pub fn to_world_rect(&self) -> Rect {
-        let half = Vec2::new(self.size.width, self.size.height) / (2.0 * self.zoom);
+        let half = Vec2::new(self.size.width, self.size.height) / (2.0 * self.clamped_zoom());
         Rect::from_center_size(self.center, Size::new(2.0 * half.x, 2.0 * half.y))
     }
 }
@@ -1832,6 +1849,39 @@ pub struct DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `TOILE-UI-281`: whatever zoom a producer writes, the culling rectangle
+    /// stays finite and no larger than the widest zoom-out shows.
+    #[test]
+    fn any_zoom_culls_a_finite_rect() {
+        let widest = Viewport {
+            zoom: MIN_ZOOM,
+            ..Viewport::default()
+        }
+        .to_world_rect();
+        for zoom in [
+            0.0,
+            -1.0,
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            1e-300,
+        ] {
+            let r = Viewport {
+                zoom,
+                ..Viewport::default()
+            }
+            .to_world_rect();
+            assert!(
+                r.width().is_finite() && r.height().is_finite(),
+                "zoom {zoom}"
+            );
+            assert!(
+                r.width() > 0.0 && r.width() <= widest.width(),
+                "zoom {zoom}"
+            );
+        }
+    }
 
     /// `TOILE-UI-071`: the register carries its layout version, and a style
     /// written under the current layout reads back whole.
