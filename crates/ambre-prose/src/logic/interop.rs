@@ -824,7 +824,7 @@ mod tests {
         assert_eq!(state.doc.oplog_vv(), before);
     }
 
-    /// `PROSE-FEAT-091`, `PROSE-IO-046`: the walk carries the stored level
+    /// `PROSE-FEAT-091`: the walk carries the stored level
     /// as it is, even one no heading style has.
     #[test]
     fn the_walk_keeps_a_stored_level_outside_the_range() {

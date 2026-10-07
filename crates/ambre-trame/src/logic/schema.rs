@@ -640,8 +640,8 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. The gate must not treat a
-    /// register holding something other than a version as no register at all.
+    /// `SCHEMA-013`: the gate must not treat a register holding something other
+    /// than a version as no register at all, which would read as version 0.
     #[test]
     fn a_register_holding_something_other_than_a_version_is_refused() {
         let doc = LoroDoc::new();
@@ -658,10 +658,10 @@ mod tests {
 
     /// The engine's refusal comes first, before the register is read. The order
     /// is the rule (`SCHEMA-014`). A payload read after a failed import shows an
-    /// absent register, which `SCHEMA-005` values at 0, which the verdict calls
+    /// absent register, which reads as version 0, which the verdict calls
     /// `Older`. The migration path opens, and bytes the engine just refused are
-    /// carried forward and opened. That is the back door `SCHEMA-013` closes
-    /// for a register that is present and unreadable.
+    /// carried forward and opened. A register that is present and unreadable
+    /// opens the same back door, and its own test closes it.
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(
@@ -679,8 +679,7 @@ mod tests {
     }
 
     /// `1 -> 2` folds a version-1 flat filter into one register. The five keys
-    /// collapse into one binary [`FilterRecord`] (`TRAME-FEAT-025`,
-    /// `TRAME-FEAT-004`).
+    /// collapse into one binary [`FilterRecord`] (`TRAME-FEAT-004`).
     #[test]
     fn a_flat_filter_migrates_to_one_register() {
         use ambre_bus::FilterOp;

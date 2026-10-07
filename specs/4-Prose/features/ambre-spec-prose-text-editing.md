@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs`; `::the_endpoints_arrive_in_either_order` | none | verified |
 | `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed, except the first of the range, which `PROSE-041` keeps. A block that carries no body was emptied by nothing and MUST stay. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied`; `::a_deletion_that_empties_the_first_paragraph_keeps_it`; `::a_deletion_crossing_a_table_leaves_the_table_standing` | none | verified |
-| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | `ambre_prose::logic::text::tests::the_join_keeps_the_first_paragraphs_identity_and_style` | none | verified |
+| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | `ambre_prose::logic::text::tests::the_join_keeps_the_first_paragraphs_identity_and_style`; `::a_deletion_that_empties_the_first_paragraph_keeps_it` | none | verified |
 
 ### 1.5 Split a paragraph
 
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-005` | `POST` | A confirmed run MUST leave the draft once the layout carrying it is in force: its text is then in the confirmed runs. | this spec section 3 | `ambre_prose::input_tests::a_confirmed_run_leaves_the_draft_once_it_is_laid_out` | none | verified |
-| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | `ambre_prose::input_tests::a_remote_insertion_before_the_draft_shifts_it` | none | verified |
+| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | `ambre_prose::input_tests::a_remote_insertion_before_the_draft_shifts_it`; `ambre_prose::logic::convergence_tests::a_change_tells_the_view_what_it_did_to_the_text` -- the runs the view shifts by | none | verified |
 | `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in, or a block holding it, is deleted. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block`; `::deleting_a_table_drops_the_draft_in_its_cell` | none | verified |
 | `PROSE-UI-178` | `POST` | When that block is deleted, the caret MUST collapse to the nearest confirmed position. | this spec section 3 | `ambre_prose::input_tests::the_caret_of_a_deleted_block_collapses_beside_it`; `::deleting_a_table_drops_the_draft_in_its_cell` | none | verified |
 | `PROSE-UI-182` | `POST` | An edit sent before the view took a concurrent change MUST land where it was typed, and the view and the document MUST end on one text. | this spec section 3 | `ambre_prose::input_tests::typing_in_flight_and_a_remote_deletion_land_on_one_text`; `::a_remote_insertion_before_the_draft_shifts_it`; `ambre_prose::rebase::tests::both_orders_land_on_one_text` | none | verified |

@@ -75,7 +75,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-093` | `POST` | `Escape` MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::escape_blurs_only_when_something_is_focused` | none | verified |
-| `TOILE-UI-330` | `POST` | A click outside the entered embed MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_outside_returns_focus_to_the_board` | none | verified |
+| `TOILE-UI-330` | `POST` | A click outside the entered embed MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_outside_returns_focus_to_the_board`; `ambre_toile::ui::embed::routing_tests::a_pointer_event_is_bound_by_its_own_position` -- the bound a click outside is read against | none | verified |
 | `TOILE-UI-331` | `FRAME` | `Escape` MUST NOT reach the child. | this spec section 4 | `ambre_toile::ui::embed::routing_tests::escape_never_reaches_the_child` | none | verified |
 | `TOILE-UI-332` | `FRAME` | Returning focus to the board MUST NOT close the child's session. | this spec section 3 | structural -- focus and sessions are two registries, and the blur path names neither the open set nor the frame clock | none | verified |
 

@@ -203,6 +203,24 @@ class Citations(unittest.TestCase):
         defects, _ = spec_code.citation_defects(ROWS, {"crates/ambre-toile/src/t.rs": text})
         self.assertEqual(defects, [])
 
+    def test_a_helper_built_for_the_tests_alone_is_no_test(self):
+        text = doc("/// `TOILE-261`", "#[cfg(test)]", "fn helper() {}")
+        defects, _ = spec_code.citation_defects(ROWS, {"crates/ambre-toile/src/t.rs": text})
+        self.assertEqual(defects, [])
+
+    def test_every_test_attribute_marks_a_test(self):
+        for attr in ("#[tokio::test]", "#[sqlx::test]", "#[wasm_bindgen_test]"):
+            text = doc("/// `TOILE-261`", attr, "async fn other() {}")
+            defects, _ = spec_code.citation_defects(ROWS, {"crates/ambre-toile/src/t.rs": text})
+            self.assertEqual([d[:3] for d in defects], [("test", "other", "TOILE-261")], attr)
+
+    def test_a_continuation_path_names_its_test(self):
+        rows = {"TOILE-261": {"document": "3-Toile/features/ambre-spec-toile-frames.md",
+                              "mechanism": "`ambre_toile::tool::tests::edit`; `::rename`"}}
+        text = doc("/// `TOILE-261`", "#[test]", "fn rename() {}")
+        defects, _ = spec_code.citation_defects(rows, {"crates/ambre-toile/src/t.rs": text})
+        self.assertEqual(defects, [])
+
 
 if __name__ == "__main__":
     unittest.main()

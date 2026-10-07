@@ -220,8 +220,12 @@ def fence_issues(text: str):
 # the index answers counts, so a lookalike (`UTF-008`) is never a citation.
 RULE_ID = re.compile(r"\b[A-Z][A-Z0-9]*(?:-[A-Z]+)*-\d{3}\b")
 FN = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)")
-# A `Mechanism` cell names a test by its path; the last segment is the `fn`.
-MECHANISM_FN = re.compile(r"`(?:\w+::)+(\w+)`")
+# `#[test]`, `#[tokio::test]`, `#[wasm_bindgen_test]`; never `#[cfg(test)]`, which
+# marks a helper the tests share.
+TEST_ATTR = re.compile(r"^\s*#\[(?:\w+::)*\w*test\b(?!\s*\))")
+# A `Mechanism` cell names a test by its path; the last segment is the `fn`. A
+# path may open on `::`, the continuation `ambre-spec-template.md` declares.
+MECHANISM_FN = re.compile(r"`(?:\w*::)+(\w+)`")
 
 
 def application(document: str) -> str | None:
@@ -258,7 +262,7 @@ def test_citations(text: str):
         while j >= 0 and lines[j].strip().startswith(("#[", "///")):
             (attrs if lines[j].strip().startswith("#[") else doc).append(lines[j])
             j -= 1
-        if any("test" in a for a in attrs):
+        if any(TEST_ATTR.match(a) for a in attrs):
             yield found.group(1), {r for d in doc for r in RULE_ID.findall(d)}
 
 

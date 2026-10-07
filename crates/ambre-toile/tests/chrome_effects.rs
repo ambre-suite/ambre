@@ -68,7 +68,7 @@ async fn a_peer_note_write_keeps_the_caret() {
 }
 
 /// The deck reads in playback order, an unnamed frame by its rank
-/// (`TOILE-FEAT-026`).
+/// (`TOILE-UI-342`).
 #[wasm_bindgen_test]
 async fn deck_panel_lists_the_slides_in_order() {
     let frame = |id: &str, name: &str| DeckFrame {

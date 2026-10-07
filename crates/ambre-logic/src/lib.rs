@@ -930,8 +930,9 @@ mod pass_tests {
         assert_eq!(restored(writes), dump(&rig));
     }
 
-    /// `ARCH-017`: an edit closed in the same pass is still saved, since the
-    /// answer it is owed leaves before the state does.
+    /// `ARCH-027`: a document closed in the pass that edited it folds the edit
+    /// into its closing snapshot. The answer the edit is owed leaves before the
+    /// state does.
     #[test]
     fn a_document_closed_in_the_pass_keeps_its_last_edit() {
         let mut rig = rig();

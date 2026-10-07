@@ -642,7 +642,7 @@ mod tests {
     }
 
     /// With the mode off, text typed inside a suggestion is plain text: it
-    /// joins no suggestion (`PROSE-FEAT-307`).
+    /// joins no suggestion (`PROSE-FEAT-304`).
     #[test]
     fn plain_typing_inside_a_suggestion_joins_none() {
         let (mut state, ids) = document(1, ALICE, &["ab"]);

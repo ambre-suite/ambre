@@ -47,8 +47,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-002` | `POST` | An import MUST write through a typed operation list the engine applies as one change. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- the builder emits typed `ImportOp`s | none | verified |
 | `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- a nested item and the cells land under their parent; structural -- `build` pushes a parent before it recurses | none | verified |
 | `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back` | none | verified |
-| `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` in `crates/ambre-prose/src/logic/interop.rs`, the one builder every import goes through, walks up the parent chain | none | verified |
+| `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` records each lift in the import's warnings | none | verified |
 | `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; structural -- `ImportCompleted` carries the report, and `ambre_prose::chrome::notify_event` toasts it | none | verified |
 | `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
+| `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 
 ### 1.4 Save a native file
 
@@ -119,7 +119,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 29 `verified`, 1 `untested`, 19 `unimplemented`. The native file and the
+* **Verification.** 31 `verified`, 1 `untested`, 17 `unimplemented`. The native file and the
   Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
 
 ---

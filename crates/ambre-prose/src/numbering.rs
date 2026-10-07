@@ -217,6 +217,14 @@ mod tests {
         state.document().commit();
     }
 
+    /// Everything the document stores on one block.
+    fn stored(state: &ProseState, id: &BlockId) -> loro::LoroValue {
+        let tree = doc::blocks(state.document());
+        doc::node_of(&tree, &crate::events::tree_id(*id))
+            .expect("a live block")
+            .get_deep_value()
+    }
+
     /// The numbers of the document, in document order.
     fn numbers(state: &ProseState) -> Vec<Vec<u32>> {
         section_numbers(&doc::blocks(state.document()))
@@ -252,8 +260,9 @@ mod tests {
     fn an_insertion_renumbers_what_follows_it() {
         let mut state = ProseState::new().expect("a document is built");
         let first = heading(&mut state, 1);
-        heading(&mut state, 1);
+        let last = heading(&mut state, 1);
         assert_eq!(numbers(&state), vec![vec![1], vec![2]]);
+        let before = stored(&state, &last);
 
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
@@ -262,6 +271,11 @@ mod tests {
             style_id: None,
         });
         assert_eq!(numbers(&state), vec![vec![1], vec![2], vec![3]]);
+        assert_eq!(
+            stored(&state, &last),
+            before,
+            "the renumbered heading was written to"
+        );
     }
 
     /// A stored level outside one to six is numbered as the nearest level
@@ -432,6 +446,7 @@ mod tests {
         let first = item(&mut state, DECIMAL);
         let last = item(&mut state, DECIMAL);
         assert_eq!(ordinal(&state, &last), 2);
+        let before = stored(&state, &last);
 
         state.handle_command(ProseCommand::InsertBlock {
             parent_id: None,
@@ -440,9 +455,14 @@ mod tests {
             style_id: None,
         });
         assert_eq!(ordinal(&state, &last), 3);
+        assert_eq!(
+            stored(&state, &last),
+            before,
+            "the renumbered item was written to"
+        );
     }
 
-    /// A block that is no ordered item has no ordinal (`PROSE-FEAT-002`).
+    /// A block that is no ordered item has no ordinal.
     #[test]
     fn a_block_that_is_no_ordered_item_has_no_ordinal() {
         let mut state = ProseState::new().expect("a document is built");

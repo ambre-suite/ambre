@@ -276,8 +276,7 @@ mod tests {
         page
     }
 
-    /// Two peers holding the same faces export one file (`PDF-004`,
-    /// `PDF-007`).
+    /// Two peers holding the same faces export one file (`PDF-004`).
     ///
     /// Each run builds its own sealed context, as a second peer would, and
     /// feeds it the shipped faces. A sealed context discovers nothing of the

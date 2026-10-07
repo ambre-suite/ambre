@@ -561,9 +561,9 @@ mod tests {
     ///
     /// The display events reach the UI thread. The delta reaches the Sync
     /// worker under the document id the registry keyed, and the presence frame
-    /// reaches it as an ephemeral. An engine answers a value and sends nothing
-    /// (`PROSE-024`), so this fan-out is the dispatcher's whole job and no
-    /// engine-side test can reach it.
+    /// reaches it as an ephemeral. An engine answers a value and sends nothing,
+    /// so this fan-out is the dispatcher's whole job and no engine-side test
+    /// can reach it.
     #[test]
     fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
         let (mut state, ui, sync) = harness();
@@ -683,7 +683,7 @@ mod tests {
     }
 
     /// The other half of `PROSE-062`: the presence frame leaves as an
-    /// ephemeral, and a caret produces no CRDT delta (`PROSE-058`).
+    /// ephemeral, and a caret produces no CRDT delta.
     #[test]
     fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
         let (mut state, _ui, sync) = harness();
@@ -1677,8 +1677,7 @@ mod tests {
     /// afterwards takes the same set (`CANVAS-067`, `PROSE-115`).
     ///
     /// A Prose measuring context is sealed, so a document that misses the
-    /// delivery shapes every run into tofu and paginates on nothing
-    /// (`PROSE-114`).
+    /// delivery shapes every run into tofu and paginates on nothing.
     #[test]
     fn every_prose_document_takes_the_faces_whenever_it_was_opened() {
         let (mut state, _ui, _sync) = harness();

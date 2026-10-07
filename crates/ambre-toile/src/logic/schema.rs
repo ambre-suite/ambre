@@ -415,7 +415,7 @@ mod tests {
             .collect()
     }
 
-    /// `SCHEMA-009`: a board written before the style register carried its
+    /// `SCHEMA-007`: a board written before the style register carried its
     /// layout version keeps its styles. Without the `1 -> 2` row, this build
     /// reads the first postcard byte as a layout it does not know. Every element
     /// then falls back to the default look.
@@ -435,7 +435,7 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-009`, the `2 -> 3` row: a version 2 board keeps its deck. The
+    /// `SCHEMA-007`, the `2 -> 3` row: a version 2 board keeps its deck. The
     /// slides live under `presentation.order`, which this build never reads
     /// again, so without the step the deck opens empty.
     #[test]
@@ -587,8 +587,8 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. The gate must not treat a
-    /// register holding something other than a version as no register at all.
+    /// `SCHEMA-013`: the gate must not treat a register holding something other
+    /// than a version as no register at all, which would read as version 0.
     #[test]
     fn a_register_holding_something_other_than_a_version_is_refused() {
         let doc = LoroDoc::new();
@@ -605,10 +605,10 @@ mod tests {
 
     /// The engine's refusal comes first, before the register is read. The order
     /// is the rule (`SCHEMA-014`). A payload read after a failed import shows an
-    /// absent register, which `SCHEMA-005` values at 0, which the verdict calls
+    /// absent register, which reads as version 0, which the verdict calls
     /// `Older`. The migration path opens, and bytes the engine just refused are
-    /// carried forward and opened. That is the back door `SCHEMA-013` closes
-    /// for a register that is present and unreadable.
+    /// carried forward and opened. A register that is present and unreadable
+    /// opens the same back door, and its own test closes it.
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(

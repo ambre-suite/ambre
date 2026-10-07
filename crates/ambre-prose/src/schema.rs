@@ -363,10 +363,10 @@ mod tests {
 
     /// The engine's refusal comes first, before the register is read. The order
     /// is the rule (`SCHEMA-014`). A payload read after a failed import shows an
-    /// absent register, which `SCHEMA-005` values at 0, which the verdict calls
+    /// absent register, which reads as version 0, which the verdict calls
     /// `Older`. The migration path opens, and bytes the engine just refused are
-    /// carried forward and opened. That is the back door `SCHEMA-013` closes
-    /// for a register that is present and unreadable.
+    /// carried forward and opened. A register that is present and unreadable
+    /// opens the same back door, and its own test closes it.
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(

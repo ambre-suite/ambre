@@ -817,7 +817,7 @@ fn board_ids_returns_every_element() {
 }
 
 /// `TOILE-UI-033`: select-all covers an element the `layers` order omits. The
-/// board holds it and the paint walk draws it (`TOILE-058`), so a select-all
+/// board holds it and the paint walk draws it, so a select-all
 /// reading the order alone would be short of exactly that element.
 #[test]
 fn board_ids_covers_an_element_the_order_omits() {
@@ -1514,7 +1514,7 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
     );
 }
 
-/// `TOILE-236`: a local restore leaves the cursor alone. What this client wrote
+/// `TOILE-245`: a local restore leaves the cursor alone. What this client wrote
 /// before it closed may have reached no peer, and a reopen mints a fresh peer
 /// id. Absorbing the restored history would therefore drop an offline session
 /// for good.
@@ -5331,8 +5331,8 @@ fn a_restyle_naming_a_missing_element_answers_an_error() {
 /// blend, which is what a register per attribute would produce.
 ///
 /// Each peer's intent is read back rather than assumed. The whole-selection
-/// restyle keeps the element's own corner radius, shadow and weight
-/// (`TOILE-UI-174`), so the register holds less than the command carried.
+/// restyle keeps the element's own corner radius, shadow and weight, so the
+/// register holds less than the command carried.
 #[test]
 fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
     // Shared base: one element, its history known to both peers.

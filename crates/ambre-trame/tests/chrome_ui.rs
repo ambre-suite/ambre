@@ -514,7 +514,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
 }
 
 /// DOM test: every command button of the `FormatBar` announces the label the
-/// registry declares (`ambre-spec-commands.md`, UI-THREAD-019).
+/// registry declares (`ambre-spec-commands.md`, UI-THREAD-036).
 ///
 /// This is the belt over the toolbar, the surface that repeated "Copy", "Bold"
 /// and "Undo" as literals beside the table that declares them. It reads the

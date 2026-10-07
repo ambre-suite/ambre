@@ -711,7 +711,7 @@ fn deck_panel_names_a_frame() {
 }
 
 /// A board with no deck says so rather than showing an empty list
-/// (`TOILE-FEAT-026`).
+/// (`TOILE-UI-342`).
 #[wasm_bindgen_test]
 fn deck_panel_empty_deck_invites_a_first_slide() {
     let owner = Owner::new();

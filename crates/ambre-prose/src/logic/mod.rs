@@ -1269,7 +1269,7 @@ mod tests {
         assert_ne!(refusal(&deleting).refused, refusal(&splitting).refused);
     }
 
-    /// A mark value the key's grammar refuses says so (`PROSE-105`). It used
+    /// A mark value the key's grammar refuses says so (`PROSE-106`). It used
     /// to travel as a range failure, which named a part of the command that
     /// was correct.
     #[test]

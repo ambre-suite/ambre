@@ -1886,7 +1886,7 @@ mod tests {
     /// lands on the element under the click, so the pin follows it
     /// (`TOILE-024`). A free world point serves when the board is empty there.
     /// It writes nothing: the view opens the composer, and the thread is born
-    /// with its first message (`TOILE-UI-307`).
+    /// with its first message.
     #[test]
     fn the_comment_tool_drops_a_thread_where_it_clicks() {
         let mut m = ToolMachine::new();

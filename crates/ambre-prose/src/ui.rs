@@ -840,8 +840,6 @@ pub fn status_figures(count: &WordCount) -> [String; 5] {
 
 #[cfg(test)]
 mod tests {
-    /// `PROSE-FEAT-040`: each of the five figures has its label, in the order
-    /// the status bar shows them.
     /// `PROSE-IO-056`: a written file waits for the host once, with the media
     /// type the Logic thread named.
     #[test]
@@ -866,6 +864,8 @@ mod tests {
         assert_eq!(state.take_export(), None);
     }
 
+    /// `PROSE-FEAT-040`: each of the five figures has its label, in the order
+    /// the status bar shows them.
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {

@@ -1096,8 +1096,7 @@ mod tests {
     }
 
     /// `PROSE-UI-147`: a merged region is drawn once, as wide as the columns
-    /// it covers. A covered cell draws nothing, not even the text it kept
-    /// (`PROSE-FEAT-048`).
+    /// it covers. A covered cell draws nothing, not even the text it kept.
     #[test]
     fn a_merged_region_is_drawn_as_one_cell_and_a_covered_cell_not_at_all() {
         use crate::logic::tables::tests::{cell_at, document_with_table, type_in};

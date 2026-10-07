@@ -336,8 +336,8 @@ mod tests {
         assert!(item_commands(&menu_layout(MenuId::Edit)).contains(&UNDO));
     }
 
-    /// A dropdown row shows the label the registry declares (`UI-THREAD-019`).
-    /// A literal written back into a layout would break this.
+    /// Every dropdown row resolves in the registry, so a menu never shows an
+    /// entry the registry cannot label (`UI-THREAD-019`).
     #[test]
     fn every_dropdown_row_is_described() {
         for (id, _) in TOP_MENUS {
