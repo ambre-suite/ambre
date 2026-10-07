@@ -88,6 +88,9 @@ leptos_icons = { workspace = true }
 # thread holds none (`toile-comments` section 5). `std::time` is unavailable on
 # wasm32-unknown-unknown.
 js-sys = { workspace = true }
+# A file picked or dropped for the board is read off the main thread
+# (`File::array_buffer`) before the view imports it (`toile-import-export`).
+wasm-bindgen-futures = { workspace = true }
 
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.

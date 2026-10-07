@@ -267,8 +267,8 @@ pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
 }
 
 /// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
-/// thread expects. `None` for a command Trame does not own (the launcher logs
-/// it), and for a command the launcher intercepts before the bus.
+/// thread expects. `None` for a command Trame does not own, and for one
+/// `chrome::TrameHandler` resolves before the bus.
 pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
     // The identities are constants of a derived `PartialEq` type, so they are
     // patterns. That means one decision over the identity string, and no
@@ -296,7 +296,7 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         // the container's header carries the document's identity.
         SAVE_FILE => TrameCommand::ExportAmbreFile,
         // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
-        // clipboard commands are UI-only intents the launcher intercepts.
+        // clipboard commands are UI-only intents the handler resolves first.
         // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
         // style state, FILTER_COLUMN opens the popover, and FIND/REPLACE open
         // the find/replace panel. None has a direct AppCommand here.

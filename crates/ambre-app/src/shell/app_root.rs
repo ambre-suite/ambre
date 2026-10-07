@@ -96,13 +96,11 @@ fn follow_shell_nav(
 pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
-        clipboard_paste,
         raf,
         theme_ctl,
         toggles,
         toile_toggles,
         style_state,
-        anchor_pos,
         toasts,
         username,
         docs,
@@ -141,7 +139,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         filter_active,
         sort_range,
         toile_ctx_scope,
-        toile_menu_cmd,
         toile_active_tool,
         toile_cursor,
         toile_style_model,
@@ -158,6 +155,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         chrome_status,
         sheets,
         active_sheet,
+        commands,
+        toile_dialogs,
     } = use_context::<Wiring>().expect("Wiring provided by mount_shell");
 
     // The reactive client route, used only to show/hide the landing overlay.
@@ -183,10 +182,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let raf = raf.clone();
         move |()| raf.resume()
     });
-
-    // Sealed-save modal: the passphrase of a `.ambre` file the user is about to
-    // write (`DOCFILE-014`). Same rAF suspend/resume as every other modal.
-    let seal_open = RwSignal::new(false);
 
     // Share modal: same rAF suspend/resume. Opening it requests the current
     // member list so the dialog renders it; the relay fills `members` on the
@@ -214,21 +209,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // the DOM. The board is handed an address that has already been through
     // `normalize_web_address`. A refusal is read while the dialog is still on
     // screen, rather than after a box lands on the board.
-    let embed_web_open = RwSignal::new(false);
-    let embed_web_text = RwSignal::new(String::new());
-    let embed_web_error = RwSignal::new(None::<&'static str>);
-    // Embed another Ambre document (`TOILE-086`). Only the launcher knows which
-    // documents this user may open, so only it can offer the list. It reads the
-    // names the document list already carries and opens nothing, so placing an
-    // embed never touches the document it points at (`TOILE-225`).
-    let embed_doc_open = RwSignal::new(false);
-    // Put a link on the selected element (`toile-links`). The chooser is the
-    // shell's for the same two reasons as the embed dialogs. An address is
-    // validated where the user can still read the refusal, and only the launcher
-    // knows which documents this user may open. The frame list is the deck's,
-    // which already holds every frame on the board -- including the off-screen
-    // ones a link exists to reach.
-    let link_open = RwSignal::new(false);
+    let toile_chrome::ToileDialogs {
+        embed_web_open,
+        embed_web_text,
+        embed_web_error,
+        embed_doc_open,
+        link_open,
+        link_text,
+        link_error,
+    } = toile_dialogs;
     // Open the sort dialog over the range the Logic thread resolved
     // (`trame-sort`), the reply to the `RequestSortRange` sent by "Sort range...".
     Effect::new(move |_| {
@@ -286,8 +275,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         });
     }
-    let link_text = RwSignal::new(String::new());
-    let link_error = RwSignal::new(None::<&'static str>);
 
     // TOFU verification modal (`ambre-spec-key-verification.md`). `tofu_open` mirrors
     // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
@@ -322,7 +309,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // (`toile-import-export`). Same reason the listener lives here: the canvas
     // belongs to the AppShell, not to the view that paints into it.
     if boot_is_toile {
-        install_canvas_file_drop(toile_dropped_file, toasts);
+        toile_chrome::install_file_drop(toile_dropped_file, toasts);
     }
 
     // Toile cursor feedback (toile-tools): reflect the active tool on the
@@ -349,196 +336,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
         });
     }
 
-    // The single command path shared by every trigger (toolbar, selection bar,
-    // context menu): a `CommandId` -> the routed document. `Callback` is `Copy`,
-    // so it is handed to each app-chrome component below.
-    // The command palette is a launcher-level overlay: no relay drives it, so
-    // the signal lives here rather than in the wiring.
-    let palette_open = RwSignal::new(false);
-
+    // Every trigger shares one command path: toolbar, selection bar, context
+    // menu, palette. The booted application's handler says what an id means,
+    // and the shell performs the answer (`ARCH-018`). `Callback` is
+    // `Copy`, so it is handed to each app-chrome component below.
+    let palette_open = commands.palette_open;
+    let seal_open = commands.seal_open;
     let on_command = Callback::new({
-        let tx = to_logic.clone();
-        move |id: CommandId| {
-            // The palette is a UI-only intent in both applications: it opens an
-            // overlay and reaches no Logic thread (`CHROME-008`).
-            if id == trame_chrome::PALETTE
-                || id == toile_chrome::PALETTE
-                || id == ambre_prose::commands::PALETTE
-            {
-                palette_open.set(true);
-                return;
-            }
-            // Prose declares its file commands beside the palette: the native
-            // save, and the Markdown import and export. Each maps to one typed
-            // command, so it is built here rather than through a table
-            // (`PROSE-IO-020`).
-            if boot_is_prose {
-                if id == ambre_prose::commands::SAVE_FILE
-                    && let Some(document_id) = current_doc.get_untracked()
-                {
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Prose(
-                            ambre_bus::app::prose::ProseCommand::ExportDocument {
-                                format: ambre_bus::app::prose::ExportFormat::Ambre,
-                            },
-                        ),
-                    });
-                } else if id == ambre_prose::commands::IMPORT_MARKDOWN
-                    && let Some(document_id) = current_doc.get_untracked()
-                {
-                    open_markdown_picker(document_id, tx.clone(), toasts);
-                } else if id == ambre_prose::commands::EXPORT_MARKDOWN
-                    && let Some(document_id) = current_doc.get_untracked()
-                {
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Prose(
-                            ambre_bus::app::prose::ProseCommand::ExportDocument {
-                                format: ambre_bus::app::prose::ExportFormat::Markdown(
-                                    ambre_bus::app::prose::MarkdownFlavor::Gfm,
-                                ),
-                            },
-                        ),
-                    });
-                } else if id == ambre_prose::commands::COPY || id == ambre_prose::commands::CUT {
-                    exec_clipboard(id == ambre_prose::commands::COPY);
-                } else if id == ambre_prose::commands::PASTE
-                    || id == ambre_prose::commands::PASTE_PLAIN
-                {
-                    let plain = id == ambre_prose::commands::PASTE_PLAIN;
-                    read_clipboard(clipboard_paste.clone(), toasts, plain);
-                }
-                return;
-            }
-            // The sealed save is a UI-only intent in both applications: a
-            // `CommandId` carries no passphrase. So the dialog collects one and
-            // emits the typed command itself (`DOCFILE-015`). One arm takes the
-            // two ids because what follows them is identical: the container,
-            // and the operation on it, are one for every application
-            // (`DOCFILE-007`).
-            if id == trame_chrome::SAVE_SEALED_FILE || id == toile_chrome::SAVE_SEALED_FILE {
-                seal_open.set(true);
-                return;
-            }
-            // Toile board: every context-menu id is forwarded into the canvas view,
-            // which resolves it against its (UI-only) selection (`toile-menus`).
-            // The Toile Find command still opens the Toile panel, handled below.
-            if boot_is_toile {
-                if id == toile_chrome::FIND {
-                    find_state_toile.set(true);
-                } else if id == toile_chrome::IMPORT_FILE {
-                    // The file dialog is the shell's (`TOILE-IO-020`): the board
-                    // learns of the file only once its bytes are read.
-                    open_board_import_picker(toile_dropped_file, toasts);
-                } else if id == toile_chrome::EMBED_WEB {
-                    embed_web_text.set(String::new());
-                    embed_web_error.set(None);
-                    embed_web_open.set(true);
-                } else if id == toile_chrome::EMBED_DOC {
-                    // Refresh the list rather than trust whatever the landing
-                    // screen last fetched: a document shared since then is one
-                    // the user expects to find here.
-                    let _ = tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
-                        cmd: RestCommand::ListDocuments,
-                    });
-                    embed_doc_open.set(true);
-                } else if id == toile_chrome::LINK_SET {
-                    link_text.set(String::new());
-                    link_error.set(None);
-                    // Both lists are refreshed rather than trusted. A frame may
-                    // have been added since the panel last read the deck. A
-                    // document may have been shared since the landing screen
-                    // fetched. The user expects to find both here.
-                    if let Some(document_id) = current_doc.get_untracked() {
-                        let _ = tx.try_send(LogicCommand::App {
-                            document_id,
-                            command: AppCommand::Toile(
-                                ambre_bus::app::toile::ToileCommand::ReadDeck,
-                            ),
-                        });
-                    }
-                    let _ = tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
-                        cmd: RestCommand::ListDocuments,
-                    });
-                    link_open.set(true);
-                } else {
-                    toile_menu_cmd.set(Some(id));
-                }
-                return;
-            }
-            // `FILTER_COLUMN` is a UI-only intent: open the popover anchored under
-            // the active cell and ask the Logic thread for the column's distinct
-            // values. Logic resolves the active column itself. Everything else
-            // flows through the shared CommandId -> AppCommand path.
-            if id == trame_chrome::FIND || id == trame_chrome::REPLACE {
-                // UI-only intents (`trame-find-replace`): open the find/replace panel in the
-                // matching mode. The panel emits FindNext/ReplaceAll itself.
-                let mode = if id == trame_chrome::FIND {
-                    trame_chrome::FindMode::Find
-                } else {
-                    trame_chrome::FindMode::Replace
-                };
-                find_state.set(Some(trame_chrome::FindReplaceState { mode }));
-            } else if id == trame_chrome::SORT_RANGE_MULTI {
-                // Ask the Logic thread for the range the sort would order
-                // (`trame-sort`). A band selection has no extent the canvas
-                // knows, so the dialog opens on the `SortRange` reply, below.
-                if let Some(document_id) = current_doc.get_untracked() {
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Trame(TrameCommand::RequestSortRange),
-                    });
-                }
-            } else if id == trame_chrome::FILTER_COLUMN {
-                let (x, y) = client_anchor(anchor_pos.get_untracked());
-                // `col` is provisional; the ColumnValues reply carries the real one.
-                filter_popover.set(Some(trame_chrome::FilterPopoverState { col: 0, x, y }));
-                filter_values.set(Vec::new());
-                if let Some(document_id) = current_doc.get_untracked() {
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Trame(TrameCommand::RequestActiveColumnValues),
-                    });
-                }
-            } else if id == trame_chrome::BOLD || id == trame_chrome::ITALIC {
-                // Bold/Italic are part of the single style event: toggle the
-                // toolbar state and emit a `SetCellStyle` (`trame-cell-styles`).
-                let is_bold = id == trame_chrome::BOLD;
-                let cur = if is_bold {
-                    style_state.bold.get_untracked()
-                } else {
-                    style_state.italic.get_untracked()
-                };
-                let mut patch = ambre_bus::StylePatch::default();
-                if is_bold {
-                    patch.bold = Some(!cur);
-                } else {
-                    patch.italic = Some(!cur);
-                }
-                if let Some(document_id) = current_doc.get_untracked() {
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Trame(TrameCommand::SetCellStyle { patch }),
-                    });
-                }
-            } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
-                exec_clipboard(id == trame_chrome::COPY);
-            } else if id == trame_chrome::PASTE {
-                read_clipboard(clipboard_paste.clone(), toasts, false);
-            } else if id == trame_chrome::IMPORT_CSV {
-                // Interop (`trame-import-export`): open a file picker, read the chosen
-                // CSV bytes, and send them to the Logic thread. It creates a new sheet
-                // and converts client-side (Zero-Knowledge).
-                if let Some(document_id) = current_doc.get_untracked() {
-                    open_csv_picker(document_id, tx.clone(), toasts);
-                }
-            } else {
-                dispatch_to_current(id, current_doc, &tx);
-            }
-        }
+        let commands = commands.clone();
+        move |id: CommandId| commands.run(id)
     });
 
     // Formatting toolbar: a control's `StylePatch` -> `SetCellStyle` over the
@@ -937,30 +743,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
             on_open=on_open
             on_close=on_close
             on_submit=Callback::new({
-                let tx = to_logic.clone();
-                move |passphrase: String| {
-                    let Some(document_id) = current_doc.get_untracked() else {
-                        return;
-                    };
-                    // The typed text becomes a `SecretBytes` here and goes
-                    // nowhere else. Every hop that drops it wipes it, and the
-                    // Sync worker is the only thread that reads it
-                    // (`ARCH-004`).
-                    let passphrase = ambre_bus::SecretBytes::from(passphrase.into_bytes());
-                    let command = if boot_is_toile {
-                        AppCommand::Toile(
-                            ambre_bus::app::toile::ToileCommand::ExportAmbreFileSealed {
-                                passphrase,
-                            },
-                        )
-                    } else {
-                        AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase })
-                    };
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command,
-                    });
-                }
+                // The application wraps the passphrase in its sealed-save
+                // command, and nothing else holds it (`ARCH-004`).
+                let commands = commands.clone();
+                move |passphrase: String| commands.seal(passphrase)
             })
         />
 
@@ -1614,7 +1400,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
 /// Copy or cut from a menu: focus the text pipe and ask the browser to fire
 /// the `copy`/`cut` DOM event the host listeners service. They write every
 /// format the active view offers.
-fn exec_clipboard(copy: bool) {
+pub(super) fn exec_clipboard(copy: bool) {
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
             && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
@@ -1633,7 +1419,7 @@ fn exec_clipboard(copy: bool) {
 /// gesture. The read is decoded and handed to the host, which routes it to the
 /// active view through the same ladder as Ctrl+V (`UI-THREAD-024`,
 /// `UI-THREAD-025`). `plain` keeps the text alone (`PROSE-UI-227`).
-fn read_clipboard(
+pub(super) fn read_clipboard(
     paste_tx: ambre_bus::conduit::Sender<crate::host::ClipboardPaste>,
     toasts: Toasts,
     plain: bool,

@@ -11,7 +11,7 @@
 //
 // The launcher (`ambre-app`) stays app-agnostic. It owns the generic AppShell,
 // the `CommandStates` store, and the per-frame relay. It reaches into this module
-// for the Trame pieces (`COMMANDS`, `bind_keys`, `command_to_app`,
+// for the Trame pieces (`COMMANDS`, `bind_keys`, `TrameHandler`,
 // `mirror_event`, the `<FormatBar>` / `<SelectionBar>` components, ...).
 //
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
@@ -19,6 +19,7 @@
 // Split across submodules (all part of the same flat `chrome::` API via the
 // re-exports below, so call sites name `chrome::FormatBar`, `chrome::BOLD`, ...):
 //   - `commands`    : command ids, keymap, dispatch, inbound-event mirroring;
+//   - `handler`     : what each command means, for the shell (`ARCH-018`);
 //   - `style`       : `Toggles` / `StyleState` and the style-event mirror;
 //   - `bars`        : the `FormatBar` toolbar;
 //   - `popovers`    : the borders / colour / filter popovers;
@@ -31,6 +32,7 @@ mod color;
 mod commands;
 mod find_replace;
 mod formula_bar;
+mod handler;
 mod icons;
 mod popovers;
 mod sheet_tabs;
@@ -50,6 +52,7 @@ pub use commands::{
 };
 pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
 pub use formula_bar::FormulaBar;
+pub use handler::TrameHandler;
 pub use popovers::{FilterPopover, FilterPopoverState};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};

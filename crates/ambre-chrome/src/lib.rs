@@ -19,6 +19,7 @@
 //   - command      -- command-state store + keybinding manager
 //   - dialog       -- native <dialog> modal (rAF-suspending)
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
+//   - handler      -- what an application hands the shell for its commands
 //   - palette      -- the command palette: every declared command, filtered
 //   - passphrase   -- the passphrase prompt of a sealed `.ambre` file
 //   - toast/status/format/font/color/debounce -- the shared controls
@@ -36,6 +37,7 @@ mod debounce;
 mod dialog;
 mod font;
 mod format;
+mod handler;
 mod palette;
 mod passphrase;
 mod shortcut;
@@ -50,6 +52,7 @@ pub use debounce::Debouncer;
 pub use dialog::Dialog;
 pub use font::{FONT_FAMILIES, FontPicker};
 pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
+pub use handler::{CommandHandler, FilePick, KeyRoute, ShellAction};
 pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;

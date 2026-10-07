@@ -223,10 +223,6 @@ fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
 #[derive(Clone)]
 struct Wiring {
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    /// Clipboard reads the Paste button decoded, handed to the host so the
-    /// active view services the paste (`UI-THREAD-024`). `Send`: it crosses the
-    /// Router's Send boundary.
-    clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     /// The active app's command toggle signals (the store's reactive view,
@@ -240,8 +236,6 @@ struct Wiring {
     /// font/size selects, colour pickers, alignment, number format, borders, wrap
     /// and underline controls (`trame-cell-styles`). Fed by `TrameEvent::StyleApplied`.
     style_state: trame_chrome::StyleState,
-    /// Floating selection-toolbar anchor (canvas-relative CSS px).
-    anchor_pos: RwSignal<Option<(f64, f64)>>,
     /// Transient notifications (ARIA live region).
     toasts: Toasts,
     /// Signed-in user's display name; `None` = signed out.
@@ -327,10 +321,6 @@ struct Wiring {
     /// publishes it on each right-click. The shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
-    /// The Toile context-menu command the shell forwards back into the canvas view
-    /// (`toile-menus`). The view drains it and resolves it against its selection
-    /// (the Logic thread never sees the selection).
-    toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     /// Toile active tool (`toile-tools`): the shared source of truth for the DOM
     /// tool palette and the bare-key tool chords. The canvas view reads it each
     /// frame and applies it. Tool selection is UI-only, canvas-local state.
@@ -416,6 +406,11 @@ struct Wiring {
     /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
     /// document switch (which arms `hydrating`).
     chrome_status: RwSignal<ChromeStatus>,
+    /// The command path: the booted application's handler, and what the shell
+    /// performs of its answers (`ARCH-018`).
+    commands: shell::CommandPath,
+    /// Toile's three choosers: a web embed, a document embed, a link.
+    toile_dialogs: toile_chrome::ToileDialogs,
 }
 
 /// Header status + loading state, derived from two independent signals carried
@@ -836,6 +831,7 @@ pub fn main() {
     // mount owner and pulled back out via slots for the imperative relay below. -
     let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
     let toile_store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
+    let commands_slot: Rc<RefCell<Option<shell::CommandPath>>> = Rc::new(RefCell::new(None));
     let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
         Rc::new(RefCell::new(None));
     let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
@@ -850,11 +846,8 @@ pub fn main() {
     > = Rc::new(RefCell::new(None));
     let filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>> =
         Rc::new(RefCell::new(None));
-    let find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>> =
-        Rc::new(RefCell::new(None));
     let find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>> =
         Rc::new(RefCell::new(None));
-    let find_state_toile_slot: Rc<RefCell<Option<RwSignal<bool>>>> = Rc::new(RefCell::new(None));
     let find_result_toile_slot: Rc<
         RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
     > = Rc::new(RefCell::new(None));
@@ -885,9 +878,7 @@ pub fn main() {
         Rc::clone(&current_doc_slot),
         Rc::clone(&filter_popover_slot),
         Rc::clone(&filter_values_slot),
-        Rc::clone(&find_state_slot),
         Rc::clone(&find_result_slot),
-        Rc::clone(&find_state_toile_slot),
         Rc::clone(&find_result_toile_slot),
         boot_is_toile,
         boot_is_prose,
@@ -932,7 +923,12 @@ pub fn main() {
         toile_followed_link,
         sheets,
         active_sheet,
+        Rc::clone(&commands_slot),
     );
+    let commands = commands_slot
+        .borrow()
+        .clone()
+        .expect("command path created during mount");
 
     let store = store_slot
         .borrow()
@@ -970,21 +966,11 @@ pub fn main() {
     let filter_values = filter_values_slot
         .borrow()
         .expect("filter_values signal created during mount");
-    // Find/replace panel signals (`trame-find-replace`), read back for the keyboard
-    // listener (Ctrl+F/Ctrl+H open the panel) and the per-frame relay (which sets
-    // `find_result` on `TrameEvent::FindResult`).
-    let find_state = find_state_slot
-        .borrow()
-        .expect("find_state signal created during mount");
+    // Find result signals (`trame-find-replace`, `toile-find`), read back for
+    // the per-frame relay, which sets them on each application's find reply.
     let find_result = find_result_slot
         .borrow()
         .expect("find_result signal created during mount");
-    // Toile Find panel signals (`toile-find`), read back for the keyboard
-    // listener (Ctrl+F opens the panel) and the per-frame relay (which sets
-    // `find_result_toile` on `ToileEvent::FindResults`).
-    let find_state_toile = find_state_toile_slot
-        .borrow()
-        .expect("find_state_toile signal created during mount");
     let find_result_toile = find_result_toile_slot
         .borrow()
         .expect("find_result_toile signal created during mount");
@@ -1007,16 +993,7 @@ pub fn main() {
     });
 
     // Keyboard: resolve registered chords and dispatch to the routed document.
-    install_command_keys(
-        keymap,
-        current_doc,
-        ui_to_logic_tx.clone(),
-        find_state,
-        find_state_toile,
-        toile_active_tool,
-        boot_is_toile,
-        boot_is_prose.then_some(prose_signals.format),
-    );
+    install_command_keys(keymap, commands.clone());
 
     // Local persistence: open the IndexedDB store on this (Main) thread, where
     // the event loop is live. On open, restore the BOOT document's snapshot (if
@@ -1732,17 +1709,10 @@ pub fn main() {
         // mirrored just above points at it. It asked nothing else. This runs the
         // exact body of the context-menu `FILTER_COLUMN` branch, so the two entry
         // points share one filter code path.
-        if filter_open_pump.take() {
-            let (x, y) = client_anchor(anchor_pos.get_untracked());
-            // `col` is provisional; the ColumnValues reply carries the real one.
-            filter_popover.set(Some(trame_chrome::FilterPopoverState { col: 0, x, y }));
-            filter_values.set(Vec::new());
-            if let Some(document_id) = current_doc.get_untracked() {
-                let _ = relay_tx.try_send(LogicCommand::App {
-                    document_id,
-                    command: AppCommand::Trame(TrameCommand::RequestActiveColumnValues),
-                });
-            }
+        if filter_open_pump.take()
+            && let Some(trame) = commands.handler.trame()
+        {
+            commands.send(trame.open_filter());
         }
 
         // Mirror the view's perf snapshot into the status-bar signal, throttled

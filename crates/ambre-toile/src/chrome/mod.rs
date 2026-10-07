@@ -16,6 +16,8 @@ mod comments;
 mod deck;
 mod find;
 mod floatbar;
+mod handler;
+pub use handler::{ToileDialogs, ToileHandler, install_file_drop};
 mod menu;
 mod menu_bar;
 mod notify;

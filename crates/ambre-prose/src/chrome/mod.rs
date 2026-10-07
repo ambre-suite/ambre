@@ -14,8 +14,10 @@ use std::collections::HashMap;
 use ambre_core::Uuid;
 use leptos::prelude::*;
 
+mod handler;
 mod menu;
 mod notify;
+pub use handler::ProseHandler;
 pub use menu::context_entries;
 pub use notify::notify_event;
 

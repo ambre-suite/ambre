@@ -12,7 +12,9 @@ use super::*;
 // AppRoot lives in a sibling submodule; it reaches the launcher imports and
 // `Wiring` via `use super::super::*`.
 mod app_root;
+mod commands;
 use app_root::AppRoot;
+pub(crate) use commands::{AppHandler, CommandPath};
 
 /// Mount the Leptos shell onto the page body: the persistent AppShell chrome
 /// (which owns the `<canvas>`) plus the landing overlay shown on `/`. All
@@ -36,9 +38,7 @@ pub(crate) fn mount_shell(
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
     filter_popover_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FilterPopoverState>>>>>,
     filter_values_slot: Rc<RefCell<Option<RwSignal<Vec<String>>>>>,
-    find_state_slot: Rc<RefCell<Option<RwSignal<Option<trame_chrome::FindReplaceState>>>>>,
     find_result_slot: Rc<RefCell<Option<RwSignal<Option<(usize, usize)>>>>>,
-    find_state_toile_slot: Rc<RefCell<Option<RwSignal<bool>>>>,
     find_result_toile_slot: Rc<
         RefCell<Option<RwSignal<Option<ambre_bus::app::toile::FindResults>>>>,
     >,
@@ -85,6 +85,7 @@ pub(crate) fn mount_shell(
     toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
+    commands_slot: Rc<RefCell<Option<CommandPath>>>,
 ) {
     leptos::mount::mount_to_body(move || {
         // The store stays here (in the mount owner, NOT in the view): it is `Rc`
@@ -120,11 +121,9 @@ pub(crate) fn mount_shell(
         let filter_values = RwSignal::new(Vec::<String>::new());
         *filter_values_slot.borrow_mut() = Some(filter_values);
         let find_state = RwSignal::new(None::<trame_chrome::FindReplaceState>);
-        *find_state_slot.borrow_mut() = Some(find_state);
         let find_result = RwSignal::new(None::<(usize, usize)>);
         *find_result_slot.borrow_mut() = Some(find_result);
         let find_state_toile = RwSignal::new(false);
-        *find_state_toile_slot.borrow_mut() = Some(find_state_toile);
         let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
         *find_result_toile_slot.borrow_mut() = Some(find_result_toile);
         let style_state = trame_chrome::StyleState::new();
@@ -141,18 +140,53 @@ pub(crate) fn mount_shell(
         // and rendered in `AppRoot`, both inside this owner, so it needs no slot.
         let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
 
+        // The command path (`ARCH-018`): the booted application's handler, and
+        // what the shell needs to perform its answers. The keyboard listener
+        // reads it back through the slot.
+        let toile_dialogs = toile_chrome::ToileDialogs::new();
+        let handler = if boot_is_toile {
+            AppHandler::Toile(toile_chrome::ToileHandler {
+                find: find_state_toile,
+                tool: toile_active_tool,
+                menu_cmd: toile_menu_cmd,
+                dropped: toile_dropped_file,
+                toasts,
+                dialogs: toile_dialogs,
+            })
+        } else if boot_is_prose {
+            AppHandler::Prose(ambre_prose::chrome::ProseHandler {
+                format: prose_signals.format,
+            })
+        } else {
+            AppHandler::Trame(trame_chrome::TrameHandler {
+                find: find_state,
+                filter_popover,
+                filter_values,
+                style: style_state,
+                anchor: anchor_pos,
+            })
+        };
+        let commands = CommandPath {
+            handler,
+            current_doc,
+            to_logic: to_logic.clone(),
+            clipboard_paste,
+            toasts,
+            palette_open: RwSignal::new(false),
+            seal_open: RwSignal::new(false),
+        };
+        *commands_slot.borrow_mut() = Some(commands.clone());
+
         // Provide the wiring via context rather than as a prop: `<Router>`'s
         // children must be `Fn` (re-runnable), so the children closure cannot
         // consume a moved `wiring`. `AppRoot` clones it back out of context.
         provide_context(Wiring {
             to_logic,
-            clipboard_paste,
             raf,
             theme_ctl,
             toggles,
             toile_toggles,
             style_state,
-            anchor_pos,
             toasts,
             username,
             docs,
@@ -191,7 +225,6 @@ pub(crate) fn mount_shell(
             filter_active,
             sort_range,
             toile_ctx_scope,
-            toile_menu_cmd,
             toile_active_tool,
             toile_cursor,
             toile_style_model,
@@ -208,6 +241,8 @@ pub(crate) fn mount_shell(
             chrome_status,
             sheets,
             active_sheet,
+            commands,
+            toile_dialogs,
         });
 
         view! {

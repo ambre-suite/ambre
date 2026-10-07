@@ -7,105 +7,15 @@
 // ============================================================================
 
 use super::*;
-use ambre_draw::Point;
 
-/// Convert a canvas-relative anchor (CSS px, as published by the view for the
-/// active cell) into client-space coordinates, by adding the canvas's viewport
-/// offset. Falls back to the top-left of the canvas when the view publishes no
-/// anchor. Used
-/// to position the filter popover under the active column header.
-pub(crate) fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
-    let (ox, oy) = leptos::prelude::document()
-        .get_element_by_id("ambre-canvas")
-        .map(|c| {
-            let r = c.get_bounding_client_rect();
-            (r.left(), r.top())
-        })
-        .unwrap_or((0.0, 0.0));
-    let (ax, ay) = anchor.unwrap_or((0.0, 0.0));
-    (ox + ax, oy + ay)
-}
-
-/// Dispatch a `CommandId` to the currently routed document, if any. Reads the
-/// active document untracked, because this runs in an event handler and not a
-/// reactive scope. Does nothing on the landing route, where no document is open.
-pub(crate) fn dispatch_to_current(
-    id: CommandId,
-    current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-) {
-    let Some(document_id) = current_doc.get_untracked() else {
-        return;
-    };
-    if let Err(e) = dispatch_command(id, document_id, to_logic) {
-        tracing::warn!("{id:?}: Logic channel full ({e:?})");
-    }
-}
-
-/// Open a transient `<input type="file">` picker for a CSV import
-/// (`trame-import-export`). On selection it reads the file bytes off the main
-/// thread (`File::array_buffer`). It then sends a [`TrameCommand::ImportCsv`]
-/// to the Logic thread, which converts them into a new sheet client-side.
-pub(crate) fn open_csv_picker(
-    document_id: DocumentId,
-    tx: ambre_bus::conduit::Sender<LogicCommand>,
-    toasts: Toasts,
-) {
-    open_file_picker(
-        ".csv,text/csv",
-        "Could not read the CSV file",
-        toasts,
-        move |data| {
-            let sent = tx.try_send(LogicCommand::App {
-                document_id,
-                command: AppCommand::Trame(TrameCommand::ImportCsv {
-                    data,
-                    delimiter: None,
-                    has_header: false,
-                    target_sheet_id: None,
-                    start_row: 0,
-                    start_col: 0,
-                }),
-            });
-            // A full queue loses the file: say so, the user picks it again
-            // (`trame-import-export`).
-            if let Err(e) = sent {
-                tracing::warn!("CSV import dropped, Logic channel full ({e:?})");
-                toasts.warning("The file did not import: the document is busy. Try again.");
-            }
-        },
-    );
-}
-
-/// Open a transient `<input type="file">` picker for a Markdown import
-/// (`PROSE-IO-027`). The bytes go to the Logic thread, which converts them
-/// client-side (`PROSE-IO-001`).
-pub(crate) fn open_markdown_picker(
-    document_id: DocumentId,
-    tx: ambre_bus::conduit::Sender<LogicCommand>,
-    toasts: Toasts,
-) {
-    open_file_picker(
-        ".md,.markdown,text/markdown",
-        "Could not read the Markdown file",
-        toasts,
-        move |data| {
-            let _ = tx.try_send(LogicCommand::App {
-                document_id,
-                command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ImportDocument {
-                    format: ambre_bus::app::prose::ImportFormat::Markdown,
-                    data,
-                }),
-            });
-        },
-    );
-}
-
-/// Open a transient file picker and hand the chosen file's bytes to `on_bytes`.
+/// Open a transient file picker and hand the chosen file's bytes to `on_bytes`,
+/// read off the main thread (`File::array_buffer`). An application asks for
+/// it through its handler, and names what it reads (`ARCH-018`).
+///
 /// The picker element never reaches the DOM. The code leaks the change
 /// closure, because the picker is one-shot and lives only until the user picks
 /// a file.
-fn open_file_picker(
+pub(crate) fn open_file_picker(
     accept: &str,
     unreadable: &'static str,
     toasts: Toasts,
@@ -447,28 +357,6 @@ pub(crate) fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
     }
 }
 
-/// Translate a `CommandId` into its `LogicCommand` and send it to the Logic
-/// thread. The single place where UI affordances become IPC payloads; every
-/// trigger routes through here.
-///
-/// Returns `Ok(())` once the Logic queue takes the command. Returns an error
-/// when that queue is full, because the lossless traffic class forbids
-/// dropping a formatting command in silence.
-pub(crate) fn dispatch_command(
-    id: CommandId,
-    document_id: DocumentId,
-    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-) -> Result<(), ambre_bus::conduit::TrySendError<LogicCommand>> {
-    let Some(command) = trame_chrome::command_to_app(id) else {
-        tracing::warn!("no LogicCommand mapping for {id:?}");
-        return Ok(());
-    };
-    to_logic.try_send(LogicCommand::App {
-        document_id,
-        command,
-    })
-}
-
 /// Inject the generated token stylesheet (`theme.css`) into `<head>` and set the
 /// initial `data-theme`. The chrome then reads colours/spacings as CSS custom
 /// properties; the canvas reads the matching `Palette` -- one source, `tokens.ron`.
@@ -514,123 +402,6 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
     });
 }
 
-/// Attach `dragover` / `drop` to the canvas so a file dropped on the board
-/// reaches the importer at the point it landed on (`TOILE-IO-020`,
-/// `TOILE-IO-023`). Runs in a post-mount effect, like the context menu.
-///
-/// This function converts the drop point to physical pixels, the same scaling
-/// the pointer path applies. That is the space the canvas view works in. The
-/// read takes the bytes off the main thread and publishes them into the shared
-/// signal the view drains next frame. The board decides what it can read
-/// (`toile_chrome::accepts_file`), so the launcher holds no format list.
-pub(crate) fn install_canvas_file_drop(
-    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
-    toasts: Toasts,
-) {
-    Effect::new(move |_| {
-        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
-            return;
-        };
-        // Without a `dragover` that prevents the default, the browser navigates
-        // away to the dropped file and the drop never fires.
-        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
-            e.prevent_default();
-        });
-        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
-        over.forget();
-
-        let dpr = web_sys::window()
-            .map(|w| w.device_pixel_ratio())
-            .unwrap_or(1.0);
-        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
-            e.prevent_default();
-            let Some(file) = e
-                .data_transfer()
-                .and_then(|dt| dt.files())
-                .and_then(|fs| fs.get(0))
-            else {
-                return;
-            };
-            let at = Point::new(e.offset_x() as f64 * dpr, e.offset_y() as f64 * dpr);
-            read_file_into(file, Some(at), dropped, toasts);
-        });
-        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
-        cb.forget();
-    });
-}
-
-/// Open a transient `<input type="file">` for a board import (`TOILE-IO-020`).
-/// The picker offers what the board reads and nothing else. A file picked this
-/// way has no drop point, so the view lands it in the middle of the viewport.
-pub(crate) fn open_board_import_picker(
-    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
-    toasts: Toasts,
-) {
-    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
-        return;
-    };
-    let Some(input) = document
-        .create_element("input")
-        .ok()
-        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
-    else {
-        return;
-    };
-    input.set_type("file");
-    let _ = input.set_attribute("accept", toile_chrome::IMPORT_ACCEPT);
-    let picker = input.clone();
-    let onchange = Closure::<dyn FnMut()>::new(move || {
-        if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
-            read_file_into(file, None, dropped, toasts);
-        }
-    });
-    input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
-    onchange.forget();
-    input.click();
-}
-
-/// Read `file` into memory and publish it for the board, or tell the user why
-/// not (`TOILE-IO-022`). The check refuses a type no converter reads before it
-/// touches the bytes, so a dropped video never costs a copy of itself.
-fn read_file_into(
-    file: web_sys::File,
-    at: Option<Point>,
-    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
-    toasts: Toasts,
-) {
-    // The browser leaves the type empty for a format it does not know. Fall
-    // back to the extension, all an `.svg` drop carries on some platforms.
-    let mut mime = file.type_();
-    if mime.is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
-        mime = "image/svg+xml".to_owned();
-    }
-    if !toile_chrome::accepts_file(&mime) {
-        toasts.warning(format!(
-            "Ambre cannot bring a {} file onto a board",
-            label(&mime)
-        ));
-        return;
-    }
-    wasm_bindgen_futures::spawn_local(async move {
-        match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-            Ok(buf) => {
-                let bytes = js_sys::Uint8Array::new(&buf).to_vec();
-                dropped.set(Some(toile_chrome::DroppedFile { bytes, mime, at }));
-            }
-            Err(_) => toasts.warning("Could not read the file"),
-        }
-    });
-}
-
-/// A media type as a user reads it: the subtype alone (`png`). Failing that, a
-/// word for a file whose type the browser could not name.
-fn label(mime: &str) -> String {
-    match mime.rsplit('/').next() {
-        Some(sub) if !sub.is_empty() => sub.to_owned(),
-        _ => "file of that kind".to_owned(),
-    }
-}
-
 /// Whether a keyboard event targets an editable element: a text `<input>`, a
 /// `<textarea>`, or a contenteditable host. A bare tool chord must not steal
 /// such an event (`toile-tools`). The pure decision lives in
@@ -652,20 +423,11 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
 }
 
 /// Install the global command-keybinding listener (the keymap's DOM half).
-/// This listener owns a `keydown` whose chord resolves in the keymap: default
-/// prevented, command dispatched to the routed document. Unmatched keys fall through to the
-/// canvas listener (content navigation), so this never steals arrow keys.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn install_command_keys(
-    keymap: Keymap,
-    current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
-    find_state_toile: RwSignal<bool>,
-    active_tool_toile: RwSignal<ambre_toile::ui::Tool>,
-    boot_is_toile: bool,
-    prose_format: Option<RwSignal<Option<CommandId>>>,
-) {
+/// This listener owns a `keydown` whose chord resolves in the keymap. The
+/// booted application's handler says what the chord does, and whether a text
+/// field keeps it (`ARCH-018`). Unmatched keys fall through to the canvas
+/// listener (content navigation), so this never steals arrow keys.
+pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath) {
     let document = web_sys::window()
         .expect("no window")
         .document()
@@ -679,56 +441,11 @@ pub(crate) fn install_command_keys(
             let Some(id) = keymap.resolve(chord) else {
                 return;
             };
-            // Toile board: the tool chords (`toile-tools`) and Find
-            // (`toile-find`) are UI-only intents this listener handles.
-            // `ToileView::handle_key` decodes every other Toile id
-            // canvas-side, so this listener leaves it alone.
-            if boot_is_toile {
-                if let Some(tool) = toile_chrome::tool_for_command(id) {
-                    // Don't steal a bare tool key while the user is typing (the
-                    // Parley editor's hidden input, a chrome text field): let the
-                    // character through untouched.
-                    if target_is_editable(&event) {
-                        return;
-                    }
-                    event.prevent_default();
-                    active_tool_toile.set(tool);
-                    return;
-                }
+            // A field the user types into (the editor's hidden input, a chrome
+            // text field) may keep the key: the handler decides which.
+            if commands.key(id, target_is_editable(&event)) {
                 event.prevent_default();
-                if id == toile_chrome::FIND {
-                    find_state_toile.set(true);
-                }
-                return;
             }
-            // Prose: a formatting chord leaves its id where the format bar's
-            // controls leave theirs, and the view drains both the same way
-            // (`PROSE-UI-056`). A chrome text field keeps its own chords.
-            if let Some(format) = prose_format
-                && ambre_prose::commands::mark_key(id).is_some()
-            {
-                if !target_is_editable(&event) {
-                    event.prevent_default();
-                    format.set(Some(id));
-                }
-                return;
-            }
-            event.prevent_default();
-            // Find & Replace (`trame-find-replace`) are UI-only intents: open the
-            // DOM panel in the matching mode, not dispatch to the Logic thread.
-            if id == trame_chrome::FIND {
-                find_state.set(Some(trame_chrome::FindReplaceState {
-                    mode: trame_chrome::FindMode::Find,
-                }));
-                return;
-            }
-            if id == trame_chrome::REPLACE {
-                find_state.set(Some(trame_chrome::FindReplaceState {
-                    mode: trame_chrome::FindMode::Replace,
-                }));
-                return;
-            }
-            dispatch_to_current(id, current_doc, &to_logic);
         });
     document
         .add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref())
