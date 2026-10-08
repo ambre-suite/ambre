@@ -461,6 +461,12 @@ class Obstacles(unittest.TestCase):
         self.assertEqual("intent", contracts.leaned_on("human-review", "unheld -- `intent` -- x"))
         self.assertIsNone(contracts.leaned_on("untested", "unheld -- `intent` -- x"))
 
+    def test_a_row_owing_a_story_keeps_its_reviewer_listed(self):
+        self.assertTrue(contracts.held_by_a_reviewer("human-review", "none"))
+        self.assertTrue(contracts.held_by_a_reviewer("partial", "human-review -- reads it"))
+        self.assertTrue(contracts.held_by_a_reviewer("partial", "`a::t` -- x; human-review -- y"))
+        self.assertFalse(contracts.held_by_a_reviewer("partial", "`a::t` -- a human-review note"))
+
     def test_the_corpus_declares_the_table(self):
         text = (contracts.SPECS / contracts.TESTING).read_text()
         self.assertEqual([], contracts.read_obstacles(text)[1])

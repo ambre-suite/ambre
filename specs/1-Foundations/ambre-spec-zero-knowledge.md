@@ -25,7 +25,7 @@ that component's prefix instead.
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
-| `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | unheld -- `intent` -- no check reads a log line back, and a payload hides under any name. A scan refusing a macro that names one is the part a gate can hold, which the `The rules held by an absence get a gate` Story (`ambre-roadmap.md` E9) brings | human-review |
+| `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | partial -- `intent` -- no check reads a log line back. A scan refusing a log macro that names a payload holds the common case, and a payload under another name stays a reading; lands with the `The rules held by an absence get a gate` Story (`ambre-roadmap.md` E9) | partial |
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
@@ -42,9 +42,9 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 13 `verified`, 1 `human-review`, 2 `unimplemented`.
-  Every row is an `INV`. This document owns no gesture, so it declares no operation table, and each
-  rule binds the boundary at every instant.
+* **Verification.** 13 `verified`, 1 `partial`, 2 `unimplemented`. Every row is an `INV`. This
+  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
+  every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
   them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
