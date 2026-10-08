@@ -20,16 +20,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3371 rows: 2454 shipped, of which 96 partial and 536 loose. 917 unbuilt.**
+**3371 rows: 2454 shipped, of which 99 partial and 533 loose. 917 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 372 | 268 | 580 | 602 |  | 1822 |
-| `partial` | 40 | 14 | 40 | 2 |  | 96 |
+| `partial` | 42 | 14 | 41 | 2 |  | 99 |
 | `failing` | 2 |  | 2 |  |  | 4 |
-| `untested` | 191 | 129 | 187 | 2 |  | 509 |
+| `untested` | 194 | 134 | 190 | 2 |  | 520 |
 | `human-review` | 9 |  |  |  |  | 9 |
-| `qa-manual` | 5 | 5 | 4 |  |  | 14 |
+| `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 284 | 57 | 28 | 109 | 439 | 917 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
@@ -59,7 +59,7 @@
 | `ambre-spec-launcher.md` | 24 | 20 | 10 |  | 10 | 4 |
 | `ambre-spec-media.md` | 13 | 13 | 11 |  | 2 |  |
 | `ambre-spec-membership.md` | 30 | 17 | 16 | 1 |  | 13 |
-| `ambre-spec-message-bus.md` | 28 | 26 | 13 | 2 | 11 | 2 |
+| `ambre-spec-message-bus.md` | 28 | 26 | 13 | 4 | 9 | 2 |
 | `ambre-spec-object-store.md` | 18 | 12 | 10 |  | 2 | 6 |
 | `ambre-spec-organizations.md` | 11 | 9 | 7 |  | 2 | 2 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
@@ -107,7 +107,7 @@
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 3 | 14 |  |
 | `ambre-spec-toile-clipboard.md` | 18 | 17 | 13 |  | 4 | 1 |
 | `ambre-spec-toile-comments.md` | 31 | 31 | 26 |  | 5 |  |
-| `ambre-spec-toile-connectors.md` | 46 | 45 | 24 | 8 | 13 | 1 |
+| `ambre-spec-toile-connectors.md` | 46 | 45 | 24 | 9 | 12 | 1 |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 28 | 1 | 4 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 5 | 8 |  |
 | `ambre-spec-toile-engine.md` | 39 | 39 | 35 |  | 4 |  |

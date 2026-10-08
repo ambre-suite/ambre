@@ -386,6 +386,69 @@ class Milestones(unittest.TestCase):
         self.assertTrue(post, "section 8 stories read as post-V1")
 
 
+class Obstacles(unittest.TestCase):
+    """A gap that cannot close names why, and a lifted reason fails the row."""
+
+    TABLE = "\n".join(
+        [
+            "**The five obstacles.**",
+            "",
+            "| Obstacle | What no mechanism reaches | Lifted by |",
+            "| :--- | :--- | :--- |",
+            "| `intent` | what a value means | -- |",
+            "| `outside-the-tree` | a pull request | -- |",
+            "| `crypto-reading` | by decision | -- |",
+            "| `gpu-device` | the shaders | -- |",
+            "| `dom-glue` | a listener | `The UI-thread belts` Story (`ambre-roadmap.md` E9) |",
+            "",
+            "* a bullet after the table",
+        ]
+    )
+
+    def obstacles(self) -> dict[str, str | None]:
+        found, errors = contracts.read_obstacles(self.TABLE)
+        self.assertEqual([], errors)
+        return found
+
+    def defects(self, status: str, gap: str) -> list[str]:
+        return contracts.obstacle_defects(WHERE, status, gap, self.obstacles())
+
+    def test_the_table_reads_each_obstacle_and_the_story_lifting_it(self):
+        found = self.obstacles()
+        self.assertIsNone(found["intent"])
+        self.assertEqual("The UI-thread belts", found["dom-glue"])
+
+    def test_a_count_off_the_table_is_refused(self):
+        _, errors = contracts.read_obstacles(self.TABLE.replace("five", "six"))
+        self.assertIn("counts six", errors[0])
+
+    def test_a_standing_obstacle_passes(self):
+        self.assertEqual([], self.defects("human-review", "unheld -- `intent` -- why"))
+        self.assertEqual([], self.defects("human-review", "partial -- `intent` -- the rest"))
+
+    def test_a_gap_naming_no_obstacle_is_refused(self):
+        self.assertIn("cannot close", self.defects("qa-manual", "none")[0])
+        self.assertIn("cannot close", self.defects("human-review", "unheld -- prose")[0])
+
+    def test_an_undeclared_obstacle_is_refused(self):
+        self.assertIn("does not declare", self.defects("qa-manual", "unheld -- `wifi` -- x")[0])
+
+    def test_a_lifted_obstacle_makes_the_row_debt(self):
+        self.assertIn("is debt", self.defects("qa-manual", "unheld -- `dom-glue` -- x")[0])
+
+    def test_a_row_owing_a_story_names_no_obstacle(self):
+        self.assertEqual([], self.defects("untested", "unheld -- a test would drive it"))
+
+    def test_a_lifting_story_must_resolve(self):
+        found = self.obstacles()
+        self.assertEqual([], contracts.lifting_defects(found, SCHEDULE, CLOSED))
+        self.assertIn("no row", contracts.lifting_defects(found, {}, {})[0])
+
+    def test_the_corpus_declares_the_table(self):
+        text = (contracts.SPECS / contracts.TESTING).read_text()
+        self.assertEqual([], contracts.read_obstacles(text)[1])
+
+
 class StoryKeys(unittest.TestCase):
     """A story name is a join key, and a key that forgives a word joins wrong."""
 

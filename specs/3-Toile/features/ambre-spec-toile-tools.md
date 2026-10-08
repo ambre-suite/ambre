@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the host `keyup` listener and the board arm that lowers the pan flag and ends a pan under the pointer, reached by holding `Space`, panning, releasing it and dragging an element | none | qa-manual |
+| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | unheld -- the host `keyup` listener and the board arm that lowers the pan flag and ends a pan under the pointer. A driven browser holds `Space`, pans, releases it and drags an element; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Cancel a gesture
 
@@ -89,10 +89,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 23 `verified`, 1 `partial`, 5 `untested`, 1 `qa-manual`. What holds is the machine: the
-  modes, the transitions and the command each gesture ends in, handle clicks included. What
-  is loose is the pan. Its three `Space` rows rest on DOM glue no host test reaches, and a
-  degenerate pen path is driven by nothing (`TOILE-UI-254`).
+* **Verification.** 23 `verified`, 1 `partial`, 6 `untested`. What holds is the machine: the modes,
+  the transitions and the command each gesture ends in, handle clicks included. What is loose is the
+  pan. Its three `Space` rows rest on DOM glue no host test reaches, and a degenerate pen path is
+  driven by nothing (`TOILE-UI-254`).
 
 ---
 

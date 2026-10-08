@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | human-review -- the reviewer refuses a speed estimate, a decay or an edge speed an application computes for itself | unheld -- no gate tells a speed estimate from any other arithmetic | human-review |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | human-review -- the reviewer refuses a speed estimate, a decay or an edge speed an application computes for itself | unheld -- `intent` -- no gate tells a speed estimate from any other arithmetic | human-review |
 
 ### 1.2 Pan and flick
 
@@ -37,7 +37,7 @@ The user puts a finger down, moves it or not, and lifts it.
 | `KINETIC-005` | `POST` | Each tick of a motion MUST move less than the one before, and the motion MUST stop below the stop speed. | this spec section 2 | `ambre_draw::kinetic::tests::each_tick_moves_less_and_the_motion_stops` | none | verified |
 | `KINETIC-006` | `FRAME` | A press, or an edge the application meets, MUST stop the motion, and no tick MUST move the view after. | this spec section 2 | `ambre_draw::kinetic::tests::a_press_or_an_edge_stops_the_motion` | none | verified |
 | `KINETIC-010` | `FRAME` | A pointer the browser cancels MUST NOT leave a tap or a motion. | this spec section 2 | `ambre_draw::kinetic::tests::a_cancelled_pan_leaves_no_tap_and_no_motion` | none | verified |
-| `KINETIC-011` | `POST` | A cancelled pointer that acted as the mouse MUST end its gesture as a release at its last position. | this spec section 3 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`): the host turns a `pointercancel` into a release at the last point it saw, reached by dragging a selection when a system gesture takes over | none | qa-manual |
+| `KINETIC-011` | `POST` | A cancelled pointer that acted as the mouse MUST end its gesture as a release at its last position. | this spec section 3 | none | unheld -- the host turns a `pointercancel` into a release at the last point it saw. A driven browser dispatches the cancel mid-drag and reads the selection end where the pointer was; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Scroll at an edge
 
@@ -61,11 +61,11 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 9 `verified`, 1 `human-review`, 1 `qa-manual`. The model's rows are unit tests
-  of `crates/ambre-draw`, which knows no application. The glide is also held once per application,
-  each driven natively with a clock the test sets. Prose's own rows hold what its column does with
-  the distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its
-  grid does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
+* **Verification.** 9 `verified`, 1 `untested`, 1 `human-review`. The model's rows are unit tests of
+  `crates/ambre-draw`, which knows no application. The glide is also held once per application, each
+  driven natively with a clock the test sets. Prose's own rows hold what its column does with the
+  distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its grid
+  does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
 
 ---
 

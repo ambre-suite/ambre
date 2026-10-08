@@ -66,6 +66,11 @@ The rules it enforces, beyond generating the file:
     in the one place a schedule lives. A row whose
     gap cannot close carries `qa-manual` or `human-review`, which owe no Story:
     they are decisions, not debt;
+  * **a gap that cannot close names its obstacle.** "Cannot" is a fact about
+    the tooling on one day. The `Gap` of a `qa-manual` or `human-review` row
+    names one obstacle of the testing document, and an obstacle a Story lifts
+    fails every row still citing it, so the requalification is listed for the
+    reader rather than remembered;
   * **the counts under a table are the table's own.** The `Verification` answer
     opens on counts `--write` derives from the table and writes over the head of
     the bullet, keeping the prose after it. A count by hand drifts: a document
@@ -106,6 +111,7 @@ from template_vocabulary import (  # noqa: F401  -- re-exported to the other gat
     LOCATED_TOKENS,
     MECHANISM,
     MECHANISM_TOKENS,
+    NUMBERS,
     OPERATION_KINDS,
     SOURCES,
     STATE_KINDS,
@@ -815,6 +821,106 @@ def milestone_defects(
     ]
 
 
+# The statuses that claim a gap cannot close, and the obstacle each names. The
+# table is the testing document's, not the template's: an obstacle is a fact
+# about the tooling, and the method owns the tooling. A `Lifted by` cell names
+# the Story bringing the mechanism, or `--`.
+CANNOT_CLOSE = ("human-review", "qa-manual")
+TESTING = "1-Foundations/ambre-spec-testing.md"
+OBSTACLES_AT = re.compile(r"\*\*The (?P<count>[a-z]+) obstacles\.\*\*")
+# `partial -- ` when a mechanism holds part of the rule and the obstacle is why
+# the rest stays a reviewer's.
+OBSTACLE_GAP = re.compile(r"^(?:unheld|partial) -- `(?P<name>[a-z][a-z-]*)`(?: -- |$)")
+OBSTACLE_ROW = re.compile(r"^\|\s*`(?P<name>[a-z][a-z-]*)`\s*\|")
+
+
+def read_obstacles(text: str) -> tuple[dict[str, str | None], list[str]]:
+    """Each obstacle the testing document declares, and the Story lifting it.
+
+    The heading counts the table, as a vocabulary heading of the template does:
+    a parse that stops matching returns nothing, and an empty set would let a
+    row cite any word. So a count off the table is an error, never a narrowing.
+    """
+    lines = text.splitlines()
+    at = [i for i, line in enumerate(lines) if OBSTACLES_AT.search(line)]
+    if len(at) != 1:
+        return {}, [f"{TESTING}: {len(at)} lines carry '**The <n> obstacles.**', want 1"]
+    word = OBSTACLES_AT.search(lines[at[0]])["count"]
+    obstacles: dict[str, str | None] = {}
+    started = False
+    for line in lines[at[0] + 1 :]:
+        if not line.startswith("|"):
+            if started:
+                break
+            continue
+        started = True
+        row = OBSTACLE_ROW.match(line)
+        if not row:
+            continue  # the header and the separator
+        lifted = line.strip().strip("|").split("|")[-1].strip()
+        cite = CITED_STORY.search(lifted)
+        obstacles[row["name"]] = cite["name"].strip('`"') if cite else None
+    if NUMBERS.get(word) != len(obstacles):
+        return obstacles, [
+            f"{TESTING}: the obstacles heading counts {word}, its table carries "
+            f"{len(obstacles)}"
+        ]
+    return obstacles, []
+
+
+def lifting_defects(
+    obstacles: dict[str, str | None],
+    schedule: dict[str, tuple[str, bool, int, str]],
+    closed: dict[str, tuple[str, bool, int, str]],
+) -> list[str]:
+    """Whether each `Lifted by` Story is a row of the roadmap or of the journal.
+
+    The loose-citation check skips a backticked phrase no schedule carries,
+    since most are not story names. Here the cell is a story name by
+    declaration, so a rename would otherwise re-open the obstacle in silence.
+    """
+    return [
+        f"{TESTING}: the obstacle `{name}` is lifted by {story!r}, which no row of "
+        f"{ROADMAP} or {JOURNAL} carries"
+        for name, story in obstacles.items()
+        if story and story_key(story) not in schedule and story_key(story) not in closed
+    ]
+
+
+def obstacle_defects(
+    where: str, status: str, gap: str, obstacles: dict[str, str | None]
+) -> list[str]:
+    """Whether a row claiming its gap cannot close names a standing obstacle.
+
+    `qa-manual` and `human-review` owe no Story because nothing could hold the
+    rule. That is true of the tooling on one day. Naming the obstacle is what
+    lets the day a Story lifts it fail every row that still leans on it.
+    """
+    if status not in CANNOT_CLOSE:
+        return []
+    found = OBSTACLE_GAP.match(gap)
+    if not found:
+        return [
+            f"{where}: `{status}` claims a gap that cannot close -- `Gap` opens on "
+            f"'unheld -- `<obstacle>` -- ', or 'partial -- ' when a mechanism holds "
+            f"part of it, with one obstacle of {TESTING} section 3"
+        ]
+    name = found["name"]
+    if name not in obstacles:
+        return [
+            f"{where}: names the obstacle `{name}`, which {TESTING} section 3 does "
+            f"not declare -- a new obstacle is a row of that table first"
+        ]
+    story = obstacles[name]
+    if story:
+        return [
+            f"{where}: `{status}` on the obstacle `{name}`, which the {story!r} Story "
+            f"lifts -- the gap can close, so the row is debt: `untested` or "
+            f"`partial`, landing with a Story"
+        ]
+    return []
+
+
 def duplicate_stories(path: Path) -> list[str]:
     """Each story name or phase code that two rows of one schedule carry.
 
@@ -1450,6 +1556,8 @@ def main() -> int:
     milestones = read_milestones(SPECS / ROADMAP)
     in_progress = current_milestone(milestones)
     errors += duplicate_stories(SPECS / ROADMAP)
+    obstacles, found = read_obstacles((SPECS / TESTING).read_text())
+    errors += found + lifting_defects(obstacles, schedule, closed)
     findings = declared_findings()
     cited_audit: set[str] = set()
     # The `Sources` cells, held until every id is read. A citation may name a row
@@ -1615,6 +1723,7 @@ def main() -> int:
             if status in OWES_STORY:
                 errors += story_defects(where, status, binding, schedule, closed)
                 errors += milestone_defects(where, status, binding, milestones, in_progress)
+            errors += obstacle_defects(where, status, binding, obstacles)
             if status != "unimplemented" and "not built" in held_by:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":

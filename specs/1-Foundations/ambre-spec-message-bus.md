@@ -38,10 +38,10 @@ is what a full queue means.
 | `BUS-012` | `POST` | A lossy command MUST be coalesced to one send per frame. | this spec section 2 | none | unheld -- each view keeps one `pending_viewport` and flushes it from its frame hook, so the coalescing is held by reading the code, and no test drives two requests inside one frame; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `BUS-017` | `POST` | A stale answer to a lossy request MUST be dropped by its version. | this spec section 2 | none | unheld -- only one application holds it: `TrameUiState::on_viewport_data` compares against `accepted_version`, and every test that drives it feeds an increasing version, so the drop branch runs in no test. Toile's viewport carries no version at all; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command` | none | verified |
-| `BUS-016` | `POST` | A full command queue MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell's per-frame read of that level and the notice it raises, reached by typing into a document whose Logic thread is saturated | none | qa-manual |
-| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one early return at the head of each `handle_input`, reached by typing into a document whose Logic thread is saturated. The level it reads is `BUS-016` | none | qa-manual |
-| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), each frame hook putting the dropped request back: Trame into `pending_viewport`, Toile into the same slot and into the set of media already asked for, reached by scrolling a document whose Logic thread is saturated; `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from | none | qa-manual |
-| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one branch at each Trame commit path, read back off the cell after a refused send. The outcome it branches on is `BUS-011` or `BUS-023` | none | qa-manual |
+| `BUS-016` | `POST` | A full command queue MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries | partial -- the shell's per-frame read of that level and the notice it raises: a driven browser saturating the Logic thread reads the notice off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
+| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | none | unheld -- one early return at the head of each `handle_input`, which a native test reaches by building the view over an outbox that reads busy. The level it reads is `BUS-016`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from | partial -- each frame hook putting the dropped request back: Trame into `pending_viewport`, Toile into the same slot and into the set of media already asked for. A native test of each view drops a request and reads it offered on the next frame; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | partial |
+| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | none | unheld -- one branch at each Trame commit path, which a native test reads back off the cell after a refused send. The outcome it branches on is `BUS-011` or `BUS-023`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 | `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the queue stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
 
 ### 1.3 Logic routes a content command
@@ -79,16 +79,16 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 13 `verified`, 2 `partial`, 7 `untested`, 4 `qa-manual`, 2 `unimplemented`. What
-  holds is the Logic dispatcher, driven on host through an unknown document, a viewer's edit and a
-  child's role. A service round trip, a late response, the lossy gate and the backlog behind a full
-  queue are driven too. Loose is the envelope discipline the other two threads owe.
+* **Verification.** 13 `verified`, 4 `partial`, 9 `untested`, 2 `unimplemented`. What holds is the
+  Logic dispatcher, driven on host through an unknown document, a viewer's edit and a child's role.
+  A service round trip, a late response, the lossy gate and the backlog behind a full queue are
+  driven too. Loose is the envelope discipline the other two threads owe.
 
   Five paths are loose because nobody drives them. Three sit in the codec and dispatcher: an encode
   no test names, a stale version, a handler capturing a sender. The fourth is the registry entry no
-  test asserts was never created; the fifth is Toile's re-offer of a dropped request. Three rows
-  live in the DOM glue, and the doctrine rules them `qa-manual`. They are the busy notice, the input
-  gate and the call site that must not write what it failed to send.
+  test asserts was never created; the fifth is Toile's re-offer of a dropped request. Three more
+  sit in the views: the busy notice, the input gate and the call site that must not write what it
+  failed to send. A native view or a driven browser reaches each of them.
 ---
 
 ## 2. MODEL

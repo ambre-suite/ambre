@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. Reached by cutting a range and pasting while the outbox refuses | none | qa-manual |
+| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none | unheld -- the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. A native test cuts a range and pastes over an outbox that refuses; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Paste
 
@@ -49,11 +49,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 2 `verified`, 1 `partial`, 4 `untested`, 1 `qa-manual`, 1 `unimplemented`. What
-  holds is the three rules that live in the Logic thread, where a test can reach them. The copy that
-  writes no delta is among them. What is loose is everything above the seam -- the ownership token
-  and the cut -- browser state, the gap the edit session has. The cut is worse: the source clear is
-  sent whether or not the paste was, against section 5, and it loses data outright.
+* **Verification.** 2 `verified`, 1 `partial`, 5 `untested`, 1 `unimplemented`. What holds is the
+  three rules that live in the Logic thread, where a test can reach them. The copy that writes no
+  delta is among them. What is loose is everything above the seam -- the ownership token and the cut
+  -- browser state, the gap the edit session has. The cut is worse: the source clear is sent whether
+  or not the paste was, against section 5, and it loses data outright.
 
 ---
 

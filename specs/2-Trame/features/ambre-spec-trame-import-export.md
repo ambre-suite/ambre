@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | none | unheld -- the importer skips an empty field on both passes, so an import into a sheet that already holds values merges with them rather than replacing the range, and no test imports twice into one sheet; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
-| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the warning `open_csv_picker` raises when the queue refuses the file | none | qa-manual |
+| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | none | unheld -- the warning `open_csv_picker` raises when the queue refuses the file. A driven browser picks a file while the Logic thread is saturated and reads the warning off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Hand a sheet back as CSV
 
@@ -97,11 +97,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 18 `verified`, 8 `untested`, 1 `qa-manual`, 13 `unimplemented`. What holds is
-  the round trip of the two gestures: the header's identity, the sheet an import activates and the
-  formula a reload re-evaluates. The role gate keeps an export in a reader's hands. What is loose is
-  the frame conditions. Every refusal now answers: a skipped record, a full queue, an export with
-  nothing to write, a snapshot that could not be read.
+* **Verification.** 18 `verified`, 9 `untested`, 13 `unimplemented`. What holds is the round trip of
+  the two gestures: the header's identity, the sheet an import activates and the formula a reload
+  re-evaluates. The role gate keeps an export in a reader's hands. What is loose is the frame
+  conditions. Every refusal now answers: a skipped record, a full queue, an export with nothing to
+  write, a snapshot that could not be read.
 
 ---
 

@@ -172,7 +172,7 @@ where the two disagree; this table invents no rung of its own.
 | `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
 | `ci-gate` | a gate in `scripts/`, run by a `just` recipe in the CI `lint` job. The clause names the script |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
-| `qa-manual` | the two places the doctrine declares mechanism-free: the wgpu pipeline, and the DOM glue |
+| `qa-manual` | the places the doctrine declares mechanism-free, one obstacle each of `1-Foundations/ambre-spec-testing.md section 3` |
 | `human-review` | cryptography, line by line, by decision |
 | `none` | no mechanism. Explicit, and never the same claim as an empty cell |
 | `not built` | the code does not exist yet |
@@ -230,8 +230,8 @@ the one place in the row where an argument belongs.
 | `partial` | a mechanism holds part of the rule, and `Gap` says which part is left | the mechanism and a Story |
 | `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | a Story |
 | `untested` | the code exists, nothing holds it, and a mechanism could | a Story |
-| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | nothing |
-| `qa-manual` | caught by using the application | nothing |
+| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | an obstacle no Story lifts |
+| `qa-manual` | caught by using the application | an obstacle no Story lifts |
 | `unimplemented` | the code does not exist yet | a Story |
 
 **Every gap that can close names its Story.** A row with no mechanism answers one question: can
@@ -239,6 +239,9 @@ this gap close? If it can, it is debt, and debt has an owner, so the row lands w
 `ambre-roadmap.md`. If it cannot, it is a permanent property, and `qa-manual` and `human-review`
 are the two words for that. The roadmap is then the whole debt register, which is where `AGENTS.md`
 already puts every schedule.
+
+**"Cannot" names its obstacle.** Such a row's `Gap` opens on one obstacle of
+`1-Foundations/ambre-spec-testing.md section 3`, and a Story lifting it turns the row into debt.
 
 ### C. The eight kinds, and the shape of a table
 
@@ -433,6 +436,7 @@ itself is stated in the section that owns it, never here.
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document | -- |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** | -- |
 | A gap that can close waits on an open story | `contracts.py` -- a story a `failing`, `untested` or `unimplemented` row names and the roadmap does not carry open: unknown, ambiguous, ticked or under a stale epic. `human-review` and `qa-manual` owe none | -- |
+| A gap that cannot close says why | `contracts.py` -- a `qa-manual` or `human-review` row whose `Gap` names no obstacle, an obstacle the testing document does not declare, or one a Story lifts | whether the obstacle named is the true one |
 | Every story mention resolves | `contracts.py` -- a `<name> Story` mention carrying no `` (`ambre-roadmap.md` <epic>) `` on the same line, and a stale epic | -- |
 | The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note | -- |
 | The schema matches the code | `spec_shape.py`, **asymmetric** -- a container built in the code and absent from the table; declared with no code is normal | -- |

@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-164` | `INV` | Moving an element MUST NOT write a change to the connectors that touch it: a drag costs one register write, whatever hangs off it. | this spec section 3 | structural -- no path from a move reaches the connector map, and the routing runs inside the read-only derivation | none | verified |
 | `TOILE-166` | `OBS` | A connector whose endpoint element is not held MUST NOT be painted. | this spec section 2 | `ambre_toile::logic::connector::tests::missing_endpoint_yields_none` -- the routing answers nothing; structural -- the derivation drops the connector on that same `None` | none | verified |
 | `TOILE-007` | `CONC` | A connector whose endpoint element is deleted by another peer MUST keep its own data: dangling is not destruction. | this spec section 2 | none | unheld -- the one test named for this deletes an endpoint locally, which garbage-collects the connector instead of dangling it (`TOILE-042`), and reads only that nothing is painted. No test holds two peers, and none reads the document afterwards; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell raising its notice off this event, reached by deleting a shape a collaborator is joining to another | none | qa-manual |
+| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left | partial -- the shell raising its notice off this event. A driven browser deletes a shape a peer is joining to another and reads the notice off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-165` | `OBS` | A connector that goes dangling because its endpoint left MUST be announced too, not only one re-aimed at a missing element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- a concurrent delete announcing the arrow on both peers, and the later delta that strands nothing announcing nothing | none | verified |
 | `TOILE-043` | `INV` | A connector MUST sit in the one paint order with the elements, so it can be placed behind one. | this spec section 3; `features/ambre-spec-toile-z-order.md` | `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- the reorder over the shared order; `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the four entries that drive a connector through it | partial -- no test runs the two ends together; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-045` | `INV` | A connector MUST be culled with the viewport, like an element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled`; `ambre_toile::logic::connector::tests::the_hull_holds_the_routed_path` | none | verified |
@@ -99,11 +99,11 @@ status values are normative in `ambre-spec-template.md`.
   routes only the arrows whose hull meets it (`TOILE-045`).
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 24 `verified`, 8 `partial`, 12 `untested`, 1 `qa-manual`, 1
-  `unimplemented`. What holds is the pure geometry and what the surface paints back: which arrow a
-  point lands on, and which end a press grabs. Held too are both ways an arrow goes dangling. What
-  is loose is the paths between them, because the view is not host-constructible. Loose too are a
-  create that trusts its endpoints, and four rows describing a shape no gesture produces.
+* **Verification.** 24 `verified`, 9 `partial`, 12 `untested`, 1 `unimplemented`. What holds is the
+  pure geometry and what the surface paints back: which arrow a point lands on, and which end a
+  press grabs. Held too are both ways an arrow goes dangling. What is loose is the paths between
+  them, because the view is not host-constructible. Loose too are a create that trusts its
+  endpoints, and four rows describing a shape no gesture produces.
 
 ---
 

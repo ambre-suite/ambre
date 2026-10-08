@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | none | unheld -- `resize_col` clamps on `MIN_COL_WIDTH` in `logic/metrics.rs` and no test reads a width back below it: it is the half `TRAME-UI-039` was carrying, and the two clamps are separate lines of code; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | none | unheld -- the release divides the on-screen extent back out by the zoom, and no test drives a resize at any zoom but one; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | none | unheld -- the local size map is written once the outbox takes the command, and nothing asserts the grid reflowed without the answer; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the early return in `send_resize_col` and `send_resize_row` before the local map is written, reached by dragging a border in a document whose Logic thread is saturated. The outcome it branches on is `BUS-011` | none | qa-manual |
+| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- the early return in `send_resize_col` and `send_resize_row` before the local map is written, which a native test reaches by resizing over an outbox that refuses. The outcome it branches on is `BUS-011`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Fit a boundary to its content
 
@@ -44,12 +44,12 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 1 `partial`, 5 `untested`, 1 `qa-manual`. What holds is the
-  document plane: the write, the reload and the concurrent race each have a test. What is loose is
-  the UI thread, where the pointer meets the zoom and the cache, and the column clamp nothing reads
-  back. A resize goes out lossless, so a refused send leaves the local size map untouched, held by a
-  manual read (`TRAME-UI-127`). A column auto-fit asks the Logic thread for the whole column and
-  measures that answer, never the viewport cache (`TRAME-UI-128`).
+* **Verification.** 3 `verified`, 1 `partial`, 6 `untested`. What holds is the document plane: the
+  write, the reload and the concurrent race each have a test. What is loose is the UI thread, where
+  the pointer meets the zoom and the cache, and the column clamp nothing reads back. A resize goes
+  out lossless, so a refused send leaves the local size map untouched, held by a manual read
+  (`TRAME-UI-127`). A column auto-fit asks the Logic thread for the whole column and measures that
+  answer, never the viewport cache (`TRAME-UI-128`).
 
 ---
 
