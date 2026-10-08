@@ -184,7 +184,7 @@ impl SelectTool {
             // box (toile-selection). Press and hover share this de-rotation so they
             // always agree.
             let pick = unrotate_point(screen, screen_b.center(), rot);
-            if let Some(h) = edge_handle_at(screen_b, pick) {
+            if let Some(h) = selection_handle_at(&selection[0], display, screen_b, pick) {
                 let id = selection[0].clone();
                 match h {
                     Handle::Rotate => {
@@ -376,7 +376,8 @@ impl SelectTool {
         let sb = selection_bounds(selection, display)?;
         let screen_b = world_rect_to_screen(sb, cam);
         let rot = element_rotation(display, &selection[0]);
-        edge_handle_at(screen_b, unrotate_point(screen, screen_b.center(), rot))
+        let pick = unrotate_point(screen, screen_b.center(), rot);
+        selection_handle_at(&selection[0], display, screen_b, pick)
     }
 
     /// The cursor the in-flight drag calls for, so it stays stable
@@ -1167,6 +1168,20 @@ fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
     None
 }
 
+/// The handle a de-rotated screen point targets on the single selection `id`.
+/// A group offers its rotate handle alone: its box is the union of its members,
+/// so there is nothing to stretch (`TOILE-UI-392`, `TOILE-155`). A press on its
+/// edge falls through to the board hit test instead.
+fn selection_handle_at(
+    id: &ElementId,
+    display: &DisplayViewport,
+    screen_b: Rect,
+    pick: Point,
+) -> Option<Handle> {
+    let h = edge_handle_at(screen_b, pick)?;
+    (h == Handle::Rotate || !is_group(id, display)).then_some(h)
+}
+
 /// Resize `base` by dragging `handle` to world point `to`; the opposite edge(s)
 /// stay put. Corners move both axes, edge handles move one.
 fn resize_rect(base: Rect, handle: Handle, to: Point) -> Rect {
@@ -1785,6 +1800,44 @@ mod tests {
         m.pointer_down(Point::new(100.0, 100.0), se, &sel_a, &disp, &cam, None);
         assert!(m.is_active());
         assert_eq!(m.hover_handle(&sel_a, &disp, &cam, se), None);
+    }
+
+    /// `TOILE-UI-392`: a press on the edge or a corner of a selected group's
+    /// box starts no resize, and the hover offers no resize cursor there. The
+    /// rotate handle still turns the group.
+    #[test]
+    fn a_press_on_a_selected_groups_edge_starts_no_resize() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![
+            member_elem("m", bounds, "g"),
+            group_node("g", bounds, None),
+        ]);
+        let cam = cam();
+        let sel = vec![ElementId("g".into())];
+        for world in [Point::new(100.0, 100.0), Point::new(100.0, 50.0)] {
+            let screen = to_screen(&cam, world);
+            let mut m = ToolMachine::new();
+            assert_eq!(m.hover_handle(&sel, &disp, &cam, screen), None);
+            m.pointer_down(world, screen, &sel, &disp, &cam, None);
+            assert!(
+                !matches!(m.gesture_cursor(), Some(GestureCursor::Handle(_))),
+                "{world:?} started a transform: {:?}",
+                m.gesture_cursor()
+            );
+        }
+
+        let knob = rotate_handle_point(world_rect_to_screen(bounds, &cam));
+        let mut m = ToolMachine::new();
+        assert_eq!(
+            m.hover_handle(&sel, &disp, &cam, knob),
+            Some(Handle::Rotate)
+        );
+        let knob_world = cam.screen_to_world() * knob;
+        m.pointer_down(knob_world, knob, &sel, &disp, &cam, None);
+        assert_eq!(
+            m.gesture_cursor(),
+            Some(GestureCursor::Handle(Handle::Rotate))
+        );
     }
 
     #[test]

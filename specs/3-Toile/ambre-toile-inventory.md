@@ -29,7 +29,7 @@
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 53 | 12 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 28 | 4 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 | 3 |
-| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 33 | 6 |
+| `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 33 | 4 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 5 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 8 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 6 |
@@ -45,4 +45,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 | 7 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 10 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 831 contract rows, 191 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 831 contract rows, 189 loose.**

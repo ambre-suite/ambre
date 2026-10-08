@@ -30,7 +30,7 @@ use crate::logic::animate::AnimatedElement;
 use super::grid;
 use super::hit::triangle_path;
 use super::tool::{
-    HANDLE_SIZE_PX, Preview, resize_handle_points, rotate_handle_point, selection_bounds,
+    HANDLE_SIZE_PX, Preview, is_group, resize_handle_points, rotate_handle_point, selection_bounds,
     world_rect_to_screen,
 };
 use super::viewport::ViewportTransform;
@@ -748,7 +748,8 @@ pub fn paint_overlay<S: DrawSurface>(
 
     // 4 corner resize handles (only for a single-element selection, matching the
     // tool's corners-only picking; a multi-selection shows the box only in Phase 0).
-    if single {
+    // A group wears none: its box is the union of its members (`TOILE-UI-391`).
+    if single && !is_group(&selection[0], vp) {
         for (_, p) in resize_handle_points(b) {
             draw_handle(surface, place(p), palette);
         }
@@ -1539,6 +1540,45 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::FillRect { .. }))
             .count();
         assert_eq!(handle_fills, 5);
+    }
+
+    /// `TOILE-UI-391`: a selected group wears its box and the rotate handle,
+    /// and no corner square.
+    #[test]
+    fn overlay_draws_no_corner_square_for_a_selected_group() {
+        let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
+        let vp = DisplayViewport {
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![elem("g", DisplayGeom::Group, bounds)],
+        };
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[ElementId("g".into())],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            None,
+            false,
+        );
+        let handle_fills = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::FillRect { .. }))
+            .count();
+        assert_eq!(handle_fills, 1, "the rotate knob alone");
+        let box_strokes = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::StrokeRect { .. }))
+            .count();
+        assert_eq!(box_strokes, 1, "the group still wears its box");
     }
 
     /// `TOILE-UI-083`: presentation mode paints no editing surface. The same

@@ -37,8 +37,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
 | `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge, a group excepted (`TOILE-UI-391`). | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
 | `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-391` | `OBS` | A selected group MUST wear no corner square: its box is derived and cannot be stretched. | this spec section 3; `TOILE-155` | none | fails -- the overlay draws the four corner squares for any single selection, a group included; lands with the `A group shows no resize handle` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-392` | `INV` | A press on the edge of a selected group's box MUST NOT start a resize. | this spec section 3; `TOILE-155` | none | fails -- the tool starts a resize from any band of a single selection's edge. The box stretches under the drag, then springs back when the command refuses the group on release; lands with the `A group shows no resize handle` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-391` | `OBS` | A selected group MUST wear no corner square: its box is derived and cannot be stretched. | this spec section 3; `TOILE-155` | `ambre_toile::ui::render::tests::overlay_draws_no_corner_square_for_a_selected_group` -- the group's box and its rotate knob paint, and no corner square does | none | verified |
+| `TOILE-UI-392` | `INV` | A press on the edge of a selected group's box MUST NOT start a resize. | this spec section 3; `TOILE-155` | `ambre_toile::ui::tool::tests::a_press_on_a_selected_groups_edge_starts_no_resize` -- a press on a corner and on a side starts no transform and the hover offers no resize cursor, while the rotate knob still turns the group | none | verified |
 | `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | `ambre_toile::ui::tool::tests::selection_bounds_skips_a_locked_element` -- a locked-only selection has no box, and a mixed selection's box covers the unlocked element alone | none | verified |
 
 ### 1.2 Click an element
@@ -83,10 +83,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 27 `verified`, 2 `failing`, 4 `untested`. What holds is the geometry and
-  select-all with the pick's exclusions. A locked element wears no box, and a deleted one leaves the
-  selection. A click, a marquee and `Escape` are driven through the view, and a hairline answers one
-  screen reach at every zoom. What is loose is the double-click into a scope.
+* **Verification.** 29 `verified`, 4 `untested`. What holds is the geometry and select-all with the
+  pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A click,
+  a marquee and `Escape` are driven through the view, and a hairline answers one screen reach at
+  every zoom. What is loose is the double-click into a scope.
 
 ---
 
