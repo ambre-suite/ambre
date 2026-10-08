@@ -13,7 +13,8 @@ mod state;
 mod supervise;
 mod ws;
 
-#[cfg(any(test, feature = "test-helpers"))]
+// Test-only: the crate is a binary, so no build outside the tests can call these.
+#[cfg(test)]
 mod test_helpers;
 
 use axum::Router;

@@ -1,4 +1,4 @@
-#![cfg(any(test, feature = "test-helpers"))]
+#![cfg(test)]
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -54,7 +54,6 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
 }
 
 /// Creates a test document and adds the owner as an owner member.
-#[allow(dead_code)]
 pub async fn create_test_document(
     pool: &PgPool,
     owner_id: ambre_core::UserId,
