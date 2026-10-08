@@ -46,6 +46,8 @@ The application names an address it does not hold. The worker fetches the object
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a download driven through a fake transport answers once, with the request, the address and the whole plaintext | none | verified |
+| `SYNC-139` | `POST` | A download MUST fetch, byte for byte, the blob an upload put through the relay's link. | this spec section 3; `ambre-spec-object-store.md` | none | unheld -- the relay's media routes run against the database alone, with a storage client that reaches no bucket, and the continuous integration has no storage service. No test puts a blob and reads it back; lands with the `A real object-store round trip` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-140` | `FRAME` | The browser transport MUST NOT alter a byte it puts to storage or fetches from it. | this spec section 3 | none | unheld -- the transport compiles for the browser alone, and every host test of the two legs drives a fake in its place; lands with the `The browser media transport held` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
 | `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | `ambre_sync::media::tests::a_download_refuses_a_blob_the_address_does_not_name` -- it refuses a blob served in place of another, and one a member sealed under the address over other bytes, which only the recomputed address catches. It drives the open the leg calls, not the leg, which runs only in a browser | none | verified |
 | `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a failed link or fetch, and a short, altered or foreign blob, each reach the application as an error for the request, and no byte is answered | none | verified |
@@ -56,9 +58,10 @@ The application names an address it does not hold. The worker fetches the object
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 11 `verified`. The address and the two requests are held on the host. So is each
-  leg end to end through a fake transport, up to the answer or the error it hands the application.
-  What is loose is the browser transport itself, and no test round-trips against object storage.
+* **Verification.** 11 `verified`, 2 `untested`. The address and the two requests are held on the
+  host. So is each leg end to end through a fake transport, up to the answer or the error it hands
+  the application. What is loose is the browser transport itself (`SYNC-140`), and no test
+  round-trips against object storage (`SYNC-139`).
 
 ---
 
@@ -184,9 +187,11 @@ of the three, and what is painted in the meantime, is the application's own feat
   the document itself is deleted (`ambre-spec-object-store.md`, `SRV-057`).
 * **The addresses stored before the key are plain hashes.** The relay cannot rekey them, and no
   step migrates them. A document that held media before the change still exposes those addresses.
-* **No test performs a round trip against object storage.** The suite has none and the continuous
-  integration has no object-storage service, which `ambre-spec-testing.md section 9` records as
-  deliberate debt.
+* **No test performs a round trip against object storage** (`SYNC-139`). The suite has none and the
+  continuous integration has no object-storage service, which `ambre-spec-testing.md section 9`
+  records as deliberate debt.
+* **No test drives the browser transport** (`SYNC-140`). The legs are held through a fake, so a
+  header the presigned link refuses, or a body the fetch truncates, fails nothing.
 * **The download leg has no caller in two applications.** The worker's half ships; Toile's reader is
   the gap `TOILE-IO-034` states, and Prose's pictures are unbuilt.
 

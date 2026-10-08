@@ -404,7 +404,8 @@ owns the subsystem.
 | `[ ]` Snapshot tests of the wire and the surfaces | -- | `insta` over the recording surface's operation sequences, the wire encodings and the PDF primitives |
 | `[ ]` A coverage gate on added lines | -- | `cargo-llvm-cov` in diff mode, which turns a baseline nobody reads into a check |
 | `[ ]` The browser-driven belt | -- | a served build driven by browser automation: the `ambre-app` boot, one command across the canvas and DOM seam, and the dialogs and menus the unit runner cannot drive |
-| `[ ]` A real object-store round trip | -- | a presigned upload against a local minio in the database tier, which performs none today |
+| `[ ]` A real object-store round trip | -- | a presigned upload against a local minio in the database tier, which performs none today. Done when `SYNC-139` reads `verified` |
+| `[ ]` The browser media transport held | -- | the transport that puts and fetches a sealed blob compiles for the browser alone, so every test of the media legs drives a fake in its place. A test in a headless browser, which the `The same page on two architectures` Story (`ambre-roadmap.md` E5) brings to the repository. Done when `SYNC-140` reads `verified` |
 
 ---
 
