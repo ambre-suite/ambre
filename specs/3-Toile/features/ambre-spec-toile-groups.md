@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-149` | `INV` | An element MUST belong to at most one container, a group or a frame. | this spec section 3 | none | unheld -- the binding detaches a member from its current container and the frame handler does the same, and no test puts one element in two lists and reads the second one back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation; `ambre_toile::logic::convergence_tests::a_member_framed_out_of_its_group_shrinks_the_group` -- the union shrinks when a frame takes a member | none | verified |
-| `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | structural -- the group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height, so there is no field a peer could author a box into | none | verified |
+| `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group writes no change, and a rotation leaves no box of its own in the caches. The group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none | unheld -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one, but no test drives a group to empty and asserts it is gone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_container_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-154` | `POST` | A transform on a group MUST reach every member. | this spec section 3 | `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- both members at their translated rects | none | verified |
 | `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | none | unheld -- the test above nests nothing, and the two-peer property (`TOILE-017`) generates a group of a group but asserts agreement, not correctness: a move that stopped at the first level would leave both peers agreeing on it, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-155` | `FRAME` | A transform on a group MUST NOT resize it: its box is derived. | this spec section 3 | none | unheld -- the resize command names one element and the group carries no geometry to write (`TOILE-150`), so the refusal is structural at the schema and unread at the command, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-155` | `FRAME` | A transform on a group MUST NOT resize it: its box is derived. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group whose member a peer deleted writes no change, and after a rotation its caches equal the other peer's and a rebuild's | none | verified |
 
 ### 1.4 Ungroup
 
@@ -72,11 +72,11 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 13 `verified`, 0 `failing`, 13 `untested`. What holds is the happy path of each
-  gesture, and the two refusals a chord over a single element or a non-group answers. A mixed
-  ungroup unbinds its groups in silence. One row holds by construction: a group has no field a box
-  could be authored into. What is loose is the re-parenting, the frame conditions and the nested
-  case.
+* **Verification.** 14 `verified`, 12 `untested`. What holds is the happy path of each gesture, and
+  the two refusals a chord over a single element or a non-group answers. A mixed ungroup unbinds its
+  groups in silence. A resize aimed at a group writes nothing, and a rotation leaves its box
+  derived, even with a member a peer deleted. What is loose is the re-parenting, the frame
+  conditions and the nested case.
 
 ---
 
@@ -201,8 +201,8 @@ the user sees is one selection box around the union of the members, with the han
   top-level group. The branch that appends the children to an enclosing group's list is driven by
   nothing. So is the order they land in, which is the end of the list and not their old place.
 * **A group cannot be resized** (`TOILE-155`). Scaling the members under one drag is not designed, and
-  the resize command names a single element. The handles a group shows can move it and rotate it
-  and not stretch it.
+  the resize command refuses a group. The handles a group shows still offer a stretch. The command
+  writes nothing, so the box springs back to its members' union on release.
 * **The pruning is proven only through the rebuild equality** (`TOILE-054`). The property test would
   catch a group left behind, because the caches would stop matching a rebuild, and no test states the
   rule directly.

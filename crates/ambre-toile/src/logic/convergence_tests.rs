@@ -1623,6 +1623,43 @@ fn group_unions_bounds_and_sits_below_members() {
     );
 }
 
+/// Holds `TOILE-155` and `TOILE-150`: a resize aimed at a group writes nothing.
+/// A rotation leaves its box derived, even with a member a peer deleted.
+#[test]
+fn a_group_takes_no_box_from_a_resize_or_a_rotation() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    a.set_user_id(UserId::new());
+    b.set_user_id(UserId::new());
+    let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let y = create_rect(&mut a, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
+    b.apply_remote(&a.export_snapshot());
+    // A binds both while B deletes one: the merged group names a dead member.
+    let out = a.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), y],
+    });
+    let g = created_id(&out);
+    let deleted = b.handle_command(ToileCommand::DeleteElements { ids: vec![x] });
+    a.apply_remote(&deleted.update.expect("the delete is a change"));
+    b.apply_remote(&out.update.expect("the binding is a change"));
+
+    let resized = a.handle_command(ToileCommand::ResizeElement {
+        id: g.clone(),
+        new: Rect::new(0.0, 0.0, 60.0, 50.0),
+    });
+    assert!(resized.update.is_none(), "a group resize wrote a change");
+    let rotated = a.handle_command(ToileCommand::RotateElement {
+        id: g.clone(),
+        radians: 0.5,
+    });
+    b.apply_remote(&rotated.update.expect("the rotation is a change"));
+    let mut rebuilt = ToileState::new();
+    rebuilt.apply_remote(&a.export_snapshot());
+    assert_eq!(a.bounds_of(&g), None, "a group took a leaf box");
+    assert_eq!(a.debug_caches(), b.debug_caches());
+    assert_eq!(a.debug_caches(), rebuilt.debug_caches());
+}
+
 #[test]
 fn derive_populates_the_group_edge_on_members() {
     let mut st = ToileState::new();

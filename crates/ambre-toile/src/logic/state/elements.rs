@@ -17,7 +17,8 @@ use crate::logic::model::{
 use crate::logic::text_merge::merge_text;
 
 use super::codec::{
-    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb,
+    BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, str_of,
+    stroke_aabb,
 };
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
@@ -316,7 +317,9 @@ impl ToileState {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
-        if bool_of(&em, "locked") {
+        // A group's box is derived from its members, so a resize has nothing
+        // to write (`TOILE-150`, `TOILE-155`).
+        if bool_of(&em, "locked") || str_of(&em, "type") == "group" {
             return ToileOutcome::display_only(Vec::new());
         }
         let r = new.abs();
@@ -338,7 +341,11 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let _ = em.insert("rot", radians);
-        self.update_bounds(id, &em);
+        // A group holds no coordinates: its box stays the union of its members'
+        // (`TOILE-009`), never a leaf box read from absent fields.
+        if str_of(&em, "type") != "group" {
+            self.update_bounds(id, &em);
+        }
         self.recompute_groups();
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
