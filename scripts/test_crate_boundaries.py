@@ -47,7 +47,17 @@ def scratch(tmp: str) -> Path:
         "fn keys() { register(trame_chrome::COMMANDS); }\n",
     )
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
-    write(root, "crates/ambre-sync/Cargo.toml", '[dependencies]\ngloo-net = { workspace = true }\n')
+    write(
+        root,
+        "crates/ambre-sync/Cargo.toml",
+        '[dependencies]\ngloo-net = { workspace = true }\n\n[lints]\nworkspace = true\n',
+    )
+    write(
+        root,
+        cb.WORKSPACE,
+        '[workspace]\nmembers = [\n    "crates/ambre-sync",\n]\n\n'
+        '[workspace.lints.clippy]\nunwrap_used = "deny"\n',
+    )
     write(root, f"{cb.WORKER}/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
     write(root, cb.NETWORK_EXCEPTIONS[0], "fn font() { window.fetch_with_str(url); }\n")
     return root
@@ -65,10 +75,35 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_network(errors)
             cb.check_storage(errors)
             cb.check_passphrase(errors)
+            cb.check_lints(errors)
             return errors
 
     def test_the_real_tree_is_clean(self):
         self.assertEqual(self.run_checks(cb.ROOT), [])
+
+    def test_the_scratch_tree_is_clean(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(self.run_checks(scratch(tmp)), [])
+
+    def test_a_member_that_does_not_inherit_the_lints_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-sync/Cargo.toml", '[dependencies]\ngloo-net = { workspace = true }\n')
+            errors = self.run_checks(root)
+        self.assertTrue(any("does not inherit the workspace lints" in e for e in errors), errors)
+
+    def test_a_root_without_a_lint_table_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, cb.WORKSPACE, '[workspace]\nmembers = [\n    "crates/ambre-sync",\n]\n')
+            errors = self.run_checks(root)
+        self.assertTrue(any("no `[workspace.lints]` table" in e for e in errors), errors)
 
     def test_a_client_enabling_the_fixture_feature_is_refused(self):
         import tempfile

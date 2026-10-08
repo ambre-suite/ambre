@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 31 | 11 |
+| `architecture` | How the client is split, and why. | implemented | 32 | 11 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 1 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 3 |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 16 implemented, 22 partial, 7 design-only. 903 contract rows, 200 loose.**
+**45 features: 16 implemented, 22 partial, 7 design-only. 904 contract rows, 200 loose.**

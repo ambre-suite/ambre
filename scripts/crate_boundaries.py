@@ -51,6 +51,11 @@ passphrase in `SecretBytes`, which serializes so that it can cross the client
 bus. So no serialized struct of `ambre-sync` declares a secret-typed field or
 a field named for a passphrase or a password, and no JSON key or serde rename
 spells one.
+
+**Every crate takes the workspace lints** (`ARCH-032`). A lint denied in the
+root table binds only the crates that inherit it, and a new crate starts with
+the default set. So the root carries `[workspace.lints]`, and every member of
+the workspace inherits it.
 """
 
 from __future__ import annotations
@@ -133,6 +138,14 @@ SECRET_FIELD = re.compile(
     re.IGNORECASE,
 )
 SECRET_KEY = re.compile(rf"\"({SECRET_NAME})\"\s*:|rename\s*=\s*\"({SECRET_NAME})\"", re.IGNORECASE)
+
+
+# The root manifest, its member list, its lint table, and the two lines that
+# make a member inherit that table.
+WORKSPACE = "Cargo.toml"
+MEMBERS = re.compile(r"^members\s*=\s*\[([^\]]*)\]", re.MULTILINE)
+LINT_TABLE = re.compile(r"^\[workspace\.lints(?:\.\w+)?\]", re.MULTILINE)
+INHERITS_LINTS = re.compile(r"^\[lints\]\s*\n\s*workspace\s*=\s*true\b", re.MULTILINE)
 
 
 def read(rel: str) -> str:
@@ -331,6 +344,25 @@ def check_passphrase(errors: list[str]) -> int:
     return len(files)
 
 
+def check_lints(errors: list[str]) -> int:
+    """`ARCH-032`: the root carries a lint table, and every member inherits it."""
+    root = read(WORKSPACE)
+    if not LINT_TABLE.search(root):
+        errors.append(f"{WORKSPACE}: no `[workspace.lints]` table, so a crate has nothing to inherit")
+        return 0
+    members = MEMBERS.search(root)
+    if not members:
+        errors.append(f"{WORKSPACE}: no `members` list, so no crate is read for the lint table")
+        return 0
+    held = 0
+    for member in re.findall(r'"([^"]+)"', members.group(1)):
+        rel = f"{member}/Cargo.toml"
+        if not INHERITS_LINTS.search(read(rel)):
+            errors.append(f"{rel}: does not inherit the workspace lints (`[lints]` `workspace = true`)")
+        held += 1
+    return held
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -345,6 +377,7 @@ def main() -> int:
     network = check_network(errors)
     storage = check_storage(errors)
     secrets = check_passphrase(errors)
+    lints = check_lints(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -353,7 +386,8 @@ def main() -> int:
         f"{density} Rust files read for a density read, "
         f"{network} manifests and Rust files read for a network call, "
         f"{storage} worker files read for browser storage, "
-        f"{secrets} worker files read for a passphrase in a request"
+        f"{secrets} worker files read for a passphrase in a request, "
+        f"{lints} member manifests read for the workspace lints"
     )
     for line in errors:
         print(f"  {line}")
@@ -366,8 +400,9 @@ def main() -> int:
             "application type, the launcher must name no application's "
             "command, event or command id, only density.rs may read the "
             "display density, the network leaves from the Sync worker alone, "
-            "the worker writes nothing to browser storage, and no request "
-            "it sends names a passphrase.",
+            "the worker writes nothing to browser storage, no request "
+            "it sends names a passphrase, and every crate inherits the "
+            "workspace lints.",
             file=sys.stderr,
         )
         return 1

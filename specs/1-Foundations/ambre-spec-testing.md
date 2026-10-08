@@ -268,7 +268,7 @@ whether it blocks the current MVP.
 | :--- | :--- | :--- |
 | Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`, `SecretString` | not the mechanism, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible |
 | `#![forbid(unsafe_code)]` | 2 crates of 17 | the pillar is claimed workspace-wide, and zero `unsafe` is measured anywhere, so lifting it to every crate is free |
-| `[workspace.lints]` | absent | clippy runs the default set with `-D warnings`. No `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` |
+| `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc` and `missing_panics_doc`; no `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` yet |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | four targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser and the Markdown reader, one minute each in the CI `fuzz` job. The sealed open path and the Trame and Toile file readers have none |

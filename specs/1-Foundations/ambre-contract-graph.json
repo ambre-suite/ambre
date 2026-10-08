@@ -104,6 +104,7 @@
   {"edge": "cites-section", "from": "ARCH-021", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "ARCH-021", "to": "ambre_bus::conduit::Sender"},
   {"edge": "verified-by", "from": "ARCH-021", "to": "ambre_bus::conduit::Receiver"},
+  {"edge": "cites-section", "from": "ARCH-032", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "cites-section", "from": "ARCH-028", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "lands-with", "from": "ARCH-028", "to": "No panic path outside the tests"},
   {"edge": "cites-section", "from": "ARCH-013", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},

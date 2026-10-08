@@ -40,6 +40,7 @@ prefix is `ARCH`.
 | `ARCH-031` | `INV` | The Logic thread MUST finish a document's unfinished work before it merges a remote delta into that document or closes it. | this spec section 2; `TOILE-IO-028` | `ambre_logic::pass_tests::a_board_closed_mid_import_saves_it_whole`; `ambre_logic::pass_tests::a_remote_delta_mid_import_lands_the_import_first` | none | verified |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a queue it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the queue crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the queues | none | verified |
 | `ARCH-021` | `INV` | A queue end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
+| `ARCH-032` | `INV` | Every crate of the workspace MUST inherit the workspace lint table. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a root manifest without `[workspace.lints]` and a member that does not set `[lints]` `workspace = true` | none | verified |
 | `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | none | fails -- about 330 sites across the workspace hold such a path, most of them indexing in Trame, Toile and the canvas, and no lint refuses a new one; lands with the `No panic path outside the tests` Story (`ambre-roadmap.md` E9) | failing |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -81,7 +82,7 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 17 `verified`, 3 `partial`, 1 `failing`, 10 `untested`. The build refuses a
+* **Verification.** 18 `verified`, 3 `partial`, 1 `failing`, 10 `untested`. The build refuses a
   cycle, a misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue.
   It refuses application logic in the launcher too. Host tests hold the Logic loop's pass, its
   unfinished work, the wake, the full queue and the disconnection of each queue. The rest is held by
