@@ -173,7 +173,7 @@ where the two disagree; this table invents no rung of its own.
 | `ci-gate` | a gate in `scripts/`, run by a `just` recipe in the CI `lint` job. The clause names the script |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
 | `qa-manual` | the places the doctrine declares mechanism-free, one obstacle each of `1-Foundations/ambre-spec-testing.md section 3` |
-| `human-review` | cryptography, line by line, by decision |
+| `human-review` | a reading no mechanism replaces, one obstacle of `1-Foundations/ambre-spec-testing.md section 3` |
 | `none` | no mechanism. Explicit, and never the same claim as an empty cell |
 | `not built` | the code does not exist yet |
 

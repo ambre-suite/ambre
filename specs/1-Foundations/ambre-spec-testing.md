@@ -69,7 +69,7 @@ here only when it brings a shape this table does not hold.
 | :--- | :--- | :--- |
 | A pure engine: parser, VM, dependency graph | pure properties | `proptest` on host: order independence, exactness, parser round trip, cycle detection. No I/O, thousands of cases |
 | CRDT state | reference model | 2-peer convergence through the application's mock sync handle plus `apply_remote`; every incremental cache asserted against a full rebuild |
-| Cryptography | strict, and read | round trip, tampering, zeroize, `proptest` -- **plus line-by-line human review**. The one place where reading is the mechanism, by choice |
+| Cryptography | strict | round trip, tampering, zeroize, `proptest` |
 | The ZK boundary | typing first, negative tests second | make plaintext **unrepresentable** at the transport boundary; what the types cannot hold becomes a test asserting an absence |
 | A service that **is** persistence | model-based, over the real services | never mock the database: for such a service, mocking tests the mock. `#[sqlx::test]` gives one database per test. Order of operations produces the bugs, and order is what nobody enumerates by hand |
 | A decoder fed by a user file or by the relay | totality first | a round trip, a malformed case, a random-bytes case, then a `cargo-fuzz` target. Totality is not optional |

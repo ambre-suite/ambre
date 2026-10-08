@@ -19,7 +19,7 @@ normative in `specs/ambre-spec-template.md`, section 1.
 | CRDT state (`trame`, `toile`, `prose`) | Reference model | 2-peer convergence through `MockSyncHandle` and `apply_remote`; an incremental cache against a full rebuild. |
 | Command and event routing (`ambre-logic`, `ambre-sync`) | Host unit test | Test `ambre_bus::conduit` channels on the Logic side; `LogicSink::channel` on the sync side. |
 | Anything at the ZK boundary | Typing first, negative test second | Make plaintext unrepresentable (`Ciphertext`, `SecretBytes`). What the type cannot hold becomes a test asserting an absence. |
-| `ambre-crypto` | Strict | Round-trip, tampering, zeroize, `proptest`, plus line-by-line human review. |
+| `ambre-crypto` | Strict | Round-trip, tampering, zeroize, `proptest`. |
 | `ambre-server` | Model-based over the real services | `#[sqlx::test]`. Never mock the database: for a service that is persistence, mocking tests the mock. |
 | Draw calls | Recording mock | `RecordingSurface`, on host. |
 | A parser on hostile input: `.ambre`, PDF, xlsx, docx, frame decoder | Fuzzing | Not set up yet. Until then, a corpus of malformed inputs as unit tests. |
