@@ -118,22 +118,17 @@ impl SyncState {
             return;
         };
 
+        let upload = Upload {
+            id,
+            document_id,
+            data,
+            address,
+            doc_key,
+            signing_key,
+        };
         wasm_bindgen_futures::spawn_local(async move {
             let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
-            let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
-                Ok(blob) => upload_leg(&GlooHttp { auth }, &base, &content_hash, &blob).await,
-                Err(e) => Err(format!("seal: {e}")),
-            };
-            match outcome {
-                Ok(()) => {
-                    let _ = tx.send(SyncEvent::MediaUploaded {
-                        id,
-                        document_id,
-                        content_hash,
-                    });
-                }
-                Err(message) => report(&logic_tx, id, "UploadMedia", message),
-            }
+            upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
         });
     }
 
@@ -182,17 +177,8 @@ impl SyncState {
 
         wasm_bindgen_futures::spawn_local(async move {
             let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
-            match download_leg(&GlooHttp { auth }, &base, &content_hash, &keyring).await {
-                Ok(data) => {
-                    let _ = tx.send(SyncEvent::MediaDownloaded {
-                        id,
-                        document_id,
-                        content_hash,
-                        data,
-                    });
-                }
-                Err(message) => report(&logic_tx, id, "DownloadMedia", message),
-            }
+            let http = GlooHttp { auth };
+            download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
         });
     }
 }
@@ -237,6 +223,77 @@ fn report(logic_tx: &LogicSink, id: RequestId, request: &str, message: String) {
         code: 500,
         message,
     });
+}
+
+/// One upload a caller asked for: the plaintext, where it goes, and the keys
+/// that seal it.
+pub(crate) struct Upload {
+    id: RequestId,
+    document_id: DocumentId,
+    data: Vec<u8>,
+    address: Address,
+    doc_key: DocumentKey,
+    signing_key: SigningKey,
+}
+
+/// Seals and uploads one blob, then answers the caller (`SYNC-076`). A
+/// success answers with the address. A failure at any step is reported, and
+/// the success event is never sent.
+async fn upload_media(
+    http: &impl MediaHttp,
+    base: &str,
+    upload: Upload,
+    tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let Upload {
+        id,
+        document_id,
+        data,
+        address,
+        doc_key,
+        signing_key,
+    } = upload;
+    let content_hash = hex::encode(address);
+    let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
+        Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
+        Err(e) => Err(format!("seal: {e}")),
+    };
+    match outcome {
+        Ok(()) => {
+            let _ = tx.send(SyncEvent::MediaUploaded {
+                id,
+                document_id,
+                content_hash,
+            });
+        }
+        Err(message) => report(logic_tx, id, "UploadMedia", message),
+    }
+}
+
+/// Downloads and opens one blob, then answers the caller (`SYNC-055`). A
+/// success answers with the whole plaintext. A failure is reported, and no
+/// byte of the blob is sent.
+async fn download_media(
+    http: &impl MediaHttp,
+    base: &str,
+    id: RequestId,
+    content_hash: String,
+    keyring: &crate::chain::Keyring,
+    tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    match download_leg(http, base, &content_hash, keyring).await {
+        Ok(data) => {
+            let _ = tx.send(SyncEvent::MediaDownloaded {
+                id,
+                document_id: keyring.document_id,
+                content_hash,
+                data,
+            });
+        }
+        Err(message) => report(logic_tx, id, "DownloadMedia", message),
+    }
 }
 
 /// Asks for a link, puts the sealed blob, then confirms it (`SYNC-076`). Each
@@ -381,16 +438,40 @@ mod tests {
         }
     }
 
-    /// Holds `SYNC-076`: an upload failing at any step reports the step and
-    /// confirms nothing, and a whole one confirms once, last.
+    /// The answers one request drew: the error reports the application got,
+    /// and the success events the worker sent.
+    fn answers(
+        logic: &ambre_bus::conduit::Receiver<LogicEvent>,
+        events: &ambre_bus::conduit::Receiver<SyncEvent>,
+    ) -> (Vec<(Option<RequestId>, String)>, Vec<SyncEvent>) {
+        let errors = logic
+            .try_iter()
+            .filter_map(|event| match event {
+                LogicEvent::ApiError { id, request, .. } => Some((id, request)),
+                _ => None,
+            })
+            .collect();
+        (errors, events.try_iter().collect())
+    }
+
+    /// Holds `SYNC-076`: an upload failing at any step confirms nothing and
+    /// reports the failure to the caller. A whole one confirms once, last, and
+    /// answers with the address (`SYNC-075`).
     #[tokio::test]
     async fn a_failed_upload_step_confirms_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
         let document_id = DocumentId::new();
-        let signing = SigningKey::from_bytes(&[0x07; 32]);
         let address = ambre_crypto::commitment::media_address(&key, b"a picture");
-        let blob = seal_blob(b"a picture", document_id, &address, &key, &signing).unwrap();
-        let hash = hex::encode(address);
+        let upload = |id| Upload {
+            id,
+            document_id,
+            data: b"a picture".to_vec(),
+            address,
+            doc_key: key.clone(),
+            signing_key: SigningKey::from_bytes(&[0x07; 32]),
+        };
+        let (logic, logic_rx) = LogicSink::channel();
+        let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
 
         for (fail, ran) in [
             ("link", &["link"][..]),
@@ -398,18 +479,29 @@ mod tests {
             ("confirm", &["link", "put", "confirm"][..]),
         ] {
             let http = FakeMedia::new(fail, Vec::new());
-            let outcome = upload_leg(&http, "base", &hash, &blob).await;
-            assert!(outcome.is_err(), "{fail}");
+            let id = RequestId::next();
+            upload_media(&http, "base", upload(id), &tx, &logic).await;
             assert_eq!(*http.steps.borrow(), ran);
+            let (errors, sent) = answers(&logic_rx, &events);
+            assert_eq!(errors, [(Some(id), "UploadMedia".to_owned())], "{fail}");
+            assert!(sent.is_empty(), "{fail} answered a success");
         }
         let http = FakeMedia::new("", Vec::new());
-        assert!(upload_leg(&http, "base", &hash, &blob).await.is_ok());
+        let id = RequestId::next();
+        upload_media(&http, "base", upload(id), &tx, &logic).await;
         assert_eq!(*http.steps.borrow(), ["link", "put", "confirm"]);
+        let (errors, sent) = answers(&logic_rx, &events);
+        assert!(errors.is_empty());
+        assert!(matches!(
+            &sent[..],
+            [SyncEvent::MediaUploaded { id: answered, content_hash, .. }]
+                if *answered == id && *content_hash == hex::encode(address)
+        ));
     }
 
     /// Holds `SYNC-055`: a download that fails to fetch, or serves a short,
-    /// altered or foreign blob, reports and delivers nothing. A whole one
-    /// delivers the bytes.
+    /// altered or foreign blob, reports the failure and delivers no byte. A
+    /// whole one delivers the plaintext (`SYNC-077`).
     #[tokio::test]
     async fn a_blob_that_fails_to_open_delivers_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
@@ -424,6 +516,8 @@ mod tests {
         let mut altered = blob.clone();
         *altered.last_mut().unwrap() ^= 1;
         let (foreign, _) = sealed(b"a picture", DocumentId::new(), &key);
+        let (logic, logic_rx) = LogicSink::channel();
+        let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
 
         for (fail, served) in [
             ("link", blob.clone()),
@@ -433,14 +527,22 @@ mod tests {
             ("", foreign),
         ] {
             let http = FakeMedia::new(fail, served);
-            let outcome = download_leg(&http, "base", &hash, &keyring).await;
-            assert!(outcome.is_err(), "{fail} delivered {outcome:?}");
+            let id = RequestId::next();
+            download_media(&http, "base", id, hash.clone(), &keyring, &tx, &logic).await;
+            let (errors, sent) = answers(&logic_rx, &events);
+            assert_eq!(errors, [(Some(id), "DownloadMedia".to_owned())], "{fail}");
+            assert!(sent.is_empty(), "{fail} delivered bytes");
         }
         let http = FakeMedia::new("", blob);
-        assert_eq!(
-            download_leg(&http, "base", &hash, &keyring).await.unwrap(),
-            b"a picture"
-        );
+        let id = RequestId::next();
+        download_media(&http, "base", id, hash.clone(), &keyring, &tx, &logic).await;
+        let (errors, sent) = answers(&logic_rx, &events);
+        assert!(errors.is_empty());
+        assert!(matches!(
+            &sent[..],
+            [SyncEvent::MediaDownloaded { id: answered, content_hash, data, .. }]
+                if *answered == id && *content_hash == hash && data == b"a picture"
+        ));
     }
 
     fn sealed(data: &[u8], document_id: DocumentId, key: &DocumentKey) -> (Vec<u8>, String) {

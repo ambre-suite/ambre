@@ -34,10 +34,10 @@ the put are the Sync worker's.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none | unheld -- the worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- an upload driven through a fake transport answers once, after the confirmation, with the request and the keyed address | none | verified |
 | `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | type-level -- the worker's only upload takes a `SealedBlob`, whose bytes only the seal builds; `ambre_sync::pipeline::tests::a_blob_bound_for_storage_is_sealed` -- such a blob opens back under the document key alone | none | verified |
 | `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | `ambre_sync::http::tests::an_upload_names_only_the_address_and_the_size` -- both requests serialize to the keyed address and the sealed size, and to no other field | none | verified |
-| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- a failing link, put or confirmation each reports its step, and no failure before the confirmation reaches it | none | verified |
+| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- a failing link, put or confirmation each reaches the application as an error for the request, with no address answered, and no failure before the confirmation reaches it | none | verified |
 
 ### 1.3 Show a picture
 
@@ -45,10 +45,10 @@ The application names an address it does not hold. The worker fetches the object
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a download driven through a fake transport answers once, with the request, the address and the whole plaintext | none | verified |
 | `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
 | `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | `ambre_sync::media::tests::a_download_refuses_a_blob_the_address_does_not_name` -- it refuses a blob served in place of another, and one a member sealed under the address over other bytes, which only the recomputed address catches. It drives the open the leg calls, not the leg, which runs only in a browser | none | verified |
-| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a failed link or fetch, and a short, altered or foreign blob, each fail the leg with no bytes, and a whole blob delivers | none | verified |
+| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a failed link or fetch, and a short, altered or foreign blob, each reach the application as an error for the request, and no byte is answered | none | verified |
 
 * **Budget.** none of its own for the transfer. `ambre-spec-budgets.md section 1` budgets the first
   paint of a picture and the absence of a refetch, and both are the reading application's. The seal
@@ -56,9 +56,9 @@ The application names an address it does not hold. The worker fetches the object
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 9 `verified`, 2 `untested`. The address and the two requests are held on the
-  host, and so are the legs' failures, driven through a fake transport. What is loose is the answer
-  each leg hands the application, and no test round-trips against object storage.
+* **Verification.** 11 `verified`. The address and the two requests are held on the host. So is each
+  leg end to end through a fake transport, up to the answer or the error it hands the application.
+  What is loose is the browser transport itself, and no test round-trips against object storage.
 
 ---
 
