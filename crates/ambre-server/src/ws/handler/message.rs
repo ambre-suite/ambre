@@ -1081,7 +1081,7 @@ mod ephemeral_binding_tests {
 
     /// A properly signed ephemeral: the transcript matches
     /// `verify_ephemeral_signature`, so the relay accepts and records it.
-    fn signed_ephemeral(
+    pub(super) fn signed_ephemeral(
         signing_key: &ed25519_dalek::SigningKey,
         pub_key: &PublicKey,
         doc_id: DocumentId,
@@ -1455,6 +1455,269 @@ mod delta_size_cap_tests {
     }
 }
 
+// Who the relay serves on a live socket: the subscription set, the membership
+// recheck, and the presence path kept apart from the history. Each test reads
+// the stores back, so it needs Postgres and Redis.
+#[cfg(test)]
+mod access_tests {
+    use super::*;
+    use crate::test_helpers::{create_test_document, create_test_user};
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
+    use rustis::commands::{GenericCommands, HashCommands, ListCommands};
+
+    async fn state_on(pool: sqlx::PgPool) -> Arc<AppState> {
+        let redis = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("need Redis for tests");
+        let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+        Arc::new(AppState {
+            db: pool,
+            redis,
+            pubsub,
+            s3: aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build()),
+            s3_bucket: "test-bucket".into(),
+            config: Arc::new(crate::state::Config::default()),
+            jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
+            oidc_clients: Arc::new(HashMap::new()),
+        })
+    }
+
+    /// A connection of `user_id`, subscribed to `doc_id` as a writer, whose
+    /// membership was verified `age` ago.
+    fn conn_of(
+        user_id: UserId,
+        key: PublicKey,
+        doc_id: DocumentId,
+        age: Duration,
+    ) -> WsConnectionState {
+        let verified = Instant::now()
+            .checked_sub(age)
+            .expect("a monotonic clock past the age");
+        WsConnectionState {
+            user_id,
+            signing_pubkey: key,
+            doc_subscriptions: HashSet::from([doc_id]),
+            doc_access_verified_at: HashMap::from([(doc_id, verified)]),
+            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            last_replay_at: HashMap::new(),
+            channel_subscriptions: HashSet::new(),
+            msg_bucket: TokenBucket::new(1000, 1000),
+        }
+    }
+
+    fn update_for(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+        Update {
+            ciphertext: Ciphertext(vec![1, 2, 3]),
+            nonce: Nonce([0u8; 24]),
+            public_data: UpdatePublicData {
+                document_id: doc_id,
+                pub_key,
+                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                clock: Clock(1),
+            },
+            commitment_tag: CommitmentTag([0u8; 32]),
+            signature: Signature([0u8; 64]),
+        }
+    }
+
+    fn replies(rx: &mut mpsc::Receiver<Vec<u8>>) -> Vec<WsServerMsg> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|wire| decode_server_msg(&wire).unwrap())
+            .collect()
+    }
+
+    /// A document with its owner and one editor, the editor's id returned.
+    async fn shared_document(pool: &sqlx::PgPool) -> (DocumentId, UserId) {
+        let owner = create_test_user(pool, "owner@ambre.app").await;
+        let editor = create_test_user(pool, "editor@ambre.app").await;
+        let doc_id = create_test_document(pool, owner, "toile").await;
+        db::add_document_member(pool, &doc_id, &editor, "editor", &[5u8; 32], &owner)
+            .await
+            .unwrap();
+        (doc_id, editor)
+    }
+
+    /// `SRV-042`: a frame for a document this connection never subscribed to is
+    /// refused before any store is read or written, on all three paths.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_frame_for_an_unsubscribed_document_is_refused(pool: sqlx::PgPool) {
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[31u8; 32]);
+        let key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let mut conn = conn_of(editor, key.clone(), doc_id, Duration::ZERO);
+        conn.doc_subscriptions.clear();
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
+        assert!(matches!(
+            replies(&mut rx).as_slice(),
+            [WsServerMsg::Error { code: 403, .. }]
+        ));
+        let eph =
+            super::ephemeral_binding_tests::signed_ephemeral(&signing_key, &key, doc_id, vec![1]);
+        handle_ephemeral(&state, &mut conn, eph).await;
+        handle_request_missing(
+            &state,
+            &mut conn,
+            doc_id,
+            ambre_protocol::messages::Seq(0),
+            &tx,
+        )
+        .await;
+        assert!(replies(&mut rx).is_empty(), "a replay for it sends nothing");
+
+        let presence: HashMap<String, String> = state
+            .redis
+            .hgetall(format!("doc:{doc_id}:presence"))
+            .await
+            .unwrap();
+        let pending: usize = state
+            .redis
+            .llen(format!("doc:{doc_id}:pending"))
+            .await
+            .unwrap();
+        assert!(presence.is_empty() && pending == 0);
+    }
+
+    /// `SRV-043`: a member removed while connected is served until the cached
+    /// check ages past the thirty-second mark, and refused on the next frame.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_member_removed_mid_session_is_no_longer_served(pool: sqlx::PgPool) {
+        assert!(MEMBERSHIP_RECHECK_TTL <= Duration::from_secs(30));
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let key = PublicKey::from_array([32u8; 32]);
+        db::remove_document_member(&pool, &doc_id, &editor)
+            .await
+            .unwrap();
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        let mut conn = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
+        handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
+        match replies(&mut rx).as_slice() {
+            [WsServerMsg::Error { code: 403, message }] => {
+                assert_eq!(message, "document access revoked");
+            }
+            other => panic!("expected a revocation, got {other:?}"),
+        }
+        assert!(
+            !conn.doc_subscriptions.contains(&doc_id),
+            "the subscription is dropped"
+        );
+        let pending: usize = state
+            .redis
+            .llen(format!("doc:{doc_id}:pending"))
+            .await
+            .unwrap();
+        assert_eq!(pending, 0);
+    }
+
+    /// `SRV-085`: a replay asked after the membership was removed is refused
+    /// and answered with nothing, not even an empty page.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_replay_after_a_removal_is_answered_with_nothing(pool: sqlx::PgPool) {
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let key = PublicKey::from_array([33u8; 32]);
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+
+        let mut kept = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
+        handle_request_missing(
+            &state,
+            &mut kept,
+            doc_id,
+            ambre_protocol::messages::Seq(0),
+            &tx,
+        )
+        .await;
+        assert!(
+            matches!(
+                replies(&mut rx).as_slice(),
+                [WsServerMsg::MissingUpdates { .. }]
+            ),
+            "a member is answered"
+        );
+
+        db::remove_document_member(&pool, &doc_id, &editor)
+            .await
+            .unwrap();
+        let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
+        handle_request_missing(
+            &state,
+            &mut removed,
+            doc_id,
+            ambre_protocol::messages::Seq(0),
+            &tx,
+        )
+        .await;
+        assert!(replies(&mut rx).is_empty());
+        assert!(!removed.doc_subscriptions.contains(&doc_id));
+    }
+
+    /// `SRV-089`: a presence frame is recorded, and takes no sequence number,
+    /// no clock and no place in the pending list or the delta index.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_presence_frame_leaves_the_history_untouched(pool: sqlx::PgPool) {
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[34u8; 32]);
+        let key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let mut conn = conn_of(editor, key.clone(), doc_id, Duration::ZERO);
+
+        let eph =
+            super::ephemeral_binding_tests::signed_ephemeral(&signing_key, &key, doc_id, vec![7]);
+        handle_ephemeral(&state, &mut conn, eph).await;
+
+        let presence: HashMap<String, String> = state
+            .redis
+            .hgetall(format!("doc:{doc_id}:presence"))
+            .await
+            .unwrap();
+        assert!(
+            presence.contains_key(&key.to_hex()),
+            "the frame was recorded"
+        );
+        let history: usize = state
+            .redis
+            .exists([
+                format!("doc:{doc_id}:seq"),
+                format!("doc:{doc_id}:clocks"),
+                format!("doc:{doc_id}:pending"),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(history, 0, "no number, no clock, no pending entry");
+        assert!(
+            db::get_updates_after(&pool, &doc_id, 0, 10)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let _ = state.redis.del(format!("doc:{doc_id}:presence")).await;
+    }
+}
+
 #[cfg(test)]
 mod ed25519_tests {
     use super::*;
@@ -1504,6 +1767,44 @@ mod ed25519_tests {
         };
 
         verify_update_signature(&pubkey, &update).expect("valid signature must be accepted");
+    }
+
+    /// Holds `SYNC-072` on the relay: the second encoding of a valid signature
+    /// is refused, and so is a small-order key with its universal forgery.
+    #[test]
+    fn only_the_canonical_signature_is_accepted() {
+        // The order of the Ed25519 group, little-endian.
+        const GROUP_ORDER: [u8; 32] = [
+            0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9,
+            0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10,
+        ];
+        let signing_key = SigningKey::from_bytes(&[9u8; 32]);
+        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let mut signed = Vec::new();
+        for field in [&b"n"[..], b"c", b"p", b"t"] {
+            push_framed(&mut signed, field);
+        }
+        let sig = signing_key.sign(&signed).to_bytes();
+        assert!(verify_sealed_signature(&pubkey, b"n", b"c", b"p", b"t", &sig).is_ok());
+
+        // The scalar raised by the group order: the same point equation holds.
+        let mut malleated = sig;
+        let mut carry = 0u16;
+        for (s, l) in malleated[32..].iter_mut().zip(GROUP_ORDER) {
+            let sum = u16::from(*s) + u16::from(l) + carry;
+            *s = sum as u8;
+            carry = sum >> 8;
+        }
+        assert!(verify_sealed_signature(&pubkey, b"n", b"c", b"p", b"t", &malleated).is_err());
+
+        // The identity point, and (R = identity, S = 0), valid for any message
+        // under a lax check.
+        let mut identity = [0u8; 32];
+        identity[0] = 1;
+        let mut forged = [0u8; 64];
+        forged[..32].copy_from_slice(&identity);
+        let small = PublicKey::from_array(identity);
+        assert!(verify_sealed_signature(&small, b"n", b"c", b"p", b"t", &forged).is_err());
     }
 
     #[test]

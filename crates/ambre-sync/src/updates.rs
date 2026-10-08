@@ -45,6 +45,13 @@ impl SyncState {
             tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
             return None;
         };
+        if !doc_state.first_arrival(seq) {
+            tracing::debug!(
+                "[Sync] dropping a second copy of seq={} doc={document_id}",
+                seq.0
+            );
+            return None;
+        }
         doc_state.last_seq = seq;
         if authored_by_us {
             doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock.0);
@@ -309,56 +316,25 @@ impl SyncState {
                         .await,
                 );
                 let (doc_key, server_created, signing_keys, role, rotation_owed) = match answer {
-                    MembersAnswer::Exists(resp) => {
-                        // Our own role rides the same response (`architecture`).
-                        // An absent or unparseable row means we cannot establish
-                        // write access. Fall back to the safest client-side
-                        // assumption, not the most permissive one. `Viewer` merely
-                        // hides affordances, whereas a wrong `Owner` would offer
-                        // edits the server then rejects.
-                        let role = crate::sharing::own_role(
-                            resp.members
-                                .iter()
-                                .map(|m| (m.user_id.as_str(), m.role.as_str())),
-                            my_user_id,
-                        );
-                        // Harvest the presence directory from the same response
-                        // that carries our wrapped key. Every member's Ed25519
-                        // signing key is already here, so resolving an ephemeral
-                        // author needs no extra round-trip
-                        // (`ambre-spec-membership.md`).
-                        let signing_keys = crate::sharing::presence_directory(
-                            resp.members
-                                .iter()
-                                .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
-                        );
-                        // The document exists server-side: our wrapped
-                        // DocumentKey MUST unwrap cleanly. A failure here is a
-                        // genuine auth error: a wrong exchange key, a tampered
-                        // row, or a real attack. Never substitute a random key.
-                        // That would "open" the document and then fail every
-                        // subsequent decrypt with a confusing commitment
-                        // mismatch instead of a clear auth error (H3).
-                        match &exchange_key {
-                            Some(ek) => match Self::unwrap_document_key(ek, &resp.members) {
-                                Ok(key) => (key, true, signing_keys, role, resp.rotation_owed),
-                                Err(_) => {
-                                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                                        document_id: doc_id,
-                                        message: "cannot unwrap document key".into(),
-                                    });
-                                    return;
-                                }
-                            },
-                            None => {
+                    MembersAnswer::Exists(resp) => match &exchange_key {
+                        Some(ek) => match Self::opened_from_members(&resp, ek, my_user_id) {
+                            Ok(o) => (o.doc_key, true, o.signing_keys, o.role, o.rotation_owed),
+                            Err(_) => {
                                 let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                     document_id: doc_id,
-                                    message: "session not ready".into(),
+                                    message: "cannot unwrap document key".into(),
                                 });
                                 return;
                             }
+                        },
+                        None => {
+                            let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                                document_id: doc_id,
+                                message: "session not ready".into(),
+                            });
+                            return;
                         }
-                    }
+                    },
                     // Not found: the document is local-only. No members response
                     // means no directory: a local-only doc has no peers to resolve
                     // presence for anyway, and its creator owns it.
@@ -518,6 +494,38 @@ impl SyncState {
         let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
         ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub_bytes, &wrapped)
             .map_err(|e| format!("ECDH unwrap: {e}"))
+    }
+
+    /// Reads the key, the directory and our role out of ONE members answer
+    /// (`SYNC-092`).
+    ///
+    /// A key that fails to unwrap is an authentication error, and no key is
+    /// generated in its place (`SYNC-012`). A generated key would fork the
+    /// document in silence. An absent or unparsable own row reads as `Viewer`,
+    /// the safe direction for a gate the server enforces anyway.
+    pub(crate) fn opened_from_members(
+        resp: &http::MembersResponse,
+        exchange_key: &x25519_dalek::StaticSecret,
+        my_user_id: Option<UserId>,
+    ) -> Result<OpenedMembers, String> {
+        let doc_key = Self::unwrap_document_key(exchange_key, &resp.members)?;
+        let role = crate::sharing::own_role(
+            resp.members
+                .iter()
+                .map(|m| (m.user_id.as_str(), m.role.as_str())),
+            my_user_id,
+        );
+        let signing_keys = crate::sharing::presence_directory(
+            resp.members
+                .iter()
+                .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+        );
+        Ok(OpenedMembers {
+            doc_key,
+            signing_keys,
+            role,
+            rotation_owed: resp.rotation_owed,
+        })
     }
 
     pub(crate) fn handle_close_document(&mut self, document_id: DocumentId) {
@@ -949,6 +957,14 @@ impl SyncState {
     }
 }
 
+/// What an open reads out of one members answer (`SYNC-092`).
+pub(crate) struct OpenedMembers {
+    pub doc_key: DocumentKey,
+    pub signing_keys: Vec<([u8; 32], UserId)>,
+    pub role: Role,
+    pub rotation_owed: bool,
+}
+
 /// What the members request says about a document being opened (`SYNC-040`).
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum MembersAnswer<T> {
@@ -976,6 +992,7 @@ impl<T> MembersAnswer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_protocol::SeqUpdate;
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
@@ -992,6 +1009,71 @@ mod tests {
             MembersAnswer::classify(Ok(Some(7))),
             MembersAnswer::Exists(7)
         );
+    }
+
+    /// One members row for `uid`, its key wrapped by `wrapper` for `holder`.
+    fn member_row(
+        uid: UserId,
+        holder: &x25519_dalek::StaticSecret,
+        wrapper: &x25519_dalek::StaticSecret,
+        doc_key: &DocumentKey,
+        role: &str,
+    ) -> http::MemberEntry {
+        let holder_pub = x25519_dalek::PublicKey::from(holder).to_bytes();
+        let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
+        http::MemberEntry {
+            user_id: uid.to_string(),
+            signing_pub_key: hex::encode([uid.as_bytes()[0]; 32]),
+            exchange_pub_key: hex::encode(holder_pub),
+            doc_key_enc: crate::sharing::wrap_key_b64(wrapper, &holder_pub, doc_key).unwrap(),
+            role: role.into(),
+            wrapper_exchange_pub_key: hex::encode(wrapper_pub),
+        }
+    }
+
+    /// Holds `SYNC-092`: the key, the directory and the role all come out of
+    /// the one answer handed in, and nothing else is consulted.
+    #[test]
+    fn the_key_the_directory_and_the_role_come_from_one_answer() {
+        let me = UserId::new();
+        let peer = UserId::new();
+        let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
+        let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
+        let doc_key = DocumentKey::generate();
+        let resp = http::MembersResponse {
+            members: vec![
+                member_row(me, &my_xk, &peer_xk, &doc_key, "editor"),
+                member_row(peer, &peer_xk, &peer_xk, &doc_key, "owner"),
+            ],
+            rotation_owed: true,
+        };
+        let opened = SyncState::opened_from_members(&resp, &my_xk, Some(me)).unwrap();
+        assert!(opened.doc_key.id() == doc_key.id());
+        assert_eq!(opened.role, Role::Editor);
+        let ids: Vec<UserId> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
+        assert_eq!(ids, vec![me, peer]);
+        assert!(opened.rotation_owed);
+    }
+
+    /// Holds `SYNC-012`: a key row that does not unwrap fails the open, and no
+    /// key is generated in its place.
+    #[test]
+    fn a_key_that_does_not_unwrap_opens_nothing() {
+        let me = UserId::new();
+        let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
+        let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
+        let mut row = member_row(me, &my_xk, &peer_xk, &DocumentKey::generate(), "editor");
+        let mut raw = base64::engine::general_purpose::URL_SAFE
+            .decode(&row.doc_key_enc)
+            .unwrap();
+        let last = raw.len() - 1;
+        raw[last] ^= 1;
+        row.doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&raw);
+        let resp = http::MembersResponse {
+            members: vec![row],
+            rotation_owed: false,
+        };
+        assert!(SyncState::opened_from_members(&resp, &my_xk, Some(me)).is_err());
     }
 
     /// A `SyncState` with one opened document, a controlled `doc_key` and a known
@@ -1607,8 +1689,11 @@ mod tests {
         // The gap closes; the next one asks again.
         state.snapshot_known(doc, parent);
         let other = SnapshotId::new();
+        // The relay numbers every delta once, so the next gap takes new numbers.
+        let first = QUARANTINE_ALERT as u64 + 50;
         for clock in 1..=(QUARANTINE_ALERT as u64) {
-            state.receive_update(Seq(clock), make_update(doc, other, clock, b"x", &key, &sk));
+            let update = make_update(doc, other, clock, b"x", &key, &sk);
+            state.receive_update(Seq(first + clock), update);
         }
         assert_eq!(asks(&ws_rx), 1, "one request for the next gap");
     }
@@ -1733,5 +1818,253 @@ mod tests {
             state.handle_send_update(doc, b"a".to_vec());
             assert_eq!(drain_ws(&ws_rx).is_empty(), held, "{role:?}");
         }
+    }
+
+    /// Holds `SYNC-024`: each update takes a clock above every one this client
+    /// used. A reopened document starts again from the echoes of its own
+    /// frames, never from one.
+    #[test]
+    fn each_update_takes_a_clock_above_every_one_used() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let clocks: Vec<u64> = sent_updates(&ws_rx, &[&key])
+            .into_iter()
+            .map(|(clock, ..)| clock)
+            .collect();
+        assert_eq!(clocks, [1, 2]);
+
+        // A reload forgets the counter; the replay echoes the two frames back.
+        state.documents.insert(
+            doc,
+            SyncDocumentState::new(doc, key.clone(), DocType::Trame, true),
+        );
+        state.receive_update(Seq(1), make_update(doc, snap, 1, b"a", &key, &sk));
+        state.receive_update(Seq(2), make_update(doc, snap, 2, b"b", &key, &sk));
+        state.handle_send_update(doc, b"c".to_vec());
+        assert_eq!(
+            sent_updates(&ws_rx, &[&key]),
+            vec![(3, key.id(), b"c".to_vec())]
+        );
+    }
+
+    /// Holds `SYNC-085`: an open sends a history request and no update, with
+    /// or without a snapshot to read.
+    #[test]
+    fn an_open_sends_no_update() {
+        for with_snapshot in [false, true] {
+            let (mut state, _rx, _doc, _key, sk, _snap) = setup();
+            state.signing_key = Some(sk.clone());
+            let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+            state.set_mock_ws(ws_tx);
+            let doc = DocumentId::new();
+            let key = DocumentKey::generate();
+            let snapshot_id = SnapshotId::new();
+            let blob = with_snapshot.then(|| snapshot_blob(doc, snapshot_id, b"s", &key, &sk));
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key,
+                snapshot_payload: blob,
+                snapshot_id: if with_snapshot {
+                    snapshot_id
+                } else {
+                    SnapshotId::genesis(doc)
+                },
+                covered_seq: Seq(u64::from(with_snapshot)),
+                doc_type: DocType::Trame,
+                server_created: true,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: false,
+                links: Vec::new(),
+            });
+            let sent = drain_ws(&ws_rx);
+            assert!(
+                sent.iter()
+                    .any(|m| matches!(m, WsClientMsg::RequestMissing { .. })),
+                "the open asks for the history"
+            );
+            assert!(
+                !sent.iter().any(|m| matches!(m, WsClientMsg::Update(_))),
+                "the open sent an update: {sent:?}"
+            );
+        }
+    }
+
+    /// Holds `SYNC-087`: a reconnect replay that overlaps a broadcast already
+    /// received delivers the overlap once. A copy held in quarantine is not
+    /// held a second time either.
+    #[test]
+    fn a_reconnect_replay_applies_nothing_twice() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let update = |seq: u64, parent| SeqUpdate {
+            seq: Seq(seq),
+            update: make_update(doc, parent, seq, &[seq as u8], &key, &sk),
+        };
+        state.handle_ws_message(WsServerMsg::Update {
+            seq: Seq(3),
+            update: update(3, snap).update,
+        });
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: vec![update(2, snap), update(3, snap)],
+        });
+        let delivered: Vec<Vec<u8>> = drain(&rx)
+            .into_iter()
+            .flat_map(|e| match e {
+                LogicEvent::RemoteUpdate { payload, .. } => vec![payload],
+                LogicEvent::RemoteUpdateBatch { payloads, .. } => payloads,
+                _ => Vec::new(),
+            })
+            .collect();
+        assert_eq!(delivered, [vec![3], vec![2]]);
+
+        let parent = SnapshotId::new();
+        state.receive_update(Seq(9), update(9, parent).update);
+        state.receive_update(Seq(9), update(9, parent).update);
+        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+    }
+
+    /// Holds `SYNC-032`: an update held in quarantine is not opened on arrival.
+    /// One sealed under a key this client lacks would fail to open, and its
+    /// arrival raises no failure.
+    #[test]
+    fn a_quarantined_update_is_not_opened_on_arrival() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        let stranger = DocumentKey::generate();
+        let update = make_update(doc, SnapshotId::new(), 1, b"x", &stranger, &sk);
+        state.receive_update(Seq(1), update);
+        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+        assert!(drain(&rx).is_empty(), "the arrival opened the update");
+    }
+
+    /// Holds `SYNC-079`: a revoke swaps the key and changes no content. The
+    /// worker sends no delta or snapshot for it, tells the document nothing
+    /// new, and what was written before still opens to the same bytes.
+    #[test]
+    fn a_revoke_changes_no_content() {
+        let (mut state, rx, doc, k1, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let before = make_update(doc, snap, 1, b"hello", &k1, &sk);
+        state.receive_update(Seq(1), before.clone());
+        let _ = drain(&rx);
+
+        let k2 = DocumentKey::generate();
+        let link = pipeline::seal_link(doc, &k1, &k2, &sk).unwrap();
+        state.handle_sync_event(SyncEvent::RevocationComplete {
+            id: RequestId::next(),
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            link,
+        });
+
+        assert!(drain_ws(&ws_rx).is_empty(), "the revoke sent a frame");
+        let content = drain(&rx).into_iter().find(|e| {
+            matches!(
+                e,
+                LogicEvent::RemoteUpdate { .. }
+                    | LogicEvent::RemoteUpdateBatch { .. }
+                    | LogicEvent::RemoteSnapshot { .. }
+            )
+        });
+        assert!(
+            content.is_none(),
+            "the revoke changed the content: {content:?}"
+        );
+        let doc_state = &state.documents[&doc];
+        assert_eq!(doc_state.doc_key.id(), k2.id());
+        assert_eq!(doc_state.open_update_named(&before).unwrap(), b"hello");
+    }
+
+    /// Holds `SYNC-097`: what the start held is released in the order it
+    /// came. The opens subscribe in order, and the edits leave in order at
+    /// rising clocks once the replay has caught the clock up.
+    #[test]
+    fn held_commands_are_released_in_order() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        let opens: Vec<DocumentId> = (0..3).map(|_| DocumentId::new()).collect();
+        state.pending_opens = opens.iter().map(|d| (*d, DocType::Trame)).collect();
+        state.flush_pending_opens();
+        let subscribed: Vec<DocumentId> = drain_ws(&ws_rx)
+            .into_iter()
+            .filter_map(|m| match m {
+                WsClientMsg::Subscribe { document_id } => Some(document_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(subscribed, opens);
+
+        // No session yet: the edits wait, interleaved with another document's.
+        let other = opens[0];
+        for payload in [b"a", b"b", b"c"] {
+            state.handle_send_update(doc, payload.to_vec());
+            state.handle_send_update(other, b"x".to_vec());
+        }
+        assert!(drain_ws(&ws_rx).is_empty());
+        state.signing_key = Some(sk);
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        assert_eq!(
+            sent_updates(&ws_rx, &[&key]),
+            vec![
+                (1, key.id(), b"a".to_vec()),
+                (2, key.id(), b"b".to_vec()),
+                (3, key.id(), b"c".to_vec()),
+            ]
+        );
+    }
+
+    /// Holds `SYNC-023`: a frame that fails a check delivers none of its
+    /// payload, and its neighbours in the same replay arrive whole.
+    #[test]
+    fn a_refused_frame_is_applied_in_no_part() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let mut forged = make_update(doc, snap, 2, b"forged", &key, &sk);
+        forged.ciphertext.0[0] ^= 1;
+        let mut unsigned = make_update(doc, snap, 3, b"unsigned", &key, &sk);
+        unsigned.signature.0 = [0; 64];
+        let updates = [
+            (1, make_update(doc, snap, 1, b"one", &key, &sk)),
+            (2, forged),
+            (3, unsigned),
+            (4, make_update(doc, snap, 4, b"four", &key, &sk)),
+        ]
+        .into_iter()
+        .map(|(seq, update)| SeqUpdate {
+            seq: Seq(seq),
+            update,
+        })
+        .collect();
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates,
+        });
+
+        let mut payloads = Vec::new();
+        let mut refused = 0;
+        for event in drain(&rx) {
+            match event {
+                LogicEvent::RemoteUpdateBatch { payloads: p, .. } => payloads.extend(p),
+                LogicEvent::RemoteUpdate { payload, .. } => payloads.push(payload),
+                LogicEvent::SyncWarning { code, .. } => {
+                    assert_eq!(code, SyncWarningCode::DecryptFailed);
+                    refused += 1;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(payloads, [b"one".to_vec(), b"four".to_vec()]);
+        assert_eq!(refused, 2);
     }
 }

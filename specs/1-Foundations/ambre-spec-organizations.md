@@ -44,7 +44,7 @@ the caller's own rank.
 |---|---|---|---|---|---|---|
 | `SRV-061` | `FAIL` | A caller MUST NOT grant an organization role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::admin_cannot_grant_owner`; `::org_role_rank_ordering`; `::integration::admin_cannot_escalate_via_add_member` | none | verified |
 | `SRV-071` | `FAIL` | A caller MUST NOT remove an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::admin_cannot_remove_owner` -- an administrator asking for an owner's removal is refused | none | verified |
-| `SRV-076` | `FAIL` | A caller MUST NOT change the role of an organization member ranked above it. | audit `N2`; this spec section 3 | none | unheld -- `::update_member_role_rejects_invalid_role` was cited for this and asserts something else: an unknown role name is a clean refusal, and a valid change by an owner succeeds. Nothing drives an administrator at an owner's role; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-076` | `FAIL` | A caller MUST NOT change the role of an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::an_administrator_cannot_change_an_owners_role` -- through the role route and the add upsert alike, and the owner keeps its rank | none | verified |
 
 ### 1.4 Release an escrowed key
 
@@ -56,7 +56,7 @@ over an opaque blob.
 | `SRV-064` | `POST` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none | unheld -- the release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built | unbuilt -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | none | unheld -- the route reads the sealed column and writes only the record, so a release is a read of the escrow and never a re-issue of it. Nothing asserts the column is unchanged afterwards, and a release that rewrote it would take the member's own recovery away; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session | partial -- nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | partial |
+| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session; `::only_an_owner_releases_an_escrowed_key` -- an administrator and a member are refused, and an owner passes the gate | none | verified |
 
 * **Budget.** none. Nothing here is on a hot path: an organization is read when a person opens their
   settings, and a release is a rare deliberate act. No row of `ambre-spec-budgets.md` names one.
@@ -64,10 +64,9 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 5 `verified`, 1 `partial`, 3 `untested`, 2 `unimplemented`. What holds is the
-  membership: the last owner, the grant clamp, the removal clamp, and the quorum the relay cannot
-  keep. What is loose is the release -- who may ask, and whether the record survives -- and the
-  deposit, which no route performs.
+* **Verification.** 7 `verified`, 2 `untested`, 2 `unimplemented`. What holds is the membership: the
+  last owner, the grant and role clamps, the removal clamp, and who may ask for a release. What is
+  loose is whether the release record survives, and the deposit, which no route performs.
 ---
 
 ## 2. WHAT EACH USER SEES

@@ -159,6 +159,23 @@ mod tests {
         assert_eq!(id, back);
     }
 
+    /// Holds `SYNC-026`: the parent of a document never snapshotted is the
+    /// document's own bytes. A peer derives it from the id alone, so the
+    /// derivation is pinned: changing it would strand every peer's first deltas.
+    #[test]
+    fn every_client_derives_the_same_genesis_parent() {
+        let bytes = [0x5a; 16];
+        let doc = DocumentId::from_bytes(bytes);
+        assert_eq!(SnapshotId::genesis(doc), SnapshotId::from_bytes(bytes));
+        // A second client, holding the id only through its text, agrees.
+        let parsed = DocumentId::parse_str(&doc.to_string()).unwrap();
+        assert_eq!(SnapshotId::genesis(parsed), SnapshotId::genesis(doc));
+        assert_ne!(
+            SnapshotId::genesis(DocumentId::from_bytes([0x5b; 16])),
+            SnapshotId::genesis(doc)
+        );
+    }
+
     #[test]
     fn debug_carries_type_name() {
         let id = UserId::from_bytes([0; 16]);

@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | none | unheld -- the worker announces itself as the last step of its start, and the relay on the other side holds every command until it sees that announcement. No test boots a worker slowly to see the first command survive; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | none | unheld -- the edit is buffered and replayed once the document is open, and no test issues an edit before a session: the host path seeds its keys before anything runs; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | none | unheld -- the holding buffer is a queue and the release drains it in order, so the rule is held by the container's own shape, and nothing asserts it. Releasing an open after the edit that depends on it drops the edit, which is `SYNC-065` failing by another route; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::held_commands_are_released_in_order` -- the held opens subscribe in order, and the held edits leave in order at rising clocks | none | verified |
 
 ### 1.3 The socket connects, and reconnects
 
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 13 `verified`, 16 `untested`. The crate graph holds the keys and the CRDT apart.
+* **Verification.** 14 `verified`, 15 `untested`. The crate graph holds the keys and the CRDT apart.
   Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
   document. A gate refuses browser storage in the worker. Each gap left is a browser property the
   wasm tier cannot boot, `ambre-spec-testing.md section 9`.

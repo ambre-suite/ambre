@@ -136,7 +136,7 @@ pub async fn issue_session(
     signing_pubkey: Option<ambre_core::PublicKey>,
 ) -> Result<TokenPair, AppError> {
     let now = unix_now();
-    let access_ttl = state.config.access_ttl_secs;
+    let access_ttl = access_lifetime(state.config.access_ttl_secs);
     let claims = Claims {
         sub: user_id.to_string(),
         spk: signing_pubkey.as_ref().map(ambre_core::PublicKey::to_hex),
@@ -165,6 +165,16 @@ pub async fn issue_session(
         refresh_token,
         access_expires_in: access_ttl,
     })
+}
+
+/// The longest an access token may live, whatever the deployment configures
+/// (`SRV-025`). A token is not revocable before its expiry, so this bounds the
+/// window a leaked one stays usable.
+pub const ACCESS_TOKEN_MAX_TTL_SECS: u64 = 15 * 60;
+
+/// The lifetime a minted token carries: the configured one, capped.
+fn access_lifetime(configured_secs: u64) -> u64 {
+    configured_secs.min(ACCESS_TOKEN_MAX_TTL_SECS)
 }
 
 /// Current Unix time in seconds.

@@ -1,4 +1,7 @@
 use super::*;
+use crate::sharing::GlooHttp;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 type Address = [u8; ambre_crypto::commitment::TAG_LEN];
 
@@ -116,81 +119,21 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let blob = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
-                Ok(blob) => blob,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        id: Some(id),
-                        request: "UploadMedia".into(),
-                        code: 500,
-                        message: format!("seal: {e}"),
+            let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
+            let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
+                Ok(blob) => upload_leg(&GlooHttp { auth }, &base, &content_hash, &blob).await,
+                Err(e) => Err(format!("seal: {e}")),
+            };
+            match outcome {
+                Ok(()) => {
+                    let _ = tx.send(SyncEvent::MediaUploaded {
+                        id,
+                        document_id,
+                        content_hash,
                     });
-                    return;
                 }
-            };
-            let encrypted_size = blob.len() as u64;
-
-            let upload_url_req =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/media/upload-url");
-            let body = http::UploadUrlRequest {
-                content_hash: content_hash.clone(),
-                size_bytes: encrypted_size,
-            };
-            let upload_url = match http::post_json_auth::<_, http::UploadUrlResponse>(
-                &upload_url_req,
-                &body,
-                auth.clone(),
-            )
-            .await
-            {
-                Ok(resp) => resp.upload_url,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        id: Some(id),
-                        request: "UploadMedia".into(),
-                        code: 500,
-                        message: format!("upload-url: {e}"),
-                    });
-                    return;
-                }
-            };
-
-            // S3 presigned PUT goes straight to object storage, not our API:
-            // no session, no CSRF header.
-            if let Err(e) = http::put_sealed(&upload_url, &blob).await {
-                let _ = logic_tx.send(LogicEvent::ApiError {
-                    id: Some(id),
-                    request: "UploadMedia".into(),
-                    code: 500,
-                    message: format!("S3 PUT: {e}"),
-                });
-                return;
+                Err(message) => report(&logic_tx, id, "UploadMedia", message),
             }
-
-            let confirm_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/media");
-            let confirm_body = http::ConfirmUploadRequest {
-                content_hash: content_hash.clone(),
-                size_bytes: encrypted_size as i64,
-            };
-            if let Err(e) =
-                http::post_json_auth::<_, serde_json::Value>(&confirm_url, &confirm_body, auth)
-                    .await
-            {
-                let _ = logic_tx.send(LogicEvent::ApiError {
-                    id: Some(id),
-                    request: "UploadMedia".into(),
-                    code: 500,
-                    message: format!("confirm: {e}"),
-                });
-                return;
-            }
-
-            let _ = tx.send(SyncEvent::MediaUploaded {
-                id,
-                document_id,
-                content_hash,
-            });
         });
     }
 
@@ -238,64 +181,121 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let download_url_req =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/media/download-url");
-            let body = http::DownloadUrlRequest {
-                content_hash: content_hash.clone(),
-            };
-            let download_url = match http::post_json_auth::<_, http::DownloadUrlResponse>(
-                &download_url_req,
-                &body,
-                auth,
-            )
-            .await
-            {
-                Ok(resp) => resp.download_url,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        id: Some(id),
-                        request: "DownloadMedia".into(),
-                        code: 500,
-                        message: format!("download-url: {e}"),
+            let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
+            match download_leg(&GlooHttp { auth }, &base, &content_hash, &keyring).await {
+                Ok(data) => {
+                    let _ = tx.send(SyncEvent::MediaDownloaded {
+                        id,
+                        document_id,
+                        content_hash,
+                        data,
                     });
-                    return;
                 }
-            };
-
-            let blob = match http::fetch_bytes(&download_url).await {
-                Ok(b) => b,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        id: Some(id),
-                        request: "DownloadMedia".into(),
-                        code: 500,
-                        message: format!("S3 GET: {e}"),
-                    });
-                    return;
-                }
-            };
-
-            let data = match open_blob_named(&blob, &content_hash, &keyring) {
-                Ok(d) => d,
-                Err(e) => {
-                    let _ = logic_tx.send(LogicEvent::ApiError {
-                        id: Some(id),
-                        request: "DownloadMedia".into(),
-                        code: 500,
-                        message: format!("Open: {e}"),
-                    });
-                    return;
-                }
-            };
-
-            let _ = tx.send(SyncEvent::MediaDownloaded {
-                id,
-                document_id,
-                content_hash,
-                data,
-            });
+                Err(message) => report(&logic_tx, id, "DownloadMedia", message),
+            }
         });
     }
+}
+
+/// The requests the two media legs make, abstracted over the transport so
+/// that a host test drives each step failing.
+#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
+pub(crate) trait MediaHttp {
+    /// An authenticated request to the relay.
+    async fn post_json<B: Serialize, R: DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<R, String>;
+    /// A sealed blob to a presigned object-storage link.
+    async fn put_sealed(&self, url: &str, blob: &pipeline::SealedBlob) -> Result<(), String>;
+    /// A blob from a presigned object-storage link.
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String>;
+}
+
+impl MediaHttp for GlooHttp {
+    async fn post_json<B: Serialize, R: DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<R, String> {
+        http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
+    }
+    async fn put_sealed(&self, url: &str, blob: &pipeline::SealedBlob) -> Result<(), String> {
+        http::put_sealed(url, blob).await
+    }
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
+        http::fetch_bytes(url).await
+    }
+}
+
+/// Reports a failed media leg to the caller that asked for it.
+fn report(logic_tx: &LogicSink, id: RequestId, request: &str, message: String) {
+    let _ = logic_tx.send(LogicEvent::ApiError {
+        id: Some(id),
+        request: request.into(),
+        code: 500,
+        message,
+    });
+}
+
+/// Asks for a link, puts the sealed blob, then confirms it (`SYNC-076`). Each
+/// step returns before the next runs, so a failed put confirms nothing.
+async fn upload_leg(
+    http: &impl MediaHttp,
+    base: &str,
+    content_hash: &str,
+    blob: &pipeline::SealedBlob,
+) -> Result<(), String> {
+    let size = blob.len() as u64;
+    let link: http::UploadUrlResponse = http
+        .post_json(
+            &format!("{base}/media/upload-url"),
+            &http::UploadUrlRequest {
+                content_hash: content_hash.to_owned(),
+                size_bytes: size,
+            },
+        )
+        .await
+        .map_err(|e| format!("upload-url: {e}"))?;
+    // The presigned PUT goes straight to object storage, not to the relay.
+    http.put_sealed(&link.upload_url, blob)
+        .await
+        .map_err(|e| format!("S3 PUT: {e}"))?;
+    http.post_json::<_, serde_json::Value>(
+        &format!("{base}/media"),
+        &http::ConfirmUploadRequest {
+            content_hash: content_hash.to_owned(),
+            size_bytes: size as i64,
+        },
+    )
+    .await
+    .map_err(|e| format!("confirm: {e}"))?;
+    Ok(())
+}
+
+/// Asks for a link, fetches the blob, then opens it whole (`SYNC-055`). A
+/// failed step returns before any data is built, so nothing half-read leaves.
+async fn download_leg(
+    http: &impl MediaHttp,
+    base: &str,
+    content_hash: &str,
+    keyring: &crate::chain::Keyring,
+) -> Result<Vec<u8>, String> {
+    let link: http::DownloadUrlResponse = http
+        .post_json(
+            &format!("{base}/media/download-url"),
+            &http::DownloadUrlRequest {
+                content_hash: content_hash.to_owned(),
+            },
+        )
+        .await
+        .map_err(|e| format!("download-url: {e}"))?;
+    let blob = http
+        .fetch_bytes(&link.download_url)
+        .await
+        .map_err(|e| format!("S3 GET: {e}"))?;
+    open_blob_named(&blob, content_hash, keyring).map_err(|e| format!("Open: {e}"))
 }
 
 #[cfg(test)]
@@ -329,6 +329,118 @@ mod tests {
             addresses.push(address);
         }
         assert_ne!(addresses[0], addresses[1]);
+    }
+
+    /// A transport that records each step and fails the one named.
+    struct FakeMedia {
+        fail: &'static str,
+        served: Vec<u8>,
+        steps: std::cell::RefCell<Vec<&'static str>>,
+    }
+
+    impl FakeMedia {
+        fn new(fail: &'static str, served: Vec<u8>) -> Self {
+            Self {
+                fail,
+                served,
+                steps: Default::default(),
+            }
+        }
+        fn step(&self, name: &'static str) -> Result<(), String> {
+            self.steps.borrow_mut().push(name);
+            if name == self.fail {
+                return Err(format!("{name} refused"));
+            }
+            Ok(())
+        }
+    }
+
+    impl MediaHttp for FakeMedia {
+        async fn post_json<B: Serialize, R: DeserializeOwned>(
+            &self,
+            url: &str,
+            _body: &B,
+        ) -> Result<R, String> {
+            let name = match url.rsplit('/').next() {
+                Some("upload-url") => "link",
+                Some("download-url") => "link",
+                _ => "confirm",
+            };
+            self.step(name)?;
+            let answer = serde_json::json!({
+                "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "ok",
+            });
+            serde_json::from_value(answer).map_err(|e| e.to_string())
+        }
+        async fn put_sealed(&self, _url: &str, _blob: &pipeline::SealedBlob) -> Result<(), String> {
+            self.step("put")
+        }
+        async fn fetch_bytes(&self, _url: &str) -> Result<Vec<u8>, String> {
+            self.step("fetch")?;
+            Ok(self.served.clone())
+        }
+    }
+
+    /// Holds `SYNC-076`: an upload failing at any step reports the step and
+    /// confirms nothing, and a whole one confirms once, last.
+    #[tokio::test]
+    async fn a_failed_upload_step_confirms_nothing() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = DocumentId::new();
+        let signing = SigningKey::from_bytes(&[0x07; 32]);
+        let address = ambre_crypto::commitment::media_address(&key, b"a picture");
+        let blob = seal_blob(b"a picture", document_id, &address, &key, &signing).unwrap();
+        let hash = hex::encode(address);
+
+        for (fail, ran) in [
+            ("link", &["link"][..]),
+            ("put", &["link", "put"][..]),
+            ("confirm", &["link", "put", "confirm"][..]),
+        ] {
+            let http = FakeMedia::new(fail, Vec::new());
+            let outcome = upload_leg(&http, "base", &hash, &blob).await;
+            assert!(outcome.is_err(), "{fail}");
+            assert_eq!(*http.steps.borrow(), ran);
+        }
+        let http = FakeMedia::new("", Vec::new());
+        assert!(upload_leg(&http, "base", &hash, &blob).await.is_ok());
+        assert_eq!(*http.steps.borrow(), ["link", "put", "confirm"]);
+    }
+
+    /// Holds `SYNC-055`: a download that fails to fetch, or serves a short,
+    /// altered or foreign blob, reports and delivers nothing. A whole one
+    /// delivers the bytes.
+    #[tokio::test]
+    async fn a_blob_that_fails_to_open_delivers_nothing() {
+        let key = DocumentKey::from_array([0x31; 32]);
+        let document_id = DocumentId::new();
+        let (blob, hash) = sealed(b"a picture", document_id, &key);
+        let keyring = crate::chain::Keyring {
+            document_id,
+            current: key.clone(),
+            previous: Vec::new(),
+            chain: crate::chain::Chain::new(document_id, Vec::new()),
+        };
+        let mut altered = blob.clone();
+        *altered.last_mut().unwrap() ^= 1;
+        let (foreign, _) = sealed(b"a picture", DocumentId::new(), &key);
+
+        for (fail, served) in [
+            ("link", blob.clone()),
+            ("fetch", blob.clone()),
+            ("", blob[..blob.len() / 2].to_vec()),
+            ("", altered),
+            ("", foreign),
+        ] {
+            let http = FakeMedia::new(fail, served);
+            let outcome = download_leg(&http, "base", &hash, &keyring).await;
+            assert!(outcome.is_err(), "{fail} delivered {outcome:?}");
+        }
+        let http = FakeMedia::new("", blob);
+        assert_eq!(
+            download_leg(&http, "base", &hash, &keyring).await.unwrap(),
+            b"a picture"
+        );
     }
 
     fn sealed(data: &[u8], document_id: DocumentId, key: &DocumentKey) -> (Vec<u8>, String) {

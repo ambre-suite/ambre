@@ -768,6 +768,67 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    /// `SRV-092`: a sign-out that presents another person's refresh token
+    /// leaves it alive, and the caller's own token is the one it revokes.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_sign_out_revokes_no_token_of_another_caller(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let mine = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+            .await
+            .unwrap();
+        let theirs = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+            .await
+            .unwrap();
+        let sign_out = |refresh: &str| {
+            Request::post("/api/auth/logout")
+                .header("authorization", format!("Bearer {}", mine.access_token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "refresh_token": refresh }).to_string(),
+                ))
+                .unwrap()
+        };
+
+        let resp = app
+            .clone()
+            .oneshot(sign_out(&theirs.refresh_token))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let alive = crate::redis_ops::refresh_get(&state.redis, &theirs.refresh_token).await;
+        assert!(alive.unwrap().is_some(), "a stranger's session survives");
+
+        let resp = app.oneshot(sign_out(&mine.refresh_token)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let gone = crate::redis_ops::refresh_get(&state.redis, &mine.refresh_token).await;
+        assert!(gone.unwrap().is_none(), "the caller's own session ends");
+    }
+
+    /// `SRV-025`: a deployment that configures a day still mints a token that
+    /// expires within fifteen minutes; a shorter figure is kept as set.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_access_token_never_outlives_fifteen_minutes(pool: sqlx::PgPool) {
+        let base = test_app_state(pool).await;
+        for (configured, minted) in [(24 * 3600, 900), (60, 60)] {
+            let state = AppState {
+                config: Arc::new(Config {
+                    access_ttl_secs: configured,
+                    ..Config::default()
+                }),
+                ..(*base).clone()
+            };
+            let tokens = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+                .await
+                .unwrap();
+            let claims = state.jwt.verify(&tokens.access_token).unwrap();
+            assert_eq!(claims.exp - claims.iat, minted);
+            assert_eq!(tokens.access_expires_in, minted);
+        }
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn get_delta_endpoint_requires_auth(pool: sqlx::PgPool) {
@@ -1644,7 +1705,8 @@ mod handler_tests {
     }
 
     // `ZK-008`: no presigned URL is signed before the document's access check.
-    // An outsider gets none of the four, a viewer gets neither upload URL.
+    // An outsider gets none of the four (`SRV-002`), a viewer gets neither
+    // upload URL (`SRV-056`).
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_presigned_url_is_signed_only_after_the_access_check(pool: sqlx::PgPool) {
@@ -1866,6 +1928,84 @@ mod handler_tests {
         assert_eq!(
             invite_status(&app, &editor, &doc_id, viewer_email, "viewer").await,
             StatusCode::OK
+        );
+    }
+
+    /// `SRV-088`: a removal tells the person removed, on their own topic. The
+    /// document's topic and the member who stays learn only that a key is
+    /// owed, which names nobody.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removal_reaches_the_person_removed_alone(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::decode_server_msg;
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        setup_named(&app, "gone@ambre.app", 41).await;
+        setup_named(&app, "stays@ambre.app", 42).await;
+        invite(&app, &owner, &doc_id, "gone@ambre.app", "editor").await;
+        invite(&app, &owner, &doc_id, "stays@ambre.app", "editor").await;
+        let gone = doc_user_id(&state, "gone@ambre.app").await;
+        let stays = doc_user_id(&state, "stays@ambre.app").await;
+
+        let topics = [
+            format!("doc:{doc_id}"),
+            format!("user:{gone}"),
+            format!("user:{stays}"),
+        ];
+        let listener = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .unwrap();
+        let mut stream = listener.subscribe(topics.clone()).await.unwrap();
+        assert_eq!(
+            revoke_status(&app, &owner, &doc_id, &gone).await,
+            StatusCode::OK
+        );
+        // One end marker per topic: a topic's messages arrive in order, so all
+        // that the removal sent has arrived once the three markers have.
+        let end = b"end".to_vec();
+        for topic in &topics {
+            let _: usize = state
+                .redis
+                .publish(topic, rustis::resp::RefBulkString::new(&end))
+                .await
+                .unwrap();
+        }
+
+        let mut heard: std::collections::HashMap<String, Vec<WsServerMsg>> = Default::default();
+        let mut ended = 0;
+        while ended < topics.len() {
+            let m = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+                .await
+                .expect("the markers arrive")
+                .unwrap()
+                .unwrap();
+            if m.payload() == end.as_slice() {
+                ended += 1;
+                continue;
+            }
+            let topic = m.channel_str().unwrap().to_owned();
+            heard
+                .entry(topic)
+                .or_default()
+                .push(decode_server_msg(m.payload()).unwrap());
+        }
+
+        assert!(matches!(
+            heard.remove(&topics[1]).unwrap_or_default().as_slice(),
+            [WsServerMsg::DocumentRevoked { .. }]
+        ));
+        assert!(matches!(
+            heard.remove(&topics[0]).unwrap_or_default().as_slice(),
+            [WsServerMsg::KeyRotationRequired { .. }]
+        ));
+        assert!(
+            heard.is_empty(),
+            "the member who stays hears nothing: {heard:?}"
         );
     }
 

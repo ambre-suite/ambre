@@ -33,7 +33,7 @@
 // ============================================================================
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use wasm_bindgen::prelude::*;
@@ -156,6 +156,10 @@ const QUARANTINE_ALERT: usize = 900;
 /// shared heap, and a `SyncWarning` is raised.
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_LIMIT: usize = 1000;
+
+/// How many of a document's latest sequence numbers the duplicate guard
+/// remembers ([`SyncDocumentState::ingested`]).
+const APPLIED_WINDOW: usize = 4096;
 
 /// WebSocket close code the server sends when it refuses the upgrade for auth
 /// reasons (expired/rotated JWT). In the application-reserved 4000-4999 range;
@@ -459,6 +463,11 @@ struct SyncDocumentState {
     /// Highest server-assigned `seq` seen for this document. Used as
     /// `after_seq` when requesting the missing history.
     last_seq: Seq,
+    /// The latest sequence numbers this client ingested, applied or held in
+    /// quarantine. A reconnect replay can overlap a broadcast received during
+    /// the same round trip, and the second copy is dropped here (`SYNC-087`).
+    /// Bounded by [`APPLIED_WINDOW`].
+    ingested: BTreeSet<u64>,
     /// Snapshots whose contents the Logic thread already holds. An inbound
     /// `Update` whose parent `snapshot_id` is here can be applied immediately;
     /// otherwise it is quarantined under that id.
@@ -539,6 +548,7 @@ impl SyncDocumentState {
             local_clock: 0,
             ephemeral_counter: 0,
             last_seq: Seq(0),
+            ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
             gap_requested: false,
@@ -550,6 +560,19 @@ impl SyncDocumentState {
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
         }
+    }
+
+    /// Records `seq` as ingested, and says whether this is its first arrival.
+    /// The window keeps the latest [`APPLIED_WINDOW`] numbers; a reconnect
+    /// overlap is far shorter than that.
+    fn first_arrival(&mut self, seq: Seq) -> bool {
+        if !self.ingested.insert(seq.0) {
+            return false;
+        }
+        if self.ingested.len() > APPLIED_WINDOW {
+            self.ingested.pop_first();
+        }
+        true
     }
 
     /// Total number of quarantined updates across all parent snapshots.

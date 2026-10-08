@@ -954,6 +954,98 @@ mod tests {
             );
         }
 
+        /// Holds `SRV-076`: an administrator changes no owner's role, through
+        /// the role route or the add upsert, and the owner keeps its rank.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn an_administrator_cannot_change_an_owners_role(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 50).await;
+            let admin = setup_org_user(&app, "admin@ambre.app", 51).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let admin_uid = user_id(&state, "admin@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &admin_uid, "admin").await,
+                StatusCode::CREATED
+            );
+
+            for role in ["admin", "member"] {
+                assert_eq!(
+                    patch_member_role(&app, &admin, &org_id, &owner_uid, role).await,
+                    StatusCode::FORBIDDEN
+                );
+                assert_eq!(
+                    post_member(&app, &admin, &org_id, &owner_uid, role).await,
+                    StatusCode::FORBIDDEN
+                );
+            }
+            let kept = crate::db::get_org_member(
+                &state.db,
+                org_id.parse().unwrap(),
+                owner_uid.parse().unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(kept.role, "owner");
+        }
+
+        /// POST a key recovery as `auth`, returning the response status.
+        async fn post_recover(app: &Router, auth: &str, org_id: &str, uid: &str) -> StatusCode {
+            app.clone()
+                .oneshot(
+                    Request::post(format!("/api/organizations/{org_id}/recover/{uid}"))
+                        .header("authorization", auth)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        /// Holds `SRV-063`: an administrator and a plain member are both
+        /// refused a member's escrowed key, and the owner passes the gate.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn only_an_owner_releases_an_escrowed_key(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+
+            let owner = setup_org_user(&app, "owner@ambre.app", 60).await;
+            let admin = setup_org_user(&app, "admin@ambre.app", 61).await;
+            let member = setup_org_user(&app, "member@ambre.app", 62).await;
+            let admin_uid = user_id(&state, "admin@ambre.app").await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &admin_uid, "admin").await,
+                StatusCode::CREATED
+            );
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
+
+            assert_eq!(
+                post_recover(&app, &admin, &org_id, &member_uid).await,
+                StatusCode::FORBIDDEN
+            );
+            assert_eq!(
+                post_recover(&app, &member, &org_id, &admin_uid).await,
+                StatusCode::FORBIDDEN
+            );
+            // The owner passes the gate. The member escrowed no key here, so
+            // the route answers that nothing is held, never a refusal.
+            assert_eq!(
+                post_recover(&app, &owner, &org_id, &member_uid).await,
+                StatusCode::NOT_FOUND
+            );
+        }
+
         // -- Last-owner lockout (B1) ----------------------------------------
 
         /// The sole owner must not be able to remove themselves: with no owner

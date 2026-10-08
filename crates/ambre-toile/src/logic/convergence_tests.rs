@@ -49,6 +49,48 @@ fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
     assert_eq!(reader.history(), author.history());
 }
 
+/// Holds `SYNC-101` for Toile: a remote delta answers display events alone,
+/// and the next local delta carries none of the remote peer's operations.
+#[test]
+fn a_remote_change_is_never_re_broadcast() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    // B's own genesis goes out with its first edit, before any import.
+    create_rect(&mut b, Point::new(0.0, 0.0), Size::new(10.0, 10.0));
+    let from_a = a
+        .handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::new(50.0, 0.0),
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: 0,
+        })
+        .update
+        .expect("a create writes");
+    let events = b.apply_remote(&from_a);
+    assert!(events.iter().any(|e| matches!(e, ToileEvent::BoardChanged)));
+
+    let out = b.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::new(90.0, 0.0),
+        size: Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: None,
+        correlate: 0,
+    });
+    let from_b = out.update.expect("a create writes");
+    let sent = loro::LoroDoc::decode_import_blob_meta(&from_a, false).expect("a delta");
+    let meta = loro::LoroDoc::decode_import_blob_meta(&from_b, false).expect("a delta");
+    for (peer, _) in sent.partial_end_vv.iter() {
+        assert_eq!(
+            meta.partial_end_vv.get(peer),
+            meta.partial_start_vv.get(peer),
+            "the delta re-exports none of A's operations"
+        );
+    }
+}
+
 /// `TOILE-092`: a peer's move of one element on a board of 500 refreshes that
 /// element alone. The receiving board resolves no element map and walks no
 /// index, and the moved element lands where the peer put it.

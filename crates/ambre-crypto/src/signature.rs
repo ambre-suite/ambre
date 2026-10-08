@@ -105,6 +105,44 @@ mod tests {
         assert!(verify(&pk, b"nonce____", b"CIPHER", b"aad", b"tag", &sig).is_err());
     }
 
+    /// The order of the Ed25519 group, little-endian.
+    const GROUP_ORDER: [u8; 32] = [
+        0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde,
+        0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10,
+    ];
+
+    /// The same signature with its scalar raised by the group order: a second
+    /// encoding that a lax verifier accepts over the same message.
+    fn malleated(sig: &[u8; SIGNATURE_LEN]) -> [u8; SIGNATURE_LEN] {
+        let mut out = *sig;
+        let mut carry = 0u16;
+        for (s, l) in out[32..].iter_mut().zip(GROUP_ORDER) {
+            let sum = u16::from(*s) + u16::from(l) + carry;
+            *s = sum as u8;
+            carry = sum >> 8;
+        }
+        out
+    }
+
+    /// Holds `SYNC-072` on the client: the non-canonical second form of a
+    /// valid signature is refused. So is a small-order key, under which one
+    /// forged signature would verify over any message.
+    #[test]
+    fn only_the_canonical_signature_is_accepted() {
+        let sk = test_key();
+        let pk = sk.verifying_key().to_bytes();
+        let sig = sign(&sk, b"n", b"c", b"a", b"t");
+        assert!(verify(&pk, b"n", b"c", b"a", b"t", &sig).is_ok());
+        assert!(verify(&pk, b"n", b"c", b"a", b"t", &malleated(&sig)).is_err());
+
+        // The identity point, and the signature (R = identity, S = 0).
+        let mut identity = [0u8; 32];
+        identity[0] = 1;
+        let mut forged = [0u8; SIGNATURE_LEN];
+        forged[..32].copy_from_slice(&identity);
+        assert!(verify(&identity, b"n", b"c", b"a", b"t", &forged).is_err());
+    }
+
     /// The length prefixes make the ciphertext|aad boundary unambiguous. Two
     /// distinct splits that share the same concatenation must not verify under a
     /// signature made for the other split. Without framing, `("ab","c")` and

@@ -389,6 +389,42 @@ fn two_peers_converge_via_mock_sync() {
     );
 }
 
+/// Holds `SYNC-101` for Trame: a remote delta answers display events alone,
+/// and the next local delta carries none of the remote peer's operations.
+#[test]
+fn a_remote_change_is_never_re_broadcast() {
+    let mut a = TrameState::new();
+    let mut b = TrameState::new();
+    let set = |text: &str| TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: text.to_owned(),
+    };
+    // B's own genesis goes out with its first edit, before any import.
+    b.handle_command(set("b"));
+    let from_a = a.handle_command(set("a")).update.expect("a delta");
+
+    let events = b.apply_remote(&from_a);
+    assert!(events.iter().any(|e| matches!(e, TrameEvent::DataReset)));
+    assert!(b.flush_delta().is_none(), "the import owes nothing");
+
+    let from_b = b
+        .handle_command(TrameCommand::SetCellText {
+            row: 1,
+            col: 0,
+            text: "next".to_owned(),
+        })
+        .update
+        .expect("a delta");
+    let meta = loro::LoroDoc::decode_import_blob_meta(&from_b, false).expect("a delta");
+    let a_peer = a.doc.peer_id();
+    assert_eq!(
+        meta.partial_end_vv.get(&a_peer),
+        meta.partial_start_vv.get(&a_peer),
+        "the delta re-exports none of A's operations"
+    );
+}
+
 /// Two peers sharing a cross-sheet formula converge when one renames the
 /// target sheet. The reference is bound to the stable `sheet_id`, the same
 /// id on both peers via sync. Both keep computing and reconstruct identical

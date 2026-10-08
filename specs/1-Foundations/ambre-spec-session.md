@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-028` | `INV` | An address MUST resolve to exactly one account. | audit `N5` | `ambre_server::db::users::tests::create_user_duplicate_email_is_conflict` -- the first of the two collisions; `::verified_email_collision_is_conflict` -- the second; `::get_user_by_email_is_case_insensitive` -- the comparison that decides what counts as the same address | none | verified |
 | `SRV-029` | `INV` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `N3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`; `::verified_email_cannot_be_squatted_by_setup`; `::oidc_relogin_keeps_its_own_email` | none | verified |
 | `SRV-024` | `INV` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none | unheld -- the signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | partial |
+| `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced; `ambre_server::routes::tests::handler_tests::an_access_token_never_outlives_fifteen_minutes` -- a configured day still mints a fifteen-minute token | none | verified |
 | `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | `ambre_server::routes::auth::tests::a_provider_account_without_keys_gets_no_signing_key`; `ambre_server::routes::auth::tests::a_stored_key_that_does_not_parse_mints_no_session`; `ambre_server::routes::tests::handler_tests::a_session_before_key_setup_carries_no_key`; `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a provider account without keys gets a session with no key, which only the setup routes take and the refresh keeps keyless. The socket closes on it. A stored key that does not parse is refused | none | verified |
 | `SRV-163` | `INV` | An account that has not registered its keys MUST NOT be offered as a recipient. | this spec section 3; `SRV-027` | `ambre_server::routes::tests::handler_tests::an_account_without_keys_is_offered_to_no_sharer`; `ambre_server::routes::tests::handler_tests::an_account_holds_both_keys_or_neither` -- the search, the key lookup and the invite pass over it until its keys are stored. A membership written before is left out of the list. The store refuses one key without the other | none | verified |
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | `ambre_server::routes::tests::handler_tests::a_token_in_the_socket_address_opens_no_session`; `::a_token_in_the_first_frame_opens_the_session` -- the socket takes its token in its first frame and never reads its address; `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::an_opened_socket_authenticates_before_it_subscribes` -- the client sends it before any subscription | none | verified |
@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-009` | `FAIL` | A refresh token MUST be consumable exactly once, including by two callers at the same instant. | this spec section 3; audit `M6` | `ambre_server::redis_ops::redis_integration_tests::refresh_consume_rejects_a_replayed_token` -- the second use fails; `::only_one_racing_caller_claims_a_refresh_token` -- exactly one of two concurrent claims wins, database tier | none | verified |
 | `SRV-026` | `POST` | A sign-out MUST revoke the caller's own refresh token. | this spec section 3 | none | unheld -- `ambre_server::routes::tests::handler_tests::logout_clears_session` asserts the route answers 200 and never that the token stops working: a sign-out that revoked nothing would pass it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-092` | `FRAME` | A sign-out MUST NOT revoke a token it did not issue to this caller. | this spec section 3 | none | unheld -- the route resolves the token to an identity and refuses one belonging to another, and no test presents a foreign token. A sign-out that over-reached would end a stranger's session from a request they never made; lands with the `The relay's access checks and the delta order held` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-092` | `FRAME` | A sign-out MUST NOT revoke a token it did not issue to this caller. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_sign_out_revokes_no_token_of_another_caller` -- a foreign refresh token survives, and the caller's own is revoked | none | verified |
 
 * **Budget.** the provider callback of `ambre-spec-budgets.md section 3`, under 200 ms, which
   reads **none exists**. The token verification carries no budget: it is a local signature check on
@@ -63,7 +63,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 10 `verified`, 2 `partial`, 5 `untested`. What holds is what a request test can
+* **Verification.** 12 `verified`, 1 `partial`, 4 `untested`. What holds is what a request test can
   drive: the token gate, the address namespace, the one-shot key write and the refresh race. What is
   loose is every rule about a deployment rather than a request.
 ---
@@ -191,9 +191,6 @@ where each of those is drawn.
   in for a provider, so the exchange itself has never run under a test (`SRV-022`).
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider.
-* **The token lifetime has a default and no ceiling.** Fifteen minutes is a figure of the
-  deployment, and nothing refuses a day (`SRV-025`), which is the shape `ZK-014` refuses for the
-  presigned link.
 * **A sign-out revokes one token, and a person may hold several.** Each renewal mints a refresh
   token, and a sign-out revokes the one the client presents. A session opened on another device
   survives it, and nothing lists what a person holds.
