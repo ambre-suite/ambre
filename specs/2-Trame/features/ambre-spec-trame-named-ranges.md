@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-067` | `INV` | A name reaching another sheet MUST survive that sheet being renamed. | this spec section 5 | `ambre_trame::logic::tests::group1::name_on_another_sheet_survives_its_rename` | none | verified |
 | `TRAME-063` | `IO` | A name MUST survive closing and reopening the document. | this spec section 3 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes` -- it runs over a snapshot export and import | none | verified |
 | `TRAME-065` | `OBS` | A formula reading a name that no longer exists MUST show an error. | this spec section 5 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes`; `ambre_trame::formula::parser::tests::undefined_name_is_error` | none | verified |
-| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | none | unheld -- the container elects the whole name by last write, and no property drives a definition: the convergence op set carries no name command; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | none | unheld -- the container elects the whole name by last write, and no property drives a definition: the convergence op set carries no name command; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Give a range a name
 
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a name resolves through one map lookup while a formula compiles, and
   `ambre-spec-budgets.md` budgets no name resolution.

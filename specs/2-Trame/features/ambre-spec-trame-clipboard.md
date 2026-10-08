@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none | unheld -- `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none | unheld -- `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Copy the selection
 
@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. Reached by cutting a range and pasting while the outbox refuses | none | qa-manual |
 
 ### 1.4 Paste
@@ -39,10 +39,10 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-061` | `POST` | A pasted formula MUST have its relative references shifted by the paste offset. | this spec section 3 | `ambre_trame::logic::tests::group5::paste_reindexes_relative_formula` | none | verified |
-| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-174` | `POST` | A plain paste MUST land the plain-text mirror as literal cells, whatever typed payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the `Paste as plain text in Trame` Story (`ambre-roadmap.md` E6). The host already strips the typed payload on the chord, but the view ignores the flag and Trame offers no menu entry | unimplemented |
-| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | partial |
 
 * **Budget.** none: a copy serialises the selection once, and
   `ambre-spec-budgets.md` budgets no clipboard operation.

@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
 | `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
-| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates | partial -- the conversion to CSS pixels and the element's placement are browser state, and no tier drives the page; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
+| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates | partial -- the conversion to CSS pixels and the element's placement are browser state, and no tier drives the page; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.2 Drag a handle
 

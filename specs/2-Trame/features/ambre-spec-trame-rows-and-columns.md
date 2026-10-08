@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-085` | `INV` | A merge MUST cover the same cells after a line is inserted, deleted or moved. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` -- it drives the insert alone, the delete and the drag reaching the same rebuild with no test reading a merge after either | none | verified |
-| `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | none | unheld -- all three are keyed by the line's identity, so they follow by the same construction the cells do, and no test reads a height, a width or a hidden row after a structural operation; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-170` | `INV` | The height, the width and the hidden mark of a line MUST follow that line when the lines move. | this spec section 3 | none | unheld -- all three are keyed by the line's identity, so they follow by the same construction the cells do, and no test reads a height, a width or a hidden row after a structural operation; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-091` | `CONC` | Two users inserting at the same position MUST both get a line. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op set carries an insert and a delete on both axes | none | verified |
 
 ### 1.2 Insert a line
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-083` | `POST` | Moving a line MUST carry the values on it. | this spec section 3 | `ambre_trame::logic::tests::group2::move_row_carries_cells_and_formula_follows_data`; `::move_column_carries_cells` | none | verified |
 | `TRAME-084` | `FRAME` | Moving a line MUST change no formula result. | this spec section 3 | `ambre_trame::logic::tests::group2::move_row_carries_cells_and_formula_follows_data` -- it reads the formula at its new position and gets its old answer | none | verified |
-| `TRAME-173` | `FRAME` | Releasing a line on the slot it came from MUST write nothing. | this spec section 4 | none | unheld -- the move returns before the list operation when the two positions are equal, so no delta and no event come out, and no test drives the case; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-173` | `FRAME` | Releasing a line on the slot it came from MUST write nothing. | this spec section 4 | none | unheld -- the move returns before the list operation when the two positions are equal, so no delta and no event come out, and no test drives the case; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Delete the selected lines
 
@@ -71,7 +71,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-089` | `FAIL` | A write more than ten thousand lines past the used range MUST be refused. | this spec section 5 | none | unheld -- the cap is a constant read in one branch of the materialization path, no test enters the branch, and a dropped write is silent apart from a log line; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-089` | `FAIL` | A write more than ten thousand lines past the used range MUST be refused. | this spec section 5 | none | unheld -- the cap is a constant read in one branch of the materialization path, no test enters the branch, and a dropped write is silent apart from a log line; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the `SheetIndex` rebuild of 10k rows in < 10 ms
   (`ambre-spec-budgets.md section 1`): a structural operation is what that row was written
