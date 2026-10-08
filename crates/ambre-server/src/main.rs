@@ -10,6 +10,7 @@ mod redis_ops;
 mod routes;
 mod s3;
 mod state;
+mod supervise;
 mod ws;
 
 #[cfg(any(test, feature = "test-helpers"))]
@@ -234,6 +235,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .nest("/api", routes::api_router(Arc::clone(&state)))
+        // A panicking handler answers the generic `500` and its connection
+        // keeps serving (`SRV-101`).
+        .layer(supervise::catch_panics())
         .layer(cors)
         // Per-request access log (method, path, status, latency). The span
         // records only the URI *path*, never the query string, so a query a
@@ -314,62 +318,68 @@ fn parse_cors_origins(allowed: &str) -> Vec<HeaderValue> {
 /// Runs once per Axum instance. Every hour it queries for snapshots
 /// beyond the configured keep limit per document (default 10), deletes
 /// them from S3 and PostgreSQL. Snapshots with most recent `created_at`
-/// are kept.
+/// are kept. A pass that panics is lost alone, and the next hour runs the
+/// next one (`SRV-101`).
 async fn snapshot_compaction_task(state: state::AppState) {
-    const KEEP_PER_DOCUMENT: i64 = 10;
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        supervise::contained("snapshot compaction", compact_once(&state)).await;
+    }
+}
 
-        // 1. Compact old snapshots: keep the N most recent per document, delete
-        //    the rest from S3 and Postgres.
-        match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
-            Ok(compactable) if !compactable.is_empty() => {
-                tracing::info!(
-                    count = compactable.len(),
-                    "compaction: deleting old snapshots"
-                );
-                for snap in &compactable {
-                    // Delete S3 object (best-effort; orphaned objects are harmless).
-                    if let Err(e) = state
-                        .s3
-                        .delete_object()
-                        .bucket(&state.s3_bucket)
-                        .key(&snap.s3_key)
-                        .send()
-                        .await
-                    {
-                        tracing::warn!(
-                            snapshot_id = %snap.id,
-                            s3_key = %snap.s3_key,
-                            error = %e,
-                            "compaction: S3 delete failed, removing DB row anyway"
-                        );
-                    }
+/// One compaction pass: the old snapshots, then the delta index they cover.
+async fn compact_once(state: &state::AppState) {
+    const KEEP_PER_DOCUMENT: i64 = 10;
 
-                    if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
-                        tracing::error!(
-                            snapshot_id = %snap.id,
-                            error = %e,
-                            "compaction: DB delete failed"
-                        );
-                    }
+    // 1. Compact old snapshots: keep the N most recent per document, delete
+    //    the rest from S3 and Postgres.
+    match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
+        Ok(compactable) if !compactable.is_empty() => {
+            tracing::info!(
+                count = compactable.len(),
+                "compaction: deleting old snapshots"
+            );
+            for snap in &compactable {
+                // Delete S3 object (best-effort; orphaned objects are harmless).
+                if let Err(e) = state
+                    .s3
+                    .delete_object()
+                    .bucket(&state.s3_bucket)
+                    .key(&snap.s3_key)
+                    .send()
+                    .await
+                {
+                    tracing::warn!(
+                        snapshot_id = %snap.id,
+                        s3_key = %snap.s3_key,
+                        error = %e,
+                        "compaction: S3 delete failed, removing DB row anyway"
+                    );
+                }
+
+                if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
+                    tracing::error!(
+                        snapshot_id = %snap.id,
+                        error = %e,
+                        "compaction: DB delete failed"
+                    );
                 }
             }
-            Ok(_) => tracing::debug!("compaction: no snapshots to delete"),
-            Err(e) => tracing::error!("compaction query failed: {e:?}"),
         }
+        Ok(_) => tracing::debug!("compaction: no snapshots to delete"),
+        Err(e) => tracing::error!("compaction query failed: {e:?}"),
+    }
 
-        // 2. Trim the delta index: drop `updates` every retained snapshot has
-        //    already folded in (seq <= MIN(covered_seq) per document). Runs every
-        //    cycle regardless of snapshot deletion -- a document can gain a
-        //    covering snapshot without crossing the keep threshold. Without this
-        //    the `updates` table grows unbounded (the dropped snapshot FK no
-        //    longer cascades old deltas away).
-        match db::purge_superseded_updates(&state.db).await {
-            Ok(0) => {}
-            Ok(n) => tracing::info!(purged = n, "compaction: trimmed superseded updates"),
-            Err(e) => tracing::error!("compaction: purge superseded updates failed: {e:?}"),
-        }
+    // 2. Trim the delta index: drop `updates` every retained snapshot has
+    //    already folded in (seq <= MIN(covered_seq) per document). Runs every
+    //    cycle regardless of snapshot deletion -- a document can gain a
+    //    covering snapshot without crossing the keep threshold. Without this
+    //    the `updates` table grows unbounded (the dropped snapshot FK no
+    //    longer cascades old deltas away).
+    match db::purge_superseded_updates(&state.db).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(purged = n, "compaction: trimmed superseded updates"),
+        Err(e) => tracing::error!("compaction: purge superseded updates failed: {e:?}"),
     }
 }
 

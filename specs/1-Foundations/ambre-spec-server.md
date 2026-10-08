@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-100` | `FAIL` | A frame that does not decode MUST be refused as a typed error, never a panic, on either side of the socket. | this spec section 3; `ARCH-006` | `ambre_protocol::tests::a_frame_that_does_not_decode_is_a_typed_error`; cargo-fuzz -- `fuzz/fuzz_targets/wire_decode.rs`, run by the CI `fuzz` job | none | verified |
-| `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | none | fails -- the fan-out hub and the durable flusher each run as one task for the whole process, and nothing restarts either. A panic while the hub handles one socket's command ends the fan-out for every socket, and the relay keeps accepting connections it no longer serves. No layer catches a panic in a handler; lands with the `The relay survives a panic` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | `ambre_server::ws::pubsub_hub::tests::a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out` -- the hub panics on one socket's request, refuses that request alone, and fans out to the others after its restart; `ambre_server::supervise::tests::a_panicking_handler_answers_a_generic_error_and_the_router_keeps_serving` -- the request; `::a_panicking_unit_of_work_leaves_the_next_one_running` -- the wrapper the flusher, the compaction and the socket loop each run under | none | verified |
 | `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- four store failures, one status and one message for all of them; `::oidc_error_is_infrastructure_level` -- the provider | none | verified |
 | `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message; `ambre_server::ws::handler::message::refusal_tests::a_refused_subscription_carries_no_store_text` -- the socket path, where a store failure answers a generic 500 | none | verified |
 | `SRV-068` | `FAIL` | A cross-origin request MUST be refused unless the deployment names its origin. | audit `M17`; this spec section 3 | `ambre_server::cors_tests::parses_and_trims_multiple_origins`; `::empty_list_yields_no_origins` -- the list the refusal is read off, the permissive fallback being reachable only in development mode and announced at start-up | none | verified |
@@ -117,10 +117,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 22 `verified`, 2 `partial`, 1 `failing`, 5 `untested`, 20 `unimplemented`. What
-  holds is what a request test can drive: the roles, the rank clamps, the signature gate, the error
-  mapping and the origin list. The delete holds too. What is loose is every rule about the process
-  or the deployment.
+* **Verification.** 23 `verified`, 2 `partial`, 5 `untested`, 20 `unimplemented`. What holds is what
+  a request test can drive: the roles, the rank clamps, the signature gate, the error mapping and
+  the origin list. The delete holds too. What is loose is every rule about the process or the
+  deployment.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -257,9 +257,21 @@ reaches any instance and the fan-out crosses them (`SRV-021`). Two things are pe
 neither is per request. The first is the signing key derived from the deployment's seed, which
 every instance must share; the second is the fan-out hub (`ambre-spec-broadcast.md`).
 
+**A panic ends the work it hit, and nothing more** (`SRV-101`). A request already runs on its
+connection's task, and a socket on its own. A layer answers a panicking request with the generic
+failure of section 3, never with the panic's message (`SRV-096`). That layer is the `catch-panic`
+feature of `tower-http`, a crate the relay already links, so nothing new is trusted. A socket that
+panics still leaves the hub and announces its departure.
+
+The hub, the flusher and the compaction serve every client. Each runs its work one unit at a time
+and drops a unit that panics. The hub keeps its routing table across a restart and subscribes its
+new stream to every topic in it. A socket whose topic the hub cannot route closes, and its client
+reopens it.
+
 **Code.**
 
 * `crates/ambre-server/src/main.rs` -- the boot, the route table, the layers and the periodic tasks;
+* `crates/ambre-server/src/supervise.rs` -- what keeps a panic inside the request, socket or task unit it hit;
 * `crates/ambre-server/src/state.rs` -- the handles and every operational figure;
 * `crates/ambre-server/src/routes/documents.rs` -- the register, the users and the member list;
 * `crates/ambre-server/src/routes/share.rs` -- the invitation, the removal, the ranks and the re-key;

@@ -269,6 +269,10 @@ pub async fn fetch_object(
 /// SCAN reconciliation runs only occasionally, and on the first cycle, seeding
 /// the set on upgrade. It re-marks any pending key missing from the set, so no
 /// acknowledged delta can be stranded by a lost marker.
+///
+/// A cycle that panics is lost alone, and the next cycle runs (`SRV-101`). A
+/// document's flush already runs on a task of its own, so its panic ends that
+/// document's flush and nothing else.
 pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
     // One full-keyspace reconciliation every RECONCILE_EVERY cycles (~5 min at a
     // 15 s cycle). Cycle 0 reconciles first, seeding the dirty set from any
@@ -277,32 +281,39 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
     let mut cycle: u32 = 0;
 
     loop {
-        if cycle == 0 {
-            reconcile_dirty_set(&state).await;
-        }
+        let reconcile = cycle == 0;
         cycle = (cycle + 1) % RECONCILE_EVERY;
-
-        tokio::time::sleep(Duration::from_secs(15)).await;
-
-        let keys = match crate::redis_ops::dirty_pending_keys(&state.redis).await {
-            Ok(keys) => keys,
-            Err(e) => {
-                tracing::error!("flusher dirty-set read failed: {e}");
-                continue;
-            }
-        };
-
-        let tasks: Vec<_> = keys
-            .into_iter()
-            .map(|key| {
-                let state = state.clone();
-                tokio::spawn(async move { flush_doc_pending(&state, &key).await })
-            })
-            .collect();
-        futures_util::future::join_all(tasks).await;
-
-        sweep_due_documents(&state).await;
+        crate::supervise::contained("flusher cycle", flush_cycle(&state, reconcile)).await;
     }
+}
+
+/// One flusher cycle: the reconciliation when it is due, the wait, then every
+/// dirty document's flush and the due sweeps.
+async fn flush_cycle(state: &crate::state::AppState, reconcile: bool) {
+    if reconcile {
+        reconcile_dirty_set(state).await;
+    }
+
+    tokio::time::sleep(Duration::from_secs(15)).await;
+
+    let keys = match crate::redis_ops::dirty_pending_keys(&state.redis).await {
+        Ok(keys) => keys,
+        Err(e) => {
+            tracing::error!("flusher dirty-set read failed: {e}");
+            return;
+        }
+    };
+
+    let tasks: Vec<_> = keys
+        .into_iter()
+        .map(|key| {
+            let state = state.clone();
+            tokio::spawn(async move { flush_doc_pending(&state, &key).await })
+        })
+        .collect();
+    futures_util::future::join_all(tasks).await;
+
+    sweep_due_documents(state).await;
 }
 
 /// How long the per-document flush lock lives. It comfortably exceeds one

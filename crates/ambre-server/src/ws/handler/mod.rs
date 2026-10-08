@@ -220,7 +220,9 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
     // Personal topic: subscribe for the whole session so server-initiated
     // pushes reach this connection even when no document is open. A
     // `DocumentShared` on a fresh invite is one.
-    pubsub
+    // A topic the hub cannot route ends the socket, which the client reopens:
+    // left open, it would miss every broadcast on that topic (`SRV-101`).
+    let routed = pubsub
         .subscribe(
             user_pubsub_channel(&user_id),
             connection_id.clone(),
@@ -228,125 +230,140 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         )
         .await;
 
-    while let Some(Ok(msg)) = ws_stream.next().await {
-        let Message::Binary(data) = msg else { continue };
-
-        let client_msg = match decode_client_msg(&data) {
-            Ok(m) => m,
-            Err(e) => {
-                let err = encode_server_msg(&WsServerMsg::Error {
-                    code: 400,
-                    message: format!("decode error: {e:?}"),
-                });
-                let _ = outbound_tx.send(err).await;
-                continue;
-            }
-        };
-
-        // Per-connection message rate limit (#1). Spend one token per inbound
-        // message before dispatching. An open socket is otherwise unbounded, and an
-        // `Update`/`Ephemeral` flood turns into a Postgres + Redis + S3 + fan-out
-        // amplification. When the bucket is empty we reject with 429 and drop the
-        // message before any handler (and any durable write) runs. The token costs
-        // no Redis round-trip; it lives entirely on `conn`.
-        if !conn.msg_bucket.try_consume(Instant::now()) {
-            let err = encode_server_msg(&WsServerMsg::Error {
-                code: 429,
-                message: "message rate limit exceeded".into(),
-            });
-            let _ = outbound_tx.send(err).await;
-            continue;
+    // A panic while serving one frame ends this socket alone (`SRV-101`). It
+    // still reaches the cleanup below, so the hub stops routing to it and its
+    // peers hear it leave.
+    let serve = async {
+        if routed.is_err() {
+            return;
         }
+        while let Some(Ok(msg)) = ws_stream.next().await {
+            let Message::Binary(data) = msg else { continue };
 
-        match client_msg {
-            WsClientMsg::Subscribe { document_id } => {
-                handle_subscribe(&state, &mut conn, document_id, &outbound_tx).await;
-                // Start forwarding this doc's live broadcasts only if access was
-                // granted (handle_subscribe records the subscription on success).
-                if conn.doc_subscriptions.contains(&document_id) {
-                    pubsub
-                        .subscribe(
-                            doc_pubsub_channel(&document_id),
-                            connection_id.clone(),
-                            outbound_tx.clone(),
-                        )
-                        .await;
-                }
-            }
-            WsClientMsg::Unsubscribe { document_id } => {
-                // Announce the departure to the peers still on the document
-                // before the subscription goes (`PRESENCE-014`). Their live
-                // set then drops this peer at once, rather than on a timeout.
-                if conn.doc_subscriptions.contains(&document_id) {
-                    announce_departure(&state, &document_id, &conn.signing_pubkey).await;
-                }
-                handle_unsubscribe(&mut conn, document_id);
-                pubsub
-                    .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
-                    .await;
-            }
-            WsClientMsg::Update(update) => {
-                tracing::debug!(
-                    "[Server<-Sync] WS Update doc={} author={} clock={}",
-                    update.public_data.document_id,
-                    update.public_data.pub_key.to_hex(),
-                    update.public_data.clock.0,
-                );
-                handle_update(&state, &mut conn, update, &outbound_tx).await;
-            }
-            WsClientMsg::Ephemeral(eph) => {
-                handle_ephemeral(&state, &mut conn, eph).await;
-            }
-            WsClientMsg::RequestMissing {
-                document_id,
-                after_seq,
-            } => {
-                handle_request_missing(&state, &mut conn, document_id, after_seq, &outbound_tx)
-                    .await;
-            }
-            WsClientMsg::SubscribeChannel { channel_id } => {
-                handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
-                if conn.channel_subscriptions.contains(&channel_id) {
-                    pubsub
-                        .subscribe(
-                            chan_pubsub_channel(&channel_id),
-                            connection_id.clone(),
-                            outbound_tx.clone(),
-                        )
-                        .await;
-                }
-            }
-            WsClientMsg::UnsubscribeChannel { channel_id } => {
-                conn.channel_subscriptions.remove(&channel_id);
-                pubsub
-                    .unsubscribe(chan_pubsub_channel(&channel_id), connection_id.clone())
-                    .await;
-            }
-            WsClientMsg::ChannelUpdate { channel_id, update } => {
-                if !conn.channel_subscriptions.contains(&channel_id) {
+            let client_msg = match decode_client_msg(&data) {
+                Ok(m) => m,
+                Err(e) => {
                     let err = encode_server_msg(&WsServerMsg::Error {
-                        code: 403,
-                        message: "not subscribed to this channel".into(),
+                        code: 400,
+                        message: format!("decode error: {e:?}"),
                     });
                     let _ = outbound_tx.send(err).await;
                     continue;
                 }
-                handle_channel_update(&state, channel_id, update).await;
+            };
+
+            // Per-connection message rate limit (#1). Spend one token per inbound
+            // message before dispatching. An open socket is otherwise unbounded, and an
+            // `Update`/`Ephemeral` flood turns into a Postgres + Redis + S3 + fan-out
+            // amplification. When the bucket is empty we reject with 429 and drop the
+            // message before any handler (and any durable write) runs. The token costs
+            // no Redis round-trip; it lives entirely on `conn`.
+            if !conn.msg_bucket.try_consume(Instant::now()) {
+                let err = encode_server_msg(&WsServerMsg::Error {
+                    code: 429,
+                    message: "message rate limit exceeded".into(),
+                });
+                let _ = outbound_tx.send(err).await;
+                continue;
             }
-            WsClientMsg::ChannelEphemeral {
-                channel_id,
-                ephemeral,
-            } => {
-                if !conn.channel_subscriptions.contains(&channel_id) {
-                    continue;
+
+            match client_msg {
+                WsClientMsg::Subscribe { document_id } => {
+                    handle_subscribe(&state, &mut conn, document_id, &outbound_tx).await;
+                    // Start forwarding this doc's live broadcasts only if access was
+                    // granted (handle_subscribe records the subscription on success).
+                    if conn.doc_subscriptions.contains(&document_id)
+                        && pubsub
+                            .subscribe(
+                                doc_pubsub_channel(&document_id),
+                                connection_id.clone(),
+                                outbound_tx.clone(),
+                            )
+                            .await
+                            .is_err()
+                    {
+                        break;
+                    }
                 }
-                handle_channel_ephemeral(&state, channel_id, ephemeral).await;
+                WsClientMsg::Unsubscribe { document_id } => {
+                    // Announce the departure to the peers still on the document
+                    // before the subscription goes (`PRESENCE-014`). Their live
+                    // set then drops this peer at once, rather than on a timeout.
+                    if conn.doc_subscriptions.contains(&document_id) {
+                        announce_departure(&state, &document_id, &conn.signing_pubkey).await;
+                    }
+                    handle_unsubscribe(&mut conn, document_id);
+                    pubsub
+                        .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
+                        .await;
+                }
+                WsClientMsg::Update(update) => {
+                    tracing::debug!(
+                        "[Server<-Sync] WS Update doc={} author={} clock={}",
+                        update.public_data.document_id,
+                        update.public_data.pub_key.to_hex(),
+                        update.public_data.clock.0,
+                    );
+                    handle_update(&state, &mut conn, update, &outbound_tx).await;
+                }
+                WsClientMsg::Ephemeral(eph) => {
+                    handle_ephemeral(&state, &mut conn, eph).await;
+                }
+                WsClientMsg::RequestMissing {
+                    document_id,
+                    after_seq,
+                } => {
+                    handle_request_missing(&state, &mut conn, document_id, after_seq, &outbound_tx)
+                        .await;
+                }
+                WsClientMsg::SubscribeChannel { channel_id } => {
+                    handle_subscribe_channel(&state, &mut conn, channel_id, &outbound_tx).await;
+                    if conn.channel_subscriptions.contains(&channel_id)
+                        && pubsub
+                            .subscribe(
+                                chan_pubsub_channel(&channel_id),
+                                connection_id.clone(),
+                                outbound_tx.clone(),
+                            )
+                            .await
+                            .is_err()
+                    {
+                        break;
+                    }
+                }
+                WsClientMsg::UnsubscribeChannel { channel_id } => {
+                    conn.channel_subscriptions.remove(&channel_id);
+                    pubsub
+                        .unsubscribe(chan_pubsub_channel(&channel_id), connection_id.clone())
+                        .await;
+                }
+                WsClientMsg::ChannelUpdate { channel_id, update } => {
+                    if !conn.channel_subscriptions.contains(&channel_id) {
+                        let err = encode_server_msg(&WsServerMsg::Error {
+                            code: 403,
+                            message: "not subscribed to this channel".into(),
+                        });
+                        let _ = outbound_tx.send(err).await;
+                        continue;
+                    }
+                    handle_channel_update(&state, channel_id, update).await;
+                }
+                WsClientMsg::ChannelEphemeral {
+                    channel_id,
+                    ephemeral,
+                } => {
+                    if !conn.channel_subscriptions.contains(&channel_id) {
+                        continue;
+                    }
+                    handle_channel_ephemeral(&state, channel_id, ephemeral).await;
+                }
+                // The session is bound once, by the first frame. A later token
+                // changes nothing on this connection.
+                WsClientMsg::Authenticate { .. } => {}
             }
-            // The session is bound once, by the first frame. A later token
-            // changes nothing on this connection.
-            WsClientMsg::Authenticate { .. } => {}
         }
-    }
+    };
+    crate::supervise::contained("socket", serve).await;
 
     // Deregister every topic this connection watched from the hub (the hub
     // drops its Redis subscription when the last interested connection leaves).

@@ -49,7 +49,7 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 23 | 4 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 6 |
-| `server` | The one process every client talks to. | partial | 50 | 6 |
+| `server` | The one process every client talks to. | partial | 50 | 5 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 6 |
 | `ui` | The page's own thread. | partial | 17 | 7 |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 16 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 16 implemented, 22 partial, 7 design-only. 903 contract rows, 201 loose.**
+**45 features: 16 implemented, 22 partial, 7 design-only. 903 contract rows, 200 loose.**
