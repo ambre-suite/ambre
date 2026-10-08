@@ -212,7 +212,8 @@ every warning. Every native job installs `libfontconfig1-dev`: the font stack li
 ## 8. MECHANISM GAPS
 
 What section 2 prescribes, against what is wired. Measured 2026-08. Each absence is a decision rather
-than an omission, and none blocks the current MVP. Epic `E9` of `ambre-roadmap.md` schedules them.
+than an omission. Epic `E9` of `ambre-roadmap.md` schedules them, and the milestone of each story says
+whether it blocks the current MVP.
 
 | Mechanism | State | Gap |
 | :--- | :--- | :--- |
