@@ -202,7 +202,8 @@ the user sees is one selection box around the union of the members, with the han
   nothing. So is the order they land in, which is the end of the list and not their old place.
 * **A group cannot be resized** (`TOILE-155`). Scaling the members under one drag is not designed, and
   the resize command refuses a group. The handles a group shows still offer a stretch. The command
-  writes nothing, so the box springs back to its members' union on release.
+  writes nothing, so the box springs back to its members' union on release (`TOILE-UI-391`,
+  `TOILE-UI-392`).
 * **The pruning is proven only through the rebuild equality** (`TOILE-054`). The property test would
   catch a group left behind, because the caches would stop matching a rebuild, and no test states the
   rule directly.

@@ -35,8 +35,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-349` | `INV` | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 4` | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order`; `ambre_toile::ui::arrow::tests::a_release_over_a_shape_re_aims_that_end` -- together, what a selected arrow answers; structural -- the selection is its own field beside the element selection, exclusive with it (`TOILE-UI-354`), and an arrow has no box, so it joins no marquee, group or transform | none | verified |
 | `TOILE-UI-386` | `INV` | A selected arrow MUST stay selected wherever the camera moves, and leave the selection only when the board loses it. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_selected_arrow_outlives_the_frame_and_leaves_with_the_board` | none | verified |
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
-| `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
+| `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge, a group excepted (`TOILE-UI-391`). | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
 | `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-391` | `OBS` | A selected group MUST wear no corner square: its box is derived and cannot be stretched. | this spec section 3; `TOILE-155` | none | fails -- the overlay draws the four corner squares for any single selection, a group included; lands with the `A group shows no resize handle` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-392` | `INV` | A press on the edge of a selected group's box MUST NOT start a resize. | this spec section 3; `TOILE-155` | none | fails -- the tool starts a resize from any band of a single selection's edge. The box stretches under the drag, then springs back when the command refuses the group on release; lands with the `A group shows no resize handle` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | `ambre_toile::ui::tool::tests::selection_bounds_skips_a_locked_element` -- a locked-only selection has no box, and a mixed selection's box covers the unlocked element alone | none | verified |
 
 ### 1.2 Click an element
@@ -81,10 +83,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 27 `verified`, 0 `failing`, 4 `untested`. What holds is the geometry and
+* **Verification.** 27 `verified`, 2 `failing`, 4 `untested`. What holds is the geometry and
   select-all with the pick's exclusions. A locked element wears no box, and a deleted one leaves the
-  selection. A click, a marquee and `Escape` are driven through the view, and a hairline answers
-  one screen reach at every zoom. What is loose is the double-click into a scope.
+  selection. A click, a marquee and `Escape` are driven through the view, and a hairline answers one
+  screen reach at every zoom. What is loose is the double-click into a scope.
 
 ---
 
@@ -160,8 +162,10 @@ square (`TOILE-UI-034`). A multi-selection keeps an upright union box.
 **What a selection looks like.** A box with four corner squares and a rotate handle above the top
 edge (`TOILE-UI-229`). A single element tilts the whole set with it (`TOILE-UI-034`); a
 multi-selection stays upright and drops the corner squares, keeping the rotate handle alone
-(`TOILE-UI-230`). A locked element is not picked, and wears no box on any surface, select-all
-included (`TOILE-UI-231`). The hovered handle drives the cursor (`features/ambre-spec-toile-tools.md`).
+(`TOILE-UI-230`). A selected group drops them too, and its edge starts no resize: its box is the
+union of its members (`TOILE-UI-391`, `TOILE-UI-392`). A locked element is not picked, and wears
+no box on any surface, select-all included (`TOILE-UI-231`). The hovered handle drives the cursor
+(`features/ambre-spec-toile-tools.md`).
 
 **What the user does not see.** A collaborator's selection: it travels as presence and paints as a
 ghost outline, never as this box (`features/ambre-spec-toile-presence.md section 4`).
