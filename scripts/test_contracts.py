@@ -444,6 +444,23 @@ class Obstacles(unittest.TestCase):
         self.assertEqual([], contracts.lifting_defects(found, SCHEDULE, CLOSED))
         self.assertIn("no row", contracts.lifting_defects(found, {}, {})[0])
 
+    def test_a_standing_obstacle_no_row_cites_is_refused(self):
+        found = self.obstacles()
+        cited = {"intent", "outside-the-tree", "crypto-reading"}
+        errors = contracts.orphan_obstacles(found, cited, SCHEDULE, CLOSED)
+        self.assertEqual(1, len(errors))
+        self.assertIn("`gpu-device` is cited by no", errors[0])
+
+    def test_a_lifted_obstacle_stays_while_its_story_is_scheduled(self):
+        found = {"dom-glue": "The UI-thread belts"}
+        self.assertEqual([], contracts.orphan_obstacles(found, set(), SCHEDULE, CLOSED))
+        shipped = contracts.orphan_obstacles(found, set(), {}, SCHEDULE)
+        self.assertIn("has shipped", shipped[0])
+
+    def test_a_row_leans_on_an_obstacle_only_when_it_cannot_close(self):
+        self.assertEqual("intent", contracts.leaned_on("human-review", "unheld -- `intent` -- x"))
+        self.assertIsNone(contracts.leaned_on("untested", "unheld -- `intent` -- x"))
+
     def test_the_corpus_declares_the_table(self):
         text = (contracts.SPECS / contracts.TESTING).read_text()
         self.assertEqual([], contracts.read_obstacles(text)[1])

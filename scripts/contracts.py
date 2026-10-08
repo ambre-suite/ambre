@@ -70,7 +70,8 @@ The rules it enforces, beyond generating the file:
     the tooling on one day. The `Gap` of a `qa-manual` or `human-review` row
     names one obstacle of the testing document, and an obstacle a Story lifts
     fails every row still citing it, so the requalification is listed for the
-    reader rather than remembered;
+    reader rather than remembered. An obstacle no row cites is refused, and so
+    is a lifted one whose Story has shipped: the table holds only live reasons;
   * **the counts under a table are the table's own.** The `Verification` answer
     opens on counts `--write` derives from the table and writes over the head of
     the bullet, keeping the prose after it. A count by hand drifts: a document
@@ -921,6 +922,40 @@ def obstacle_defects(
     return []
 
 
+def leaned_on(status: str, gap: str) -> str | None:
+    """The obstacle a row claiming its gap cannot close names, if any."""
+    found = OBSTACLE_GAP.match(gap) if status in CANNOT_CLOSE else None
+    return found["name"] if found else None
+
+
+def orphan_obstacles(
+    obstacles: dict[str, str | None],
+    cited: set[str],
+    schedule: dict[str, tuple[str, bool, int, str]],
+    closed: dict[str, tuple[str, bool, int, str]],
+) -> list[str]:
+    """Whether each obstacle of the table is still a live reason.
+
+    A standing obstacle no row cites pre-approves a `qa-manual` no reader has
+    weighed: the next row would lean on it without arguing it. A lifted one stays
+    while its Story is scheduled, since it lists the requalification under way,
+    and goes once the Story ships, when no row may cite it.
+    """
+    errors: list[str] = []
+    for name, story in obstacles.items():
+        if story is None and name not in cited:
+            errors.append(
+                f"{TESTING}: the obstacle `{name}` is cited by no `qa-manual` or "
+                f"`human-review` row -- an obstacle is declared the day a row needs it"
+            )
+        elif story and story_key(story) not in schedule and story_key(story) in closed:
+            errors.append(
+                f"{TESTING}: the obstacle `{name}` is lifted by {story!r}, which has "
+                f"shipped -- the reason is gone, so its row goes"
+            )
+    return errors
+
+
 def duplicate_stories(path: Path) -> list[str]:
     """Each story name or phase code that two rows of one schedule carry.
 
@@ -1560,6 +1595,7 @@ def main() -> int:
     errors += found + lifting_defects(obstacles, schedule, closed)
     findings = declared_findings()
     cited_audit: set[str] = set()
+    cited_obstacles: set[str] = set()
     # The `Sources` cells, held until every id is read. A citation may name a row
     # declared further down the corpus, so resolving one during the pass would
     # answer on the half read so far.
@@ -1724,6 +1760,8 @@ def main() -> int:
                 errors += story_defects(where, status, binding, schedule, closed)
                 errors += milestone_defects(where, status, binding, milestones, in_progress)
             errors += obstacle_defects(where, status, binding, obstacles)
+            if named := leaned_on(status, binding):
+                cited_obstacles.add(named)
             if status != "unimplemented" and "not built" in held_by:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":
@@ -1753,6 +1791,7 @@ def main() -> int:
 
     errors += review_table_defects(reviewed)
     errors += audit_coverage_defects(findings, cited_audit)
+    errors += orphan_obstacles(obstacles, cited_obstacles, schedule, closed)
     for where, sources in cited_sources:
         errors += source_defects(where, sources, seen)
     errors += twin_defects(statements)

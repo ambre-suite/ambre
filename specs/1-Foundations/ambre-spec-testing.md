@@ -73,7 +73,7 @@ here only when it brings a shape this table does not hold.
 | The ZK boundary | typing first, negative tests second | make plaintext **unrepresentable** at the transport boundary; what the types cannot hold becomes a test asserting an absence |
 | A service that **is** persistence | model-based, over the real services | never mock the database: for such a service, mocking tests the mock. `#[sqlx::test]` gives one database per test. Order of operations produces the bugs, and order is what nobody enumerates by hand |
 | A decoder fed by a user file or by the relay | totality first | a round trip, a malformed case, a random-bytes case, then a `cargo-fuzz` target. Totality is not optional |
-| A GPU pipeline | assisted review plus a visual check | `qa-manual` through `/run`. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
+| A GPU pipeline | assisted review plus a visual check | `qa-manual` through `/run`, whose first row declares its obstacle below. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
 | DOM glue | extraction first, then the browser | the decision logic on host (section 5.A), the rest in the wasm tier or in a driven browser. Never `qa-manual`: the obstacle is lifted, below |
 
 **CRDT convergence is mandatory.** Every collaborative CRDT state ships a property test of
@@ -85,20 +85,20 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A row a mechanism half holds opens on `` partial -- `<obstacle>` -- `` instead.
 
-**The five obstacles.**
+**The three obstacles.**
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `intent` | what a value means, or why a line exists: the right code and the wrong one have one shape, so no check tells them apart | -- |
 | `outside-the-tree` | a claim made where no check runs: a pull request, the commit an artifact was owed in, the origin of committed bytes | -- |
-| `crypto-reading` | cryptography read line by line, by decision (the regime above) | -- |
-| `gpu-device` | the upload, the shaders and the frame that reaches the screen (section 5.B) | -- |
 | `dom-glue` | a listener, a browser API, the shell reading a level each frame | `The browser-driven belt` Story (`ambre-roadmap.md` E9) |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
   it is debt: `untested` or `partial`, and it lands with a Story.
 * **A new obstacle is a row here first.** A row citing a name the table does not carry fails.
+* **An obstacle lives while a row needs it.** A standing one no row cites fails, since it would
+  excuse the next row without an argument. A lifted one goes once its Story ships.
 * **The day a seam or a tool reaches an obstacle**, its Story goes in `Lifted by`. The gate then
   lists every row to requalify, so no reader has to remember them.
 

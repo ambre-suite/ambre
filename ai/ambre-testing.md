@@ -23,7 +23,7 @@ normative in `specs/ambre-spec-template.md`, section 1.
 | `ambre-server` | Model-based over the real services | `#[sqlx::test]`. Never mock the database: for a service that is persistence, mocking tests the mock. |
 | Draw calls | Recording mock | `RecordingSurface`, on host. |
 | A parser on hostile input: `.ambre`, PDF, xlsx, docx, frame decoder | Fuzzing | Not set up yet. Until then, a corpus of malformed inputs as unit tests. |
-| GPU pipeline | Assisted review and visual check | `./run_server.sh`, plus `trunk serve`: launch the app and look at it. The row's status is then `qa-manual`, and its `Gap` names the obstacle (`ambre-spec-testing.md` section 3). Extract the decision logic out of `cfg(target_arch = "wasm32")` into pure functions first, and unit-test those on host. |
+| GPU pipeline | Assisted review and visual check | `./run_server.sh`, plus `trunk serve`: launch the app and look at it. The row's status is then `qa-manual`, and its `Gap` names the obstacle (`ambre-spec-testing.md` section 3), declared there by the first such row. Extract the decision logic out of `cfg(target_arch = "wasm32")` into pure functions first, and unit-test those on host. |
 | DOM glue | Extraction, then the browser | Extract the decision logic to host first. What stays DOM is a wasm-tier test or a driven browser, never `qa-manual`: the `dom-glue` obstacle is lifted. |
 
 ## Rules
