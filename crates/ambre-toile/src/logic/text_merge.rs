@@ -259,7 +259,8 @@ fn backtrack(
     Some(steps)
 }
 
-#[cfg(test)]
+// Host-only: proptest does not build on wasm32, and the merge is pure.
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
 

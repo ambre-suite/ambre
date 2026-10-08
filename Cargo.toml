@@ -274,6 +274,11 @@ license = "AGPL-3.0-only"
 # script of `scripts/` repeats it. `deny` and not `warn`: `just lint` runs
 # `-D warnings`, so a warning fails the gate all the same, and the value that
 # reads as the truth is the one written here.
+[workspace.lints.rust]
+# The "no `unsafe`" pillar of `README.md`, held by the build: every crate
+# inherits this table (`ARCH-032`), so none can open an unchecked block.
+unsafe_code = "forbid"
+
 [workspace.lints.clippy]
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"

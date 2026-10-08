@@ -420,7 +420,7 @@ owns the subsystem.
 | `[ ]` Fuzzing the remaining readers | MVP | the sealed path, and the Trame and Toile readers of a user's file, have no fuzz target. Done when `ARCH-029` reads `verified` |
 | `[ ]` No panic path outside the tests | MVP | the panic lints denied in the workspace lint table, crate by crate from the lightest: Prose, the relay and the protocol first, then Sync, the canvas, Toile and Trame. A kept site carries an `expect` attribute with its reason. Done when `ARCH-028` reads `verified` |
 | `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
-| `[ ]` No unsafe code in any crate | MVP | `forbid(unsafe_code)` in every crate instead of two. The workspace measures zero unchecked access today, and nothing refuses the first one. Done when every row bound to this story reads `verified` |
+| `[x]` No unsafe code in any crate | MVP | `forbid(unsafe_code)` in every crate instead of two. The workspace measures zero unchecked access today, and nothing refuses the first one. Done when every row bound to this story reads `verified` |
 | `[x]` The workspace lints | MVP | a workspace lint table in place of the default clippy set, which the panic lints of `No panic path outside the tests` need. Done when the root manifest carries `[workspace.lints]` and every crate inherits it |
 | `[ ]` Snapshot tests of the wire and the surfaces | -- | `insta` over the recording surface's operation sequences, the wire encodings and the PDF primitives |
 | `[ ]` A coverage gate on added lines | -- | `cargo-llvm-cov` in diff mode, which turns a baseline nobody reads into a check |

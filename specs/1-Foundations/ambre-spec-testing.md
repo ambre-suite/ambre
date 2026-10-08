@@ -267,7 +267,7 @@ whether it blocks the current MVP.
 | Mechanism | State | Gap |
 | :--- | :--- | :--- |
 | Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`, `SecretString` | not the mechanism, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible |
-| `#![forbid(unsafe_code)]` | 2 crates of 17 | the pillar is claimed workspace-wide, and zero `unsafe` is measured anywhere, so lifting it to every crate is free |
+| `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 17 crates refuse an `unsafe` block |
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc` and `missing_panics_doc`; no `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` yet |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |

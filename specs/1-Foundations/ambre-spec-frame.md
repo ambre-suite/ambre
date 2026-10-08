@@ -26,7 +26,7 @@ one numbering over the four documents the rendering layer produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-001` | `INV` | A GPU resource MUST NOT leave the UI thread. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- `wgpu::Device`, `HTMLCanvasElement` and the atlas textures are `!Send`, so moving one to another thread does not compile | none | verified |
-| `CANVAS-008` | `INV` | Rendering code MUST contain no `unsafe`. | README pillar "Security" | none | unheld -- a count gives zero `unsafe` in `ambre-canvas`, `ambre-draw` and `ambre-pdf`, and no crate carries `#![forbid(unsafe_code)]`, so what holds the pillar is a reader counting rather than a build refusing; lands with the `No unsafe code in any crate` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-008` | `INV` | Rendering code MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `CANVAS-057` | `INV` | A crate that needs `unsafe` MUST stay encapsulated behind the rendering layer, never reached from an application. | README pillar "Security"; this spec section 2 | none | unheld -- `wgpu` and `swash` are declared by the rendering crates, and no `deny.toml` entry refuses an application crate taking either directly, unlike the cryptography and CRDT bans, which do; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | none | unheld -- a focusable input element and a hidden live region sit beside the canvas and carry the focused unit, which is the mechanism that replaced the platform tree this row used to name. One view of three writes to them, and nothing observes it; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-016` | `INV` | The frame read-out MUST be available in every application, not in one. | this spec section 3 | not built | unbuilt -- lands with the `One performance read-out` Story (`ambre-roadmap.md` E8). `PerfPublisher` ships and Trame is its only consumer | unimplemented |
@@ -70,7 +70,7 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 3 `verified`, 13 `untested`, 2 `unimplemented`. The verified rules are the ones
+* **Verification.** 4 `verified`, 12 `untested`, 2 `unimplemented`. The verified rules are the ones
   a host tier can reach: a type-level `!Send` and a process-global latch. Every untested rule is a
   property of a frame already presented, and no headless browser reads a pixel back from a wgpu
   canvas. The gap is therefore the whole loop, rather than thirteen gaps.

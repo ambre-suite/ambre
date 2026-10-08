@@ -4122,7 +4122,9 @@ fn canvas_client_offset() -> (f64, f64) {
         .unwrap_or((0.0, 0.0))
 }
 
-#[cfg(test)]
+// Host-only: the view drives a detached text pipe, which the browser build
+// replaces by its DOM input elements.
+#[cfg(all(test, not(target_arch = "wasm32")))]
 #[path = "view_tests.rs"]
 mod view_tests;
 

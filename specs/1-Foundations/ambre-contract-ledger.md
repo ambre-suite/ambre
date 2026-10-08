@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3372 rows: 2455 shipped, of which 103 partial and 526 loose. 917 unbuilt.**
+**3372 rows: 2455 shipped, of which 103 partial and 521 loose. 917 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 374 | 268 | 582 | 602 |  | 1826 |
+| `verified` | 377 | 269 | 583 | 602 |  | 1831 |
 | `partial` | 46 | 14 | 41 | 2 |  | 103 |
 | `failing` | 1 |  |  |  |  | 1 |
-| `untested` | 194 | 134 | 190 | 2 |  | 520 |
+| `untested` | 191 | 133 | 189 | 2 |  | 515 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 284 | 57 | 28 | 109 | 439 | 917 |
@@ -51,7 +51,7 @@
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
-| `ambre-spec-frame.md` | 18 | 16 | 3 |  | 13 | 2 |
+| `ambre-spec-frame.md` | 18 | 16 | 4 |  | 12 | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 7 | 1 | 2 |  |
 | `ambre-spec-key-rotation.md` | 25 | 23 | 19 |  | 4 | 2 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
@@ -68,9 +68,9 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 23 | 19 | 15 |  | 4 | 4 |
 | `ambre-spec-sequencer.md` | 46 | 18 | 9 | 3 | 6 | 28 |
-| `ambre-spec-server.md` | 50 | 30 | 23 | 2 | 5 | 20 |
+| `ambre-spec-server.md` | 50 | 30 | 24 | 2 | 4 | 20 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
-| `ambre-spec-sync.md` | 29 | 29 | 14 |  | 15 |  |
+| `ambre-spec-sync.md` | 29 | 29 | 15 |  | 14 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 3 | 1 | 7 | 6 |
@@ -84,7 +84,7 @@
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 8 | 2 | 1 | 5 | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 4 |  | 6 |  |
-| `ambre-spec-trame-engine.md` | 17 | 17 | 13 | 1 | 3 |  |
+| `ambre-spec-trame-engine.md` | 17 | 17 | 14 | 1 | 2 |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 5 |  | 1 |  |
 | `ambre-spec-trame-formula-engine.md` | 44 | 43 | 40 |  | 3 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
@@ -110,7 +110,7 @@
 | `ambre-spec-toile-connectors.md` | 46 | 45 | 24 | 9 | 12 | 1 |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 28 | 1 | 4 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 5 | 8 |  |
-| `ambre-spec-toile-engine.md` | 39 | 39 | 35 |  | 4 |  |
+| `ambre-spec-toile-engine.md` | 39 | 39 | 36 |  | 3 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 9 |  | 6 |  |
 | `ambre-spec-toile-frames.md` | 23 | 23 | 18 | 1 | 4 |  |
 | `ambre-spec-toile-freehand.md` | 12 | 12 | 6 | 1 | 5 |  |
