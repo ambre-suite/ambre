@@ -1313,6 +1313,157 @@ mod handler_tests {
         );
     }
 
+    /// `SRV-101`: a panic while one socket is served ends that socket alone. It
+    /// still leaves its document, so a peer on the same relay hears it go, and
+    /// the peer's socket keeps being answered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_panicking_socket_ends_alone_and_its_peer_hears_it_leave(pool: sqlx::PgPool) {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let peer_email = "peer@ambre.app";
+        let peer = setup_named(&app, peer_email, 5).await;
+        invite(&app, &owner, &doc_id, peer_email, "editor").await;
+        let document_id = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}/api/ws", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut victim = subscribed_socket(&url, &owner, document_id).await;
+        let mut watcher = subscribed_socket(&url, &peer, document_id).await;
+
+        let panic_frame = WsClientMsg::UnsubscribeChannel {
+            channel_id: crate::ws::PANIC_CHANNEL,
+        };
+        victim
+            .send(Message::Binary(encode_client_msg(&panic_frame).into()))
+            .await
+            .unwrap();
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while let Some(Ok(frame)) = victim.next().await {
+                if matches!(frame, Message::Close(_)) {
+                    break;
+                }
+            }
+        })
+        .await;
+        assert!(ended.is_ok(), "the socket that panicked ends");
+
+        let owner_key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let heard_leave = loop {
+            match next_server_msg(&mut watcher).await {
+                Some(WsServerMsg::PeerLeft {
+                    document_id: left,
+                    pub_key,
+                }) if left == document_id && pub_key == owner_key => break true,
+                Some(_) => continue,
+                None => break false,
+            }
+        };
+        assert!(heard_leave, "the peer hears the panicked socket leave");
+        assert_refused_unknown_document(&mut watcher).await;
+    }
+
+    /// A socket on `url`, authenticated with `auth` and subscribed to
+    /// `document_id`. Its hub route is in place on return.
+    async fn subscribed_socket(
+        url: &str,
+        auth: &str,
+        document_id: ambre_core::DocumentId,
+    ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+    {
+        use futures_util::SinkExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        let mut socket = tokio_tungstenite::connect_async(url).await.unwrap().0;
+        let token = auth.trim_start_matches("Bearer ");
+        socket
+            .send(Message::Binary(authenticate(token).into()))
+            .await
+            .unwrap();
+        let subscribe = WsClientMsg::Subscribe { document_id };
+        socket
+            .send(Message::Binary(encode_client_msg(&subscribe).into()))
+            .await
+            .unwrap();
+        assert!(matches!(
+            next_server_msg(&mut socket).await,
+            Some(WsServerMsg::Subscribed { .. })
+        ));
+        // The socket serves its frames in order, so the answer to a second one
+        // means the first one's hub route is in place.
+        assert_refused_unknown_document(&mut socket).await;
+        socket
+    }
+
+    /// Subscribes `socket` to a document nobody created, and checks the relay
+    /// answers with the refusal.
+    async fn assert_refused_unknown_document<S>(socket: &mut S)
+    where
+        S: futures_util::Sink<tokio_tungstenite::tungstenite::Message>
+            + futures_util::Stream<
+                Item = Result<
+                    tokio_tungstenite::tungstenite::Message,
+                    tokio_tungstenite::tungstenite::Error,
+                >,
+            > + Unpin,
+        S::Error: std::fmt::Debug,
+    {
+        use futures_util::SinkExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        let probe = WsClientMsg::Subscribe {
+            document_id: ambre_core::DocumentId::new(),
+        };
+        socket
+            .send(Message::Binary(encode_client_msg(&probe).into()))
+            .await
+            .unwrap();
+        let answer = loop {
+            match next_server_msg(socket).await {
+                Some(WsServerMsg::Error { code, .. }) => break Some(code),
+                Some(_) => continue,
+                None => break None,
+            }
+        };
+        assert_eq!(answer, Some(403), "the socket is still answered");
+    }
+
+    /// The next message the server sends on `socket`, or `None` once the
+    /// socket ends or stays silent for five seconds.
+    async fn next_server_msg<S>(socket: &mut S) -> Option<WsServerMsg>
+    where
+        S: futures_util::Stream<
+                Item = Result<
+                    tokio_tungstenite::tungstenite::Message,
+                    tokio_tungstenite::tungstenite::Error,
+                >,
+            > + Unpin,
+    {
+        use futures_util::StreamExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        loop {
+            let frame = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+                .await
+                .ok()??
+                .ok()?;
+            match frame {
+                Message::Binary(bytes) => {
+                    return ambre_protocol::ws::decode_server_msg(&bytes).ok();
+                }
+                Message::Close(_) => return None,
+                _ => continue,
+            }
+        }
+    }
+
     /// The `Authenticate` frame for `token`, encoded.
     fn authenticate(token: &str) -> Vec<u8> {
         encode_client_msg(&WsClientMsg::Authenticate {

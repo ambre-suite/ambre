@@ -149,6 +149,11 @@ const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
 /// Mirrors the HTTP 403 of `SETUP_REQUIRED`.
 const WS_CLOSE_SETUP_REQUIRED: u16 = 4403;
 
+/// A channel whose unsubscribe makes the socket loop panic, so a test can force
+/// the failure `SRV-101` is about.
+#[cfg(test)]
+pub(crate) const PANIC_CHANNEL: ChannelId = ChannelId::from_bytes([0xff; 16]);
+
 /// The close code and reason a refused upgrade sends for `error`.
 fn refusal_close(error: &AppError) -> (u16, &'static str) {
     match error {
@@ -265,6 +270,14 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                 });
                 let _ = outbound_tx.send(err).await;
                 continue;
+            }
+
+            #[cfg(test)]
+            if matches!(
+                client_msg,
+                WsClientMsg::UnsubscribeChannel { channel_id } if channel_id == PANIC_CHANNEL
+            ) {
+                panic!("forced by a test");
             }
 
             match client_msg {

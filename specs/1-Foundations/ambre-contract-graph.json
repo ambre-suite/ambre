@@ -2036,6 +2036,7 @@
   {"edge": "cites-section", "from": "SRV-101", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-rule", "from": "SRV-101", "to": "ARCH-028"},
   {"edge": "verified-by", "from": "SRV-101", "to": "ambre_server::ws::pubsub_hub::tests::a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out"},
+  {"edge": "verified-by", "from": "SRV-101", "to": "ambre_server::routes::tests::handler_tests::a_panicking_socket_ends_alone_and_its_peer_hears_it_leave"},
   {"edge": "verified-by", "from": "SRV-101", "to": "ambre_server::supervise::tests::a_panicking_handler_answers_a_generic_error_and_the_router_keeps_serving"},
   {"edge": "verified-by", "from": "SRV-101", "to": "::a_panicking_unit_of_work_leaves_the_next_one_running"},
   {"edge": "cites-rule", "from": "SRV-020", "to": "ZK-006"},
