@@ -107,10 +107,10 @@ and `ambre-app`.
 
 ---
 
-## 5. THE TWO SEAMS
+## 5. THE THREE SEAMS
 
-Both seams do one thing: push the untestable boundary as close to the hardware as possible, then unit
-test everything on the pure side. The Logic thread needs no seam -- it is pure Rust already, which is
+All three seams do one thing: push the untestable boundary as close to the hardware as possible, then
+unit test everything on the pure side. The Logic thread needs no seam -- it is pure Rust already, which is
 a designed property of the three-thread stack (`ambre-spec-architecture.md section 2`).
 
 ### A. The DOM seam
@@ -154,6 +154,32 @@ Rendering splits across the `DrawSurface` boundary in `ambre-draw`.
 A headless software adapter and golden-image readback are both reserved for a precise critical need.
 The first is driver-dependent, the second brittle under antialiasing drift. The default is the
 `DrawSurface` contract plus a visual check.
+
+The "how to draw" half still carries CPU work that needs no device: atlas packing, eviction order and
+tessellation into vertex buffers. That work extracts to plain functions over plain buffers, tested on
+host like the DOM seam's decision logic. Only the upload and the shader stay behind the device.
+
+### C. The transport seam
+
+The network is the third untestable boundary: the browser's `fetch`, `WebSocket` and timers, and on
+the relay, a second instance. Both sides follow the same rule.
+
+| Part | Nature | Where it is tested |
+| :--- | :--- | :--- |
+| The browser call: `fetch`, `AbortSignal`, `WebSocket::new`, `setTimeout` | irreducibly wasm | a thin shell, held by the wasm tier or by review |
+| **The request policy**: renew once on an expired token, never on a refused one, the timeout, the error mapping | pure, behind a send trait | host, with a scripted transport |
+| **The socket lifecycle**: open, close codes, backoff and its reset, the reconnect replay | a state machine over an injected clock | host, by stepping the clock |
+| **The relay across instances**: broadcast, presence, session limits and revocation | two `AppState`s on one Postgres and one Redis | the db tier |
+
+* **The send trait is the precedent already in the crate.** `MediaHttp` and `ShareHttp` put the media
+  and sharing calls behind a trait, and the socket has an in-memory `MockWsTransport`. The request
+  policy gets the same treatment.
+* **The clock is a value, not a call.** The lifecycle reads time from a parameter, so a test advances
+  it without sleeping. The timer shell only turns a deadline into a `setTimeout`.
+* **Two instances means two states, not two processes.** Each `AppState` owns its own hub and
+  connection tables. Sharing the stores is exactly what the deployment shares.
+* **What never extracts:** the browser's own behaviour under a real network -- a proxy, a dropped
+  TCP connection, a CORS refusal. That stays with `The browser-driven belt`.
 
 ---
 
@@ -241,7 +267,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 | An `ambre-app` end-to-end headless boot | a real boot spawns the Logic thread, a second wasm artifact for Sync, and a wgpu surface. The `wasm-bindgen-test` harness provisions none of the three: no shared-memory page, no worker loader, no GPU adapter. A true belt needs browser automation against a served build, outside the unit-test runner |
 | An end-to-end command across the canvas and DOM boundary | three cases need a real canvas and a driven browser, so they wait on the same automation as the boot above: a click travelling `CommandId` -> `LogicCommand` -> `UiEvent` -> chrome toggle plus canvas repaint, one IME composition cycle (`CHROME-007`), and rAF suspension and resumption behind a modal |
 | `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
-| The GPU "how to draw" half | section 5.B: it needs a real device, and the seam is what keeps the untested surface small |
+| The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them extracts to host, and nothing has been extracted yet |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |
 | A real S3 round trip | nothing in the suite performs one, and the CI minio service is missing. A presigned upload against a local minio is the check to run before this reaches an environment that matters |
 
