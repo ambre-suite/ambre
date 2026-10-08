@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-100` | `FAIL` | A frame that does not decode MUST be refused as a typed error, never a panic, on either side of the socket. | this spec section 3; `ARCH-006` | `ambre_protocol::tests::a_frame_that_does_not_decode_is_a_typed_error`; cargo-fuzz -- `fuzz/fuzz_targets/wire_decode.rs`, run by the CI `fuzz` job | none | verified |
-| `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | none | unheld -- no layer catches a panic in a handler, and nothing states what a poisoned lock means; lands with the `The relay survives a panic` Story (`ambre-roadmap.md` E7) | untested |
+| `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | none | fails -- the fan-out hub and the durable flusher each run as one task for the whole process, and nothing restarts either. A panic while the hub handles one socket's command ends the fan-out for every socket, and the relay keeps accepting connections it no longer serves. No layer catches a panic in a handler; lands with the `The relay survives a panic` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- four store failures, one status and one message for all of them; `::oidc_error_is_infrastructure_level` -- the provider | none | verified |
 | `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message; `ambre_server::ws::handler::message::refusal_tests::a_refused_subscription_carries_no_store_text` -- the socket path, where a store failure answers a generic 500 | none | verified |
 | `SRV-068` | `FAIL` | A cross-origin request MUST be refused unless the deployment names its origin. | audit `M17`; this spec section 3 | `ambre_server::cors_tests::parses_and_trims_multiple_origins`; `::empty_list_yields_no_origins` -- the list the refusal is read off, the permissive fallback being reachable only in development mode and announced at start-up | none | verified |
@@ -117,10 +117,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 22 `verified`, 1 `partial`, 6 `untested`, 1 `human-review`, 20 `unimplemented`.
-  What holds is what a request test can drive: the roles, the rank clamps, the signature gate, the
-  error mapping and the origin list. The delete holds too. What is loose is every rule about the
-  process or the deployment.
+* **Verification.** 22 `verified`, 1 `partial`, 1 `failing`, 5 `untested`, 1 `human-review`, 20
+  `unimplemented`. What holds is what a request test can drive: the roles, the rank clamps, the
+  signature gate, the error mapping and the origin list. The delete holds too. What is loose is
+  every rule about the process or the deployment.
 ---
 
 ## 2. WHAT EACH USER SEES
