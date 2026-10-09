@@ -12,6 +12,7 @@
 // ============================================================================
 
 use ambre_crypto::DocumentKey;
+use ambre_protocol::{EntryDigest, MembershipAct};
 use base64::Engine;
 use ed25519_dalek::SigningKey;
 use serde::Serialize;
@@ -21,6 +22,7 @@ use x25519_dalek::StaticSecret;
 use ambre_bus::{DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId};
 
 use crate::http;
+use crate::membership_log::{self, Draft, Log};
 use crate::{LogicSink, SyncEvent};
 
 /// Decodes a hex-encoded X25519 public key into its 32 raw bytes.
@@ -34,47 +36,170 @@ pub(crate) fn decode_exchange_pubkey(hex_str: &str) -> Result<[u8; 32], String> 
 /// Wraps `doc_key` for the holder of `peer_pub` via X25519 ECDH and returns the
 /// base64 url-safe `nonce || ciphertext` blob the server stores as `doc_key_enc`.
 /// Only that peer (using its own secret against our public key) can unwrap it.
-pub(crate) fn wrap_key_b64(
+/// The anchor of the membership log is sealed beside the key (`SYNC-104`), so
+/// the recipient learns where the log starts from the member who wrapped.
+pub(crate) fn wrap_anchored_b64(
     my_xk: &StaticSecret,
     peer_pub: &[u8; 32],
     doc_key: &DocumentKey,
+    anchor: Option<EntryDigest>,
 ) -> Result<String, ambre_crypto::CryptoError> {
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
-    let wrapped = ambre_crypto::ecdh::wrap_document_key(my_xk, peer_pub, doc_key)?;
+    let anchor = anchor.map(|EntryDigest(bytes)| bytes);
+    let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
     let mut enc = wrapped.nonce.to_vec();
     enc.extend_from_slice(&wrapped.ciphertext);
     Ok(base64::engine::general_purpose::URL_SAFE.encode(&enc))
 }
 
+/// Unwraps our own copy of the key among `rows`, given as `(exchange key,
+/// wrapped key, wrapper's exchange key)`, and the log anchor sealed with it.
+///
+/// Our row is the one carrying our exchange key. The exchange runs against
+/// whoever wrapped, never against our own key (`SYNC-034`). A row with no
+/// wrapper recorded falls back to the member's own key, for an older relay.
+pub(crate) fn unwrap_own<'a>(
+    exchange_key: &StaticSecret,
+    rows: impl IntoIterator<Item = (&'a str, &'a str, &'a str)>,
+) -> Result<(DocumentKey, Option<EntryDigest>), String> {
+    let ours = hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes());
+    let (own, enc, wrapper) = rows
+        .into_iter()
+        .find(|(own, _, _)| *own == ours)
+        .ok_or("own member entry not found")?;
+    let encrypted = base64::engine::general_purpose::URL_SAFE
+        .decode(enc)
+        .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
+    let (nonce, ciphertext) = encrypted
+        .split_first_chunk::<24>()
+        .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
+        .ok_or("wrapped key too short")?;
+    let wrapper = if wrapper.is_empty() { own } else { wrapper };
+    let peer = decode_exchange_pubkey(wrapper)?;
+    let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
+    ambre_crypto::ecdh::unwrap_anchored(exchange_key, &peer, &wrapped)
+        .map(|(key, anchor)| (key, anchor.map(EntryDigest)))
+        .map_err(|e| format!("ECDH unwrap: {e}"))
+}
+
+/// Decodes a hex-encoded Ed25519 verifying key into its 32 raw bytes.
+fn decode_signing_pubkey(hex_str: &str) -> Result<[u8; 32], String> {
+    let bytes = hex::decode(hex_str).map_err(|e| format!("hex decode signing key: {e}"))?;
+    bytes
+        .try_into()
+        .map_err(|_| "signing key is not 32 bytes".to_string())
+}
+
+/// The user who signs the entries a change appends (`SYNC-132`).
+pub(crate) struct Author {
+    pub user_id: UserId,
+    pub signing_key: SigningKey,
+}
+
+/// The log a members answer serves, walked from the anchor sealed with our
+/// own copy of the key (`SYNC-104`). The anchor is `None` when our row does
+/// not unwrap or carries none.
+pub(crate) fn served_log(
+    document_id: DocumentId,
+    exchange_key: &StaticSecret,
+    resp: &http::DocumentMembersResponse,
+) -> (Log, Option<EntryDigest>) {
+    let rows = resp.members.iter().map(|m| {
+        (
+            m.exchange_pub_key.as_str(),
+            m.doc_key_enc.as_str(),
+            m.wrapper_exchange_pub_key.as_str(),
+        )
+    });
+    let anchor = unwrap_own(exchange_key, rows)
+        .ok()
+        .and_then(|(_, anchor)| anchor);
+    (walk_served(document_id, anchor, &resp.log), anchor)
+}
+
+/// Walks the entries a members answer serves from `anchor`, under the rule
+/// documents apply to self-joins (`SYNC-106`).
+pub(crate) fn walk_served(
+    document_id: DocumentId,
+    anchor: Option<EntryDigest>,
+    texts: &[String],
+) -> Log {
+    let entries = membership_log::decode(texts);
+    Log::walk(document_id, anchor, &entries, membership_log::no_self_join)
+}
+
+/// The entry `draft` makes after `log`, signed by `author`, in request form.
+/// `None` for a document whose log is empty: it predates the log, and no
+/// entry of it could link to a first one.
+fn entry_after(log: &Log, draft: Draft, author: &Author) -> Result<Option<String>, String> {
+    let next = log.next();
+    if next.0 == 0 {
+        return Ok(None);
+    }
+    let entry = membership_log::sign(draft, next, author.user_id, &author.signing_key)?;
+    membership_log::encode(&entry).map(Some)
+}
+
+/// The creator's copy of a new document's key, and the first entry of its
+/// log in request form (`SYNC-132`). The creator signs the entry, and the
+/// copy seals its digest as the anchor (`SYNC-104`).
+pub(crate) fn creation(
+    document_id: DocumentId,
+    doc_key: &DocumentKey,
+    exchange_key: &StaticSecret,
+    author: &Author,
+) -> Result<(String, String), String> {
+    let draft = Draft {
+        document: document_id,
+        member: author.user_id,
+        member_key: author.signing_key.verifying_key().to_bytes(),
+        act: MembershipAct::Create,
+        role: Role::Owner,
+        key: Some(doc_key.id()),
+    };
+    let entry = membership_log::sign(draft, (0, None), author.user_id, &author.signing_key)?;
+    let anchor = membership_log::digest(&entry).ok_or("the first entry does not encode")?;
+    let own_pub = x25519_dalek::PublicKey::from(exchange_key);
+    let doc_key_enc = wrap_anchored_b64(exchange_key, own_pub.as_bytes(), doc_key, Some(anchor))
+        .map_err(|e| format!("key wrap failed: {e}"))?;
+    Ok((doc_key_enc, membership_log::encode(&entry)?))
+}
+
 /// Builds the `POST /documents/{id}/share` body: ECDH-wraps `doc_key` for the
-/// invitee whose hex exchange pubkey is `invitee_pub_hex`.
+/// invitee whose hex exchange pubkey is `invitee_pub_hex`. The wrap seals the
+/// log `anchor` beside the key (`SYNC-104`), and the body carries the signed
+/// `entry`.
 pub(crate) fn build_invite_request(
     my_xk: &StaticSecret,
     invitee_pub_hex: &str,
     invitee_email: String,
     doc_key: &DocumentKey,
     role: Role,
+    anchor: Option<EntryDigest>,
+    entry: Option<String>,
 ) -> Result<http::InviteRequest, String> {
     let peer = decode_exchange_pubkey(invitee_pub_hex)?;
     Ok(http::InviteRequest {
         invitee_email,
         role: role.to_string(),
-        doc_key_enc: wrap_key_b64(my_xk, &peer, doc_key).map_err(|e| e.to_string())?,
+        doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor).map_err(|e| e.to_string())?,
         // The relay refuses the copy if a rotation replaced this key
         // between the read and the post (`SYNC-143`).
         key_id: hex::encode(doc_key.id().as_array()),
+        entry,
     })
 }
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
-/// payload). A member whose exchange key does not parse cannot be re-wrapped
-/// for. The rotation goes on for the others, and that member is returned in
-/// the second list so the caller reports it (`SYNC-043`). Nothing is skipped
-/// in silence.
+/// payload), with the log `anchor` sealed beside it (`SYNC-104`). A member
+/// whose exchange key does not parse cannot be re-wrapped for. The rotation
+/// goes on for the others, and that member is returned in the second list so
+/// the caller reports it (`SYNC-043`). Nothing is skipped in silence.
 pub(crate) fn rotate_entries_for(
     my_xk: &StaticSecret,
     new_doc_key: &DocumentKey,
+    anchor: Option<EntryDigest>,
     members: &[http::DocumentMemberEntry],
 ) -> (Vec<http::RotateKeyEntry>, Vec<String>) {
     let mut unwrapped = Vec::new();
@@ -83,7 +208,7 @@ pub(crate) fn rotate_entries_for(
         .filter_map(|m| {
             let wrapped = decode_exchange_pubkey(&m.exchange_pub_key)
                 .ok()
-                .and_then(|peer| wrap_key_b64(my_xk, &peer, new_doc_key).ok());
+                .and_then(|peer| wrap_anchored_b64(my_xk, &peer, new_doc_key, anchor).ok());
             match wrapped {
                 Some(doc_key_enc) => Some(http::RotateKeyEntry {
                     user_id: m.user_id.clone(),
@@ -151,7 +276,10 @@ pub(crate) fn own_role<'a>(
 /// parsed role). Unknown roles fall back to viewer. A row whose id does not
 /// parse is left out and logged. An invented id names a person nothing can act
 /// on, and a revoke aimed at it addresses nobody (`SYNC-038`).
-pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<MemberInfo> {
+///
+/// Each row carries what `log` says of it. A verified row shows the role of
+/// its latest valid entry, whatever the relay's row says (`SYNC-110`).
+pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) -> Vec<MemberInfo> {
     entries
         .into_iter()
         .filter_map(|m| {
@@ -159,11 +287,13 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<Member
                 tracing::warn!("Sync: member row with a malformed id left out of the list");
                 return None;
             };
+            let (standing, logged) = log.standing(user_id);
             Some(MemberInfo {
                 user_id,
                 display_name: m.display_name,
                 email: m.email,
-                role: m.role.parse().unwrap_or(Role::Viewer),
+                role: logged.unwrap_or_else(|| m.role.parse().unwrap_or(Role::Viewer)),
+                standing,
             })
         })
         .collect()
@@ -193,7 +323,8 @@ pub(crate) trait ShareHttp {
         url: &str,
         body: &B,
     ) -> Result<R, String>;
-    async fn delete(&self, url: &str) -> Result<(), String>;
+    async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String>;
+    async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String>;
 }
 
 /// Production transport: authenticated `gloo_net` fetch (wasm at runtime, but it
@@ -213,8 +344,11 @@ impl ShareHttp for GlooHttp {
     ) -> Result<R, String> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
     }
-    async fn delete(&self, url: &str) -> Result<(), String> {
-        http::delete_auth(url, self.auth.clone()).await
+    async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+        http::delete_json_auth(url, body, self.auth.clone()).await
+    }
+    async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+        http::patch_json_auth(url, body, self.auth.clone()).await
     }
 }
 
@@ -242,6 +376,8 @@ pub(crate) struct InviteParams {
     /// (`ambre-spec-key-verification.md`). Sync re-fetched key must still equal it, or the
     /// wrap is refused.
     pub expect_exchange_pub_key: [u8; 32],
+    /// Signs the invitation's entry in the log.
+    pub author: Author,
 }
 
 /// Invite orchestration: search the invitee by email, ECDH-wrap the document key
@@ -292,24 +428,78 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         }
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
     }
-    let body = match build_invite_request(
-        &p.exchange_key,
-        &invitee.exchange_pubkey,
-        p.invitee_email.clone(),
-        &p.doc_key,
-        p.role,
-    ) {
-        Ok(req) => req,
-        Err(message) => return api_error(logic_tx, "InviteToDocument", 500, message),
+    // The invitation's entry names the invitee by identity and signing key.
+    let Ok(invitee_id) = UserId::parse_str(&invitee.id) else {
+        return api_error(
+            logic_tx,
+            "InviteToDocument",
+            502,
+            "the server named the invitee with a malformed identifier".into(),
+        );
     };
+    let invitee_key = match decode_signing_pubkey(&invitee.signing_pubkey) {
+        Ok(key) => key,
+        Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
+    };
+    let members_url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, p.document_id
+    );
     let invite_url = format!(
         "{}://{}/api/documents/{}/share",
         p.url_scheme, p.api_base, p.document_id
     );
-    match http
-        .post_json::<_, http::InviteResponse>(&invite_url, &body)
-        .await
-    {
+    let mut tries = 0;
+    let posted = loop {
+        tries += 1;
+        // The entry takes the place after the log the relay serves now.
+        let members = match http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                return api_error(
+                    logic_tx,
+                    "InviteToDocument",
+                    500,
+                    format!("Get members failed: {e}"),
+                );
+            }
+        };
+        let (log, anchor) = served_log(p.document_id, &p.exchange_key, &members);
+        let draft = Draft {
+            document: p.document_id,
+            member: invitee_id,
+            member_key: invitee_key,
+            act: MembershipAct::Invite,
+            role: p.role,
+            key: Some(p.doc_key.id()),
+        };
+        let body = match entry_after(&log, draft, &p.author).and_then(|entry| {
+            build_invite_request(
+                &p.exchange_key,
+                &invitee.exchange_pubkey,
+                p.invitee_email.clone(),
+                &p.doc_key,
+                p.role,
+                anchor,
+                entry,
+            )
+        }) {
+            Ok(req) => req,
+            Err(message) => return api_error(logic_tx, "InviteToDocument", 500, message),
+        };
+        match http
+            .post_json::<_, http::InviteResponse>(&invite_url, &body)
+            .await
+        {
+            // Another entry took the place first: read the log again.
+            Err(e) if http::is_log_moved(&e) && tries < ROTATION_TRIES => {}
+            posted => break posted,
+        }
+    };
+    match posted {
         Ok(resp) => {
             let Ok(user_id) = UserId::parse_str(&resp.user_id) else {
                 return api_error(
@@ -420,8 +610,8 @@ pub(crate) struct RevokeParams {
     pub exchange_key: StaticSecret,
     /// The key the revoke replaces, sealed under the new one (`SYNC-116`).
     pub previous: DocumentKey,
-    /// Signs the link the revoke leaves.
-    pub signing_key: SigningKey,
+    /// Signs the link the revoke leaves, and its entry in the log.
+    pub author: Author,
 }
 
 /// Revoke orchestration: fetch the members, generate a fresh `DocumentKey` and
@@ -441,7 +631,12 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         p.url_scheme, p.api_base, p.document_id
     );
     let new_doc_key = DocumentKey::generate();
-    let link = match link_to(p.document_id, &p.previous, &new_doc_key, &p.signing_key) {
+    let link = match link_to(
+        p.document_id,
+        &p.previous,
+        &new_doc_key,
+        &p.author.signing_key,
+    ) {
         Ok(link) => link,
         Err(e) => return api_error(logic_tx, "RevokeFromDocument", 500, e),
     };
@@ -452,11 +647,11 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     let mut tries = 0;
     let unwrapped = loop {
         tries += 1;
-        let members = match http
+        let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
         {
-            Ok(resp) => resp.members,
+            Ok(resp) => resp,
             Err(e) => {
                 return api_error(
                     logic_tx,
@@ -466,26 +661,47 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 );
             }
         };
+        let (log, anchor) = served_log(p.document_id, &p.exchange_key, &resp);
         // Compared parsed, so a spelling of the same id cannot keep the member in.
-        let staying: Vec<_> = members
+        let (removed, staying): (Vec<_>, Vec<_>) = resp
+            .members
             .into_iter()
-            .filter(|m| UserId::parse_str(&m.user_id).ok() != Some(p.user_id))
-            .collect();
-        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &staying);
+            .partition(|m| UserId::parse_str(&m.user_id).ok() == Some(p.user_id));
+        let entry = match removed.first().map(|m| {
+            let draft = Draft {
+                document: p.document_id,
+                member: p.user_id,
+                member_key: decode_signing_pubkey(&m.signing_pub_key)?,
+                act: MembershipAct::Revoke,
+                role: m.role.parse().unwrap_or(Role::Viewer),
+                key: Some(new_doc_key.id()),
+            };
+            entry_after(&log, draft, &p.author)
+        }) {
+            Some(Ok(entry)) => entry,
+            // No row for the member: the relay refuses the removal itself.
+            None => None,
+            Some(Err(e)) => return api_error(logic_tx, "RevokeFromDocument", 500, e),
+        };
+        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &staying);
         let body = http::RevokeRequest {
             user_id: p.user_id.to_string(),
             keys,
             members: staying.into_iter().map(|m| m.user_id).collect(),
             link: link.1.clone(),
+            entry,
         };
         match http
             .post_json::<_, serde_json::Value>(&revoke_url, &body)
             .await
         {
             Ok(_) => break unwrapped,
-            // A member joined between the read and the post, and the relay
-            // changed nothing. The next try reads them again (`SYNC-143`).
-            Err(e) if http::is_members_changed(&e) && tries < ROTATION_TRIES => {}
+            // A member joined between the read and the post, or another
+            // entry took the place of this one, and the relay changed
+            // nothing. The next try reads them again (`SYNC-143`).
+            Err(e)
+                if (http::is_members_changed(&e) || http::is_log_moved(&e))
+                    && tries < ROTATION_TRIES => {}
             Err(e) => {
                 return api_error(
                     logic_tx,
@@ -523,29 +739,77 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
 pub(crate) struct LeaveParams {
     pub id: RequestId,
     pub document_id: DocumentId,
-    /// This user: a departure removes no one else.
-    pub user_id: UserId,
+    /// This user, who signs their own revoke: a departure removes no one else.
+    pub author: Author,
     pub url_scheme: &'static str,
     pub api_base: String,
+    pub exchange_key: StaticSecret,
 }
 
-/// Departure orchestration: DELETE this user's own share, and nothing else.
-/// No key is generated and none is posted, so the members who stay never
-/// trust a key the leaver chose (`SYNC-127`, `SYNC-130`). The relay records
-/// the rotation as owed. Success -> `SyncEvent::DocumentLeft`; failure ->
-/// `LogicEvent::ApiError`.
+/// Departure orchestration: DELETE this user's own share with the revoke they
+/// sign, and nothing else. No key is generated and none is posted, so the
+/// members who stay never trust a key the leaver chose (`SYNC-127`,
+/// `SYNC-130`). The relay records the rotation as owed. Success ->
+/// `SyncEvent::DocumentLeft`; failure -> `LogicEvent::ApiError`.
 pub(crate) async fn leave_task<H: ShareHttp>(
     http: &H,
     p: LeaveParams,
     event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
 ) {
+    let me = p.author.user_id;
+    let members_url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, p.document_id
+    );
     let url = format!(
         "{}://{}/api/documents/{}/share/{}",
-        p.url_scheme, p.api_base, p.document_id, p.user_id
+        p.url_scheme, p.api_base, p.document_id, me
     );
-    if let Err(e) = http.delete(&url).await {
-        return api_error(logic_tx, "LeaveDocument", 500, format!("Leave failed: {e}"));
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        let resp = match http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                return api_error(
+                    logic_tx,
+                    "LeaveDocument",
+                    500,
+                    format!("Get members failed: {e}"),
+                );
+            }
+        };
+        let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+        let role = resp
+            .members
+            .iter()
+            .find(|m| UserId::parse_str(&m.user_id).ok() == Some(me))
+            .and_then(|m| m.role.parse().ok())
+            .unwrap_or(Role::Viewer);
+        let draft = Draft {
+            document: p.document_id,
+            member: me,
+            member_key: p.author.signing_key.verifying_key().to_bytes(),
+            act: MembershipAct::Revoke,
+            role,
+            key: None,
+        };
+        let entry = match entry_after(&log, draft, &p.author) {
+            Ok(entry) => entry,
+            Err(e) => return api_error(logic_tx, "LeaveDocument", 500, e),
+        };
+        let body = http::LeaveRequest { entry };
+        match http.delete(&url, &body).await {
+            Ok(()) => break,
+            Err(e) if http::is_log_moved(&e) && tries < ROTATION_TRIES => {}
+            Err(e) => {
+                return api_error(logic_tx, "LeaveDocument", 500, format!("Leave failed: {e}"));
+            }
+        }
     }
     let _ = event_tx.send(SyncEvent::DocumentLeft {
         id: p.id,
@@ -563,6 +827,100 @@ pub(crate) struct SettleParams {
     pub previous: DocumentKey,
     /// Signs the link the rotation leaves.
     pub signing_key: SigningKey,
+}
+
+/// Inputs for [`role_change_task`].
+pub(crate) struct RoleChangeParams {
+    pub id: RequestId,
+    pub document_id: DocumentId,
+    /// The member whose role changes.
+    pub user_id: UserId,
+    pub role: Role,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+    /// The owner who signs the change's entry.
+    pub author: Author,
+}
+
+/// Role-change orchestration: read the log, sign the change's entry and
+/// PATCH it with the role (`SYNC-132`). Success ->
+/// `SyncEvent::MemberRoleUpdatedEvent`; failure -> `LogicEvent::ApiError`.
+pub(crate) async fn role_change_task<H: ShareHttp>(
+    http: &H,
+    p: RoleChangeParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+    logic_tx: &LogicSink,
+) {
+    let members_url = format!(
+        "{}://{}/api/documents/{}/members",
+        p.url_scheme, p.api_base, p.document_id
+    );
+    let url = format!(
+        "{}://{}/api/documents/{}/members/{}",
+        p.url_scheme, p.api_base, p.document_id, p.user_id
+    );
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        let resp = match http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                return api_error(
+                    logic_tx,
+                    "UpdateDocumentMemberRole",
+                    500,
+                    format!("Get members failed: {e}"),
+                );
+            }
+        };
+        let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+        let Some(target) = resp
+            .members
+            .iter()
+            .find(|m| UserId::parse_str(&m.user_id).ok() == Some(p.user_id))
+        else {
+            return api_error(
+                logic_tx,
+                "UpdateDocumentMemberRole",
+                404,
+                "the member is no longer in the document".into(),
+            );
+        };
+        let entry = decode_signing_pubkey(&target.signing_pub_key).and_then(|member_key| {
+            let draft = Draft {
+                document: p.document_id,
+                member: p.user_id,
+                member_key,
+                act: MembershipAct::ChangeRole,
+                role: p.role,
+                key: None,
+            };
+            entry_after(&log, draft, &p.author)
+        });
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => return api_error(logic_tx, "UpdateDocumentMemberRole", 500, e),
+        };
+        let body = http::RoleChangeRequest {
+            role: p.role.to_string(),
+            entry,
+        };
+        match http.patch(&url, &body).await {
+            Ok(()) => break,
+            Err(e) if http::is_log_moved(&e) && tries < ROTATION_TRIES => {}
+            Err(e) => return api_error(logic_tx, "UpdateDocumentMemberRole", 500, e),
+        }
+    }
+    let _ = event_tx.send(SyncEvent::MemberRoleUpdatedEvent {
+        id: p.id,
+        document_id: p.document_id,
+        user_id: p.user_id,
+        role: p.role,
+    });
 }
 
 /// The link from `next` back to `previous`, and the text a request carries.
@@ -622,7 +980,9 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             let _ = event_tx.send(SyncEvent::DebtGone { document_id });
             return;
         }
-        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &resp.members);
+        let (_, anchor) = served_log(document_id, &p.exchange_key, &resp);
+        let (keys, unwrapped) =
+            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &resp.members);
         if !unwrapped.is_empty() {
             tracing::warn!(
                 "Sync: the owed rotation skips {} member(s) with an unreadable key",
@@ -659,6 +1019,8 @@ pub(crate) struct ListMembersParams {
     pub document_id: DocumentId,
     pub url_scheme: &'static str,
     pub api_base: String,
+    /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
+    pub exchange_key: StaticSecret,
 }
 
 /// Member-list orchestration: GET the members, map them, emit
@@ -683,7 +1045,9 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                     .iter()
                     .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
             );
-            let members = map_members(resp.members);
+            // Each row carries what the log says of it (`SYNC-108`).
+            let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
+            let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
                 id: p.id,
                 document_id: p.document_id,
@@ -722,25 +1086,28 @@ mod tests {
             exchange_pub_key: pub_hex.to_string(),
             doc_key_enc: String::new(),
             role: "editor".into(),
+            wrapper_exchange_pub_key: String::new(),
         }
     }
 
-    /// Decode helper: the inverse of `wrap_key_b64`, used by recipients.
+    /// Decode helper: the inverse of `wrap_anchored_b64`, used by recipients.
     fn unwrap_b64(
         recipient: &StaticSecret,
         wrapper_pub: &[u8; 32],
         doc_key_enc: &str,
     ) -> Result<DocumentKey, String> {
-        let raw = base64::engine::general_purpose::URL_SAFE
-            .decode(doc_key_enc)
-            .map_err(|e| e.to_string())?;
-        let nonce_len = raw.len() - 32 - 16; // XChaCha nonce; AEAD tag is 16
-        let wrapped = ambre_crypto::WrappedKey {
-            nonce: raw[..nonce_len].try_into().map_err(|_| "bad nonce")?,
-            ciphertext: raw[nonce_len..].to_vec(),
-        };
-        ambre_crypto::ecdh::unwrap_document_key(recipient, wrapper_pub, &wrapped)
-            .map_err(|e| format!("{e:?}"))
+        unwrap_anchor_b64(recipient, wrapper_pub, doc_key_enc).map(|(key, _)| key)
+    }
+
+    /// As [`unwrap_b64`], with the anchor sealed beside the key.
+    fn unwrap_anchor_b64(
+        recipient: &StaticSecret,
+        wrapper_pub: &[u8; 32],
+        doc_key_enc: &str,
+    ) -> Result<(DocumentKey, Option<EntryDigest>), String> {
+        let own = hex::encode(PublicKey::from(recipient).to_bytes());
+        let wrapper = hex::encode(wrapper_pub);
+        unwrap_own(recipient, [(own.as_str(), doc_key_enc, wrapper.as_str())])
     }
 
     #[test]
@@ -765,6 +1132,8 @@ mod tests {
             "invitee@test.local".into(),
             &doc_key,
             Role::Editor,
+            None,
+            None,
         )
         .expect("valid pubkey");
 
@@ -785,6 +1154,8 @@ mod tests {
             "x@y.z".into(),
             &DocumentKey::generate(),
             Role::Viewer,
+            None,
+            None,
         );
         assert!(err.is_err());
     }
@@ -802,7 +1173,7 @@ mod tests {
             member("22222222-2222-2222-2222-222222222222", "garbage"),
             member("33333333-3333-3333-3333-333333333333", &b_pub),
         ];
-        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, &members);
+        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &members);
 
         // The malformed member is returned for the report; the two valid ones
         // are wrapped (`SYNC-043`).
@@ -821,16 +1192,20 @@ mod tests {
             m.role = "bogus".into();
             m
         }];
-        let mapped = map_members(entries);
+        let none = Log::walk(DocumentId::new(), None, &[], membership_log::no_self_join);
+        let mapped = map_members(entries, &none);
         // An unparsable id is left out, never replaced by an invented one
         // (`SYNC-038`).
         assert_eq!(mapped.len(), 1);
         assert_eq!(mapped[0].role, Role::Editor);
-        let bogus_role = map_members(vec![{
-            let mut m = member("55555555-5555-5555-5555-555555555555", "ab");
-            m.role = "bogus".into();
-            m
-        }]);
+        let bogus_role = map_members(
+            vec![{
+                let mut m = member("55555555-5555-5555-5555-555555555555", "ab");
+                m.role = "bogus".into();
+                m
+            }],
+            &none,
+        );
         assert_eq!(
             bogus_role[0].role,
             Role::Viewer,
@@ -848,7 +1223,8 @@ mod tests {
     enum Call {
         Get(String),
         Post(String, serde_json::Value),
-        Delete(String),
+        Delete(String, serde_json::Value),
+        Patch(String, serde_json::Value),
     }
 
     /// A scripted [`ShareHttp`]. It returns the queued responses in order and
@@ -896,10 +1272,37 @@ mod tests {
             let v = self.next()?;
             serde_json::from_value(v).map_err(|e| e.to_string())
         }
-        async fn delete(&self, url: &str) -> Result<(), String> {
-            self.calls.borrow_mut().push(Call::Delete(url.to_string()));
+        async fn delete<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+            let bv = serde_json::to_value(body).unwrap();
+            self.calls
+                .borrow_mut()
+                .push(Call::Delete(url.to_string(), bv));
             self.next().map(|_| ())
         }
+        async fn patch<B: Serialize>(&self, url: &str, body: &B) -> Result<(), String> {
+            let bv = serde_json::to_value(body).unwrap();
+            self.calls
+                .borrow_mut()
+                .push(Call::Patch(url.to_string(), bv));
+            self.next().map(|_| ())
+        }
+    }
+
+    /// The author every task test signs as.
+    fn author() -> Author {
+        Author {
+            user_id: UserId::new(),
+            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+        }
+    }
+
+    /// A hex public key of 32 bytes, as the relay serves it.
+    fn signing_hex(key: &SigningKey) -> String {
+        key.verifying_key()
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     /// Fresh event + logic queues with their receivers.
@@ -919,7 +1322,7 @@ mod tests {
             "id": "55555555-5555-5555-5555-555555555555",
             "email": email,
             "display_name": "Invitee",
-            "signing_pubkey": "00",
+            "signing_pubkey": "00".repeat(32),
             "exchange_pubkey": exchange_pub_hex,
         } ] })
     }
@@ -935,6 +1338,7 @@ mod tests {
             exchange_key: my_xk.clone(),
             doc_key: DocumentKey::generate(),
             expect_exchange_pub_key: expect,
+            author: author(),
         }
     }
 
@@ -947,6 +1351,7 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(user_search_json("invitee@test.local", &invitee_pub_hex)),
+            Ok(serde_json::json!({ "members": [] })),
             Ok(serde_json::json!({
                 "user_id": "55555555-5555-5555-5555-555555555555",
                 "display_name": "Invitee",
@@ -962,15 +1367,16 @@ mod tests {
         }
         assert!(lrx.try_recv().is_err(), "no ApiError on success");
 
-        // Two calls: search then share; the share body wraps a key only the
-        // invitee can unwrap.
+        // Three calls: search, members, then share. The share body wraps a key
+        // only the invitee can unwrap, and a document with no log gets no entry.
         let calls = http.calls();
-        assert_eq!(calls.len(), 2);
-        match &calls[1] {
+        assert_eq!(calls.len(), 3);
+        match &calls[2] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/share"));
                 let enc = body["doc_key_enc"].as_str().unwrap();
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
+                assert!(body.get("entry").is_none());
             }
             other => panic!("expected share POST, got {other:?}"),
         }
@@ -1101,7 +1507,7 @@ mod tests {
             api_base: "api.test".into(),
             exchange_key: my_xk.clone(),
             previous: DocumentKey::generate(),
-            signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
+            author: author(),
         }
     }
 
@@ -1119,7 +1525,7 @@ mod tests {
         serde_json::json!({
             "user_id": uid,
             "display_name": name, "email": "m@test.local",
-            "signing_pub_key": "00", "exchange_pub_key": pub_hex,
+            "signing_pub_key": "00".repeat(32), "exchange_pub_key": pub_hex,
             "doc_key_enc": "", "role": "editor",
         })
     }
@@ -1289,8 +1695,16 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let (_i_xk, i_pub) = keypair(2);
         let doc_key = DocumentKey::generate();
-        let req =
-            build_invite_request(&my_xk, &i_pub, "i@test".into(), &doc_key, Role::Editor).unwrap();
+        let req = build_invite_request(
+            &my_xk,
+            &i_pub,
+            "i@test".into(),
+            &doc_key,
+            Role::Editor,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(req.key_id, hex::encode(doc_key.id().as_array()));
     }
 
@@ -1303,6 +1717,7 @@ mod tests {
         let expect = decode_exchange_pubkey(&i_pub).unwrap();
         let http = FakeHttp::new(vec![
             Ok(user_search_json("invitee@test.local", &i_pub)),
+            Ok(serde_json::json!({ "members": [] })),
             Err("POST https://api.test/share: KEY_CHANGED".into()),
         ]);
         let (etx, erx, sink, lrx) = channels();
@@ -1340,15 +1755,21 @@ mod tests {
     /// generated, so none reaches the members who stay (`SYNC-127`, `SYNC-130`).
     #[tokio::test]
     async fn leaving_posts_the_removal_alone_and_chooses_no_key() {
-        let me = UserId::new();
-        let http = FakeHttp::new(vec![Ok(serde_json::json!({ "status": "left" }))]);
+        let (my_xk, _) = keypair(1);
+        let author = author();
+        let me = author.user_id;
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "members": [] })),
+            Ok(serde_json::json!({ "status": "left" })),
+        ]);
         let (etx, erx, sink, lrx) = channels();
         let params = LeaveParams {
             id: RequestId::next(),
             document_id: DocumentId::new(),
-            user_id: me,
+            author,
             url_scheme: "https",
             api_base: "api.test".into(),
+            exchange_key: my_xk,
         };
         leave_task(&http, params, &etx, &sink).await;
         assert!(matches!(
@@ -1357,8 +1778,13 @@ mod tests {
         ));
         assert!(lrx.try_recv().is_err());
         let calls = http.calls();
-        assert_eq!(calls.len(), 1, "no GET, no POST: nothing to wrap");
-        assert!(matches!(&calls[0], Call::Delete(u) if u.ends_with(&format!("/share/{me}"))));
+        assert_eq!(
+            calls.len(),
+            2,
+            "the members read, then the removal: no POST"
+        );
+        assert!(matches!(&calls[0], Call::Get(_)));
+        assert!(matches!(&calls[1], Call::Delete(u, _) if u.ends_with(&format!("/share/{me}"))));
     }
 
     fn settle_params(my_xk: &StaticSecret) -> SettleParams {
@@ -1511,6 +1937,7 @@ mod tests {
             document_id: DocumentId::new(),
             url_scheme: "https",
             api_base: "api.test".into(),
+            exchange_key: keypair(1).0,
         }
     }
 
@@ -1644,5 +2071,365 @@ mod tests {
             }
             _ => panic!("unexpected event (want DocumentMembersReady)"),
         }
+    }
+
+    // -- The signed membership log (`ambre-spec-membership.md`).
+
+    use ambre_bus::MemberStanding;
+
+    /// A copy of `author`, for a task that takes its own.
+    fn same(author: &Author) -> Author {
+        Author {
+            user_id: author.user_id,
+            signing_key: author.signing_key.clone(),
+        }
+    }
+
+    /// One member of a logged document: an identity, a signing key and an
+    /// exchange key.
+    struct Peer {
+        author: Author,
+        xk: StaticSecret,
+    }
+
+    impl Peer {
+        fn new(seed: u8) -> Self {
+            Self {
+                author: Author {
+                    user_id: UserId::from_bytes([seed; 16]),
+                    signing_key: MasterSeed::from_array([seed; 32]).derive_signing_key(),
+                },
+                xk: keypair(seed).0,
+            }
+        }
+
+        fn exchange_hex(&self) -> String {
+            hex::encode(PublicKey::from(&self.xk).to_bytes())
+        }
+    }
+
+    /// A document `owner` created with a log: its key, the rows and the
+    /// entries the relay serves for it.
+    struct Logged {
+        document_id: DocumentId,
+        doc_key: DocumentKey,
+        anchor: EntryDigest,
+        owner_exchange: String,
+        rows: Vec<serde_json::Value>,
+        log: Vec<String>,
+    }
+
+    impl Logged {
+        fn new(owner: &Peer) -> Self {
+            let document_id = DocumentId::new();
+            let doc_key = DocumentKey::generate();
+            let (enc, entry) = creation(document_id, &doc_key, &owner.xk, &owner.author).unwrap();
+            let anchor = membership_log::decode(std::slice::from_ref(&entry))
+                .first()
+                .and_then(membership_log::digest)
+                .unwrap();
+            let mut logged = Self {
+                document_id,
+                doc_key,
+                anchor,
+                owner_exchange: owner.exchange_hex(),
+                rows: Vec::new(),
+                log: vec![entry],
+            };
+            logged.row(owner, enc, Role::Owner);
+            logged
+        }
+
+        fn row(&mut self, peer: &Peer, doc_key_enc: String, role: Role) {
+            self.rows.push(serde_json::json!({
+                "user_id": peer.author.user_id.to_string(),
+                "display_name": "Member", "email": "m@test.local",
+                "signing_pub_key": signing_hex(&peer.author.signing_key),
+                "exchange_pub_key": peer.exchange_hex(),
+                "wrapper_exchange_pub_key": self.owner_exchange,
+                "doc_key_enc": doc_key_enc, "role": role.to_string(),
+            }));
+        }
+
+        /// The log walked from the anchor, with `more` entries after it.
+        fn walk(&self, more: &[&str]) -> Log {
+            let mut texts = self.log.clone();
+            texts.extend(more.iter().map(|text| text.to_string()));
+            walk_served(self.document_id, Some(self.anchor), &texts)
+        }
+
+        /// `owner` invites `peer`: the entry joins the log and the row joins
+        /// the members, with a copy sealing the anchor.
+        fn invite(&mut self, owner: &Peer, peer: &Peer, role: Role) {
+            let draft = Draft {
+                document: self.document_id,
+                member: peer.author.user_id,
+                member_key: peer.author.signing_key.verifying_key().to_bytes(),
+                act: MembershipAct::Invite,
+                role,
+                key: Some(self.doc_key.id()),
+            };
+            let entry = entry_after(&self.walk(&[]), draft, &owner.author)
+                .unwrap()
+                .unwrap();
+            self.log.push(entry);
+            let peer_pub = PublicKey::from(&peer.xk).to_bytes();
+            let enc =
+                wrap_anchored_b64(&owner.xk, &peer_pub, &self.doc_key, Some(self.anchor)).unwrap();
+            self.row(peer, enc, role);
+        }
+
+        fn answer(&self) -> serde_json::Value {
+            serde_json::json!({ "members": self.rows, "log": self.log })
+        }
+    }
+
+    /// The entry a request body carries, decoded.
+    fn posted_entry(body: &serde_json::Value) -> ambre_protocol::MembershipEntry {
+        let text = body["entry"]
+            .as_str()
+            .expect("the request carries an entry");
+        membership_log::decode(&[text.to_string()])
+            .pop()
+            .expect("the entry decodes")
+    }
+
+    /// Holds `SYNC-132` and `SYNC-104` at the creation: the creator signs the
+    /// first entry, and its own copy of the key seals that entry's digest.
+    #[test]
+    fn a_new_document_signs_its_first_entry_and_seals_its_digest() {
+        let owner = Peer::new(1);
+        let logged = Logged::new(&owner);
+        let resp: http::DocumentMembersResponse = serde_json::from_value(logged.answer()).unwrap();
+        let (log, anchor) = served_log(logged.document_id, &owner.xk, &resp);
+        assert_eq!(anchor, Some(logged.anchor));
+        assert_eq!(
+            log.standing(owner.author.user_id),
+            (MemberStanding::Verified, Some(Role::Owner))
+        );
+        assert_eq!(log.wraps(owner.author.user_id), Some(logged.doc_key.id()));
+    }
+
+    /// Holds `SYNC-105`, `SYNC-123` and `SYNC-132` at the invite. One request
+    /// carries the copy and the entry. The entry names the key the copy wraps
+    /// and links to the log, and the copy seals the anchor (`SYNC-104`).
+    #[tokio::test]
+    async fn an_invite_posts_its_signed_entry_beside_the_copy() {
+        let owner = Peer::new(1);
+        let logged = Logged::new(&owner);
+        let (invitee_xk, invitee_hex) = keypair(2);
+        let mut params = invite_params(&owner.xk, decode_exchange_pubkey(&invitee_hex).unwrap());
+        params.document_id = logged.document_id;
+        params.doc_key = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &invitee_hex)),
+            Ok(logged.answer()),
+            Ok(serde_json::json!({
+                "user_id": "55555555-5555-5555-5555-555555555555",
+                "display_name": "Invitee",
+            })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        invite_task(&http, params, &etx, &sink).await;
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
+
+        let calls = http.calls();
+        let Call::Post(_, body) = &calls[2] else {
+            panic!("expected the share POST: {calls:?}");
+        };
+        let entry = posted_entry(body);
+        let invitee = UserId::parse_str("55555555-5555-5555-5555-555555555555").unwrap();
+        assert_eq!(entry.act, MembershipAct::Invite);
+        assert_eq!(entry.member, invitee);
+        assert_eq!(entry.key, Some(logged.doc_key.id()));
+        let text = body["entry"].as_str().unwrap();
+        assert_eq!(
+            logged.walk(&[text]).standing(invitee),
+            (MemberStanding::Verified, Some(Role::Editor))
+        );
+        let owner_pub = PublicKey::from(&owner.xk).to_bytes();
+        let enc = body["doc_key_enc"].as_str().unwrap();
+        let (key, anchor) = unwrap_anchor_b64(&invitee_xk, &owner_pub, enc).unwrap();
+        assert_eq!(key.id(), logged.doc_key.id());
+        assert_eq!(anchor, Some(logged.anchor));
+    }
+
+    /// An invite whose place another entry took is signed again after that
+    /// entry, so the log never forks (`SYNC-132`).
+    #[tokio::test]
+    async fn an_invite_overtaken_in_the_log_is_signed_again_after_it() {
+        let owner = Peer::new(1);
+        let mut logged = Logged::new(&owner);
+        let first = logged.answer();
+        logged.invite(&owner, &Peer::new(3), Role::Viewer);
+        let (_invitee_xk, invitee_hex) = keypair(2);
+        let mut params = invite_params(&owner.xk, decode_exchange_pubkey(&invitee_hex).unwrap());
+        params.document_id = logged.document_id;
+        params.doc_key = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &invitee_hex)),
+            Ok(first),
+            Err("POST https://api.test/share: LOG_MOVED".into()),
+            Ok(logged.answer()),
+            Ok(serde_json::json!({
+                "user_id": "55555555-5555-5555-5555-555555555555",
+                "display_name": "Invitee",
+            })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, params, &etx, &sink).await;
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::InviteSent { .. })));
+        assert!(lrx.try_recv().is_err());
+        let calls = http.calls();
+        let positions: Vec<u64> = calls
+            .iter()
+            .filter_map(|call| match call {
+                Call::Post(_, body) => Some(posted_entry(body).position),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(positions, vec![1, 2]);
+    }
+
+    /// Holds `SYNC-132` at the revoke: the request carries the entry that
+    /// removes the member and names the key the rotation installs.
+    #[tokio::test]
+    async fn a_revoke_posts_the_entry_that_removes_the_member() {
+        let owner = Peer::new(1);
+        let carol = Peer::new(3);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &carol, Role::Editor);
+        let mut params = revoke_params(&owner.xk);
+        params.document_id = logged.document_id;
+        params.user_id = carol.author.user_id;
+        params.previous = logged.doc_key.clone();
+        params.author = same(&owner.author);
+        let http = FakeHttp::new(vec![
+            Ok(logged.answer()),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+        let Ok(SyncEvent::RevocationComplete { new_doc_key, .. }) = erx.try_recv() else {
+            panic!("expected RevocationComplete");
+        };
+        let calls = http.calls();
+        let Call::Post(_, body) = &calls[1] else {
+            panic!("expected the revoke POST: {calls:?}");
+        };
+        let entry = posted_entry(body);
+        assert_eq!(entry.act, MembershipAct::Revoke);
+        assert_eq!(entry.key, Some(new_doc_key.id()));
+        let text = body["entry"].as_str().unwrap();
+        let log = logged.walk(&[text]);
+        assert_eq!(
+            log.standing(carol.author.user_id).0,
+            MemberStanding::Revoked
+        );
+    }
+
+    /// Holds `SYNC-132` at a leave: the member signs their own removal.
+    #[tokio::test]
+    async fn a_member_who_leaves_signs_their_own_removal() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        let params = LeaveParams {
+            id: RequestId::next(),
+            document_id: logged.document_id,
+            author: same(&bob.author),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: bob.xk.clone(),
+        };
+        let http = FakeHttp::new(vec![
+            Ok(logged.answer()),
+            Ok(serde_json::json!({ "status": "left" })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        leave_task(&http, params, &etx, &sink).await;
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::DocumentLeft { .. })));
+        let calls = http.calls();
+        let Call::Delete(_, body) = &calls[1] else {
+            panic!("expected the removal: {calls:?}");
+        };
+        let entry = posted_entry(body);
+        assert_eq!(
+            (entry.member, entry.author),
+            (bob.author.user_id, bob.author.user_id)
+        );
+        let text = body["entry"].as_str().unwrap();
+        let log = logged.walk(&[text]);
+        assert_eq!(log.standing(bob.author.user_id).0, MemberStanding::Revoked);
+    }
+
+    /// Holds `SYNC-132` and `SYNC-110` at a role change: the owner signs the
+    /// entry, and the role the log then gives is the new one.
+    #[tokio::test]
+    async fn a_role_change_posts_the_entry_that_gives_the_role() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        let params = RoleChangeParams {
+            id: RequestId::next(),
+            document_id: logged.document_id,
+            user_id: bob.author.user_id,
+            role: Role::Viewer,
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: owner.xk.clone(),
+            author: same(&owner.author),
+        };
+        let http = FakeHttp::new(vec![
+            Ok(logged.answer()),
+            Ok(serde_json::json!({ "status": "updated" })),
+        ]);
+        let (etx, erx, sink, _lrx) = channels();
+        role_change_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::MemberRoleUpdatedEvent {
+                role: Role::Viewer,
+                ..
+            })
+        ));
+        let calls = http.calls();
+        let Call::Patch(url, body) = &calls[1] else {
+            panic!("expected the role PATCH: {calls:?}");
+        };
+        assert!(url.ends_with(&format!("/members/{}", bob.author.user_id)));
+        assert_eq!(body["role"], "viewer");
+        let text = body["entry"].as_str().unwrap();
+        let log = logged.walk(&[text]);
+        assert_eq!(log.standing(bob.author.user_id).1, Some(Role::Viewer));
+    }
+
+    /// Holds `SYNC-108` and `SYNC-110` at the list: a row no valid entry
+    /// reaches reads unverified, and a logged row takes the log's role.
+    #[test]
+    fn the_member_list_shows_what_the_log_verifies() {
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Viewer);
+        // The relay claims a role the log never gave, and adds a stranger.
+        logged.rows[1]["role"] = "owner".into();
+        logged.row(&Peer::new(9), String::new(), Role::Editor);
+        let resp: http::DocumentMembersResponse = serde_json::from_value(logged.answer()).unwrap();
+        let (log, _) = served_log(logged.document_id, &owner.xk, &resp);
+        let shown = map_members(resp.members, &log);
+        let standing: Vec<_> = shown.iter().map(|m| (m.standing, m.role)).collect();
+        assert_eq!(
+            standing,
+            vec![
+                (MemberStanding::Verified, Role::Owner),
+                (MemberStanding::Verified, Role::Viewer),
+                (MemberStanding::Unverified, Role::Editor),
+            ]
+        );
     }
 }

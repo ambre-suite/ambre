@@ -748,6 +748,23 @@ pub fn object_key(bytes: &[u8]) -> Result<KeyId, PipelineError> {
         .ok_or(PipelineError::ShortObject)
 }
 
+/// The key that signed a sealed object, read from its header without opening
+/// it. An open checks the signature under this same key, so a filter on it
+/// holds (`SYNC-121`).
+///
+/// # Errors
+///
+/// [`PipelineError::UnknownLayout`] when the layout is not one this build
+/// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold a key.
+pub fn object_author(bytes: &[u8]) -> Result<[u8; AUTHOR_KEY_LEN], PipelineError> {
+    check_layout(bytes)?;
+    let start = LAYOUT_LEN + KEY_ID_LEN;
+    bytes
+        .get(start..start + AUTHOR_KEY_LEN)
+        .and_then(|author| author.try_into().ok())
+        .ok_or(PipelineError::ShortObject)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

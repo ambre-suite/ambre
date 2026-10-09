@@ -26,10 +26,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-039` | `INV` | No key material MUST cross to the Logic thread on a member row. | `ambre-spec-zero-knowledge.md`, `ZK-002` | type-level -- the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | none | verified |
 | `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | `ambre_sync::updates::tests::the_key_the_directory_and_the_role_come_from_one_answer` -- the open reads all three through one function that takes one answer and nothing else | none | verified |
-| `SYNC-132` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-132` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | `ambre_sync::sharing::tests::a_new_document_signs_its_first_entry_and_seals_its_digest` -- the creation posts the first entry, signed by the creator; `::an_invite_posts_its_signed_entry_beside_the_copy`; `::a_revoke_posts_the_entry_that_removes_the_member`; `::a_member_who_leaves_signs_their_own_removal`; `::a_role_change_posts_the_entry_that_gives_the_role` -- each change posts an entry its author signed; `::an_invite_overtaken_in_the_log_is_signed_again_after_it` -- an entry whose place another took is signed again at the next one | none | verified |
+| `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | `ambre_protocol::membership::tests::every_field_but_the_signature_is_signed` -- a change to any named field breaks the signature; `::an_entry_names_a_previous_digest_unless_it_is_the_first`; `ambre_sync::membership_log::tests::a_row_is_verified_only_through_a_chain_to_the_first_entry` -- an entry with a wrong digest breaks the chain | none | verified |
+| `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | `ambre_sync::membership_log::tests::a_row_is_verified_only_through_a_chain_to_the_first_entry` -- a row past a broken link, or under another first entry, is unverified | none | verified |
+| `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | `ambre_sync::sharing::tests::a_new_document_signs_its_first_entry_and_seals_its_digest` -- the owner's copy seals the digest of the first entry; `::an_invite_posts_its_signed_entry_beside_the_copy` -- the invitee's copy opens to the same digest; `ambre_crypto::tests::the_log_anchor_travels_sealed_with_the_key` -- the anchor rides inside the seal | none | verified |
 | `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | `ambre_sync::sharing::tests::map_members_parses_roles_and_drops_invented_ids` -- a row whose identifier does not parse is dropped, never given a fresh one | none | verified |
 
 ### 1.2 A document is shared with someone
@@ -65,20 +65,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-105` | `POST` | An invite MUST post its signed entry and the wrapped key in one request. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-123` | `POST` | The signed entry of an invite MUST name the key it wraps. | this spec section 3; `SYNC-115` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-124` | `FAIL` | Given a wrapped key whose identifier differs from the one its invite names, the client MUST refuse the key. | this spec section 3; `SYNC-115` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-106` | `POST` | An entry signed by the member it adds MUST count as valid only under a rule of the application that owns the document. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-107` | `FRAME` | Recording an entry MUST NOT change an earlier entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-105` | `POST` | An invite MUST post its signed entry and the wrapped key in one request. | this spec section 3 | `ambre_sync::sharing::tests::an_invite_posts_its_signed_entry_beside_the_copy` -- the one share request carries both | none | verified |
+| `SYNC-123` | `POST` | The signed entry of an invite MUST name the key it wraps. | this spec section 3; `SYNC-115` | `ambre_sync::sharing::tests::an_invite_posts_its_signed_entry_beside_the_copy` -- the entry names the identifier the copy carries | none | verified |
+| `SYNC-124` | `FAIL` | Given a wrapped key whose identifier differs from the one its invite names, the client MUST refuse the key. | this spec section 3; `SYNC-115` | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- a verified invite naming another key leaves the copy unheld | none | verified |
+| `SYNC-106` | `POST` | An entry signed by the member it adds MUST count as valid only under a rule of the application that owns the document. | this spec section 3 | `ambre_sync::membership_log::tests::a_self_join_counts_only_under_the_applications_rule` -- the same self-join verifies under an accepting rule and is dropped under the default one | none | verified |
+| `SYNC-107` | `FRAME` | Recording an entry MUST NOT change an earlier entry of the log. | this spec section 3 | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- a third entry leaves the first two byte for byte, and a stale position is refused | none | verified |
 
 ### 1.6 A member list is checked
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-108` | `FAIL` | Given a member row with no valid chain, the client MUST show it as unverified. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-109` | `FAIL` | Given an invite replayed after a later revoke of the same member, the client MUST count the member as revoked. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-110` | `POST` | The role a client shows for a member MUST be the role of the latest valid entry for that member. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-108` | `FAIL` | Given a member row with no valid chain, the client MUST show it as unverified. | this spec section 3 | `ambre_sync::sharing::tests::the_member_list_shows_what_the_log_verifies` -- a row the log does not link reaches the list as unverified; `ambre_sync::membership_log::tests::an_entry_its_author_did_not_sign_or_may_not_make_verifies_nothing` | none | verified |
+| `SYNC-109` | `FAIL` | Given an invite replayed after a later revoke of the same member, the client MUST count the member as revoked. | this spec section 3 | `ambre_sync::membership_log::tests::an_invite_replayed_after_a_revoke_leaves_the_member_revoked` | none | verified |
+| `SYNC-110` | `POST` | The role a client shows for a member MUST be the role of the latest valid entry for that member. | this spec section 3 | `ambre_sync::membership_log::tests::the_role_is_the_latest_valid_entrys`; `ambre_sync::sharing::tests::the_member_list_shows_what_the_log_verifies` -- the list carries the logged role over the relay's column; `::a_role_change_posts_the_entry_that_gives_the_role` | none | verified |
+| `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -86,10 +86,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 16 `verified`, 1 `partial`, 13 `unimplemented`. What holds is every pure
-  transform, extracted out of the browser and covered. Those are the wrap, the identity pair it
-  binds, the refusal of a weak key, the pin comparison, the directory build and the role. What is
-  loose is the branches that only run against a live relay.
+* **Verification.** 29 `verified`, 1 `partial`. Every pure transform holds, out of the browser:
+  the wrap, the weak key, the pin, the directory, the role and the log walk. What is loose is the
+  branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -177,13 +176,15 @@ client check what the relay serves.
 ```rust
 pub struct MembershipEntry {
     pub document: DocumentId,
+    pub position: u64,                  // the place in the log, from zero
     pub member: UserId,
+    pub member_key: [u8; 32],           // the member's signing key
     pub act: MembershipAct,
     pub role: Role,
     pub key: Option<KeyId>,             // the key an invite or a self-join wraps
     pub previous: Option<EntryDigest>,  // absent on the first entry alone
     pub author: UserId,
-    pub signature: Signature,
+    pub signature: Vec<u8>,
 }
 pub enum MembershipAct { Create, Invite, Revoke, ChangeRole, SelfJoin }
 pub struct EntryDigest([u8; 32]);
@@ -191,6 +192,14 @@ pub struct EntryDigest([u8; 32]);
 
 What the relay can still do is withhold the latest entries. It can show a list that is late, never
 a list it made up. A revoke also rotates the key, so a revoked member reads nothing new either way.
+
+**How an entry is appended.** The relay checks the signature against the author's registered key.
+It appends at the entry's position alone, under the document lock. Two writers racing for one
+position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again after the winner.
+
+**A document older than the log.** Its log is empty, so the relay takes a change with no entry.
+It has no first entry, so none of its rows verifies, and the list shows each as unverified. A
+document whose log holds an entry refuses a change without one.
 
 **A document the relay does not know is this client's own.** A missing document on open means it
 exists on this client alone and has not been created on the relay yet. The local user is then the
@@ -202,6 +211,8 @@ which is `SYNC-040`.
 * `crates/ambre-sync/src/sharing.rs` -- the wrap, the directory, the role, the invite and the list;
 * `crates/ambre-sync/src/members.rs` -- the handlers that gather the state and spawn the requests;
 * `crates/ambre-sync/src/updates.rs` -- the unwrap at open, and the wrapper-key choice;
+* `crates/ambre-sync/src/membership_log.rs` -- the walk of the log, and the next entry to sign;
+* `crates/ambre-protocol/src/membership.rs` -- the entry, its signed bytes and its digest;
 * `crates/ambre-crypto/src/ecdh.rs` -- the exchange, the derivation and the seal of the key itself.
 
 ---
@@ -255,8 +266,8 @@ authority: the role here hides what the relay would refuse anyway.
   appear until something refetches.
 * **No test drives an open.** The whole open path runs in a browser: the members request, the
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
-* **The signed membership log is unbuilt.** No entry is signed today, and every member row is taken
-  on the relay's word (`SYNC-132`, `SYNC-102` to `SYNC-111`).
+* **A document created before the log has no first entry.** Its rows stay unverified for ever, and
+  no rule states how such a document gains a log.
 * **A relay can withhold the latest entries.** Nothing tells a client that its list is late. A
   signed head of the log, pinned by each member, would make the gap visible, and no rule states it.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no

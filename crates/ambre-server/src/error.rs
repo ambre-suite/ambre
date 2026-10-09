@@ -55,6 +55,11 @@ pub enum AppError {
     #[error("The document key changed since the invitation wrapped it")]
     KeyChanged,
 
+    /// Another membership entry took the place this one was signed for
+    /// (`SRV-104`). The client reads the log again and signs after it.
+    #[error("The membership log moved since the entry was signed")]
+    LogMoved,
+
     #[error("Invalid signature")]
     InvalidSignature,
 
@@ -131,6 +136,7 @@ impl IntoResponse for AppError {
             AppError::RotationOwed => (StatusCode::CONFLICT, "ROTATION_OWED"),
             AppError::MembersChanged => (StatusCode::CONFLICT, "MEMBERS_CHANGED"),
             AppError::KeyChanged => (StatusCode::CONFLICT, "KEY_CHANGED"),
+            AppError::LogMoved => (StatusCode::CONFLICT, "LOG_MOVED"),
             AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
             AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
             AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),

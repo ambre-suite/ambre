@@ -942,6 +942,13 @@ input[type="radio"] {
     font-weight: 500;
 }
 
+.ambre-share-member-standing {
+    margin-left: var(--space-3);
+    color: var(--error);
+    font-size: var(--font-small);
+    font-weight: 400;
+}
+
 .ambre-share-member-email {
     grid-column: 1;
     color: var(--text-dim);

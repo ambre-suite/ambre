@@ -1,0 +1,485 @@
+//! The signed membership log of one document
+//! (`ambre-spec-membership.md section 3`).
+//!
+//! The relay stays the authority on access, and the log lets this client check
+//! what it serves. The walk starts at the first entry, which must hash to the
+//! anchor the wrapped key carried (`SYNC-104`). It checks each entry against the
+//! state the entries before it built, and stops at the first that fails. A row
+//! the walk never reached stands on the relay's word alone (`SYNC-103`).
+
+use std::collections::{HashMap, HashSet};
+
+use ambre_bus::MemberStanding;
+use ambre_core::{DocumentId, KeyId, Role, UserId};
+use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry};
+use base64::Engine as _;
+use ed25519_dalek::SigningKey;
+
+/// The rule of the owning application that accepts a member's own entry
+/// (`SYNC-106`). Documents have none yet, so every self-join fails there.
+pub(crate) type SelfJoinRule = fn(&MembershipEntry) -> bool;
+
+/// The rule documents apply: no self-join is valid.
+pub(crate) fn no_self_join(_: &MembershipEntry) -> bool {
+    false
+}
+
+/// The rank of a document role, the order the relay grants them in.
+fn rank(role: Role) -> Option<u8> {
+    match role {
+        Role::Viewer => Some(0),
+        Role::Editor => Some(1),
+        Role::Owner => Some(2),
+        Role::Admin | Role::Member => None,
+    }
+}
+
+/// What the log says of one member once the walk applied its entries.
+#[derive(Clone)]
+struct Held {
+    role: Role,
+    /// The signing key the entry that added the member named.
+    key: [u8; 32],
+    /// Still a member: no later valid entry removed them.
+    present: bool,
+    /// The key the entry that added the member wraps (`SYNC-123`).
+    wraps: Option<KeyId>,
+}
+
+/// The digest of one entry, as the next entry names it. `None` for an entry
+/// that does not encode, which no decoded entry is.
+pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
+    let bytes = entry.encode().ok()?;
+    Some(EntryDigest(ambre_crypto::hash::entry_digest(&bytes)))
+}
+
+/// One document's log, as far as a chain of valid entries reaches.
+pub(crate) struct Log {
+    held: HashMap<UserId, Held>,
+    /// Every key the log granted a writing role, at any point.
+    signers: HashSet<[u8; 32]>,
+    /// Whether the wrapped key carried an anchor at all.
+    anchored: bool,
+    /// The place and the previous digest the next entry takes.
+    next: (u64, Option<EntryDigest>),
+}
+
+impl Log {
+    /// Walks `entries` from the first, which must hash to `anchor`, and stops
+    /// at the first entry that fails a check.
+    pub(crate) fn walk(
+        document: DocumentId,
+        anchor: Option<EntryDigest>,
+        entries: &[MembershipEntry],
+        self_join: SelfJoinRule,
+    ) -> Self {
+        let mut log = Self {
+            held: HashMap::new(),
+            signers: HashSet::new(),
+            anchored: anchor.is_some(),
+            next: (
+                u64::try_from(entries.len()).unwrap_or(u64::MAX),
+                entries.last().and_then(digest),
+            ),
+        };
+        let mut previous = None;
+        for (place, entry) in entries.iter().enumerate() {
+            let fits = entry.document == document
+                && u64::try_from(place).is_ok_and(|place| place == entry.position)
+                && entry.well_formed()
+                && entry.previous == previous;
+            let this = digest(entry);
+            let valid = fits
+                && match previous {
+                    None => this.is_some() && this == anchor && log.creates(entry),
+                    Some(_) => log.allows(entry, self_join),
+                };
+            if !valid {
+                break;
+            }
+            log.apply(entry);
+            previous = this;
+        }
+        log
+    }
+
+    /// Whether `entry` is a valid first entry: the creator adds themselves as
+    /// owner, and signs it.
+    fn creates(&self, entry: &MembershipEntry) -> bool {
+        entry.act == MembershipAct::Create
+            && entry.author == entry.member
+            && entry.role == Role::Owner
+            && signed_by(entry, &entry.member_key)
+    }
+
+    /// Whether the state so far allows `entry`, and its author signed it.
+    fn allows(&self, entry: &MembershipEntry, self_join: SelfJoinRule) -> bool {
+        let author = self.held.get(&entry.author).filter(|held| held.present);
+        let target = self.held.get(&entry.member).filter(|held| held.present);
+        let author_rank = author.and_then(|held| rank(held.role));
+        let granted = rank(entry.role);
+        let allowed = match entry.act {
+            MembershipAct::Create => false,
+            // An editor or an owner adds a member at or below their own rank,
+            // and touches no member above it, as the relay checks.
+            MembershipAct::Invite => match (author_rank, granted) {
+                (Some(by), Some(role)) => {
+                    by >= 1
+                        && role <= by
+                        && target.is_none_or(|held| rank(held.role).is_some_and(|t| t <= by))
+                }
+                _ => false,
+            },
+            MembershipAct::ChangeRole => {
+                author_rank == Some(2) && target.is_some() && granted.is_some()
+            }
+            // A member removes themselves, and an owner removes anyone.
+            MembershipAct::Revoke => {
+                target.is_some() && (entry.author == entry.member || author_rank == Some(2))
+            }
+            MembershipAct::SelfJoin => {
+                entry.author == entry.member && granted.is_some() && self_join(entry)
+            }
+        };
+        let key = match entry.act {
+            MembershipAct::SelfJoin => Some(&entry.member_key),
+            _ => author.map(|held| &held.key),
+        };
+        allowed && key.is_some_and(|key| signed_by(entry, key))
+    }
+
+    /// Applies one valid entry to the state.
+    fn apply(&mut self, entry: &MembershipEntry) {
+        match entry.act {
+            MembershipAct::Create | MembershipAct::Invite | MembershipAct::SelfJoin => {
+                self.held.insert(
+                    entry.member,
+                    Held {
+                        role: entry.role,
+                        key: entry.member_key,
+                        present: true,
+                        wraps: entry.key,
+                    },
+                );
+            }
+            MembershipAct::ChangeRole => {
+                if let Some(held) = self.held.get_mut(&entry.member) {
+                    held.role = entry.role;
+                }
+            }
+            MembershipAct::Revoke => {
+                if let Some(held) = self.held.get_mut(&entry.member) {
+                    held.present = false;
+                }
+            }
+        }
+        if let Some(held) = self.held.get(&entry.member)
+            && held.present
+            && rank(held.role).is_some_and(|r| r >= 1)
+        {
+            self.signers.insert(held.key);
+        }
+    }
+
+    /// What the log says of `member`, and the role its latest valid entry
+    /// gives them (`SYNC-108`, `SYNC-109`, `SYNC-110`).
+    pub(crate) fn standing(&self, member: UserId) -> (MemberStanding, Option<Role>) {
+        match self.held.get(&member) {
+            Some(held) if held.present => (MemberStanding::Verified, Some(held.role)),
+            Some(_) => (MemberStanding::Revoked, None),
+            None => (MemberStanding::Unverified, None),
+        }
+    }
+
+    /// The keys a key link may be signed by (`SYNC-121`): every key the log
+    /// granted a writing role. `None` for a document whose wrap carried no
+    /// anchor, which predates the log.
+    pub(crate) fn signers(&self) -> Option<&HashSet<[u8; 32]>> {
+        self.anchored.then_some(&self.signers)
+    }
+
+    /// The key the entry that added `member` wraps, when the log reaches it.
+    pub(crate) fn wraps(&self, member: UserId) -> Option<KeyId> {
+        self.held
+            .get(&member)
+            .filter(|held| held.present)
+            .and_then(|held| held.wraps)
+    }
+
+    /// The place and the previous digest the next entry takes. They follow
+    /// every entry served, valid or not: the relay appends at its own end.
+    pub(crate) fn next(&self) -> (u64, Option<EntryDigest>) {
+        self.next
+    }
+}
+
+/// Whether `key` signed `entry`.
+fn signed_by(entry: &MembershipEntry, key: &[u8; 32]) -> bool {
+    entry.signed_bytes().is_ok_and(|bytes| {
+        ambre_crypto::signature::verify_message(key, &bytes, &entry.signature).is_ok()
+    })
+}
+
+/// What an entry records, before its place in the log and its signature.
+pub(crate) struct Draft {
+    pub document: DocumentId,
+    pub member: UserId,
+    pub member_key: [u8; 32],
+    pub act: MembershipAct,
+    pub role: Role,
+    pub key: Option<KeyId>,
+}
+
+/// Signs `draft` as the entry after `next`, by `author` (`SYNC-132`).
+///
+/// # Errors
+///
+/// The encoder's error, which a well-formed entry never reaches.
+pub(crate) fn sign(
+    draft: Draft,
+    next: (u64, Option<EntryDigest>),
+    author: UserId,
+    signing_key: &SigningKey,
+) -> Result<MembershipEntry, String> {
+    let mut entry = MembershipEntry {
+        document: draft.document,
+        position: next.0,
+        member: draft.member,
+        member_key: draft.member_key,
+        act: draft.act,
+        role: draft.role,
+        key: draft.key,
+        previous: next.1,
+        author,
+        signature: Vec::new(),
+    };
+    let bytes = entry.signed_bytes().map_err(|e| e.to_string())?;
+    entry.signature = ambre_crypto::signature::sign_message(signing_key, &bytes).to_vec();
+    Ok(entry)
+}
+
+/// The form an entry takes in a request: its encoding, in base64.
+///
+/// # Errors
+///
+/// The encoder's error.
+pub(crate) fn encode(entry: &MembershipEntry) -> Result<String, String> {
+    let bytes = entry.encode().map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::URL_SAFE.encode(bytes))
+}
+
+/// The entries a members answer carries, up to the first that does not
+/// decode. The walk could not pass it anyway.
+pub(crate) fn decode(texts: &[String]) -> Vec<MembershipEntry> {
+    texts
+        .iter()
+        .map_while(|text| {
+            let bytes = base64::engine::general_purpose::URL_SAFE
+                .decode(text)
+                .ok()?;
+            MembershipEntry::decode(&bytes).ok()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    /// One user of a test log: an identity and a signing key.
+    pub(crate) struct Person {
+        pub id: UserId,
+        pub key: SigningKey,
+    }
+
+    impl Person {
+        pub(crate) fn new(seed: u8) -> Self {
+            Self {
+                id: UserId::from_bytes([seed; 16]),
+                key: SigningKey::from_bytes(&[seed; 32]),
+            }
+        }
+
+        pub(crate) fn public(&self) -> [u8; 32] {
+            self.key.verifying_key().to_bytes()
+        }
+    }
+
+    pub(crate) const DOC: DocumentId = DocumentId::from_bytes([7; 16]);
+
+    /// Appends the entry `by` signs about `member` to `log`.
+    pub(crate) fn append(
+        log: &mut Vec<MembershipEntry>,
+        by: &Person,
+        member: &Person,
+        act: MembershipAct,
+        role: Role,
+    ) {
+        let next = (
+            u64::try_from(log.len()).unwrap(),
+            log.last().and_then(digest),
+        );
+        let draft = Draft {
+            document: DOC,
+            member: member.id,
+            member_key: member.public(),
+            act,
+            role,
+            key: Some(KeyId::from_array([log.len() as u8; 16])),
+        };
+        log.push(sign(draft, next, by.id, &by.key).unwrap());
+    }
+
+    /// A log Alice created, where she invited Bob as an editor.
+    pub(crate) fn created(alice: &Person, bob: &Person) -> Vec<MembershipEntry> {
+        let mut log = Vec::new();
+        append(&mut log, alice, alice, MembershipAct::Create, Role::Owner);
+        append(&mut log, alice, bob, MembershipAct::Invite, Role::Editor);
+        log
+    }
+
+    fn anchor(log: &[MembershipEntry]) -> Option<EntryDigest> {
+        log.first().and_then(digest)
+    }
+
+    fn walk(log: &[MembershipEntry]) -> Log {
+        Log::walk(DOC, anchor(log), log, no_self_join)
+    }
+
+    /// Holds `SYNC-103`: a row counts as verified only when valid entries
+    /// link it to the first. A log rooted elsewhere, or one whose link is
+    /// broken, leaves every row past the break unverified.
+    #[test]
+    fn a_row_is_verified_only_through_a_chain_to_the_first_entry() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &carol, MembershipAct::Invite, Role::Viewer);
+        let view = walk(&log);
+        for member in [alice.id, bob.id, carol.id] {
+            assert_eq!(view.standing(member).0, MemberStanding::Verified);
+        }
+        // Rooted at a creator the relay made: the anchor does not match.
+        let mallory = Person::new(9);
+        let forged = created(&mallory, &bob);
+        let view = Log::walk(DOC, anchor(&log), &forged, no_self_join);
+        assert_eq!(view.standing(bob.id).0, MemberStanding::Unverified);
+        // An entry whose previous digest is not the one before it.
+        let mut broken = log.clone();
+        if let Some(entry) = broken.get_mut(2) {
+            entry.previous = Some(EntryDigest([0; 32]));
+        }
+        let view = walk(&broken);
+        assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
+        assert_eq!(view.standing(carol.id).0, MemberStanding::Unverified);
+        // No anchor at all: nothing verifies.
+        let view = Log::walk(DOC, None, &log, no_self_join);
+        assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
+    }
+
+    /// Holds `SYNC-108` at the walk. An entry another key signed, or that the
+    /// author's rank does not allow, ends the chain. The row it would add is
+    /// then unverified.
+    #[test]
+    fn an_entry_its_author_did_not_sign_or_may_not_make_verifies_nothing() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &carol, MembershipAct::Invite, Role::Viewer);
+        if let Some(entry) = log.get_mut(2) {
+            entry.author = alice.id;
+        }
+        assert_eq!(walk(&log).standing(carol.id).0, MemberStanding::Unverified);
+
+        // An editor may not grant the owning role.
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &carol, MembershipAct::Invite, Role::Owner);
+        assert_eq!(walk(&log).standing(carol.id).0, MemberStanding::Unverified);
+
+        // A viewer may not invite at all.
+        let mut log = Vec::new();
+        append(&mut log, &alice, &alice, MembershipAct::Create, Role::Owner);
+        append(&mut log, &alice, &bob, MembershipAct::Invite, Role::Viewer);
+        append(&mut log, &bob, &carol, MembershipAct::Invite, Role::Viewer);
+        assert_eq!(walk(&log).standing(carol.id).0, MemberStanding::Unverified);
+    }
+
+    /// Holds `SYNC-106`: an entry a member signs to add themselves counts only
+    /// under a rule of the owning application. Documents have none.
+    #[test]
+    fn a_self_join_counts_only_under_the_applications_rule() {
+        let (alice, bob, dave) = (Person::new(1), Person::new(2), Person::new(4));
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &dave,
+            &dave,
+            MembershipAct::SelfJoin,
+            Role::Viewer,
+        );
+        assert_eq!(walk(&log).standing(dave.id).0, MemberStanding::Unverified);
+        let view = Log::walk(DOC, anchor(&log), &log, |_| true);
+        assert_eq!(view.standing(dave.id).0, MemberStanding::Verified);
+    }
+
+    /// Holds `SYNC-109`: an invite served again after a revoke of the same
+    /// member changes nothing. Appended at the end, it does not link, and the
+    /// member stays revoked.
+    #[test]
+    fn an_invite_replayed_after_a_revoke_leaves_the_member_revoked() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let mut log = created(&alice, &bob);
+        append(&mut log, &alice, &bob, MembershipAct::Revoke, Role::Editor);
+        assert_eq!(walk(&log).standing(bob.id), (MemberStanding::Revoked, None));
+        let replayed = log.get(1).cloned().unwrap();
+        log.push(replayed);
+        assert_eq!(walk(&log).standing(bob.id), (MemberStanding::Revoked, None));
+        // A member who leaves signs their own revoke.
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &bob, MembershipAct::Revoke, Role::Editor);
+        assert_eq!(walk(&log).standing(bob.id).0, MemberStanding::Revoked);
+    }
+
+    /// Holds `SYNC-110`: the role shown is the one the latest valid entry
+    /// gives, whatever the relay's row says.
+    #[test]
+    fn the_role_is_the_latest_valid_entrys() {
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let mut log = created(&alice, &bob);
+        assert_eq!(walk(&log).standing(bob.id).1, Some(Role::Editor));
+        append(
+            &mut log,
+            &alice,
+            &bob,
+            MembershipAct::ChangeRole,
+            Role::Viewer,
+        );
+        assert_eq!(walk(&log).standing(bob.id).1, Some(Role::Viewer));
+        // An editor may not change a role: the entry ends the chain.
+        append(&mut log, &bob, &bob, MembershipAct::ChangeRole, Role::Owner);
+        assert_eq!(walk(&log).standing(bob.id).1, Some(Role::Viewer));
+    }
+
+    /// The next entry follows every entry served, and the signers are the
+    /// keys the log granted a writing role.
+    #[test]
+    fn the_next_entry_follows_the_served_log_and_writers_sign_links() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        let view = walk(&log);
+        assert_eq!(view.next(), (3, log.last().and_then(digest)));
+        let signers = view.signers().unwrap();
+        assert!(signers.contains(&alice.public()) && signers.contains(&bob.public()));
+        assert!(!signers.contains(&carol.public()));
+        assert_eq!(view.wraps(bob.id), Some(KeyId::from_array([1; 16])));
+        assert!(Log::walk(DOC, None, &log, no_self_join).signers().is_none());
+        // The entries travel through their request form.
+        let texts: Vec<String> = log.iter().map(|e| encode(e).unwrap()).collect();
+        assert_eq!(decode(&texts), log);
+    }
+}

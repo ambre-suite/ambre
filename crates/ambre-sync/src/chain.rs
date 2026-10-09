@@ -9,7 +9,7 @@
 //! A recovered key opens history and nothing else. The walk hands it back to
 //! one open, and never stores it where a seal reads its key (`SYNC-122`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ambre_core::{DocumentId, KeyId};
 use ambre_crypto::DocumentKey;
@@ -71,6 +71,23 @@ impl Chain {
         }
         None
     }
+}
+
+/// The links among `links` signed by a key the membership log granted a
+/// writing role (`SYNC-121`). `signers` is `None` for a document older than
+/// the log. Every link is kept then, and its signature still holds under the
+/// key its header names.
+pub(crate) fn signed_by_writers(
+    links: Vec<KeyLink>,
+    signers: Option<&HashSet<[u8; 32]>>,
+) -> Vec<KeyLink> {
+    let Some(signers) = signers else {
+        return links;
+    };
+    links
+        .into_iter()
+        .filter(|link| pipeline::object_author(&link.sealed).is_ok_and(|a| signers.contains(&a)))
+        .collect()
 }
 
 /// What one document's keys open: the current key, the cache and the chain.
@@ -193,6 +210,26 @@ mod tests {
 
         let elsewhere = Chain::new(DocumentId::new(), links);
         assert_eq!(elsewhere.len(), 0);
+    }
+
+    /// Holds `SYNC-121`. The walk drops a link whose signer holds no writing
+    /// role in the log, so the key it seals is out of reach.
+    /// A document with no log keeps every link.
+    #[test]
+    fn a_link_no_writer_signed_is_dropped() {
+        let document_id = DocumentId::new();
+        let (keys, mut links) = rotations(document_id, 2);
+        let stranger = MasterSeed::from_array([0x55; 32]).derive_signing_key();
+        if let Some(link) = links.get_mut(0) {
+            *link = pipeline::seal_link(document_id, &keys[0], &keys[1], &stranger).unwrap();
+        }
+        let writers = HashSet::from([rotator().verifying_key().to_bytes()]);
+        let kept = signed_by_writers(links.clone(), Some(&writers));
+        assert_eq!(kept.len(), 1);
+        let chain = Chain::new(document_id, kept);
+        assert!(chain.recover(document_id, &keys[2], keys[1].id()).is_some());
+        assert!(chain.recover(document_id, &keys[2], keys[0].id()).is_none());
+        assert_eq!(signed_by_writers(links, None).len(), 2);
     }
 
     /// A key the walk recovers opens history and is handed back alone: the

@@ -66,7 +66,7 @@ A client that lacks the key a frame or a snapshot names walks the chain back fro
 |---|---|---|---|---|---|---|
 | `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | `ambre_sync::chain::tests::the_current_key_walks_back_to_every_older_key` -- past the tenth rotation, the current key reaches every older key and none newer; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open recovers the key of a snapshot and of a frame twelve rotations back | none | verified |
 | `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | `ambre_sync::chain::tests::a_link_naming_another_key_stops_the_walk_there` -- a link sealing another key than it names ends the walk, and every key past it stays out of reach; `ambre_sync::chain::tests::a_link_tampered_or_misfiled_opens_nothing` -- a re-sealed link and another document's open nothing | none | verified |
-| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | `ambre_sync::chain::tests::a_link_no_writer_signed_is_dropped` -- a link signed by a reader, or by a key the log never verified, is left out of the walk | none | verified |
 | `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | `ambre_sync::chain::tests::a_recovered_key_never_becomes_the_current_one` -- the walk hands the key back and leaves the current one; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- after the open, the current key is the one installed and the cache holds nothing recovered | none | verified |
 
 ### 1.5 Leave on one's own
@@ -89,7 +89,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 22 `verified`, 4 `untested`, 2 `unimplemented`. The relay half holds, as do the
+* **Verification.** 23 `verified`, 4 `untested`, 1 `unimplemented`. The relay half holds, as do the
   key wipe, the open by name, the one-request revoke, the departure's debt and the chain. The
   client's two rotation paths are loose: no test drives a notice through to the key held.
 
@@ -202,8 +202,9 @@ a link, the relay would have to seal under a key it never holds. The hash binds 
 key it names.
 
 The signature adds attribution, and attribution means something only against the signed
-membership log. Until it lands, a signature is checked against the author key its own
-header carries. That proves the seal whole, and names no one (`SYNC-121`).
+membership log. A link counts only when its signer's key is one the log verifies for a member who
+may write (`SYNC-121`). A document whose log is empty verifies no one, so its links stand on the
+seal and the hash alone.
 
 **The relay chains one rotation at a time.** It stores a link in the transaction that stores the
 wrapped copies, under a lock on the document. A link that does not start from the last key chained
@@ -282,9 +283,6 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   exists for. Refusing a frame under the key a removal left behind is the relay's job (`SRV-123`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
-* **A link's signer is not checked against the log.** Its signature holds against the key its own
-  header carries, which proves the seal and names no one. The signer is checked (`SYNC-121`) by
-  the `Signed membership log` Story (`ambre-roadmap.md` E5).
 * **The relay can withhold a link.** It cannot forge one, and a link it drops ends the walk there: the
   history before it reads as closed, not as wrong. Nothing tells the user it was withheld.
 * **A revoke runs from an open document only.** It seals the current key under the new one, and the

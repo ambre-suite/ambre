@@ -791,6 +791,203 @@ mod handler_tests {
         assert_eq!(members[0]["doc_key_enc"], new_key);
     }
 
+    /// An account registered under the signing key `seed` derives, with its
+    /// id and its `Authorization` header.
+    async fn setup_signed(
+        app: &Router,
+        state: &AppState,
+        email: &str,
+        seed: u8,
+    ) -> (String, ed25519_dalek::SigningKey, ambre_core::UserId) {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
+        let body = serde_json::json!({
+            "email": email,
+            "display_name": "Signer",
+            "master_key_enc": base64_encode(&[1u8; 32]),
+            "master_key_salt": base64_encode(&[2u8; 16]),
+            "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
+            "exchange_pubkey": hex::encode([seed; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/setup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let auth = format!("Bearer {}", access_token_of(resp).await);
+        let id = ambre_core::UserId::parse_str(&doc_user_id(state, email).await).unwrap();
+        (auth, key, id)
+    }
+
+    /// `entry` signed by `key`, in the form a request carries it.
+    fn sealed(
+        mut entry: ambre_protocol::MembershipEntry,
+        key: &ed25519_dalek::SigningKey,
+    ) -> String {
+        use ed25519_dalek::Signer;
+        entry.signature = key.sign(&entry.signed_bytes().unwrap()).to_bytes().to_vec();
+        base64_encode(&entry.encode().unwrap())
+    }
+
+    /// An unsigned entry of `doc` at `position`. The relay walks no digest,
+    /// so the previous one is filler.
+    fn entry_at(
+        doc: ambre_core::DocumentId,
+        position: u64,
+        author: ambre_core::UserId,
+        member: (ambre_core::UserId, &ed25519_dalek::SigningKey),
+        act: ambre_protocol::MembershipAct,
+        role: ambre_core::Role,
+    ) -> ambre_protocol::MembershipEntry {
+        ambre_protocol::MembershipEntry {
+            document: doc,
+            position,
+            member: member.0,
+            member_key: member.1.verifying_key().to_bytes(),
+            act,
+            role,
+            key: (act == ambre_protocol::MembershipAct::Invite)
+                .then(|| ambre_core::KeyId::from_array([1; 16])),
+            previous: (position > 0).then_some(ambre_protocol::EntryDigest([position as u8; 32])),
+            author,
+            signature: Vec::new(),
+        }
+    }
+
+    /// A request with a JSON body.
+    fn json_request(
+        method: &str,
+        uri: &str,
+        auth: &str,
+        body: &serde_json::Value,
+    ) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .header("authorization", auth)
+            .body(Body::from(serde_json::to_string(body).unwrap()))
+            .unwrap()
+    }
+
+    /// The `log` a members answer serves.
+    async fn served_log(app: &Router, auth: &str, doc_id: &str) -> Vec<serde_json::Value> {
+        let resp = app
+            .clone()
+            .oneshot(get_with(&format!("/api/documents/{doc_id}/members"), auth))
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["log"].as_array().unwrap().clone()
+    }
+
+    /// Holds `SRV-104` and `SYNC-107`. The register keeps each signed entry
+    /// beside the member rows it changes, in order. Appending one leaves the
+    /// earlier entries as they were. The relay refuses an entry for a place
+    /// another took, one the caller did not sign, and one naming another
+    /// change. It refuses a change of a logged document that carries none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_register_keeps_each_signed_entry_beside_the_rows(pool: sqlx::PgPool) {
+        use ambre_core::Role;
+        use ambre_protocol::MembershipAct;
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@log.test", 41).await;
+        let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@log.test", 42).await;
+        let doc = ambre_core::DocumentId::new();
+        let doc_id = doc.to_string();
+        let me = (owner_id, &owner_key);
+        let bob = (bob_id, &bob_key);
+
+        let create = sealed(
+            entry_at(doc, 0, owner_id, me, MembershipAct::Create, Role::Owner),
+            &owner_key,
+        );
+        let body = serde_json::json!({
+            "doc_type": "prose", "document_id": doc_id,
+            "doc_key_enc": base64_encode(&[5u8; 32]), "entry": create,
+        });
+        let (status, _) =
+            status_and_code(&app, json_request("POST", "/api/documents", &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let invite = sealed(
+            entry_at(doc, 1, owner_id, bob, MembershipAct::Invite, Role::Editor),
+            &owner_key,
+        );
+        let body = serde_json::json!({
+            "invitee_email": "bob@log.test", "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 32]), "key_id": key_id_hex(1), "entry": invite,
+        });
+        let share = format!("/api/documents/{doc_id}/share");
+        let (status, _) = status_and_code(&app, json_request("POST", &share, &owner, &body)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [create.as_str(), invite.as_str()]
+        );
+
+        let role = format!("/api/documents/{doc_id}/members/{bob_id}");
+        let change = |position, key| {
+            let entry = entry_at(
+                doc,
+                position,
+                owner_id,
+                bob,
+                MembershipAct::ChangeRole,
+                Role::Viewer,
+            );
+            serde_json::json!({ "role": "viewer", "entry": sealed(entry, key) })
+        };
+        // Signed by a key the caller does not hold.
+        let (status, code) = status_and_code(
+            &app,
+            json_request("PATCH", &role, &owner, &change(2, &bob_key)),
+        )
+        .await;
+        assert_eq!(
+            (status, code.as_str()),
+            (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE")
+        );
+        // Signed for a place another entry took.
+        let (status, code) = status_and_code(
+            &app,
+            json_request("PATCH", &role, &owner, &change(1, &owner_key)),
+        )
+        .await;
+        assert_eq!((status, code.as_str()), (StatusCode::CONFLICT, "LOG_MOVED"));
+        // A role change carrying the invite's entry records another change.
+        let body = serde_json::json!({ "role": "viewer", "entry": invite });
+        let (status, _) = status_and_code(&app, json_request("PATCH", &role, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        // No entry at all, on a document that keeps a log.
+        let body = serde_json::json!({ "role": "viewer" });
+        let (status, _) = status_and_code(&app, json_request("PATCH", &role, &owner, &body)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(served_log(&app, &owner, &doc_id).await.len(), 2);
+
+        let changed = change(2, &owner_key);
+        let (status, _) =
+            status_and_code(&app, json_request("PATCH", &role, &owner, &changed)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            served_log(&app, &owner, &doc_id).await,
+            [
+                create.as_str(),
+                invite.as_str(),
+                changed["entry"].as_str().unwrap()
+            ]
+        );
+    }
+
     /// An owner can change a member's role; an unknown role string is rejected.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

@@ -179,6 +179,36 @@ fn wrap_unwrap_roundtrip() {
     assert_eq!(unwrapped.as_bytes(), doc_key.as_bytes());
 }
 
+/// Holds `SYNC-104` at the primitive. The anchor of the membership log rides
+/// inside the seal, so it opens with the key and is bound to it. A wrap
+/// without one opens with none, and the key alone still unwraps either.
+#[test]
+fn the_log_anchor_travels_sealed_with_the_key() {
+    let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
+    let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
+    let alice_pub = x25519_dalek::PublicKey::from(&alice).to_bytes();
+    let bob_pub = x25519_dalek::PublicKey::from(&bob).to_bytes();
+    let doc_key = DocumentKey::from_array([0x55; 32]);
+
+    let anchored = ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&[0x66; 32])).unwrap();
+    let (key, anchor) = ecdh::unwrap_anchored(&bob, &alice_pub, &anchored).unwrap();
+    assert_eq!(key.as_bytes(), doc_key.as_bytes());
+    assert_eq!(anchor, Some([0x66; 32]));
+    let key = ecdh::unwrap_document_key(&bob, &alice_pub, &anchored).unwrap();
+    assert_eq!(key.as_bytes(), doc_key.as_bytes());
+
+    let bare = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
+    let (_, anchor) = ecdh::unwrap_anchored(&bob, &alice_pub, &bare).unwrap();
+    assert_eq!(anchor, None);
+
+    // A flipped byte of the sealed anchor fails the tag: nobody swaps it.
+    let mut tampered = anchored;
+    if let Some(byte) = tampered.ciphertext.get_mut(40) {
+        *byte ^= 1;
+    }
+    assert!(ecdh::unwrap_anchored(&bob, &alice_pub, &tampered).is_err());
+}
+
 #[test]
 fn weak_peer_public_key_rejected() {
     // The all-zero u-coordinate is a low-order point: the X25519 output is the

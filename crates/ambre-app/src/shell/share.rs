@@ -4,7 +4,7 @@
 // the document from their own row (`SYNC-141`). Every action leaves as a
 // `RestCommand` through `send`, so a test reads the command without a worker.
 
-use ambre_bus::{DocumentId, MemberInfo, RestCommand, Role, UserId};
+use ambre_bus::{DocumentId, MemberInfo, MemberStanding, RestCommand, Role, UserId};
 use leptos::prelude::*;
 
 /// What the signed-in user may do on one row of the member list.
@@ -27,6 +27,20 @@ pub(crate) fn row_action(member: UserId, role: Role, me: Option<UserId>) -> RowA
         Some(me) if me == member => RowAction::Leave,
         _ => RowAction::Revoke,
     }
+}
+
+/// The mark a row carries when the signed membership log does not vouch for
+/// it (`SYNC-108`). A verified row carries none.
+fn standing_badge(standing: MemberStanding) -> Option<impl IntoView> {
+    let (label, title) = match standing {
+        MemberStanding::Verified => return None,
+        MemberStanding::Unverified => (
+            "Unverified",
+            "No signed entry links this member to the document's creator",
+        ),
+        MemberStanding::Revoked => ("Revoked", "A signed entry removed this member"),
+    };
+    Some(view! { <span class="ambre-share-member-standing" title=title>{label}</span> })
 }
 
 /// The members of the current document, one row each. `send` takes every
@@ -64,6 +78,7 @@ pub(crate) fn ShareMembers(
                         <li>
                             <span class="ambre-share-member-name">
                                 {member.display_name.clone()}
+                                {standing_badge(member.standing)}
                             </span>
                             <span class="ambre-share-member-email">{member.email.clone()}</span>
                             <select prop:value=cur_role.as_str() on:change=on_role>
@@ -146,6 +161,7 @@ mod tests {
             display_name: format!("member {byte}"),
             email: format!("m{byte}@example.com"),
             role,
+            standing: MemberStanding::Verified,
         }
     }
 

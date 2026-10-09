@@ -253,8 +253,10 @@ pub async fn create_test_document(
         .expect("failed to create test document");
     let doc_id =
         ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
-    db::add_document_member(pool, &doc_id, &owner_id, "owner", &[5u8; 32], &owner_id)
-        .await
-        .expect("failed to add owner member");
+    db::add_document_member(
+        pool, &doc_id, &owner_id, "owner", &[5u8; 32], &owner_id, None,
+    )
+    .await
+    .expect("failed to add owner member");
     doc_id
 }

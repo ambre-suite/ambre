@@ -80,7 +80,7 @@ impl SyncState {
             );
             return;
         };
-        let Some(exchange_key) = exchange_key else {
+        let (Some(exchange_key), Some(author)) = (exchange_key, self.author()) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: "InviteToDocument".into(),
@@ -112,6 +112,7 @@ impl SyncState {
             exchange_key,
             doc_key,
             expect_exchange_pub_key,
+            author,
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
@@ -146,8 +147,7 @@ impl SyncState {
             self.reply(id, RestEvent::RevocationComplete { document_id });
             return;
         };
-        let (Some(exchange_key), Some(signing_key)) = (exchange_key, self.signing_key.clone())
-        else {
+        let (Some(exchange_key), Some(author)) = (exchange_key, self.author()) else {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: "RevokeFromDocument".into(),
@@ -183,7 +183,7 @@ impl SyncState {
             api_base,
             exchange_key,
             previous,
-            signing_key,
+            author,
         };
         let http = sharing::GlooHttp { auth };
         wasm_bindgen_futures::spawn_local(async move {
@@ -191,10 +191,23 @@ impl SyncState {
         });
     }
 
+    /// The signer of the entries this user appends to a membership log
+    /// (`SYNC-132`), once signed in.
+    pub(crate) fn author(&self) -> Option<sharing::Author> {
+        Some(sharing::Author {
+            user_id: self.user_id?,
+            signing_key: self.signing_key.clone()?,
+        })
+    }
+
     /// Leaves a document: DELETEs this user's own share and nothing else
     /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
     pub(crate) fn handle_leave_document(&self, id: RequestId, document_id: DocumentId) {
-        let (Some(tx), Some(user_id)) = (self.event_tx.clone(), self.user_id) else {
+        let (Some(tx), Some(author), Some(exchange_key)) = (
+            self.event_tx.clone(),
+            self.author(),
+            self.exchange_key.clone(),
+        ) else {
             let _ = self.logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: "LeaveDocument".into(),
@@ -207,9 +220,10 @@ impl SyncState {
         let params = sharing::LeaveParams {
             id,
             document_id,
-            user_id,
+            author,
             url_scheme: self.url_scheme,
             api_base: self.api_base.clone(),
+            exchange_key,
         };
         let http = sharing::GlooHttp {
             auth: self.auth_context(),
@@ -228,12 +242,13 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
 
-        if let Some(tx) = event_tx {
+        if let (Some(tx), Some(exchange_key)) = (event_tx, self.exchange_key.clone()) {
             let params = sharing::ListMembersParams {
                 id,
                 document_id,
                 url_scheme,
                 api_base,
+                exchange_key,
             };
             let http = sharing::GlooHttp { auth };
             wasm_bindgen_futures::spawn_local(async move {
@@ -250,8 +265,8 @@ impl SyncState {
         }
     }
 
-    /// Updates a member's role via `PATCH /api/documents/{id}/members/{uid}`.
-    /// Sends the new role as a JSON body and replies with
+    /// Updates a member's role via `PATCH /api/documents/{id}/members/{uid}`,
+    /// with the entry this owner signs for it (`SYNC-132`). Replies with
     /// [`RestEvent::MemberRoleUpdated`] on success.
     pub(crate) fn handle_update_document_member_role(
         &self,
@@ -260,36 +275,33 @@ impl SyncState {
         user_id: UserId,
         role: Role,
     ) {
-        let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
-        let auth = self.auth_context();
-
-        if let Some(tx) = event_tx {
+        if let Some(tx) = self.event_tx.clone() {
+            let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone())
+            else {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: None,
+                    request: "UpdateDocumentMemberRole".into(),
+                    code: 401,
+                    message: "Not authenticated".into(),
+                });
+                return;
+            };
+            let params = sharing::RoleChangeParams {
+                id,
+                document_id,
+                user_id,
+                role,
+                url_scheme: self.url_scheme,
+                api_base: self.api_base.clone(),
+                exchange_key,
+                author,
+            };
+            let http = sharing::GlooHttp {
+                auth: self.auth_context(),
+            };
             wasm_bindgen_futures::spawn_local(async move {
-                let url = format!(
-                    "{url_scheme}://{api_base}/api/documents/{document_id}/members/{user_id}"
-                );
-                let body = serde_json::json!({ "role": role.to_string() });
-                match http::patch_json_auth(&url, &body, auth).await {
-                    Ok(()) => {
-                        let _ = tx.send(SyncEvent::MemberRoleUpdatedEvent {
-                            id,
-                            document_id,
-                            user_id,
-                            role,
-                        });
-                    }
-                    Err(e) => {
-                        let _ = logic_tx.send(LogicEvent::ApiError {
-                            id: None,
-                            request: "UpdateDocumentMemberRole".into(),
-                            code: 500,
-                            message: e,
-                        });
-                    }
-                }
+                sharing::role_change_task(&http, params, &tx, &logic_tx).await;
             });
         } else {
             tracing::info!("Sync: UpdateDocumentMemberRole {document_id:?} {user_id:?} {role:?}");

@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3384 rows: 2511 shipped, of which 107 partial and 519 loose. 873 unbuilt.**
+**3384 rows: 2526 shipped, of which 107 partial and 519 loose. 858 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 430 | 269 | 584 | 602 |  | 1885 |
+| `verified` | 445 | 269 | 584 | 602 |  | 1900 |
 | `partial` | 50 | 14 | 41 | 2 |  | 107 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 191 | 133 | 188 | 2 |  | 514 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 240 | 57 | 28 | 109 | 439 | 873 |
+| `unimplemented` | 225 | 57 | 28 | 109 | 439 | 858 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -53,12 +53,12 @@
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 4 |  | 12 | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 7 | 1 | 2 |  |
-| `ambre-spec-key-rotation.md` | 28 | 26 | 22 |  | 4 | 2 |
+| `ambre-spec-key-rotation.md` | 28 | 27 | 23 |  | 4 | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 10 |  | 10 | 4 |
 | `ambre-spec-media.md` | 13 | 13 | 11 |  | 2 |  |
-| `ambre-spec-membership.md` | 30 | 17 | 16 | 1 |  | 13 |
+| `ambre-spec-membership.md` | 30 | 30 | 29 | 1 |  |  |
 | `ambre-spec-message-bus.md` | 28 | 26 | 13 | 4 | 9 | 2 |
 | `ambre-spec-object-store.md` | 18 | 12 | 10 |  | 2 | 6 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 25 | 4 |  |  |
@@ -69,7 +69,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 21 | 17 |  | 4 | 3 |
 | `ambre-spec-sequencer.md` | 46 | 37 | 28 | 3 | 6 | 9 |
-| `ambre-spec-server.md` | 52 | 33 | 27 | 2 | 4 | 19 |
+| `ambre-spec-server.md` | 52 | 34 | 28 | 2 | 4 | 18 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
 | `ambre-spec-sync.md` | 29 | 29 | 15 |  | 14 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |

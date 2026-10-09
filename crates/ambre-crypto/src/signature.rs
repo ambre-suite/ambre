@@ -84,10 +84,51 @@ pub fn verify(
         .map_err(|_| CryptoError::InvalidSignature)
 }
 
+/// Signs `message` whole with `signing_key`. The caller's message opens with
+/// its own domain, so the signature serves no other use.
+pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> [u8; SIGNATURE_LEN] {
+    signing_key.sign(message).to_bytes()
+}
+
+/// Verifies a signature [`sign_message`] made, strictly, as [`verify`] does.
+///
+/// # Errors
+///
+/// [`CryptoError::InvalidSignature`] for a key that is not a point, a
+/// signature of the wrong length, or one that does not verify.
+pub fn verify_message(
+    author_pub: &[u8; 32],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), CryptoError> {
+    let verifying_key =
+        VerifyingKey::from_bytes(author_pub).map_err(|_| CryptoError::InvalidSignature)?;
+    let sig = Signature::from_slice(signature).map_err(|_| CryptoError::InvalidSignature)?;
+    verifying_key
+        .verify_strict(message, &sig)
+        .map_err(|_| CryptoError::InvalidSignature)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
+
+    /// A whole-message signature checks under its author's key alone, and
+    /// over its own message alone.
+    #[test]
+    fn a_message_signature_checks_under_its_author_alone() {
+        let sk = test_key();
+        let pk = sk.verifying_key().to_bytes();
+        let sig = sign_message(&sk, b"entry");
+        assert!(verify_message(&pk, b"entry", &sig).is_ok());
+        assert!(verify_message(&pk, b"entrY", &sig).is_err());
+        let other = SigningKey::from_bytes(&[8u8; 32])
+            .verifying_key()
+            .to_bytes();
+        assert!(verify_message(&other, b"entry", &sig).is_err());
+        assert!(verify_message(&pk, b"entry", &sig[..63]).is_err());
+    }
 
     fn test_key() -> SigningKey {
         SigningKey::from_bytes(&[7u8; 32])

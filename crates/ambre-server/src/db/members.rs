@@ -41,12 +41,22 @@ pub struct MemberWithUserRow {
     pub wrapper_exchange_pubkey: Option<Vec<u8>>,
 }
 
+/// One signed membership entry a request carries, checked by the route that
+/// received it (`SRV-104`). `bytes` are stored as they came.
+#[derive(Debug)]
+pub struct LogEntry {
+    /// The place the entry was signed for.
+    pub position: u64,
+    pub bytes: Vec<u8>,
+}
+
 /// Adds (or updates) a user to a document's membership with a role and encrypted document key.
 ///
 /// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it enforces the
 /// same last-owner invariant as `update_document_member_role`. It refuses to demote the
 /// document's only remaining owner. The check and the write run in one transaction with the
 /// target row locked (`FOR UPDATE`) so concurrent demotions cannot both pass the count.
+/// A creation's first `entry` lands in the same transaction (`SRV-104`).
 pub async fn add_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -54,17 +64,91 @@ pub async fn add_document_member(
     role: &str,
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
+    entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
+    if let Some(entry) = entry {
+        let did = id_to_uuid(*document_id);
+        lock_document(&mut tx, did).await?;
+        append_entry(&mut tx, did, entry).await?;
+    }
     upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// Appends `entry` at the next place of the document's log, inside the
+/// caller's transaction and under its document lock (`SRV-104`). An entry
+/// signed for another place is refused: another landed first, and the
+/// client signs again after it. A stored entry is never rewritten
+/// (`SYNC-107`).
+async fn append_entry(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    entry: &LogEntry,
+) -> Result<(), AppError> {
+    let next: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM document_membership_log WHERE document_id = $1")
+            .bind(document_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    if i64::try_from(entry.position).ok() != Some(next) {
+        return Err(AppError::LogMoved);
+    }
+    sqlx::query(
+        "INSERT INTO document_membership_log (document_id, position, entry) VALUES ($1, $2, $3)",
+    )
+    .bind(document_id)
+    .bind(next)
+    .bind(&entry.bytes)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Records the entry a membership change carries (`SYNC-132`). A document
+/// whose log holds entries takes no change without one. A document with an
+/// empty log predates it, and its changes carry none.
+async fn record_change(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: uuid::Uuid,
+    entry: Option<&LogEntry>,
+) -> Result<(), AppError> {
+    if let Some(entry) = entry {
+        return append_entry(tx, document_id, entry).await;
+    }
+    let logged: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM document_membership_log WHERE document_id = $1)",
+    )
+    .bind(document_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if logged {
+        return Err(AppError::BadRequest(
+            "the document keeps a membership log: the change needs its entry".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Every entry of a document's log, in order (`SRV-104`).
+pub async fn membership_log(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Vec<Vec<u8>>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT entry FROM document_membership_log WHERE document_id = $1 ORDER BY position",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_all(pool)
+    .await?)
 }
 
 /// Adds a member with a copy of the key named `key_id`, refused when a
 /// rotation has replaced that key (`SRV-168`). The check runs under the
 /// document lock every rotation takes, so the two are ordered. An invitation
 /// that lands first is among the members a rotation must name (`SRV-167`).
+#[allow(clippy::too_many_arguments)]
 pub async fn invite_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -73,6 +157,7 @@ pub async fn invite_document_member(
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
     key_id: &ambre_core::KeyId,
+    entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
@@ -88,6 +173,7 @@ pub async fn invite_document_member(
     if last.is_some_and(|last| last != key_id.as_array()) {
         return Err(AppError::KeyChanged);
     }
+    record_change(&mut tx, did, entry).await?;
     upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
     tx.commit().await?;
     Ok(())
@@ -230,9 +316,12 @@ pub async fn remove_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
+    entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
+    lock_document(&mut tx, did).await?;
+    record_change(&mut tx, did, entry).await?;
     delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
     sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
         .bind(did)
@@ -245,6 +334,7 @@ pub async fn remove_document_member(
 /// Removes a member and re-wraps the new key for every member who stays, in
 /// one transaction (`ambre-spec-key-rotation.md`, `SYNC-126`). Either both
 /// land or neither does: a removal never stands without its rotation.
+#[allow(clippy::too_many_arguments)]
 pub async fn revoke_and_rotate(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -253,12 +343,14 @@ pub async fn revoke_and_rotate(
     keys: &[(ambre_core::UserId, Vec<u8>)],
     members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
+    entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
     // The document row first, as every rotation takes it: two rotations of one
     // document queue on it instead of deadlocking on the member rows.
     lock_document(&mut tx, did).await?;
+    record_change(&mut tx, did, entry).await?;
     delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
     rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, members, link).await?;
     tx.commit().await?;
@@ -384,11 +476,14 @@ pub async fn update_document_member_role(
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     role: &str,
+    entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
 
     let mut tx = pool.begin().await?;
+    lock_document(&mut tx, did).await?;
+    record_change(&mut tx, did, entry).await?;
 
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",

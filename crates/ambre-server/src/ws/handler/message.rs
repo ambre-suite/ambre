@@ -1595,7 +1595,7 @@ mod access_tests {
         let owner = create_test_user(pool, "owner@ambre.app").await;
         let editor = create_test_user(pool, "editor@ambre.app").await;
         let doc_id = create_test_document(pool, owner, "toile").await;
-        db::add_document_member(pool, &doc_id, &editor, "editor", &[5u8; 32], &owner)
+        db::add_document_member(pool, &doc_id, &editor, "editor", &[5u8; 32], &owner, None)
             .await
             .unwrap();
         (doc_id, editor)
@@ -1660,7 +1660,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = PublicKey::from_array([32u8; 32]);
-        db::remove_document_member(&pool, &doc_id, &editor)
+        db::remove_document_member(&pool, &doc_id, &editor, None)
             .await
             .unwrap();
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
@@ -1715,7 +1715,7 @@ mod access_tests {
             "a member is answered"
         );
 
-        db::remove_document_member(&pool, &doc_id, &editor)
+        db::remove_document_member(&pool, &doc_id, &editor, None)
             .await
             .unwrap();
         let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);

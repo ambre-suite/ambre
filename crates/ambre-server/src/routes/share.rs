@@ -45,6 +45,74 @@ fn doc_type_from_str(s: &str) -> Option<ambre_core::DocType> {
     }
 }
 
+/// What a route expects of the membership entry its request carries.
+pub(crate) struct Expected<'a> {
+    pub act: ambre_protocol::MembershipAct,
+    /// The member the change adds, removes or changes.
+    pub member: ambre_core::UserId,
+    /// The role the entry gives, `None` for a removal.
+    pub role: Option<&'a str>,
+    /// The key the entry names, when the route knows it. That is the key an
+    /// invite wraps, the key a revoke installs, or none for a role change.
+    pub key: Option<Option<ambre_core::KeyId>>,
+}
+
+/// Decodes and checks the signed membership entry a request carries
+/// (`SRV-104`). The entry must record the change the route makes, about
+/// the member it names and under the key that member registered. The caller
+/// must have signed it with their own key. The relay checks the signature
+/// and nothing past it: the digests are the clients' to walk.
+pub(crate) async fn checked_entry(
+    state: &AppState,
+    auth: &auth::AuthSession,
+    doc_id: ambre_core::DocumentId,
+    text: Option<&str>,
+    expected: Expected<'_>,
+) -> Result<Option<db::LogEntry>, AppError> {
+    use base64::Engine;
+    use ed25519_dalek::{Signature, VerifyingKey};
+    let Some(text) = text else {
+        return Ok(None);
+    };
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(text)
+        .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
+    let entry = ambre_protocol::MembershipEntry::decode(&bytes)
+        .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
+    let member_key = db::get_user(&state.db, &expected.member)
+        .await?
+        .and_then(|user| user.signing_pubkey);
+    let first = entry.act == ambre_protocol::MembershipAct::Create;
+    let records = entry.well_formed()
+        && entry.document == doc_id
+        && entry.author == auth.user_id
+        && entry.member == expected.member
+        && entry.act == expected.act
+        && expected
+            .role
+            .is_none_or(|role| entry.role.to_string() == role)
+        && expected.key.is_none_or(|key| entry.key == key)
+        && first == (entry.position == 0)
+        && member_key.as_deref() == Some(entry.member_key.as_slice());
+    if !records {
+        return Err(AppError::BadRequest(
+            "entry: does not record this change".into(),
+        ));
+    }
+    let signed = entry
+        .signed_bytes()
+        .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
+    let signature =
+        Signature::from_slice(&entry.signature).map_err(|_| AppError::InvalidSignature)?;
+    VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
+        .and_then(|key| key.verify_strict(&signed, &signature))
+        .map_err(|_| AppError::InvalidSignature)?;
+    Ok(Some(db::LogEntry {
+        position: entry.position,
+        bytes,
+    }))
+}
+
 /// Request to add a user to a document. `doc_key_enc` is the DocumentKey
 /// encrypted with the invitee's X25519 exchange key.
 #[derive(serde::Deserialize)]
@@ -55,6 +123,9 @@ pub struct InviteRequest {
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
     pub key_id: String,
+    /// The signed entry the invite appends to the log (`SYNC-105`).
+    #[serde(default)]
+    pub entry: Option<String>,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
@@ -121,6 +192,14 @@ pub async fn invite_to_document(
             detail: e.to_string(),
         })?;
     let key_id = parse_key_id(&req.key_id)?;
+    let expected = Expected {
+        act: ambre_protocol::MembershipAct::Invite,
+        member: invitee_id,
+        role: Some(&req.role),
+        // The entry names the key the copy wraps (`SYNC-123`).
+        key: Some(Some(key_id)),
+    };
+    let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
     db::invite_document_member(
         &state.db,
         &doc_id,
@@ -129,6 +208,7 @@ pub async fn invite_to_document(
         &doc_key_enc,
         &s.user_id,
         &key_id,
+        entry.as_ref(),
     )
     .await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
@@ -156,10 +236,18 @@ pub async fn invite_to_document(
     }))
 }
 
+/// The body a removal may carry: the signed entry that records it.
+#[derive(serde::Deserialize)]
+pub struct RemovalRequest {
+    #[serde(default)]
+    pub entry: Option<String>,
+}
+
 pub async fn revoke_from_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path((document_id, user_id)): Path<(String, String)>,
+    body: Option<Json<RemovalRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
@@ -172,10 +260,18 @@ pub async fn revoke_from_document(
     if target != s.user_id && m.role != "owner" {
         return Err(AppError::Forbidden);
     }
+    let expected = Expected {
+        act: ambre_protocol::MembershipAct::Revoke,
+        member: target,
+        role: None,
+        key: Some(None),
+    };
+    let text = body.as_ref().and_then(|Json(body)| body.entry.as_deref());
+    let entry = checked_entry(&state, &s, doc_id, text, expected).await?;
     // The removal posts no rotation, so the document owes one (`SRV-122`). The
     // mirror is raised first: no frame slips in between the commit and it.
     crate::redis_ops::mirror_rotation_owed(&state.redis, &doc_id, true).await?;
-    if let Err(e) = db::remove_document_member(&state.db, &doc_id, &target).await {
+    if let Err(e) = db::remove_document_member(&state.db, &doc_id, &target, entry.as_ref()).await {
         restore_debt_mirror(&state, &doc_id).await;
         return Err(e);
     }
@@ -198,6 +294,9 @@ pub struct RevokeRequest {
     pub members: Vec<String>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
     pub link: String,
+    /// The signed entry that records the removal (`SYNC-132`).
+    #[serde(default)]
+    pub entry: Option<String>,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -220,8 +319,23 @@ pub async fn revoke_and_rotate(
     let keys = decode_keys(&req.keys)?;
     let members = decode_members(&req.members)?;
     let link = decode_link(&req.link, doc_id)?;
+    let expected = Expected {
+        act: ambre_protocol::MembershipAct::Revoke,
+        member: target,
+        role: None,
+        // The entry names the key the rotation installs.
+        key: Some(Some(link.key)),
+    };
+    let entry = checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
     db::revoke_and_rotate(
-        &state.db, &doc_id, &target, &s.user_id, &keys, &members, &link,
+        &state.db,
+        &doc_id,
+        &target,
+        &s.user_id,
+        &keys,
+        &members,
+        &link,
+        entry.as_ref(),
     )
     .await?;
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");

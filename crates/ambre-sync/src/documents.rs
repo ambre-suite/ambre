@@ -129,12 +129,12 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let exchange_key = self.exchange_key.clone();
-            let signing_key = self.signing_key.clone();
+            let author = self.author();
             wasm_bindgen_futures::spawn_local(async move {
                 // E2EE: the server only ever stores ciphertext. Generate a fresh
                 // DocumentKey, seal the name with it, and wrap the key for the
                 // owner (ourselves) via X25519. We can then recover it on open.
-                let (Some(exchange_key), Some(signing_key)) = (exchange_key, signing_key) else {
+                let (Some(exchange_key), Some(author)) = (exchange_key, author) else {
                     let _ = tx.send(SyncEvent::HttpError {
                         id,
                         message: "CreateDocument: session locked (no session keys)".into(),
@@ -151,30 +151,24 @@ impl SyncState {
                 let name_enc = if name.is_empty() {
                     Ok(None)
                 } else {
-                    Self::seal_document_name(document_id, &doc_key, &signing_key, &name)
+                    Self::seal_document_name(document_id, &doc_key, &author.signing_key, &name)
                         .map(Some)
                         .map_err(|e| format!("CreateDocument: name seal failed: {e}"))
                 };
-                let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
+                // The copy carries the anchor of the log its creator starts
+                // (`SYNC-104`, `SYNC-132`).
                 let sealed = name_enc.and_then(|name_enc| {
-                    ambre_crypto::ecdh::wrap_document_key(
-                        &exchange_key,
-                        own_pub.as_bytes(),
-                        &doc_key,
-                    )
-                    .map(|wrapped| (name_enc, wrapped))
-                    .map_err(|e| format!("CreateDocument: key wrap failed: {e}"))
+                    sharing::creation(document_id, &doc_key, &exchange_key, &author)
+                        .map(|created| (name_enc, created))
+                        .map_err(|e| format!("CreateDocument: {e}"))
                 });
-                let (name_enc, wrapped) = match sealed {
+                let (name_enc, (doc_key_enc, entry)) = match sealed {
                     Ok(pair) => pair,
                     Err(message) => {
                         let _ = tx.send(SyncEvent::HttpError { id, message });
                         return;
                     }
                 };
-                let mut enc = wrapped.nonce.to_vec();
-                enc.extend_from_slice(&wrapped.ciphertext);
-                let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
 
                 let url = format!("{url_scheme}://{api_base}/api/documents");
                 let body = http::CreateDocumentRequest {
@@ -182,6 +176,7 @@ impl SyncState {
                     name_enc,
                     doc_key_enc,
                     document_id: Some(document_id.to_string()),
+                    entry: Some(entry),
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await

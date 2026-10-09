@@ -194,6 +194,22 @@ pub struct MemberInfo {
     pub display_name: String,
     pub email: String,
     pub role: Role,
+    /// What the signed membership log says of this row
+    /// (`ambre-spec-membership.md`, `SYNC-103`).
+    pub standing: MemberStanding,
+}
+
+/// What the signed membership log says of one member row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MemberStanding {
+    /// A chain of valid entries links the row to the first entry of the log.
+    Verified,
+    /// No valid chain reaches the row: it stands on the relay's word alone
+    /// (`SYNC-108`).
+    Unverified,
+    /// The log's latest valid entry for the member removes them, whatever the
+    /// relay serves (`SYNC-109`).
+    Revoked,
 }
 
 /// User (search result).

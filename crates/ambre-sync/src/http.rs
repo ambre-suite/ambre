@@ -122,13 +122,19 @@ const MEMBERS_CHANGED: &str = "MEMBERS_CHANGED";
 /// key it wraps (HTTP 409, `SYNC-143`).
 const KEY_CHANGED: &str = "KEY_CHANGED";
 
+/// The relay's code for a membership entry refused because another entry
+/// took its place in the log first (HTTP 409, `SRV-104`).
+const LOG_MOVED: &str = "LOG_MOVED";
+
 /// The error a refused request reads as. `code` is the relay's error code,
 /// kept only with the status that may carry it. A 403 carries a setup still
 /// owed, and a 409 a membership or a key that moved under the request.
 fn refusal(method: &str, url: &str, status: u16, code: Option<&str>) -> String {
     match (status, code) {
         (403, Some(SETUP_REQUIRED)) => format!("{method} {url}: {SETUP_REQUIRED}"),
-        (409, Some(code @ (MEMBERS_CHANGED | KEY_CHANGED))) => format!("{method} {url}: {code}"),
+        (409, Some(code @ (MEMBERS_CHANGED | KEY_CHANGED | LOG_MOVED))) => {
+            format!("{method} {url}: {code}")
+        }
         _ => format!("{method} {url}: HTTP {status}"),
     }
 }
@@ -150,6 +156,12 @@ pub(crate) fn is_members_changed(message: &str) -> bool {
 /// wraps is no longer the document's.
 pub(crate) fn is_key_changed(message: &str) -> bool {
     message.ends_with(&format!(": {KEY_CHANGED}"))
+}
+
+/// Whether `message` is a membership entry the relay refused because the log
+/// moved since the writer read it.
+pub(crate) fn is_log_moved(message: &str) -> bool {
+    message.ends_with(&format!(": {LOG_MOVED}"))
 }
 
 async fn refused(method: &str, url: &str, resp: Response) -> String {
@@ -391,30 +403,52 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
+    send_json_auth("PATCH", gloo_net::http::Request::patch, url, body, auth).await
+}
+
+/// HTTP DELETE carrying a JSON body: a departure sends the entry it signs
+/// (`SYNC-132`).
+pub(crate) async fn delete_json_auth<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    send_json_auth("DELETE", gloo_net::http::Request::delete, url, body, auth).await
+}
+
+/// Sends `body` as JSON with the `method` that `builder` opens, retried once
+/// after a refresh, to a route that answers with no body.
+async fn send_json_auth<T: Serialize>(
+    method: &str,
+    builder: fn(&str) -> gloo_net::http::RequestBuilder,
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
     let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("PATCH {url}: serialize error: {e}"))?;
+        serde_json::to_vec(body).map_err(|e| format!("{method} {url}: serialize error: {e}"))?;
     let send = |token: SecretToken| {
-        gloo_net::http::Request::patch(url)
+        builder(url)
             .header("Content-Type", "application/json")
             .header("Authorization", &bearer(&token))
             .abort_signal(Some(&timeout_signal()))
             .body(body_json.clone())
     };
     let resp = send(auth.access_token()?)
-        .map_err(|e| format!("PATCH {url}: body error: {e}"))?
+        .map_err(|e| format!("{method} {url}: body error: {e}"))?
         .send()
         .await
-        .map_err(|e| format!("PATCH {url}: {e}"))?;
+        .map_err(|e| format!("{method} {url}: {e}"))?;
     if resp.status() == 401 {
         auth.refresh().await?;
         let resp = send(auth.access_token()?)
-            .map_err(|e| format!("PATCH {url}: body error: {e}"))?
+            .map_err(|e| format!("{method} {url}: body error: {e}"))?
             .send()
             .await
-            .map_err(|e| format!("PATCH {url}: {e}"))?;
-        return expect_ok("PATCH", url, resp).await;
+            .map_err(|e| format!("{method} {url}: {e}"))?;
+        return expect_ok(method, url, resp).await;
     }
-    expect_ok("PATCH", url, resp).await
+    expect_ok(method, url, resp).await
 }
 
 pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
@@ -567,6 +601,10 @@ pub(crate) struct CreateDocumentRequest {
     pub doc_key_enc: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub document_id: Option<String>,
+    /// The first entry of the membership log, as `membership_log::encode`
+    /// writes it (`SYNC-132`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -588,6 +626,9 @@ pub(crate) struct MembersResponse {
     /// (`SRV-122`, `SYNC-128`).
     #[serde(default)]
     pub rotation_owed: bool,
+    /// The membership log, oldest entry first (`SRV-104`).
+    #[serde(default)]
+    pub log: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -690,7 +731,7 @@ pub(crate) struct UserInfoEntry {
     pub id: String,
     pub email: String,
     pub display_name: String,
-    #[allow(dead_code)]
+    /// The key an invitation's entry names for the invitee (`SYNC-132`).
     pub signing_pubkey: String,
     pub exchange_pubkey: String,
 }
@@ -709,6 +750,25 @@ pub(crate) struct InviteRequest {
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
     pub key_id: String,
+    /// The entry the inviter signs for this invitation (`SYNC-132`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+}
+
+/// The body of a departure: the entry the leaver signs (`SYNC-132`).
+#[derive(Serialize)]
+pub(crate) struct LeaveRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+}
+
+/// The body of a role change: the role and the entry the owner signs for it
+/// (`SYNC-132`).
+#[derive(Serialize)]
+pub(crate) struct RoleChangeRequest {
+    pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -737,6 +797,9 @@ pub(crate) struct RevokeRequest {
     pub members: Vec<String>,
     /// The link to the key this revoke replaces (`SYNC-118`).
     pub link: String,
+    /// The entry the owner signs for this revoke (`SYNC-132`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
 }
 
 /// The links of one document's chain, oldest first (`SYNC-117`).
@@ -803,6 +866,9 @@ pub(crate) struct DocumentMembersResponse {
     /// The document owes a rotation (`SRV-122`, `SYNC-128`).
     #[serde(default)]
     pub rotation_owed: bool,
+    /// The membership log, oldest entry first (`SRV-104`).
+    #[serde(default)]
+    pub log: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -813,9 +879,12 @@ pub(crate) struct DocumentMemberEntry {
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
-    #[allow(dead_code)]
     pub doc_key_enc: String,
     pub role: String,
+    /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
+    /// against it, which yields the log anchor (`SYNC-104`).
+    #[serde(default)]
+    pub wrapper_exchange_pub_key: String,
 }
 
 /// Asks for a link to put one sealed blob. It names the keyed address and the

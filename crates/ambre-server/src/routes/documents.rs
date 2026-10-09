@@ -250,6 +250,10 @@ pub struct CreateDocumentRequest {
     /// server materializes the row under this id idempotently.
     #[serde(default)]
     pub document_id: Option<String>,
+    /// The first entry of the membership log, signed by the creator
+    /// (`SYNC-132`).
+    #[serde(default)]
+    pub entry: Option<String>,
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
@@ -311,6 +315,16 @@ pub async fn create_document(
             .map_err(|e| AppError::Conflict {
                 detail: e.to_string(),
             })?;
+        // An owner's retry finds the first entry already stored, and the
+        // log is never rewritten (`SYNC-107`).
+        let text = req.entry.as_deref().filter(|_| created);
+        let expected = super::share::Expected {
+            act: ambre_protocol::MembershipAct::Create,
+            member: s.user_id,
+            role: Some("owner"),
+            key: None,
+        };
+        let entry = super::share::checked_entry(&state, &s, doc_id, text, expected).await?;
         db::add_document_member(
             &state.db,
             &doc_id,
@@ -318,6 +332,7 @@ pub async fn create_document(
             "owner",
             &doc_key_enc,
             &s.user_id,
+            entry.as_ref(),
         )
         .await?;
     }
@@ -569,8 +584,15 @@ pub async fn list_document_members(
     // A member with write access that reads a debt rotates before it sends a
     // frame (`ambre-spec-key-rotation.md`, `SYNC-128`).
     let rotation_owed = db::rotation_owed(&state.db, &doc_id).await?;
+    // The signed entries beside the rows, for a client to check them against
+    // (`SRV-104`, `SYNC-108`).
+    let log: Vec<String> = db::membership_log(&state.db, &doc_id)
+        .await?
+        .iter()
+        .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
+        .collect();
     Ok(axum::Json(
-        serde_json::json!({"members":json,"rotation_owed":rotation_owed}),
+        serde_json::json!({"members":json,"rotation_owed":rotation_owed,"log":log}),
     ))
 }
 
@@ -578,6 +600,9 @@ pub async fn list_document_members(
 #[derive(serde::Deserialize)]
 pub struct UpdateMemberRoleRequest {
     pub role: String,
+    /// The signed entry that gives the role (`SYNC-132`).
+    #[serde(default)]
+    pub entry: Option<String>,
 }
 
 pub async fn update_document_member_role(
@@ -600,7 +625,15 @@ pub async fn update_document_member_role(
             detail: "invalid role".into(),
         });
     }
-    db::update_document_member_role(&state.db, &doc_id, &target, &req.role).await?;
+    let expected = super::share::Expected {
+        act: ambre_protocol::MembershipAct::ChangeRole,
+        member: target,
+        role: Some(&req.role),
+        key: Some(None),
+    };
+    let entry =
+        super::share::checked_entry(&state, &s, doc_id, req.entry.as_deref(), expected).await?;
+    db::update_document_member_role(&state.db, &doc_id, &target, &req.role, entry.as_ref()).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %req.role, by = %s.user_id, "member role updated");
     Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
 }

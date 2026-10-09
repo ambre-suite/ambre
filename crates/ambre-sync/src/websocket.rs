@@ -1071,44 +1071,10 @@ impl SyncState {
                 return;
             }
 
-            let our_exchange_pub = {
-                let pk = x25519_dalek::PublicKey::from(&ek);
-                hex::encode(pk.as_bytes())
-            };
-            let Some(entry) = resp
-                .members
-                .iter()
-                .find(|m| m.exchange_pub_key == our_exchange_pub)
-            else {
-                tracing::warn!("Sync: KeyRotationRequired: own member entry not found");
-                return;
-            };
-
-            let new_doc_key = match (|| -> Result<DocumentKey, String> {
-                let encrypted = base64::engine::general_purpose::URL_SAFE
-                    .decode(&entry.doc_key_enc)
-                    .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
-                let (nonce, ciphertext) = encrypted
-                    .split_first_chunk::<24>()
-                    .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
-                    .ok_or("wrapped key too short")?;
-                // The new key was wrapped by the rotator. Unwrap against THEIR
-                // exchange key, not our own (fallback to our own for older
-                // servers without the wrapper field).
-                let wrapper_hex = if entry.wrapper_exchange_pub_key.is_empty() {
-                    &entry.exchange_pub_key
-                } else {
-                    &entry.wrapper_exchange_pub_key
-                };
-                let peer_pub: [u8; 32] = hex::decode(wrapper_hex)
-                    .map_err(|e| format!("hex decode pubkey: {e}"))?
-                    .try_into()
-                    .map_err(|_| "invalid pubkey length")?;
-                let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
-                ambre_crypto::ecdh::unwrap_document_key(&ek, &peer_pub, &wrapped)
-                    .map_err(|e| format!("ECDH unwrap: {e}"))
-            })() {
-                Ok(k) => k,
+            // The new key was wrapped by the rotator, and the unwrap runs
+            // against their exchange key, not our own.
+            let (new_doc_key, anchor) = match Self::unwrap_anchored(&ek, &resp.members) {
+                Ok(unwrapped) => unwrapped,
                 Err(e) => {
                     tracing::error!("Sync: KeyRotationRequired unwrap failed: {e}");
                     return;
@@ -1116,8 +1082,11 @@ impl SyncState {
             };
 
             // The link the rotator left reaches back from the new key
-            // (`SYNC-117`).
+            // (`SYNC-117`). It counts only when a writer the log names
+            // signed it (`SYNC-121`).
             let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
+            let log = crate::sharing::walk_served(document_id, anchor, &resp.log);
+            let links = crate::chain::signed_by_writers(links, log.signers());
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,

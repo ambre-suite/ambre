@@ -131,6 +131,7 @@ mod documents;
 mod http;
 mod media;
 mod members;
+mod membership_log;
 pub mod mock;
 pub mod mock_relay;
 mod pipeline;

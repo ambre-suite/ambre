@@ -9,6 +9,7 @@
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 use crate::aead;
 use crate::error::CryptoError;
@@ -84,10 +85,31 @@ pub fn wrap_document_key(
     peer_public: &[u8; 32],
     doc_key: &DocumentKey,
 ) -> Result<WrappedKey, CryptoError> {
+    wrap_anchored(own_secret, peer_public, doc_key, None)
+}
+
+/// Wraps `doc_key` as [`wrap_document_key`] does, with the digest of the
+/// document's first membership entry sealed beside it (`SYNC-104`). So the
+/// recipient learns where the log starts from the member who wrapped, never
+/// from the relay alone.
+///
+/// # Errors
+///
+/// Every error of [`wrap_document_key`].
+pub fn wrap_anchored(
+    own_secret: &StaticSecret,
+    peer_public: &[u8; 32],
+    doc_key: &DocumentKey,
+    anchor: Option<&[u8; 32]>,
+) -> Result<WrappedKey, CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
     let kek = derive_kek(&shared, &own_pub, peer_public);
-    let (nonce, ciphertext) = aead::seal(doc_key.as_bytes(), KEK_DOMAIN, &kek)?;
+    let mut plaintext = Zeroizing::new(doc_key.as_bytes().to_vec());
+    if let Some(anchor) = anchor {
+        plaintext.extend_from_slice(anchor);
+    }
+    let (nonce, ciphertext) = aead::seal(&plaintext, KEK_DOMAIN, &kek)?;
     Ok(WrappedKey { nonce, ciphertext })
 }
 
@@ -100,20 +122,44 @@ pub fn wrap_document_key(
 /// * [`CryptoError::WeakPublicKey`] from [`shared_secret`].
 /// * [`CryptoError::AeadFailed`] when the wrapped key does not verify under the
 ///   derived key-encryption key.
-/// * [`CryptoError::InvalidKeyLength`] when the plaintext inside is not 32
-///   bytes wide.
+/// * [`CryptoError::InvalidKeyLength`] when the plaintext inside is neither a
+///   key nor a key and an anchor.
 pub fn unwrap_document_key(
     own_secret: &StaticSecret,
     peer_public: &[u8; 32],
     wrapped: &WrappedKey,
 ) -> Result<DocumentKey, CryptoError> {
+    unwrap_anchored(own_secret, peer_public, wrapped).map(|(key, _)| key)
+}
+
+/// Unwraps what [`wrap_anchored`] sealed: the key, and the anchor of the
+/// membership log when the wrapper sealed one.
+///
+/// # Errors
+///
+/// Every error of [`unwrap_document_key`].
+pub fn unwrap_anchored(
+    own_secret: &StaticSecret,
+    peer_public: &[u8; 32],
+    wrapped: &WrappedKey,
+) -> Result<(DocumentKey, Option<[u8; 32]>), CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
     let own_pub = PublicKey::from(own_secret).to_bytes();
     let kek = derive_kek(&shared, peer_public, &own_pub);
-    let bytes = aead::open(&wrapped.nonce, &wrapped.ciphertext, KEK_DOMAIN, &kek)?;
-    let arr: [u8; 32] = bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| CryptoError::InvalidKeyLength)?;
-    Ok(DocumentKey::from_array(arr))
+    let bytes = Zeroizing::new(aead::open(
+        &wrapped.nonce,
+        &wrapped.ciphertext,
+        KEK_DOMAIN,
+        &kek,
+    )?);
+    let (key, anchor) = match bytes.len() {
+        32 => (bytes.get(..32), None),
+        64 => (bytes.get(..32), bytes.get(32..)),
+        _ => (None, None),
+    };
+    let key: [u8; 32] = key
+        .and_then(|k| k.try_into().ok())
+        .ok_or(CryptoError::InvalidKeyLength)?;
+    let anchor = anchor.and_then(|a| <[u8; 32]>::try_from(a).ok());
+    Ok((DocumentKey::from_array(key), anchor))
 }
