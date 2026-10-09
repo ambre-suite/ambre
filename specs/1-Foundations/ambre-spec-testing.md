@@ -54,7 +54,8 @@ compiler needs no test, no run and no reading.
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
 | `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
 | `cargo-llvm-cov` in diff mode | are the added lines exercised at all | as a CI gate, once the informative baseline exists |
-| `criterion` with a CI threshold | a performance regression never appears in a diff | every operation carrying a numbered budget in `ambre-spec-budgets.md` |
+| `criterion` | a time on the machine of the author, for the figure a budget row quotes | an operation carrying a numbered budget in `ambre-spec-budgets.md`. A time on a shared runner moves by tens of percent between runs, so it never fails a build |
+| `callgrind`, a count of instructions with a CI ceiling | a performance regression never appears in a diff, and a count does not move between runs | every operation carrying a numbered budget in `ambre-spec-budgets.md`. The ceiling is the budget converted at the rate `scripts/instructions.py` states, and the CI `instructions` job fails an operation above it. It counts the native build: the phone figure stays a conversion |
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
@@ -274,7 +275,8 @@ whether it blocks the current MVP.
 | `cargo-fuzz` | wired | four targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser and the Markdown reader, one minute each in the CI `fuzz` job. The sealed open path and the Trame and Toile file readers have none |
 | `cargo-mutants` | absent | the whole suite, never adversarially checked |
 | `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
-| `criterion` | 1 bench, in `ambre-crypto` | `architecture section 5` budgets about ten operations, and no CI threshold job exists, so a regression cannot fail a build. **The desktop measurement exists; the mobile one the targets are written against has never been taken** |
+| `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |
+| `callgrind` | wired, one budget | the CI `instructions` job holds the Toile body commit under its ceiling, and the bound its diff cap allows. Every other budget row has no ceiling yet |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings, and the `KrillaSurface` primitives |
 | `loom`, `miri` | **not adopted, by decision** | zero `unsafe`, and atomics are flags and counters. Re-check with `rg 'unsafe\|Ordering::' --stats` before revisiting |
 

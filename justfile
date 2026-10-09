@@ -120,6 +120,14 @@ fixtures-bench-corpus:
 fixtures-bench: fixtures-bench-corpus
     cargo bench -p ambre-logic --features fixtures,toile-pdf --bench scale
 
+# A count of instructions under `callgrind` does not move between two runs, so
+# unlike a time it can fail a build. The CI `instructions` job runs this; the
+# ceilings and how a budget converts to one live in the script. Needs valgrind.
+
+# instruction-count budgets: each counted operation against its ceiling.
+instructions:
+    python3 scripts/instructions.py
+
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
 # `just services-up` (CI declares them as `services:` instead).

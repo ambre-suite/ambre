@@ -77,7 +77,7 @@ editor and not restated here.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_double_click_keeps_the_body_and_a_close_writes_it_once` -- two keystrokes, then `Escape` and a frame, leave as one `SetText` carrying the opened body as its base | none | verified |
-| `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the merge runs two character diffs per close, capped at 256 edit steps, and no bench measures it at the size the budget names; lands with the `A note close holds its budget` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-UI-383` | `POST` | Leaving the editor MUST commit within the body commit budget, merge included. | this spec section 3; `ambre-spec-budgets.md section 1` | `callgrind` -- the `body_commit` operation of `crates/ambre-toile/benches/instructions.rs`, under its ceiling in the CI `instructions` job | none | verified |
 | `TOILE-UI-206` | `POST` | Leaving the editor MUST keep its element selected, so the next gesture acts on what was just typed into. | this spec section 4 | none | unheld -- the selection is set at the open and the close does not touch it, and no test reads it after a close; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-064` | `POST` | A body edit MUST be one undo item, however many keystrokes it took. | this spec section 3; `TOILE-014` | none | unheld -- the editor holds the buffer and sends one whole-body write when it closes, so the granularity holds by construction, and nothing drives an edit and counts the items; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | `ambre_toile::ui::view::view_tests::an_untouched_editor_closes_without_a_write` -- an editor opened and closed through the view sends no command | none | verified |
@@ -94,9 +94,10 @@ editor and not restated here.
   No figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 20 `verified`, 21 `untested`, 1 `unimplemented`. What holds is the body's look
+* **Verification.** 21 `verified`, 20 `untested`, 1 `unimplemented`. What holds is the body's look
   under edit, and a double-click and a close driven through the view. A close keeps a peer's edit
-  (`TOILE-UI-381`, `TOILE-UI-382`). An editor whose target a peer deleted closes with a notice. What
+  (`TOILE-UI-381`, `TOILE-UI-382`), and its count of instructions stays under its budget
+  (`TOILE-UI-383`). An editor whose target a peer deleted closes with a notice. What
   is loose is the other entries and the shared-text substrate (`TOILE-065`).
 
 ---
@@ -126,8 +127,9 @@ declared in `ambre-spec-toile-schema.md section 3` (`TOILE-030`).
 
 **Command** (`ambre-bus`): `SetText { id, base, text }` -- the whole body, written once when the
 editor closes, and the body it opened on. The handler merges the change from `base` to `text` into
-the stored body, then diffs the result into its text. So an edit that landed while the editor was
-open keeps its characters (`TOILE-UI-381`). It
+the stored body, then writes the edits the merge found into its text. So an edit that landed while
+the editor was open keeps its characters (`TOILE-UI-381`). The text is spared a diff of its own,
+which over a 4 KB body cost forty times the budget (`TOILE-UI-383`). It
 refuses any element that carries no body field, and a locked one
 (`TOILE-197`, `TOILE-033`).
 

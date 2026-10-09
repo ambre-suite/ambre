@@ -122,5 +122,11 @@ harness = false
 name = "board_cost"
 harness = false
 
+# Holds the "Toile body commit" row by a count of instructions under callgrind,
+# through `scripts/instructions.py`.
+[[bench]]
+name = "instructions"
+harness = false
+
 [lints]
 workspace = true

@@ -37,17 +37,97 @@ enum Step {
     Insert(usize, char),
 }
 
+/// One edit of the stored text: `delete` characters from `at` go, and `insert`
+/// comes in their place. Positions count characters, and each edit's `at`
+/// reads the text with the edits before it already applied.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Edit {
+    pub at: usize,
+    pub delete: usize,
+    pub insert: String,
+}
+
+/// A merge: the text it yields, and the edits that turn the stored text into
+/// it. Logic writes the edits, so the CRDT is spared a diff of its own over the
+/// whole body (`TOILE-UI-383`).
+pub struct Merge {
+    pub text: String,
+    pub edits: Vec<Edit>,
+}
+
 /// The text that keeps the change from `base` to `stored` and the change from
 /// `base` to `typed`. Where the two touch different runs of the base, both
 /// apply. Where they replace the same run differently, the stored run comes
 /// first and the typed run follows, so no word of either is lost.
 pub fn merge_text(base: &str, stored: &str, typed: &str) -> String {
-    if stored == base || stored == typed {
-        return typed.to_owned();
+    merge_edits(base, stored, typed).text
+}
+
+/// The merge [`merge_text`] yields, with the edits that bring `stored` to it.
+/// The stored text only ever gains the typed change, so an edit is a typed
+/// run or a typed run placed after the peer's.
+pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
+    if stored == typed || typed == base {
+        return Merge {
+            text: stored.to_owned(),
+            edits: Vec::new(),
+        };
     }
-    if typed == base {
-        return stored.to_owned();
+    // Neither side touches what all three texts share at their ends, so only
+    // the middle is decoded and diffed. A close then costs little more than a
+    // copy of the body, however long it is (`TOILE-UI-383`).
+    let (head, tail) = common_ends(base, stored, typed);
+    fn middle(s: &str, head: usize, tail: usize) -> &str {
+        s.get(head..s.len() - tail).unwrap_or_default()
     }
+    let mut merge = merge_middle(
+        middle(base, head, tail),
+        middle(stored, head, tail),
+        middle(typed, head, tail),
+    );
+    let shift = base.get(..head).unwrap_or_default().chars().count();
+    for e in &mut merge.edits {
+        e.at += shift;
+    }
+    let mut text = String::with_capacity(head + merge.text.len() + tail);
+    text.push_str(base.get(..head).unwrap_or_default());
+    text.push_str(&merge.text);
+    text.push_str(base.get(base.len() - tail..).unwrap_or_default());
+    Merge {
+        text,
+        edits: merge.edits,
+    }
+}
+
+/// The bytes the three texts share at their start and at their end. Both cut
+/// at a character boundary, and they never overlap in any of the three.
+fn common_ends(base: &str, stored: &str, typed: &str) -> (usize, usize) {
+    let (a, b, c) = (base.as_bytes(), stored.as_bytes(), typed.as_bytes());
+    let same = |((x, y), z): &((&u8, &u8), &u8)| x == y && y == z;
+    let mut head = a.iter().zip(b).zip(c).take_while(same).count();
+    // The three agree byte for byte up to `head`, so a boundary in one is a
+    // boundary in all.
+    while !base.is_char_boundary(head) {
+        head -= 1;
+    }
+    let room = a.len().min(b.len()).min(c.len()) - head;
+    let mut tail = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .zip(c.iter().rev())
+        .take(room)
+        .take_while(same)
+        .count();
+    while !base.is_char_boundary(base.len() - tail) {
+        tail -= 1;
+    }
+    (head, tail)
+}
+
+/// [`merge_edits`] over texts that share no start and no end, positions
+/// counted from the start of the middle.
+fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
     let base: Vec<char> = base.chars().collect();
     let stored: Vec<char> = stored.chars().collect();
     let typed: Vec<char> = typed.chars().collect();
@@ -56,28 +136,58 @@ pub fn merge_text(base: &str, stored: &str, typed: &str) -> String {
     hunks.sort_by_key(|h| (h.start, h.end, h.side));
 
     let mut out = String::with_capacity(4 * (stored.len() + typed.len()));
+    let mut edits = Vec::new();
+    // The characters written so far: where the next edit lands in the stored
+    // text once the edits before it apply.
+    let mut pos = 0;
     let mut at = 0;
     let mut rest = hunks.as_slice();
     while let Some(first) = rest.first() {
         let (len, end) = cluster(rest);
         let (group, tail) = rest.split_at(len);
-        out.extend(run(&base, at, first.start));
+        let kept = run(&base, at, first.start);
+        out.extend(kept);
+        pos += kept.len();
         let mine = region(&base, group, Side::Stored, first.start, end);
         let theirs = region(&base, group, Side::Typed, first.start, end);
         match (mine, theirs) {
-            (Some(s), Some(t)) if s == t => out.push_str(&s),
+            (Some(s), Some(t)) if s == t => {
+                pos += s.chars().count();
+                out.push_str(&s);
+            }
             (Some(s), Some(t)) => {
+                pos += s.chars().count();
                 out.push_str(&s);
                 out.push_str(&t);
+                let insert = Edit {
+                    at: pos,
+                    delete: 0,
+                    insert: t,
+                };
+                pos += insert.insert.chars().count();
+                edits.push(insert);
             }
-            (Some(r), None) | (None, Some(r)) => out.push_str(&r),
+            (Some(s), None) => {
+                pos += s.chars().count();
+                out.push_str(&s);
+            }
+            (None, Some(t)) => {
+                out.push_str(&t);
+                let replace = Edit {
+                    at: pos,
+                    delete: run(&base, first.start, end).len(),
+                    insert: t,
+                };
+                pos += replace.insert.chars().count();
+                edits.push(replace);
+            }
             (None, None) => {}
         }
         at = end;
         rest = tail;
     }
     out.extend(run(&base, at, base.len()));
-    out
+    Merge { text: out, edits }
 }
 
 /// The base characters `start..end`, or none when the run is out of range.
@@ -206,7 +316,12 @@ fn myers(a: &[char], b: &[char]) -> Option<Vec<Step>> {
     let mut v = vec![0_isize; usize::try_from(2 * max + 3).ok()?];
     let mut trace = Vec::new();
     for d in 0..=max {
-        trace.push(v.clone());
+        // Depth `d` reads diagonals `-d - 1..=d + 1` only, so the trace keeps
+        // that window and not the whole frontier. The copy grows with the depth
+        // reached, not with the cap.
+        let window =
+            usize::try_from(offset - d - 1).ok()?..=usize::try_from(offset + d + 1).ok()?;
+        trace.push(v.get(window)?.to_vec());
         for k in (-d..=d).step_by(2) {
             let mut x = if comes_down(&v, k, d, offset)? {
                 reach(&v, k + 1, offset)?
@@ -220,25 +335,21 @@ fn myers(a: &[char], b: &[char]) -> Option<Vec<Step>> {
             }
             *v.get_mut(usize::try_from(k + offset).ok()?)? = x;
             if x >= n && y >= m {
-                return backtrack(&trace, b, n, m, offset);
+                return backtrack(&trace, b, n, m);
             }
         }
     }
     None
 }
 
-/// Walk the frontiers back from the end of both texts to the script.
-fn backtrack(
-    trace: &[Vec<isize>],
-    b: &[char],
-    n: isize,
-    m: isize,
-    offset: isize,
-) -> Option<Vec<Step>> {
+/// Walk the frontiers back from the end of both texts to the script. The
+/// frontier kept at depth `d` starts at diagonal `-d - 1`.
+fn backtrack(trace: &[Vec<isize>], b: &[char], n: isize, m: isize) -> Option<Vec<Step>> {
     let (mut x, mut y) = (n, m);
     let mut steps = Vec::new();
     for (d, v) in trace.iter().enumerate().rev() {
         let d = isize::try_from(d).ok()?;
+        let offset = d + 1;
         let k = x - y;
         let down = comes_down(v, k, d, offset)?;
         let prev_k = if down { k + 1 } else { k - 1 };
@@ -347,6 +458,25 @@ mod tests {
             let rebuilt = region(&base, &hunks, Side::Typed, 0, base.len())
                 .unwrap_or_else(|| base.iter().collect());
             proptest::prop_assert_eq!(rebuilt, side.iter().collect::<String>());
+        }
+
+        /// The edits of a merge, replayed on the stored text in order, yield
+        /// the merged text: what Logic writes is what the view echoes. The
+        /// alphabet carries a multibyte character, so a position counted in
+        /// bytes fails.
+        #[test]
+        fn the_edits_of_a_merge_rebuild_it_from_the_stored_text(
+            base in "[ab é]{0,30}",
+            stored in "[ab é]{0,30}",
+            typed in "[ab é]{0,30}",
+        ) {
+            let merge = merge_edits(&base, &stored, &typed);
+            let mut text: Vec<char> = stored.chars().collect();
+            for e in &merge.edits {
+                proptest::prop_assert!(e.at + e.delete <= text.len());
+                text.splice(e.at..e.at + e.delete, e.insert.chars());
+            }
+            proptest::prop_assert_eq!(text.into_iter().collect::<String>(), merge.text);
         }
     }
 }

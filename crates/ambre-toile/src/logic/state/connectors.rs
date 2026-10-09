@@ -14,13 +14,13 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
 };
 
-use crate::logic::text_merge::merge_text;
+use crate::logic::text_merge::merge_edits;
 use crate::ui::label::LABEL_W;
 
 use super::codec::{
     bin_of, connector_label_or_seed, encode_anchor, map_str, read_connector, write_connector,
 };
-use super::{CONNECTORS, LAYERS, ToileState};
+use super::{CONNECTORS, LAYERS, ToileState, write_edits};
 
 /// One arrow as the cull reads it: its ends, and how far its paint reaches
 /// past the box of its outline. The caption box rides the outline, so half
@@ -130,7 +130,7 @@ impl ToileState {
 
     /// Write an arrow's caption. The caption is a `LoroText`. The change from
     /// `base`, the caption the editor opened on, to `text` is merged into the
-    /// stored caption, then diffed into it. Two peers typing on one arrow then
+    /// stored caption, and its edits are written into it. Two peers typing on one arrow then
     /// converge character by character (`TOILE-047`), even when one edit lands
     /// while the other's editor is open (`TOILE-263`).
     pub(super) fn set_connector_label(
@@ -145,10 +145,8 @@ impl ToileState {
         let Some(label) = connector_label_or_seed(&cm) else {
             return self.err_no_connector(&id);
         };
-        let merged = merge_text(base, &label.to_string(), text);
-        // The diff is bounded by the caption's length, which a caption is; a
-        // timeout here would silently drop the edit, so none is set.
-        let _ = label.update(&merged, loro::UpdateOptions::default());
+        let merge = merge_edits(base, &label.to_string(), text);
+        let _ = write_edits(&label, &merge.edits);
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }

@@ -74,6 +74,7 @@ use crate::logic::command::{
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, ElementStyle, FrameId, NodeId, PlaybackState};
 use crate::logic::schema;
+use crate::logic::text_merge::Edit;
 
 // Root container names.
 pub(crate) const ELEMENTS: &str = "elements";
@@ -210,6 +211,26 @@ pub struct ToileState {
     ///   read met first therefore reaches the user at the next import, not at
     ///   once. Late, and never wrong: the register is still unreadable.
     undecodable: std::cell::Cell<bool>,
+}
+
+/// Write a merge's edits into the text it was computed against, in order. The
+/// merge already knows which characters change, so the text is spared the
+/// whole-body diff `LoroText::update` would run (`TOILE-UI-383`).
+///
+/// # Errors
+///
+/// The first edit the text refuses. Every position was computed against the
+/// text as read, so a refusal means it changed between the read and the write.
+fn write_edits(text: &loro::LoroText, edits: &[Edit]) -> loro::LoroResult<()> {
+    for e in edits {
+        if e.delete > 0 {
+            text.delete(e.at, e.delete)?;
+        }
+        if !e.insert.is_empty() {
+            text.insert(e.at, &e.insert)?;
+        }
+    }
+    Ok(())
 }
 
 /// The board scaffolding, which every peer writes on open, before any edit.

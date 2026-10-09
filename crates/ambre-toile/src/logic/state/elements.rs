@@ -14,13 +14,13 @@ use crate::logic::index::ElementBounds;
 use crate::logic::model::{
     ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
 };
-use crate::logic::text_merge::merge_text;
+use crate::logic::text_merge::merge_edits;
 
 use super::codec::{
     BODY, bin_of, body_text_or_seed, bool_of, content_matches, expanded_aabb, f64_of, str_of,
     stroke_aabb,
 };
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
+use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState, write_edits};
 
 impl ToileState {
     pub(super) fn create_element(
@@ -156,7 +156,8 @@ impl ToileState {
 
     /// Write the body of a sticky / text element. The editor hands the body it
     /// opened on and the whole body it closes with. The write merges that
-    /// change into the stored body, then diffs the result into its `LoroText`.
+    /// change into the stored body, then writes the merge's edits into its
+    /// `LoroText`.
     /// So two authors editing one note each keep the characters they typed
     /// (`TOILE-030`), even when one edit lands while the other's editor is
     /// open (`TOILE-UI-381`). Only sticky / text elements carry that field; a
@@ -179,12 +180,11 @@ impl ToileState {
         let Some(body) = body_text_or_seed(&em) else {
             return ToileOutcome::display_only(Vec::new());
         };
-        let stored = body.to_string();
-        let merged = merge_text(base, &stored, text);
-        if merged == stored {
+        let merge = merge_edits(base, &body.to_string(), text);
+        if merge.edits.is_empty() {
             return ToileOutcome::display_only(Vec::new());
         }
-        let _ = body.update(&merged, loro::UpdateOptions::default());
+        let _ = write_edits(&body, &merge.edits);
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }

@@ -5540,7 +5540,6 @@
   {"edge": "verified-by", "from": "TOILE-UI-062", "to": "ambre_toile::ui::view::view_tests::a_double_click_keeps_the_body_and_a_close_writes_it_once"},
   {"edge": "cites-section", "from": "TOILE-UI-383", "section": "3", "to": "3-Toile/features/ambre-spec-toile-text-editing.md"},
   {"edge": "cites-document", "from": "TOILE-UI-383", "section": "1", "to": "ambre-spec-budgets.md"},
-  {"edge": "lands-with", "from": "TOILE-UI-383", "to": "A note close holds its budget"},
   {"edge": "cites-section", "from": "TOILE-UI-206", "section": "4", "to": "3-Toile/features/ambre-spec-toile-text-editing.md"},
   {"edge": "lands-with", "from": "TOILE-UI-206", "to": "Toile text editing held"},
   {"edge": "cites-section", "from": "TOILE-UI-064", "section": "3", "to": "3-Toile/features/ambre-spec-toile-text-editing.md"},

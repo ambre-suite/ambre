@@ -27,10 +27,10 @@ use crate::logic::command::{
     ToileOutcome,
 };
 use crate::logic::model::{ElementId, FrameId, NodeId};
-use crate::logic::text_merge::merge_text;
+use crate::logic::text_merge::{Merge, merge_edits};
 
 use super::codec::str_of;
-use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState};
+use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState, write_edits};
 
 /// The slide transition length a fresh board is seeded with, in milliseconds.
 /// The deck's `transition_ms` register carries an editable value over it, and a
@@ -393,11 +393,14 @@ impl ToileState {
         let stored = text.to_string();
         if stored != base {
             let typed = splice(base, delta);
-            let merged = merge_text(base, &stored, &typed);
-            if merged == stored {
+            let Merge {
+                text: merged,
+                edits,
+            } = merge_edits(base, &stored, &typed);
+            if edits.is_empty() {
                 return ToileOutcome::display_only(Vec::new());
             }
-            let _ = text.update(&merged, loro::UpdateOptions::default());
+            let _ = write_edits(&text, &edits);
             self.doc.commit();
             // The panel shows `typed`, and the note is now `merged`.
             let told = (merged != typed).then(|| ToileEvent::NotesChanged {

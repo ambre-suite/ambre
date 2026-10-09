@@ -139,6 +139,28 @@ jobs:
           path: fuzz/artifacts/
 
   # ---------------------------------------------------------------------------
+  # instructions -- the budgets held by a count of instructions under
+  # callgrind (`ambre-spec-testing.md section 2`). A time on a shared runner
+  # moves by tens of percent between runs; a count does not, so an operation
+  # over its ceiling fails the build. The ceilings live in the script.
+  # ---------------------------------------------------------------------------
+  instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev valgrind
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: instructions
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: just instructions
+
+  # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"
   # tier): the whole workspace, the server and the feature-gated belts included,
   # zero external dependency.
