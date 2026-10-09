@@ -554,6 +554,7 @@ mod handler_tests {
             "invitee_email": invitee_email,
             "role": "editor",
             "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
         });
         let resp = app
             .clone()
@@ -626,6 +627,7 @@ mod handler_tests {
             "invitee_email": invitee_email,
             "role": "editor",
             "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
         });
         let resp = app
             .clone()
@@ -663,6 +665,7 @@ mod handler_tests {
         let new_key = base64_encode(&[0xABu8; 32]);
         let rotate_body = serde_json::json!({
             "keys": [ { "user_id": owner_id, "doc_key_enc": new_key } ],
+            "members": [ owner_id ],
             "link": link_text(&doc_id, 2, 1),
         });
         let resp = app
@@ -698,6 +701,7 @@ mod handler_tests {
             "invitee_email": invitee_email,
             "role": "editor",
             "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
         });
         let resp = app
             .clone()
@@ -852,6 +856,11 @@ mod handler_tests {
     fn base64_encode(data: &[u8]) -> String {
         use base64::Engine;
         base64::engine::general_purpose::URL_SAFE.encode(data)
+    }
+
+    /// The identifier of test key `key`, as an invitation names it.
+    fn key_id_hex(key: u8) -> String {
+        hex::encode([key; 16])
     }
 
     /// A rotation's link from key `key` back to key `previous`, as a client
@@ -1155,6 +1164,8 @@ mod handler_tests {
                 "invitee_email": "keyless@example.com",
                 "role": role,
                 "doc_key_enc": base64_encode(&[9u8; 32]),
+                "key_id": key_id_hex(1),
+            "key_id": key_id_hex(1),
             })
         };
         let share = format!("/api/documents/{doc_id}/share");
@@ -1587,6 +1598,7 @@ mod handler_tests {
             "invitee_email": invitee_email,
             "role": role,
             "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
         });
         let resp = app
             .clone()
@@ -1979,6 +1991,7 @@ mod handler_tests {
             "invitee_email": invitee_email,
             "role": role,
             "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
         });
         app.clone()
             .oneshot(
@@ -2257,6 +2270,7 @@ mod handler_tests {
 
         let rotate_body = serde_json::json!({
             "keys": [ { "user_id": editor_uid, "doc_key_enc": base64_encode(&[0xABu8; 32]) } ],
+            "members": [ editor_uid ],
             "link": link_text(&doc_id, 2, 1),
         });
         let resp = app
@@ -2386,8 +2400,14 @@ mod handler_tests {
         assert_eq!(status_of(&app, leave, &leaver, None).await, StatusCode::OK);
         assert!(owes_rotation(&app, &owner, &doc_id).await);
 
+        let members: Vec<String> = list_members(&app, &owner, &doc_id)
+            .await
+            .iter()
+            .map(|m| m["user_id"].as_str().unwrap().to_string())
+            .collect();
         let keys = serde_json::json!({
             "keys": [ { "user_id": stayer_uid, "doc_key_enc": base64_encode(&[0xCDu8; 32]) } ],
+            "members": members,
             "link": link_text(&doc_id, 2, 1),
         });
         let rotate = Request::post(format!("/api/documents/{doc_id}/rotate-key"));
@@ -2432,6 +2452,7 @@ mod handler_tests {
         let body = serde_json::json!({
             "user_id": revokee_uid,
             "keys": [ { "user_id": owner_uid, "doc_key_enc": new_key } ],
+            "members": [ owner_uid ],
             "link": link_text(&doc_id, 2, 1),
         });
         let revoke = Request::post(format!("/api/documents/{doc_id}/revoke"));
@@ -2449,6 +2470,116 @@ mod handler_tests {
         assert_eq!(members[0]["doc_key_enc"], new_key, "and the key rotated");
         assert!(!owes_rotation(&app, &owner, &doc_id).await);
         assert!(!debt_mirrored(&state, &doc_id).await);
+    }
+
+    /// `SRV-167`, `SRV-168`: an invitation and a revoke race on one document.
+    /// The revoke read the members before the invitation landed, so it is
+    /// refused whole; read again, it wraps for the newcomer too. An invitation
+    /// wrapping the key the revoke replaced is refused. Every member left holds
+    /// a copy of the current key.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_invited_during_a_revoke_gets_the_new_key(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let _ = setup_named(&app, "revokee@test.com", 77).await;
+        invite(&app, &owner, &doc_id, "revokee@test.com", "editor").await;
+        let revokee_uid = doc_user_id(&state, "revokee@test.com").await;
+        let uids = |members: Vec<serde_json::Value>| -> Vec<String> {
+            members
+                .iter()
+                .map(|m| m["user_id"].as_str().unwrap().to_string())
+                .filter(|uid| *uid != revokee_uid)
+                .collect()
+        };
+        // The revoke reads the members it keeps: the owner alone.
+        let read_before = uids(list_members(&app, &owner, &doc_id).await);
+        assert_eq!(read_before.len(), 1);
+
+        // The invitation lands between the read and the post.
+        let _ = setup_named(&app, "newcomer@test.com", 78).await;
+        invite(&app, &owner, &doc_id, "newcomer@test.com", "editor").await;
+        let newcomer_uid = doc_user_id(&state, "newcomer@test.com").await;
+
+        let revoke_with = |read: Vec<String>| {
+            let keys: Vec<_> = read
+                .iter()
+                .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": base64_encode(&[0xE2; 32]) }))
+                .collect();
+            serde_json::json!({
+                "user_id": revokee_uid,
+                "keys": keys,
+                "members": read,
+                "link": link_text(&doc_id, 2, 1),
+            })
+        };
+        let revoke = || Request::post(format!("/api/documents/{doc_id}/revoke"));
+        let resp = app
+            .clone()
+            .oneshot(
+                revoke()
+                    .header("authorization", &owner)
+                    .header("content-type", "application/json")
+                    .body(Body::from(revoke_with(read_before).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let refusal: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(refusal["error"], "MEMBERS_CHANGED");
+        assert_eq!(
+            list_members(&app, &owner, &doc_id).await.len(),
+            3,
+            "a refused revoke removes no one"
+        );
+        assert!(key_links(&app, &owner, &doc_id).await.is_empty());
+
+        // Read again, the revoke names the newcomer and wraps for them.
+        let read_again = uids(list_members(&app, &owner, &doc_id).await);
+        assert!(read_again.contains(&newcomer_uid));
+        assert_eq!(
+            status_of(&app, revoke(), &owner, Some(revoke_with(read_again))).await,
+            StatusCode::OK
+        );
+        let members = list_members(&app, &owner, &doc_id).await;
+        assert_eq!(members.len(), 2);
+        assert!(
+            members
+                .iter()
+                .all(|m| m["doc_key_enc"] == base64_encode(&[0xE2; 32])),
+            "every member left holds the current key: {members:?}"
+        );
+
+        // An invitation that wrapped the key the revoke replaced is refused.
+        let _ = setup_named(&app, "late@test.com", 79).await;
+        let stale = serde_json::json!({
+            "invitee_email": "late@test.com",
+            "role": "editor",
+            "doc_key_enc": base64_encode(&[9u8; 32]),
+            "key_id": key_id_hex(1),
+        });
+        let share = || Request::post(format!("/api/documents/{doc_id}/share"));
+        assert_eq!(
+            status_of(&app, share(), &owner, Some(stale)).await,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(list_members(&app, &owner, &doc_id).await.len(), 2);
+        let current = serde_json::json!({
+            "invitee_email": "late@test.com",
+            "role": "editor",
+            "doc_key_enc": base64_encode(&[0xE2; 32]),
+            "key_id": key_id_hex(2),
+        });
+        assert_eq!(
+            status_of(&app, share(), &owner, Some(current)).await,
+            StatusCode::OK
+        );
     }
 
     /// The links a member reads back, oldest first.
@@ -2494,6 +2625,7 @@ mod handler_tests {
         let rotation = |copy: u8, link: String| {
             serde_json::json!({
                 "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[copy; 32]) } ],
+                "members": [ owner_uid ],
                 "link": link,
             })
         };
@@ -2527,6 +2659,7 @@ mod handler_tests {
         );
         let bare = serde_json::json!({
             "keys": [ { "user_id": owner_uid, "doc_key_enc": base64_encode(&[0xB3; 32]) } ],
+            "members": [ owner_uid ],
         });
         assert!(
             status_of(&app, rotate(), &owner, Some(bare))

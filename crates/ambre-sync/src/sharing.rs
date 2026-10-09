@@ -61,6 +61,9 @@ pub(crate) fn build_invite_request(
         invitee_email,
         role: role.to_string(),
         doc_key_enc: wrap_key_b64(my_xk, &peer, doc_key).map_err(|e| e.to_string())?,
+        // The relay refuses the copy if a rotation replaced this key
+        // between the read and the post (`SYNC-143`).
+        key_id: hex::encode(doc_key.id().as_array()),
     })
 }
 
@@ -324,6 +327,14 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 display_name: resp.display_name,
             });
         }
+        // A rotation landed first: the copy wraps a key the relay refuses.
+        // Nothing was added, and an invitation sent again wraps the new key.
+        Err(e) if http::is_key_changed(&e) => api_error(
+            logic_tx,
+            "InviteToDocument",
+            409,
+            "The document's key changed during the invitation; invite again".into(),
+        ),
         Err(e) => api_error(logic_tx, "InviteToDocument", 500, e),
     }
 }
@@ -395,6 +406,10 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     });
 }
 
+/// How many times a rotation is posted when members keep joining between its
+/// read and its post (`SYNC-143`). Each try reads the members again.
+const ROTATION_TRIES: usize = 3;
+
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
 pub(crate) struct RevokeParams {
     pub id: RequestId,
@@ -425,28 +440,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         "{}://{}/api/documents/{}/members",
         p.url_scheme, p.api_base, p.document_id
     );
-    let members = match http
-        .get_json::<http::DocumentMembersResponse>(&members_url)
-        .await
-    {
-        Ok(resp) => resp.members,
-        Err(e) => {
-            return api_error(
-                logic_tx,
-                "RevokeFromDocument",
-                500,
-                format!("Get members failed: {e}"),
-            );
-        }
-    };
-    // Compared parsed, so a spelling of the same id cannot keep the member in.
-    let staying: Vec<_> = members
-        .into_iter()
-        .filter(|m| UserId::parse_str(&m.user_id).ok() != Some(p.user_id))
-        .collect();
-
     let new_doc_key = DocumentKey::generate();
-    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &staying);
     let link = match link_to(p.document_id, &p.previous, &new_doc_key, &p.signing_key) {
         Ok(link) => link,
         Err(e) => return api_error(logic_tx, "RevokeFromDocument", 500, e),
@@ -455,22 +449,53 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         "{}://{}/api/documents/{}/revoke",
         p.url_scheme, p.api_base, p.document_id
     );
-    let body = http::RevokeRequest {
-        user_id: p.user_id.to_string(),
-        keys,
-        link: link.1,
+    let mut tries = 0;
+    let unwrapped = loop {
+        tries += 1;
+        let members = match http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+        {
+            Ok(resp) => resp.members,
+            Err(e) => {
+                return api_error(
+                    logic_tx,
+                    "RevokeFromDocument",
+                    500,
+                    format!("Get members failed: {e}"),
+                );
+            }
+        };
+        // Compared parsed, so a spelling of the same id cannot keep the member in.
+        let staying: Vec<_> = members
+            .into_iter()
+            .filter(|m| UserId::parse_str(&m.user_id).ok() != Some(p.user_id))
+            .collect();
+        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &staying);
+        let body = http::RevokeRequest {
+            user_id: p.user_id.to_string(),
+            keys,
+            members: staying.into_iter().map(|m| m.user_id).collect(),
+            link: link.1.clone(),
+        };
+        match http
+            .post_json::<_, serde_json::Value>(&revoke_url, &body)
+            .await
+        {
+            Ok(_) => break unwrapped,
+            // A member joined between the read and the post, and the relay
+            // changed nothing. The next try reads them again (`SYNC-143`).
+            Err(e) if http::is_members_changed(&e) && tries < ROTATION_TRIES => {}
+            Err(e) => {
+                return api_error(
+                    logic_tx,
+                    "RevokeFromDocument",
+                    500,
+                    format!("Revoke failed: {e}"),
+                );
+            }
+        }
     };
-    if let Err(e) = http
-        .post_json::<_, serde_json::Value>(&revoke_url, &body)
-        .await
-    {
-        return api_error(
-            logic_tx,
-            "RevokeFromDocument",
-            500,
-            format!("Revoke failed: {e}"),
-        );
-    }
 
     let _ = event_tx.send(SyncEvent::RevocationComplete {
         id: p.id,
@@ -574,46 +599,57 @@ pub(crate) async fn settle_task<H: ShareHttp>(
         "{}://{}/api/documents/{}/members",
         p.url_scheme, p.api_base, document_id
     );
-    let resp = match http
-        .get_json::<http::DocumentMembersResponse>(&members_url)
-        .await
-    {
-        Ok(resp) => resp,
-        Err(e) => return unsettled(format!("Get members failed: {e}")),
-    };
-    if !resp.rotation_owed {
-        let _ = event_tx.send(SyncEvent::DebtGone { document_id });
-        return;
-    }
-    let new_doc_key = DocumentKey::generate();
-    let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &resp.members);
-    if !unwrapped.is_empty() {
-        tracing::warn!(
-            "Sync: the owed rotation skips {} member(s) with an unreadable key",
-            unwrapped.len()
-        );
-    }
-    let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
-        Ok(link) => link,
-        Err(e) => return unsettled(e),
-    };
     let rotate_url = format!(
         "{}://{}/api/documents/{}/rotate-key",
         p.url_scheme, p.api_base, document_id
     );
-    let body = http::RotateKeyRequest { keys, link: text };
-    match http
-        .post_json::<_, serde_json::Value>(&rotate_url, &body)
-        .await
-    {
-        Ok(_) => {
-            let _ = event_tx.send(SyncEvent::DebtSettled {
-                document_id,
-                new_doc_key,
-                link,
-            });
+    let new_doc_key = DocumentKey::generate();
+    let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
+        Ok(link) => link,
+        Err(e) => return unsettled(e),
+    };
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        let resp = match http
+            .get_json::<http::DocumentMembersResponse>(&members_url)
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => return unsettled(format!("Get members failed: {e}")),
+        };
+        if !resp.rotation_owed {
+            let _ = event_tx.send(SyncEvent::DebtGone { document_id });
+            return;
         }
-        Err(e) => unsettled(format!("Rotate key failed: {e}")),
+        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, &resp.members);
+        if !unwrapped.is_empty() {
+            tracing::warn!(
+                "Sync: the owed rotation skips {} member(s) with an unreadable key",
+                unwrapped.len()
+            );
+        }
+        let body = http::RotateKeyRequest {
+            keys,
+            members: resp.members.into_iter().map(|m| m.user_id).collect(),
+            link: text.clone(),
+        };
+        match http
+            .post_json::<_, serde_json::Value>(&rotate_url, &body)
+            .await
+        {
+            Ok(_) => {
+                let _ = event_tx.send(SyncEvent::DebtSettled {
+                    document_id,
+                    new_doc_key,
+                    link,
+                });
+                return;
+            }
+            // A member joined since the read (`SYNC-143`): read them again.
+            Err(e) if http::is_members_changed(&e) && tries < ROTATION_TRIES => {}
+            Err(e) => return unsettled(format!("Rotate key failed: {e}")),
+        }
     }
 }
 
@@ -1136,6 +1172,146 @@ mod tests {
             }
             other => panic!("expected the revoke POST, got {other:?}"),
         }
+    }
+
+    /// `SYNC-143`: a member joined between the revoke's read and its post. The
+    /// relay refused it whole, so the revoke reads the members again and wraps
+    /// the same new key for the newcomer too. Each post names what it read.
+    #[tokio::test]
+    async fn a_revoke_refused_for_a_newcomer_is_built_again_for_them() {
+        let (my_xk, _) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let (_c_xk, c_pub) = keypair(3);
+        let (_n_xk, n_pub) = keypair(4);
+        let params = revoke_params(&my_xk);
+        let removed = params.user_id.to_string();
+        let a = "11111111-1111-1111-1111-111111111111";
+        let newcomer = "44444444-4444-4444-4444-444444444444";
+
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "members": [
+                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
+            ] })),
+            Err("POST https://api.test/revoke: MEMBERS_CHANGED".into()),
+            Ok(serde_json::json!({ "members": [
+                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
+                member_row(newcomer, "New", &n_pub),
+            ] })),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+
+        let Ok(SyncEvent::RevocationComplete { link, .. }) = erx.try_recv() else {
+            panic!("expected RevocationComplete");
+        };
+        assert!(
+            lrx.try_recv().is_err(),
+            "a retry that lands reports nothing"
+        );
+        let calls = http.calls();
+        assert_eq!(calls.len(), 4, "read, refused post, read again, post");
+        let (Call::Post(_, first), Call::Post(_, second)) = (&calls[1], &calls[3]) else {
+            panic!("expected two posts: {calls:?}");
+        };
+        assert_eq!(first["members"], serde_json::json!([a]));
+        assert_eq!(second["members"], serde_json::json!([a, newcomer]));
+        let wrapped: Vec<_> = second["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| k["user_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(wrapped, vec![a, newcomer], "the newcomer gets a copy");
+        assert_eq!(posted_link(first), posted_link(second), "one new key");
+        assert_eq!(posted_link(second), link);
+    }
+
+    /// `SYNC-143`: members that keep joining end the revoke after its tries,
+    /// with the refusal reported and no key swapped.
+    #[tokio::test]
+    async fn a_revoke_gives_up_after_its_tries() {
+        let (my_xk, _) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let members = serde_json::json!({ "members": [
+            member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
+        ] });
+        let mut script = Vec::new();
+        for _ in 0..ROTATION_TRIES {
+            script.push(Ok(members.clone()));
+            script.push(Err("POST https://api.test/revoke: MEMBERS_CHANGED".into()));
+        }
+        let http = FakeHttp::new(script);
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
+        assert!(erx.try_recv().is_err(), "no key swapped");
+        assert!(matches!(
+            lrx.try_recv(),
+            Ok(LogicEvent::ApiError { code: 500, .. })
+        ));
+        assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
+    }
+
+    /// `SYNC-143`: an owed rotation refused for a newcomer reads the members
+    /// again, and the payment wraps for the newcomer too.
+    #[tokio::test]
+    async fn an_owed_rotation_refused_for_a_newcomer_is_paid_for_them() {
+        let (my_xk, my_pub) = keypair(1);
+        let (_n_xk, n_pub) = keypair(4);
+        let me = "11111111-1111-1111-1111-111111111111";
+        let newcomer = "44444444-4444-4444-4444-444444444444";
+        let http = FakeHttp::new(vec![
+            Ok(
+                serde_json::json!({ "members": [ member_row(me, "Me", &my_pub) ],
+                "rotation_owed": true }),
+            ),
+            Err("POST https://api.test/rotate-key: MEMBERS_CHANGED".into()),
+            Ok(serde_json::json!({ "members": [
+                member_row(me, "Me", &my_pub), member_row(newcomer, "New", &n_pub),
+            ], "rotation_owed": true })),
+            Ok(serde_json::json!({ "status": "rotated" })),
+        ]);
+        let (etx, erx, _sink, _lrx) = channels();
+        settle_task(&http, settle_params(&my_xk), &etx).await;
+        assert!(matches!(erx.try_recv(), Ok(SyncEvent::DebtSettled { .. })));
+        let calls = http.calls();
+        let Call::Post(_, body) = &calls[3] else {
+            panic!("expected the second payment: {calls:?}");
+        };
+        assert_eq!(body["members"], serde_json::json!([me, newcomer]));
+        assert_eq!(body["keys"].as_array().unwrap().len(), 2);
+    }
+
+    /// `SYNC-143`: an invitation names the key its copy wraps, so the relay
+    /// can refuse one a rotation overtook.
+    #[test]
+    fn an_invitation_names_the_key_it_wraps() {
+        let (my_xk, _) = keypair(1);
+        let (_i_xk, i_pub) = keypair(2);
+        let doc_key = DocumentKey::generate();
+        let req =
+            build_invite_request(&my_xk, &i_pub, "i@test".into(), &doc_key, Role::Editor).unwrap();
+        assert_eq!(req.key_id, hex::encode(doc_key.id().as_array()));
+    }
+
+    /// `SYNC-143`: an invitation the relay refused for a key that changed is
+    /// reported as such, and nothing is sent as invited.
+    #[tokio::test]
+    async fn an_invitation_overtaken_by_a_rotation_is_reported() {
+        let (my_xk, _) = keypair(1);
+        let (_i_xk, i_pub) = keypair(2);
+        let expect = decode_exchange_pubkey(&i_pub).unwrap();
+        let http = FakeHttp::new(vec![
+            Ok(user_search_json("invitee@test.local", &i_pub)),
+            Err("POST https://api.test/share: KEY_CHANGED".into()),
+        ]);
+        let (etx, erx, sink, lrx) = channels();
+        invite_task(&http, invite_params(&my_xk, expect), &etx, &sink).await;
+        assert!(erx.try_recv().is_err());
+        assert!(matches!(
+            lrx.try_recv(),
+            Ok(LogicEvent::ApiError { code: 409, .. })
+        ));
     }
 
     /// A revoke the relay refuses changes nothing here either: no key is

@@ -46,6 +46,7 @@ and every copy in one request, so the revoke lands whole or not at all.
 | `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | `ambre_sync::updates::tests::a_revoke_changes_no_content` -- across a completed revoke no frame leaves, no remote change reaches the engine, and a frame sealed before it still opens | none | verified |
 | `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed`; `ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` -- the rotation names each member it could not re-wrap for, and the revoke reports them | none | verified |
 | `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the one revoke post carries the link; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does a payment; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay stores it with the copies; `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- a rotation without its link, with another document's, or chained from a stale key changes nothing | none | verified |
+| `SYNC-143` | `POST` | A member invited while a rotation is built MUST end up holding the new key. A rotation the relay refused for a member it did not read MUST be built again from a fresh read, and an invitation MUST name the key its copy wraps. | this spec section 3; `SRV-167`, `SRV-168` | `ambre_sync::sharing::tests::a_revoke_refused_for_a_newcomer_is_built_again_for_them` -- the second post names and wraps for the newcomer, under the same new key; `ambre_sync::sharing::tests::an_owed_rotation_refused_for_a_newcomer_is_paid_for_them` -- an owed rotation does the same; `ambre_sync::sharing::tests::a_revoke_gives_up_after_its_tries` -- the retries are bounded, and no key is swapped; `ambre_sync::sharing::tests::an_invitation_names_the_key_it_wraps` -- the copy carries its key's identifier; `ambre_sync::sharing::tests::an_invitation_overtaken_by_a_rotation_is_reported` -- a refused copy adds no one and is reported; `ambre_sync::http::tests::a_moved_membership_or_key_reads_as_its_own_refusal` -- only a 409 with its code reads as either refusal | none | verified |
 | `SYNC-126` | `POST` | A revoke MUST post the removal and the wrapped copies in one request. | this spec section 3; `SYNC-041` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- one read of the members, then one post that names the member and carries every copy; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay applies the one request whole and leaves no debt | none | verified |
 
 ### 1.3 Take on a rotation
@@ -88,7 +89,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 21 `verified`, 4 `untested`, 2 `unimplemented`. The relay half holds, as do the
+* **Verification.** 22 `verified`, 4 `untested`, 2 `unimplemented`. The relay half holds, as do the
   key wipe, the open by name, the one-request revoke, the departure's debt and the chain. The
   client's two rotation paths are loose: no test drives a notice through to the key held.
 
@@ -131,9 +132,16 @@ key never leaves the Sync worker.
 3. wrap the new key once per member but the one removed (`SYNC-035`, `SYNC-043`);
 4. post the removal and every wrapped copy in one request (`SYNC-126`). The relay applies them in
    one transaction, records the rotator as the wrapper (`SYNC-046`) and broadcasts the notice after
-   the commit (`SYNC-047`). The signed link joins the same request with the chain (`SYNC-118`);
+   the commit (`SYNC-047`). The signed link joins the same request with the chain (`SYNC-118`).
+   The request names every member the client read. A member invited since is in none of them, so
+   the relay refuses the whole request and the client starts again at step 1 (`SYNC-143`);
 5. move the previous key into the cache, install the new one, and report the revoke done;
 6. seal a fresh snapshot under the new key (`SYNC-048`).
+
+**An invitation racing a rotation.** Both take the document's lock on the relay, so one lands
+first. If the invitation does, the rotation that read the members before it is refused and read
+again (`SRV-167`). If the rotation does, the invitation wraps a key it replaced and is refused
+(`SRV-168`); the user invites again, under the new key.
 
 **A departure, in steps.** The member who leaves posts the removal alone (`SYNC-127`). They do not
 choose the next key: the members who stay would then trust a key the leaver picked (`SYNC-130`).
@@ -264,9 +272,8 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A departure is confirmed on screen only.** The sharing screen asks once, then sends it
   (`SYNC-141`). Nothing asks the relay whether the user is the last owner; an owner is simply never
   offered the departure (`SYNC-142`).
-* **A member added during a revoke keeps the previous key.** The members are read before the post,
-  and a member invited between the two gets no copy of the new key. The `A member invited during a
-  revoke gets the new key` Story (`ambre-roadmap.md` E7) closes it.
+* **A rotation outrun three times gives up.** Members who keep joining between the read and the
+  post end the revoke with an error after three tries (`SYNC-143`). The user revokes again.
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).

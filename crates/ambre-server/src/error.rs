@@ -45,6 +45,16 @@ pub enum AppError {
     #[error("Rotation owed")]
     RotationOwed,
 
+    /// A member joined after the rotation read the members, so it would hold
+    /// no copy of the new key (`SRV-167`). The client reads them again.
+    #[error("The members changed since the rotation read them")]
+    MembersChanged,
+
+    /// The key an invitation wraps is no longer the document's current one
+    /// (`SRV-168`).
+    #[error("The document key changed since the invitation wrapped it")]
+    KeyChanged,
+
     #[error("Invalid signature")]
     InvalidSignature,
 
@@ -119,6 +129,8 @@ impl IntoResponse for AppError {
             AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
             AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),
             AppError::RotationOwed => (StatusCode::CONFLICT, "ROTATION_OWED"),
+            AppError::MembersChanged => (StatusCode::CONFLICT, "MEMBERS_CHANGED"),
+            AppError::KeyChanged => (StatusCode::CONFLICT, "KEY_CHANGED"),
             AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
             AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
             AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),

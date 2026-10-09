@@ -20,11 +20,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3374 rows: 2457 shipped, of which 103 partial and 520 loose. 917 unbuilt.**
+**3377 rows: 2460 shipped, of which 103 partial and 520 loose. 917 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 380 | 269 | 583 | 602 |  | 1834 |
+| `verified` | 383 | 269 | 583 | 602 |  | 1837 |
 | `partial` | 46 | 14 | 41 | 2 |  | 103 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 191 | 133 | 189 | 2 |  | 515 |
@@ -53,7 +53,7 @@
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 4 |  | 12 | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 7 | 1 | 2 |  |
-| `ambre-spec-key-rotation.md` | 27 | 25 | 21 |  | 4 | 2 |
+| `ambre-spec-key-rotation.md` | 28 | 26 | 22 |  | 4 | 2 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 10 |  | 10 | 4 |
@@ -68,7 +68,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 23 | 19 | 15 |  | 4 | 4 |
 | `ambre-spec-sequencer.md` | 46 | 18 | 9 | 3 | 6 | 28 |
-| `ambre-spec-server.md` | 50 | 30 | 24 | 2 | 4 | 20 |
+| `ambre-spec-server.md` | 52 | 32 | 26 | 2 | 4 | 20 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
 | `ambre-spec-sync.md` | 29 | 29 | 15 |  | 14 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
@@ -181,7 +181,7 @@
 | `ambre-spec-fixtures.md` | FIXTURE-001..035 |
 | `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
-| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..142 |
+| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..011 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101 |
@@ -258,7 +258,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |

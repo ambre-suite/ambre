@@ -114,13 +114,22 @@ struct RefusalBody {
     error: String,
 }
 
+/// The relay's code for a rotation refused because a member joined after it
+/// read the members (HTTP 409, `SYNC-143`).
+const MEMBERS_CHANGED: &str = "MEMBERS_CHANGED";
+
+/// The relay's code for an invitation refused because a rotation replaced the
+/// key it wraps (HTTP 409, `SYNC-143`).
+const KEY_CHANGED: &str = "KEY_CHANGED";
+
 /// The error a refused request reads as. `code` is the relay's error code,
-/// read only for a 403: the one status that may stand for a setup still owed.
+/// kept only with the status that may carry it. A 403 carries a setup still
+/// owed, and a 409 a membership or a key that moved under the request.
 fn refusal(method: &str, url: &str, status: u16, code: Option<&str>) -> String {
-    if status == 403 && code == Some(SETUP_REQUIRED) {
-        format!("{method} {url}: {SETUP_REQUIRED}")
-    } else {
-        format!("{method} {url}: HTTP {status}")
+    match (status, code) {
+        (403, Some(SETUP_REQUIRED)) => format!("{method} {url}: {SETUP_REQUIRED}"),
+        (409, Some(code @ (MEMBERS_CHANGED | KEY_CHANGED))) => format!("{method} {url}: {code}"),
+        _ => format!("{method} {url}: HTTP {status}"),
     }
 }
 
@@ -131,9 +140,21 @@ pub(crate) fn is_setup_refusal(message: &str) -> bool {
     message.ends_with(&format!(": {SETUP_REQUIRED}"))
 }
 
+/// Whether `message` is a rotation the relay refused because the members
+/// changed since it read them.
+pub(crate) fn is_members_changed(message: &str) -> bool {
+    message.ends_with(&format!(": {MEMBERS_CHANGED}"))
+}
+
+/// Whether `message` is an invitation the relay refused because the key it
+/// wraps is no longer the document's.
+pub(crate) fn is_key_changed(message: &str) -> bool {
+    message.ends_with(&format!(": {KEY_CHANGED}"))
+}
+
 async fn refused(method: &str, url: &str, resp: Response) -> String {
     let status = resp.status();
-    let code = if status == 403 {
+    let code = if status == 403 || status == 409 {
         resp.json::<RefusalBody>().await.ok().map(|body| body.error)
     } else {
         None
@@ -608,6 +629,8 @@ pub(crate) struct InviteRequest {
     pub invitee_email: String,
     pub role: String,
     pub doc_key_enc: String,
+    /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
+    pub key_id: String,
 }
 
 #[derive(Deserialize)]
@@ -619,6 +642,8 @@ pub(crate) struct InviteResponse {
 #[derive(Serialize)]
 pub(crate) struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
+    /// Every member the rotation read, wrapped for or not (`SYNC-143`).
+    pub members: Vec<String>,
     /// The link to the key this rotation replaces, as [`encode_link`] writes
     /// it (`SYNC-118`).
     pub link: String,
@@ -630,6 +655,8 @@ pub(crate) struct RotateKeyRequest {
 pub(crate) struct RevokeRequest {
     pub user_id: String,
     pub keys: Vec<RotateKeyEntry>,
+    /// Every member the revoke read and keeps, wrapped for or not (`SYNC-143`).
+    pub members: Vec<String>,
     /// The link to the key this revoke replaces (`SYNC-118`).
     pub link: String,
 }
@@ -775,6 +802,43 @@ mod tests {
         )));
         let crafted = "https://relay.example/api/users/search?q=: SETUP_REQUIRED";
         assert!(!is_setup_refusal(&refusal("GET", crafted, 500, None)));
+    }
+
+    /// A 409 keeps the code of a membership or a key that moved, and no other
+    /// status or code reads as either (`SYNC-143`).
+    #[test]
+    fn a_moved_membership_or_key_reads_as_its_own_refusal() {
+        let url = "https://relay.example/api/documents/d/revoke";
+        assert!(is_members_changed(&refusal(
+            "POST",
+            url,
+            409,
+            Some(MEMBERS_CHANGED)
+        )));
+        assert!(is_key_changed(&refusal(
+            "POST",
+            url,
+            409,
+            Some(KEY_CHANGED)
+        )));
+        assert!(!is_members_changed(&refusal(
+            "POST",
+            url,
+            409,
+            Some("CONFLICT")
+        )));
+        assert!(!is_members_changed(&refusal(
+            "POST",
+            url,
+            500,
+            Some(MEMBERS_CHANGED)
+        )));
+        assert!(!is_key_changed(&refusal(
+            "POST",
+            url,
+            409,
+            Some(MEMBERS_CHANGED)
+        )));
     }
 
     /// An unlock finding no master material reads as a setup owed, not as a

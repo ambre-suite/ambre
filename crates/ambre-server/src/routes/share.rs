@@ -52,6 +52,9 @@ pub struct InviteRequest {
     pub invitee_email: String,
     pub role: String,
     pub doc_key_enc: String,
+    /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
+    /// refuses the invitation (`SRV-168`).
+    pub key_id: String,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
@@ -117,13 +120,15 @@ pub async fn invite_to_document(
         .map_err(|e| AppError::Conflict {
             detail: e.to_string(),
         })?;
-    db::add_document_member(
+    let key_id = parse_key_id(&req.key_id)?;
+    db::invite_document_member(
         &state.db,
         &doc_id,
         &invitee_id,
         &req.role,
         &doc_key_enc,
         &s.user_id,
+        &key_id,
     )
     .await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
@@ -189,6 +194,8 @@ pub async fn revoke_from_document(
 pub struct RevokeRequest {
     pub user_id: String,
     pub keys: Vec<RotateKeyEntry>,
+    /// Every member the revoke read and keeps, wrapped for or not (`SRV-167`).
+    pub members: Vec<String>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
     pub link: String,
 }
@@ -211,8 +218,12 @@ pub async fn revoke_and_rotate(
         return Err(AppError::Forbidden);
     }
     let keys = decode_keys(&req.keys)?;
+    let members = decode_members(&req.members)?;
     let link = decode_link(&req.link, doc_id)?;
-    db::revoke_and_rotate(&state.db, &doc_id, &target, &s.user_id, &keys, &link).await?;
+    db::revoke_and_rotate(
+        &state.db, &doc_id, &target, &s.user_id, &keys, &members, &link,
+    )
+    .await?;
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
@@ -278,6 +289,20 @@ fn decode_keys(entries: &[RotateKeyEntry]) -> Result<Vec<(ambre_core::UserId, Ve
         .collect()
 }
 
+/// Decodes the members a rotation read.
+fn decode_members(ids: &[String]) -> Result<Vec<ambre_core::UserId>, AppError> {
+    ids.iter().map(|id| parse_user_id(id)).collect()
+}
+
+/// Decodes the hex identifier of the key an invitation wraps.
+fn parse_key_id(text: &str) -> Result<ambre_core::KeyId, AppError> {
+    let bytes: [u8; ambre_core::KEY_ID_LEN] = hex::decode(text)
+        .ok()
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| AppError::BadRequest("key_id: not a key identifier".into()))?;
+    Ok(ambre_core::KeyId::from_array(bytes))
+}
+
 /// Decodes a rotation's link and refuses one the relay must not store: a
 /// malformed one, one past the size bound, one of another document.
 fn decode_link(
@@ -323,6 +348,8 @@ pub async fn list_key_links(
 #[derive(serde::Deserialize)]
 pub struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
+    /// Every member the rotation read, wrapped for or not (`SRV-167`).
+    pub members: Vec<String>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
     pub link: String,
 }
@@ -360,8 +387,9 @@ pub async fn rotate_document_key(
     }
 
     let keys = decode_keys(&req.keys)?;
+    let members = decode_members(&req.members)?;
     let link = decode_link(&req.link, doc_id)?;
-    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &link).await?;
+    db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;

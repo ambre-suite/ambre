@@ -108,6 +108,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- an update and a presence frame are refused while the mirror holds the debt, and accepted once it clears; `ambre_server::ws::handler::message::refusal_tests::a_frame_refused_for_its_key_names_the_key_and_the_clock` -- the author is told which key and which clock | none | verified |
 | `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | `ambre_server::routes::tests::handler_tests::an_owed_rotation_is_open_to_an_editor_and_clears_the_debt` -- the register and the mirror read no debt after the rotation; `::a_revoke_removes_and_rotates_in_one_request` -- a revoke leaves none | none | verified |
 | `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::redis_ops::lua_tests::a_frame_owed_a_rotation_takes_no_seq_and_no_clock` -- the refused frame leaves no sequence key, and the same clock is accepted at sequence 1 once the debt clears | none | verified |
+| `SRV-167` | `FAIL` | A rotation MUST be refused whole when the document holds a member it did not read. | this spec section 3; `SYNC-143` | `ambre_server::routes::tests::handler_tests::a_member_invited_during_a_revoke_gets_the_new_key` -- a revoke that read the members before an invitation landed is refused with `MEMBERS_CHANGED`, removes no one and stores no link, and the same revoke read again lands with a copy for every member left | none | verified |
+| `SRV-168` | `FAIL` | An invitation MUST be refused when a rotation has replaced the key its copy wraps. | this spec section 3; `SYNC-143` | `ambre_server::routes::tests::handler_tests::a_member_invited_during_a_revoke_gets_the_new_key` -- an invitation naming the replaced key is refused and adds no one, and one naming the current key lands | none | verified |
 | `SRV-136` | `POST` | A removal from a space MUST remove the member from every channel of that space, and mark each private one as owing a rotation. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
@@ -117,7 +119,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 24 `verified`, 2 `partial`, 4 `untested`, 20 `unimplemented`. What holds is what
+* **Verification.** 26 `verified`, 2 `partial`, 4 `untested`, 20 `unimplemented`. What holds is what
   a request test can drive: the roles, the rank clamps, the signature gate, the error mapping and
   the origin list. The delete holds too. What is loose is every rule about the process or the
   deployment.

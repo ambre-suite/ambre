@@ -55,22 +55,67 @@ pub async fn add_document_member(
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
 ) -> Result<(), AppError> {
+    let mut tx = pool.begin().await?;
+    upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Adds a member with a copy of the key named `key_id`, refused when a
+/// rotation has replaced that key (`SRV-168`). The check runs under the
+/// document lock every rotation takes, so the two are ordered. An invitation
+/// that lands first is among the members a rotation must name (`SRV-167`).
+pub async fn invite_document_member(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    role: &str,
+    doc_key_enc: &[u8],
+    invited_by: &ambre_core::UserId,
+    key_id: &ambre_core::KeyId,
+) -> Result<(), AppError> {
+    let did = id_to_uuid(*document_id);
+    let mut tx = pool.begin().await?;
+    lock_document(&mut tx, did).await?;
+    // No link yet means no rotation yet: the key the document was created
+    // with is the only one, and the copy wraps it.
+    let last: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT key_id FROM document_key_links WHERE document_id = $1 ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(did)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if last.is_some_and(|last| last != key_id.as_array()) {
+        return Err(AppError::KeyChanged);
+    }
+    upsert_member(&mut tx, document_id, user_id, role, doc_key_enc, invited_by).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// The upsert behind both adds, inside the caller's transaction.
+async fn upsert_member(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    document_id: &ambre_core::DocumentId,
+    user_id: &ambre_core::UserId,
+    role: &str,
+    doc_key_enc: &[u8],
+    invited_by: &ambre_core::UserId,
+) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
     let inviter = id_to_uuid(*invited_by);
-
-    let mut tx = pool.begin().await?;
 
     let current_role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2 FOR UPDATE",
     )
     .bind(did)
     .bind(uid)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if current_role.as_deref() == Some("owner") && role != "owner" {
-        ensure_not_last_owner(&mut tx, did).await?;
+        ensure_not_last_owner(tx, did).await?;
     }
 
     sqlx::query(
@@ -81,10 +126,8 @@ pub async fn add_document_member(
     .bind(role)
     .bind(doc_key_enc)
     .bind(inviter)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-
-    tx.commit().await?;
     Ok(())
 }
 
@@ -208,6 +251,7 @@ pub async fn revoke_and_rotate(
     user_id: &ambre_core::UserId,
     rotated_by: &ambre_core::UserId,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -216,7 +260,7 @@ pub async fn revoke_and_rotate(
     // document queue on it instead of deadlocking on the member rows.
     lock_document(&mut tx, did).await?;
     delete_member(&mut tx, did, id_to_uuid(*user_id)).await?;
-    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, link).await?;
+    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, members, link).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -378,12 +422,13 @@ pub async fn rotate_document_keys(
     document_id: &ambre_core::DocumentId,
     rotated_by: &ambre_core::UserId,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let mut tx = pool.begin().await?;
     lock_document(&mut tx, did).await?;
-    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, link).await?;
+    rewrap_members(&mut tx, did, id_to_uuid(*rotated_by), keys, members, link).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -391,13 +436,32 @@ pub async fn rotate_document_keys(
 /// Stores the rotation's link and writes each member's new wrapped copy. It
 /// clears the document's debt (`SRV-124`, `SYNC-118`), inside the caller's
 /// transaction and under its document lock.
+///
+/// `members` are the members the rotation read before it wrapped. A member
+/// outside them joined since and holds no copy of the new key. It would keep
+/// the one the relay now refuses, so the rotation is refused whole (`SRV-167`).
 async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
     rotator: uuid::Uuid,
     keys: &[(ambre_core::UserId, Vec<u8>)],
+    members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
+    // The same rows the member list serves (`SRV-163`): an account without
+    // keys is in neither, so it cannot hold a rotation back.
+    let current: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT dm.user_id FROM document_members dm INNER JOIN users u ON u.id = dm.user_id \
+         WHERE dm.document_id = $1 AND u.signing_pubkey IS NOT NULL",
+    )
+    .bind(document_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let read: std::collections::HashSet<uuid::Uuid> =
+        members.iter().map(|m| id_to_uuid(*m)).collect();
+    if current.iter().any(|m| !read.contains(m)) {
+        return Err(AppError::MembersChanged);
+    }
     append_link(tx, document_id, link).await?;
     // The rotator re-wrapped every key with ITS exchange key, so it becomes the
     // new wrapper of record. Update `invited_by` alongside `doc_key_enc`, or
