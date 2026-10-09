@@ -44,10 +44,10 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
-    RestCommand, RestEvent, Role, SecretBytes, SecretString, SnapshotId, SyncCommand, UserId,
-    UserInfo,
+    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId, SyncCommand,
+    UserId, UserInfo,
 };
-use ambre_core::{KeyId, PublicKey};
+use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -697,6 +697,23 @@ impl SyncDocumentState {
         pipeline::open_update(update, &key)
     }
 
+    /// Opens an update and names what its signature proves. That is the PeerID
+    /// its signer and nonce derive, and the member the signer resolves to
+    /// (`SYNC-114`, `AUTHOR-013`). A body too short for its parts is refused.
+    fn open_signed_update(
+        &self,
+        update: &ambre_protocol::Update,
+    ) -> Result<SignedDelta, pipeline::PipelineError> {
+        let body = pipeline::split_update_body(self.open_update_named(update)?)?;
+        let signer = *update.public_data.pub_key.as_array();
+        Ok(SignedDelta {
+            peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
+            nonce: body.nonce,
+            user: self.signing_keys.get(&signer).copied(),
+            payload: body.delta,
+        })
+    }
+
     /// Replaces the active document key with `new_key`, pushing the previous
     /// active key onto the front of the [`old_keys`] LRU cache. The cache is
     /// bounded to 10 entries; excess keys are dropped and zeroized on
@@ -826,6 +843,11 @@ pub struct SyncState {
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
     pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
 
+    /// The session nonce of each open document, drawn when it opens and dropped
+    /// when it closes (`AUTHOR-002`). Every update this session seals for the
+    /// document carries it (`SYNC-112`).
+    session_nonces: HashMap<DocumentId, SessionNonce>,
+
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
@@ -879,6 +901,7 @@ impl SyncState {
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
             pending_pre_session_updates: Vec::new(),
+            session_nonces: HashMap::new(),
             dev_username: None,
         }
     }
@@ -914,11 +937,11 @@ impl SyncState {
     /// non-fatal `SyncWarning` on a decode/decrypt failure (drop semantics).
     /// `opened` is `None` when the document is not open in this session.
     #[allow(dead_code)]
-    fn deliver_remote(
+    fn deliver_remote<T>(
         &self,
         document_id: DocumentId,
-        opened: Option<Result<Vec<u8>, pipeline::PipelineError>>,
-        make_event: impl FnOnce(Vec<u8>) -> LogicEvent,
+        opened: Option<Result<T, pipeline::PipelineError>>,
+        make_event: impl FnOnce(T) -> LogicEvent,
     ) {
         match opened {
             None => {
@@ -1460,6 +1483,7 @@ mod seal_tests {
         let id = DocumentId::new();
         let doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
         state.documents.insert(id, doc);
+        state.session_nonces.insert(id, SessionNonce([1; 16]));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         (state, id, wire)
@@ -1527,7 +1551,11 @@ mod seal_tests {
             panic!("the first frame is not the update: {:?}", frames[0]);
         };
         assert_ne!(update.ciphertext.0, typed);
-        assert_eq!(pipeline::open_update(update, key).expect("opens"), typed);
+        let body = pipeline::open_update(update, key).expect("opens");
+        assert_eq!(
+            pipeline::split_update_body(body).expect("splits").delta,
+            typed
+        );
         let WsClientMsg::Ephemeral(ephemeral) = &frames[1] else {
             panic!("the second frame is not the ephemeral: {:?}", frames[1]);
         };

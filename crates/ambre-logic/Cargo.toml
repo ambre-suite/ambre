@@ -59,6 +59,10 @@ futures-channel = { workspace = true }
 
 tracing       = { workspace = true }
 futures-util  = { workspace = true }
+# The authorship check reads which PeerIDs a delta carries before any engine
+# imports it (`AUTHOR-012`). Already in the graph through every application
+# crate, so the edge adds no code to the worker.
+loro          = { workspace = true }
 # The PDF-export FontContext lives on this thread (`toile-pdf-export`), seeded
 # by `LogicCommand::LoadFonts`. Only parley -- not the whole GPU canvas crate --
 # so the Logic worker's wasm stays lean.

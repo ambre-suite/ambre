@@ -149,8 +149,11 @@ impl SyncState {
                 }
             });
         } else {
-            // Host-test / offline path: generate keys locally.
+            // Host-test / offline path: generate keys locally. The user it
+            // announces is the one it holds, so an opened document gets a
+            // session identity (`AUTHOR-002`).
             let master_seed = MasterSeed::generate();
+            let user_id = *self.user_id.get_or_insert_with(UserId::new);
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());
             self.master_seed = Some(master_seed);
@@ -158,7 +161,7 @@ impl SyncState {
             self.reply(
                 id,
                 RestEvent::SessionReady {
-                    user_id: UserId::new(),
+                    user_id,
                     display_name: "offline".into(),
                     email: "offline@localhost".into(),
                 },
@@ -494,6 +497,7 @@ impl SyncState {
         self._onclose = None;
         self._onerror = None;
         self.documents.clear();
+        self.session_nonces.clear();
         self.master_seed = None;
         self.signing_key = None;
         self.exchange_key = None;

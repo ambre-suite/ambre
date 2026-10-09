@@ -895,26 +895,26 @@ impl SyncState {
                 // parent snapshot is unknown are held in quarantine by
                 // `ingest_update` and released later. Decrypt failures surface as
                 // their own `SyncWarning`, preserving the per-update path.
-                let mut payloads: Vec<Vec<u8>> = Vec::new();
+                let mut deltas: Vec<SignedDelta> = Vec::new();
                 for seq_update in updates {
                     match self.ingest_update(seq_update.seq, seq_update.update) {
-                        Some(Ok(payload)) => payloads.push(payload),
+                        Some(Ok(delta)) => deltas.push(delta),
                         // The `Err` arm only warns; the builder is never called.
                         Some(Err(e)) => {
-                            self.deliver_remote(document_id, Some(Err(e)), |payload| {
+                            self.deliver_remote(document_id, Some(Err(e)), |delta| {
                                 LogicEvent::RemoteUpdateBatch {
                                     document_id,
-                                    payloads: vec![payload],
+                                    deltas: vec![delta],
                                 }
                             });
                         }
                         None => {}
                     }
                 }
-                if !payloads.is_empty() {
+                if !deltas.is_empty() {
                     self.send_to_logic(LogicEvent::RemoteUpdateBatch {
                         document_id,
-                        payloads,
+                        deltas,
                     });
                 }
                 // The replay has advanced `local_clock` past everything the
@@ -1251,6 +1251,9 @@ mod tests {
         let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Prose, true);
         doc.last_seq = Seq(7);
         state.documents.insert(id, doc);
+        state
+            .session_nonces
+            .insert(id, ambre_core::SessionNonce([1; 16]));
 
         state.handle_command(SyncCommand::HoldInbound);
         state.handle_sync_event(closed(1006));

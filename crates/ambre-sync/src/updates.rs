@@ -11,11 +11,8 @@ impl SyncState {
     pub(crate) fn receive_update(&mut self, seq: Seq, update: Update) {
         let document_id = update.public_data.document_id;
         if let Some(opened) = self.ingest_update(seq, update) {
-            self.deliver_remote(document_id, Some(opened), |payload| {
-                LogicEvent::RemoteUpdate {
-                    document_id,
-                    payload,
-                }
+            self.deliver_remote(document_id, Some(opened), |delta| {
+                LogicEvent::RemoteUpdate { document_id, delta }
             });
         }
     }
@@ -30,7 +27,7 @@ impl SyncState {
         &mut self,
         seq: Seq,
         update: Update,
-    ) -> Option<Result<Vec<u8>, pipeline::PipelineError>> {
+    ) -> Option<Result<SignedDelta, pipeline::PipelineError>> {
         let document_id = update.public_data.document_id;
         // The per-author clock counter is not persisted across a reload. After F5
         // it restarts at 0 and would re-emit a clock the server already consumed
@@ -62,12 +59,12 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
-            let opened = doc_state.open_update_named(&update);
+            let opened = doc_state.open_signed_update(&update);
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
                 update.public_data.clock.0,
-                opened.as_ref().map(|b| b.len()).unwrap_or(0),
+                opened.as_ref().map(|d| d.payload.len()).unwrap_or(0),
             );
             return Some(opened);
         }
@@ -254,21 +251,18 @@ impl SyncState {
             doc_state.gap_requested = false;
         }
 
-        let results: Vec<Result<Vec<u8>, pipeline::PipelineError>> = {
+        let results: Vec<Result<SignedDelta, pipeline::PipelineError>> = {
             let Some(doc_state) = self.documents.get(&document_id) else {
                 return;
             };
             pending
                 .iter()
-                .map(|u| doc_state.open_update_named(u))
+                .map(|u| doc_state.open_signed_update(u))
                 .collect()
         };
         for opened in results {
-            self.deliver_remote(document_id, Some(opened), |payload| {
-                LogicEvent::RemoteUpdate {
-                    document_id,
-                    payload,
-                }
+            self.deliver_remote(document_id, Some(opened), |delta| {
+                LogicEvent::RemoteUpdate { document_id, delta }
             });
         }
     }
@@ -295,6 +289,7 @@ impl SyncState {
             self.pending_opens.push((document_id, doc_type));
             return;
         }
+        self.issue_session_identity(document_id);
 
         let event_tx = self.event_tx.clone();
 
@@ -527,11 +522,37 @@ impl SyncState {
         })
     }
 
+    /// Tells the Logic thread the PeerID this session writes `document_id`
+    /// under, with its signed registry entry (`AUTHOR-001`, `AUTHOR-019`).
+    ///
+    /// The nonce is drawn on the first open and kept until the close, so each
+    /// open draws a new one (`AUTHOR-002`). A second open of a document still
+    /// open keeps it: the operations already written must keep deriving. Without
+    /// a signing key or a user, nothing is sent, and the Logic thread applies
+    /// no edit.
+    pub(crate) fn issue_session_identity(&mut self, document_id: DocumentId) {
+        let (Some(signing_key), Some(user)) = (self.signing_key.as_ref(), self.user_id) else {
+            return;
+        };
+        let nonce = *self
+            .session_nonces
+            .entry(document_id)
+            .or_insert_with(ambre_crypto::peer::draw_nonce);
+        let (peer, entry) =
+            ambre_crypto::peer::session_identity(signing_key, user, document_id, nonce);
+        self.send_to_logic(LogicEvent::SessionIdentity {
+            document_id,
+            peer,
+            entry: entry.to_bytes(),
+        });
+    }
+
     pub(crate) fn handle_close_document(&mut self, document_id: DocumentId) {
         if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
         self.documents.remove(&document_id);
+        self.session_nonces.remove(&document_id);
         tracing::info!("Sync: CloseDocument {document_id:?}");
     }
 
@@ -648,6 +669,14 @@ impl SyncState {
         pub_key: PublicKey,
     ) -> Option<KeyId> {
         let doc_state = self.documents.get(&document_id)?;
+        // The nonce rides inside the ciphertext, ahead of the delta
+        // (`SYNC-112`). A document opened with no identity has written nothing
+        // the Logic thread would send.
+        let Some(nonce) = self.session_nonces.get(&document_id) else {
+            tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
+            return None;
+        };
+        let body = pipeline::update_body(nonce, payload);
         let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
@@ -656,7 +685,7 @@ impl SyncState {
             snapshot_id: doc_state.current_snapshot_id,
             clock: Clock(clock),
         };
-        match pipeline::update_frame(payload, public_data, &doc_state.doc_key, signing_key) {
+        match pipeline::update_frame(&body, public_data, &doc_state.doc_key, signing_key) {
             Ok(frame) => {
                 tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
                 self.ws_send_sealed(&frame);
@@ -1105,6 +1134,7 @@ mod tests {
         let doc_state = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, true);
         let known_snapshot = doc_state.current_snapshot_id;
         state.documents.insert(document_id, doc_state);
+        state.session_nonces.insert(document_id, TEST_NONCE);
         (state, rx, document_id, doc_key, signing_key, known_snapshot)
     }
 
@@ -1124,8 +1154,12 @@ mod tests {
             snapshot_id,
             clock: Clock(clock),
         };
-        pipeline::seal_update(payload, public_data, doc_key, signing_key).expect("seal")
+        let body = pipeline::update_body(&TEST_NONCE, payload);
+        pipeline::seal_update(&body, public_data, doc_key, signing_key).expect("seal")
     }
+
+    /// The session nonce every update of these tests carries.
+    const TEST_NONCE: SessionNonce = SessionNonce([6; 16]);
 
     /// A frame opens with the one key it names (`SYNC-045`). A previous key
     /// still cached opens its own frames, and a key this client never held
@@ -1140,8 +1174,9 @@ mod tests {
 
         let under =
             |key: &DocumentKey| make_update(document_id, snapshot, 1, b"d", key, &signing_key);
-        assert_eq!(doc_state.open_update_named(&under(&new_key)).unwrap(), b"d");
-        assert_eq!(doc_state.open_update_named(&under(&old_key)).unwrap(), b"d");
+        let opened = |key: &DocumentKey| doc_state.open_signed_update(&under(key)).unwrap();
+        assert_eq!(opened(&new_key).payload, b"d");
+        assert_eq!(opened(&old_key).payload, b"d");
         assert_eq!(
             doc_state.key_named(old_key.id()).map(|key| key.id()),
             Some(old_key.id())
@@ -1191,7 +1226,7 @@ mod tests {
 
         let doc_state = &state.documents[&doc];
         let old = make_update(doc, snapshot_id, 1, b"d", &keys[1], &sk);
-        assert_eq!(doc_state.open_update_named(&old).unwrap(), b"d");
+        assert_eq!(doc_state.open_signed_update(&old).unwrap().payload, b"d");
         assert_eq!(doc_state.doc_key.id(), current.id());
         assert!(
             doc_state.old_keys.is_empty(),
@@ -1234,16 +1269,101 @@ mod tests {
         let events = drain(&rx);
         assert_eq!(events.len(), 1);
         match &events[0] {
-            LogicEvent::RemoteUpdate {
-                document_id,
-                payload,
-            } => {
+            LogicEvent::RemoteUpdate { document_id, delta } => {
                 assert_eq!(*document_id, doc);
-                assert_eq!(payload, b"hello");
+                assert_eq!(delta.payload, b"hello");
             }
             other => panic!("expected RemoteUpdate, got {other:?}"),
         }
         assert_eq!(state.documents[&doc].quarantine_len(), 0);
+    }
+
+    /// An opened update reaches the Logic thread with the nonce its body
+    /// carried and the PeerID its signer and that nonce derive. It also names
+    /// the member the directory holds for its signer (`SYNC-114`, `AUTHOR-013`). A signer the
+    /// directory does not name resolves to no member.
+    #[test]
+    fn an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let alice = UserId::new();
+        let signer = sk.verifying_key().to_bytes();
+        state
+            .documents
+            .get_mut(&doc)
+            .unwrap()
+            .set_signing_keys([(signer, alice)]);
+        state.receive_update(Seq(1), make_update(doc, snap, 1, b"hello", &key, &sk));
+        let stranger = MasterSeed::generate().derive_signing_key();
+        state.receive_update(Seq(2), make_update(doc, snap, 1, b"hi", &key, &stranger));
+
+        let deltas: Vec<SignedDelta> = drain(&rx)
+            .into_iter()
+            .map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => delta,
+                other => panic!("expected RemoteUpdate, got {other:?}"),
+            })
+            .collect();
+        let expected = SignedDelta {
+            payload: b"hello".to_vec(),
+            nonce: TEST_NONCE,
+            peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
+            user: Some(alice),
+        };
+        assert_eq!(deltas.first(), Some(&expected));
+        let unknown = deltas.get(1).unwrap();
+        assert_eq!(unknown.user, None);
+        assert_eq!(
+            unknown.peer,
+            ambre_crypto::peer::derive_peer_id(&stranger.verifying_key().to_bytes(), &TEST_NONCE)
+        );
+    }
+
+    /// Each open of a document draws a new PeerID (`AUTHOR-002`). A second
+    /// open of a document still open keeps the one its operations derive.
+    #[test]
+    fn each_open_draws_a_new_peer_and_a_repeated_open_keeps_it() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.session_nonces.clear();
+        state.signing_key = Some(sk);
+        state.user_id = Some(UserId::new());
+        let issue = |state: &mut SyncState| {
+            state.issue_session_identity(doc);
+            drain(&rx)
+                .into_iter()
+                .find_map(|e| match e {
+                    LogicEvent::SessionIdentity { peer, .. } => Some(peer),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let first = issue(&mut state);
+        assert_eq!(issue(&mut state), first);
+        state.handle_close_document(doc);
+        assert_ne!(issue(&mut state), first);
+    }
+
+    /// An update whose body is too short for the nonce and the marker is
+    /// dropped with a warning, and nothing reaches the document.
+    #[test]
+    fn an_update_too_short_for_its_parts_is_dropped() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let public_data = UpdatePublicData {
+            document_id: doc,
+            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            key_id: key.id(),
+            snapshot_id: snap,
+            clock: Clock(1),
+        };
+        let short = pipeline::seal_update(&[6; 16], public_data, &key, &sk).unwrap();
+        state.receive_update(Seq(1), short);
+        let events = drain(&rx);
+        assert!(matches!(
+            events.as_slice(),
+            [LogicEvent::SyncWarning {
+                code: SyncWarningCode::DecryptFailed,
+                ..
+            }]
+        ));
     }
 
     #[test]
@@ -1273,7 +1393,7 @@ mod tests {
         let payloads: Vec<Vec<u8>> = drain(&rx)
             .into_iter()
             .map(|e| match e {
-                LogicEvent::RemoteUpdate { payload, .. } => payload,
+                LogicEvent::RemoteUpdate { delta, .. } => delta.payload,
                 other => panic!("expected RemoteUpdate, got {other:?}"),
             })
             .collect();
@@ -1648,8 +1768,8 @@ mod tests {
         assert!(
             matches!(&events[..], [
                 LogicEvent::RemoteSnapshot { payload: base, .. },
-                LogicEvent::RemoteUpdate { payload: after, .. },
-            ] if base == b"base" && after == b"after"),
+                LogicEvent::RemoteUpdate { delta: after, .. },
+            ] if base == b"base" && after.payload == b"after"),
             "the base reaches Logic before what rests on it: {events:?}"
         );
     }
@@ -1718,8 +1838,9 @@ mod tests {
             .filter_map(|msg| match msg {
                 WsClientMsg::Update(u) => {
                     let key = keys.iter().find(|k| k.id() == u.public_data.key_id)?;
-                    let plain = pipeline::open_update(&u, key).expect("opens");
-                    Some((u.public_data.clock.0, u.public_data.key_id, plain))
+                    let body = pipeline::open_update(&u, key).expect("opens");
+                    let delta = pipeline::split_update_body(body).expect("splits").delta;
+                    Some((u.public_data.clock.0, u.public_data.key_id, delta))
                 }
                 _ => None,
             })
@@ -1825,6 +1946,7 @@ mod tests {
                 links: Vec::new(),
             });
             let _ = drain_ws(&ws_rx);
+            state.session_nonces.insert(doc, TEST_NONCE);
             state.handle_send_update(doc, b"a".to_vec());
             assert_eq!(drain_ws(&ws_rx).is_empty(), held, "{role:?}");
         }
@@ -1926,8 +2048,10 @@ mod tests {
         let delivered: Vec<Vec<u8>> = drain(&rx)
             .into_iter()
             .flat_map(|e| match e {
-                LogicEvent::RemoteUpdate { payload, .. } => vec![payload],
-                LogicEvent::RemoteUpdateBatch { payloads, .. } => payloads,
+                LogicEvent::RemoteUpdate { delta, .. } => vec![delta.payload],
+                LogicEvent::RemoteUpdateBatch { deltas, .. } => {
+                    deltas.into_iter().map(|d| d.payload).collect()
+                }
                 _ => Vec::new(),
             })
             .collect();
@@ -1989,7 +2113,10 @@ mod tests {
         );
         let doc_state = &state.documents[&doc];
         assert_eq!(doc_state.doc_key.id(), k2.id());
-        assert_eq!(doc_state.open_update_named(&before).unwrap(), b"hello");
+        assert_eq!(
+            doc_state.open_signed_update(&before).unwrap().payload,
+            b"hello"
+        );
     }
 
     /// Holds `SYNC-097`: what the start held is released in the order it
@@ -2065,8 +2192,10 @@ mod tests {
         let mut refused = 0;
         for event in drain(&rx) {
             match event {
-                LogicEvent::RemoteUpdateBatch { payloads: p, .. } => payloads.extend(p),
-                LogicEvent::RemoteUpdate { payload, .. } => payloads.push(payload),
+                LogicEvent::RemoteUpdateBatch { deltas, .. } => {
+                    payloads.extend(deltas.into_iter().map(|d| d.payload));
+                }
+                LogicEvent::RemoteUpdate { delta, .. } => payloads.push(delta.payload),
                 LogicEvent::SyncWarning { code, .. } => {
                     assert_eq!(code, SyncWarningCode::DecryptFailed);
                     refused += 1;

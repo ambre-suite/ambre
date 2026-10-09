@@ -175,6 +175,15 @@ impl LogicState {
             );
             return;
         }
+        // No edit before the session identity (`AUTHOR-002`): it would be
+        // written under a PeerID no delta of this session may carry
+        // (`AUTHOR-008`). Sync issues the identity as it handles the open.
+        if command.is_mutating() && doc.identity.is_none() {
+            tracing::warn!(
+                "Logic: dropping mutating command on doc {document_id}: no session identity yet"
+            );
+            return;
+        }
         // The deck's PDF export is the one app command this thread serves itself
         // (`toile-pdf-export`). The render walk needs the base font faces the
         // Main thread fetched at boot. Those live here, beside the documents
@@ -459,6 +468,108 @@ impl LogicState {
             persist,
             outcome.requests,
         );
+    }
+
+    /// Import a locally persisted snapshot and the deltas logged after it, and
+    /// forward the resulting viewport events to the UI. Local-only: never
+    /// forwarded to Sync, and never checked for authorship, since this client
+    /// wrote or accepted every byte of it.
+    pub(crate) fn restore_local(
+        &mut self,
+        document_id: DocumentId,
+        snapshot: Option<Vec<u8>>,
+        deltas: Vec<Vec<u8>>,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
+            return;
+        };
+        // A snapshot import is the same operation whichever engine owns the
+        // document, and it is a full-state read. The schema gate runs inside
+        // `DocState::import_snapshot` before any container is used
+        // (`SCHEMA-006`). A refused document leaves the state alone
+        // (`SCHEMA-012`) and reaches the user as the owning app's own refusal
+        // event. A restore that silently does nothing is indistinguishable from
+        // a document that never existed.
+        let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
+            Some(Ok(events)) => events,
+            Some(Err(e)) => {
+                tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
+                vec![doc.refusal_event(&e)]
+            }
+            None => Vec::new(),
+        };
+        // The deltas logged since the snapshot, imported the way a relay's
+        // replay is. The log is folded into a snapshot at once, so the next
+        // restore reads one row.
+        if !deltas.is_empty() {
+            events.extend(doc.apply_remote_batch(&deltas));
+            self.owe_snapshot(document_id);
+        }
+        for event in events {
+            self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
+        self.owe_layout(document_id);
+    }
+
+    /// Write the document under the session identity Sync issued
+    /// (`AUTHOR-002`), then apply the local restores that waited for it.
+    ///
+    /// The same identity issued twice is nothing new: the document reopened
+    /// in the same session, and its unsent cursor stays where it is.
+    pub(crate) fn adopt_session(&mut self, document_id: DocumentId, peer: u64, entry: Vec<u8>) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        if doc.identity == Some(peer) {
+            return;
+        }
+        if !doc.state.adopt_session(peer, entry) {
+            return;
+        }
+        doc.identity = Some(peer);
+        let held = std::mem::take(&mut doc.held_restores);
+        for restore in held {
+            self.restore_local(document_id, restore.snapshot, restore.deltas);
+        }
+    }
+
+    /// Apply a remote delta only when every operation it carries was written
+    /// under the PeerID of its signer (`AUTHOR-012`). A refused delta changes
+    /// nothing (`AUTHOR-014`). The log names the document and the signer and
+    /// never a byte of the payload (`ZK-001`).
+    pub(crate) fn apply_signed(&mut self, document_id: DocumentId, delta: &SignedDelta) {
+        if !authored_by(&delta.payload, delta.peer) {
+            tracing::warn!(
+                "Logic: refused a delta on doc {document_id}: an operation is not its signer's \
+                 (user {:?})",
+                delta.user
+            );
+            return;
+        }
+        self.apply_remote(document_id, &delta.payload);
+    }
+
+    /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
+    /// checked on its own, and only the refused ones are left out.
+    pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
+        let accepted: Vec<Vec<u8>> = deltas
+            .into_iter()
+            .filter_map(|delta| {
+                if authored_by(&delta.payload, delta.peer) {
+                    Some(delta.payload)
+                } else {
+                    tracing::warn!(
+                        "Logic: refused a replayed delta on doc {document_id}: an operation is \
+                         not its signer's (user {:?})",
+                        delta.user
+                    );
+                    None
+                }
+            })
+            .collect();
+        if !accepted.is_empty() {
+            self.apply_remote_batch(document_id, &accepted);
+        }
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.

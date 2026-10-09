@@ -11,6 +11,7 @@
 
 use std::io::Read;
 
+use ambre_core::authorship::{SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::{KEY_ID_LEN, KeyId};
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -75,6 +76,58 @@ pub enum PipelineError {
     WrongKey,
     #[error("unknown sealed object layout: {0:#x}")]
     UnknownLayout(u8),
+    #[error("an update body is too short for its parts")]
+    ShortBody,
+    #[error("an update body carries an activity summary this build cannot read")]
+    UnknownSummary,
+}
+
+// -- Update body ---------------------------------------------------------------
+
+/// The marker byte of an update body with no activity summary. No other value
+/// is written until the summary ships (`SYNC-113`).
+const NO_SUMMARY: u8 = 0x00;
+
+/// What an update carries inside its ciphertext: the session nonce of its
+/// author, then the delta (`SYNC-112`).
+#[derive(Debug, PartialEq, Eq)]
+pub struct UpdateBody {
+    /// The session nonce the author's PeerID derives from.
+    pub nonce: SessionNonce,
+    /// The Loro update, opaque to the envelope.
+    pub delta: Vec<u8>,
+}
+
+/// The body of an update: the nonce, the summary marker, then the delta. It is
+/// the payload the seal compresses and encrypts, so the nonce stays inside.
+#[must_use]
+pub fn update_body(nonce: &SessionNonce, delta: &[u8]) -> Vec<u8> {
+    let mut body = Vec::with_capacity(SESSION_NONCE_LEN + 1 + delta.len());
+    body.extend_from_slice(&nonce.0);
+    body.push(NO_SUMMARY);
+    body.extend_from_slice(delta);
+    body
+}
+
+/// Splits an opened update into its nonce and its delta, the last step of the
+/// open. A body too short for its parts, or one with a summary, is refused.
+///
+/// # Errors
+///
+/// [`PipelineError::ShortBody`] and [`PipelineError::UnknownSummary`].
+pub fn split_update_body(mut body: Vec<u8>) -> Result<UpdateBody, PipelineError> {
+    let (nonce, marker) = {
+        let (nonce, rest) = body
+            .split_first_chunk::<SESSION_NONCE_LEN>()
+            .ok_or(PipelineError::ShortBody)?;
+        let marker = *rest.first().ok_or(PipelineError::ShortBody)?;
+        (SessionNonce(*nonce), marker)
+    };
+    if marker != NO_SUMMARY {
+        return Err(PipelineError::UnknownSummary);
+    }
+    let delta = body.split_off(SESSION_NONCE_LEN + 1);
+    Ok(UpdateBody { nonce, delta })
 }
 
 /// Refuses a key other than the one the metadata names (`SYNC-125`). On the
@@ -793,6 +846,58 @@ mod tests {
             .unwrap();
             assert_eq!(plaintext[0], version);
         }
+    }
+
+    /// The session nonce rides inside the ciphertext (`SYNC-112`). One delta
+    /// sealed under two nonces shows the relay the same readable part. Each
+    /// opens back to its own nonce and the delta.
+    #[test]
+    fn the_session_nonce_is_sealed_inside_the_ciphertext() {
+        let (doc_key, signing, author) = keys();
+        let pd = update_pd(author);
+        let first = SessionNonce([1; SESSION_NONCE_LEN]);
+        let second = SessionNonce([2; SESSION_NONCE_LEN]);
+        let seal = |nonce: &SessionNonce| {
+            seal_update(
+                &update_body(nonce, b"delta"),
+                pd.clone(),
+                &doc_key,
+                &signing,
+            )
+            .unwrap()
+        };
+        let (a, b) = (seal(&first), seal(&second));
+        assert_eq!(readable_part(&a), readable_part(&b));
+        for (update, nonce) in [(&a, first), (&b, second)] {
+            let body = split_update_body(open_update(update, &doc_key).unwrap()).unwrap();
+            assert_eq!(
+                body,
+                UpdateBody {
+                    nonce,
+                    delta: b"delta".to_vec()
+                }
+            );
+        }
+    }
+
+    /// A body too short for the nonce and the marker is refused, and so is a
+    /// summary this build cannot read.
+    #[test]
+    fn an_update_body_short_of_its_parts_is_refused() {
+        assert!(matches!(
+            split_update_body(vec![0; SESSION_NONCE_LEN]),
+            Err(PipelineError::ShortBody)
+        ));
+        let mut body = update_body(&SessionNonce([1; SESSION_NONCE_LEN]), b"d");
+        if let Some(marker) = body.get_mut(SESSION_NONCE_LEN) {
+            *marker = 1;
+        }
+        assert!(matches!(
+            split_update_body(body),
+            Err(PipelineError::UnknownSummary)
+        ));
+        let empty = split_update_body(update_body(&SessionNonce([1; 16]), b"")).unwrap();
+        assert!(empty.delta.is_empty());
     }
 
     /// What the upload sends holds no byte run of the plaintext. It opens

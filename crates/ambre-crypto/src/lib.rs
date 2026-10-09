@@ -19,6 +19,7 @@ pub mod error;
 pub mod hash;
 pub mod keys;
 pub mod passphrase;
+pub mod peer;
 mod random;
 pub mod signature;
 

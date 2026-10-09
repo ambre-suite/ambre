@@ -9,6 +9,19 @@ use ambre_core::schema::SchemaError;
 
 use super::*;
 
+/// Write the registry entry of `peer` under its own origin, which the undo
+/// manager excludes (`AUTHOR-009`). Answers the PeerID's counter past the
+/// entry, or `None` when the engine refused the write.
+fn write_entry(doc: &LoroDoc, peer: u64, entry: Vec<u8>) -> Option<i32> {
+    use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+    if let Err(e) = doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+        tracing::error!("[Logic] the registry entry was refused: {e:?}");
+        return None;
+    }
+    doc.commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+    doc.oplog_vv().get(&peer).copied()
+}
+
 impl TrameState {
     /// Export any new CRDT ops since `last_exported_vv` and bump the tracking
     /// cursor. Returns `Some` binary delta if there were new ops.
@@ -16,6 +29,14 @@ impl TrameState {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
+        }
+        // The registry entry alone is no edit: it waits for the first one and
+        // travels with it (`AUTHOR-009`).
+        if let Some(end) = self.entry_end {
+            if current.get(&self.doc.peer_id()) == Some(&end) {
+                return None;
+            }
+            self.entry_end = None;
         }
         // Export the incremental ops. On failure we must NOT advance the export
         // cursor. Swallowing the error (the old `.ok()`) dropped the local delta
@@ -32,6 +53,24 @@ impl TrameState {
         self.last_exported_vv = current;
         tracing::info!("[Logic] flush_delta -> {} bytes of CRDT ops", delta.len());
         Some(delta)
+    }
+
+    /// Write under the session identity Sync issued for this workbook
+    /// (`AUTHOR-002`), and write its registry entry first (`AUTHOR-009`).
+    ///
+    /// The export cursor moves past everything the workbook held before. Those
+    /// operations are not this session's to send (`AUTHOR-008`). The entry is
+    /// written now, before any edit opens an undo group it would split. `false`
+    /// when the CRDT engine refused the identity, and then nothing changed.
+    pub fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+        self.doc.commit();
+        if let Err(e) = self.doc.set_peer_id(peer) {
+            tracing::error!("[Logic] the session identity was refused: {e:?}");
+            return false;
+        }
+        self.last_exported_vv = self.doc.oplog_vv();
+        self.entry_end = write_entry(&self.doc, peer, entry);
+        true
     }
 
     /// Apply a remote CRDT delta and return display events.

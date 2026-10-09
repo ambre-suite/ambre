@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3377 rows: 2469 shipped, of which 103 partial and 519 loose. 908 unbuilt.**
+**3378 rows: 2487 shipped, of which 103 partial and 519 loose. 891 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 392 | 269 | 584 | 602 |  | 1847 |
+| `verified` | 410 | 269 | 584 | 602 |  | 1865 |
 | `partial` | 46 | 14 | 41 | 2 |  | 103 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 191 | 133 | 188 | 2 |  | 514 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 275 | 57 | 28 | 109 | 439 | 908 |
+| `unimplemented` | 258 | 57 | 28 | 109 | 439 | 891 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -61,12 +61,13 @@
 | `ambre-spec-membership.md` | 30 | 17 | 16 | 1 |  | 13 |
 | `ambre-spec-message-bus.md` | 28 | 26 | 13 | 4 | 9 | 2 |
 | `ambre-spec-object-store.md` | 18 | 12 | 10 |  | 2 | 6 |
+| `ambre-spec-op-authorship.md` | 23 | 16 | 16 |  |  | 7 |
 | `ambre-spec-organizations.md` | 11 | 9 | 7 |  | 2 | 2 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
-| `ambre-spec-sealed-envelope.md` | 23 | 19 | 15 |  | 4 | 4 |
+| `ambre-spec-sealed-envelope.md` | 24 | 21 | 17 |  | 4 | 3 |
 | `ambre-spec-sequencer.md` | 46 | 26 | 17 | 3 | 6 | 20 |
 | `ambre-spec-server.md` | 52 | 33 | 27 | 2 | 4 | 19 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
@@ -256,7 +257,7 @@
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069 |
 | `ambre-spec-residency.md` | RESID-001..020 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
-| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138 |
+| `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |

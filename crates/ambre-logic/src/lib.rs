@@ -46,7 +46,7 @@ pub mod fixtures;
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    RestEvent, Role, SyncCommand, UiEvent, UserId,
+    RestEvent, Role, SignedDelta, SyncCommand, UiEvent, UserId,
 };
 
 use ambre_core::schema::SchemaError;
@@ -373,6 +373,34 @@ impl DocState {
             DocState::Trame(_) => {}
         }
     }
+
+    /// Write under the session identity Sync issued (`AUTHOR-002`), whichever
+    /// application owns the document. `false` when the engine refused it.
+    fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+        match self {
+            DocState::Trame(state) => state.adopt_session(peer, entry),
+            DocState::Toile(state) => state.adopt_session(peer, entry),
+            DocState::Prose(state) => state.adopt_session(peer, entry),
+        }
+    }
+}
+
+/// Whether every operation `payload` carries was written under `peer`, the
+/// PeerID Sync derived from the delta's signer and nonce (`AUTHOR-012`).
+///
+/// Read before any engine imports the delta, from the change headers alone, so
+/// a refusal leaves the document untouched (`AUTHOR-014`). Only an update blob
+/// passes: a snapshot carries the whole history, every author's included.
+/// Bytes the engine cannot read are refused too, since nothing in them can be
+/// attributed.
+fn authored_by(payload: &[u8], peer: u64) -> bool {
+    match loro::LoroDoc::decode_import_blob_meta(payload, false) {
+        Ok(meta) => {
+            meta.mode == loro::EncodedBlobMode::Updates
+                && meta.partial_end_vv.keys().all(|p| *p == peer)
+        }
+        Err(_) => false,
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -399,6 +427,20 @@ struct LiveDoc {
     /// arrives on `DocumentReady` and supersedes it. A downgrade landing a beat
     /// late is harmless -- the server rejects any write we should not have made.
     role: Role,
+    /// The PeerID this session writes the document under, once Sync issued it
+    /// (`AUTHOR-002`). Until then no edit is taken: an operation written under
+    /// the provisional PeerID could never travel (`AUTHOR-008`).
+    identity: Option<u64>,
+    /// The local restores that arrived before the identity, applied once it
+    /// lands. A restore may write under the document's PeerID, and that write
+    /// must be one the session can send.
+    held_restores: Vec<HeldRestore>,
+}
+
+/// A local restore held until the document has its session identity.
+struct HeldRestore {
+    snapshot: Option<Vec<u8>>,
+    deltas: Vec<Vec<u8>>,
 }
 
 impl LiveDoc {
@@ -407,7 +449,35 @@ impl LiveDoc {
             state,
             logged: None,
             role: Role::Owner,
+            identity: None,
+            held_restores: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+impl LogicState {
+    /// Open a document as the client does, Sync's answer included: the
+    /// `OpenDocument`, then the session identity Sync issues for it.
+    pub(crate) fn open_with_identity(&mut self, document_id: DocumentId, doc_type: DocType) {
+        self.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type,
+        });
+        self.grant_identity(document_id);
+    }
+
+    /// The session identity Sync would issue for `document_id`, under a PeerID
+    /// no other call of this test binary hands out.
+    pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> u64 {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
+        let peer = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.handle_logic_event(LogicEvent::SessionIdentity {
+            document_id,
+            peer,
+            entry: peer.to_le_bytes().to_vec(),
+        });
+        peer
     }
 }
 
@@ -784,10 +854,7 @@ mod pass_tests {
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
         let document_id = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(document_id, DocType::Prose);
         state.answer_pass();
         let block = match &state.docs[&document_id].state {
             DocState::Prose(prose) => prose.root_blocks()[0],
@@ -858,6 +925,7 @@ mod pass_tests {
             snapshot,
             deltas,
         });
+        state.grant_identity(document_id);
         text(&state.docs[&document_id].state)
     }
 
@@ -980,10 +1048,7 @@ mod pass_tests {
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
         let document_id = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Toile,
-        });
+        state.open_with_identity(document_id, DocType::Toile);
         state.answer_pass();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
         let (_to_logic_events, from_sync) =
@@ -1117,5 +1182,234 @@ mod pass_tests {
             1,
             "one Undo takes the file back"
         );
+    }
+}
+
+#[cfg(test)]
+mod authorship_tests {
+    //! The authorship check on the Logic side (`ambre-spec-op-authorship.md`):
+    //! Sync derived the PeerID from the signer, and Logic compares it with
+    //! every operation a delta carries.
+
+    use super::*;
+    use ambre_bus::TrameCommand;
+    use ambre_core::SessionNonce;
+    use ambre_core::authorship::{PEERS_MAP, peer_key};
+    use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
+
+    const ALICE: u64 = 0xA11CE;
+    const MALLORY: u64 = 0xBAD;
+
+    struct Rig {
+        state: LogicState,
+        sync: Receiver<SyncCommand>,
+        _ui: Receiver<UiEvent>,
+        document_id: DocumentId,
+        peer: u64,
+    }
+
+    /// One open workbook holding its session identity, its opening drained.
+    fn rig() -> Rig {
+        let (to_ui, ui) = test_link();
+        let (to_sync, sync) = test_link();
+        let (to_persist, persist) = test_link();
+        std::mem::forget(persist);
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Trame,
+        });
+        let peer = state.grant_identity(document_id);
+        sync.try_iter().for_each(drop);
+        Rig {
+            state,
+            sync,
+            _ui: ui,
+            document_id,
+            peer,
+        }
+    }
+
+    /// The delta a session writing under `peer` sends for one cell edit.
+    fn written_by(peer: u64, text: &str) -> Vec<u8> {
+        let mut author = TrameState::new();
+        assert!(author.adopt_session(peer, peer.to_le_bytes().to_vec()));
+        author
+            .handle_command(TrameCommand::SetCellText {
+                row: 0,
+                col: 0,
+                text: text.to_owned(),
+            })
+            .update
+            .expect("an edit writes a delta")
+    }
+
+    /// One delta carrying the operations of every delta in `deltas`.
+    fn merged(deltas: &[Vec<u8>]) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        doc.import(&TrameState::new().export_snapshot())
+            .expect("the scaffolding");
+        let base = doc.oplog_vv();
+        for delta in deltas {
+            doc.import(delta).expect("a delta");
+        }
+        doc.export(ExportMode::updates(&base)).expect("an export")
+    }
+
+    fn signed(payload: Vec<u8>, peer: u64) -> SignedDelta {
+        SignedDelta {
+            payload,
+            nonce: SessionNonce([0; 16]),
+            peer,
+            user: None,
+        }
+    }
+
+    /// Every operation the document holds, read back from its snapshot.
+    fn held(rig: &Rig) -> VersionVector {
+        let doc = LoroDoc::new();
+        doc.import(&rig.state.docs[&rig.document_id].state.export_snapshot())
+            .expect("the document's own snapshot");
+        doc.oplog_vv()
+    }
+
+    fn edit(rig: &mut Rig, text: &str) -> Vec<u8> {
+        rig.state.handle_logic_command(LogicCommand::App {
+            document_id: rig.document_id,
+            command: AppCommand::Trame(TrameCommand::SetCellText {
+                row: 1,
+                col: 1,
+                text: text.to_owned(),
+            }),
+        });
+        rig.sync
+            .try_iter()
+            .find_map(|cmd| match cmd {
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                _ => None,
+            })
+            .expect("a local edit sends a delta")
+    }
+
+    /// The PeerIDs whose operations a delta carries.
+    fn authors(delta: &[u8]) -> Vec<u64> {
+        let meta = LoroDoc::decode_import_blob_meta(delta, false).expect("a readable delta");
+        meta.partial_end_vv.keys().copied().collect()
+    }
+
+    /// `AUTHOR-012`, `AUTHOR-014`: a delta Mallory signs over Alice's
+    /// operation is refused, and so is one that mixes both. Neither changes
+    /// the document, its registry or its export cursor.
+    #[test]
+    fn a_delta_carrying_an_operation_not_its_signers_is_refused_whole() {
+        let mut rig = rig();
+        let before = held(&rig);
+        let forged = written_by(ALICE, "forged");
+        let mixed = merged(&[written_by(MALLORY, "mine"), written_by(ALICE, "hers")]);
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(forged, MALLORY),
+        });
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(mixed.clone(), MALLORY),
+        });
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdateBatch {
+            document_id: rig.document_id,
+            deltas: vec![signed(mixed, MALLORY)],
+        });
+        assert_eq!(held(&rig), before, "a refused delta reached the document");
+        assert!(rig.sync.try_recv().is_err(), "a refusal sent something");
+        // The cursor did not move: the next edit carries this session alone.
+        assert_eq!(authors(&edit(&mut rig, "after")), vec![rig.peer]);
+    }
+
+    /// `AUTHOR-012`: the delta its signer wrote is imported, and in a batch
+    /// only the refused delta is left out.
+    #[test]
+    fn a_delta_its_signer_wrote_reaches_the_document() {
+        let mut rig = rig();
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdateBatch {
+            document_id: rig.document_id,
+            deltas: vec![
+                signed(written_by(ALICE, "hers"), ALICE),
+                signed(written_by(MALLORY, "forged"), ALICE),
+            ],
+        });
+        let held = held(&rig);
+        assert!(held.get(&ALICE).is_some(), "the honest delta was dropped");
+        assert!(held.get(&MALLORY).is_none(), "the forged delta landed");
+    }
+
+    /// `AUTHOR-007`: the verdict reads the delta and its signer alone, so two
+    /// peers fed the same deltas keep the same ones.
+    #[test]
+    fn two_peers_given_the_same_deltas_keep_the_same_ones() {
+        let deltas = [
+            signed(written_by(ALICE, "hers"), ALICE),
+            signed(written_by(ALICE, "forged"), MALLORY),
+            signed(
+                merged(&[written_by(MALLORY, "a"), written_by(ALICE + 1, "b")]),
+                MALLORY,
+            ),
+        ];
+        let kept: Vec<VersionVector> = (0..2)
+            .map(|_| {
+                let mut rig = rig();
+                for delta in deltas.clone() {
+                    rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+                        document_id: rig.document_id,
+                        delta,
+                    });
+                }
+                let mut held = held(&rig);
+                held.remove(&rig.peer);
+                held
+            })
+            .collect();
+        assert_eq!(kept.first(), kept.get(1));
+    }
+
+    /// `AUTHOR-008`, `AUTHOR-009`, `AUTHOR-011`: a session that never edits
+    /// sends nothing. Its first delta writes its own registry entry and
+    /// carries its own operations alone, though the document holds Alice's.
+    #[test]
+    fn the_first_delta_carries_the_registry_entry_and_this_sessions_operations_alone() {
+        let mut rig = rig();
+        let hers = written_by(ALICE, "hers");
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta: signed(hers.clone(), ALICE),
+        });
+        assert!(rig.sync.try_recv().is_err(), "an unedited session sent");
+
+        let first = edit(&mut rig, "mine");
+        assert_eq!(authors(&first), vec![rig.peer]);
+        let reader = LoroDoc::new();
+        reader
+            .import(&TrameState::new().export_snapshot())
+            .expect("the scaffolding");
+        reader.import(&hers).expect("Alice's delta");
+        let registry = |doc: &LoroDoc| match doc.get_map(PEERS_MAP).get_deep_value() {
+            LoroValue::Map(map) => (*map).clone(),
+            _ => Default::default(),
+        };
+        let hers_only = registry(&reader);
+        reader.import(&first).expect("the first delta");
+        let after = registry(&reader);
+        assert_eq!(
+            after.get(&peer_key(rig.peer)),
+            Some(&LoroValue::Binary(rig.peer.to_le_bytes().to_vec().into()))
+        );
+        assert_eq!(
+            after.len(),
+            hers_only.len() + 1,
+            "another entry was written"
+        );
+        assert_eq!(after.get(&peer_key(ALICE)), hers_only.get(&peer_key(ALICE)));
+
+        let second = edit(&mut rig, "again");
+        assert_eq!(authors(&second), vec![rig.peer]);
     }
 }

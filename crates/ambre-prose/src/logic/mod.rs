@@ -171,6 +171,10 @@ pub struct ProseState {
     /// The changes the view has not drawn yet, and what it drew for the
     /// command in dispatch (`catchup`).
     catchup: catchup::CatchUp,
+    /// This PeerID's counter just past its registry entry, while the entry is
+    /// all the session wrote. No delta goes out for it alone; the first edit
+    /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
+    entry_end: Option<i32>,
 }
 
 /// The document scaffolding, which every peer writes on open, before any edit.
@@ -255,6 +259,9 @@ impl ProseState {
         undo.add_exclude_origin_prefix(LOAD_ORIGIN);
         undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
         undo.add_exclude_origin_prefix(comments::COMMENT_ORIGIN);
+        // The registry entry is bookkeeping, not prose: an undo never
+        // retracts it (`AUTHOR-009`).
+        undo.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
         let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
         // After the scaffolding: a document never laid out measures whole.
         let touched = touched::Touched::watch(&doc);
@@ -282,6 +289,7 @@ impl ProseState {
             stamped_counter,
             touched,
             catchup: catchup::CatchUp::default(),
+            entry_end: None,
         })
     }
 
@@ -437,6 +445,38 @@ impl ProseState {
     }
 
     // -- session identity --------------------------------------------------
+
+    /// Write under the session identity Sync issued for this document
+    /// (`AUTHOR-002`), and write its registry entry first (`AUTHOR-009`).
+    ///
+    /// The export cursor moves past everything the document held before. Those
+    /// operations are not this session's to send (`AUTHOR-008`). The entry is
+    /// written now, before any edit opens an undo group it would split. It is
+    /// no edit, so it owes no last-modified stamp. `false` when the CRDT engine
+    /// refused the identity, and then nothing changed.
+    pub fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+        use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+        self.doc.commit();
+        if let Err(e) = self.doc.set_peer_id(peer) {
+            tracing::error!("Prose: the session identity was refused: {e:?}");
+            return false;
+        }
+        self.peer = peer;
+        self.last_exported_vv = self.doc.oplog_vv();
+        self.entry_end = match self.doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+            Ok(()) => {
+                self.doc
+                    .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+                self.doc.oplog_vv().get(&peer).copied()
+            }
+            Err(e) => {
+                tracing::error!("Prose: the registry entry was refused: {e:?}");
+                None
+            }
+        };
+        self.stamped_counter = self.entry_end.unwrap_or(0);
+        true
+    }
 
     /// Seed the canonical `UserId`, from `LogicEvent::SessionReady`.
     pub fn set_user_id(&mut self, user_id: UserId) {
@@ -1128,6 +1168,14 @@ impl ProseState {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
+        }
+        // The registry entry alone is no edit: it waits for the first one and
+        // travels with it (`AUTHOR-009`).
+        if let Some(end) = self.entry_end {
+            if current.get(&self.peer) == Some(&end) {
+                return None;
+            }
+            self.entry_end = None;
         }
         match self.doc.export(ExportMode::updates(&self.last_exported_vv)) {
             Ok(delta) => {

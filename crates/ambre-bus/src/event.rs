@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, UserId};
+use ambre_core::SessionNonce;
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -33,10 +34,22 @@ pub enum LogicEvent {
     },
 
     // -- Real-time sync (server push) ------------------------------------------
-    /// Decrypted and decompressed CRDT delta, ready for `LoroDoc::import()`.
+    /// The identity this session writes under in a document, sent once per open
+    /// (`ambre-spec-op-authorship.md`). The Logic thread sets `peer` on the
+    /// document, and writes `entry` into its peer registry with its first delta.
+    /// It applies no mutating command to the document before this arrives.
+    SessionIdentity {
+        document_id: DocumentId,
+        /// The PeerID, derived from the signing key and the session nonce.
+        peer: u64,
+        /// The encoded registry entry of `peer` (`ambre_core::PeerEntry`).
+        entry: Vec<u8>,
+    },
+
+    /// Decrypted and decompressed CRDT delta, with its signer, ready for `LoroDoc::import()`.
     RemoteUpdate {
         document_id: DocumentId,
-        payload: Vec<u8>,
+        delta: SignedDelta,
     },
 
     /// A batch of decrypted CRDT deltas to import as one merge+reseed. Emitted by a server
@@ -46,7 +59,7 @@ pub enum LogicEvent {
     /// (server `seq` order).
     RemoteUpdateBatch {
         document_id: DocumentId,
-        payloads: Vec<Vec<u8>>,
+        deltas: Vec<SignedDelta>,
     },
 
     /// Decrypted and decompressed CRDT snapshot.
@@ -186,4 +199,23 @@ pub enum LogicEvent {
     /// The relay speaks a newer wire version than this build. Only an update
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
+}
+
+/// One opened update and what its signature proves about it
+/// (`ambre-spec-sealed-envelope.md`, `SYNC-114`).
+///
+/// The Sync worker derives `peer` from the signer key and `nonce`. The Logic
+/// thread refuses the delta when one of its operations carries another PeerID
+/// (`ambre-spec-op-authorship.md`, `AUTHOR-012`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedDelta {
+    /// The Loro update, decrypted and decompressed.
+    pub payload: Vec<u8>,
+    /// The session nonce of its author, opened from inside the ciphertext.
+    pub nonce: SessionNonce,
+    /// The only PeerID its operations may carry.
+    pub peer: u64,
+    /// The member the signing key resolves to, `None` when the directory does
+    /// not name it (`AUTHOR-013`).
+    pub user: Option<UserId>,
 }

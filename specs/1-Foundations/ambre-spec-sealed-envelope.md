@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-021` | `POST` | A payload at or below the compression threshold MUST NOT be compressed. | this spec section 2 | `ambre_sync::pipeline::tests::compression_threshold` -- a payload exactly at the threshold comes back marked raw, and one byte over comes back compressed and round-trips | none | verified |
 | `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | none | unheld -- sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), and nonce freshness is asserted nowhere: no test seals the same payload twice and compares the two nonces; lands with the `A key rotation, the seal and the escrow held` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here; lands with the `A key rotation, the seal and the escrow held` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | `ambre_sync::pipeline::tests::the_session_nonce_is_sealed_inside_the_ciphertext` -- one delta sealed under two nonces shows the relay the same readable part, and each opens back to its own nonce | none | verified |
 | `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | `ambre_sync::pipeline::tests::the_compression_version_is_sealed_inside_the_ciphertext` -- the version byte is read back from the opened plaintext and from no public field | none | verified |
 
@@ -57,7 +57,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path; lands with the `A key rotation, the seal and the escrow held` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-023` | `FRAME` | A frame that fails any check MUST NOT be applied in part. | this spec section 2 | `ambre_sync::updates::tests::a_refused_frame_is_applied_in_no_part` -- a tampered and an unsigned frame in one replay each deliver none of their payload, and their neighbours arrive whole | none | verified |
 | `SYNC-135` | `FAIL` | A document name or a media blob whose author key belongs to no member of its document MUST be refused. | this spec section 2; `SYNC-018` | not built | unbuilt -- lands with the `The author of a sealed object is a member` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce and its activity summary beside the delta. | this spec section 2 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce, the PeerID it derives and the user of its signer beside the delta. | this spec section 2; `AUTHOR-013` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta arrives with the nonce its body carried, the PeerID its signer derives, and the member the directory names, or none | none | verified |
+| `SYNC-144` | `POST` | An opened update that carries an activity summary MUST reach the Logic thread with it beside the delta. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`. The outbound seal of 1 KB is under
   200 us, the inbound open under 350 us, and the round trip under 600 us. A 100 KB snapshot
@@ -66,7 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 15 `verified`, 4 `untested`, 4 `unimplemented`. What holds is refusal: a
+* **Verification.** 17 `verified`, 4 `untested`, 3 `unimplemented`. What holds is refusal: a
   tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a replayed
   counter, a decompression bomb and an unknown codec. What is loose is every rule stated as an
   absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.
@@ -111,14 +112,19 @@ signature says who wrote the frame, the tag says under which key, and only then 
 | 4. read the version byte and decompress under the ceiling | an unknown version, and a bomb | drop, and warn |
 | 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |
 
+```text
+update body = nonce (16 bytes) || summary marker (1 byte) || delta
+```
+
 ```rust
 pub struct UpdateBody {
     pub nonce: SessionNonce,                 // ambre-spec-op-authorship.md
-    pub summary: Option<ActivitySummary>,    // ambre-spec-residency.md
-    pub delta: CrdtDelta,
+    pub delta: Vec<u8>,                      // a Loro update, opaque to the envelope
 }
-pub struct CrdtDelta(Vec<u8>);               // a Loro update, opaque to the envelope
 ```
+
+The marker is `0` today, for no summary, and any other value is refused. The summary of
+`ambre-spec-residency.md` takes the other values when it lands (`SYNC-144`).
 
 **Two standalone objects take the same envelope.** A document name and a media blob travel outside
 any message. So they carry their own parts: the layout, the key identifier, the author key, the

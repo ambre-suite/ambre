@@ -55,38 +55,19 @@ impl LogicState {
                     state.load_faces(&self.base_faces);
                     slot.insert(LiveDoc::new(state));
                 }
-                let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
+                let Some(doc) = self.docs.get_mut(&document_id) else {
                     tracing::warn!(
                         "Logic: no live document {document_id} to restore snapshot into"
                     );
                     return;
                 };
-                // A snapshot import is the same operation whichever engine owns
-                // the document, and it is a full-state read. The schema gate runs
-                // inside `DocState::import_snapshot` before any container is used
-                // (`SCHEMA-006`). A refused document leaves the state alone
-                // (`SCHEMA-012`) and reaches the user as the owning app's own
-                // refusal event. A restore that silently does nothing is
-                // indistinguishable from a document that never existed.
-                let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
-                    Some(Ok(events)) => events,
-                    Some(Err(e)) => {
-                        tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
-                        vec![doc.refusal_event(&e)]
-                    }
-                    None => Vec::new(),
-                };
-                // The deltas logged since the snapshot, imported the way a
-                // relay's replay is. The log is folded into a snapshot at once,
-                // so the next restore reads one row.
-                if !deltas.is_empty() {
-                    events.extend(doc.apply_remote_batch(&deltas));
-                    self.owe_snapshot(document_id);
+                // A restore can write under the document's PeerID, so it waits
+                // for the session identity (`AUTHOR-002`).
+                if doc.identity.is_none() {
+                    doc.held_restores.push(HeldRestore { snapshot, deltas });
+                    return;
                 }
-                for event in events {
-                    self.send_to_ui(UiEvent::Viewport { document_id, event });
-                }
-                self.owe_layout(document_id);
+                self.restore_local(document_id, snapshot, deltas);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -269,18 +250,25 @@ impl LogicState {
                 self.apply_remote(document_id, &payload);
             }
 
-            LogicEvent::RemoteUpdate {
-                document_id,
-                payload,
-            } => {
-                self.apply_remote(document_id, &payload);
+            // Sync derived the PeerID from the signer; Logic compares it with
+            // every operation the delta carries (`AUTHOR-012`).
+            LogicEvent::RemoteUpdate { document_id, delta } => {
+                self.apply_signed(document_id, &delta);
             }
 
             LogicEvent::RemoteUpdateBatch {
                 document_id,
-                payloads,
+                deltas,
             } => {
-                self.apply_remote_batch(document_id, &payloads);
+                self.apply_signed_batch(document_id, deltas);
+            }
+
+            LogicEvent::SessionIdentity {
+                document_id,
+                peer,
+                entry,
+            } => {
+                self.adopt_session(document_id, peer, entry);
             }
 
             LogicEvent::RemoteEphemeral {
@@ -486,10 +474,7 @@ mod tests {
     /// has no way to supply it.
     fn exported_file(doc_type: DocType, document_id: DocumentId) -> Vec<u8> {
         let (mut state, ui, _sync) = harness();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type,
-        });
+        state.open_with_identity(document_id, doc_type);
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
@@ -568,10 +553,7 @@ mod tests {
     fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
         let (mut state, ui, sync) = harness();
         let document_id = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(document_id, DocType::Prose);
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
             other => panic!("the registry opened {other:?}"),
@@ -616,10 +598,7 @@ mod tests {
         use ambre_bus::app::prose::ProseEvent;
         let (mut state, ui, _sync) = harness();
         let document_id = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(document_id, DocType::Prose);
         state.answer_pass();
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
@@ -688,10 +667,7 @@ mod tests {
     fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
         let (mut state, _ui, sync) = harness();
         let document_id = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(document_id, DocType::Prose);
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
             other => panic!("the registry opened {other:?}"),
@@ -753,10 +729,7 @@ mod tests {
     fn a_saved_file_opens_back_as_the_document_that_was_saved() {
         let document_id = DocumentId::new();
         let (mut state, _ui, _sync) = harness();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Trame,
-        });
+        state.open_with_identity(document_id, DocType::Trame);
         state.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
@@ -777,6 +750,7 @@ mod tests {
             snapshot: Some(header.payload),
             deltas: Vec::new(),
         });
+        reopened.grant_identity(document_id);
         reopened.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
@@ -806,10 +780,7 @@ mod tests {
     fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, RequestId, Vec<u8>) {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id,
-            doc_type,
-        });
+        state.open_with_identity(document_id, doc_type);
         let passphrase = ambre_bus::SecretBytes::from(b"a passphrase".to_vec());
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase }),
@@ -1197,6 +1168,7 @@ mod tests {
         let mut doc = LiveDoc::new(DocState::Trame(Box::new(TrameState::new())));
         doc.role = role;
         state.docs.insert(doc_id, doc);
+        state.grant_identity(doc_id);
         doc_id
     }
 
@@ -1257,10 +1229,7 @@ mod tests {
 
         // A freshly opened slot is optimistically writable, before Sync has
         // resolved our real role.
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id: doc_id,
-            doc_type: DocType::Trame,
-        });
+        state.open_with_identity(doc_id, DocType::Trame);
         assert_eq!(state.docs[&doc_id].role, Role::Owner);
 
         // The members response says otherwise: the gate closes.
@@ -1298,6 +1267,7 @@ mod tests {
         let mut doc = LiveDoc::new(DocState::Toile(Box::new(toile)));
         doc.role = role;
         state.docs.insert(doc_id, doc);
+        state.grant_identity(doc_id);
         doc_id
     }
 
@@ -1685,10 +1655,7 @@ mod tests {
         assert!(!faces.is_empty(), "the workspace ships its faces");
 
         let before = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id: before,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(before, DocType::Prose);
         assert_eq!(
             state.docs[&before].state.face_count(),
             0,
@@ -1705,10 +1672,7 @@ mod tests {
         );
 
         let after = DocumentId::new();
-        state.handle_logic_command(LogicCommand::OpenDocument {
-            document_id: after,
-            doc_type: DocType::Prose,
-        });
+        state.open_with_identity(after, DocType::Prose);
         assert_eq!(
             state.docs[&after].state.face_count(),
             faces.len(),

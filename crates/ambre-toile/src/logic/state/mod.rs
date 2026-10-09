@@ -211,6 +211,10 @@ pub struct ToileState {
     ///   read met first therefore reaches the user at the next import, not at
     ///   once. Late, and never wrong: the register is still unreadable.
     undecodable: std::cell::Cell<bool>,
+    /// This PeerID's counter just past its registry entry, while the entry is
+    /// all the session wrote. No delta goes out for it alone; the first edit
+    /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
+    entry_end: Option<i32>,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -348,6 +352,9 @@ impl ToileState {
         // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
         // reverts what the user drew, never a message a teammate has read.
         undo.add_exclude_origin_prefix(COMMENT_ORIGIN);
+        // The registry entry is bookkeeping, not a drawing: an undo never
+        // retracts it (`AUTHOR-009`).
+        undo.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
         let (touched, watch) = caches::watch(&doc);
         Self {
             doc,
@@ -377,10 +384,42 @@ impl ToileState {
             pending_imports: Vec::new(),
             import_job: None,
             undecodable: std::cell::Cell::new(false),
+            entry_end: None,
         }
     }
 
     // -- session identity -------------------------------------------------
+
+    /// Write under the session identity Sync issued for this board
+    /// (`AUTHOR-002`), and write its registry entry first (`AUTHOR-009`).
+    ///
+    /// The export cursor moves past everything the board held before. Those
+    /// operations are not this session's to send (`AUTHOR-008`). The entry is
+    /// written now, before any edit opens an undo group it would split. Every
+    /// id minted from here on carries the new PeerID. `false` when the CRDT
+    /// engine refused the identity, and then nothing changed.
+    pub fn adopt_session(&mut self, peer: u64, entry: Vec<u8>) -> bool {
+        use ambre_core::authorship::{PEERS_MAP, PEERS_ORIGIN, peer_key};
+        self.doc.commit();
+        if let Err(e) = self.doc.set_peer_id(peer) {
+            tracing::error!("Toile: the session identity was refused: {e:?}");
+            return false;
+        }
+        self.peer = peer;
+        self.exported_vv = self.doc.oplog_vv();
+        self.entry_end = match self.doc.get_map(PEERS_MAP).insert(&peer_key(peer), entry) {
+            Ok(()) => {
+                self.doc
+                    .commit_with(loro::CommitOptions::new().origin(PEERS_ORIGIN));
+                self.doc.oplog_vv().get(&peer).copied()
+            }
+            Err(e) => {
+                tracing::error!("Toile: the registry entry was refused: {e:?}");
+                None
+            }
+        };
+        true
+    }
 
     /// Seed the canonical `UserId` from `LogicEvent::SessionReady`. Called
     /// by the dispatcher once the session carries an authenticated user;
@@ -1018,6 +1057,14 @@ impl ToileState {
         let current = self.doc.oplog_vv();
         if current == self.exported_vv {
             return None;
+        }
+        // The registry entry alone is no edit: it waits for the first one and
+        // travels with it (`AUTHOR-009`).
+        if let Some(end) = self.entry_end {
+            if current.get(&self.peer) == Some(&end) {
+                return None;
+            }
+            self.entry_end = None;
         }
         let exported = self.doc.export(ExportMode::updates(&self.exported_vv));
         Self::take_delta(&mut self.exported_vv, current, exported)

@@ -1,0 +1,96 @@
+//! The types that bind a Loro PeerID to the signing key of its author
+//! (`ambre-spec-op-authorship.md`).
+//!
+//! A session draws a [`SessionNonce`] each time it opens a document. Its PeerID
+//! is a hash of the author's signing key and that nonce, computed in
+//! `ambre-crypto`. The document carries a peer registry, one [`PeerEntry`] per
+//! PeerID, so a reader can resolve an operation to its user.
+
+use serde::{Deserialize, Serialize};
+
+use crate::UserId;
+
+/// Length of a session nonce, in bytes.
+pub const SESSION_NONCE_LEN: usize = 16;
+
+/// Length of an Ed25519 signature, in bytes.
+pub const ENTRY_SIGNATURE_LEN: usize = 64;
+
+/// Length of an encoded [`PeerEntry`]: the user, the nonce, the signature.
+pub const PEER_ENTRY_LEN: usize = 16 + SESSION_NONCE_LEN + ENTRY_SIGNATURE_LEN;
+
+/// The root map of the peer registry, in every document (`AUTHOR-004`).
+pub const PEERS_MAP: &str = "peers";
+
+/// The commit origin of a registry write. An application keeps it off its undo
+/// stack: the entry is no gesture of the user.
+pub const PEERS_ORIGIN: &str = "ambre-peers";
+
+/// 128 random bits drawn when a client opens a document (`AUTHOR-002`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);
+
+/// One row of the peer registry: who wrote under a PeerID, and with which
+/// nonce. It carries that user's signature over the document, the PeerID and
+/// the nonce (`AUTHOR-019`).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PeerEntry {
+    /// The user the entry claims.
+    pub user: UserId,
+    /// The nonce the PeerID derives from.
+    pub nonce: SessionNonce,
+    /// The signature of `user` over the document, the PeerID and the nonce.
+    pub signature: [u8; ENTRY_SIGNATURE_LEN],
+}
+
+impl PeerEntry {
+    /// The entry as the registry stores it: the user, the nonce, then the
+    /// signature.
+    #[must_use]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(PEER_ENTRY_LEN);
+        out.extend_from_slice(self.user.as_bytes());
+        out.extend_from_slice(&self.nonce.0);
+        out.extend_from_slice(&self.signature);
+        out
+    }
+
+    /// Reads an entry back. `None` when `bytes` is not exactly one entry, which
+    /// a reader treats as an absent entry (`AUTHOR-006`).
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let (user, rest) = bytes.split_first_chunk::<16>()?;
+        let (nonce, rest) = rest.split_first_chunk::<SESSION_NONCE_LEN>()?;
+        let signature: [u8; ENTRY_SIGNATURE_LEN] = rest.try_into().ok()?;
+        Some(Self {
+            user: UserId::from_bytes(*user),
+            nonce: SessionNonce(*nonce),
+            signature,
+        })
+    }
+}
+
+/// The registry key of a PeerID: sixteen lowercase hex digits.
+#[must_use]
+pub fn peer_key(peer: u64) -> String {
+    format!("{peer:016x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_entry_reads_back_and_a_truncated_one_does_not() {
+        let entry = PeerEntry {
+            user: UserId::from_bytes([3; 16]),
+            nonce: SessionNonce([5; SESSION_NONCE_LEN]),
+            signature: [7; ENTRY_SIGNATURE_LEN],
+        };
+        let bytes = entry.to_bytes();
+        assert_eq!(bytes.len(), PEER_ENTRY_LEN);
+        assert_eq!(PeerEntry::from_bytes(&bytes), Some(entry));
+        assert_eq!(PeerEntry::from_bytes(&bytes[1..]), None);
+        assert_eq!(peer_key(0xab), "00000000000000ab");
+    }
+}

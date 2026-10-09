@@ -7,6 +7,7 @@
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
+//! - [`authorship`]: the session nonce and the peer registry entry
 //! - [`Error`]: core error types
 //! - [`docfile`]: the `.ambre` container header in its two lineages -- plaintext
 //!   and passphrase-sealed -- shared by every app
@@ -17,6 +18,7 @@
 // `unsafe` block breaks the build rather than silently landing.
 #![forbid(unsafe_code)]
 
+pub mod authorship;
 pub mod doc_type;
 pub mod docfile;
 pub mod error;
@@ -35,6 +37,7 @@ pub mod uuid;
 pub mod version;
 
 // Re-export the main types for convenient use.
+pub use authorship::{PeerEntry, SessionNonce};
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,

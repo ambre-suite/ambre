@@ -36,7 +36,7 @@ pub mod ui;
 
 // Re-export the main types for convenient use.
 pub use command::SyncCommand;
-pub use event::LogicEvent;
+pub use event::{LogicEvent, SignedDelta};
 // Trame data plane (command + event + value types) lives under `app::trame`;
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{

@@ -253,6 +253,10 @@ pub struct TrameState {
     /// display-only read is therefore reported at the next import rather than
     /// at once. Late, and never wrong: the register is still unreadable.
     undecodable: std::cell::Cell<bool>,
+    /// This PeerID's counter just past its registry entry, while the entry is
+    /// all the session wrote. No delta goes out for it alone; the first edit
+    /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
+    entry_end: Option<i32>,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.
@@ -361,6 +365,9 @@ impl TrameState {
         // Keep implicit row/column materialization off the undo stack (see
         // [`MATERIALIZE_ORIGIN`]); only user-intended edits are undoable.
         undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
+        // The registry entry is bookkeeping, not an edit: an undo never
+        // retracts it (`AUTHOR-009`).
+        undo_manager.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);
         let mut state = Self {
             active: (0, 0),
             selection: TrackedSelection {
@@ -394,6 +401,7 @@ impl TrameState {
             uid_counter: 0,
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
+            entry_end: None,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();

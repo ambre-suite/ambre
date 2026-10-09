@@ -204,7 +204,17 @@ fn logic_event_roundtrips_through_postcard() {
     });
     roundtrip_event(&LogicEvent::RemoteUpdate {
         document_id: doc,
-        payload: vec![3, 1, 4, 1, 5, 9],
+        delta: ambre_bus::SignedDelta {
+            payload: vec![3, 1, 4, 1, 5, 9],
+            nonce: ambre_core::SessionNonce([2; 16]),
+            peer: 7,
+            user: Some(UserId::from_bytes([1; 16])),
+        },
+    });
+    roundtrip_event(&LogicEvent::SessionIdentity {
+        document_id: doc,
+        peer: 7,
+        entry: vec![8; 96],
     });
     roundtrip_event(&LogicEvent::ConnectionStatus {
         document_id: doc,

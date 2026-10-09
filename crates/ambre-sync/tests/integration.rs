@@ -293,8 +293,14 @@ fn open_document_subscribes_via_mock_ws() {
         doc_type: DocType::Trame,
     });
 
-    // No Rest event is expected (OpenDocument is fire-and-forget).
-    assert!(rx.try_iter().count() == 0);
+    // No Rest event is expected (OpenDocument is fire-and-forget). The one
+    // event Logic receives is the session identity of the opened document.
+    let events: Vec<LogicEvent> = rx.try_iter().collect();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events.first(),
+        Some(LogicEvent::SessionIdentity { document_id, .. }) if *document_id == doc_id
+    ));
 
     // The mock WS must have received a Subscribe message.
     let msgs = mock.drain_client_msgs();

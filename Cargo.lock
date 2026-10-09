@@ -194,6 +194,7 @@ dependencies = [
  "image",
  "js-sys",
  "kurbo",
+ "loro",
  "parley",
  "serde",
  "serde_json",
