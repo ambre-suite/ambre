@@ -185,6 +185,75 @@ pub async fn rename_document(
     Ok(())
 }
 
+/// A delete marked in the register and not finished: its rows may still be
+/// there, and its second sweep is due at `sweep_due` (Unix seconds).
+#[derive(Debug)]
+pub struct PendingDeletion {
+    pub document_id: ambre_core::DocumentId,
+    pub sweep_due: i64,
+    /// Whether the document row is still there: the delete stopped before its
+    /// last step.
+    pub rows_left: bool,
+}
+
+/// Marks a document as being deleted, before anything of it goes (`SRV-165`).
+/// A second mark keeps the later of the two sweeps, so a delete begun again
+/// never sweeps before a link it handed out has expired.
+pub async fn begin_deletion(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    sweep_due: i64,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO document_deletions (document_id, sweep_due) VALUES ($1, $2) \
+         ON CONFLICT (document_id) DO UPDATE \
+         SET sweep_due = GREATEST(document_deletions.sweep_due, EXCLUDED.sweep_due)",
+    )
+    .bind(id_to_uuid(*document_id))
+    .bind(sweep_due)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Every delete still marked, the earliest sweep first, at most `limit`.
+pub async fn pending_deletions(
+    pool: &PgPool,
+    limit: i64,
+) -> Result<Vec<PendingDeletion>, AppError> {
+    let rows: Vec<(uuid::Uuid, i64, bool)> = sqlx::query_as(
+        "SELECT d.document_id, d.sweep_due, \
+                EXISTS (SELECT 1 FROM documents WHERE id = d.document_id) \
+         FROM document_deletions d ORDER BY d.sweep_due LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, sweep_due, rows_left)| PendingDeletion {
+            document_id: uuid_row_to_id(id),
+            sweep_due,
+            rows_left,
+        })
+        .collect())
+}
+
+/// Drops the mark of a delete whose second sweep ran at `swept_at`, unless a
+/// later mark pushed the sweep past it meanwhile.
+pub async fn end_deletion(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    swept_at: i64,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM document_deletions WHERE document_id = $1 AND sweep_due <= $2")
+        .bind(id_to_uuid(*document_id))
+        .bind(swept_at)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Cascade-deletes a document and all associated rows (members, snapshots, updates).
 pub async fn delete_document(
     pool: &PgPool,

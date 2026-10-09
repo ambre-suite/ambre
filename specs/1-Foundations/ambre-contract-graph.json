@@ -2116,7 +2116,7 @@
   {"edge": "cites-section", "from": "SRV-165", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-rule", "from": "SRV-165", "to": "SRV-017"},
   {"edge": "cites-rule", "from": "SRV-165", "to": "SRV-057"},
-  {"edge": "lands-with", "from": "SRV-165", "to": "A delete completes once it has begun"},
+  {"edge": "verified-by", "from": "SRV-165", "to": "ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass"},
   {"edge": "cites-section", "from": "SRV-137", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-document", "from": "SRV-137", "to": "ambre-spec-zero-knowledge.md"},
   {"edge": "lands-with", "from": "SRV-137", "to": "SYNC P4` / `SRV P1` -- channels"},

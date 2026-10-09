@@ -288,7 +288,7 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
 }
 
 /// One flusher cycle: the reconciliation when it is due, the wait, then every
-/// dirty document's flush and the due sweeps.
+/// dirty document's flush and the pass over unfinished deletes.
 async fn flush_cycle(state: &crate::state::AppState, reconcile: bool) {
     if reconcile {
         reconcile_dirty_set(state).await;
@@ -313,7 +313,7 @@ async fn flush_cycle(state: &crate::state::AppState, reconcile: bool) {
         .collect();
     futures_util::future::join_all(tasks).await;
 
-    sweep_due_documents(state).await;
+    crate::deletion::finish_deletions(state).await;
 }
 
 /// How long the per-document flush lock lives. It comfortably exceeds one
@@ -330,44 +330,11 @@ pub fn late_write_window_secs(presigned_url_ttl_secs: u64) -> u64 {
     presign_lifetime(presigned_url_ttl_secs).as_secs() + FLUSH_LOCK_TTL_SECS + 60
 }
 
-/// Seconds since the Unix epoch, the clock the sweep schedule is scored in.
+/// Seconds since the Unix epoch, the clock a delete's sweep is scheduled in.
 pub fn unix_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
-}
-
-/// Sweeps again the objects of every deleted document whose late-write window
-/// has passed, then drops it from the schedule (`SRV-057`). A sweep that fails
-/// keeps its entry, and the next cycle retries it.
-pub async fn sweep_due_documents(state: &crate::state::AppState) {
-    let now = unix_now();
-    let due = match crate::redis_ops::due_sweeps(&state.redis, now, 100).await {
-        Ok(due) => due,
-        Err(e) => {
-            tracing::error!("sweep schedule read failed: {e}");
-            return;
-        }
-    };
-    for id in due {
-        let Ok(doc_id) = ambre_core::DocumentId::parse_str(&id) else {
-            tracing::error!(id, "sweep schedule holds a malformed document id");
-            let _ = crate::redis_ops::sweep_done(&state.redis, &id, now).await;
-            continue;
-        };
-        let prefix = format_s3_document_prefix(&state.config.s3_env_prefix, &doc_id);
-        match delete_prefix(&state.s3, &state.s3_bucket, &prefix).await {
-            Ok(count) => {
-                if count > 0 {
-                    tracing::info!(document_id = %doc_id, count, "second sweep removed late objects");
-                }
-                if let Err(e) = crate::redis_ops::sweep_done(&state.redis, &id, now).await {
-                    tracing::warn!(document_id = %doc_id, error = %e, "sweep schedule update failed");
-                }
-            }
-            Err(e) => tracing::error!(document_id = %doc_id, error = %e, "second sweep failed"),
-        }
-    }
 }
 
 /// Re-marks every existing `doc:*:pending` key in the dirty set via a single

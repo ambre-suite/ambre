@@ -687,10 +687,6 @@ pub fn document_gone_key(document_id: &ambre_core::DocumentId) -> String {
     format!("doc:{document_id}:gone")
 }
 
-/// Redis sorted set of the documents whose object prefix is swept again, each
-/// scored by the Unix second the sweep is due (`SRV-057`).
-pub const SWEEP_DUE_SET: &str = "sweep:due";
-
 /// Sets the tombstone of a document for `ttl_secs`: the first step of a
 /// delete, before any object or key is removed.
 pub async fn mark_document_gone(
@@ -714,20 +710,19 @@ pub async fn mark_document_gone(
 /// the mirror of an owed rotation. One script, so no reader sees a half-purged
 /// document.
 ///
-/// The same script renews the tombstone for `ttl_secs` and schedules a second
-/// sweep of the document's objects at `sweep_due` (Unix seconds). That sweep
-/// catches an object a late writer put after the first one (`SRV-057`).
+/// The same script renews the tombstone for `ttl_secs`. The second sweep of
+/// the objects is scheduled in the register, which a reset of this store does
+/// not lose (`SRV-057`, `SRV-165`).
 pub async fn purge_document_state(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     ttl_secs: u64,
-    sweep_due: u64,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 redis.call('SREM', KEYS[7], KEYS[3])
 redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
 redis.call('SET', KEYS[8], '1', 'EX', ARGV[1])
-return redis.call('ZADD', KEYS[9], ARGV[2], ARGV[3])
+return 1
 "#;
     let keys = document_state_keys(document_id);
     let gone_key = document_gone_key(document_id);
@@ -743,48 +738,11 @@ return redis.call('ZADD', KEYS[9], ARGV[2], ARGV[3])
                 keys[5].as_str(),
                 FLUSH_DIRTY_SET,
                 gone_key.as_str(),
-                SWEEP_DUE_SET,
             ],
-            [
-                ttl_secs.to_string(),
-                sweep_due.to_string(),
-                document_id.to_string(),
-            ],
+            [ttl_secs.to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
-    Ok(())
-}
-
-/// The documents whose second sweep is due at `now` (Unix seconds), at most
-/// `limit` of them.
-pub async fn due_sweeps(redis: &Client, now: u64, limit: usize) -> Result<Vec<String>, AppError> {
-    const LUA: &str =
-        "return redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])";
-    redis
-        .eval::<Vec<String>>(LUA, [SWEEP_DUE_SET], [now.to_string(), limit.to_string()])
-        .await
-        .map_err(|e| AppError::Redis(format!("due sweeps: {e}")))
-}
-
-/// Drops a document from the sweep schedule once its second sweep is done,
-/// unless it was rescheduled past `now` meanwhile.
-pub async fn sweep_done(redis: &Client, document_id: &str, now: u64) -> Result<(), AppError> {
-    const LUA: &str = r#"
-local due = redis.call('ZSCORE', KEYS[1], ARGV[1])
-if due and tonumber(due) <= tonumber(ARGV[2]) then
-    return redis.call('ZREM', KEYS[1], ARGV[1])
-end
-return 0
-"#;
-    let _: i64 = redis
-        .eval::<i64>(
-            LUA,
-            [SWEEP_DUE_SET],
-            [document_id.to_owned(), now.to_string()],
-        )
-        .await
-        .map_err(|e| AppError::Redis(format!("sweep done: {e}")))?;
     Ok(())
 }
 

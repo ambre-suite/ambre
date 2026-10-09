@@ -145,7 +145,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 |---|---|
 | a snapshot beyond the ten most recent | the hourly pass removes the object, then the row; a failure on the object still removes the row |
 | a delta the trim covers | the row goes and the object stays (`ambre-spec-sequencer.md`, `SRV-039`) |
-| a document deleted | a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
+| a document deleted | a mark in the register comes first, so a pass finishes a delete a failure stopped (`ambre-spec-server.md`, `SRV-165`); a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
 
 **What the relay knows about a picture.** Its address and its size, against the document. The

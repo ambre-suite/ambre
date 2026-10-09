@@ -447,7 +447,7 @@ mod handler_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_deleted_document_leaves_nothing(pool: sqlx::PgPool) {
         use crate::error::AppError;
-        use rustis::commands::{GenericCommands, HashCommands, ScriptingCommands, StringCommands};
+        use rustis::commands::{GenericCommands, HashCommands, StringCommands};
         let setup_state = test_app_state(pool.clone()).await;
         let setup = build_test_router(setup_state);
         let auth = setup_and_get_auth(&setup).await;
@@ -526,17 +526,114 @@ mod handler_tests {
 
         // An object put after the sweep, then the second sweep once it is due.
         stub.put(object(&doc_id, "media/late"));
-        let due_now = "return redis.call('ZADD', KEYS[1], 0, ARGV[1])";
-        let sweep_set = crate::redis_ops::SWEEP_DUE_SET;
-        let _: i64 = redis.eval(due_now, [sweep_set], [&doc_id]).await.unwrap();
-        crate::s3::sweep_due_documents(&state).await;
+        sqlx::query("UPDATE document_deletions SET sweep_due = 0")
+            .execute(&state.db)
+            .await
+            .unwrap();
+        crate::deletion::finish_deletions(&state).await;
         assert_eq!(stub.keys(), [object(&other_id, "deltas/0000000001")]);
-        let score = "return redis.call('ZSCORE', KEYS[1], ARGV[1])";
-        let left: Option<String> = redis.eval(score, [sweep_set], [&doc_id]).await.unwrap();
-        assert_eq!(left, None, "a done sweep leaves the schedule");
+        let marks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_deletions")
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+        assert_eq!(marks, 0, "a done sweep drops the mark");
 
         let gone_key = crate::redis_ops::document_gone_key(&doc);
         let _ = redis.del([&other_seq, &gone_key]).await;
+    }
+
+    // `SRV-165`: a delete the object store stops keeps its mark, and the
+    // flusher's pass finishes it. The pass sets the tombstone again after a
+    // reset lost it, and drops the mark once the second sweep has run.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_delete_interrupted_is_finished_by_the_pass(pool: sqlx::PgPool) {
+        use rustis::commands::{GenericCommands, StringCommands};
+        let setup_state = test_app_state(pool.clone()).await;
+        let setup = build_test_router(setup_state);
+        let auth = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &auth).await;
+        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let env = Config::default().s3_env_prefix;
+        let object = |rest: &str| format!("{env}/documents/{doc_id}/{rest}");
+        let marks = |pool: sqlx::PgPool| async move {
+            let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM document_deletions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            n
+        };
+
+        // The object store is down: the delete fails past its mark.
+        let down =
+            test_app_state_with_s3(pool.clone(), offline_s3(Some("http://127.0.0.1:1"))).await;
+        let [seq, ..] = crate::redis_ops::document_state_keys(&doc);
+        down.redis.set(&seq, 7).await.unwrap();
+        let resp = build_test_router(down.clone())
+            .oneshot(
+                Request::delete(format!("/api/documents/{doc_id}"))
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            marks(pool.clone()).await,
+            1,
+            "the mark outlives the failure"
+        );
+        assert!(
+            crate::db::get_document(&down.db, &doc)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // A reset of the ephemeral store loses the tombstone.
+        let gone_key = crate::redis_ops::document_gone_key(&doc);
+        let _: usize = down.redis.del([&gone_key]).await.unwrap();
+
+        // The store is back, and the pass finishes the delete.
+        let stub = S3Stub::spawn([object("snapshots/s1"), object("media/abc")]).await;
+        let state = test_app_state_with_s3(pool.clone(), offline_s3(Some(&stub.endpoint))).await;
+        crate::deletion::finish_deletions(&state).await;
+        assert!(stub.keys().is_empty(), "the objects are gone");
+        assert!(
+            crate::db::get_document(&state.db, &doc)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let left: usize = state
+            .redis
+            .exists(crate::redis_ops::document_state_keys(&doc))
+            .await
+            .unwrap();
+        assert_eq!(left, 0, "no relay key survives the pass");
+        let fenced: usize = state.redis.exists([&gone_key]).await.unwrap();
+        assert_eq!(fenced, 1, "the pass sets the tombstone again");
+        assert_eq!(
+            marks(pool.clone()).await,
+            1,
+            "the second sweep is not due yet"
+        );
+
+        // A late object, then the pass once the sweep is due.
+        stub.put(object("media/late"));
+        sqlx::query("UPDATE document_deletions SET sweep_due = 0")
+            .execute(&state.db)
+            .await
+            .unwrap();
+        crate::deletion::finish_deletions(&state).await;
+        assert!(
+            stub.keys().is_empty(),
+            "the second sweep removes the late object"
+        );
+        assert_eq!(marks(pool).await, 0, "a done delete drops its mark");
+
+        let _: usize = state.redis.del([&gone_key]).await.unwrap();
     }
 
     #[sqlx::test]

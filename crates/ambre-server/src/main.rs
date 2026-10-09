@@ -2,6 +2,7 @@
 
 mod auth;
 mod db;
+mod deletion;
 mod error;
 mod jwt;
 mod middleware;
