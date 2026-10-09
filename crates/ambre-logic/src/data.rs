@@ -178,11 +178,17 @@ impl LogicState {
         }
         // No edit before the session identity (`AUTHOR-002`): it would be
         // written under a PeerID no delta of this session may carry
-        // (`AUTHOR-008`). Sync issues the identity as it handles the open.
+        // (`AUTHOR-008`). Sync issues the identity as it handles the open, and
+        // the edit is applied under it then (`AUTHOR-026`, `AUTHOR-029`).
         if command.is_mutating() && doc.identity.is_none() {
-            tracing::warn!(
-                "Logic: dropping mutating command on doc {document_id}: no session identity yet"
-            );
+            if doc.held_edits.len() < HELD_EDITS_LIMIT {
+                doc.held_edits.push(command);
+            } else {
+                tracing::warn!(
+                    "Logic: dropping mutating command on doc {document_id}: {HELD_EDITS_LIMIT} \
+                     edits already wait for the session identity"
+                );
+            }
             return;
         }
         // The deck's PDF export is the one app command this thread serves itself
@@ -475,11 +481,15 @@ impl LogicState {
     /// forward the resulting viewport events to the UI. Local-only: never
     /// forwarded to Sync, and never checked for authorship, since this client
     /// wrote or accepted every byte of it.
+    ///
+    /// A [`Restore::Shown`] restore is never saved back: the session identity
+    /// replaces the state it built (`AUTHOR-027`).
     pub(crate) fn restore_local(
         &mut self,
         document_id: DocumentId,
         snapshot: Option<Vec<u8>>,
         deltas: Vec<Vec<u8>>,
+        restore: Restore,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
@@ -504,7 +514,9 @@ impl LogicState {
         // restore reads one row.
         if !deltas.is_empty() {
             events.extend(doc.apply_remote_batch(&deltas));
-            self.owe_snapshot(document_id);
+            if restore == Restore::Kept {
+                self.owe_snapshot(document_id);
+            }
         }
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
@@ -512,25 +524,67 @@ impl LogicState {
         self.owe_layout(document_id);
     }
 
+    /// A new state for a document of `doc_type`, seeded with what the session
+    /// already knows: the user, the display name and the faces.
+    pub(crate) fn fresh_state(&self, doc_type: DocType) -> Option<DocState> {
+        let mut state = DocState::new(doc_type)?;
+        // Seed the identity if the session is already authenticated; otherwise
+        // the later `SessionReady` sweep covers this state.
+        if let Some(user_id) = self.my_user_id {
+            state.set_user_id(user_id);
+        }
+        if let Some(name) = &self.my_display_name {
+            state.set_display_name(name);
+        }
+        // The faces that already arrived, so a document opened after boot
+        // measures on the same set as one opened before it. A sealed measuring
+        // context holds nothing until this runs.
+        state.load_faces(&self.base_faces);
+        Some(state)
+    }
+
     /// Write the document under the session identity Sync issued
     /// (`AUTHOR-002`), then apply the local restores that waited for it.
+    ///
+    /// A restore shown before the identity may have written under the
+    /// provisional PeerID, and such an operation never travels (`AUTHOR-008`).
+    /// The document is then rebuilt from a fresh state, and the restores run
+    /// again under the identity (`AUTHOR-027`). Sync issues the identity before
+    /// it fetches anything, so the rebuild drops nothing from the relay.
     ///
     /// The same identity issued twice is nothing new: the document reopened
     /// in the same session, and its unsent cursor stays where it is.
     pub(crate) fn adopt_session(&mut self, document_id: DocumentId, peer: u64, entry: Vec<u8>) {
-        let Some(doc) = self.docs.get_mut(&document_id) else {
+        let Some(doc) = self.docs.get(&document_id) else {
             return;
         };
         if doc.identity == Some(peer) {
             return;
+        }
+        let rebuilt = if doc.held_restores.is_empty() {
+            None
+        } else {
+            self.fresh_state(doc.state.doc_type())
+        };
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        if let Some(state) = rebuilt {
+            doc.state = state;
         }
         if !doc.state.adopt_session(peer, entry) {
             return;
         }
         doc.identity = Some(peer);
         let held = std::mem::take(&mut doc.held_restores);
+        let edits = std::mem::take(&mut doc.held_edits);
         for restore in held {
-            self.restore_local(document_id, restore.snapshot, restore.deltas);
+            self.restore_local(document_id, restore.snapshot, restore.deltas, Restore::Kept);
+        }
+        // The edits made before the identity, in the order they were made, on
+        // top of the restored document (`AUTHOR-026`).
+        for command in edits {
+            self.handle_app_command(document_id, command);
         }
     }
 

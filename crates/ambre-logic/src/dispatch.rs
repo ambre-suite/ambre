@@ -38,22 +38,10 @@ impl LogicState {
                 // first, materialise the live document here so the snapshot is
                 // never dropped. A later `OpenDocument` finds the slot occupied
                 // and reuses it.
-                if let std::collections::hash_map::Entry::Vacant(slot) =
-                    self.docs.entry(document_id)
-                    && let Some(mut state) = DocState::new(doc_type)
+                if !self.docs.contains_key(&document_id)
+                    && let Some(state) = self.fresh_state(doc_type)
                 {
-                    if let Some(user_id) = self.my_user_id {
-                        state.set_user_id(user_id);
-                    }
-                    if let Some(name) = &self.my_display_name {
-                        state.set_display_name(name);
-                    }
-                    // The faces that already arrived, so a document opened after
-                    // boot measures on the same set as one opened before it
-                    // (`PROSE-115`). A sealed measuring context holds nothing
-                    // until this runs (`PROSE-114`).
-                    state.load_faces(&self.base_faces);
-                    slot.insert(LiveDoc::new(state));
+                    self.docs.insert(document_id, LiveDoc::new(state));
                 }
                 let Some(doc) = self.docs.get_mut(&document_id) else {
                     tracing::warn!(
@@ -61,13 +49,19 @@ impl LogicState {
                     );
                     return;
                 };
-                // A restore can write under the document's PeerID, so it waits
-                // for the session identity (`AUTHOR-002`).
+                // A restore can write under the document's PeerID, and nothing
+                // written before the session identity can travel (`AUTHOR-008`).
+                // It is shown now and kept, and the identity rebuilds the
+                // document from it (`AUTHOR-027`).
                 if doc.identity.is_none() {
-                    doc.held_restores.push(HeldRestore { snapshot, deltas });
+                    doc.held_restores.push(HeldRestore {
+                        snapshot: snapshot.clone(),
+                        deltas: deltas.clone(),
+                    });
+                    self.restore_local(document_id, snapshot, deltas, Restore::Shown);
                     return;
                 }
-                self.restore_local(document_id, snapshot, deltas);
+                self.restore_local(document_id, snapshot, deltas, Restore::Kept);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -104,24 +98,10 @@ impl LogicState {
                 // Pre-seed the in-memory state so UI edits are routed immediately,
                 // before any snapshot/delta arrives (same rationale as the smoke
                 // doc). A later RemoteSnapshot reuses the existing state.
-                if let std::collections::hash_map::Entry::Vacant(slot) =
-                    self.docs.entry(document_id)
-                    && let Some(mut state) = DocState::new(doc_type)
+                if !self.docs.contains_key(&document_id)
+                    && let Some(state) = self.fresh_state(doc_type)
                 {
-                    // Seed the identity if the session is already authenticated;
-                    // otherwise the later `SessionReady` sweep covers this slot.
-                    if let Some(user_id) = self.my_user_id {
-                        state.set_user_id(user_id);
-                    }
-                    if let Some(name) = &self.my_display_name {
-                        state.set_display_name(name);
-                    }
-                    // The faces that already arrived, so a document opened after
-                    // boot measures on the same set as one opened before it
-                    // (`PROSE-115`). A sealed measuring context holds nothing
-                    // until this runs (`PROSE-114`).
-                    state.load_faces(&self.base_faces);
-                    slot.insert(LiveDoc::new(state));
+                    self.docs.insert(document_id, LiveDoc::new(state));
                 }
                 self.send_to_sync(SyncCommand::OpenDocument {
                     document_id,

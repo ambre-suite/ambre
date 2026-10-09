@@ -450,6 +450,9 @@ struct LiveDoc {
     /// lands. A restore may write under the document's PeerID, and that write
     /// must be one the session can send.
     held_restores: Vec<HeldRestore>,
+    /// The edits made before the identity, applied under it once it lands
+    /// (`AUTHOR-026`). None reaches the document before (`AUTHOR-029`).
+    held_edits: Vec<AppCommand>,
     /// The relay's number of each delta applied since the last snapshot, and
     /// what it carries. A snapshot check reads it (`AUTHOR-016`).
     ledger: snapshot_check::SeqLedger,
@@ -458,6 +461,16 @@ struct LiveDoc {
     /// Set by `DocumentReady`: every delta the relay kept is replayed, so a
     /// delta still waiting below the ledger's contiguous end waits for ever.
     ready: bool,
+}
+
+/// What a local restore leaves behind.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Restore {
+    /// Shown before the session identity, then dropped when the identity
+    /// rebuilds the document (`AUTHOR-027`). Nothing of it is saved.
+    Shown,
+    /// Applied under the session identity, and saved like any other state.
+    Kept,
 }
 
 /// A local restore held until the document has its session identity.
@@ -474,6 +487,7 @@ impl LiveDoc {
             role: Role::Owner,
             identity: None,
             held_restores: Vec::new(),
+            held_edits: Vec::new(),
             ledger: snapshot_check::SeqLedger::default(),
             waiting: waiting::Waiting::default(),
             ready: false,
@@ -511,6 +525,13 @@ impl LogicState {
 /// them into a snapshot. A keystroke then costs a delta, not a whole export,
 /// while a restore never replays more than this many.
 const DELTAS_PER_SNAPSHOT: usize = 256;
+
+/// How many edits a document holds while it waits for its session identity
+/// (`ambre-spec-budgets.md` section 6). The wait is one message from the Sync
+/// worker, or the unlock of a session opened before it. Past the cap a new
+/// edit is dropped and logged, so the ones held keep the order they were made
+/// in.
+const HELD_EDITS_LIMIT: usize = 256;
 
 /// One write to local persistence, which the Main thread performs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1603,5 +1624,139 @@ mod authorship_tests {
             _ => None,
         });
         assert_eq!(covered, Some(1));
+    }
+
+    /// One open document still waiting for its session identity, with the
+    /// receiver of its local persistence.
+    fn unidentified(doc_type: DocType) -> (Rig, Receiver<(DocumentId, PersistWrite)>) {
+        let (to_ui, ui) = test_link();
+        let (to_sync, sync) = test_link();
+        let (to_persist, persist) = test_link();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type,
+        });
+        sync.try_iter().for_each(drop);
+        ui.try_iter().for_each(drop);
+        let rig = Rig {
+            state,
+            sync,
+            ui,
+            document_id,
+            peer: 0,
+        };
+        (rig, persist)
+    }
+
+    /// `AUTHOR-026`, `AUTHOR-029`: an edit made before the identity reaches
+    /// neither the document nor Sync, and travels under the identity once it
+    /// lands.
+    #[test]
+    fn an_edit_before_the_identity_is_applied_under_it() {
+        let (mut rig, _persist) = unidentified(DocType::Trame);
+        let before = held(&rig);
+        rig.state.handle_logic_command(LogicCommand::App {
+            document_id: rig.document_id,
+            command: AppCommand::Trame(TrameCommand::SetCellText {
+                row: 1,
+                col: 1,
+                text: "early".to_owned(),
+            }),
+        });
+        assert_eq!(held(&rig), before, "a held edit reached the document");
+        assert!(rig.sync.try_recv().is_err(), "a held edit was sent");
+
+        let peer = rig.state.grant_identity(rig.document_id);
+        let sent: Vec<Vec<u8>> = rig
+            .sync
+            .try_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::SendUpdate { payload, .. } => Some(payload),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sent.len(), 1, "the held edit did not travel once");
+        assert_eq!(
+            sent.iter().flat_map(|d| authors(d)).collect::<Vec<_>>(),
+            vec![peer]
+        );
+    }
+
+    /// A page Alice emptied of every block. Restoring it grows a paragraph, a
+    /// write under whatever PeerID the document holds then (`PROSE-027`).
+    fn emptied_page() -> Vec<u8> {
+        let doc = LoroDoc::new();
+        doc.set_peer_id(ALICE).expect("a PeerID");
+        let page = DocState::new(DocType::Prose).expect("a page");
+        doc.import(&page.export_snapshot())
+            .expect("the scaffolding");
+        let tree = doc.get_tree("blocks");
+        for root in tree.roots() {
+            tree.delete(root).expect("a block deleted");
+        }
+        doc.commit();
+        doc.export(ExportMode::Snapshot).expect("a snapshot")
+    }
+
+    /// `AUTHOR-027`: a cached document shows before the identity and saves
+    /// nothing. Once the identity lands, the document holds the cache and
+    /// nothing written under a PeerID but the cache's and the session's.
+    #[test]
+    fn a_cached_document_shows_before_the_identity_and_is_rebuilt_under_it() {
+        let logged = written_by(ALICE + 1, "logged");
+        let cases = [
+            (
+                DocType::Trame,
+                snapshot_of(&[written_by(ALICE, "hers")]),
+                vec![logged],
+            ),
+            (DocType::Prose, emptied_page(), Vec::new()),
+        ];
+        for (doc_type, cached, deltas) in cases {
+            let (mut rig, persist) = unidentified(doc_type);
+            let restored = {
+                let doc = LoroDoc::new();
+                doc.import(&cached).expect("the cached snapshot");
+                for delta in &deltas {
+                    doc.import(delta).expect("a logged delta");
+                }
+                doc.oplog_vv()
+            };
+            rig.state
+                .handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+                    document_id: rig.document_id,
+                    doc_type,
+                    snapshot: Some(cached),
+                    deltas,
+                });
+            assert!(
+                rig.ui
+                    .try_iter()
+                    .any(|e| matches!(e, UiEvent::Viewport { .. })),
+                "{doc_type:?}: the cache was not shown before the identity"
+            );
+            assert!(
+                persist.try_recv().is_err(),
+                "{doc_type:?}: a shown restore was saved"
+            );
+
+            let peer = rig.state.grant_identity(rig.document_id);
+            let held = held(&rig);
+            assert!(
+                held.includes_vv(&restored),
+                "{doc_type:?}: the cache was lost"
+            );
+            let strangers: Vec<u64> = held
+                .keys()
+                .copied()
+                .filter(|p| *p != peer && restored.get(p).is_none())
+                .collect();
+            assert!(
+                strangers.is_empty(),
+                "{doc_type:?}: written under {strangers:x?}"
+            );
+        }
     }
 }

@@ -83,10 +83,10 @@ derive from no key. No delta ever carries them, so every client must write them 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `AUTHOR-026` | `POST` | An edit made before the session identity arrives MUST be applied under that identity once it arrives. | this spec section 3; `AUTHOR-008` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `AUTHOR-027` | `POST` | A document restored from the local cache MUST be shown before the session identity arrives. | this spec section 3 | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `AUTHOR-028` | `POST` | The edits a closed session left unsent MUST travel at the next open, under the PeerID that wrote them. | this spec section 3; `AUTHOR-002` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `AUTHOR-029` | `FRAME` | An edit held until the session identity arrives MUST NOT reach the document under any other PeerID. | this spec section 3; `AUTHOR-008` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-026` | `POST` | An edit made before the session identity arrives MUST be applied under that identity once it arrives. | this spec section 3; `AUTHOR-008` | `ambre_logic::authorship_tests::an_edit_before_the_identity_is_applied_under_it` -- the held edit travels once, carrying the session's operations alone | none | verified |
+| `AUTHOR-027` | `POST` | A document restored from the local cache MUST be shown before the session identity arrives. | this spec section 3 | `ambre_logic::authorship_tests::a_cached_document_shows_before_the_identity_and_is_rebuilt_under_it` -- a workbook and an emptied page show before the identity and save nothing, and then hold the cache under its own PeerIDs and the session's alone | none | verified |
+| `AUTHOR-028` | `POST` | The edits a closed session left unsent MUST travel at the next open, under the PeerID that wrote them. | this spec section 3; `AUTHOR-002` | not built | unbuilt -- lands with the `Unsent edits travel at the next open` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-029` | `FRAME` | An edit held until the session identity arrives MUST NOT reach the document under any other PeerID. | this spec section 3; `AUTHOR-008` | `ambre_logic::authorship_tests::an_edit_before_the_identity_is_applied_under_it` -- before the identity, the document and Sync see nothing of the edit | none | verified |
 
 * **Budget.** one row of `ambre-spec-budgets.md section 1`, the check of one received delta. It
   decodes the blob metadata without importing it, and compares one PeerID per author. An
@@ -94,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 21 `verified`, 4 `partial`, 4 `unimplemented`. Every delta is checked, and every
+* **Verification.** 24 `verified`, 4 `partial`, 1 `unimplemented`. Every delta is checked, and every
   row on it holds by a test. Nothing checks a snapshot yet, so its author can still place any
   operation in it.
 
@@ -147,7 +147,12 @@ other's state.
 1. The Sync worker draws the nonce of the session, or keeps the one an open document holds.
 2. It derives the PeerID, signs the registry entry, and sends both to the Logic thread.
 3. The Logic thread sets the PeerID on the document and writes the entry at once.
-4. Until the PeerID arrives, the Logic thread takes no edit, and holds any local restore.
+4. Until the PeerID arrives, the Logic thread holds each edit, applied under the PeerID once it lands
+   (`AUTHOR-026`).
+5. A local restore in that wait is shown at once and kept. A restore may write, and a write under
+   the provisional PeerID never travels. So the PeerID rebuilds the document from a fresh state and
+   runs the restore again (`AUTHOR-027`). The Sync worker sends the PeerID before it fetches, so
+   the rebuild drops nothing from the relay.
 
 A second device, a second tab and a reopen each draw a new nonce, so each writes under its own
 PeerID. Two writers never share one, which is the invariant a Loro document needs.
@@ -255,9 +260,9 @@ The binding has no control of its own.
 * **A migration step is held by convention alone.** The scaffolding's identity is frozen per
   version, and what a migration step writes is not (`AUTHOR-024`). A step edited after its version
   shipped leaves a delta waiting, and the document is then reported unreadable (`AUTHOR-025`).
-* **An edit made before the identity is lost.** The window is one message from the Sync worker,
-  taken at the open (`AUTHOR-026`). A cached document waits for the same message before it shows,
-  because Prose writes its restore under the session's PeerID (`AUTHOR-027`).
+* **An edit held past its cap is dropped.** The cap is a row of `ambre-spec-budgets.md section 6`,
+  and only a session opened before its unlock reaches it. A held edit naming a block the shown
+  restore grew finds no such block after the rebuild, since the block regrows under another id.
 * **Edits left unsent by a closed session never travel.** They sit under a PeerID no later session
   writes under, and its nonce is gone with the session (`AUTHOR-028`). This predates the binding.
 * **The relay history of an older build no longer opens.** Its deltas carry random PeerIDs.
