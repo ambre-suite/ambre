@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3384 rows: 2539 shipped, of which 106 partial and 519 loose. 845 unbuilt.**
+**3384 rows: 2547 shipped, of which 107 partial and 520 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 459 | 269 | 584 | 602 |  | 1914 |
-| `partial` | 49 | 14 | 41 | 2 |  | 106 |
+| `verified` | 465 | 269 | 584 | 602 |  | 1920 |
+| `partial` | 50 | 14 | 41 | 2 |  | 107 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 191 | 133 | 188 | 2 |  | 514 |
+| `untested` | 192 | 133 | 188 | 2 |  | 515 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 212 | 57 | 28 | 109 | 439 | 845 |
+| `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -45,7 +45,7 @@
 | `ambre-spec-chrome.md` | 23 | 20 | 9 | 1 | 10 | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 2 | 13 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
-| `ambre-spec-delta-order.md` | 20 | 19 | 14 |  | 5 | 1 |
+| `ambre-spec-delta-order.md` | 20 | 20 | 15 |  | 5 |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 3 |  | 3 |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 | 1 |  |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
@@ -66,7 +66,7 @@
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
-| `ambre-spec-residency.md` | 20 | 12 | 12 |  |  | 8 |
+| `ambre-spec-residency.md` | 20 | 19 | 17 | 1 | 1 | 1 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 22 | 18 |  | 4 | 2 |
 | `ambre-spec-sequencer.md` | 46 | 37 | 28 | 3 | 6 | 9 |

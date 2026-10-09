@@ -17,6 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 32 | 10 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 1 |
+| `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 20 | 5 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 3 |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 2 |
@@ -38,7 +39,6 @@
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 24 | 4 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 13 |
-| `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | partial | 20 | 5 |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 15 | 3 |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 | 12 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 | 4 |
@@ -48,7 +48,7 @@
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 2 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 | 2 |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
-| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 |  |
+| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 | 1 |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 | 4 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 6 |
 | `server` | The one process every client talks to. | partial | 52 | 4 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 916 contract rows, 196 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 916 contract rows, 197 loose.**

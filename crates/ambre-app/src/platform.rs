@@ -240,6 +240,9 @@ pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
         SyncWarningCode::DocumentUnreadable => {
             "Some changes were made by a different version of Ambre and cannot be shown here."
         }
+        SyncWarningCode::LocalStoreFull => {
+            "This device is out of storage. Editing is paused until your changes are saved."
+        }
     }
 }
 

@@ -53,7 +53,7 @@ The client asks for a document it may hold nothing of, part of, or all of.
 | `SYNC-028` | `POST` | The post-open replay MUST start after the last delta the downloaded snapshot already contains. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_gates_request_missing_on_covered_seq`; `::open_document_ready_without_snapshot_requests_full_history` | none | verified |
 | `SYNC-029` | `POST` | A document MUST be reported ready once per open, after its first replay has landed. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_deferred_to_initial_replay`; `::open_document_ready_immediate_without_replay`; `::document_ready_carries_the_role_on_both_paths` | none | verified |
 | `SYNC-027` | `POST` | A history replay MUST reach the Logic thread as one batch, never as one event per delta. | this spec section 3 | none | unheld -- the replay collects every opened payload and sends one batch event, and no test counts the events a replay of several deltas produces; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-131` | `POST` | The Logic thread MUST import a history replay in slices that each fit the frame budget, and yield between them. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-131` | `POST` | The Logic thread MUST import a history replay in slices that each fit the frame budget, and yield between them. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_logic::replay::tests::a_long_replay_lands_in_slices_and_yields_between_them` -- each pass imports at most a slice, the loop comes back unasked, and the end of the replay waits for the last slice | none | verified |
 | `SYNC-031` | `POST` | The quarantine MUST ask the relay for the missing history once per gap, not once per arrival. | this spec section 3 | `ambre_sync::updates::tests::the_quarantine_asks_once_per_gap` -- arrivals held behind one gap send a single history request for it | none | verified |
 | `SYNC-085` | `FRAME` | Opening a document MUST NOT emit an update. | this spec section 3; derived | `ambre_sync::updates::tests::an_open_sends_no_update` -- with a snapshot to read or without one, the open sends a history request and no update | none | verified |
 
@@ -76,7 +76,7 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 14 `verified`, 5 `untested`, 1 `unimplemented`. What holds is the quarantine
+* **Verification.** 15 `verified`, 5 `untested`. What holds is the quarantine
   itself. An update ahead of its snapshot waits, one whose base is known is delivered, the release
   runs in clock order, and the overflow warns once. What is loose is everything about the clock and
   the socket, both needing a driven transport the host tier does not have.
@@ -139,7 +139,9 @@ in that order, then delivered. Nothing cascades: a release makes one parent know
 
 **A replay is imported in slices** (`SYNC-131`). One import of a long tail blocks the Logic thread
 for as long as it runs. Importing delta by delta costs no more than one batch, so the thread yields
-between slices, and the view shows the messages as they land.
+between slices, and the view shows the messages as they land. A slice is 64 KB of payload, and at
+least one delta. A live delta, a close or an export lands the rest whole first, and what reads the
+whole replay waits for its last slice.
 
 **An open, and why ready is not immediate.** A document is hydrated when its snapshot and every
 delta the relay already holds have arrived, not when the socket answers. So the ready signal waits
@@ -158,6 +160,7 @@ That is a document that exists on this client alone, or an open with no connecti
 
 * `crates/ambre-sync/src/updates.rs` -- the ingest, the quarantine, the bounds and the release;
 * `crates/ambre-sync/src/websocket.rs` -- the demultiplexing, the replay batch and the ready signal;
+* `crates/ambre-logic/src/replay.rs` -- the replay imported in slices;
 * `crates/ambre-core/src/id.rs` -- the genesis parent.
 
 ---

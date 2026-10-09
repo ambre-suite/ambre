@@ -78,6 +78,7 @@ wasm-bindgen        = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 js-sys              = { workspace = true }
 web-sys             = { workspace = true, features = [
+    "DomException",
     "Event",
     "EventTarget",
     "DomStringList",
@@ -89,7 +90,9 @@ web-sys             = { workspace = true, features = [
     "IdbTransaction",
     "IdbTransactionMode",
     "IdbKeyRange",
+    "Navigator",
     "Storage",
+    "StorageManager",
     "Window",
 ] }
 

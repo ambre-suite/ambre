@@ -22,6 +22,9 @@ impl LogicState {
             } => {
                 self.handle_app_command(document_id, command);
             }
+            LogicCommand::LocalStoreFull { document_id, full } => {
+                self.store_full(document_id, full);
+            }
 
             // -- Local restore (Main thread, startup) --------------------------
             // Import a locally persisted snapshot into the document's state and
@@ -95,6 +98,7 @@ impl LogicState {
                     RestCommand::Logout => {
                         self.docs.clear();
                         self.evicted.clear();
+                        self.store_full.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -116,6 +120,8 @@ impl LogicState {
                 document_id,
                 doc_type,
             } => {
+                // A view shows it: its local copy stays (`RESID-003`).
+                self.send_to_persist(document_id, PersistWrite::Shown);
                 // A document that left memory reads its local copy back first
                 // (`RESID-010`).
                 if self.reopen_evicted(document_id, doc_type) {
@@ -333,6 +339,9 @@ impl LogicState {
                     counters,
                 });
             }
+            LogicEvent::Released { document_id } => {
+                self.store_sent(document_id);
+            }
 
             // Initial hydration complete: any snapshot was applied by the
             // preceding RemoteSnapshot arm (queue order is preserved), so the
@@ -347,11 +356,9 @@ impl LogicState {
                     doc.ready = true;
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
-                // The replay is done: a delta still waiting waits for ever
-                // (`AUTHOR-025`), and what the relay lacks of an earlier
-                // session is known (`AUTHOR-028`).
-                self.report_stalled(document_id);
-                self.send_unsent(document_id);
+                // The relay sent its whole replay. What reads all of it runs
+                // once its last slice is imported (`SYNC-131`).
+                self.ready(document_id);
             }
 
             LogicEvent::SyncWarning {

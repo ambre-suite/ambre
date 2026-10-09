@@ -138,6 +138,13 @@ pub enum LogicEvent {
         counters: ambre_core::activity::ActivityCounters,
     },
 
+    /// A released document turned into a light subscription: the relay
+    /// acknowledged every frame this client sent of it (`RESID-009`). Its
+    /// local copy holds nothing the relay lacks (`RESID-019`).
+    Released {
+        document_id: DocumentId,
+    },
+
     /// Non-fatal warning, such as a quarantine overflow or a decrypt failure.
     SyncWarning {
         document_id: DocumentId,

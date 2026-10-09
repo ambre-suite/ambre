@@ -26,6 +26,14 @@ pub struct Held {
     viewed: u64,
 }
 
+impl Held {
+    /// The tick of its last view, kept so a reload restores the order.
+    #[must_use]
+    pub fn viewed(&self) -> u64 {
+        self.viewed
+    }
+}
+
 /// The documents one tier holds, and the order they leave in.
 #[derive(Debug, Clone)]
 pub struct Residency<K> {
@@ -103,6 +111,14 @@ impl<K: Copy + Eq + Hash> Residency<K> {
         if let Some(held) = self.held.get_mut(&key) {
             held.unsent = unsent;
         }
+    }
+
+    /// Hold a document as an earlier run of the tier knew it, its view tick
+    /// included, so the order survives a reload (`RESID-008`). Later ticks
+    /// are drawn past it.
+    pub fn restore(&mut self, key: K, held: Held, viewed: u64) {
+        self.tick = self.tick.max(viewed);
+        self.held.insert(key, Held { viewed, ..held });
     }
 
     /// Stop holding a document, returning what was known of it.
@@ -210,6 +226,8 @@ mod tests {
         assert!(tier.holds(1));
     }
 
+    /// Holds `RESID-019`: a copy with a change the relay has not acknowledged
+    /// is never named, and leaves once the change is acknowledged.
     #[test]
     fn an_unsent_change_keeps_its_document() {
         let mut tier = three();
@@ -219,6 +237,8 @@ mod tests {
         assert_eq!(evict(&mut tier, 0), vec![1]);
     }
 
+    /// Holds `RESID-007`: an immutable document leaves first, whatever its
+    /// last view.
     #[test]
     fn an_immutable_document_leaves_before_any_other() {
         let mut tier = three();
@@ -226,6 +246,8 @@ mod tests {
         assert_eq!(tier.evictions(20 * MB), vec![3]);
     }
 
+    /// Holds `RESID-008`: within a rank, the least recently viewed leaves
+    /// first, and a reload keeps the order.
     #[test]
     fn the_least_recently_viewed_leaves_first() {
         let mut tier = three();
@@ -235,6 +257,14 @@ mod tests {
         tier.pin(2);
         tier.unpin(2);
         assert_eq!(tier.evictions(20 * MB), vec![3]);
+        let mut reloaded = Residency::new();
+        for key in [3, 1, 2] {
+            if let Some(held) = tier.get(key) {
+                reloaded.restore(key, *held, held.viewed());
+            }
+        }
+        reloaded.hold(4, 10 * MB);
+        assert_eq!(reloaded.evictions(20 * MB), vec![3, 1]);
     }
 
     #[test]

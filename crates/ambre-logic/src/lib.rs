@@ -21,7 +21,7 @@
 // `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// IndexedDB-backed local snapshot store. Compiled only for wasm, since its
 /// callbacks need a live event loop. The store itself is driven by the Main
@@ -34,11 +34,15 @@ pub mod persistence;
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
 mod data;
 mod dispatch;
+/// A history replay imported in slices (`SYNC-131`).
+mod replay;
 /// Which documents this thread holds, and the reopen of one that left
 /// (`ambre-spec-residency.md`).
 mod residency;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
+/// What the local store holds, and which copies leave it (`RESID-002`).
+pub mod store_ledger;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -476,6 +480,12 @@ struct LiveDoc {
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
     restoring: Option<u64>,
+    /// The deltas of a replay not yet imported, one slice a pass
+    /// (`SYNC-131`).
+    replay: replay::ReplayQueue,
+    /// `DocumentReady` landed while the replay was still being imported:
+    /// what reads the whole replay runs after its last slice.
+    ready_held: bool,
 }
 
 /// What a local restore leaves behind.
@@ -509,6 +519,8 @@ impl LiveDoc {
             relay: loro::VersionVector::default(),
             earlier: Vec::new(),
             restoring: None,
+            replay: replay::ReplayQueue::new(),
+            ready_held: false,
         }
     }
 
@@ -588,6 +600,27 @@ pub enum PersistWrite {
     /// reads it back and answers with a `RestoreLocalSnapshot`, empty when
     /// the store holds nothing (`RESID-010`, `RESID-012`).
     ReadBack { doc_type: DocType },
+    /// Not a write: a view shows the document, so its copy never leaves the
+    /// local store (`RESID-003`).
+    Shown,
+    /// Not a write: the document's view closed, so its copy may leave the
+    /// local store once the relay holds every change (`RESID-008`).
+    Hidden,
+    /// Not a write: the relay holds every change of the document, so its
+    /// copy is one the relay can serve again (`RESID-019`).
+    Sent,
+}
+
+impl PersistWrite {
+    /// Whether it writes to the store, rather than read it back or tell the
+    /// store's ledger what the document is.
+    #[must_use]
+    pub fn is_write(&self) -> bool {
+        matches!(
+            self,
+            Self::Snapshot(_) | Self::Delta(_) | Self::Session { .. } | Self::ForgetSession { .. }
+        )
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -663,6 +696,9 @@ struct LogicState {
     /// horizon its local copy holds. Sync keeps a light subscription for each
     /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
     evicted: HashMap<DocumentId, u64>,
+    /// The documents whose unsent change the browser refuses to store. While
+    /// any is, no local edit is taken (`RESID-018`).
+    store_full: HashSet<DocumentId>,
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).
@@ -695,6 +731,7 @@ impl LogicState {
             export_cx: None,
             owed: HashMap::new(),
             evicted: HashMap::new(),
+            store_full: HashSet::new(),
         }
     }
 
@@ -793,9 +830,11 @@ impl LogicState {
     ///
     /// A board whose import was running when the pass began then takes one
     /// more slice of it (`ARCH-030`). An import the pass started already
-    /// applied its first slice, so no pass applies two.
+    /// applied its first slice, so no pass applies two. A history replay
+    /// takes its next slice the same way (`SYNC-131`).
     fn drain_pass(&mut self, from_ui: &Receiver<LogicCommand>, from_sync: &Receiver<LogicEvent>) {
         let importing = self.boards_with_pending_work();
+        let replaying = self.docs_replaying();
         for command in from_ui.try_iter().take(from_ui.len()) {
             self.handle_logic_command(command);
         }
@@ -804,6 +843,9 @@ impl LogicState {
         }
         for document_id in importing {
             self.resume_import(document_id);
+        }
+        for document_id in replaying {
+            self.resume_replay(document_id);
         }
         self.answer_pass();
     }
@@ -936,7 +978,12 @@ mod pass_tests {
         rig.state.handle_logic_command(keystroke(&rig, 0));
         rig.state.answer_pass();
         rig.ui.try_iter().for_each(drop);
-        rig.saved = rig.persist.try_iter().map(|(_, w)| w).collect();
+        rig.saved = rig
+            .persist
+            .try_iter()
+            .map(|(_, w)| w)
+            .filter(PersistWrite::is_write)
+            .collect();
         rig
     }
 
@@ -963,7 +1010,7 @@ mod pass_tests {
         assert!(
             persist
                 .try_iter()
-                .all(|(_, w)| matches!(w, PersistWrite::Session { .. }))
+                .all(|(_, w)| !w.is_write() || matches!(w, PersistWrite::Session { .. }))
         );
         Rig {
             state,
@@ -1020,7 +1067,10 @@ mod pass_tests {
                 PersistWrite::Delta(bytes) => deltas.push(bytes),
                 PersistWrite::Session { .. }
                 | PersistWrite::ForgetSession { .. }
-                | PersistWrite::ReadBack { .. } => {}
+                | PersistWrite::ReadBack { .. }
+                | PersistWrite::Shown
+                | PersistWrite::Hidden
+                | PersistWrite::Sent => {}
             }
         }
         let (to_persist, _persist) = test_link();
@@ -1065,7 +1115,12 @@ mod pass_tests {
             })
             .count();
         assert_eq!(layouts, 1, "one layout for the pass");
-        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        let writes: Vec<PersistWrite> = rig
+            .persist
+            .try_iter()
+            .map(|(_, w)| w)
+            .filter(PersistWrite::is_write)
+            .collect();
         assert_eq!(writes.len(), 3, "one delta per keystroke");
         assert!(writes.iter().all(|w| matches!(w, PersistWrite::Delta(_))));
         let log = rig.saved.iter().cloned().chain(writes).collect();
@@ -1079,7 +1134,12 @@ mod pass_tests {
         let mut rig = Rig::fresh();
         rig.state.handle_logic_command(keystroke(&rig, 0));
         rig.state.answer_pass();
-        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        let writes: Vec<PersistWrite> = rig
+            .persist
+            .try_iter()
+            .map(|(_, w)| w)
+            .filter(PersistWrite::is_write)
+            .collect();
         assert!(
             matches!(writes.as_slice(), [PersistWrite::Snapshot(_)]),
             "{writes:?}"
@@ -1096,7 +1156,12 @@ mod pass_tests {
         for pos in 0..u32::try_from(DELTAS_PER_SNAPSHOT + 3).expect("small") {
             rig.state.handle_logic_command(keystroke(&rig, pos));
             rig.state.answer_pass();
-            writes.extend(rig.persist.try_iter().map(|(_, w)| w));
+            writes.extend(
+                rig.persist
+                    .try_iter()
+                    .map(|(_, w)| w)
+                    .filter(PersistWrite::is_write),
+            );
         }
         let snapshots = writes
             .iter()
@@ -1123,7 +1188,12 @@ mod pass_tests {
             .expect("queued");
         let before = dump(&rig);
         rig.state.drain_pass(&from_ui, &from_sync);
-        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        let writes: Vec<PersistWrite> = rig
+            .persist
+            .try_iter()
+            .map(|(_, w)| w)
+            .filter(PersistWrite::is_write)
+            .collect();
         assert!(
             matches!(writes.as_slice(), [PersistWrite::Snapshot(_)]),
             "the close folds the edit into a snapshot: {writes:?}"
@@ -1800,7 +1870,7 @@ mod authorship_tests {
                 "{doc_type:?}: the cache was not shown before the identity"
             );
             assert!(
-                persist.try_recv().is_err(),
+                !persist.try_iter().any(|(_, w)| w.is_write()),
                 "{doc_type:?}: a shown restore was saved"
             );
 

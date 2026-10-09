@@ -27,4 +27,9 @@ pub enum SyncWarningCode {
     /// The document shows what it could read, and the rest never arrives
     /// (`ambre-spec-op-authorship.md`, `AUTHOR-025`).
     DocumentUnreadable = 3,
+
+    /// Raised by Logic. The browser refuses to store a change the relay has
+    /// not acknowledged. Editing pauses until the change is stored or the
+    /// relay holds it (`ambre-spec-residency.md`, `RESID-018`).
+    LocalStoreFull = 4,
 }

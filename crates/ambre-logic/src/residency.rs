@@ -10,6 +10,7 @@
 
 use super::*;
 
+use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_core::activity::ActivityCounters;
 
 impl LogicState {
@@ -36,6 +37,9 @@ impl LogicState {
             self.owe_snapshot(document_id);
         }
         self.answer_document(document_id, true);
+        // No view shows it now: its copy may leave the store once the relay
+        // holds every change (`RESID-008`, `RESID-019`).
+        self.send_to_persist(document_id, PersistWrite::Hidden);
         self.docs.remove(&document_id);
         // A response arriving after close has no engine to feed, and must not
         // forward to the UI as a stray API event (`toile-media`).
@@ -127,6 +131,40 @@ impl LogicState {
             counters: ActivityCounters::default(),
         });
     }
+
+    /// Sync turned the document light: the relay holds every change of it
+    /// (`RESID-019`). A change the store refused is now on the relay, so it
+    /// no longer pauses editing (`RESID-018`).
+    pub(crate) fn store_sent(&mut self, document_id: DocumentId) {
+        self.send_to_persist(document_id, PersistWrite::Sent);
+        self.store_full(document_id, false);
+    }
+
+    /// The browser refuses, or takes again, an unsent change of a document
+    /// (`RESID-018`). The user is warned once, as editing pauses.
+    pub(crate) fn store_full(&mut self, document_id: DocumentId, full: bool) {
+        if !full {
+            if self.store_full.remove(&document_id) && self.store_full.is_empty() {
+                tracing::info!("Logic: the local store takes changes again, editing resumes");
+            }
+            return;
+        }
+        let paused = !self.store_full.is_empty();
+        self.store_full.insert(document_id);
+        if !paused {
+            self.send_to_ui(UiEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::LocalStoreFull,
+                message: "the local store refuses an unsent change".to_owned(),
+            });
+        }
+    }
+
+    /// Whether local edits pause: an unsent change cannot be stored, and an
+    /// edit taken now could be lost with it (`RESID-018`).
+    pub(crate) fn edits_paused(&self) -> bool {
+        !self.store_full.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -175,8 +213,11 @@ mod tests {
         assert!(!state.docs.contains_key(&document_id));
         let writes: Vec<PersistWrite> = drain(&persist).into_iter().map(|(_, w)| w).collect();
         assert!(
-            matches!(writes.as_slice(), [PersistWrite::Snapshot(_)]),
-            "the document left memory unsaved"
+            matches!(
+                writes.as_slice(),
+                [PersistWrite::Snapshot(_), PersistWrite::Hidden]
+            ),
+            "the document left memory unsaved: {writes:?}"
         );
         let commands = drain(&sync);
         assert!(
@@ -223,7 +264,7 @@ mod tests {
         assert!(
             matches!(
                 drain(&persist).as_slice(),
-                [(_, PersistWrite::ReadBack { .. })]
+                [(_, PersistWrite::Shown), (_, PersistWrite::ReadBack { .. })]
             ),
             "the reopen did not read the local copy"
         );
@@ -281,5 +322,67 @@ mod tests {
                 "got {commands:?}"
             );
         }
+    }
+
+    /// Holds `RESID-018`. While the store refuses an unsent change, no edit
+    /// is taken and the user is warned once. Editing resumes once the store
+    /// takes the change again, or once the relay holds it.
+    #[test]
+    fn a_full_store_pauses_editing_until_the_change_is_safe() {
+        use ambre_bus::app::prose::ProseCommand;
+        let (mut state, document_id, _sync, persist, ui) = opened();
+        let DocState::Prose(prose) = &state.docs[&document_id].state else {
+            panic!("the rig opened a Prose document");
+        };
+        let block_id = prose.root_blocks()[0];
+        let edit = |state: &mut LogicState| {
+            state.handle_logic_command(LogicCommand::App {
+                document_id,
+                command: AppCommand::Prose(ProseCommand::InsertText {
+                    block_id,
+                    pos: 0,
+                    text: "a".to_owned(),
+                }),
+            });
+            state.answer_pass();
+            drain(&persist).iter().any(|(_, w)| w.is_write())
+        };
+        for _ in 0..2 {
+            state.handle_logic_command(LogicCommand::LocalStoreFull {
+                document_id,
+                full: true,
+            });
+        }
+        let warnings = drain(&ui)
+            .into_iter()
+            .filter(|event| {
+                matches!(
+                    event,
+                    UiEvent::SyncWarning {
+                        code: SyncWarningCode::LocalStoreFull,
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(warnings, 1, "the user was not warned once");
+        assert!(
+            !edit(&mut state),
+            "an edit was taken while the store is full"
+        );
+        state.handle_logic_command(LogicCommand::LocalStoreFull {
+            document_id,
+            full: false,
+        });
+        assert!(edit(&mut state), "editing did not resume once space freed");
+        state.handle_logic_command(LogicCommand::LocalStoreFull {
+            document_id,
+            full: true,
+        });
+        state.handle_logic_event(LogicEvent::Released { document_id });
+        assert!(
+            edit(&mut state),
+            "editing did not resume once the relay held the change"
+        );
     }
 }

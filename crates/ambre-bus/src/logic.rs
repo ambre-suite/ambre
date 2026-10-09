@@ -81,6 +81,13 @@ pub enum LogicCommand {
         sessions: Vec<(u64, SessionNonce)>,
     },
 
+    /// The browser refused to store a change of `document_id` that the relay
+    /// has not acknowledged, even after room was made (`RESID-018`). While
+    /// `full`, no local edit is taken. Sent again with `full: false` once
+    /// the change is stored or the relay holds it. Local-only, from the Main
+    /// thread, like [`RestoreLocalSnapshot`](LogicCommand::RestoreLocalSnapshot).
+    LocalStoreFull { document_id: DocumentId, full: bool },
+
     // -- P3 -- Service plane (relayed request/response) -------------------------
     /// A [`RestCommand`] service operation. The Logic dispatcher applies any
     /// state hook (for example `Logout` clears the document registry) and forwards it

@@ -102,6 +102,8 @@ impl SyncState {
         self.light
             .insert(document_id, LightSubscription::of(doc, applied));
         tracing::info!("Sync: doc={document_id} kept as a light subscription");
+        // The local copy now holds nothing the relay lacks (`RESID-019`).
+        self.send_to_logic(LogicEvent::Released { document_id });
     }
 
     /// Counts an update of a document held as a light subscription. Returns
@@ -272,10 +274,16 @@ mod tests {
     }
 
     /// Holds `RESID-009`: a release waits while a frame this client sent is
-    /// unacknowledged, and lands with its echo.
+    /// unacknowledged, and lands with its echo. Only then does the local
+    /// store hear that the relay holds every change (`RESID-019`).
     #[test]
     fn a_release_waits_for_the_echo_of_every_frame_sent() {
-        let (sink, _rx) = LogicSink::channel();
+        let released = |events: Vec<LogicEvent>| {
+            events
+                .iter()
+                .any(|event| matches!(event, LogicEvent::Released { .. }))
+        };
+        let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, String::new(), None);
         let document_id = DocumentId::new();
         let doc_key = DocumentKey::generate();
@@ -294,11 +302,13 @@ mod tests {
             1,
             "an unacknowledged frame was dropped"
         );
+        assert!(!released(drain(&rx)), "the store heard of a change unsent");
         let echo = update(document_id, snapshot, &doc_key, None);
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
         state.receive_update(Seq(1), echo);
         assert_eq!(state.documents_len(), 0);
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
+        assert!(released(drain(&rx)));
     }
 
     /// Holds `RESID-010` on the Sync side: a reopen resumes after the

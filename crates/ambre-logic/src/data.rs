@@ -159,6 +159,12 @@ impl LogicState {
     /// view holds the child's id and emits through the same queue, so a command
     /// never travels through the parent.
     pub(crate) fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
+        // The store refuses an unsent change: an edit taken now could be lost
+        // with it (`RESID-018`). Reading, selecting and scrolling still pass.
+        if command.is_mutating() && self.edits_paused() {
+            tracing::warn!("Logic: dropping an edit on doc {document_id}: the local store is full");
+            return;
+        }
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: no live document {document_id} for app command");
             return;
@@ -296,9 +302,10 @@ impl LogicState {
     /// Whether any board still has an import to apply, so the loop must come
     /// back without waiting for a message (`ARCH-030`).
     pub(crate) fn has_pending_work(&self) -> bool {
-        self.docs
-            .values()
-            .any(|doc| matches!(&doc.state, DocState::Toile(s) if s.has_pending_work()))
+        self.docs.values().any(|doc| {
+            !doc.replay.is_empty()
+                || matches!(&doc.state, DocState::Toile(s) if s.has_pending_work())
+        })
     }
 
     /// Apply the next slice of a board's running import and fan it out
@@ -319,7 +326,19 @@ impl LogicState {
     /// before what reads the board here rather than in the engine: the exports
     /// this thread serves itself, a remote delta, and a close. A remote delta
     /// merged mid-import would also end the import's undo group in Loro.
+    ///
+    /// A history replay still being imported lands whole first too
+    /// (`SYNC-131`).
     pub(crate) fn settle_import(&mut self, document_id: DocumentId) {
+        self.settle_replay(document_id);
+        self.settle_board_import(document_id);
+    }
+
+    /// Land a board's running import whole, now: [`settle_import`] without
+    /// the replay, for the import of one replay slice.
+    ///
+    /// [`settle_import`]: Self::settle_import
+    fn settle_board_import(&mut self, document_id: DocumentId) {
         let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
         else {
             return;
@@ -696,7 +715,7 @@ impl LogicState {
 
     /// Note what the deltas just applied wait on, and drop what the document
     /// now holds. A document left waiting for good is reported (`AUTHOR-025`).
-    fn track_waiting(&mut self, document_id: DocumentId, applied: &[(u64, &[u8])]) {
+    pub(crate) fn track_waiting(&mut self, document_id: DocumentId, applied: &[(u64, &[u8])]) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -763,13 +782,8 @@ impl LogicState {
         if accepted.is_empty() {
             return;
         }
-        let (seqs, payloads): (Vec<u64>, Vec<Vec<u8>>) = accepted.into_iter().unzip();
-        self.apply_remote_batch(document_id, &payloads);
-        let applied: Vec<(u64, &[u8])> = seqs
-            .into_iter()
-            .zip(payloads.iter().map(Vec::as_slice))
-            .collect();
-        self.track_waiting(document_id, &applied);
+        // One slice now, the rest one a pass (`SYNC-131`).
+        self.replay(document_id, accepted);
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
@@ -813,14 +827,16 @@ impl LogicState {
         }
     }
 
-    /// Apply a batch of remote deltas (a server history replay on open) as one
+    /// Apply a batch of remote deltas (one slice of a history replay) as one
     /// merge+reseed, so the UI repaints once instead of once per delta. Mirrors
     /// [`apply_remote`] for the local-persist and viewport-forward tail.
-    pub(crate) fn apply_remote_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
-        self.settle_import(document_id);
+    ///
+    /// It settles a board's import, never the replay it is a slice of.
+    pub(crate) fn merge_batch(&mut self, document_id: DocumentId, payloads: &[Vec<u8>]) {
+        self.settle_board_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             tracing::warn!(
-                "Logic: apply_remote_batch for unopened doc {document_id} ({} delta(s)), dropping",
+                "Logic: merge_batch for unopened doc {document_id} ({} delta(s)), dropping",
                 payloads.len()
             );
             return;

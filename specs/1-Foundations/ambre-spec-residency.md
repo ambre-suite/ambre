@@ -2,7 +2,8 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- a closed document leaves memory for the local store, keeps a light
-subscription and reopens from its copy. The local store has no budget yet.
+subscription and reopens from its copy. The local store holds a byte budget and meets the quota.
+No read cursor exists yet.
 
 > Which documents a client holds, in memory and on disk, and what a document it does not hold still
 > costs. A user can belong to hundreds of documents that change at once. The client keeps the few
@@ -23,19 +24,19 @@ prefix is `RESID`, and it belongs to this document alone.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `RESID-001` | `INV` | A document no view shows MUST leave memory once its view closes. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_logic::residency::tests::a_closed_document_reaches_the_store_then_leaves_memory` -- it closes the view of a document and finds no document left in the Logic state | none | verified |
-| `RESID-002` | `INV` | The local store MUST stay within its byte budget. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-002` | `INV` | The local store MUST stay within its byte budget. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_logic::store_ledger::tests::the_store_stays_within_its_budget` -- a copy past the budget is named for deletion and no longer counted | none | verified |
 | `RESID-003` | `INV` | A document a view shows MUST NOT leave memory. | this spec section 3 | `ambre_logic::residency::tests::a_shown_document_never_leaves_memory` -- it closes one document and finds the one still shown in memory | none | verified |
 | `RESID-004` | `INV` | A document not held in memory MUST cost only a light subscription: its key, its counters and its cursor. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_sync::light::tests::an_evicted_document_costs_only_a_light_subscription` -- it releases a document, finds its full session gone, and bounds the entry left by the budget row | none | verified |
 | `RESID-005` | `INV` | The activity counters of a document not held in memory MUST come from the activity summaries alone. | this spec section 3; `SYNC-113` | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- the counters it reads back are the ones the sealed summaries name | none | verified |
-| `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | none | unheld -- the launcher asks `navigator.storage.persist()` once the store opens. A driven browser reads `persisted()` after boot; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Evict a document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `RESID-006` | `POST` | An evicted document MUST reach the local store before its memory is freed. | this spec section 3 | `ambre_logic::residency::tests::a_closed_document_reaches_the_store_then_leaves_memory` -- the snapshot write is queued before the release reaches Sync | none | verified |
-| `RESID-007` | `POST` | Eviction MUST take a document its application marks immutable before any other. | this spec section 3 | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `RESID-008` | `POST` | Among the documents of one rank, eviction MUST take the least recently viewed first. | this spec section 3 | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-007` | `POST` | Eviction MUST take a document its application marks immutable before any other. | this spec section 3 | `ambre_core::residency::tests::an_immutable_document_leaves_before_any_other` -- an immutable copy leaves before an older mutable one | none | verified |
+| `RESID-008` | `POST` | Among the documents of one rank, eviction MUST take the least recently viewed first. | this spec section 3 | `ambre_core::residency::tests::the_least_recently_viewed_leaves_first` -- the order survives a restore; `ambre_logic::store_ledger::tests::a_reload_keeps_the_order_of_the_views` -- the ledger row round-trips; `ambre_logic::persistence::wasm_tests::ledger_rows_come_back_until_the_copy_leaves` -- wasm tier, a real browser database | none | verified |
 | `RESID-009` | `FRAME` | Evicting a document MUST NOT drop a local change the relay has not acknowledged. | this spec section 3; `ambre-spec-sync.md` | `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the full session stays while a sent frame waits on its echo, and leaves with it | none | verified |
 
 ### 1.3 Reopen an evicted document
@@ -61,17 +62,17 @@ The browser can refuse a write before the local store reaches its own budget.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `RESID-017` | `POST` | A write the browser refuses for its quota MUST evict what the relay already holds from the local store, then retry once. | this spec section 3; `RESID-007`, `RESID-008` | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `The local store within its budget` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-017` | `POST` | A write the browser refuses for its quota MUST evict what the relay already holds from the local store, then retry once. | this spec section 3; `RESID-007`, `RESID-008` | `ambre_logic::store_ledger::tests::a_refused_write_frees_what_the_relay_holds_then_retries_once` -- the decision | partial -- `dom-glue` -- the quota detection is DOM glue, so a driven browser fills the quota and reads the retry; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
+| `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | `ambre_logic::residency::tests::a_full_store_pauses_editing_until_the_change_is_safe` -- one warning, an edit refused, then taken again once space frees or the relay acknowledges | none | verified |
+| `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | `ambre_core::residency::tests::an_unsent_change_keeps_its_document`; `ambre_logic::store_ledger::tests::a_shown_or_unsent_copy_never_leaves` -- past the budget and under the quota alike; `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the acknowledgement reaches the Logic thread only after the echo | none | verified |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 6`: the documents in memory, the local
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 12 `verified`, 8 `unimplemented` by host tests on the Logic and Sync states. 8
-  `unimplemented`: the local store has no budget, no eviction order and no quota handling yet, and
-  no read cursor exists.
+* **Verification.** 17 `verified`, 1 `partial`, 1 `untested`, 1 `unimplemented`, by host tests on
+  the Logic, Sync and ledger states. 1 `partial`: the quota detection is DOM glue. 1 `untested`: the
+  persistent storage request. 1 `unimplemented`: no read cursor exists.
 
 ---
 
@@ -148,10 +149,15 @@ counters with the counts it holds (`RESID-010`, `RESID-011`). Sync skips the rel
 it folds in nothing past the horizon. A copy that is missing or refused drops the light
 subscription, and the open fetches the whole document (`RESID-012`).
 
+**The ledger of the local store.** The Main thread counts what each write costs, by document. Logic
+tells it which document a view shows and when the relay holds every change. Any write marks its
+document unsent, and only that acknowledgement clears it. One row per document keeps its bytes,
+its last view and its flags, so a reload restores the order (`RESID-008`).
+
 **Code.** `ambre_core::activity` holds the summary and the counters. `ambre_sync::light` holds the
 light subscription, and `ambre_logic::residency` the close and the reopen. `ambre_core::residency`
-holds the eviction order the local store will use. The local store is the browser database the
-launcher opens.
+holds the eviction order, and `ambre_logic::store_ledger` the budget and the quota decision. The
+launcher's `local_store` performs them on the browser database it opens.
 
 ---
 
@@ -186,8 +192,8 @@ Residency has no control of its own.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The local store has no bound.** It keeps every copy until its document is deleted. No write
-  meets the quota, and the browser is not asked for persistent storage.
+* **No application marks a document immutable yet.** The order takes such a document first, and
+  Murmure will mark its final segments.
 * **No application writes a summary yet.** Every update counts as activity alone, until an
   application writes summaries with its own messages.
 * **The three budgets are not measured.** The figures in `ambre-spec-budgets.md section 6` are

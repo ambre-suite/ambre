@@ -63,6 +63,8 @@ use wasm_bindgen::prelude::*;
 
 mod host;
 mod landing;
+/// The local store the Main thread drives, within its budget (`RESID-002`).
+mod local_store;
 mod route;
 mod signin;
 
@@ -982,14 +984,14 @@ pub fn main() {
     // the event loop is live. On open, restore the BOOT document's snapshot (if
     // any) so an edit survives a refresh without a network round-trip. The store
     // is shared with the per-frame relay below, which saves snapshots Logic emits.
-    let persist_store: Rc<RefCell<Option<ambre_logic::persistence::PersistenceStore>>> =
-        Rc::new(RefCell::new(None));
+    let persist_store: Rc<RefCell<Option<local_store::LocalStore>>> = Rc::new(RefCell::new(None));
     // Set when the store will never open, so the writes waiting for it go.
     let persist_gone = Rc::new(std::cell::Cell::new(false));
     {
         let store_slot = Rc::clone(&persist_store);
         let gone = Rc::clone(&persist_gone);
         let restore_tx = ui_to_logic_tx.clone();
+        let full_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let store = match ambre_logic::persistence::PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
@@ -1036,7 +1038,7 @@ pub fn main() {
                     });
                 }
             }
-            *store_slot.borrow_mut() = Some(store);
+            *store_slot.borrow_mut() = Some(local_store::LocalStore::open(store, full_tx).await);
         });
     }
 
@@ -1165,13 +1167,14 @@ pub fn main() {
                 }
             }
         }
-        if let Some(store) = persist_store_frame.borrow().as_ref() {
+        if let Some(local) = persist_store_frame.borrow().as_ref() {
+            local.tick();
             for (document_id, write) in persist_waiting.drain(..) {
                 match write {
                     // Read after every write queued before it, so the copy
                     // holds what the document had when it left (`RESID-010`).
                     ambre_logic::PersistWrite::ReadBack { doc_type } => {
-                        let store = store.clone();
+                        let store = local.store().clone();
                         let tx = relay_tx.clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             let key = *document_id.as_bytes();
@@ -1187,18 +1190,9 @@ pub fn main() {
                             });
                         });
                     }
-                    ambre_logic::PersistWrite::Snapshot(bytes) => {
-                        store.save_snapshot(*document_id.as_bytes(), bytes);
-                    }
-                    ambre_logic::PersistWrite::Delta(bytes) => {
-                        store.save_delta(*document_id.as_bytes(), bytes);
-                    }
-                    ambre_logic::PersistWrite::Session { peer, nonce } => {
-                        store.save_session(*document_id.as_bytes(), peer, nonce);
-                    }
-                    ambre_logic::PersistWrite::ForgetSession { peer } => {
-                        store.forget_session(*document_id.as_bytes(), peer);
-                    }
+                    // Each write passes the store's ledger, which keeps it
+                    // within its budget and meets the quota (`RESID-002`).
+                    write => local.apply(document_id, write),
                 }
             }
         }
@@ -1209,8 +1203,10 @@ pub fn main() {
         // owned (this relay). Writing the pin before dispatch is normative.
         if let Some(p) = tofu_confirm.get_untracked() {
             tofu_confirm.set(None);
-            if let Some(store) = persist_store_frame.borrow().as_ref() {
-                store.save_trusted_key(*p.user_id.as_bytes(), p.exchange_pub_key);
+            if let Some(local) = persist_store_frame.borrow().as_ref() {
+                local
+                    .store()
+                    .save_trusted_key(*p.user_id.as_bytes(), p.exchange_pub_key);
             }
             let _ = relay_tx.try_send(LogicCommand::Rest {
                 id: RequestId::next(),
@@ -1457,7 +1453,7 @@ pub fn main() {
                     let pin_rx = persist_store_frame
                         .borrow()
                         .as_ref()
-                        .map(|s| s.load_trusted_key(*prompt.user_id.as_bytes()));
+                        .map(|s| s.store().load_trusted_key(*prompt.user_id.as_bytes()));
                     let relay = relay_tx.clone();
                     let role_sig = invite_role;
                     let prompt_sig = tofu_prompt;
