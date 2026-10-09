@@ -48,6 +48,7 @@
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 2 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 | 2 |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
+| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 | 4 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 | 6 |
 | `server` | The one process every client talks to. | partial | 52 | 4 |
@@ -57,8 +58,7 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
-| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | design-only | 20 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 21 partial, 6 design-only. 916 contract rows, 196 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 916 contract rows, 196 loose.**

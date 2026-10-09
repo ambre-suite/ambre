@@ -119,6 +119,12 @@ impl Rekey {
         self.owed
     }
 
+    /// Whether every frame sent was acknowledged, and no edit waits on a
+    /// payment (`RESID-009`).
+    pub(crate) fn settled(&self) -> bool {
+        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight
+    }
+
     /// Holds an edit made while the rotation is owed. Returns whether the
     /// caller starts a payment.
     pub(crate) fn hold(&mut self, payload: Vec<u8>) -> bool {

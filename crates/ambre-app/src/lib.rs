@@ -1151,11 +1151,42 @@ pub fn main() {
         // next snapshot. Best-effort; the put() commits as the event loop idles.
         persist_waiting.extend(logic_to_persist_rx.try_iter());
         if persist_gone_frame.get() {
-            persist_waiting.clear();
+            // A store that never opens holds no copy: each reopen waiting on
+            // one is answered empty, and fetches from the relay (`RESID-012`).
+            for (document_id, write) in persist_waiting.drain(..) {
+                if let ambre_logic::PersistWrite::ReadBack { doc_type } = write {
+                    let _ = relay_tx.try_send(LogicCommand::RestoreLocalSnapshot {
+                        document_id,
+                        doc_type,
+                        snapshot: None,
+                        deltas: Vec::new(),
+                        sessions: Vec::new(),
+                    });
+                }
+            }
         }
         if let Some(store) = persist_store_frame.borrow().as_ref() {
             for (document_id, write) in persist_waiting.drain(..) {
                 match write {
+                    // Read after every write queued before it, so the copy
+                    // holds what the document had when it left (`RESID-010`).
+                    ambre_logic::PersistWrite::ReadBack { doc_type } => {
+                        let store = store.clone();
+                        let tx = relay_tx.clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let key = *document_id.as_bytes();
+                            let snapshot = store.load_snapshot(key).await.ok().flatten();
+                            let deltas = store.load_deltas(key).await.unwrap_or_default();
+                            let sessions = store.load_sessions(key).await.unwrap_or_default();
+                            let _ = tx.try_send(LogicCommand::RestoreLocalSnapshot {
+                                document_id,
+                                doc_type,
+                                snapshot,
+                                deltas,
+                                sessions,
+                            });
+                        });
+                    }
                     ambre_logic::PersistWrite::Snapshot(bytes) => {
                         store.save_snapshot(*document_id.as_bytes(), bytes);
                     }

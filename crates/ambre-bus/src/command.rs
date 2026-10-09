@@ -55,6 +55,16 @@ pub enum SyncCommand {
         document_id: DocumentId,
     },
 
+    /// The Logic thread evicted a document from memory (`RESID-006`). Sync
+    /// keeps a light subscription in place of the full session, which counts
+    /// its activity and resumes a later open after `applied_seq`
+    /// (`RESID-004`, `RESID-010`).
+    ReleaseDocument {
+        document_id: DocumentId,
+        /// The highest relay number the evicted copy holds.
+        applied_seq: u64,
+    },
+
     /// Raw CRDT delta produced by `LoroDoc::export_updates()`.
     SendUpdate {
         document_id: DocumentId,

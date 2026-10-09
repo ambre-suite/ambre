@@ -58,6 +58,14 @@ pub enum UiEvent {
         connected: bool,
     },
 
+    /// The activity of a document not held in memory, for its badge
+    /// (`RESID-014`). A reopen replaces it with the counts the document holds
+    /// (`RESID-011`).
+    Activity {
+        document_id: DocumentId,
+        counters: ambre_core::activity::ActivityCounters,
+    },
+
     /// Initial hydration of a freshly opened document is complete (snapshot, if
     /// any, already applied). The UI dismisses its document-loading overlay.
     /// Fires once per open, including for empty/brand-new documents.

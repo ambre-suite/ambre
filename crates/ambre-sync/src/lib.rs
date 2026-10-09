@@ -129,6 +129,7 @@ mod channels;
 mod docfile;
 mod documents;
 mod http;
+mod light;
 mod media;
 mod members;
 mod membership_log;
@@ -538,6 +539,10 @@ struct SyncDocumentState {
     /// A snapshot only its author confirmed, held until the open has replayed
     /// every delta the relay kept. It is checked then (`AUTHOR-022`).
     held_snapshot: Option<HeldSnapshot>,
+    /// The Logic thread evicted the document at this horizon. The session
+    /// becomes a light subscription once every frame sent is acknowledged
+    /// (`RESID-009`).
+    released: Option<Seq>,
 }
 
 /// A snapshot the Logic thread is checking.
@@ -594,6 +599,7 @@ impl SyncDocumentState {
             rekey: rekey::Rekey::default(),
             checks: HashMap::new(),
             held_snapshot: None,
+            released: None,
         }
     }
 
@@ -896,6 +902,10 @@ pub struct SyncState {
     /// document carries it (`SYNC-112`).
     session_nonces: HashMap<DocumentId, SessionNonce>,
 
+    /// The documents the Logic thread evicted, each kept as a light
+    /// subscription (`RESID-004`).
+    light: HashMap<DocumentId, light::LightSubscription>,
+
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
     /// silently re-login if the refresh token is also dead. That happens when
     /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
@@ -950,6 +960,7 @@ impl SyncState {
             pending_opens: Vec::new(),
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
+            light: HashMap::new(),
             dev_username: None,
         }
     }
@@ -1135,6 +1146,10 @@ impl SyncState {
                 doc_type,
             } => self.handle_open_document(document_id, doc_type),
             SyncCommand::CloseDocument { document_id } => self.handle_close_document(document_id),
+            SyncCommand::ReleaseDocument {
+                document_id,
+                applied_seq,
+            } => self.handle_release_document(document_id, Seq(applied_seq)),
             SyncCommand::SendUpdate {
                 document_id,
                 payload,

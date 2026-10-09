@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-025` | `POST` | Opening a channel MUST subscribe to its `meta` document and to its live segments. | this spec section 3; `SRV-047` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-026` | `POST` | Opening a channel MUST pin the documents the view shows. | this spec section 3; `RESID-003` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-026` | `POST` | Opening a channel MUST pin the documents the view shows. | this spec section 3; `RESID-003` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-027` | `FAIL` | Given a document whose header names another channel, the engine MUST refuse it and warn. | this spec section 3; `MURMURE-001` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-028` | `FRAME` | Opening a channel MUST NOT load a final segment. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 

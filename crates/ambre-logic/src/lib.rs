@@ -34,6 +34,9 @@ pub mod persistence;
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
 mod data;
 mod dispatch;
+/// Which documents this thread holds, and the reopen of one that left
+/// (`ambre-spec-residency.md`).
+mod residency;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
@@ -469,6 +472,10 @@ struct LiveDoc {
     /// The earlier sessions of this user on the document, read back from the
     /// local store: each PeerID with the nonce it derives from.
     earlier: Vec<(u64, SessionNonce)>,
+    /// The document reopens from the local store after leaving memory, at
+    /// this horizon. Sync is asked to open it once the read lands
+    /// (`RESID-010`).
+    restoring: Option<u64>,
 }
 
 /// What a local restore leaves behind.
@@ -501,6 +508,7 @@ impl LiveDoc {
             ready: false,
             relay: loro::VersionVector::default(),
             earlier: Vec::new(),
+            restoring: None,
         }
     }
 
@@ -576,6 +584,10 @@ pub enum PersistWrite {
     /// An earlier session whose operations the relay holds: nothing of it is
     /// left to send.
     ForgetSession { peer: u64 },
+    /// Not a write: the document left memory and reopens. The Main thread
+    /// reads it back and answers with a `RestoreLocalSnapshot`, empty when
+    /// the store holds nothing (`RESID-010`, `RESID-012`).
+    ReadBack { doc_type: DocType },
 }
 
 // -----------------------------------------------------------------------------
@@ -647,6 +659,10 @@ struct LogicState {
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
     owed: HashMap<DocumentId, Owed>,
+    /// The documents that left memory when their view closed, each with the
+    /// horizon its local copy holds. Sync keeps a light subscription for each
+    /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
+    evicted: HashMap<DocumentId, u64>,
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).
@@ -678,6 +694,7 @@ impl LogicState {
             base_faces: Vec::new(),
             export_cx: None,
             owed: HashMap::new(),
+            evicted: HashMap::new(),
         }
     }
 
@@ -1001,7 +1018,9 @@ mod pass_tests {
                     deltas.clear();
                 }
                 PersistWrite::Delta(bytes) => deltas.push(bytes),
-                PersistWrite::Session { .. } | PersistWrite::ForgetSession { .. } => {}
+                PersistWrite::Session { .. }
+                | PersistWrite::ForgetSession { .. }
+                | PersistWrite::ReadBack { .. } => {}
             }
         }
         let (to_persist, _persist) = test_link();

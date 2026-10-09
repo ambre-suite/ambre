@@ -97,6 +97,14 @@ impl SyncState {
                 after_seq: last_seq,
             });
         }
+        // An evicted document still counts what it missed (`RESID-014`).
+        for (document_id, seen) in self.light_cursors() {
+            self.ws_send(&WsClientMsg::Subscribe { document_id });
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq: seen,
+            });
+        }
     }
 
     /// Attaches onmessage / onclose / onerror closures to `ws`. Each closure
@@ -527,9 +535,13 @@ impl SyncState {
                             message: format!("the latest snapshot does not open: {e}"),
                         });
                     }
+                    // No snapshot, or a reopen that resumes from the local
+                    // copy: the replay starts after its horizon, 0 when none
+                    // (`RESID-010`).
                     None => {
                         doc_state.current_snapshot_id = snapshot_id;
                         doc_state.known_snapshots.insert(snapshot_id);
+                        doc_state.last_seq = covered_seq;
                     }
                 }
                 // A snapshot another user confirmed alone waits for the replay,
@@ -986,6 +998,7 @@ impl SyncState {
                 // were revoked so the UI can react.
                 tracing::info!("Sync: DocumentRevoked {document_id:?}");
                 self.documents.remove(&document_id);
+                self.light.remove(&document_id);
                 if let Some(uid) = self.user_id {
                     self.send_to_logic(LogicEvent::MemberRevoked {
                         document_id,

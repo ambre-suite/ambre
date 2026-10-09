@@ -498,6 +498,7 @@ impl SyncState {
         self._onerror = None;
         self.documents.clear();
         self.session_nonces.clear();
+        self.light.clear();
         self.master_seed = None;
         self.signing_key = None;
         self.exchange_key = None;

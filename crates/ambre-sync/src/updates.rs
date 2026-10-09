@@ -38,6 +38,11 @@ impl SyncState {
         let authored_by_us = self.signing_key.as_ref().is_some_and(|sk| {
             sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array()
         });
+        // An evicted document counts the update and loads nothing
+        // (`RESID-014`, `RESID-016`).
+        if self.count_light(seq, &update) {
+            return None;
+        }
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: Update for unopened doc {document_id:?}, dropping");
             return None;
@@ -55,7 +60,13 @@ impl SyncState {
             // The echo is the relay's receipt: that frame and every earlier
             // one need no resend (`SYNC-129`).
             doc_state.rekey.confirm_through(update.public_data.clock.0);
+            // A release waiting on this echo lands now (`RESID-009`).
+            if doc_state.released.is_some() {
+                self.settle_release(document_id);
+            }
         }
+        // A release that just landed turned the document light.
+        let doc_state = self.documents.get_mut(&document_id)?;
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
@@ -467,6 +478,9 @@ impl SyncState {
             return;
         }
         self.issue_session_identity(document_id);
+        // An evicted document resumes after what its local copy holds
+        // (`RESID-010`).
+        let resume = self.take_light(document_id);
 
         let event_tx = self.event_tx.clone();
 
@@ -611,25 +625,42 @@ impl SyncState {
                                         blob,
                                     });
                             }
-                            let payload = match &start_id {
-                                Some(id) => {
+                            // The local copy already folds in the relay's
+                            // snapshot: no download, and the replay starts
+                            // after the copy's horizon (`RESID-010`).
+                            let resumed = resume.filter(|horizon| {
+                                light::resumes(*horizon, u64::try_from(start_covered).unwrap_or(0))
+                            });
+                            let payload = match (&start_id, resumed) {
+                                (Some(id), None) => {
                                     http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
                                         .await
                                 }
-                                None => None,
+                                _ => None,
                             };
                             let snap_id = start_id.and_then(|id| SnapshotId::parse_str(&id).ok());
                             // Only gate on the covered seq if the blob actually
                             // downloaded; otherwise a failed fetch would skip
                             // history that was never applied (data loss).
-                            match payload {
-                                Some(_) => (payload, snap_id, start_covered),
-                                None => (None, None, 0),
+                            match (payload, resumed) {
+                                (Some(payload), _) => (Some(payload), snap_id, start_covered),
+                                (None, Some(horizon)) => {
+                                    (None, snap_id, i64::try_from(horizon.0).unwrap_or(i64::MAX))
+                                }
+                                (None, None) => (None, None, 0),
                             }
                         }
                         // No snapshot yet, or a transient error: fall back to the
                         // full delta replay (RequestMissing from seq 0) on open.
-                        Ok(None) | Err(_) => (None, None, 0),
+                        // With no snapshot on the relay, a local copy still
+                        // spares the replay of what it holds (`RESID-010`).
+                        Ok(None) => match resume {
+                            Some(horizon) => {
+                                (None, None, i64::try_from(horizon.0).unwrap_or(i64::MAX))
+                            }
+                            None => (None, None, 0),
+                        },
+                        Err(_) => (None, None, 0),
                     }
                 } else {
                     (None, None, 0)
@@ -798,6 +829,7 @@ impl SyncState {
         }
         self.documents.remove(&document_id);
         self.session_nonces.remove(&document_id);
+        self.light.remove(&document_id);
         tracing::info!("Sync: CloseDocument {document_id:?}");
     }
 
@@ -870,8 +902,16 @@ impl SyncState {
             tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
             return;
         };
-        let body = pipeline::update_body(nonce, &payload);
-        self.send_body(document_id, body);
+        self.send_update_body(document_id, *nonce, &payload);
+    }
+
+    /// Builds the body of a delta this client writes and sends it. No
+    /// application of this build writes a summary yet, so none rides along.
+    fn send_update_body(&mut self, document_id: DocumentId, nonce: SessionNonce, delta: &[u8]) {
+        match pipeline::update_body(&nonce, None, delta) {
+            Ok(body) => self.send_body(document_id, body),
+            Err(error) => tracing::warn!("[Sync] update body refused doc={document_id}: {error}"),
+        }
     }
 
     /// Sends what an earlier session of this user wrote and never sent. The
@@ -888,8 +928,7 @@ impl SyncState {
             tracing::warn!("[Sync] SendUnsent before session ready doc={document_id}, dropped");
             return;
         }
-        let body = pipeline::update_body(&nonce, &payload);
-        self.send_body(document_id, body);
+        self.send_update_body(document_id, nonce, &payload);
     }
 
     /// Seals an update body and sends it, or holds it while the document is
@@ -1473,7 +1512,7 @@ mod tests {
             snapshot_id,
             clock: Clock(clock),
         };
-        let body = pipeline::update_body(&TEST_NONCE, payload);
+        let body = pipeline::update_body(&TEST_NONCE, None, payload).expect("no summary");
         pipeline::seal_update(&body, public_data, doc_key, signing_key).expect("seal")
     }
 

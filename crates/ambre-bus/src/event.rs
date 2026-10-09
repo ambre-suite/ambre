@@ -131,6 +131,13 @@ pub enum LogicEvent {
         connected: bool,
     },
 
+    /// The activity counted for a document not held in memory, read from the
+    /// summaries alone (`RESID-005`, `RESID-014`).
+    Activity {
+        document_id: DocumentId,
+        counters: ambre_core::activity::ActivityCounters,
+    },
+
     /// Non-fatal warning, such as a quarantine overflow or a decrypt failure.
     SyncWarning {
         document_id: DocumentId,

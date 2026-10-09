@@ -78,6 +78,7 @@ const STORE_TRUSTED_KEYS: &str = "trusted_keys";
 ///
 /// Created once per session via [`open`](PersistenceStore::open). The database
 /// and its object store are created on first visit. All operations are async.
+#[derive(Clone)]
 pub struct PersistenceStore {
     db: IdbDatabase,
 }

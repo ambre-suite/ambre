@@ -484,16 +484,20 @@ impl LogicState {
     ///
     /// A [`Restore::Shown`] restore is never saved back: the session identity
     /// replaces the state it built (`AUTHOR-027`).
+    ///
+    /// Returns `false` when the snapshot was refused, so a reopen fetches the
+    /// document from the relay instead (`RESID-012`).
     pub(crate) fn restore_local(
         &mut self,
         document_id: DocumentId,
         snapshot: Option<Vec<u8>>,
         deltas: Vec<Vec<u8>>,
         restore: Restore,
-    ) {
+    ) -> bool {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
-            return;
+            return false;
         };
+        let mut opened = true;
         // A snapshot import is the same operation whichever engine owns the
         // document, and it is a full-state read. The schema gate runs inside
         // `DocState::import_snapshot` before any container is used
@@ -505,6 +509,7 @@ impl LogicState {
             Some(Ok(events)) => events,
             Some(Err(e)) => {
                 tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
+                opened = false;
                 vec![doc.refusal_event(&e)]
             }
             None => Vec::new(),
@@ -522,6 +527,7 @@ impl LogicState {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         self.owe_layout(document_id);
+        opened
     }
 
     /// A new state for a document of `doc_type`, seeded with what the session

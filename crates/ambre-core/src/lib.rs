@@ -18,6 +18,9 @@
 // `unsafe` block breaks the build rather than silently landing.
 #![forbid(unsafe_code)]
 
+/// The activity summary an update may carry, and the counters it moves
+/// (`ambre-spec-residency.md`).
+pub mod activity;
 pub mod authorship;
 pub mod doc_type;
 pub mod docfile;
@@ -29,6 +32,9 @@ pub mod fixtures;
 pub mod id;
 pub mod key_id;
 pub mod public_key;
+/// Which documents a client holds, and which leave first
+/// (`ambre-spec-residency.md`).
+pub mod residency;
 pub mod role;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).

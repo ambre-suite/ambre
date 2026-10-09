@@ -34,6 +34,21 @@ impl LogicState {
                 deltas,
                 sessions,
             } => {
+                // The local copy a reopen asked for (`RESID-010`).
+                if let Some(horizon) = self
+                    .docs
+                    .get_mut(&document_id)
+                    .and_then(|doc| doc.restoring.take())
+                {
+                    self.reopen_from_store(
+                        document_id,
+                        doc_type,
+                        horizon,
+                        HeldRestore { snapshot, deltas },
+                        sessions,
+                    );
+                    return;
+                }
                 // Order-independent: the boot-time local restore and the route
                 // poll's `OpenDocument` race on startup. If the restore arrives
                 // first, materialise the live document here so the snapshot is
@@ -59,9 +74,9 @@ impl LogicState {
                         snapshot: snapshot.clone(),
                         deltas: deltas.clone(),
                     });
-                    self.restore_local(document_id, snapshot, deltas, Restore::Shown);
+                    let _ = self.restore_local(document_id, snapshot, deltas, Restore::Shown);
                 } else {
-                    self.restore_local(document_id, snapshot, deltas, Restore::Kept);
+                    let _ = self.restore_local(document_id, snapshot, deltas, Restore::Kept);
                 }
                 // The sessions that wrote the restored operations, so what they
                 // left unsent travels (`AUTHOR-028`).
@@ -79,12 +94,14 @@ impl LogicState {
                     // handler can emit further commands against it.
                     RestCommand::Logout => {
                         self.docs.clear();
+                        self.evicted.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
                     }
                     RestCommand::DeleteDocument { document_id } => {
                         self.docs.remove(document_id);
+                        self.evicted.remove(document_id);
                         self.owed.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
                         self.forget_pending_seals(Some(*document_id));
@@ -99,6 +116,11 @@ impl LogicState {
                 document_id,
                 doc_type,
             } => {
+                // A document that left memory reads its local copy back first
+                // (`RESID-010`).
+                if self.reopen_evicted(document_id, doc_type) {
+                    return;
+                }
                 // Pre-seed the in-memory state so UI edits are routed immediately,
                 // before any snapshot/delta arrives (same rationale as the smoke
                 // doc). A later RemoteSnapshot reuses the existing state.
@@ -117,18 +139,9 @@ impl LogicState {
             }
             LogicCommand::CloseDocument { document_id } => {
                 // The last edits of the pass are saved before the state goes,
-                // so closing a document never loses them (`ARCH-017`). A running
-                // import lands whole first, so the save never holds half of it
-                // (`ARCH-031`).
-                self.settle_import(document_id);
-                self.answer_document(document_id, true);
-                self.docs.remove(&document_id);
-                // Drop any in-flight service routes for this document. A response
-                // arriving after close has no engine to feed, and must not
-                // forward to the UI as a stray API event (`toile-media`).
-                self.rest_routes.retain(|_, d| *d != document_id);
-                self.forget_pending_seals(Some(document_id));
-                self.send_to_sync(SyncCommand::CloseDocument { document_id });
+                // so closing a document never loses them (`ARCH-017`). It then
+                // leaves memory, and Sync keeps it light (`RESID-001`).
+                self.evict(document_id);
             }
             LogicCommand::OpenChannel { channel_id } => {
                 self.send_to_sync(SyncCommand::OpenChannel { channel_id });
@@ -306,6 +319,18 @@ impl LogicState {
                 self.send_to_ui(UiEvent::ConnectionStatus {
                     document_id,
                     connected,
+                });
+            }
+
+            // Counted by Sync from the summaries alone, for a document this
+            // thread no longer holds (`RESID-005`).
+            LogicEvent::Activity {
+                document_id,
+                counters,
+            } => {
+                self.send_to_ui(UiEvent::Activity {
+                    document_id,
+                    counters,
                 });
             }
 
