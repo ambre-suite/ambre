@@ -49,12 +49,48 @@ impl ProseState {
             display_name: self.my_name.clone().unwrap_or_default(),
         };
         match postcard::to_allocvec(&payload) {
-            Ok(bytes) => ProseOutcome::ephemeral_only(bytes),
+            Ok(bytes) => {
+                self.last_frame = Some(bytes.clone());
+                ProseOutcome::ephemeral_only(bytes)
+            }
             Err(e) => {
                 tracing::warn!("Prose: the presence frame could not be encoded: {e}");
                 ProseOutcome::nothing()
             }
         }
+    }
+
+    /// The frame that tells the other sessions this one is open: the last one
+    /// sent, or a caret at the start of the first block. Sent once the document
+    /// is ready, so a session that never moves its caret still counts as
+    /// running (`PROSE-121`).
+    pub fn announce(&mut self) -> Option<Vec<u8>> {
+        if let Some(frame) = &self.last_frame {
+            return Some(frame.clone());
+        }
+        let first = *self.root_blocks().first()?;
+        self.update_cursor(&CursorPosition {
+            block_id: first,
+            offset: 0,
+            anchor: None,
+        })
+        .ephemeral
+    }
+
+    /// The answer owed to a session that joined since this one last spoke:
+    /// it has not heard of this one yet. Taken once per newcomer.
+    pub fn take_greeting(&mut self) -> Option<Vec<u8>> {
+        if !std::mem::take(&mut self.owe_greeting) {
+            return None;
+        }
+        self.announce()
+    }
+
+    /// Whether a session of `user_id` is open on this document, as far as this
+    /// peer knows.
+    #[must_use]
+    pub(crate) fn is_live(&self, user_id: &UserId) -> bool {
+        self.live.contains(user_id)
     }
 
     /// Apply a remote presence frame.
@@ -73,6 +109,10 @@ impl ProseState {
                 return Vec::new();
             }
         };
+        // A session this one has not met has not heard of it either.
+        if self.live.insert(from_user_id) {
+            self.owe_greeting = true;
+        }
         let Some(position) = self.resolve(&frame) else {
             // Dropped, not raised: the peer keeps the caret it last had until a
             // frame this document can resolve arrives.
@@ -86,6 +126,7 @@ impl ProseState {
 
     /// Forget a peer's caret, when the session says they left.
     pub fn drop_presence(&mut self, user_id: UserId) -> Vec<ProseEvent> {
+        self.live.remove(&user_id);
         if self.presence.remove(&user_id).is_none() {
             return Vec::new();
         }

@@ -901,6 +901,33 @@ impl LogicState {
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
         }
+        // A Prose session answers each newcomer once, so a silent one is known
+        // to it (`ambre-spec-prose-schema.md` section 2).
+        let greeting = match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
+            Some(DocState::Prose(state)) => state.take_greeting(),
+            _ => None,
+        };
+        if let Some(payload) = greeting {
+            self.send_to_sync(SyncCommand::SendEphemeral {
+                document_id,
+                payload,
+            });
+        }
+    }
+
+    /// Tell the other Prose sessions on a document that this one is open, once
+    /// it is ready (`ambre-spec-prose-schema.md` section 2).
+    pub(crate) fn announce(&mut self, document_id: DocumentId) {
+        let frame = match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
+            Some(DocState::Prose(state)) => state.announce(),
+            _ => None,
+        };
+        if let Some(payload) = frame {
+            self.send_to_sync(SyncCommand::SendEphemeral {
+                document_id,
+                payload,
+            });
+        }
     }
 
     /// A peer stopped watching a document (`PRESENCE-014`): drop them from the

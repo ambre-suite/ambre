@@ -360,6 +360,9 @@ impl LogicState {
                     doc.ready = true;
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
+                // The other sessions learn this one is open, though its caret
+                // never moves (`ambre-spec-prose-schema.md` section 2).
+                self.announce(document_id);
                 // The relay sent its whole replay. What reads all of it runs
                 // once its last slice is imported (`SYNC-131`).
                 self.ready(document_id);

@@ -130,6 +130,15 @@ pub struct ProseState {
     /// (`PROSE-058`). The name is cosmetic and decides nothing
     /// (`PRESENCE-004`).
     presence: HashMap<UserId, (crate::events::CursorPosition, String)>,
+    /// Every user with a session open on this document, as far as this peer
+    /// knows. A user joins on any frame that decodes and leaves on the relay's
+    /// word alone (`PRESENCE-014`). Apart from `presence`, which drops a caret
+    /// it cannot place.
+    live: std::collections::HashSet<UserId>,
+    /// This session's last presence frame, re-sent to a newcomer.
+    last_frame: Option<Vec<u8>>,
+    /// Whether a newcomer has not heard from this session yet.
+    owe_greeting: bool,
     /// The paginator, built on the first layout asked for. It is the one place
     /// the document is measured, for the screen and for export alike
     /// (`PROSE-064`). It lives here so measuring runs where the document does
@@ -280,6 +289,9 @@ impl ProseState {
             suggesting: false,
             burst: None,
             presence: HashMap::new(),
+            live: std::collections::HashSet::new(),
+            last_frame: None,
+            owe_greeting: false,
             paginator: None,
             faces: Vec::new(),
             handed: None,

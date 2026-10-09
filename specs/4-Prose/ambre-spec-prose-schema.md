@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-122` | `INV` | A hidden block MUST carry the peer id of the session that deleted it. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_deleted_block_keeps_its_node_and_names_the_session_that_hid_it` | none | verified |
 | `PROSE-119` | `INV` | A hidden block, and every block under it, MUST read as gone to every reader of the document. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_hidden_table_hides_every_block_under_it` | none | verified |
 | `PROSE-120` | `INV` | An undo of a deletion MUST bring the block back under its own `TreeID`, with its body. | this spec section 2 | `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
-| `PROSE-121` | `INV` | A hidden block MUST NOT be removed for good while the session named in its marker still runs. | this spec section 2 | `ambre_prose::logic::sweep::tests::a_block_hidden_by_a_running_session_stays` -- the session's own pass, and a peer holding its caret, keep the block, and its undo still restores it; `::a_block_hidden_by_a_session_that_ended_is_removed_for_good` -- the converse, carried to the other peer; `::the_removal_is_no_step_of_the_undo_stack` | none | verified |
+| `PROSE-121` | `INV` | A hidden block MUST NOT be removed for good while the session named in its marker still runs. | this spec section 2 | `ambre_prose::logic::sweep::tests::a_block_hidden_by_a_running_session_stays` -- the session's own pass, and a peer holding its caret, keep the block, and its undo still restores it; `::a_block_hidden_by_a_session_that_ended_is_removed_for_good` -- the converse, carried to the other peer; `::a_silent_session_runs_once_it_has_announced_itself` -- an announce, or a caret this peer cannot place, keeps the block; `::a_newcomer_is_answered_once`; `::a_session_whose_user_left_has_ended`; `::the_removal_is_no_step_of_the_undo_stack` | none | verified |
 | `PROSE-002` | `INV` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | structural -- `ambre_prose::doc::get_block_text` opens one root `LoroText` per leaf block, and `ambre_prose::doc::create_block` writes no text into the node map; `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences` | none | verified |
 | `PROSE-089` | `CONC` | Two peers typing in the same paragraph MUST both keep their text: one author's sentence MUST NOT be lost to the other's write. | this spec section 3; this spec section 6 | `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences`; `::an_offline_edit_and_a_concurrent_one_both_land` | none | verified |
 | `PROSE-007` | `INV` | A mark's expansion behaviour MUST come from `expand_type_for` alone: no call site MUST decide it. | this spec section 3 | structural -- `ambre_prose::mark::configure` builds the document's whole style configuration from `expand_type_for`, and no write path names an expansion; `ambre_prose::mark::tests::a_formatting_mark_swallows_an_insertion_at_its_edge`; `::an_anchor_mark_never_swallows_an_insertion` | none | verified |
@@ -95,10 +95,13 @@ names the style's, and the blob's own bytes decide the image's.
   marker, and the block comes back with its identity and its body (`PROSE-120`).
 * A hidden block is never removed while the session that hid it runs, since only that session's
   undo can restore it (`PROSE-121`). A compaction's snapshot triggers the pass. The client
-  removes for good each hidden block whose session reads as ended, with its subtree and bodies. A
-  session runs when it is the client's own, or when the user the registry names for it shows a
-  caret. The removal is a delta of the client's session, sent after the snapshot, and never a step
-  of its undo. A session open but silent reads as ended, so its undo may bring back nothing.
+  removes for good each hidden block whose session reads as ended, with its subtree and bodies. The
+  removal is a delta of the client's session, sent after the snapshot, and never a step of its undo.
+* A session runs when it is the client's own, or when the user the registry names for it has a
+  session open here. Each session sends a presence frame once the document is ready, and answers
+  each newcomer once, so a silent one is known. A user leaves on the relay's word alone
+  (`PRESENCE-014`). Two sessions of one user read as one: when one closes, the other's hidden block
+  may go, and its undo brings back nothing.
 * A block's body is a **root** Text container whose name joins the tag `t` and the tree id with `:`
   -- `"t:{tree_id}"`. A `TreeID` renders as two decimal numbers joined by `@`, so it cannot contain
   the separator (`PROSE-088`).
