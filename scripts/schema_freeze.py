@@ -4,7 +4,8 @@
 Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
 the value types a build writes (`SCHEMA-018`), in `shapes.txt`. It also freezes
 the identity its scaffolding is written under (`AUTHOR-024`), in
-`scaffold.txt`. Every file below says "shape" for both. A belt
+`scaffold.txt`, and what each migration step writes (`AUTHOR-024`), in
+`migrations.txt`. Every file below says "shape" for all three. A belt
 in the crate compares a build against that text. The belt alone is weak: a
 developer whose build moved the shape can regenerate the section in place and
 watch the belt go green, with the version never raised and every peer on the
@@ -45,8 +46,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BELT = "the_shape_a_build_writes_is_the_shape_frozen_for_its_version"
 SCAFFOLD_BELT = "the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version"
+MIGRATION_BELT = "each_migration_step_writes_what_its_version_froze"
 # Each frozen file, and the belt that compares a build against it.
-FREEZES = {"shapes.txt": BELT, "scaffold.txt": SCAFFOLD_BELT}
+FREEZES = {
+    "shapes.txt": BELT,
+    "scaffold.txt": SCAFFOLD_BELT,
+    "migrations.txt": MIGRATION_BELT,
+}
 # `== v3`: the line that opens a section. Everything above the first one is the
 # file's comment header, which explains the format and is free to be reworded.
 MARK = "== "

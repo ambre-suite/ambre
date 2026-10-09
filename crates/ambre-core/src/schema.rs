@@ -215,6 +215,19 @@ pub fn scaffold_peer(scaffold: &[u8]) -> u64 {
     hash.peer()
 }
 
+/// The fingerprint of what one migration step writes, as each application's
+/// `schema/migrations.txt` freezes it (`AUTHOR-024`).
+///
+/// `written` is the update the step exports on the canonical document of the
+/// version it leaves. A step edited after its version shipped writes other
+/// operations, so its fingerprint moves.
+#[must_use]
+pub fn step_fingerprint(written: &[u8]) -> u64 {
+    let mut hash = Fnv::new(b"ambre-migration-step");
+    hash.feed(written);
+    hash.0
+}
+
 /// FNV-1a over a domain tag, then the bytes fed to it.
 struct Fnv(u64);
 

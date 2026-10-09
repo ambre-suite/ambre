@@ -56,10 +56,12 @@ def shape(root: Path, crate: str, text: str = HEADER + V1, name: str = "shapes.t
     return path
 
 
-def frozen(root: Path, crate: str) -> None:
-    """Every frozen file of a crate, each holding `v1`."""
+def frozen(root: Path, crate: str, missing: str | None = None) -> None:
+    """Every frozen file of a crate, each holding `v1`. `missing` names a file
+    left out."""
     for name in schema_freeze.FREEZES:
-        shape(root, crate, name=name)
+        if name != missing:
+            shape(root, crate, name=name)
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -95,7 +97,7 @@ class RepositoryTest(unittest.TestCase):
         self.shapes = self.root / "crates" / "ambre-x" / "schema" / "shapes.txt"
         self.shapes.parent.mkdir(parents=True)
         belt(self.root, "ambre-x", version=1)
-        shape(self.root, "ambre-x", name="scaffold.txt")
+        frozen(self.root, "ambre-x", missing="shapes.txt")
         git(self.root, "init", "-q", "-b", "main")
         git(self.root, "config", "user.email", "t@example.com")
         git(self.root, "config", "user.name", "t")
@@ -211,20 +213,31 @@ class BeltTest(unittest.TestCase):
         belt(self.root, "ambre-x", version=1, missing=schema_freeze.SCAFFOLD_BELT)
         self.assertEqual(len(self.findings()), 1)
 
+    def test_frozen_migrations_with_no_belt_are_refused(self):
+        frozen(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1, missing=schema_freeze.MIGRATION_BELT)
+        self.assertEqual(len(self.findings()), 1)
+
     def test_a_stamped_crate_with_no_frozen_shape_is_refused(self):
-        shape(self.root, "ambre-x", name="scaffold.txt")
+        frozen(self.root, "ambre-x", missing="shapes.txt")
         belt(self.root, "ambre-x", version=1)
         self.assertEqual(len(self.findings()), 1)
 
     def test_a_stamped_crate_with_no_frozen_scaffold_is_refused(self):
-        shape(self.root, "ambre-x")
+        frozen(self.root, "ambre-x", missing="scaffold.txt")
+        belt(self.root, "ambre-x", version=1)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_stamped_crate_with_no_frozen_migrations_is_refused(self):
+        frozen(self.root, "ambre-x", missing="migrations.txt")
         belt(self.root, "ambre-x", version=1)
         self.assertEqual(len(self.findings()), 1)
 
     def test_a_bump_with_no_section_to_compare_against_is_refused(self):
+        # One finding per frozen file: none carries a `v2` section.
         frozen(self.root, "ambre-x")
         belt(self.root, "ambre-x", version=2)
-        self.assertEqual(len(self.findings()), 2)
+        self.assertEqual(len(self.findings()), len(schema_freeze.FREEZES))
 
     def test_the_protocol_constants_are_not_a_stamp(self):
         # `ambre-core` declares `SCHEMA_VERSION_KEY` and

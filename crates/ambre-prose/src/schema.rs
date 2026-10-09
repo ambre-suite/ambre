@@ -97,7 +97,7 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// `8 -> 9` moves a footnote's text out of its entry into a block of its own
 /// (`PROSE-FEAT-305`). A version 8 document may hold notes, so this step
 /// rewrites each one: see [`notes_to_blocks`].
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
         to: 1,

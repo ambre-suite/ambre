@@ -36,17 +36,25 @@ use ambre_bus::{
     BorderStyle, Borders, CellBorder, CellFormat, CellStyle, FilterKind, FilterOp, HAlign,
     SelectionKind, StylePatch, TrameCommand, VAlign,
 };
-use loro::{LoroDoc, LoroValue};
+use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, migration_peer, step_fingerprint};
+use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
-use crate::logic::schema::{DEFAULT_SHEET, FilterRecord, SCHEMA_VERSION};
+use crate::logic::schema::{
+    DEFAULT_SHEET, FilterRecord, MIGRATIONS, SCHEMA_VERSION, SHEETS_MAP, cells_map_name,
+    cols_list_name, filters_map_name, rows_list_name,
+};
 use crate::logic::styles::StyleRecord;
+use crate::model::{Uid, cell_key};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
 
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
 const SCAFFOLD: &str = include_str!("../../schema/scaffold.txt");
+
+/// What each migration step writes, one section per `SCHEMA_VERSION`.
+const STEPS: &str = include_str!("../../schema/migrations.txt");
 
 /// The source the key declarations are read from, so the coverage assertion
 /// cannot drift from the module it guards.
@@ -411,6 +419,112 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
          SCHEMA_VERSION {SCHEMA_VERSION} in `schema/scaffold.txt`. Another \
          build of that version writes it under another identity, and a delta \
          that waits on it never applies. Raise SCHEMA_VERSION and append a section."
+    );
+}
+
+/// A workbook as `version` stored it, written under a fixed identity. `None`
+/// writes no register, which is the layout before the register existed.
+fn workbook_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
+    let doc = LoroDoc::new();
+    doc.set_peer_id(1)
+        .expect("a fresh document takes a peer id");
+    doc.get_map(SHEETS_MAP)
+        .insert(DEFAULT_SHEET, "Sheet1")
+        .expect("the sheet");
+    write(&doc);
+    if let Some(version) = version {
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, i64::from(version))
+            .expect("the register");
+    }
+    doc.commit();
+    doc
+}
+
+/// The canonical workbook of the version a step leaves: that version's layout,
+/// holding what the step rewrites. Each step reads its own, so a step added
+/// later never moves what an earlier one writes.
+fn canonical(from: u32) -> LoroDoc {
+    match from {
+        0 => workbook_at(None, |_| {}),
+        // The flat filter keys the `1 -> 2` step folds.
+        1 => workbook_at(Some(1), |doc| {
+            let filters = doc.get_map(filters_map_name(DEFAULT_SHEET));
+            for (key, value) in [
+                ("col", "0000000000000001_00000000"),
+                ("kind", "condition"),
+                ("op", "gt"),
+                ("value", "1"),
+            ] {
+                filters.insert(key, value).expect("a flat key");
+            }
+        }),
+        // A positional formula the `2 -> 3` step names by its cells.
+        2 => workbook_at(Some(2), |doc| {
+            let uid = |counter| Uid { peer: 1, counter };
+            let rows = doc.get_movable_list(rows_list_name(DEFAULT_SHEET));
+            for counter in 0..3 {
+                rows.push(uid(counter).to_key_part()).expect("a row");
+            }
+            let cols = doc.get_movable_list(cols_list_name(DEFAULT_SHEET));
+            for counter in 3..5 {
+                cols.push(uid(counter).to_key_part()).expect("a column");
+            }
+            doc.get_map(cells_map_name(DEFAULT_SHEET))
+                .insert(&cell_key(uid(0), uid(4)), "=SUM(A2:A3)+A2")
+                .expect("the formula");
+        }),
+        _ => panic!("the step from version {from} has no canonical workbook: write one here"),
+    }
+}
+
+/// Each step of the registry, run as the gate runs it on its canonical
+/// workbook. One line per step: `from -> to` and what it wrote.
+fn steps_written() -> Vec<String> {
+    MIGRATIONS
+        .iter()
+        .map(|step| {
+            let stored = canonical(step.from)
+                .export(ExportMode::Snapshot)
+                .expect("a snapshot");
+            let scratch = LoroDoc::new();
+            scratch.import(&stored).expect("the snapshot imports");
+            let heads = scratch.oplog_frontiers();
+            scratch
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .expect("the migration identity");
+            let before = scratch.oplog_vv();
+            (step.apply)(&scratch).expect("the step runs on its canonical workbook");
+            let written = scratch
+                .export(ExportMode::updates(&before))
+                .expect("the step's writes export");
+            format!(
+                "{} -> {} {:016x}",
+                step.from,
+                step.to,
+                step_fingerprint(&written)
+            )
+        })
+        .collect()
+}
+
+/// Every build of one version runs each migration step alike (`AUTHOR-024`).
+/// A step stamps the version it reaches, so a raised version moves every line
+/// and freezes a section of its own.
+#[test]
+fn each_migration_step_writes_what_its_version_froze() {
+    let listed: String = steps_written()
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert_eq!(
+        section_of(STEPS, SCHEMA_VERSION).as_deref(),
+        Some(listed.as_str()),
+        "a migration step this build runs writes other operations than the \
+         ones frozen for SCHEMA_VERSION {SCHEMA_VERSION} in \
+         `schema/migrations.txt`. A peer on another build of that version \
+         migrates the same workbook another way. Restore the step, or raise \
+         SCHEMA_VERSION and append a section."
     );
 }
 

@@ -1,0 +1,22 @@
+# ambre-prose/schema/migrations.txt  What each migration step writes (`AUTHOR-024`).
+#
+# One section per `SCHEMA_VERSION`, each listing every step that version runs:
+# the version it leaves, the version it reaches, and, as hex, the fingerprint
+# of the operations it writes on the canonical document of the version it leaves.
+#
+# Read by `logic::schema_shape`, which fails when a build's step writes other
+# operations than a section froze for it. Two peers on two builds then migrate
+# one document two ways. A step that must change is a new step under a raised
+# `SCHEMA_VERSION` and a new section below, never an edit to a published section.
+# A step stamps the version it reaches, so a raised version moves every line.
+
+== v9
+0 -> 1 c99074bb33d48fb9
+1 -> 2 b656e2eaf0e3eabf
+2 -> 3 b656e2eaf0e3eabf
+3 -> 4 b656e2eaf0e3eabf
+4 -> 5 b656e2eaf0e3eabf
+5 -> 6 b656e2eaf0e3eabf
+6 -> 7 b656e2eaf0e3eabf
+7 -> 8 b656e2eaf0e3eabf
+8 -> 9 bc7c4ada6631fc76

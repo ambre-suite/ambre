@@ -95,7 +95,7 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// (`TOILE-029`).
 ///
 /// `3 -> 4` moves each string body into a text container (`TOILE-030`).
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
         to: 1,

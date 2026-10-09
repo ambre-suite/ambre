@@ -237,7 +237,7 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 ///
 /// `2 -> 3` names each formula reference by its row and column
 /// ([`stored_reference_step`]).
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
         to: 1,

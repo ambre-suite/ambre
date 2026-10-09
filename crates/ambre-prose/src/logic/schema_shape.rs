@@ -21,7 +21,8 @@
 
 use std::collections::BTreeSet;
 
-use loro::{LoroDoc, LoroValue, TreeID};
+use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, migration_peer, step_fingerprint};
+use loro::{ExportMode, LoroDoc, LoroText, LoroValue, TreeID};
 
 use crate::doc;
 use crate::events::{
@@ -29,13 +30,16 @@ use crate::events::{
     ParagraphStyle, ProseCommand, VAlign, tree_id,
 };
 use crate::logic::ProseState;
-use crate::schema::SCHEMA_VERSION;
+use crate::schema::{MIGRATIONS, SCHEMA_VERSION};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
 
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
 const SCAFFOLD: &str = include_str!("../../schema/scaffold.txt");
+
+/// What each migration step writes, one section per `SCHEMA_VERSION`.
+const STEPS: &str = include_str!("../../schema/migrations.txt");
 
 /// The source the key declarations are read from, so the coverage assertion
 /// cannot drift from the module it guards.
@@ -582,6 +586,95 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
          SCHEMA_VERSION {SCHEMA_VERSION} in `schema/scaffold.txt`. Another \
          build of that version writes it under another identity, and a delta \
          that waits on it never applies. Raise SCHEMA_VERSION and append a section."
+    );
+}
+
+/// The canonical document of the version a step leaves: that version's
+/// layout, holding what the step rewrites, written under a fixed identity.
+/// Each step reads its own, so a step added later never moves what an earlier
+/// one writes. Version 0 carries no register.
+fn canonical(from: u32) -> LoroDoc {
+    let doc = LoroDoc::new();
+    doc.set_peer_id(1)
+        .expect("a fresh document takes a peer id");
+    match from {
+        // Each of these steps stamps the number and rewrites nothing.
+        0..=7 => {}
+        // A footnote whose text, marks and all, sits in its entry: the layout
+        // the `8 -> 9` step moves into a block of its own.
+        8 => {
+            crate::mark::configure(&doc);
+            let entry = doc
+                .get_map(doc::ANNOTS)
+                .insert_container("n1", loro::LoroMap::new())
+                .expect("an entry");
+            entry
+                .insert(doc::ANNOT_KIND, crate::note::KIND_FOOTNOTE)
+                .expect("a kind");
+            let text = entry
+                .insert_container(doc::ANNOT_TEXT, LoroText::new())
+                .expect("a text");
+            text.insert(0, "old note").expect("written");
+            text.mark(0..3, "b", "true").expect("marked");
+        }
+        _ => panic!("the step from version {from} has no canonical document: write one here"),
+    }
+    if from > 0 {
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, i64::from(from))
+            .expect("the register");
+    }
+    doc.commit();
+    doc
+}
+
+/// Each step of the registry, run as the gate runs it on its canonical
+/// document. One line per step: `from -> to` and what it wrote.
+fn steps_written() -> Vec<String> {
+    MIGRATIONS
+        .iter()
+        .map(|step| {
+            let stored = canonical(step.from)
+                .export(ExportMode::Snapshot)
+                .expect("a snapshot");
+            let scratch = LoroDoc::new();
+            scratch.import(&stored).expect("the snapshot imports");
+            let heads = scratch.oplog_frontiers();
+            scratch
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .expect("the migration identity");
+            let before = scratch.oplog_vv();
+            (step.apply)(&scratch).expect("the step runs on its canonical document");
+            let written = scratch
+                .export(ExportMode::updates(&before))
+                .expect("the step's writes export");
+            format!(
+                "{} -> {} {:016x}",
+                step.from,
+                step.to,
+                step_fingerprint(&written)
+            )
+        })
+        .collect()
+}
+
+/// Every build of one version runs each migration step alike (`AUTHOR-024`).
+/// A step stamps the version it reaches, so a raised version moves every line
+/// and freezes a section of its own.
+#[test]
+fn each_migration_step_writes_what_its_version_froze() {
+    let listed: String = steps_written()
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert_eq!(
+        section_of(STEPS, SCHEMA_VERSION).as_deref(),
+        Some(listed.as_str()),
+        "a migration step this build runs writes other operations than the \
+         ones frozen for SCHEMA_VERSION {SCHEMA_VERSION} in \
+         `schema/migrations.txt`. A peer on another build of that version \
+         migrates the same document another way. Restore the step, or raise \
+         SCHEMA_VERSION and append a section."
     );
 }
 

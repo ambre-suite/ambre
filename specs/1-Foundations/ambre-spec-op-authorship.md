@@ -71,7 +71,7 @@ derive from no key. No delta ever carries them, so every client must write them 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `AUTHOR-024` | `INV` | A client MUST write the scaffolding and each migration of a schema version as the operations every other build writes for it. | this spec section 3; `SCHEMA-020` | `ambre_trame::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the scaffolding's identity against `schema/scaffold.txt`; `ambre_toile::logic::state::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Toile; `ambre_prose::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Prose; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section of `scaffold.txt` append-only | partial -- what each migration step writes is not frozen; lands with the `Each migration frozen with its version` Story (`ambre-roadmap.md` E5) | partial |
+| `AUTHOR-024` | `INV` | A client MUST write the scaffolding and each migration of a schema version as the operations every other build writes for it. | this spec section 3; `SCHEMA-020` | `ambre_trame::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the scaffolding's identity against `schema/scaffold.txt`; `ambre_toile::logic::state::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Toile; `ambre_prose::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Prose; `ambre_trame::logic::schema_shape::each_migration_step_writes_what_its_version_froze` -- each step run on a canonical workbook of the version it leaves, against `schema/migrations.txt`; `ambre_toile::logic::state::schema_shape::each_migration_step_writes_what_its_version_froze` -- the same for Toile; `ambre_prose::logic::schema_shape::each_migration_step_writes_what_its_version_froze` -- the same for Prose; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section of `scaffold.txt` and of `migrations.txt` append-only | none | verified |
 
 ### 1.6 A delta that waits on an operation no session signs
 
@@ -94,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 25 `verified`, 4 `partial`. Every delta is checked, and every
+* **Verification.** 26 `verified`, 3 `partial`. Every delta is checked, and every
   row on it holds by a test. Nothing checks a snapshot yet, so its author can still place any
   operation in it.
 
@@ -264,9 +264,9 @@ The binding has no control of its own.
   can still place any operation in it. A snapshot from the relay is checked (section 1.4).
 * **No reader resolves a PeerID yet.** The resolution is built and tested, and no surface shows an
   author. The first is the message of Murmure.
-* **A migration step is held by convention alone.** The scaffolding's identity is frozen per
-  version, and what a migration step writes is not (`AUTHOR-024`). A step edited after its version
-  shipped leaves a delta waiting, and the document is then reported unreadable (`AUTHOR-025`).
+* **A migration step is frozen on one canonical document.** Each step runs on a document of the
+  version it leaves (`AUTHOR-024`). A step whose output depends on content that document lacks can
+  still drift unseen, and the document is then reported unreadable (`AUTHOR-025`).
 * **An edit held past its cap is dropped.** The cap is a row of `ambre-spec-budgets.md section 6`,
   and only a session opened before its unlock reaches it. A held edit naming a block the shown
   restore grew finds no such block after the rebuild, since the block regrows under another id.

@@ -34,9 +34,10 @@
 use std::collections::BTreeSet;
 
 use kurbo::{BezPath, Point, Size};
-use loro::{Container, LoroDoc, LoroValue, ValueOrContainer};
+use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use ambre_bus::{DocType, DocumentId, UserId};
+use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, migration_peer, step_fingerprint};
 
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
@@ -48,15 +49,18 @@ use crate::logic::model::{
     Anchor, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, LinkTarget, NodeId, PathType,
     Shadow, ShapeKind, StrokePoint,
 };
-use crate::logic::schema::SCHEMA_VERSION;
+use crate::logic::schema::{MIGRATIONS, SCHEMA_VERSION};
 
-use super::ToileState;
+use super::{BODY, CONNECTORS, ELEMENTS, ToileState};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
 
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
 const SCAFFOLD: &str = include_str!("../../../schema/scaffold.txt");
+
+/// What each migration step writes, one section per `SCHEMA_VERSION`.
+const STEPS: &str = include_str!("../../../schema/migrations.txt");
 
 /// The sources the key declarations are read from, so the coverage assertion
 /// cannot drift from the modules it guards. Every module that writes a key into
@@ -652,6 +656,128 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
          SCHEMA_VERSION {SCHEMA_VERSION} in `schema/scaffold.txt`. Another \
          build of that version writes it under another identity, and a delta \
          that waits on it never applies. Raise SCHEMA_VERSION and append a section."
+    );
+}
+
+/// A board as `version` stored it, written under a fixed identity. `None`
+/// writes no register, which is the layout before the register existed.
+fn board_at(version: Option<u32>, write: impl FnOnce(&LoroDoc)) -> LoroDoc {
+    let doc = LoroDoc::new();
+    doc.set_peer_id(1)
+        .expect("a fresh document takes a peer id");
+    write(&doc);
+    if let Some(version) = version {
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, i64::from(version))
+            .expect("the register");
+    }
+    doc.commit();
+    doc
+}
+
+/// One element map under `container`, keyed `id`.
+fn element_map(doc: &LoroDoc, container: &str, id: &str) -> loro::LoroMap {
+    doc.get_map(container)
+        .insert_container(id, loro::LoroMap::new())
+        .expect("an element")
+}
+
+/// The canonical board of the version a step leaves: that version's layout,
+/// holding what the step rewrites. Each step reads its own, so a step added
+/// later never moves what an earlier one writes.
+fn canonical(from: u32) -> LoroDoc {
+    match from {
+        0 => board_at(None, |doc| {
+            element_map(doc, ELEMENTS, "e1")
+                .insert("type", "sticky")
+                .expect("a type");
+        }),
+        // The bare style registers the `1 -> 2` step versions.
+        1 => board_at(Some(1), |doc| {
+            let style = ElementStyle {
+                fill: Some(0xffaa_bbcc),
+                corner: 8.0,
+                ..ElementStyle::default()
+            };
+            let bare = postcard::to_allocvec(&style).expect("the bare layout");
+            for (container, id) in [(ELEMENTS, "e1"), (CONNECTORS, "c1")] {
+                element_map(doc, container, id)
+                    .insert("style", LoroValue::Binary(bare.clone().into()))
+                    .expect("a style register");
+            }
+        }),
+        // The deck inside the `presentation` map the `2 -> 3` step moves out.
+        2 => board_at(Some(2), |doc| {
+            let pres = doc.get_map("presentation");
+            let order = pres
+                .insert_container("order", loro::LoroMovableList::new())
+                .expect("the old order");
+            order.push("f1").expect("a slide");
+            order.push("f2").expect("a slide");
+            pres.insert_container("config", loro::LoroMap::new())
+                .expect("the old config")
+                .insert("transition_ms", 800.0)
+                .expect("a setting");
+        }),
+        // The string bodies the `3 -> 4` step turns into texts.
+        3 => board_at(Some(3), |doc| {
+            for (id, body) in [("e1", "buy milk"), ("e2", "")] {
+                let element = element_map(doc, ELEMENTS, id);
+                element.insert("type", "sticky").expect("a type");
+                element.insert(BODY, body).expect("a string body");
+            }
+        }),
+        _ => panic!("the step from version {from} has no canonical board: write one here"),
+    }
+}
+
+/// Each step of the registry, run as the gate runs it on its canonical board.
+/// One line per step: `from -> to` and what it wrote.
+fn steps_written() -> Vec<String> {
+    MIGRATIONS
+        .iter()
+        .map(|step| {
+            let stored = canonical(step.from)
+                .export(ExportMode::Snapshot)
+                .expect("a snapshot");
+            let scratch = LoroDoc::new();
+            scratch.import(&stored).expect("the snapshot imports");
+            let heads = scratch.oplog_frontiers();
+            scratch
+                .set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .expect("the migration identity");
+            let before = scratch.oplog_vv();
+            (step.apply)(&scratch).expect("the step runs on its canonical board");
+            let written = scratch
+                .export(ExportMode::updates(&before))
+                .expect("the step's writes export");
+            format!(
+                "{} -> {} {:016x}",
+                step.from,
+                step.to,
+                step_fingerprint(&written)
+            )
+        })
+        .collect()
+}
+
+/// Every build of one version runs each migration step alike (`AUTHOR-024`).
+/// A step stamps the version it reaches, so a raised version moves every line
+/// and freezes a section of its own.
+#[test]
+fn each_migration_step_writes_what_its_version_froze() {
+    let listed: String = steps_written()
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert_eq!(
+        section_of(STEPS, SCHEMA_VERSION).as_deref(),
+        Some(listed.as_str()),
+        "a migration step this build runs writes other operations than the \
+         ones frozen for SCHEMA_VERSION {SCHEMA_VERSION} in \
+         `schema/migrations.txt`. A peer on another build of that version \
+         migrates the same board another way. Restore the step, or raise \
+         SCHEMA_VERSION and append a section."
     );
 }
 
