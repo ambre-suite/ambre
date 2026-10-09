@@ -51,6 +51,7 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that the snapshot and the element count are identical either side of the apply | none | verified |
 | `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame` -- it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | none | verified |
 | `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed; `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the relay's store drops the sample at once | partial -- that the relay says it on both paths is `SRV-097`, whose announcement no test drives; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | partial |
+| `PRESENCE-015` | `POST` | A peer MUST leave the live set only when the last of its sessions on the document stops watching it. | this spec section 3; `PRESENCE-005`, `PRESENCE-014` | not built | unbuilt -- lands with the `A departure waits for the user's last session` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` -- its peer selects an element the frame does not carry, so one ghost is painted, the other is dropped, and nothing is raised | none | verified |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
@@ -60,10 +61,10 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 * **Boundary.** every presence frame leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
   `UserId` in `ambre-sync` first, so no peer paints under another name.
-* **Verification.** 10 `verified`, 1 `partial`, 3 `untested`. The identity half is held end to end, and a
-  departure travels twice. The relay says it, and the client ages a peer out if that word is lost.
-  The four gaps are rules held by construction: an anchor type, an absent smoothing, a relay half,
-  a cosmetic name.
+* **Verification.** 10 `verified`, 1 `partial`, 3 `untested`, 1 `unimplemented`. The identity half
+  is held end to end, and a departure travels twice. The relay says it, and the client ages a peer
+  out if that word is lost. The four gaps are rules held by construction: an anchor type, an absent
+  smoothing, a relay half, a cosmetic name.
 
 ---
 

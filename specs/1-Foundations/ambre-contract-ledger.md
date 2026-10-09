@@ -20,7 +20,7 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3384 rows: 2548 shipped, of which 107 partial and 520 loose. 836 unbuilt.**
+**3386 rows: 2548 shipped, of which 107 partial and 520 loose. 838 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -30,7 +30,7 @@
 | `untested` | 192 | 133 | 188 | 2 |  | 515 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 204 | 57 | 28 | 108 | 439 | 836 |
+| `unimplemented` | 205 | 57 | 28 | 109 | 439 | 838 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -64,7 +64,7 @@
 | `ambre-spec-op-authorship.md` | 29 | 29 | 26 | 3 |  |  |
 | `ambre-spec-organizations.md` | 11 | 9 | 7 |  | 2 | 2 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
-| `ambre-spec-presence.md` | 14 | 14 | 10 | 1 | 3 |  |
+| `ambre-spec-presence.md` | 15 | 14 | 10 | 1 | 3 | 1 |
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-residency.md` | 20 | 19 | 17 | 1 | 1 | 1 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
@@ -138,7 +138,7 @@
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  |  | 2 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |  |
-| `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |  |
+| `ambre-spec-prose-engine.md` | 43 | 42 | 42 |  |  | 1 |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |  |
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |  |
@@ -225,12 +225,12 @@
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
 | `ambre-spec-pdf-export.md` | PDF-001..007 |
-| `ambre-spec-presence.md` | PRESENCE-001..014 |
+| `ambre-spec-presence.md` | PRESENCE-001..015 |
 | `ambre-spec-prose-accessibility.md` | PROSE-UI-066..069,077..081 |
 | `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279,295..297; PROSE-UI-049..050,144,231..232 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
-| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
+| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129..130; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
 | `ambre-spec-prose-find-replace.md` | PROSE-FEAT-033..036,148,150..153,155..159,289 |
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |

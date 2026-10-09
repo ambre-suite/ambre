@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE PROSE ENGINE
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
+**Implementation:** partial
 
 > An author types a word and every collaborator reads it. One thread holds the document, writes the
 > change, and answers with the pages the screen shows. The other thread paints that answer and owns
@@ -86,6 +86,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_frame_naming_a_block_this_peer_does_not_hold_is_dropped`; `::a_malformed_frame_is_dropped_rather_than_raised` | none | verified |
+| `PROSE-130` | `POST` | A session that has not placed its caret MUST announce itself without drawing a caret on a peer's screen. | this spec section 3; `ambre-spec-prose-schema.md`, `PROSE-121` | not built | unbuilt -- lands with the `An announced session draws no caret it did not place` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `PROSE-058` | `FRAME` | Applying a presence frame MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 
 ### 1.8 Take in a decrypted picture
@@ -116,10 +117,11 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 42 `verified`, nothing else. Seven rows are compiler-held: the
-  crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a shape no
-  command builds yet: the image block, and the block under a table cell. Each is read through the
-  format rather than through a gesture. The fan-out is driven across the real dispatcher.
+* **Verification.** 42 `verified`, 1 `unimplemented`. Seven rows are compiler-held:
+  the crate graph, the lint wall, the closed command enum, the one return type. Two rows bind a
+  shape no command builds yet: the image block, and the block under a table cell. Each is read
+  through the format rather than through a gesture. The fan-out is driven across the real
+  dispatcher.
 
 ---
 
