@@ -184,6 +184,11 @@ fn sync_command_roundtrips_through_postcard() {
         document_id: doc,
         payload: vec![0, 1, 2, 250, 255],
     });
+    roundtrip_sync(&SyncCommand::SendUnsent {
+        document_id: doc,
+        payload: vec![3, 4],
+        nonce: ambre_core::SessionNonce([5; 16]),
+    });
     roundtrip_sync(&SyncCommand::SendChannelEphemeral {
         channel_id: chan,
         payload: vec![9, 8, 7],
@@ -216,6 +221,7 @@ fn logic_event_roundtrips_through_postcard() {
         document_id: doc,
         peer: 7,
         entry: vec![8; 96],
+        nonce: ambre_core::SessionNonce([9; 16]),
     });
     roundtrip_event(&LogicEvent::ConnectionStatus {
         document_id: doc,

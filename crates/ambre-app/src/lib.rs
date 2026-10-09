@@ -1014,17 +1014,25 @@ pub fn main() {
                     .load_deltas(*document_id.as_bytes())
                     .await
                     .unwrap_or_default();
+                let sessions = store
+                    .load_sessions(*document_id.as_bytes())
+                    .await
+                    .unwrap_or_default();
+                // Sessions alone restore nothing: without local operations
+                // there is nothing of theirs left to send.
                 if snapshot.is_some() || !deltas.is_empty() {
                     tracing::info!(
-                        "Persistence: restoring doc ({} snapshot bytes, {} deltas)",
+                        "Persistence: restoring doc ({} snapshot bytes, {} deltas, {} sessions)",
                         snapshot.as_ref().map_or(0, Vec::len),
                         deltas.len(),
+                        sessions.len(),
                     );
                     let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
                         doc_type,
                         snapshot,
                         deltas,
+                        sessions,
                     });
                 }
             }
@@ -1153,6 +1161,12 @@ pub fn main() {
                     }
                     ambre_logic::PersistWrite::Delta(bytes) => {
                         store.save_delta(*document_id.as_bytes(), bytes);
+                    }
+                    ambre_logic::PersistWrite::Session { peer, nonce } => {
+                        store.save_session(*document_id.as_bytes(), peer, nonce);
+                    }
+                    ambre_logic::PersistWrite::ForgetSession { peer } => {
+                        store.forget_session(*document_id.as_bytes(), peer);
                     }
                 }
             }

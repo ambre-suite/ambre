@@ -85,7 +85,7 @@ derive from no key. No delta ever carries them, so every client must write them 
 |---|---|---|---|---|---|---|
 | `AUTHOR-026` | `POST` | An edit made before the session identity arrives MUST be applied under that identity once it arrives. | this spec section 3; `AUTHOR-008` | `ambre_logic::authorship_tests::an_edit_before_the_identity_is_applied_under_it` -- the held edit travels once, carrying the session's operations alone | none | verified |
 | `AUTHOR-027` | `POST` | A document restored from the local cache MUST be shown before the session identity arrives. | this spec section 3 | `ambre_logic::authorship_tests::a_cached_document_shows_before_the_identity_and_is_rebuilt_under_it` -- a workbook and an emptied page show before the identity and save nothing, and then hold the cache under its own PeerIDs and the session's alone | none | verified |
-| `AUTHOR-028` | `POST` | The edits a closed session left unsent MUST travel at the next open, under the PeerID that wrote them. | this spec section 3; `AUTHOR-002` | not built | unbuilt -- lands with the `Unsent edits travel at the next open` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-028` | `POST` | The edits a closed session left unsent MUST travel at the next open restored from the local store, under the PeerID that wrote them. | this spec section 3; `AUTHOR-002` | `ambre_logic::authorship_tests::an_earlier_sessions_unsent_edits_travel_with_its_nonce` -- after the replay, the span past the relay's copy travels with that session's nonce and its operations alone, and the new session is saved at its identity; `ambre_logic::authorship_tests::an_earlier_session_the_relay_holds_whole_is_forgotten` -- a session the relay holds whole sends nothing and is dropped from the store; `ambre_sync::updates::tests::an_unsent_delta_is_sealed_with_its_sessions_nonce` -- Sync seals it with the nonce it was given, and a resend keeps it; `ambre_logic::persistence::wasm_tests::sessions_are_kept_until_forgotten` -- wasm tier, the store keeps each session per document until it is forgotten | none | verified |
 | `AUTHOR-029` | `FRAME` | An edit held until the session identity arrives MUST NOT reach the document under any other PeerID. | this spec section 3; `AUTHOR-008` | `ambre_logic::authorship_tests::an_edit_before_the_identity_is_applied_under_it` -- before the identity, the document and Sync see nothing of the edit | none | verified |
 
 * **Budget.** one row of `ambre-spec-budgets.md section 1`, the check of one received delta. It
@@ -94,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 24 `verified`, 4 `partial`, 1 `unimplemented`. Every delta is checked, and every
+* **Verification.** 25 `verified`, 4 `partial`. Every delta is checked, and every
   row on it holds by a test. Nothing checks a snapshot yet, so its author can still place any
   operation in it.
 
@@ -153,6 +153,11 @@ other's state.
    the provisional PeerID never travels. So the PeerID rebuilds the document from a fresh state and
    runs the restore again (`AUTHOR-027`). The Sync worker sends the PeerID before it fetches, so
    the rebuild drops nothing from the relay.
+6. The local store saves the PeerID and its nonce at the identity, before any operation under it.
+7. Once the relay's replay is done, each earlier session in the store sends what it wrote past what
+   the relay is known to hold. Its own nonce seals it. A session the relay holds whole
+   is dropped from the store (`AUTHOR-028`). What the relay holds is a lower bound, so an operation
+   may travel twice, and an import skips it.
 
 A second device, a second tab and a reopen each draw a new nonce, so each writes under its own
 PeerID. Two writers never share one, which is the invariant a Loro document needs.
@@ -215,7 +220,9 @@ else: no arrival order, no local state. So every peer reaches the same verdict o
 * `crates/ambre-crypto/src/peer.rs` -- the nonce, the derivation, the signed entry and its resolution;
 * `crates/ambre-core/src/authorship.rs` -- the registry map and the entry bytes;
 * `crates/ambre-sync/src/updates.rs` -- the session identity per open, and the derived PeerID;
-* `crates/ambre-logic/src/data.rs` -- the gate on edits, and the check before import;
+* `crates/ambre-logic/src/data.rs` -- the gate on edits, the check before import, and the unsent
+  edits of earlier sessions;
+* `crates/ambre-logic/src/persistence.rs` -- the sessions the local store keeps;
 * `crates/ambre-trame/src/logic/sync.rs` -- the entry write and the export cursor, as in Toile
   and Prose.
 
@@ -263,7 +270,8 @@ The binding has no control of its own.
 * **An edit held past its cap is dropped.** The cap is a row of `ambre-spec-budgets.md section 6`,
   and only a session opened before its unlock reaches it. A held edit naming a block the shown
   restore grew finds no such block after the rebuild, since the block regrows under another id.
-* **Edits left unsent by a closed session never travel.** They sit under a PeerID no later session
-  writes under, and its nonce is gone with the session (`AUTHOR-028`). This predates the binding.
+* **Unsent edits wait for an open from the local store.** Only the boot open restores the cache, so
+  a document reopened inside the page sends an earlier session's edits at the next boot open
+  (`AUTHOR-028`). Edits left unsent before the store kept sessions never travel: no nonce was kept.
 * **The relay history of an older build no longer opens.** Its deltas carry random PeerIDs.
   Nothing has shipped, so no migration is planned.

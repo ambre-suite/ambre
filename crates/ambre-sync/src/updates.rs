@@ -752,6 +752,7 @@ impl SyncState {
             document_id,
             peer,
             entry: entry.to_bytes(),
+            nonce,
         });
     }
 
@@ -817,7 +818,7 @@ impl SyncState {
     }
 
     pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
-        let Some(signing_key) = self.signing_key.clone() else {
+        if self.signing_key.is_none() {
             // Session not established yet (for example an edit landed in the gap between
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
@@ -825,12 +826,46 @@ impl SyncState {
             self.pending_pre_session_updates
                 .push((document_id, payload));
             return;
+        }
+        // The nonce rides inside the ciphertext, ahead of the delta
+        // (`SYNC-112`). A document opened with no identity has written nothing
+        // the Logic thread would send.
+        let Some(nonce) = self.session_nonces.get(&document_id) else {
+            tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
+            return;
         };
-        let Some(pub_key) = self.author_pub_key() else {
+        let body = pipeline::update_body(nonce, &payload);
+        self.send_body(document_id, body);
+    }
+
+    /// Sends what an earlier session of this user wrote and never sent. The
+    /// body carries that session's nonce, so a reader derives the PeerID that
+    /// wrote it (`AUTHOR-028`).
+    pub(crate) fn handle_send_unsent(
+        &mut self,
+        document_id: DocumentId,
+        payload: Vec<u8>,
+        nonce: SessionNonce,
+    ) {
+        if self.signing_key.is_none() {
+            // Sent after the document is ready, so after the session is.
+            tracing::warn!("[Sync] SendUnsent before session ready doc={document_id}, dropped");
+            return;
+        }
+        let body = pipeline::update_body(&nonce, &payload);
+        self.send_body(document_id, body);
+    }
+
+    /// Seals an update body and sends it, or holds it while the document is
+    /// created or owes a rotation. The body carries its nonce, so a frame
+    /// sent again later keeps the PeerID it was written under.
+    pub(crate) fn send_body(&mut self, document_id: DocumentId, body: Vec<u8>) {
+        let (Some(signing_key), Some(pub_key)) = (self.signing_key.clone(), self.author_pub_key())
+        else {
             return;
         };
         // Lazy server creation: a local-only doc materializes on its first update.
-        // Buffer the payload and fire the create POST once; the buffer is flushed
+        // Buffer the body and fire the create POST once; the buffer is flushed
         // in order from the `DocumentMaterialized` handler.
         if self
             .documents
@@ -838,7 +873,7 @@ impl SyncState {
             .is_some_and(|d| !d.server_created)
         {
             if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                doc_state.pending_updates.push(payload);
+                doc_state.pending_updates.push(body);
             }
             self.trigger_lazy_create(document_id);
             return;
@@ -850,41 +885,32 @@ impl SyncState {
         // An owed rotation is paid before any frame: the edit waits unsealed,
         // and takes its clock once the new key lands (`SYNC-128`).
         if doc_state.rekey.owes() {
-            if doc_state.rekey.hold(payload) {
+            if doc_state.rekey.hold(body) {
                 self.start_settle(document_id);
             }
             return;
         }
         doc_state.local_clock += 1;
         let clock = doc_state.local_clock;
-        if let Some(key_id) =
-            self.seal_and_send(document_id, clock, &payload, &signing_key, pub_key)
+        if let Some(key_id) = self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
             && let Some(doc_state) = self.documents.get_mut(&document_id)
-            && doc_state.rekey.record_sent(clock, key_id, payload)
+            && doc_state.rekey.record_sent(clock, key_id, body)
         {
             tracing::warn!("[Sync] unconfirmed log full doc={document_id}, oldest forgotten");
         }
     }
 
-    /// Seals `payload` at `clock` under the current key and sends it. Returns
-    /// the key it was sealed under, `None` when the seal failed.
+    /// Seals an update `body` at `clock` under the current key and sends it.
+    /// Returns the key it was sealed under, `None` when the seal failed.
     fn seal_and_send(
         &self,
         document_id: DocumentId,
         clock: u64,
-        payload: &[u8],
+        body: &[u8],
         signing_key: &SigningKey,
         pub_key: PublicKey,
     ) -> Option<KeyId> {
         let doc_state = self.documents.get(&document_id)?;
-        // The nonce rides inside the ciphertext, ahead of the delta
-        // (`SYNC-112`). A document opened with no identity has written nothing
-        // the Logic thread would send.
-        let Some(nonce) = self.session_nonces.get(&document_id) else {
-            tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
-            return None;
-        };
-        let body = pipeline::update_body(nonce, payload);
         let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
@@ -893,7 +919,7 @@ impl SyncState {
             snapshot_id: doc_state.current_snapshot_id,
             clock: Clock(clock),
         };
-        match pipeline::update_frame(&body, public_data, &doc_state.doc_key, signing_key) {
+        match pipeline::update_frame(body, public_data, &doc_state.doc_key, signing_key) {
             Ok(frame) => {
                 tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
                 self.ws_send_sealed(&frame);
@@ -918,12 +944,12 @@ impl SyncState {
         if let (Some(signing_key), Some(pub_key)) =
             (self.signing_key.clone(), self.author_pub_key())
         {
-            for (clock, payload) in refused {
-                self.seal_and_send(document_id, clock, &payload, &signing_key, pub_key.clone());
+            for (clock, body) in refused {
+                self.seal_and_send(document_id, clock, &body, &signing_key, pub_key.clone());
             }
         }
-        for payload in waiting {
-            self.handle_send_update(document_id, payload);
+        for body in waiting {
+            self.send_body(document_id, body);
         }
     }
 
@@ -2529,6 +2555,64 @@ mod tests {
                 (2, key.id(), b"b".to_vec()),
                 (3, key.id(), b"c".to_vec()),
             ]
+        );
+    }
+
+    /// Each update sent, as the nonce and the delta its body carries.
+    fn sent_bodies(
+        rx: &ambre_bus::conduit::Receiver<Vec<u8>>,
+        key: &DocumentKey,
+    ) -> Vec<(SessionNonce, Vec<u8>)> {
+        drain_ws(rx)
+            .into_iter()
+            .filter_map(|msg| match msg {
+                WsClientMsg::Update(u) => {
+                    let body = pipeline::open_update(&u, key).expect("opens");
+                    let body = pipeline::split_update_body(body).expect("splits");
+                    Some((body.nonce, body.delta))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `AUTHOR-028`: an earlier session's unsent delta is sealed with that
+    /// session's nonce, not the current one. A current edit beside it keeps
+    /// the current nonce, and a refusal sends both again with their own.
+    #[test]
+    fn an_unsent_delta_is_sealed_with_its_sessions_nonce() {
+        let (mut state, _rx, doc, k1, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let earlier = SessionNonce([7; 16]);
+
+        state.handle_send_unsent(doc, b"old".to_vec(), earlier);
+        state.handle_send_update(doc, b"new".to_vec());
+        let sent = sent_bodies(&ws_rx, &k1);
+        let [(old_nonce, old), (new_nonce, new)] = sent.as_slice() else {
+            panic!("expected two updates, got {}", sent.len());
+        };
+        assert_eq!((*old_nonce, old.as_slice()), (earlier, b"old".as_slice()));
+        assert_eq!(new.as_slice(), b"new");
+        assert_ne!(*new_nonce, earlier, "a current edit took the earlier nonce");
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            links: Vec::new(),
+        });
+        let _ = drain_ws(&ws_rx);
+        state.handle_ws_message(WsServerMsg::KeyRefused {
+            document_id: doc,
+            key_id: k1.id(),
+            clock: Clock(1),
+        });
+        assert_eq!(
+            sent_bodies(&ws_rx, &k2),
+            vec![(earlier, b"old".to_vec()), (*new_nonce, b"new".to_vec())],
+            "the resend changed a nonce"
         );
     }
 

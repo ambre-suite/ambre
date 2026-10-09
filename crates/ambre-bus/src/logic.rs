@@ -22,6 +22,7 @@
 //!   no single response to correlate -- kept explicit.
 
 use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
+use ambre_core::SessionNonce;
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
 // `crate::app`, command + event + value types grouped by document type. This envelope
@@ -74,6 +75,10 @@ pub enum LogicCommand {
         /// The deltas logged since that snapshot, in no set order. A Loro
         /// import does not depend on it.
         deltas: Vec<Vec<u8>>,
+        /// The earlier sessions of this user on the document: each PeerID with
+        /// the nonce it derives from, so what one left unsent travels
+        /// (`AUTHOR-028`).
+        sessions: Vec<(u64, SessionNonce)>,
     },
 
     // -- P3 -- Service plane (relayed request/response) -------------------------

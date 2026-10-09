@@ -28,7 +28,8 @@ pub(crate) struct SentFrame {
     pub clock: u64,
     /// The key the frame was last sealed under.
     pub key_id: KeyId,
-    /// The plaintext, kept to seal it again under another key.
+    /// The plaintext body, its session nonce ahead of the delta, kept to seal
+    /// it again under another key.
     pub payload: Vec<u8>,
 }
 

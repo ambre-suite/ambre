@@ -19,6 +19,7 @@
 //! [`LogicCommand::Rest`]: crate::LogicCommand::Rest
 //! [`LogicEvent::Rest`]: crate::LogicEvent::Rest
 
+use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -58,6 +59,15 @@ pub enum SyncCommand {
     SendUpdate {
         document_id: DocumentId,
         payload: Vec<u8>,
+    },
+
+    /// The operations an earlier session of this user wrote and never sent.
+    /// They are sealed with that session's nonce, so a reader derives the
+    /// PeerID that wrote them (`AUTHOR-028`).
+    SendUnsent {
+        document_id: DocumentId,
+        payload: Vec<u8>,
+        nonce: SessionNonce,
     },
 
     /// Full CRDT state for compaction (presigned URL -> S3).

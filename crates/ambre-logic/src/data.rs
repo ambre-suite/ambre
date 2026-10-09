@@ -552,9 +552,19 @@ impl LogicState {
     /// again under the identity (`AUTHOR-027`). Sync issues the identity before
     /// it fetches anything, so the rebuild drops nothing from the relay.
     ///
+    /// The PeerID and its nonce are saved before any operation written under
+    /// them, so a later open can send what this session leaves unsent
+    /// (`AUTHOR-028`).
+    ///
     /// The same identity issued twice is nothing new: the document reopened
     /// in the same session, and its unsent cursor stays where it is.
-    pub(crate) fn adopt_session(&mut self, document_id: DocumentId, peer: u64, entry: Vec<u8>) {
+    pub(crate) fn adopt_session(
+        &mut self,
+        document_id: DocumentId,
+        peer: u64,
+        entry: Vec<u8>,
+        nonce: SessionNonce,
+    ) {
         let Some(doc) = self.docs.get(&document_id) else {
             return;
         };
@@ -578,6 +588,7 @@ impl LogicState {
         doc.identity = Some(peer);
         let held = std::mem::take(&mut doc.held_restores);
         let edits = std::mem::take(&mut doc.held_edits);
+        self.send_to_persist(document_id, PersistWrite::Session { peer, nonce });
         for restore in held {
             self.restore_local(document_id, restore.snapshot, restore.deltas, Restore::Kept);
         }
@@ -585,6 +596,76 @@ impl LogicState {
         // top of the restored document (`AUTHOR-026`).
         for command in edits {
             self.handle_app_command(document_id, command);
+        }
+        self.send_unsent(document_id);
+    }
+
+    /// Take in the earlier sessions the local store kept for a document, and
+    /// send what they left unsent once the relay's replay is done.
+    pub(crate) fn note_earlier_sessions(
+        &mut self,
+        document_id: DocumentId,
+        sessions: Vec<(u64, SessionNonce)>,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        for (peer, nonce) in sessions {
+            if !doc.earlier.iter().any(|(p, _)| *p == peer) {
+                doc.earlier.push((peer, nonce));
+            }
+        }
+        self.send_unsent(document_id);
+    }
+
+    /// Send, for each earlier session, the operations it wrote past what the
+    /// relay is known to hold, sealed with that session's nonce
+    /// (`AUTHOR-028`). A session the relay holds whole is forgotten.
+    ///
+    /// Runs once the relay's replay is done, since only then is its lower
+    /// bound worth reading. An operation sent twice is harmless: an import
+    /// skips what the document already holds.
+    pub(crate) fn send_unsent(&mut self, document_id: DocumentId) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        if !doc.ready || doc.identity.is_none() || !doc.held_restores.is_empty() {
+            return;
+        }
+        let held = doc.state.crdt().oplog_vv();
+        let mut sends = Vec::new();
+        let mut forgotten = Vec::new();
+        for (peer, nonce) in std::mem::take(&mut doc.earlier) {
+            if Some(peer) == doc.identity {
+                continue;
+            }
+            let end = held.get(&peer).copied().unwrap_or(0);
+            let start = doc.relay.get(&peer).copied().unwrap_or(0);
+            if end <= start {
+                forgotten.push(peer);
+                continue;
+            }
+            let span = loro::IdSpan::new(peer, start, end);
+            match doc
+                .state
+                .crdt()
+                .export(loro::ExportMode::updates_in_range(vec![span]))
+            {
+                Ok(payload) => sends.push((payload, nonce)),
+                Err(e) => tracing::warn!(
+                    "Logic: doc {document_id} could not export an earlier session's edits: {e}"
+                ),
+            }
+        }
+        for (payload, nonce) in sends {
+            self.send_to_sync(SyncCommand::SendUnsent {
+                document_id,
+                payload,
+                nonce,
+            });
+        }
+        for peer in forgotten {
+            self.send_to_persist(document_id, PersistWrite::ForgetSession { peer });
         }
     }
 
@@ -647,6 +728,9 @@ impl LogicState {
     fn record_seq(&mut self, document_id: DocumentId, seq: u64, payload: Option<&Vec<u8>>) {
         if let Some(doc) = self.docs.get_mut(&document_id) {
             doc.ledger.record(seq, payload.map(Vec::as_slice));
+            if let Some(payload) = payload {
+                doc.relay_saw(payload);
+            }
         }
     }
 
@@ -840,6 +924,7 @@ impl LogicState {
         if let Some(doc) = self.docs.get_mut(&document_id) {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
+            doc.relay_saw(payload);
         }
         self.track_waiting(document_id, &[]);
     }

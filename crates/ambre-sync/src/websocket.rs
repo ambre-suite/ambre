@@ -612,8 +612,8 @@ impl SyncState {
                     "Sync: document {document_id:?} materialized, flushing {} update(s)",
                     pending.len()
                 );
-                for payload in pending {
-                    self.handle_send_update(document_id, payload);
+                for body in pending {
+                    self.send_body(document_id, body);
                 }
             }
             SyncEvent::DocumentCreateFailed {

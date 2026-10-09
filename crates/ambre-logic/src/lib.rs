@@ -54,6 +54,7 @@ use ambre_bus::{
     UiEvent, UserId,
 };
 
+use ambre_core::SessionNonce;
 use ambre_core::schema::SchemaError;
 
 use ambre_prose::ProseState;
@@ -461,6 +462,13 @@ struct LiveDoc {
     /// Set by `DocumentReady`: every delta the relay kept is replayed, so a
     /// delta still waiting below the ledger's contiguous end waits for ever.
     ready: bool,
+    /// The operations this client has seen arrive from the relay: a lower
+    /// bound of what the relay holds. An operation of an earlier session
+    /// past it is sent again (`AUTHOR-028`).
+    relay: loro::VersionVector,
+    /// The earlier sessions of this user on the document, read back from the
+    /// local store: each PeerID with the nonce it derives from.
+    earlier: Vec<(u64, SessionNonce)>,
 }
 
 /// What a local restore leaves behind.
@@ -491,6 +499,25 @@ impl LiveDoc {
             ledger: snapshot_check::SeqLedger::default(),
             waiting: waiting::Waiting::default(),
             ready: false,
+            relay: loro::VersionVector::default(),
+            earlier: Vec::new(),
+        }
+    }
+
+    /// Note the operations a blob from the relay carries (`AUTHOR-028`). A
+    /// PeerID's bound grows only when the blob starts at or below it, so a gap
+    /// the relay never received is not counted as held. A blob the engine
+    /// cannot read adds nothing, which keeps the bound low.
+    fn relay_saw(&mut self, payload: &[u8]) {
+        let Ok(meta) = loro::LoroDoc::decode_import_blob_meta(payload, false) else {
+            return;
+        };
+        for (peer, end) in meta.partial_end_vv.iter() {
+            let start = meta.partial_start_vv.get(peer).copied().unwrap_or(0);
+            let held = self.relay.get(peer).copied().unwrap_or(0);
+            if start <= held && *end > held {
+                self.relay.insert(*peer, *end);
+            }
         }
     }
 }
@@ -516,6 +543,7 @@ impl LogicState {
             document_id,
             peer,
             entry: peer.to_le_bytes().to_vec(),
+            nonce: SessionNonce([0; 16]),
         });
         peer
     }
@@ -542,6 +570,12 @@ pub enum PersistWrite {
     /// A change appended to the document's log, imported after the snapshot on
     /// restore.
     Delta(Vec<u8>),
+    /// A session's PeerID and the nonce it derives from, kept so a later
+    /// open sends what the session left unsent (`AUTHOR-028`).
+    Session { peer: u64, nonce: SessionNonce },
+    /// An earlier session whose operations the relay holds: nothing of it is
+    /// left to send.
+    ForgetSession { peer: u64 },
 }
 
 // -----------------------------------------------------------------------------
@@ -908,6 +942,12 @@ mod pass_tests {
             other => panic!("the registry opened {other:?}"),
         };
         ui.try_iter().for_each(drop);
+        // The session saved at its identity is not a save of the document.
+        assert!(
+            persist
+                .try_iter()
+                .all(|(_, w)| matches!(w, PersistWrite::Session { .. }))
+        );
         Rig {
             state,
             ui,
@@ -961,6 +1001,7 @@ mod pass_tests {
                     deltas.clear();
                 }
                 PersistWrite::Delta(bytes) => deltas.push(bytes),
+                PersistWrite::Session { .. } | PersistWrite::ForgetSession { .. } => {}
             }
         }
         let (to_persist, _persist) = test_link();
@@ -971,6 +1012,7 @@ mod pass_tests {
             doc_type: DocType::Prose,
             snapshot,
             deltas,
+            sessions: Vec::new(),
         });
         state.grant_identity(document_id);
         text(&state.docs[&document_id].state)
@@ -1182,7 +1224,7 @@ mod pass_tests {
             .try_iter()
             .filter_map(|(_, write)| match write {
                 PersistWrite::Snapshot(bytes) => Some(bytes),
-                PersistWrite::Delta(_) => None,
+                _ => None,
             })
             .last()
             .expect("the close saves a snapshot");
@@ -1730,6 +1772,7 @@ mod authorship_tests {
                     doc_type,
                     snapshot: Some(cached),
                     deltas,
+                    sessions: Vec::new(),
                 });
             assert!(
                 rig.ui
@@ -1758,5 +1801,113 @@ mod authorship_tests {
                 "{doc_type:?}: written under {strangers:x?}"
             );
         }
+    }
+
+    /// The deltas one session writing under `peer` sends, one per text.
+    fn session_wrote(peer: u64, texts: &[&str]) -> Vec<Vec<u8>> {
+        let mut author = TrameState::new();
+        assert!(author.adopt_session(peer, peer.to_le_bytes().to_vec()));
+        texts
+            .iter()
+            .map(|text| {
+                author
+                    .handle_command(TrameCommand::SetCellText {
+                        row: 0,
+                        col: 0,
+                        text: (*text).to_owned(),
+                    })
+                    .update
+                    .expect("an edit writes a delta")
+            })
+            .collect()
+    }
+
+    /// A document cached with both of Alice's deltas and her session, then
+    /// identified. The relay replays the first `relayed` of her deltas before
+    /// the replay ends. Returns what Logic sent and saved.
+    fn reopened(relayed: usize) -> (Vec<SyncCommand>, Vec<PersistWrite>, Vec<Vec<u8>>, u64) {
+        let hers = session_wrote(ALICE, &["one", "two"]);
+        let (mut rig, persist) = unidentified(DocType::Trame);
+        rig.state
+            .handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+                document_id: rig.document_id,
+                doc_type: DocType::Trame,
+                snapshot: Some(snapshot_of(&hers)),
+                deltas: Vec::new(),
+                sessions: vec![(ALICE, SessionNonce([7; 16]))],
+            });
+        let peer = rig.state.grant_identity(rig.document_id);
+        for (seq, delta) in hers.iter().take(relayed).enumerate() {
+            receive(&mut rig, delta.clone(), seq as u64 + 1);
+        }
+        assert!(
+            !rig.sync
+                .try_iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendUnsent { .. })),
+            "sent before the replay was done"
+        );
+        ready(&mut rig);
+        let sent = rig.sync.try_iter().collect();
+        let saved = persist.try_iter().map(|(_, write)| write).collect();
+        (sent, saved, hers, peer)
+    }
+
+    /// `AUTHOR-028`: what an earlier session wrote past what the relay holds
+    /// travels once the replay is done. It is sealed with that session's
+    /// nonce and carries its operations alone. The current session is saved
+    /// with its nonce at the identity.
+    #[test]
+    fn an_earlier_sessions_unsent_edits_travel_with_its_nonce() {
+        let (sent, saved, hers, peer) = reopened(1);
+        let unsent: Vec<(Vec<u8>, SessionNonce)> = sent
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::SendUnsent { payload, nonce, .. } => Some((payload, nonce)),
+                _ => None,
+            })
+            .collect();
+        let [(payload, nonce)] = unsent.as_slice() else {
+            panic!("expected one unsent delta, got {}", unsent.len());
+        };
+        assert_eq!(*nonce, SessionNonce([7; 16]));
+        assert_eq!(authors(payload), vec![ALICE]);
+        let meta = LoroDoc::decode_import_blob_meta(payload, false).expect("a readable delta");
+        let first = LoroDoc::decode_import_blob_meta(&hers[0], false).expect("her first delta");
+        assert_eq!(
+            meta.partial_start_vv.get(&ALICE),
+            first.partial_end_vv.get(&ALICE),
+            "the unsent delta does not start where the relay's copy ends"
+        );
+        assert!(
+            saved
+                .iter()
+                .any(|w| matches!(w, PersistWrite::Session { peer: p, .. } if *p == peer)),
+            "the session was not saved at the identity"
+        );
+        assert!(
+            !saved
+                .iter()
+                .any(|w| matches!(w, PersistWrite::ForgetSession { .. })),
+            "a session with unsent edits was forgotten"
+        );
+    }
+
+    /// `AUTHOR-028`: an earlier session the relay holds whole sends nothing
+    /// and is forgotten.
+    #[test]
+    fn an_earlier_session_the_relay_holds_whole_is_forgotten() {
+        let (sent, saved, _, _) = reopened(2);
+        assert!(
+            !sent
+                .iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendUnsent { .. })),
+            "a held session was sent again"
+        );
+        assert!(
+            saved
+                .iter()
+                .any(|w| matches!(w, PersistWrite::ForgetSession { peer } if *peer == ALICE)),
+            "a held session was not forgotten"
+        );
     }
 }

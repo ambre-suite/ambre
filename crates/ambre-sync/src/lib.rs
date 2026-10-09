@@ -457,8 +457,9 @@ struct SyncDocumentState {
     /// A lazy-creation POST is in flight. Guards against firing several POSTs
     /// when updates arrive back-to-back before the first one completes.
     creating: bool,
-    /// Outbound CRDT update payloads buffered while the document is being lazily
-    /// created server-side. Flushed in order once it is materialized.
+    /// Outbound update bodies, each carrying its session nonce, buffered while
+    /// the document is being lazily created server-side. Flushed in order once
+    /// it is materialized.
     pending_updates: Vec<Vec<u8>>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
@@ -1143,6 +1144,11 @@ impl SyncState {
                 );
                 self.handle_send_update(document_id, payload);
             }
+            SyncCommand::SendUnsent {
+                document_id,
+                payload,
+                nonce,
+            } => self.handle_send_unsent(document_id, payload, nonce),
             SyncCommand::SendSnapshot {
                 document_id,
                 payload,

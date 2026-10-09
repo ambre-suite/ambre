@@ -32,6 +32,7 @@ impl LogicState {
                 doc_type,
                 snapshot,
                 deltas,
+                sessions,
             } => {
                 // Order-independent: the boot-time local restore and the route
                 // poll's `OpenDocument` race on startup. If the restore arrives
@@ -59,9 +60,12 @@ impl LogicState {
                         deltas: deltas.clone(),
                     });
                     self.restore_local(document_id, snapshot, deltas, Restore::Shown);
-                    return;
+                } else {
+                    self.restore_local(document_id, snapshot, deltas, Restore::Kept);
                 }
-                self.restore_local(document_id, snapshot, deltas, Restore::Kept);
+                // The sessions that wrote the restored operations, so what they
+                // left unsent travels (`AUTHOR-028`).
+                self.note_earlier_sessions(document_id, sessions);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -265,8 +269,9 @@ impl LogicState {
                 document_id,
                 peer,
                 entry,
+                nonce,
             } => {
-                self.adopt_session(document_id, peer, entry);
+                self.adopt_session(document_id, peer, entry, nonce);
             }
 
             LogicEvent::RemoteEphemeral {
@@ -318,8 +323,10 @@ impl LogicState {
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
                 // The replay is done: a delta still waiting waits for ever
-                // (`AUTHOR-025`).
+                // (`AUTHOR-025`), and what the relay lacks of an earlier
+                // session is known (`AUTHOR-028`).
                 self.report_stalled(document_id);
+                self.send_unsent(document_id);
             }
 
             LogicEvent::SyncWarning {
@@ -752,6 +759,7 @@ mod tests {
             doc_type: header.doc_type,
             snapshot: Some(header.payload),
             deltas: Vec::new(),
+            sessions: Vec::new(),
         });
         reopened.grant_identity(document_id);
         reopened.handle_logic_command(LogicCommand::App {
@@ -1065,6 +1073,7 @@ mod tests {
             doc_type: DocType::Trame,
             snapshot: Some(snapshot),
             deltas: Vec::new(),
+            sessions: Vec::new(),
         });
         assert!(state.docs.contains_key(&doc_id));
     }

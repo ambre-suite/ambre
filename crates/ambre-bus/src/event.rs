@@ -44,6 +44,10 @@ pub enum LogicEvent {
         peer: u64,
         /// The encoded registry entry of `peer` (`ambre_core::PeerEntry`).
         entry: Vec<u8>,
+        /// The nonce `peer` derives from. The Logic thread keeps it in the
+        /// local store, so a later open can send what this session left
+        /// unsent (`AUTHOR-028`).
+        nonce: SessionNonce,
     },
 
     /// Decrypted and decompressed CRDT delta, with its signer, ready for `LoroDoc::import()`.
