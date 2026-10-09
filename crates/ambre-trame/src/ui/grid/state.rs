@@ -71,10 +71,8 @@ impl TrameUiState {
     /// `true` when the zoom actually changed, so the caller can repaint and
     /// re-request the (now differently sized) viewport.
     pub fn set_zoom(&mut self, zoom: f64) -> bool {
-        let z = zoom.clamp(
-            Self::ZOOM_PRESETS[0],
-            Self::ZOOM_PRESETS[Self::ZOOM_PRESETS.len() - 1],
-        );
+        let [lo, .., hi] = Self::ZOOM_PRESETS;
+        let z = zoom.clamp(lo, hi);
         if (z - self.zoom).abs() < f64::EPSILON {
             return false;
         }

@@ -199,6 +199,10 @@ pub enum WsServerMsg {
 ///
 /// When postcard cannot serialize `msg`. Every field of [`WsClientMsg`] is a
 /// postcard type, so the encoder fails only when the allocator does.
+#[expect(
+    clippy::expect_used,
+    reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
+)]
 pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
     let buf = vec![CURRENT_VERSION.as_u8()];
     postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg")
@@ -213,11 +217,11 @@ pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
 ///   wire version.
 /// * [`WireDecodeError::Postcard`] when the body does not decode.
 pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
-    if data.is_empty() {
+    let Some((&version, body)) = data.split_first() else {
         return Err(WireDecodeError::Empty);
-    }
-    match data[0] {
-        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(&data[1..])?),
+    };
+    match version {
+        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(body)?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }
@@ -228,6 +232,10 @@ pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
 ///
 /// When postcard cannot serialize `msg`, for the reason
 /// [`encode_client_msg`] states.
+#[expect(
+    clippy::expect_used,
+    reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
+)]
 pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
     let buf = vec![CURRENT_VERSION.as_u8()];
     postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg")
@@ -239,11 +247,11 @@ pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
 ///
 /// The three errors [`decode_client_msg`] raises, on the same three inputs.
 pub fn decode_server_msg(data: &[u8]) -> Result<WsServerMsg, WireDecodeError> {
-    if data.is_empty() {
+    let Some((&version, body)) = data.split_first() else {
         return Err(WireDecodeError::Empty);
-    }
-    match data[0] {
-        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(&data[1..])?),
+    };
+    match version {
+        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(body)?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }

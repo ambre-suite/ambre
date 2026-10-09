@@ -246,10 +246,10 @@ run the same command.
 
 | Job | Runs |
 | :--- | :--- |
-| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host, and the five corpus scripts |
+| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, and the five corpus scripts |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres, redis and minio as services, with `--features db` |
-| `test-wasm` | `wasm-pack test --headless --chrome` |
+| `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `wasm-pack test --headless --chrome` |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 
@@ -268,7 +268,7 @@ whether it blocks the current MVP.
 | :--- | :--- | :--- |
 | Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`, `SecretString` | not the mechanism, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible |
 | `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 17 crates refuse an `unsafe` block |
-| `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc` and `missing_panics_doc`; no `pedantic`, no `deny(unwrap_used, panic, indexing_slicing)` yet |
+| `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
 | `cargo-fuzz` | wired | four targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser and the Markdown reader, one minute each in the CI `fuzz` job. The sealed open path and the Trame and Toile file readers have none |

@@ -52,9 +52,9 @@ impl TrameState {
             // and the feed order decides which cell of a cycle gets rejected. A
             // document where `A1=B1` and `B1=A1` met through a CRDT merge would
             // otherwise flag a different culprit on each reseed.
-            let mut keys: Vec<&String> = cells.keys().collect();
-            keys.sort_unstable();
-            for (key, value) in keys.into_iter().map(|k| (k, &cells[k])) {
+            let mut entries: Vec<_> = cells.iter().collect();
+            entries.sort_unstable_by_key(|(key, _)| *key);
+            for (key, value) in entries {
                 // Masked cells (covered by a merge, conflicting value) stay out of
                 // the DAG.
                 if masked.contains(key) {
@@ -604,8 +604,9 @@ impl TrameState {
             .iter()
             .position(|id| *id == self.active_sheet)
             .unwrap_or(0);
-        order[..pos]
+        order
             .iter()
+            .take(pos)
             .rev()
             .find(|id| live.contains(id))
             .cloned()

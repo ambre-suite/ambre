@@ -28,11 +28,17 @@ pub struct Toggles {
 impl Toggles {
     /// Resolve the history-enabled signals from a store built over
     /// [`super::COMMANDS`]. Bold/italic now live in [`StyleState`] (the single
-    /// style event), not the command store.
+    /// style event), not the command store. A command missing from the store
+    /// reads as disabled.
     pub fn from_store(store: &CommandStates) -> Self {
+        let enabled = |id| {
+            store
+                .enabled_signal(id)
+                .unwrap_or_else(|| RwSignal::new(false))
+        };
         Self {
-            undo_enabled: store.enabled_signal(UNDO).expect("undo registered"),
-            redo_enabled: store.enabled_signal(REDO).expect("redo registered"),
+            undo_enabled: enabled(UNDO),
+            redo_enabled: enabled(REDO),
         }
     }
 }

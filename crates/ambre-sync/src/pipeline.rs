@@ -568,7 +568,10 @@ fn object_parts(
     }
     let key_id = object_key(bytes)?;
     check_key(key_id, doc_key)?;
-    let (author, rest) = bytes[LAYOUT_LEN + KEY_ID_LEN..].split_at(AUTHOR_KEY_LEN);
+    let (author, rest) = bytes
+        .get(LAYOUT_LEN + KEY_ID_LEN..)
+        .ok_or(PipelineError::ShortObject)?
+        .split_at(AUTHOR_KEY_LEN);
     let (signature, rest) = rest.split_at(ambre_crypto::signature::SIGNATURE_LEN);
     let (tag, rest) = rest.split_at(ambre_crypto::commitment::TAG_LEN);
     let (nonce, ciphertext) = rest.split_at(ambre_crypto::aead::NONCE_LEN);

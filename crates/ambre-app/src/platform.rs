@@ -296,6 +296,10 @@ pub(crate) fn initials(name: Option<&str>) -> String {
 /// the worker's `onmessage` and the relay, both on the main thread.
 pub(crate) type SyncInbox = Rc<RefCell<ambre_bus::conduit::Backlog<LogicEvent>>>;
 
+#[expect(
+    clippy::expect_used,
+    reason = "a client without its Sync worker cannot reach the relay at all"
+)]
 pub(crate) fn spawn_sync_worker(
     to_logic: SyncInbox,
     sync_ready: Rc<Cell<bool>>,
@@ -427,6 +431,10 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
 /// booted application's handler says what the chord does, and whether a text
 /// field keeps it (`ARCH-018`). Unmatched keys fall through to the canvas
 /// listener (content navigation), so this never steals arrow keys.
+#[expect(
+    clippy::expect_used,
+    reason = "the boot wires the page it was served with, which has no fallback page"
+)]
 pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath) {
     let document = web_sys::window()
         .expect("no window")

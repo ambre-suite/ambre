@@ -74,8 +74,10 @@ const MDI_FILTER_PATH: &str = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C1
 pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
     static POLY: std::sync::OnceLock<Vec<Vec<(f64, f64)>>> = std::sync::OnceLock::new();
     POLY.get_or_init(|| {
-        let path =
-            kurbo::BezPath::from_svg(MDI_FILTER_PATH).expect("MdiFilter path is a valid SVG path");
+        // The path is a constant a host test parses; a failure paints no glyph.
+        let Ok(path) = kurbo::BezPath::from_svg(MDI_FILTER_PATH) else {
+            return Vec::new();
+        };
         // Flatten curves to line segments, grouping into contours at each MoveTo.
         let mut contours: Vec<Vec<(f64, f64)>> = Vec::new();
         kurbo::flatten(path.iter(), 0.05, |el| match el {
@@ -125,10 +127,9 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
         let uy = (y - by) / h; // scanline in unit space
         xs.clear();
         for contour in contours {
-            let n = contour.len();
-            for i in 0..n {
-                let (x0, y0) = contour[i];
-                let (x1, y1) = contour[(i + 1) % n]; // wrap = implicit close
+            // Each point pairs with the next; the cycle wraps = implicit close.
+            let next = contour.iter().cycle().skip(1);
+            for (&(x0, y0), &(x1, y1)) in contour.iter().zip(next) {
                 // Half-open crossing test avoids double-counting shared vertices.
                 if (y0 <= uy && y1 > uy) || (y1 <= uy && y0 > uy) {
                     let t = (uy - y0) / (y1 - y0);
@@ -137,14 +138,13 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
             }
         }
         xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let mut i = 0;
-        while i + 1 < xs.len() {
-            let xa = bx + xs[i].clamp(0.0, 1.0) * w;
-            let xb = bx + xs[i + 1].clamp(0.0, 1.0) * w;
+        for span in xs.chunks_exact(2) {
+            let [a, b] = span else { continue };
+            let xa = bx + a.clamp(0.0, 1.0) * w;
+            let xb = bx + b.clamp(0.0, 1.0) * w;
             if xb > xa {
                 s.fill_rect(Rect::new(xa, y - 0.5, xb, y + 0.5), color);
             }
-            i += 2;
         }
         y += 1.0;
     }

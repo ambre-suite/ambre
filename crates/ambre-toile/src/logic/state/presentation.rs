@@ -387,7 +387,9 @@ impl ToileState {
         if delta.delete == 0 && delta.insert.is_empty() {
             return ToileOutcome::display_only(Vec::new());
         }
-        let text = notes_text_or_seed(&em);
+        let Some(text) = notes_text_or_seed(&em) else {
+            return ToileOutcome::display_only(Vec::new());
+        };
         let stored = text.to_string();
         if stored != base {
             let typed = splice(base, delta);
@@ -581,17 +583,17 @@ fn splice(base: &str, delta: &TextDelta) -> String {
 }
 
 /// The frame's `notes` LoroText, seeding an empty one on first use. The
-/// `em` map is already known to be a frame (checked by the caller).
-fn notes_text_or_seed(em: &LoroMap) -> LoroText {
+/// `em` map is already known to be a frame (checked by the caller). `None`
+/// when the map holds no text and refuses a new one, and the edit is dropped.
+fn notes_text_or_seed(em: &LoroMap) -> Option<LoroText> {
     if let Some(text) = em
         .get(NOTES)
         .and_then(|v| v.into_container().ok())
         .and_then(|c| c.into_text().ok())
     {
-        return text;
+        return Some(text);
     }
-    em.insert_container(NOTES, LoroText::new())
-        .expect("seed frame notes text")
+    em.insert_container(NOTES, LoroText::new()).ok()
 }
 
 /// Read a movable list's string entries in order.
@@ -607,7 +609,8 @@ fn slide_order_of(list: &LoroMovableList) -> Vec<String> {
     out
 }
 
-#[cfg(all(test, feature = "pdf"))]
+#[cfg(test)]
+#[cfg(feature = "pdf")]
 mod pdf_tests {
     use kurbo::{Point, Size};
 

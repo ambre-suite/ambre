@@ -64,7 +64,8 @@ pub fn coverage_grew(font_cx: &mut FontContext, missing: ScriptSet) -> bool {
 /// Tests only. A running peer receives the same bytes over the message bus,
 /// fetched by the Main thread (`LogicCommand::LoadFonts`). The Logic thread
 /// has no way of its own to read a file.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn shipped_faces() -> Vec<Vec<u8>> {
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
     const FILES: [&str; 6] = [

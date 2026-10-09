@@ -269,6 +269,10 @@ fn write_scaffold(doc: &LoroDoc) {
 /// The identity the scaffolding is written under: a hash of the scaffolding
 /// this build writes (`TRAME-231`). Two builds that scaffold alike share it,
 /// and two that differ never write two changes under one identifier.
+#[expect(
+    clippy::expect_used,
+    reason = "a fresh document with no op takes a peer id and exports"
+)]
 fn scaffold_identity() -> u64 {
     static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *PEER.get_or_init(|| {
@@ -316,6 +320,10 @@ impl TrameState {
     ///
     /// When a fresh `LoroDoc` refuses `peer`, which it does only after an op is
     /// recorded. No op precedes this call.
+    #[expect(
+        clippy::expect_used,
+        reason = "a fresh document with no op takes a peer id"
+    )]
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: Trame's sheet ids capture it.
@@ -330,6 +338,10 @@ impl TrameState {
     /// Shared body of [`new`](Self::new) and [`with_peer`](Self::with_peer): the
     /// document scaffolding and every derived cache, over a `LoroDoc` the caller
     /// has already configured.
+    #[expect(
+        clippy::expect_used,
+        reason = "a document outside a transaction takes a peer id"
+    )]
     fn from_doc(doc: LoroDoc) -> Self {
         let peer = doc.peer_id();
         // Every peer writes the scaffolding as one shared identity, so every
@@ -511,7 +523,8 @@ mod tests;
 // Host-only: built on `proptest`, which is a host-target dev-dependency (its
 // `wait-timeout` transitive dep does not compile on wasm32). The wasm tier runs
 // the chrome UI tests instead (`tests/chrome_ui.rs`).
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod convergence_tests;
 
 /// The schema shape belt (`SCHEMA-018`): the key set, the value types and the

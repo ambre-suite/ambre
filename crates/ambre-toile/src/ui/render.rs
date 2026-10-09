@@ -701,12 +701,11 @@ pub fn paint_overlay<S: DrawSurface>(
     // through the transform faithfully, so the box is drawn as four rotated edges.
     // Each handle square is drawn axis-aligned (screen-aligned, Miro-style) at its
     // rotated center.
-    let single = selection.len() == 1;
-    let theta = if single {
-        selection_rotation(&selection[0], vp, gesture)
-    } else {
-        0.0
+    let single = match selection {
+        [only] => Some(only),
+        _ => None,
     };
+    let theta = single.map_or(0.0, |only| selection_rotation(only, vp, gesture));
     let place = |p: Point| {
         if theta == 0.0 {
             p
@@ -727,8 +726,7 @@ pub fn paint_overlay<S: DrawSurface>(
             place(Point::new(b.x1, b.y1)),
             place(Point::new(b.x0, b.y1)),
         ];
-        for i in 0..4 {
-            let (a, d) = (c[i], c[(i + 1) % 4]);
+        for (a, d) in c.iter().zip(c.iter().cycle().skip(1)) {
             surface.stroke_line(a.x, a.y, d.x, d.y, palette.selection, 1.5);
         }
     }
@@ -749,7 +747,7 @@ pub fn paint_overlay<S: DrawSurface>(
     // 4 corner resize handles (only for a single-element selection, matching the
     // tool's corners-only picking; a multi-selection shows the box only in Phase 0).
     // A group wears none: its box is the union of its members (`TOILE-UI-391`).
-    if single && !is_group(&selection[0], vp) {
+    if single.is_some_and(|only| !is_group(only, vp)) {
         for (_, p) in resize_handle_points(b) {
             draw_handle(surface, place(p), palette);
         }

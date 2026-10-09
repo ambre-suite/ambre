@@ -678,6 +678,13 @@ impl QuadRenderer {
         }
     }
 
+    /// One of the two ping-pong offscreens: the first for index 0, the second
+    /// for any other. The index only ever holds 0 or 1.
+    fn offscreen(&self, idx: usize) -> &OffscreenTarget {
+        let [first, second] = &self.offscreens;
+        if idx == 0 { first } else { second }
+    }
+
     /// Resize the ping-pong offscreens to the buffer. Call it whenever the
     /// canvas size changes. Both offscreens get a fresh allocation and lose
     /// their content, so the next frame must use `ContentRepaint::Full`. Only
@@ -874,16 +881,14 @@ impl QuadRenderer {
         if image.width == 0 || image.height == 0 {
             return;
         }
-        let needed = (image.width as usize) * (image.height as usize) * 4;
-        if image.pixels.len() < needed {
-            return;
-        }
         if self
             .images
             .get(image.key, image.width, image.height)
             .is_none()
         {
-            let uploaded = self.upload_image(device, queue, image);
+            let Some(uploaded) = self.upload_image(device, queue, image) else {
+                return;
+            };
             self.images.insert(image.key, uploaded);
         }
         let key = image.key;
@@ -893,8 +898,8 @@ impl QuadRenderer {
         };
         let base = b.image_vertices.len() as u32;
         let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-        for (i, c) in corners.iter().enumerate() {
-            b.image_vertices.push(ImageVertex { pos: *c, uv: uv[i] });
+        for (pos, uv) in corners.into_iter().zip(uv) {
+            b.image_vertices.push(ImageVertex { pos, uv });
         }
         let start = b.image_indices.len() as u32;
         b.image_indices
@@ -904,13 +909,16 @@ impl QuadRenderer {
     }
 
     /// Upload one picture and its CPU-built mip chain, and mint the bind group
-    /// the image pipeline binds per run.
+    /// the image pipeline binds per run. `None` when the buffer is shorter than
+    /// the declared size, which uploads nothing.
     fn upload_image(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         image: &ImageSource<'_>,
-    ) -> CacheEntry<wgpu::BindGroup> {
+    ) -> Option<CacheEntry<wgpu::BindGroup>> {
+        let level0 = (image.width as usize) * (image.height as usize) * 4;
+        let level0_pixels = image.pixels.get(..level0)?;
         let chain = mipmap::build_chain(image.pixels, image.width, image.height);
         let levels = mipmap::level_count(image.width, image.height);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -948,8 +956,7 @@ impl QuadRenderer {
                 },
             );
         };
-        let level0 = (image.width as usize) * (image.height as usize) * 4;
-        write(0, &image.pixels[..level0], image.width, image.height);
+        write(0, level0_pixels, image.width, image.height);
         let mut bytes = level0;
         for (i, level) in chain.iter().enumerate() {
             write(i as u32 + 1, &level.pixels, level.width, level.height);
@@ -970,13 +977,13 @@ impl QuadRenderer {
                 },
             ],
         });
-        CacheEntry {
+        Some(CacheEntry {
             payload: bind_group,
             bytes,
             width: image.width,
             height: image.height,
             last_used: self.images.clock,
-        }
+        })
     }
 
     // -- Glyph geometry -------------------------------------------------------
@@ -1097,12 +1104,8 @@ impl QuadRenderer {
         ];
         let b = self.active_batches_mut();
         let base = b.glyph_vertices.len() as u32;
-        for i in 0..4 {
-            b.glyph_vertices.push(GlyphVertex {
-                pos: corners[i],
-                uv: uv[i],
-                color: c,
-            });
+        for (pos, uv) in corners.into_iter().zip(uv) {
+            b.glyph_vertices.push(GlyphVertex { pos, uv, color: c });
         }
         b.glyph_indices
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -1125,12 +1128,9 @@ impl QuadRenderer {
         ];
         let b = self.active_batches_mut();
         let base = b.color_glyph_vertices.len() as u32;
-        for i in 0..4 {
-            b.color_glyph_vertices.push(GlyphVertex {
-                pos: corners[i],
-                uv: uv[i],
-                color: c,
-            });
+        for (pos, uv) in corners.into_iter().zip(uv) {
+            b.color_glyph_vertices
+                .push(GlyphVertex { pos, uv, color: c });
         }
         b.color_glyph_indices.extend_from_slice(&[
             base,
@@ -1209,8 +1209,8 @@ impl QuadRenderer {
         };
 
         if let ContentRepaint::Scroll { dx_px, dy_px } = cells {
-            let src = &self.offscreens[self.current_offscreen_idx].texture;
-            let dst = &self.offscreens[dst_idx].texture;
+            let src = &self.offscreen(self.current_offscreen_idx).texture;
+            let dst = &self.offscreen(dst_idx).texture;
             copy_offscreen_with_offset(
                 encoder,
                 src,
@@ -1231,7 +1231,7 @@ impl QuadRenderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("cells_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.offscreens[dst_idx].view,
+                    view: &self.offscreen(dst_idx).view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -1309,7 +1309,13 @@ impl QuadRenderer {
                 ..Default::default()
             });
             pass.set_pipeline(&self.blit_pipeline);
-            pass.set_bind_group(0, &self.blit_bind_groups[self.current_offscreen_idx], &[]);
+            let [first, second] = &self.blit_bind_groups;
+            let blit = if self.current_offscreen_idx == 0 {
+                first
+            } else {
+                second
+            };
+            pass.set_bind_group(0, blit, &[]);
             pass.draw(0..3, 0..1);
         }
 

@@ -27,14 +27,14 @@ pub(crate) fn stdev(args: &[CellValue]) -> CellValue {
 
 /// LARGE / SMALL(array..., k) -- the k-th largest / smallest numeric value.
 pub(crate) fn large_small(args: &[CellValue], largest: bool) -> CellValue {
-    if args.len() < 2 {
+    let Some((last, values)) = args.split_last().filter(|(_, values)| !values.is_empty()) else {
         return CellValue::Error(FormulaError::NaError);
-    }
-    let k = match args[args.len() - 1].as_number() {
+    };
+    let k = match last.as_number() {
         Ok(n) if n >= 1.0 => n as usize,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let mut nums = match flatten_total(&args[..args.len() - 1]) {
+    let mut nums = match flatten_total(values) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -43,7 +43,10 @@ pub(crate) fn large_small(args: &[CellValue], largest: bool) -> CellValue {
     }
     nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let pick = if largest { nums.len() - k } else { k - 1 };
-    CellValue::Number(nums[pick])
+    match nums.get(pick) {
+        Some(&n) => CellValue::Number(n),
+        None => CellValue::Error(FormulaError::NumError),
+    }
 }
 
 /// RANK(number, ref, [order]) -- 1-based rank; order 0/omitted = descending.
@@ -51,11 +54,11 @@ pub(crate) fn rank(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let num = match args[0].as_number() {
+    let num = match arg(args, 0).as_number() {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    let data: Vec<f64> = range_cells(&args[1])
+    let data: Vec<f64> = range_cells(arg(args, 1))
         .filter_map(|v| v.as_number().ok())
         .collect();
     if !data.iter().any(|n| nearly_equal(*n, num)) {
@@ -75,13 +78,13 @@ pub(crate) fn mode(args: &[CellValue]) -> CellValue {
         Ok(nums) => nums,
         Err(err) => return err,
     };
-    if nums.is_empty() {
+    let Some(&first) = nums.first() else {
         return CellValue::Error(FormulaError::NaError);
-    }
-    let mut best = nums[0];
+    };
+    let mut best = first;
     let mut best_count = 0usize;
     for (i, &a) in nums.iter().enumerate() {
-        let c = nums[i..].iter().filter(|&&b| nearly_equal(b, a)).count();
+        let c = nums.iter().skip(i).filter(|&&b| nearly_equal(b, a)).count();
         if c > best_count {
             best_count = c;
             best = a;
@@ -242,14 +245,14 @@ pub(crate) fn npv(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let rate = match args[0].as_number() {
+    let rate = match arg(args, 0).as_number() {
         Ok(r) => r,
         Err(e) => return CellValue::Error(e),
     };
     if rate == -1.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    let flows = match flatten_total(&args[1..]) {
+    let flows = match flatten_total(rest_from(args, 1)) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -267,7 +270,7 @@ pub(crate) fn irr(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let flows = match flatten_total(&args[..1]) {
+    let flows = match flatten_total(one(args, 0)) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -341,8 +344,8 @@ pub(crate) fn ifna(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match &args[0] {
-        CellValue::Error(FormulaError::NaError) => args[1].clone(),
+    match arg(args, 0) {
+        CellValue::Error(FormulaError::NaError) => arg(args, 1).clone(),
         other => other.clone(),
     }
 }
@@ -353,8 +356,10 @@ pub(crate) fn ifs(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     for pair in args.chunks_exact(2) {
-        if is_truthy(&pair[0]) {
-            return pair[1].clone();
+        if let [cond, value] = pair
+            && is_truthy(cond)
+        {
+            return value.clone();
         }
     }
     CellValue::Error(FormulaError::NaError)
@@ -365,20 +370,19 @@ pub(crate) fn switch_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let subject = &args[0];
-    let rest = &args[1..];
-    let mut i = 0;
-    while i + 1 < rest.len() {
-        if values_equal_ci(subject, &rest[i]) {
-            return rest[i + 1].clone();
-        }
-        i += 2;
-    }
+    let subject = arg(args, 0);
+    let rest = rest_from(args, 1);
+    let pairs = rest.chunks_exact(2);
     // A trailing unpaired argument is the default.
-    if !rest.len().is_multiple_of(2) {
-        return rest[rest.len() - 1].clone();
+    let default = pairs.remainder().first().cloned();
+    for pair in pairs {
+        if let [value, result] = pair
+            && values_equal_ci(subject, value)
+        {
+            return result.clone();
+        }
     }
-    CellValue::Error(FormulaError::NaError)
+    default.unwrap_or(CellValue::Error(FormulaError::NaError))
 }
 
 /// HLOOKUP(lookup, table, row_index, [range_lookup]) -- horizontal VLOOKUP.
@@ -386,11 +390,11 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let table = match &args[1] {
+    let table = match arg(args, 1) {
         CellValue::Range(r) => r,
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    let row_index = match args[2].as_number() {
+    let row_index = match arg(args, 2).as_number() {
         Ok(n) if n >= 1.0 => n as usize - 1,
         _ => return CellValue::Error(FormulaError::NaError),
     };
@@ -405,7 +409,7 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             None => continue,
         };
         if approximate {
-            if compare_cells(key, &args[0])
+            if compare_cells(key, arg(args, 0))
                 .map(|o| o.is_le())
                 .unwrap_or(false)
             {
@@ -413,7 +417,7 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             } else {
                 break;
             }
-        } else if values_equal_ci(key, &args[0]) {
+        } else if values_equal_ci(key, arg(args, 0)) {
             best = Some(col);
             break;
         }
@@ -429,8 +433,8 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match args[0].as_number() {
-        Ok(n) if n >= 1.0 && (n as usize) < args.len() => args[n as usize].clone(),
+    match arg(args, 0).as_number() {
+        Ok(n) if n >= 1.0 && (n as usize) < args.len() => arg(args, n as usize).clone(),
         Ok(_) => CellValue::Error(FormulaError::NumError),
         Err(e) => CellValue::Error(e),
     }
@@ -461,8 +465,8 @@ pub(crate) fn search_fn(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let lowered = vec![
-        CellValue::Text(args[0].to_display().to_lowercase()),
-        CellValue::Text(args[1].to_display().to_lowercase()),
+        CellValue::Text(arg(args, 0).to_display().to_lowercase()),
+        CellValue::Text(arg(args, 1).to_display().to_lowercase()),
     ];
     let mut call: Vec<CellValue> = lowered;
     if let Some(start) = args.get(2) {
@@ -476,21 +480,21 @@ pub(crate) fn replace_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 4 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let chars: Vec<char> = args[0].to_display().chars().collect();
-    let start = match args[1].as_number() {
+    let chars: Vec<char> = arg(args, 0).to_display().chars().collect();
+    let start = match arg(args, 1).as_number() {
         Ok(n) if n >= 1.0 => n as usize - 1,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let count = match args[2].as_number() {
+    let count = match arg(args, 2).as_number() {
         Ok(n) if n >= 0.0 => n as usize,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let new = args[3].to_display();
+    let new = arg(args, 3).to_display();
     let start = start.min(chars.len());
     let end = (start + count).min(chars.len());
-    let mut out: String = chars[..start].iter().collect();
+    let mut out: String = chars.iter().take(start).collect();
     out.push_str(&new);
-    out.extend(&chars[end..]);
+    out.extend(chars.iter().skip(end));
     CellValue::Text(out)
 }
 
@@ -499,7 +503,7 @@ pub(crate) fn exact(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Boolean(args[0].to_display() == args[1].to_display())
+    CellValue::Boolean(arg(args, 0).to_display() == arg(args, 1).to_display())
 }
 
 /// TEXTJOIN(delimiter, ignore_empty, text1, ...) -- join with a separator.
@@ -507,9 +511,9 @@ pub(crate) fn textjoin(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let delim = args[0].to_display();
-    let ignore_empty = is_truthy(&args[1]);
-    let parts: Vec<String> = flatten_all(&args[2..])
+    let delim = arg(args, 0).to_display();
+    let ignore_empty = is_truthy(arg(args, 1));
+    let parts: Vec<String> = flatten_all(rest_from(args, 2))
         .iter()
         .filter(|v| !(ignore_empty && matches!(v, CellValue::Empty)))
         .map(|v| v.to_display())
@@ -535,7 +539,7 @@ pub(crate) fn code_fn(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match args[0].to_display().chars().next() {
+    match arg(args, 0).to_display().chars().next() {
         Some(c) => CellValue::Number(c as u32 as f64),
         None => CellValue::Error(FormulaError::TypeError),
     }
@@ -547,9 +551,9 @@ pub(crate) fn time_fn(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let secs = match (
-        args[0].as_number(),
-        args[1].as_number(),
-        args[2].as_number(),
+        arg(args, 0).as_number(),
+        arg(args, 1).as_number(),
+        arg(args, 2).as_number(),
     ) {
         (Ok(h), Ok(m), Ok(s)) => h * 3600.0 + m * 60.0 + s,
         _ => return CellValue::Error(FormulaError::TypeError),
@@ -620,7 +624,7 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (serial, months) = match (args[0].as_number(), args[1].as_number()) {
+    let (serial, months) = match (arg(args, 0).as_number(), arg(args, 1).as_number()) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
@@ -635,7 +639,7 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (serial, months) = match (args[0].as_number(), args[1].as_number()) {
+    let (serial, months) = match (arg(args, 0).as_number(), arg(args, 1).as_number()) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };

@@ -350,14 +350,10 @@ pub async fn get_org_shamir_shares(
     .bind(org_id)
     .fetch_all(pool)
     .await?;
-    let shares: Vec<(uuid::Uuid, Vec<u8>)> = rows
+    let shares = rows
         .iter()
-        .map(|r| {
-            let uid: uuid::Uuid = r.try_get("user_id").unwrap();
-            let share: Vec<u8> = r.try_get("shamir_share_enc").unwrap();
-            (uid, share)
-        })
-        .collect();
+        .map(|r| Ok((r.try_get("user_id")?, r.try_get("shamir_share_enc")?)))
+        .collect::<Result<Vec<(uuid::Uuid, Vec<u8>)>, sqlx::Error>>()?;
     Ok(shares)
 }
 

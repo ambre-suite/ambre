@@ -734,7 +734,8 @@ fn packed(rgba: u32) -> Color {
     Color::from_rgba8(r, g, b, a)
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use ambre_core::UserId;
     use ambre_draw::Color;

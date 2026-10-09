@@ -162,8 +162,11 @@ impl ProseState {
         // deleting it would take the blocks beyond the focus with it.
         let tree = doc::blocks(&self.doc);
         let (first, last) = (anchor_at.min(focus_at), anchor_at.max(focus_at));
-        let beyond = &order[last + 1..];
-        let emptied: Vec<TreeID> = order[first..=last]
+        // Both endpoints index `order`, so neither range comes back empty.
+        let beyond = order.get(last + 1..).unwrap_or_default();
+        let emptied: Vec<TreeID> = order
+            .get(first..=last)
+            .unwrap_or_default()
             .iter()
             .copied()
             .filter(|id| *id != head)

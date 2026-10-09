@@ -493,7 +493,8 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> u32 {
 /// A paginator holding the faces the application ships.
 ///
 /// Tests only: it stands in for the `LoadFonts` delivery a running peer gets.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn shipped_paginator() -> Paginator {
     let mut paginator = Paginator::new();
     for bytes in crate::layout::fonts::shipped_faces() {
@@ -737,7 +738,8 @@ mod tests {
 /// can differ. These hold the three consequences. A context holding extra
 /// faces measures no differently. A measurement short of a face says so, and
 /// a face that arrives throws the layout away.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod convergence {
     use ambre_bus::app::prose::BlockType;
     use ambre_draw::LazyFont;

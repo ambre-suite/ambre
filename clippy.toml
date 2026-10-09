@@ -1,0 +1,7 @@
+# A test asserts by panicking, so the panic lints of the workspace table
+# (`ARCH-028`) stop at its boundary. A crate with a `clippy.toml` of its own
+# repeats these four lines: clippy reads the nearest file and no other.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

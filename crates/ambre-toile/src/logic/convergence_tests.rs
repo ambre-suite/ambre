@@ -4046,7 +4046,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
         focused,
     } = geom
     else {
-        unreachable!("filtered above")
+        panic!("filtered above")
     };
     assert_eq!(document_id, child, "the child reference did not round-trip");
     assert_eq!(doc_type, ambre_core::DocType::Trame);

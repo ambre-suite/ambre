@@ -16,9 +16,17 @@ pub const TAG_LEN: usize = 32;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// An HMAC-SHA256 keyed by `key`. The one kept panic site of the module.
+#[expect(
+    clippy::expect_used,
+    reason = "HMAC accepts a key of any length, so the constructor cannot fail"
+)]
+fn keyed(key: &[u8]) -> HmacSha256 {
+    HmacSha256::new_from_slice(key).expect("HMAC accepts a key of any length")
+}
+
 fn mac(key: &DocumentKey, nonce: &[u8], ciphertext: &[u8], aad: &[u8]) -> HmacSha256 {
-    let mut m =
-        HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts a key of any length");
+    let mut m = keyed(key.as_bytes());
     m.update(nonce);
     m.update(ciphertext);
     m.update(aad);
@@ -54,14 +62,13 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
 pub fn media_address(key: &DocumentKey, plaintext: &[u8]) -> [u8; TAG_LEN] {
     let subkey: [u8; TAG_LEN] = mac_over(key, MEDIA_ADDRESS_DOMAIN);
-    let mut m = HmacSha256::new_from_slice(&subkey).expect("HMAC accepts a key of any length");
+    let mut m = keyed(&subkey);
     m.update(plaintext);
     m.finalize().into_bytes().into()
 }
 
 fn mac_over(key: &DocumentKey, data: &[u8]) -> [u8; TAG_LEN] {
-    let mut m =
-        HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts a key of any length");
+    let mut m = keyed(key.as_bytes());
     m.update(data);
     m.finalize().into_bytes().into()
 }

@@ -520,8 +520,10 @@ pub(crate) async fn handle_request_missing(
         first_page = false;
         let page_len = updates.len();
         // Rows are ordered by seq; the last one is this page's high-water mark
-        // and the cursor for the next page.
-        let next_cursor = updates[page_len - 1].seq;
+        // and the cursor for the next page. The page is not empty, checked above.
+        let Some(next_cursor) = updates.last().map(|u| u.seq) else {
+            return;
+        };
 
         // Rehydrate each indexed delta into the full sealed Update the client
         // needs to decrypt and verify. The bytes live in S3 once flushed, or in
@@ -707,6 +709,10 @@ pub(crate) async fn verify_document_access(
 /// MUST match `ambre_crypto::signature::push_framed` byte-for-byte: the client
 /// signs with that framing and the server (which does not link `ambre-crypto`)
 /// reconstructs it here to verify.
+#[expect(
+    clippy::expect_used,
+    reason = "a field past 4 GiB never reaches a signature, and a wrapped length would forge the transcript"
+)]
 fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
     let len = u32::try_from(field.len()).expect("signed field exceeds u32::MAX");
     msg.extend_from_slice(&len.to_le_bytes());

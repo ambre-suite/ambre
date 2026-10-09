@@ -12,6 +12,13 @@
 // ============================================================================
 
 #![cfg(feature = "fixtures")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
 
 use std::path::{Path, PathBuf};
 

@@ -282,6 +282,16 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+# No panic path outside the tests (`ARCH-028`). The root `clippy.toml` lifts
+# these inside `#[cfg(test)]`; a site kept on purpose carries an `#[expect]`
+# with its reason.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
 
 [profile.dev.package."*"]
 opt-level = 3

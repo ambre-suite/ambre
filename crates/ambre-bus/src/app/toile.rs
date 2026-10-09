@@ -340,13 +340,11 @@ impl ElementStyle {
     /// does not know is reported, never silently reset. A later layout change
     /// then adds a migration row that decodes the older version.
     pub fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.is_empty() {
-            return Some(Self::default());
+        match bytes.split_first() {
+            None => Some(Self::default()),
+            Some((&STYLE_VERSION, body)) => postcard::from_bytes(body).ok(),
+            Some(_) => None,
         }
-        if bytes[0] != STYLE_VERSION {
-            return None;
-        }
-        postcard::from_bytes(&bytes[1..]).ok()
     }
 
     /// Rewrite a `"style"` register a build before [`STYLE_VERSION`] wrote.

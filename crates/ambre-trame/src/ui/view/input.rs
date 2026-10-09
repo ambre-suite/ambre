@@ -72,8 +72,11 @@ impl TrameView {
                 shift,
                 ..
             } if self.fill_drag.is_none() && self.state.header_hit(*x, *y).is_some() => {
+                let Some(hit) = self.state.header_hit(*x, *y) else {
+                    return false;
+                };
                 self.text_input.focus();
-                match self.state.header_hit(*x, *y).expect("guarded") {
+                match hit {
                     HeaderHit::ColBody(c) => {
                         if *shift && self.state.selection.kind == SelKind::Cols {
                             self.extend_axis(c);
@@ -133,7 +136,9 @@ impl TrameView {
             // Dragging a grabbed header moves the live insertion guide to the
             // boundary under the cursor (Excel-style reorder preview).
             InputEvent::PointerMove { x, y } if self.reorder_drag.is_some() => {
-                let (kind, _) = self.reorder_drag.expect("guarded");
+                let Some((kind, _)) = self.reorder_drag else {
+                    return false;
+                };
                 let slot = match kind {
                     SelKind::Cols => self.state.col_drop_slot(*x).map(|s| (SelKind::Cols, s)),
                     SelKind::Rows => self.state.row_drop_slot(*y).map(|s| (SelKind::Rows, s)),
@@ -260,9 +265,12 @@ impl TrameView {
             InputEvent::PointerDown {
                 x, y, button: 2, ..
             } if self.state.header_hit(*x, *y).is_some() => {
+                let Some(hit) = self.state.header_hit(*x, *y) else {
+                    return false;
+                };
                 self.text_input.focus();
                 use crate::ui::grid::CtxScope;
-                let scope = match self.state.header_hit(*x, *y).expect("guarded") {
+                let scope = match hit {
                     HeaderHit::ColBody(c) => {
                         self.select_axis(SelKind::Cols, c);
                         CtxScope::Column

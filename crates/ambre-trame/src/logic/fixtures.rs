@@ -12,6 +12,15 @@
 // specified with the rest of the fixture surface in `ambre-spec-fixtures.md`.
 //
 // Part of the `TrameState` impl, split out by concern like `sync` and `docfile`.
+// A generator aborts on a corpus it cannot build, so the panic lints of
+// `ARCH-028` do not hold here.
+
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "a fixture generator aborts on a corpus it cannot build"
+)]
 
 use std::collections::BTreeMap;
 

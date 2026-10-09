@@ -47,6 +47,14 @@ impl JwtKeys {
     ///
     /// `jsonwebtoken` (ring) wants the private key as PKCS#8 DER and the public
     /// key as raw 32 bytes, so we convert via ed25519-dalek's `pkcs8` support.
+    ///
+    /// # Panics
+    ///
+    /// Never: an Ed25519 key always encodes to PKCS#8.
+    #[expect(
+        clippy::expect_used,
+        reason = "an Ed25519 key always encodes to PKCS#8, so the conversion cannot fail"
+    )]
     pub fn from_seed(seed: &[u8; 32]) -> Self {
         let signing = SigningKey::from_bytes(seed);
         let pkcs8 = signing

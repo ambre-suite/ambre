@@ -24,6 +24,14 @@
 //! * `-t, --run-time` -- default `120s`.
 //! * `--report-file` -- no default; pass it to generate an HTML report.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a load harness run by hand stops on its first broken step"
+)]
+
 use goose::prelude::*;
 use reqwest::cookie::Jar;
 use std::sync::Arc;

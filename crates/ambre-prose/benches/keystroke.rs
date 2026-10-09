@@ -7,6 +7,8 @@
 //! the layout handed to the view. The snapshot that folds the log is measured
 //! apart: a keystroke pays it once every few hundred keys.
 
+#![allow(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
+
 use std::hint::black_box;
 
 use ambre_bus::app::prose::ProseCommand;

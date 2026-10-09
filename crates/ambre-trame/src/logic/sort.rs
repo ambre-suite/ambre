@@ -156,8 +156,8 @@ impl TrameState {
         keyed.sort_by(|(_, a), (_, b)| {
             // Lexicographic over the keys: first non-equal column decides, each
             // key applying its own direction.
-            for (i, (_, ascending)) in keys.iter().enumerate() {
-                let ord = compare_cell_values(&a[i], &b[i]);
+            for ((_, ascending), (va, vb)) in keys.iter().zip(a.iter().zip(b)) {
+                let ord = compare_cell_values(va, vb);
                 let ord = if *ascending { ord } else { ord.reverse() };
                 if ord != std::cmp::Ordering::Equal {
                     return ord;
@@ -193,11 +193,15 @@ impl TrameState {
         let base = sort_start as usize;
         for (offset, want) in target.into_iter().enumerate() {
             let dst = base + offset;
-            if cur[dst] == want {
+            if cur.get(dst) == Some(&want) {
                 continue;
             }
             // The wanted uid is always at or after `dst` (earlier slots are fixed).
-            let src = cur[dst..].iter().position(|u| *u == want).map(|p| p + dst);
+            let src = cur
+                .iter()
+                .skip(dst)
+                .position(|u| *u == want)
+                .map(|p| p + dst);
             let Some(src) = src else { continue };
             let _ = list.mov(src, dst);
             let u = cur.remove(src);

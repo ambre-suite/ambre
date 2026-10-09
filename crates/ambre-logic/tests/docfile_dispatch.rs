@@ -13,6 +13,14 @@
 // hand-assembled. The test would catch a header written by one app and
 // unreadable by the other.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
+
 use ambre_core::{
     DocType, Uuid,
     docfile::{DocFileError, read_ambre_plaintext},

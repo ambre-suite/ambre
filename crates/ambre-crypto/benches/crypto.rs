@@ -3,6 +3,11 @@
 //! Targets (desktop; mobile measured later) from `architecture`:
 //!   seal 1 KB  < 200 us (P95), open 1 KB < 350 us (P95).
 
+#![allow(
+    clippy::unwrap_used,
+    reason = "a bench stops on a broken step rather than measure it"
+)]
+
 use ambre_crypto::keys::{DocumentKey, MasterSeed};
 use ambre_crypto::{envelope, passphrase};
 use criterion::{Criterion, criterion_group, criterion_main};

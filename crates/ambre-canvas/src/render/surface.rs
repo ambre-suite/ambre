@@ -353,10 +353,7 @@ impl DrawSurface for WgpuSurface<'_> {
             (dest.x1, dest.y1),
             (dest.x0, dest.y1),
         ];
-        let mapped: Vec<Point> = corners_world
-            .iter()
-            .map(|(x, y)| t * Point::new(*x, *y))
-            .collect();
+        let mapped: [Point; 4] = corners_world.map(|(x, y)| t * Point::new(x, y));
         // Clip is a bounding-box reject here, as it is for a path. The quad is
         // textured, and trimming it would need the uv range trimmed with it
         // (`ambre-spec-drawing-surface.md section 5`).
@@ -372,12 +369,7 @@ impl DrawSurface for WgpuSurface<'_> {
                 return;
             }
         }
-        let corners = [
-            [mapped[0].x as f32, mapped[0].y as f32],
-            [mapped[1].x as f32, mapped[1].y as f32],
-            [mapped[2].x as f32, mapped[2].y as f32],
-            [mapped[3].x as f32, mapped[3].y as f32],
-        ];
+        let corners = mapped.map(|p| [p.x as f32, p.y as f32]);
         self.renderer
             .push_image(self.device, self.queue, image, corners);
     }

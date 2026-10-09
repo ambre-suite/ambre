@@ -114,9 +114,10 @@ pub fn ContextMenu(
         let Some((x, y)) = pos.get() else { return };
         focused.set(0);
         let (mut lx, mut ty) = (x, y);
-        if let Some(menu) = menu_ref.get() {
+        if let Some(menu) = menu_ref.get()
+            && let Some(win) = web_sys::window()
+        {
             let rect = menu.get_bounding_client_rect();
-            let win = web_sys::window().unwrap();
             let vw = win
                 .inner_width()
                 .ok()
@@ -140,8 +141,9 @@ pub fn ContextMenu(
     // (contextmenu). A backdrop would have swallowed both -- the menu moved but
     // the selection stayed on the old cell. Registered once (the menu is a shell
     // singleton); it no-ops while closed and ignores clicks inside the menu.
-    {
-        let doc = web_sys::window().unwrap().document().unwrap();
+    // Without a document, there is no outside to click: the menu still closes
+    // on Escape and on a command.
+    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let cb =
             Closure::<dyn FnMut(web_sys::PointerEvent)>::new(move |e: web_sys::PointerEvent| {
                 if pos.get_untracked().is_none() {
@@ -256,16 +258,18 @@ pub fn ContextMenu(
                 }
                 // First-letter typeahead: jump to the next item whose label
                 // starts with the typed character, wrapping around.
-                _ if key.chars().count() == 1 => {
-                    let ch = key.chars().next().unwrap().to_ascii_lowercase();
-                    let start = focused.get_untracked();
-                    if let Some(off) =
-                        (1..=len).find(|&o| initials.get((start + o) % len.max(1)) == Some(&ch))
-                    {
-                        focused.set((start + off) % len.max(1));
+                _ => {
+                    let mut chars = key.chars();
+                    if let (Some(ch), None) = (chars.next(), chars.next()) {
+                        let ch = ch.to_ascii_lowercase();
+                        let start = focused.get_untracked();
+                        if let Some(off) =
+                            (1..=len).find(|&o| initials.get((start + o) % len.max(1)) == Some(&ch))
+                        {
+                            focused.set((start + off) % len.max(1));
+                        }
                     }
                 }
-                _ => {}
             }
         };
 

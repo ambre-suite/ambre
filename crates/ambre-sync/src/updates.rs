@@ -105,7 +105,9 @@ impl SyncState {
             });
         }
 
-        let doc_state = self.documents.get_mut(&document_id).expect("doc present");
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
         if doc_state.quarantine_len() >= QUARANTINE_LIMIT {
             // Drop the globally oldest quarantined update (smallest clock).
             let oldest = doc_state
@@ -470,13 +472,10 @@ impl SyncState {
         let encrypted = base64::engine::general_purpose::URL_SAFE
             .decode(&entry.doc_key_enc)
             .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
-        if encrypted.len() < 24 {
-            return Err("wrapped key too short".into());
-        }
-        let nonce: [u8; 24] = encrypted[..24]
-            .try_into()
-            .map_err(|_| "invalid nonce length")?;
-        let ciphertext = encrypted[24..].to_vec();
+        let (nonce, ciphertext) = encrypted
+            .split_first_chunk::<24>()
+            .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
+            .ok_or("wrapped key too short")?;
 
         // The DH peer is whoever WRAPPED our key (the inviter, or ourselves at
         // creation) -- not our own key. Fall back to the member's own key if an
@@ -775,9 +774,20 @@ impl SyncState {
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
-            let wrapped =
-                ambre_crypto::ecdh::wrap_document_key(&exchange_key, own_pub.as_bytes(), &doc_key)
-                    .expect("wrap doc key for self");
+            let wrapped = match ambre_crypto::ecdh::wrap_document_key(
+                &exchange_key,
+                own_pub.as_bytes(),
+                &doc_key,
+            ) {
+                Ok(wrapped) => wrapped,
+                Err(e) => {
+                    let _ = tx.send(SyncEvent::DocumentCreateFailed {
+                        document_id,
+                        message: format!("key wrap failed: {e}"),
+                    });
+                    return;
+                }
+            };
             let mut enc = wrapped.nonce.to_vec();
             enc.extend_from_slice(&wrapped.ciphertext);
             let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);

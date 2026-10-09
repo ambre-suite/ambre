@@ -6,6 +6,13 @@
 //! They run under `wasm-pack test --headless --chrome crates/ambre-toile`
 //! (`just test-wasm`). On the host target the whole file is empty.
 #![cfg(target_arch = "wasm32")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
 
 use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId};
 use ambre_toile::chrome::{DeckIntent, DeckPanel, PresenterIntent, PresenterPanel};

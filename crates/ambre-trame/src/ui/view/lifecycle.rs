@@ -9,6 +9,10 @@ impl TrameView {
     ///
     /// When the browser exposes no `window` or no Performance API. The view
     /// measures every frame against a budget, so neither has a fallback.
+    #[expect(
+        clippy::expect_used,
+        reason = "the view measures every frame and has no fallback for a missing clock"
+    )]
     pub fn new(
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,

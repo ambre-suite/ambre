@@ -236,7 +236,7 @@ impl TrameState {
 /// Auto-detect the CSV field separator: comma vs semicolon, by frequency in the
 /// first kilobyte (`trame-import-export`). Defaults to comma on a tie.
 fn detect_csv_delimiter(data: &[u8]) -> u8 {
-    let sample = &data[..data.len().min(1024)];
+    let sample = data.get(..1024).unwrap_or(data);
     let commas = sample.iter().filter(|&&b| b == b',').count();
     let semicolons = sample.iter().filter(|&&b| b == b';').count();
     if semicolons > commas { b';' } else { b',' }

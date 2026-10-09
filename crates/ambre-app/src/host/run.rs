@@ -27,6 +27,11 @@ use super::*;
 /// fetched on demand is forwarded to the Logic thread (`CANVAS-068`). That
 /// thread measures Prose pages on a context of its own, and cannot fetch.
 #[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "the boot wires the page it was served with, which has no fallback page"
+)]
 pub fn run_with<F, C, P>(
     canvas_id: &str,
     make_view: F,

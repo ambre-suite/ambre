@@ -8,6 +8,14 @@
 // keeps the DOM chrome and the wgpu content in lockstep by construction.
 // ============================================================================
 
+#![allow(
+    clippy::panic,
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "a build script reports a failure by panicking"
+)]
+
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;

@@ -109,6 +109,10 @@ impl BenchBaseline {
 ///
 /// An empty result means no bench has run, which the caller reports rather than
 /// committing an empty baseline.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when a directory or an estimate file cannot be read.
 pub fn criterion_means(dir: &Path) -> Result<Vec<BenchMeasurement>, FixtureError> {
     let mut out = Vec::new();
     // A tree that is not there is a run that has not happened. The caller says
@@ -178,6 +182,11 @@ fn collect_means(
 /// The belt walks them and refuses one that names no machine. A file that is
 /// neither JSON nor a baseline raises an error rather than a skip. A baseline
 /// nobody can read is not a baseline.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] on an unreadable file, and [`FixtureError::Manifest`]
+/// on a file that is not a baseline.
 pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, FixtureError> {
     if !dir.is_dir() {
         return Ok(Vec::new());
@@ -224,6 +233,10 @@ pub const REGISTRY: &[&dyn FixtureGen] = &merged_registry();
 ///
 /// A `const fn` rather than a hand-written list, for the reason [`REGISTRY`]
 /// states. The `while` loops are what a `const fn` has instead of an iterator.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "const evaluation turns an index out of bounds into a build error"
+)]
 const fn merged_registry() -> [&'static dyn FixtureGen; REGISTRY_LEN] {
     // Every slot is overwritten below; the repeated element only gives the array
     // a value to start from, which a `const fn` cannot obtain any other way.
@@ -259,6 +272,10 @@ pub const BENCH_REGISTRY: &[&dyn FixtureGen] = &merged_bench_registry();
 
 /// Both per-engine scale registries, concatenated at compile time. The reasoning
 /// is [`merged_registry`]'s.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "const evaluation turns an index out of bounds into a build error"
+)]
 const fn merged_bench_registry() -> [&'static dyn FixtureGen; BENCH_REGISTRY_LEN] {
     let mut out: [&dyn FixtureGen; BENCH_REGISTRY_LEN] =
         [TRAME_BENCH_FIXTURES[0]; BENCH_REGISTRY_LEN];
@@ -366,6 +383,11 @@ pub fn canonical_dump(state: &DocState) -> String {
 /// CWD at its own package root. A bare relative `fixtures/` would then resolve
 /// differently for every consumer crate. The `env!` expands when *this* crate
 /// compiles, so the anchor stays `ambre-logic`'s own directory whoever calls.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when a manifest cannot be read or no ancestor holds a
+/// workspace.
 pub fn corpus_root() -> Result<PathBuf, FixtureError> {
     let start = Path::new(env!("CARGO_MANIFEST_DIR"));
     for dir in start.ancestors() {
@@ -390,6 +412,10 @@ pub fn corpus_root() -> Result<PathBuf, FixtureError> {
 ///
 /// Resolves `<corpus root>/current/<name>.ambre` and hands the bytes to
 /// [`import_fixture`], which is the production import path.
+///
+/// # Errors
+///
+/// As [`load_fixture_from`].
 pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(CURRENT_DIR), name)
 }
@@ -401,6 +427,10 @@ pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> 
 /// a corpus that moved would then move in one place. The error a missing
 /// artifact yields is [`FixtureError::NotFound`], which tells the author to run
 /// `just fixtures-bench-corpus`.
+///
+/// # Errors
+///
+/// As [`load_fixture_from`].
 pub fn load_bench_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(BENCH_DIR), name)
 }
@@ -410,6 +440,11 @@ pub fn load_bench_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureE
 /// The parameterized form the belt drives with a temporary directory. `just
 /// fixtures-check` uses it to load the tree it just regenerated instead of the
 /// committed one. Same body, so testing this tests the shipping path.
+///
+/// # Errors
+///
+/// [`FixtureError::NotFound`] when no artifact has that name, and
+/// [`FixtureError::Io`] when it cannot be read. Otherwise as [`import_fixture`].
 pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState), FixtureError> {
     let path = artifact_path(dir, name);
     let bytes = match fs::read(&path) {
@@ -439,6 +474,11 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 /// rejection off that vector would accept a corrupt Toile artifact and hand back
 /// an empty board. Each engine's `import_ambre_plaintext` returns a typed
 /// [`DocFileError::PayloadRejected`] instead, carried out verbatim.
+///
+/// # Errors
+///
+/// [`FixtureError::Container`] on bytes the container or the engine refuses,
+/// and [`FixtureError::NoEngine`] for a type with no engine.
 pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureError> {
     let doc_type = read_ambre_plaintext(bytes)?.doc_type;
     // Pinned reader, not `DocState::new`: the receiving state commits its own
@@ -480,6 +520,11 @@ pub fn manifest_path(dir: &Path, name: &str) -> PathBuf {
 
 /// Read a sidecar back off disk. Used by `fixtures-check` and by the frozen belt,
 /// which both compare a committed manifest against a recomputed one.
+///
+/// # Errors
+///
+/// [`FixtureError::NotFound`] when there is no sidecar, [`FixtureError::Io`]
+/// when it cannot be read, and [`FixtureError::Manifest`] when it does not parse.
 pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureError> {
     let path = manifest_path(dir, name);
     let text = match fs::read_to_string(&path) {
@@ -510,6 +555,11 @@ pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureE
 ///
 /// The driver, not the generator, produces this: a [`FixtureGen`] has no method
 /// that could.
+///
+/// # Errors
+///
+/// As [`import_fixture`], and [`FixtureError::Container`] when the bytes hold
+/// another type than the generator declares.
 pub fn manifest_for(
     generator: &dyn FixtureGen,
     bytes: &[u8],
@@ -548,6 +598,10 @@ pub fn digest_of(bytes: &[u8]) -> [u8; 32] {
 ///
 /// Returns the manifest it wrote, so a caller can diff it against a committed one
 /// without re-reading the disk.
+///
+/// # Errors
+///
+/// As [`manifest_for`], and [`FixtureError::Io`] when a file cannot be written.
 pub fn write_fixture(
     generator: &dyn FixtureGen,
     dir: &Path,
@@ -577,6 +631,10 @@ pub fn write_fixture(
 /// drives this same body with a synthetic registry while the shipping one is
 /// still empty. The walk is therefore proven before the first real generator
 /// lands.
+///
+/// # Errors
+///
+/// The first error [`write_fixture`] returns.
 pub fn generate_into(
     registry: &[&dyn FixtureGen],
     dir: &Path,
@@ -599,6 +657,10 @@ pub fn generate_into(
 /// No drift gate rides on this tree. The committed corpus has one
 /// (`check_corpus`), and it exists because git keeps a committed artifact
 /// forever; a generated-on-demand tree is rebuilt from the seed instead.
+///
+/// # Errors
+///
+/// The first error [`write_fixture`] returns.
 pub fn generate_bench_into(
     registry: &[&dyn FixtureGen],
     dir: &Path,
@@ -666,6 +728,10 @@ impl FrozenEntry {
 }
 
 /// Every artifact under `<root>/frozen/`, newest last.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when the frozen tree cannot be listed.
 pub fn frozen_entries(root: &Path) -> Result<Vec<FrozenEntry>, FixtureError> {
     let dir = root.join(FROZEN_DIR);
     let mut entries: Vec<FrozenEntry> = artifact_stems(&dir)?
@@ -689,6 +755,11 @@ pub const FROZEN_KEEP_PER_TYPE: usize = 3;
 /// person typing it, so the path cannot disagree with the bytes. The call refuses
 /// an existing target rather than overwriting it: a frozen artifact takes its
 /// bytes once (`FIXTURE-018`).
+///
+/// # Errors
+///
+/// As [`read_manifest`], [`FixtureError::Manifest`] when the target is already
+/// frozen, and [`FixtureError::Io`] when a copy fails.
 pub fn freeze(root: &Path, name: &str) -> Result<PathBuf, FixtureError> {
     let current = root.join(CURRENT_DIR);
     let manifest = read_manifest(&current, name)?;
@@ -719,6 +790,11 @@ pub fn freeze(root: &Path, name: &str) -> Result<PathBuf, FixtureError> {
 /// Two causes, one pass (`FIXTURE-021`, `FIXTURE-026`). One is an artifact past
 /// the cap for its document type. The other is an artifact whose generator is
 /// gone, which has lost the second term of its comparison for good.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when the tree cannot be listed or a file cannot be
+/// removed.
 pub fn retain_frozen(
     registry: &[&dyn FixtureGen],
     root: &Path,
@@ -841,6 +917,11 @@ impl CorpusReport {
 /// `scratch` is a directory the caller owns and the gate regenerates into. The
 /// committed tree is never written, so a red gate leaves the working copy
 /// exactly as it found it.
+///
+/// # Errors
+///
+/// An error that stops the comparison itself, from [`write_fixture`] or from
+/// reading the tree. A disagreement is a [`Drift`] in the report instead.
 pub fn check_corpus(
     registry: &[&dyn FixtureGen],
     root: &Path,
@@ -989,6 +1070,11 @@ fn check_frozen(
 ///
 /// Detecting an orphan is the gate's job; removing one is this function's. The
 /// fix for a red gate is therefore `just fixtures`, never a manual delete.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when the tree cannot be listed or an artifact cannot be
+/// removed.
 pub fn prune_orphans(
     registry: &[&dyn FixtureGen],
     dir: &Path,

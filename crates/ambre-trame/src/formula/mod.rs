@@ -17,7 +17,8 @@ pub(crate) mod test_index;
 // `wait-timeout` transitive dep does not compile on wasm32). These properties
 // cover the formula stack's algebraic contracts (parser/printer, compiler,
 // VM, engine, functions).
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod prop_tests;
 
 pub use compile::SheetIndices;

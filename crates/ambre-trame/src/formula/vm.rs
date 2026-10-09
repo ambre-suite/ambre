@@ -341,10 +341,9 @@ impl<'a> EvalContext<'a> {
         let mut values = Vec::with_capacity(rows * cols);
         for rp in rs..=re {
             for cp in cs..=ce {
-                let v = match (rp < row_len, cp < col_len) {
-                    (true, true) => {
-                        let row = idx.row_id(rp).expect("rp < row_len");
-                        let col = idx.col_id(cp).expect("cp < col_len");
+                let ids = (rp < row_len && cp < col_len).then(|| (idx.row_id(rp), idx.col_id(cp)));
+                let v = match ids {
+                    Some((Some(row), Some(col))) => {
                         self.eval_cell(CellId::bound(dep.sheet, row, col))
                     }
                     _ => CellValue::Empty,

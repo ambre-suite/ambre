@@ -18,11 +18,26 @@ default:
 # Host target only. The wasm `-A warnings` rustflag is scoped to
 # `[target.wasm32-unknown-unknown]` in `.cargo/config.toml`, so host clippy
 # keeps every warning and `-D warnings` makes them fatal.
+#
+# Every non-default feature is on, so the code behind one is linted too: the
+# fixture machinery, the PDF export and the relay's database half. A panic lint
+# that never sees a file holds nothing there (`ARCH-028`).
 
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers -- -D warnings
+
+# Lint (wasm): the code only the browser compiles -- the application chrome, the
+# canvas host, the workers -- which host clippy never reads. The flags are those
+# of `test-wasm`, so the two share one build. `-Awarnings` silences what is only a
+# warning, so this holds the denied lints alone: the panic lints (`ARCH-028`)
+# and the documentation lints. The Prose unit tests are host-only, so its wasm
+# test file is linted alone.
+lint-wasm:
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown --workspace --exclude ambre-server --lib
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
+    RUSTFLAGS="-Awarnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel
 
 # **One invocation for the whole tier.** Cargo caches a build per feature set, so
 # four `cargo test` lines under four sets compile the workspace four times over

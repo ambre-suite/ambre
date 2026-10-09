@@ -151,8 +151,9 @@ impl ToileState {
         let elems = self.doc.get_map(ELEMENTS);
         let layers = self.doc.get_movable_list(LAYERS);
         let mut created = Vec::with_capacity(new_ids.len());
-        for (slot, clip) in payload.elements.iter().enumerate() {
-            let id = &new_ids[slot];
+        // `new_ids` and `new_conns` are minted one per payload entry. A slot
+        // the payload names past them is a malformed paste, and it is skipped.
+        for (id, clip) in new_ids.iter().zip(&payload.elements) {
             let Ok(em) = elems.insert_container(id.as_str(), LoroMap::new()) else {
                 continue;
             };
@@ -174,24 +175,28 @@ impl ToileState {
         }
         // Rebuild each group / frame `children` list with the remapped ids.
         for m in &payload.membership {
-            if let Some(em) = self.element_map(&new_ids[m.parent_slot])
+            if let Some(parent) = new_ids.get(m.parent_slot)
+                && let Some(em) = self.element_map(parent)
                 && let Ok(children) = em.insert_container(CHILDREN, LoroMovableList::new())
             {
-                for &cs in &m.child_slots {
-                    let _ = children.push(new_ids[cs].as_str());
+                for child in m.child_slots.iter().filter_map(|&cs| new_ids.get(cs)) {
+                    let _ = children.push(child.as_str());
                 }
             }
         }
         // Connectors: remap endpoints, keep anchors / path / arrows.
         let conns = self.doc.get_map(CONNECTORS);
-        for (i, c) in payload.connectors.iter().enumerate() {
-            let Ok(cm) = conns.insert_container(new_conns[i].as_str(), LoroMap::new()) else {
+        for (conn_id, c) in new_conns.iter().zip(&payload.connectors) {
+            let (Some(from), Some(to)) = (new_ids.get(c.from_slot), new_ids.get(c.to_slot)) else {
+                continue;
+            };
+            let Ok(cm) = conns.insert_container(conn_id.as_str(), LoroMap::new()) else {
                 continue;
             };
             write_clip_fields(&cm, &c.fields, Vec2::ZERO);
-            let _ = cm.insert("from", new_ids[c.from_slot].as_str());
-            let _ = cm.insert("to", new_ids[c.to_slot].as_str());
-            let _ = layers.push(NodeId::Connector(new_conns[i].clone()).encode().as_str());
+            let _ = cm.insert("from", from.as_str());
+            let _ = cm.insert("to", to.as_str());
+            let _ = layers.push(NodeId::Connector(conn_id.clone()).encode().as_str());
         }
         self.doc.commit();
 

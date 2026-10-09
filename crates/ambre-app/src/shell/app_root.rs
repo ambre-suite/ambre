@@ -48,6 +48,10 @@ fn follow_shell_nav(
 /// OUTSIDE this tree by the per-frame route poll (see `pre_frame` in `main`).
 /// The canvas handle is `!Send`, and the `<Router>` subtree must be Send.
 #[component]
+#[expect(
+    clippy::expect_used,
+    reason = "`mount_shell` provides the wiring before it mounts the root"
+)]
 pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,

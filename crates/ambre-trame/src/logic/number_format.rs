@@ -88,10 +88,11 @@ pub(crate) fn format_custom(value: f64, pattern: &str) -> String {
     let sections = split_sections(pattern);
     // One section serves every value; two split off the negatives; a third
     // serves zero. A section chosen for its sign prints the magnitude.
+    let pick = |i: usize| sections.get(i).map_or("", String::as_str);
     let (section, value) = match (sections.len(), value) {
-        (2.., v) if v < 0.0 => (sections[1].as_str(), -v),
-        (3.., v) if v == 0.0 => (sections[2].as_str(), v),
-        (_, v) => (sections[0].as_str(), v),
+        (2.., v) if v < 0.0 => (pick(1), -v),
+        (3.., v) if v == 0.0 => (pick(2), v),
+        (_, v) => (pick(0), v),
     };
     let tokens = lex(section);
     if tokens.iter().any(|t| matches!(t, Token::Date(..))) {
@@ -136,12 +137,10 @@ fn lex(section: &str) -> Vec<Token> {
         i += 1;
         let token = match c {
             '"' => {
-                let end = chars[i..]
-                    .iter()
-                    .position(|&q| q == '"')
-                    .map_or(chars.len(), |p| i + p);
-                let text: String = chars[i..end].iter().collect();
-                i = end + 1;
+                let tail = chars.get(i..).unwrap_or_default();
+                let len = tail.iter().position(|&q| q == '"').unwrap_or(tail.len());
+                let text: String = tail.iter().take(len).collect();
+                i += len + 1;
                 Token::Literal(text)
             }
             '\\' => {
@@ -161,8 +160,9 @@ fn lex(section: &str) -> Vec<Token> {
             }
             'y' | 'Y' | 'm' | 'M' | 'd' | 'D' | 'h' | 'H' | 's' | 'S' => {
                 let letter = c.to_ascii_lowercase();
-                let run = chars[i..]
+                let run = chars
                     .iter()
+                    .skip(i)
                     .take_while(|n| n.to_ascii_lowercase() == letter)
                     .count();
                 i += run;
@@ -182,7 +182,10 @@ fn render_number(tokens: &[Token], value: f64) -> String {
     let value = value * 100f64.powi(percents as i32);
     let point = tokens.iter().position(|t| *t == Token::Point);
     let (int_tokens, frac_tokens) = match point {
-        Some(p) => (&tokens[..p], &tokens[p + 1..]),
+        Some(p) => (
+            tokens.get(..p).unwrap_or_default(),
+            tokens.get(p + 1..).unwrap_or_default(),
+        ),
         None => (tokens, &[][..]),
     };
     let is_digit = |t: &&Token| matches!(t, Token::Zero | Token::Hash);
@@ -222,7 +225,11 @@ fn place_integer(tokens: &[Token], digits: &str, grouped: bool) -> String {
             .iter()
             .rposition(|t| matches!(t, Token::Zero | Token::Hash));
         match (first, last) {
-            (Some(f), Some(l)) => tokens[f..=l].iter().any(|t| matches!(t, Token::Literal(_))),
+            (Some(f), Some(l)) => tokens
+                .get(f..=l)
+                .unwrap_or_default()
+                .iter()
+                .any(|t| matches!(t, Token::Literal(_))),
             _ => false,
         }
     };
@@ -345,13 +352,15 @@ fn render_date(tokens: &[Token], serial: f64) -> String {
             },
             Token::Date('m', len) => {
                 // `m` after an hour or before a second is the minutes.
-                let after_hour = tokens[..i]
+                let after_hour = tokens
                     .iter()
+                    .take(i)
                     .rev()
                     .find(|t| matches!(t, Token::Date(..)))
                     .is_some_and(|t| matches!(t, Token::Date('h', _)));
-                let before_second = tokens[i + 1..]
+                let before_second = tokens
                     .iter()
+                    .skip(i + 1)
                     .find(|t| matches!(t, Token::Date(..)))
                     .is_some_and(|t| matches!(t, Token::Date('s', _)));
                 if *len <= 2 && (after_hour || before_second) {
@@ -363,7 +372,10 @@ fn render_date(tokens: &[Token], serial: f64) -> String {
             Token::Date('d', len) => match len {
                 1 | 2 => out.push_str(&pad(d as u32, *len)),
                 _ => {
-                    let name = DAYS[(serial.floor() as i64).rem_euclid(7) as usize];
+                    let name = DAYS
+                        .get((serial.floor() as i64).rem_euclid(7) as usize)
+                        .copied()
+                        .unwrap_or("");
                     let shown: String = if *len == 3 {
                         name.chars().take(3).collect()
                     } else {

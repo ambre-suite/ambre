@@ -180,12 +180,14 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         // interleaved transform stack. `rect_path` yields None for a degenerate
         // (zero-area / inverted) rect. In that case we push a valid but
         // zero-area clip path -- which correctly clips everything out. The
-        // count is preserved without a special case in pop_clip.
-        match rect_path(rect) {
+        // count is preserved without a special case in pop_clip. A rect with a
+        // non-finite corner yields no path at all. An identity transform then
+        // keeps the count instead: the page is left unclipped, never broken.
+        match rect_path(rect).or_else(|| degenerate_clip_path(rect)) {
             Some(path) => self.surface.push_clip_path(&path, &FillRule::NonZero),
             None => self
                 .surface
-                .push_clip_path(&degenerate_clip_path(rect), &FillRule::NonZero),
+                .push_transform(&affine_to_transform(Affine::IDENTITY)),
         }
     }
 
@@ -283,26 +285,23 @@ fn rect_path(rect: Rect) -> Option<krilla::geom::Path> {
     pb.finish()
 }
 
-/// Build an always-valid, effectively zero-area clip path for a degenerate clip
-/// rectangle. Used only by `push_clip` to preserve the push/pop balance when
-/// `rect_path` rejects the rect. The extent is clamped to a sub-pixel epsilon,
-/// so `PathBuilder::finish` never returns `None` (a truly collapsed path would).
+/// Build an effectively zero-area clip path for a degenerate clip rectangle.
+/// Used only by `push_clip` to preserve the push/pop balance when `rect_path`
+/// rejects the rect. The extent is clamped to a sub-pixel epsilon, so only a
+/// non-finite corner yields `None` (a truly collapsed path would too).
 /// The visible clip region stays negligible -- the intended "clip out
 /// everything" behavior for a zero-area region.
-fn degenerate_clip_path(rect: Rect) -> krilla::geom::Path {
+fn degenerate_clip_path(rect: Rect) -> Option<krilla::geom::Path> {
     const EPS: f32 = 1e-4;
     let x = rect.x0.min(rect.x1) as f32;
     let y = rect.y0.min(rect.y1) as f32;
     let w = ((rect.x1 - rect.x0).abs() as f32).max(EPS);
     let h = ((rect.y1 - rect.y0).abs() as f32).max(EPS);
+    // A positive extent always yields a rect; only a non-finite corner fails.
+    let kr = KRect::from_xywh(x, y, w, h)?;
     let mut pb = PathBuilder::new();
-    // from_xywh with a positive w/h always yields a valid rect; the unwrap is
-    // therefore infallible (w, h >= EPS > 0).
-    if let Some(kr) = KRect::from_xywh(x, y, w, h) {
-        pb.push_rect(kr);
-    }
+    pb.push_rect(kr);
     pb.finish()
-        .expect("epsilon-sized rect path is always valid")
 }
 
 /// Convert a kurbo `BezPath` into a krilla path, element by element. Returns

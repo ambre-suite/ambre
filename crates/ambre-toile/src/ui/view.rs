@@ -2006,10 +2006,14 @@ impl ToileView {
             // and a long stroke would resend its whole history each time. What
             // a peer needs is where the pen is now; the finished stroke arrives
             // as a delta when it commits.
-            live_stroke: self
-                .machine
-                .live_stroke()
-                .map(|pts| pts[pts.len().saturating_sub(LIVE_STROKE_TAIL)..].to_vec()),
+            live_stroke: self.machine.live_stroke().map(|pts| {
+                pts.iter()
+                    .rev()
+                    .take(LIVE_STROKE_TAIL)
+                    .rev()
+                    .cloned()
+                    .collect()
+            }),
             laser: self.machine.laser(),
             // The presentation broadcast rides its own frame, emitted by the
             // Logic thread on a slide change (`toile-presentation`).
@@ -2915,7 +2919,7 @@ impl ToileView {
                 let e = self
                     .find_element(id)
                     .or_else(|| self.edit_frame.as_ref().filter(|e| &e.id == id))?;
-                let band = self.frame_title_band(e);
+                let band = self.frame_title_band(e)?;
                 let pad = InlineEditor::pad(self.cam.zoom);
                 let s2w = self.cam.screen_to_world();
                 let world = Rect::from_points(
@@ -2931,14 +2935,14 @@ impl ToileView {
     /// The screen-space band a frame's title occupies, or a band of the same
     /// shape when it carries none. An editor has to open on a frame the user is
     /// naming for the first time (`TOILE-261`).
-    fn frame_title_band(&self, e: &DisplayElement) -> Rect {
+    /// `None` only if the placeholder label were ever empty.
+    fn frame_title_band(&self, e: &DisplayElement) -> Option<Rect> {
         let title = match &e.geom {
             DisplayGeom::Frame(t) => t.as_str(),
             _ => "",
         };
         let (label, _) = render::frame_title_label(title);
         render::frame_title_box(world_rect_to_screen(e.bounds, &self.cam), label)
-            .expect("the label is never empty")
     }
 
     /// Optimistically set a frame's title in the local display, so the band
@@ -3292,10 +3296,9 @@ impl ToileView {
         surface: &mut S,
         font_cx: &mut FontContext,
     ) {
-        if self.editor.is_none() {
+        let Some(target) = self.editor.as_ref().map(|ed| ed.target().clone()) else {
             return;
-        }
-        let target = self.editor.as_ref().unwrap().target().clone();
+        };
         // Resolve the edited target's screen geometry (may have scrolled out).
         let geom = self.edit_target_geometry();
 
@@ -3307,7 +3310,10 @@ impl ToileView {
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
                 let caret_on = (self.frame_now_ms / CARET_BLINK_MS) as i64 % 2 == 0;
-                let ed = self.editor.as_mut().unwrap();
+                // The guard above found an editor, and nothing since closed it.
+                let Some(ed) = self.editor.as_mut() else {
+                    return;
+                };
                 ed.flush(font_cx, wrap_w, zoom);
                 // Always paint the body -- including the closing frame. The
                 // content pass already ran this frame with the element's static
@@ -3342,7 +3348,11 @@ impl ToileView {
         }
 
         if self.edit_closing {
-            if let Some(text) = self.editor.as_ref().unwrap().committed_text() {
+            let committed = self
+                .editor
+                .as_ref()
+                .map(|ed| (ed.committed_text(), ed.opened_text().to_owned()));
+            if let Some((Some(text), base)) = committed {
                 // Optimistic local update: reflect the committed text in the
                 // static pass immediately. Dropping the editor then does not
                 // flash the pre-edit body for the frames before the CRDT
@@ -3356,7 +3366,6 @@ impl ToileView {
                         // (`TOILE-UI-209`): the screen keeps the committed body.
                         // The base lets Logic keep a peer's edit that landed
                         // while the editor was open (`TOILE-UI-381`).
-                        let base = self.editor.as_ref().unwrap().opened_text().to_owned();
                         let locked = self.find_element(&id).is_some_and(|e| e.locked);
                         if !locked {
                             self.patch_element_text(&id, &base, &text);
@@ -3366,7 +3375,6 @@ impl ToileView {
                     EditTarget::ConnectorLabel(id) => {
                         // The base keeps a peer's caption edit that landed
                         // while the editor was open (`TOILE-263`).
-                        let base = self.editor.as_ref().unwrap().opened_text().to_owned();
                         self.patch_connector_label(&id, &base, &text);
                         self.send_edit(ToileCommand::SetConnectorLabel { id, base, text });
                     }
@@ -3511,13 +3519,9 @@ impl ToileView {
         // painted. The cull asks for both ends of the glide at once. An element
         // only the previous slide holds therefore stays in the set, and fades
         // out whole (`TOILE-UI-085`).
-        if self.transition.is_some() {
-            let covering = self
-                .transition
-                .as_ref()
-                .expect("the guard above found one")
-                .covering_viewport(&self.cam);
-            let frame = self.transition.as_mut().unwrap().advance(now_ms);
+        if let Some(transition) = self.transition.as_mut() {
+            let covering = transition.covering_viewport(&self.cam);
+            let frame = transition.advance(now_ms);
             self.cam = frame.cam;
             self.anim_overrides = frame
                 .overrides
@@ -4124,7 +4128,8 @@ fn canvas_client_offset() -> (f64, f64) {
 
 // Host-only: the view drives a detached text pipe, which the browser build
 // replaces by its DOM input elements.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[path = "view_tests.rs"]
 mod view_tests;
 

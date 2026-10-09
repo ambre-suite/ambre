@@ -273,12 +273,15 @@ async fn create_gpu_state(
         caps.formats,
         caps.alpha_modes
     );
-    let format = caps
+    let preferred = caps
         .formats
         .iter()
-        .find(|&&f| f == wgpu::TextureFormat::Bgra8Unorm || f == wgpu::TextureFormat::Rgba8Unorm)
-        .copied()
-        .unwrap_or(caps.formats[0]);
+        .find(|&&f| f == wgpu::TextureFormat::Bgra8Unorm || f == wgpu::TextureFormat::Rgba8Unorm);
+    // A surface the adapter cannot present to has no format at all.
+    let Some(&format) = preferred.or(caps.formats.first()) else {
+        tracing::error!("surface reports no texture format");
+        return None;
+    };
 
     surface.configure(&device, &surface_config(format, width, height));
 

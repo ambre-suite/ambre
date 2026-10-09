@@ -101,6 +101,7 @@ pub const SEALED_AAD_LEN: usize = 5 + SALT_LEN;
 
 // Field offsets inside the header. Named rather than inlined so a version bump
 // that moves a field moves it in one place.
+const MAGIC_LEN: usize = AMBRE_MAGIC.len();
 const VERSION_AT: usize = 4;
 const DOC_TYPE_AT: usize = 5;
 const DOCUMENT_ID_AT: usize = 6;
@@ -284,10 +285,10 @@ pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8
 /// * [`DocFileError::UnknownDocType`] when the type byte names no app this
 ///   build knows.
 pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
-    if data.len() < HEADER_LEN {
+    let Some((head, payload)) = data.split_first_chunk::<HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
-    }
-    if data[..AMBRE_MAGIC.len()] != AMBRE_MAGIC {
+    };
+    if !head.starts_with(&AMBRE_MAGIC) {
         return Err(DocFileError::InvalidMagic);
     }
     // Version before doc_type, and the lineage before the version. A sealed
@@ -295,24 +296,24 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     // confusion the partition prevents. A future plaintext version may redefine
     // that byte too, so it is worth checking against *this* build's DocType set
     // only once the version matches.
-    let version = data[VERSION_AT];
+    let version = head[VERSION_AT];
     if version & SEALED_BIT != 0 {
         return Err(DocFileError::SealedFile);
     }
     if version != AMBRE_VERSION {
         return Err(DocFileError::UnsupportedVersion { found: version });
     }
-    let raw_type = data[DOC_TYPE_AT];
+    let raw_type = head[DOC_TYPE_AT];
     let doc_type =
         DocType::from_u8(raw_type).ok_or(DocFileError::UnknownDocType { found: raw_type })?;
     // Infallible: the slice is exactly 16 bytes wide by construction.
-    let document_id = Uuid::from_slice(&data[DOCUMENT_ID_AT..HEADER_LEN])
-        .map_err(|_| DocFileError::TruncatedHeader)?;
+    let document_id =
+        Uuid::from_slice(&head[DOCUMENT_ID_AT..]).map_err(|_| DocFileError::TruncatedHeader)?;
     Ok(AmbreHeader {
         version,
         doc_type,
         document_id,
-        payload: data[HEADER_LEN..].to_vec(),
+        payload: payload.to_vec(),
     })
 }
 
@@ -409,7 +410,7 @@ impl SealedAmbre {
 /// [`SealedAmbre::aad`].
 fn sealed_aad_at(version: u8, salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
     let mut out = [0u8; SEALED_AAD_LEN];
-    out[..AMBRE_MAGIC.len()].copy_from_slice(&AMBRE_MAGIC);
+    out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
     out[VERSION_AT] = version;
     out[SALT_AT..].copy_from_slice(salt);
     out
@@ -469,22 +470,22 @@ pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
     if version != AMBRE_SEALED_VERSION {
         return Err(DocFileError::SealedVersionUnsupported { found: version });
     }
-    if data.len() < SEALED_HEADER_LEN {
+    let Some((head, ciphertext)) = data.split_first_chunk::<SEALED_HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
-    }
-    let salt = data
+    };
+    let salt = head
         .get(SALT_AT..SEAL_NONCE_AT)
         .and_then(|s| <[u8; SALT_LEN]>::try_from(s).ok())
         .ok_or(DocFileError::TruncatedHeader)?;
-    let nonce = data
-        .get(SEAL_NONCE_AT..SEALED_HEADER_LEN)
+    let nonce = head
+        .get(SEAL_NONCE_AT..)
         .and_then(|s| <[u8; SEAL_NONCE_LEN]>::try_from(s).ok())
         .ok_or(DocFileError::TruncatedHeader)?;
     Ok(SealedAmbre {
         version,
         salt,
         nonce,
-        ciphertext: data[SEALED_HEADER_LEN..].to_vec(),
+        ciphertext: ciphertext.to_vec(),
     })
 }
 

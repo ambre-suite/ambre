@@ -70,7 +70,10 @@ pub fn FilterPopover(
         let kind = if by_values.get_untracked() {
             FilterKind::Values(checked.get_untracked().into_iter().collect())
         } else {
-            let (op, _) = FILTER_OPS[op_idx.get_untracked().min(FILTER_OPS.len() - 1)];
+            let Some(&(op, _)) = FILTER_OPS.get(op_idx.get_untracked()).or(FILTER_OPS.last())
+            else {
+                return;
+            };
             FilterKind::Condition {
                 op,
                 value: cond_value.get_untracked(),

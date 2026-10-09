@@ -38,21 +38,23 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
     let new: Vec<char> = new.chars().collect();
 
     // Common prefix length (in codepoints).
-    let max_prefix = old.len().min(new.len());
-    let mut prefix = 0;
-    while prefix < max_prefix && old[prefix] == new[prefix] {
-        prefix += 1;
-    }
+    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
 
     // Common suffix length, not overlapping the shared prefix on either side.
-    let mut suffix = 0;
-    let max_suffix = max_prefix - prefix;
-    while suffix < max_suffix && old[old.len() - 1 - suffix] == new[new.len() - 1 - suffix] {
-        suffix += 1;
-    }
+    let suffix = old
+        .iter()
+        .skip(prefix)
+        .rev()
+        .zip(new.iter().skip(prefix).rev())
+        .take_while(|(a, b)| a == b)
+        .count();
 
     let delete = old.len() - prefix - suffix;
-    let insert: String = new[prefix..new.len() - suffix].iter().collect();
+    let insert: String = new
+        .iter()
+        .skip(prefix)
+        .take(new.len() - prefix - suffix)
+        .collect();
     Some(TextDelta {
         at: prefix,
         delete,

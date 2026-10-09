@@ -28,23 +28,32 @@ const FINGERPRINT_LEN: usize = 20;
 /// aloud for out-of-band verification. The output is stable for a given key: the
 /// same key always yields the same string.
 ///
-/// # Panics
-///
-/// Never. The chunk walk holds an `expect` over the base32 output, which RFC
-/// 4648 defines as ASCII, so no input reaches it.
 pub fn fingerprint(pub_key: &[u8; 32]) -> String {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
     hasher.update(pub_key);
-    let digest = hasher.finalize();
-    let encoded = BASE32_NOPAD.encode(&digest[..FINGERPRINT_LEN]);
+    let digest: [u8; FINGERPRINT_LEN] = prefix(&hasher.finalize());
+    let encoded = BASE32_NOPAD.encode(&digest);
     // Group into 4-char blocks: "XXXX XXXX ..." (8 groups for 32 chars).
-    encoded
-        .as_bytes()
-        .chunks(4)
-        .map(|c| std::str::from_utf8(c).expect("base32 output is ASCII"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut out = String::with_capacity(encoded.len() + encoded.len() / 4);
+    for (i, c) in encoded.chars().enumerate() {
+        if i > 0 && i % 4 == 0 {
+            out.push(' ');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// The first `N` bytes of `digest`, zero-filled past its end. Every caller
+/// truncates a 64-byte BLAKE2b digest, so the fill never happens; it keeps the
+/// copy free of a length check that could panic.
+pub(crate) fn prefix<const N: usize>(digest: &[u8]) -> [u8; N] {
+    let mut out = [0u8; N];
+    for (o, d) in out.iter_mut().zip(digest) {
+        *o = *d;
+    }
+    out
 }
 
 /// Computes the chain hash `BLAKE2b(len(parent_proof) || parent_proof ||
@@ -55,8 +64,5 @@ pub fn chain_hash(parent_proof: &[u8], snapshot_bytes: &[u8]) -> [u8; HASH_LEN] 
     hasher.update((parent_proof.len() as u64).to_le_bytes());
     hasher.update(parent_proof);
     hasher.update(snapshot_bytes);
-    let digest = hasher.finalize();
-    let mut out = [0u8; HASH_LEN];
-    out.copy_from_slice(&digest[..HASH_LEN]);
-    out
+    prefix(&hasher.finalize())
 }

@@ -261,6 +261,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
+      # Clippy on the wasm target: the code host clippy never reads holds the
+      # panic lints too (`ARCH-028`). Before the tests, so a lint fails fast.
+      - name: Toolchain (clippy)
+        run: rustup component add clippy
+      - run: just lint-wasm
       - run: just test-wasm
 
   # ---------------------------------------------------------------------------

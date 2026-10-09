@@ -7,6 +7,10 @@
 ///
 /// Panics only if the platform entropy source is unavailable, which on our
 /// targets (browser, native) is not a recoverable condition.
+#[expect(
+    clippy::expect_used,
+    reason = "a key drawn from a failed entropy source must never be used, so stopping is the safe end"
+)]
 pub(crate) fn fill(buf: &mut [u8]) {
     getrandom::fill(buf).expect("platform CSPRNG unavailable");
 }

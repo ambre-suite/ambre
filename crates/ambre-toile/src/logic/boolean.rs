@@ -49,16 +49,16 @@ pub const FLATTEN_TOL: f64 = 0.25;
 /// when fewer than two paths are given or the geometry fully cancels (the caller
 /// treats an empty result as a no-op). Deterministic.
 pub fn boolean_op(op: BoolOp, paths: &[BezPath], tol: f64) -> BezPath {
-    if paths.len() < 2 {
+    let Some((first, rest)) = paths.split_first().filter(|(_, rest)| !rest.is_empty()) else {
         return BezPath::new();
-    }
+    };
     let rule = overlay_rule(op);
 
     // Seed the accumulator with the first path's contours, then fold each
     // remaining path into it. `overlay` returns `Shapes` (a `Vec<Shape>`), which
     // is itself a valid subject for the next step.
-    let mut acc: Vec<Shape> = vec![flatten_to_contours(&paths[0], tol)];
-    for path in &paths[1..] {
+    let mut acc: Vec<Shape> = vec![flatten_to_contours(first, tol)];
+    for path in rest {
         let clip = flatten_to_contours(path, tol);
         acc = acc.overlay(&clip, rule, FillRule::NonZero);
     }

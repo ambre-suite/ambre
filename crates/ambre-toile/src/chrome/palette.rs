@@ -80,7 +80,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     // armed, else the default (the first swatch).
     let strip_color = move || match active.get() {
         Tool::Sticky(c) => c,
-        _ => STICKY_SWATCHES[0],
+        _ => STICKY_SWATCHES.first().copied().unwrap_or_default(),
     };
     let is_active = move || matches!(active.get(), Tool::Sticky(_));
 

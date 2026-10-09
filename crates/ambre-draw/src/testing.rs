@@ -13,6 +13,13 @@
 // returns a constant so timings are deterministic (and irrelevant) in tests.
 // ============================================================================
 
+// A test double. An unbalanced clip or transform is the bug it exists to
+// catch, so it stops the test at the call that caused it.
+#![allow(
+    clippy::expect_used,
+    reason = "a test double fails the test that misuses it"
+)]
+
 use crate::{
     Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Rect,
     Stroke,

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "a test double fails the test that misuses it"
+)]
+
 use std::collections::HashMap;
 
 use ambre_bus::{DocumentId, SnapshotId, UserId};

@@ -229,6 +229,10 @@ fn write_scaffold(doc: &LoroDoc) {
 /// The identity the scaffolding is written under: a hash of the scaffolding
 /// this build writes (`TOILE-265`). Two builds that scaffold alike share it,
 /// and two that differ never write two changes under one identifier.
+#[expect(
+    clippy::expect_used,
+    reason = "a fresh document with no op takes a peer id and exports"
+)]
 fn scaffold_identity() -> u64 {
     static PEER: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *PEER.get_or_init(|| {
@@ -282,6 +286,10 @@ impl ToileState {
     ///
     /// When a fresh `LoroDoc` refuses `peer`, which it does only after an op is
     /// recorded. No op precedes this call.
+    #[expect(
+        clippy::expect_used,
+        reason = "a fresh document with no op takes a peer id"
+    )]
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: every minted element id captures it.
@@ -296,6 +304,10 @@ impl ToileState {
     /// Shared body of [`new`](Self::new) and [`with_peer`](Self::with_peer): the
     /// board scaffolding and every derived cache, over a `LoroDoc` the caller has
     /// already configured.
+    #[expect(
+        clippy::expect_used,
+        reason = "a document outside a transaction takes a peer id"
+    )]
     fn from_doc(doc: LoroDoc) -> Self {
         let peer = doc.peer_id();
         // Every peer writes the scaffolding as one shared identity, so every

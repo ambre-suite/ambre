@@ -82,7 +82,7 @@ pub async fn invite_to_document(
     // `owner`, who could then revoke/rotate -- a privilege escalation. Only an owner
     // may grant `owner`.
     let caller_rank = doc_role_rank(&m.role).ok_or(AppError::Forbidden)?;
-    if caller_rank < doc_role_rank("editor").expect("editor is a known role") {
+    if doc_role_rank("editor").is_none_or(|editor| caller_rank < editor) {
         return Err(AppError::Forbidden);
     }
     let granted_rank = doc_role_rank(&req.role).ok_or(AppError::Conflict {

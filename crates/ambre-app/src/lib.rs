@@ -454,7 +454,16 @@ impl ChromeStatus {
 // symbol `main` declared multiple times"). The launcher boot path is not what the
 // unit tests exercise (they cover the pure helpers -- route/base64/fps). Dropping
 // `main` from the test build is harmless.
+/// Boot the client: the Logic thread, the Sync worker and the shell.
+///
+/// # Panics
+///
+/// When the browser refuses a thread or the page lacks its mount points.
 #[cfg(not(test))]
+#[expect(
+    clippy::expect_used,
+    reason = "the boot spawns the threads the page runs on, which has no fallback page"
+)]
 #[wasm_bindgen(start)]
 pub fn main() {
     // Our crates log at the build's level, and every dependency at WARN

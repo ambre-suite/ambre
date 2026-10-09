@@ -301,7 +301,7 @@ impl Writer {
                     out.push_str(&delimiter.close());
                 }
             }
-            for delimiter in &wanted[keep..] {
+            for delimiter in wanted.iter().skip(keep) {
                 out.push_str(delimiter.open());
                 open.push(delimiter.clone());
             }

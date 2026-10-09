@@ -819,7 +819,7 @@ mod pass_tests {
     /// The text of every top-level block of a Prose document, in order.
     fn text(state: &DocState) -> String {
         let DocState::Prose(prose) = state else {
-            unreachable!("a Prose document");
+            panic!("the rig holds a Prose document");
         };
         prose
             .root_blocks()

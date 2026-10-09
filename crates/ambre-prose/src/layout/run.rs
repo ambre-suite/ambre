@@ -548,8 +548,11 @@ impl ParleyRunData {
         if upstream && index > 0 && self.segments.get(index).is_some_and(|s| s.start == byte) {
             index -= 1;
         }
-        // `segments` is never empty, so the first one always answers.
-        let segment = self.segments.get(index).unwrap_or(&self.segments[0]);
+        // `segments` is never empty, so the first one always answers. The
+        // default caret only stands in for a run built without one.
+        let Some(segment) = self.segments.get(index).or_else(|| self.segments.first()) else {
+            return (0, Cursor::default());
+        };
         let local = byte.saturating_sub(segment.start);
         (
             index,
@@ -1007,7 +1010,8 @@ const _: () = {
     crosses::<TableShape>();
 };
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use crate::doc;
     use crate::layout::measure::{EffectiveStyle, shipped_measurer};

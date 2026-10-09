@@ -42,6 +42,10 @@ fn post_bytes(scope: &DedicatedWorkerGlobalScope, bytes: &[u8]) {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a Sync worker outside a dedicated worker scope has no channel to report on"
+)]
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();

@@ -90,8 +90,8 @@ fn next_focus(hits: &[ElementId], from: Option<&ElementId>, backward: bool) -> O
     match hits.iter().position(|h| h == from) {
         // `+ len` before subtracting keeps the step unsigned and wraps correctly
         // for the backward case at index 0.
-        Some(idx) if backward => Some(hits[(idx + len - 1) % len].clone()),
-        Some(idx) => Some(hits[(idx + 1) % len].clone()),
+        Some(idx) if backward => hits.get((idx + len - 1) % len).cloned(),
+        Some(idx) => hits.get((idx + 1) % len).cloned(),
         None => first,
     }
 }

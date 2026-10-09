@@ -480,11 +480,16 @@ impl SyncState {
                 rotation_owed,
                 links,
             } => {
-                self.documents.insert(
-                    document_id,
-                    SyncDocumentState::new(document_id, doc_key, doc_type, server_created),
-                );
-                let doc_state = self.documents.get_mut(&document_id).expect("just inserted");
+                let doc_state = self
+                    .documents
+                    .entry(document_id)
+                    .insert_entry(SyncDocumentState::new(
+                        document_id,
+                        doc_key,
+                        doc_type,
+                        server_created,
+                    ))
+                    .into_mut();
                 doc_state.chain = crate::chain::Chain::new(document_id, links);
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.role = role;
@@ -894,9 +899,15 @@ impl SyncState {
                 for seq_update in updates {
                     match self.ingest_update(seq_update.seq, seq_update.update) {
                         Some(Ok(payload)) => payloads.push(payload),
-                        Some(Err(e)) => self.deliver_remote(document_id, Some(Err(e)), |_| {
-                            unreachable!("Err arm never builds an event")
-                        }),
+                        // The `Err` arm only warns; the builder is never called.
+                        Some(Err(e)) => {
+                            self.deliver_remote(document_id, Some(Err(e)), |payload| {
+                                LogicEvent::RemoteUpdateBatch {
+                                    document_id,
+                                    payloads: vec![payload],
+                                }
+                            });
+                        }
                         None => {}
                     }
                 }
@@ -1059,13 +1070,10 @@ impl SyncState {
                 let encrypted = base64::engine::general_purpose::URL_SAFE
                     .decode(&entry.doc_key_enc)
                     .map_err(|e| format!("base64 decode doc_key_enc: {e}"))?;
-                if encrypted.len() < 24 {
-                    return Err("wrapped key too short".into());
-                }
-                let nonce: [u8; 24] = encrypted[..24]
-                    .try_into()
-                    .map_err(|_| "invalid nonce length")?;
-                let ciphertext = encrypted[24..].to_vec();
+                let (nonce, ciphertext) = encrypted
+                    .split_first_chunk::<24>()
+                    .map(|(nonce, ciphertext)| (*nonce, ciphertext.to_vec()))
+                    .ok_or("wrapped key too short")?;
                 // The new key was wrapped by the rotator. Unwrap against THEIR
                 // exchange key, not our own (fallback to our own for older
                 // servers without the wrapper field).

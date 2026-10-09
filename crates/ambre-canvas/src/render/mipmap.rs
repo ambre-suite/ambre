@@ -78,23 +78,24 @@ pub fn level_count(width: u32, height: u32) -> u32 {
 ///   The clamp carries the edge rather than dropping it.
 fn reduce(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
     let mut dst = vec![0u8; (nw as usize) * (nh as usize) * 4];
-    for y in 0..nh {
-        for x in 0..nw {
-            // The 2x2 block this destination texel averages. The clamp makes an
-            // odd source dimension read its last row or column twice instead of
-            // sampling past the end.
-            let x0 = (x * 2).min(w - 1);
-            let y0 = (y * 2).min(h - 1);
-            let x1 = (x * 2 + 1).min(w - 1);
-            let y1 = (y * 2 + 1).min(h - 1);
-            let at = |px: u32, py: u32, c: usize| -> u32 {
-                u32::from(src[((py * w + px) as usize) * 4 + c])
-            };
-            let d = ((y * nw + x) as usize) * 4;
-            for c in 0..4 {
-                let sum = at(x0, y0, c) + at(x1, y0, c) + at(x0, y1, c) + at(x1, y1, c);
-                dst[d + c] = ((sum + 2) / 4) as u8;
-            }
+    // A texel past the end of `src` reads as zero. The caller sizes `src` as
+    // `w * h` texels, so none is; the read stays checked all the same.
+    let at = |px: u32, py: u32, c: usize| -> u32 {
+        src.get(((py * w + px) as usize) * 4 + c)
+            .map_or(0, |&v| u32::from(v))
+    };
+    for (i, texel) in dst.chunks_exact_mut(4).enumerate() {
+        let (x, y) = (i as u32 % nw, i as u32 / nw);
+        // The 2x2 block this destination texel averages. The clamp makes an
+        // odd source dimension read its last row or column twice instead of
+        // sampling past the end.
+        let x0 = (x * 2).min(w - 1);
+        let y0 = (y * 2).min(h - 1);
+        let x1 = (x * 2 + 1).min(w - 1);
+        let y1 = (y * 2 + 1).min(h - 1);
+        for (c, out) in texel.iter_mut().enumerate() {
+            let sum = at(x0, y0, c) + at(x1, y0, c) + at(x0, y1, c) + at(x1, y1, c);
+            *out = ((sum + 2) / 4) as u8;
         }
     }
     dst

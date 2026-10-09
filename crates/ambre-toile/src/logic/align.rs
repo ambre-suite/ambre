@@ -36,13 +36,10 @@ pub use ambre_bus::app::toile::AlignOp;
 /// semantics of each [`AlignOp`].
 pub fn align_deltas(boxes: &[Rect], op: AlignOp) -> Vec<Vec2> {
     let zero = vec![Vec2::ZERO; boxes.len()];
-    if boxes.len() < 2 {
+    let Some((first, rest)) = boxes.split_first().filter(|(_, rest)| !rest.is_empty()) else {
         return zero;
-    }
-    let mut union = boxes[0];
-    for b in &boxes[1..] {
-        union = union.union(*b);
-    }
+    };
+    let union = rest.iter().fold(*first, |union, b| union.union(*b));
     match op {
         AlignOp::Left => shift(boxes, |b| Vec2::new(union.x0 - b.x0, 0.0)),
         AlignOp::HCenter => shift(boxes, |b| Vec2::new(union.center().x - b.center().x, 0.0)),
@@ -91,10 +88,10 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
     // Selection order is not paint order and not screen order. Sort by near
     // edge so the walk lays the boxes out left to right (top to bottom).
     // Keep the original index to answer in the order fed in.
-    let mut order: Vec<usize> = (0..boxes.len()).collect();
-    order.sort_by(|&a, &b| {
-        (axis.near)(&boxes[a])
-            .partial_cmp(&(axis.near)(&boxes[b]))
+    let mut order: Vec<(usize, &Rect)> = boxes.iter().enumerate().collect();
+    order.sort_by(|(_, a), (_, b)| {
+        (axis.near)(a)
+            .partial_cmp(&(axis.near)(b))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     let span = (axis.extent)(&union);
@@ -103,10 +100,12 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
     let gap = (span - occupied) / (boxes.len() - 1) as f64;
 
     let mut out = vec![Vec2::ZERO; boxes.len()];
-    let mut cursor = (axis.near)(&boxes[order[0]]);
-    for &i in &order {
-        out[i] = (axis.delta)(cursor - (axis.near)(&boxes[i]));
-        cursor += (axis.extent)(&boxes[i]) + gap;
+    let mut cursor = order.first().map_or(0.0, |(_, b)| (axis.near)(b));
+    for (i, b) in order {
+        if let Some(slot) = out.get_mut(i) {
+            *slot = (axis.delta)(cursor - (axis.near)(b));
+        }
+        cursor += (axis.extent)(b) + gap;
     }
     out
 }

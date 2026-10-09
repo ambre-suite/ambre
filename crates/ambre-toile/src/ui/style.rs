@@ -211,7 +211,7 @@ mod tests {
             .into_iter()
             .map(|n| match n {
                 DisplayNode::Element(e) => e,
-                _ => unreachable!(),
+                _ => panic!("the fixture builds elements only"),
             })
             .collect();
         let model = style_scope_for(&[eid("a"), eid("b")], &selected).expect("model");

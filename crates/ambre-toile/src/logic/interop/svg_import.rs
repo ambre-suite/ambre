@@ -427,10 +427,10 @@ fn as_axis_aligned_rect(bez: &BezPath) -> Option<Rect> {
     }
     let xs: Vec<f64> = distinct(pts.iter().map(|p| p.x));
     let ys: Vec<f64> = distinct(pts.iter().map(|p| p.y));
-    if xs.len() != 2 || ys.len() != 2 {
-        return None;
+    match (xs.as_slice(), ys.as_slice()) {
+        (&[x0, x1], &[y0, y1]) => Some(Rect::new(x0, y0, x1, y1)),
+        _ => None,
     }
-    Some(Rect::new(xs[0], ys[0], xs[1], ys[1]))
 }
 
 /// The distinct values of an iterator of coordinates, within a small epsilon,

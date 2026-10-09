@@ -125,14 +125,13 @@ pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> f64 {
 
 /// A polyline (freehand stroke) hits within `tol` of any of its segments.
 fn polyline_hit(pts: &[Point], local: Point, tol: f64) -> bool {
-    if pts.is_empty() {
-        return false;
+    match pts {
+        [] => false,
+        [only] => only.distance(local) <= tol,
+        _ => pts
+            .windows(2)
+            .any(|w| matches!(w, &[a, b] if point_segment_distance(local, a, b) <= tol)),
     }
-    if pts.len() == 1 {
-        return pts[0].distance(local) <= tol;
-    }
-    pts.windows(2)
-        .any(|w| point_segment_distance(local, w[0], w[1]) <= tol)
 }
 
 /// Euclidean distance from `p` to the segment `[a, b]`.

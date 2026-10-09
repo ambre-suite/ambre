@@ -395,7 +395,10 @@ pub async fn get_pending_deltas_map(
         let Ok(parsed) = serde_json::from_str::<serde_json::Value>(blob) else {
             continue;
         };
-        let (Some(seq), Some(b64)) = (parsed["seq"].as_u64(), parsed["update_b64"].as_str()) else {
+        let (Some(seq), Some(b64)) = (
+            parsed.get("seq").and_then(serde_json::Value::as_u64),
+            parsed.get("update_b64").and_then(serde_json::Value::as_str),
+        ) else {
             continue;
         };
         if let Ok(wire) = base64::engine::general_purpose::URL_SAFE.decode(b64) {
@@ -936,7 +939,8 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "test-helpers"))]
+#[cfg(test)]
+#[cfg(feature = "test-helpers")]
 mod lua_tests {
     use super::*;
 

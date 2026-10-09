@@ -13,6 +13,14 @@
 // feature and has its own belt in `fixtures_corpus.rs`.
 // ============================================================================
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
+
 use ambre_bus::{DocType, TrameCommand};
 use ambre_core::Uuid;
 use ambre_logic::DocState;

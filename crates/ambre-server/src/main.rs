@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                  do not survive a restart, and multi-instance verification will fail)"
             );
             let mut seed = [0u8; 32];
-            getrandom::fill(&mut seed).expect("CSPRNG");
+            getrandom::fill(&mut seed).map_err(|e| format!("no CSPRNG for the JWT seed: {e}"))?;
             seed
         }
         Err(_) => {

@@ -146,22 +146,32 @@ impl SyncState {
                 // before the relay has seen either (`SYNC-068`).
                 let document_id = DocumentId::new();
 
+                // Sealing and wrapping fail only on a bug. The document is not
+                // created then, and the caller reads why.
                 let name_enc = if name.is_empty() {
-                    None
+                    Ok(None)
                 } else {
-                    Some(
-                        Self::seal_document_name(document_id, &doc_key, &signing_key, &name)
-                            .expect("seal doc name"),
-                    )
+                    Self::seal_document_name(document_id, &doc_key, &signing_key, &name)
+                        .map(Some)
+                        .map_err(|e| format!("CreateDocument: name seal failed: {e}"))
                 };
-
                 let own_pub = x25519_dalek::PublicKey::from(&exchange_key);
-                let wrapped = ambre_crypto::ecdh::wrap_document_key(
-                    &exchange_key,
-                    own_pub.as_bytes(),
-                    &doc_key,
-                )
-                .expect("wrap doc key for self");
+                let sealed = name_enc.and_then(|name_enc| {
+                    ambre_crypto::ecdh::wrap_document_key(
+                        &exchange_key,
+                        own_pub.as_bytes(),
+                        &doc_key,
+                    )
+                    .map(|wrapped| (name_enc, wrapped))
+                    .map_err(|e| format!("CreateDocument: key wrap failed: {e}"))
+                });
+                let (name_enc, wrapped) = match sealed {
+                    Ok(pair) => pair,
+                    Err(message) => {
+                        let _ = tx.send(SyncEvent::HttpError { id, message });
+                        return;
+                    }
+                };
                 let mut enc = wrapped.nonce.to_vec();
                 enc.extend_from_slice(&wrapped.ciphertext);
                 let doc_key_enc = base64::engine::general_purpose::URL_SAFE.encode(&enc);
@@ -304,8 +314,15 @@ impl SyncState {
                         }
                     }
                 };
-                let name_enc = Self::seal_document_name(doc_id, &doc_key, &signing_key, &name)
-                    .expect("seal doc name");
+                let name_enc = match Self::seal_document_name(doc_id, &doc_key, &signing_key, &name)
+                {
+                    Ok(name_enc) => name_enc,
+                    Err(e) => {
+                        let message = format!("RenameDocument: name seal failed: {e}");
+                        let _ = tx.send(SyncEvent::HttpError { id, message });
+                        return;
+                    }
+                };
 
                 // PATCH /api/documents/{id} (matches the server route).
                 let url = format!("{url_scheme}://{api_base}/api/documents/{doc_id}");
@@ -369,13 +386,10 @@ impl ListedName<'_> {
         let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
             .decode(self.doc_key_enc)
             .ok()?;
-        if wrapped_bytes.len() < 24 {
-            return None;
-        }
-        let nonce: [u8; 24] = wrapped_bytes[..24].try_into().ok()?;
+        let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
         let wrapped = ambre_crypto::WrappedKey {
-            nonce,
-            ciphertext: wrapped_bytes[24..].to_vec(),
+            nonce: *nonce,
+            ciphertext: ciphertext.to_vec(),
         };
         let wrapper_hex = if self.wrapper_exchange_pub_key.is_empty() {
             // Self-wrapped owner row: the DH peer is our own public key.

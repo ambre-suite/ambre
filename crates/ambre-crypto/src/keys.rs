@@ -12,7 +12,7 @@
 //!
 //! All three are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
 
-use ambre_core::{KEY_ID_LEN, KeyId, SALT_LEN};
+use ambre_core::{KeyId, SALT_LEN};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
@@ -37,10 +37,7 @@ fn derive32(domain: &[u8], seed: &[u8; 32]) -> [u8; 32] {
     let mut hasher = Blake2b512::new();
     hasher.update(domain);
     hasher.update(seed);
-    let digest = hasher.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&digest[..32]);
-    out
+    crate::hash::prefix(&hasher.finalize())
 }
 
 /// The root secret of a user, decrypted at login from the server-stored,
@@ -129,9 +126,7 @@ impl DocumentKey {
             .chain_update(KEY_ID_DOMAIN)
             .chain_update(self.0)
             .finalize();
-        let mut id = [0u8; KEY_ID_LEN];
-        id.copy_from_slice(&digest[..KEY_ID_LEN]);
-        KeyId::from_array(id)
+        KeyId::from_array(crate::hash::prefix(&digest))
     }
 
     /// Seals `previous` under this key and signs it: one link of the key

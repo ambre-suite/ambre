@@ -133,7 +133,7 @@ impl TrameState {
                         let tidx = (top as i64 - sr1 as i64).div_euclid(bh as i64);
                         let sidx = tidx.rem_euclid(k) as usize;
                         let src_top = sr1 + sidx as u32 * bh;
-                        let raw = sources[sidx].clone();
+                        let raw = sources.get(sidx).cloned().unwrap_or_default();
                         self.fill_merged_tile(top, left, bh, bw, tidx, &raw, src_top, left, series);
                     }
                     top += bh;
@@ -156,7 +156,7 @@ impl TrameState {
                         let tidx = (left as i64 - sc1 as i64).div_euclid(bw as i64);
                         let sidx = tidx.rem_euclid(k) as usize;
                         let src_left = sc1 + sidx as u32 * bw;
-                        let raw = sources[sidx].clone();
+                        let raw = sources.get(sidx).cloned().unwrap_or_default();
                         self.fill_merged_tile(top, left, bh, bw, tidx, &raw, top, src_left, series);
                     }
                     left += bw;
@@ -314,7 +314,7 @@ impl TrameState {
         let text = if let Some((first, step)) = series {
             format_number(first + idx as f64 * step)
         } else {
-            let raw = &sources[k];
+            let raw = sources.get(k).map(String::as_str).unwrap_or_default();
             if raw.starts_with('=') {
                 shift_formula(
                     raw,
@@ -322,7 +322,7 @@ impl TrameState {
                     col as i64 - src_col as i64,
                 )
             } else {
-                raw.clone()
+                raw.to_owned()
             }
         };
         self.write_cell(row, col, &text);

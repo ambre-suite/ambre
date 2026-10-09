@@ -110,14 +110,21 @@ pub(super) fn build(ir: &ProseIr, warnings: &mut Warnings) -> Vec<ImportOp> {
 fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &mut Warnings) {
     let kind = ir_type(block);
     let mut depth = chain.len();
-    while depth > 1 && !accepts(ops, chain[depth - 1], kind) {
+    while depth > 1
+        && chain
+            .get(depth - 1)
+            .is_some_and(|&p| !accepts(ops, p, kind))
+    {
         depth -= 1;
     }
     if depth < chain.len() {
         warnings.lifted(type_name(kind));
     }
-    let parent = chain[depth - 1];
-    let chain = &chain[..depth];
+    // The walk always seeds `chain` with the root, so it is never empty.
+    let chain = chain.get(..depth).unwrap_or_default();
+    let Some(&parent) = chain.last() else {
+        return;
+    };
     match block {
         IrBlock::Paragraph { runs, .. } => {
             push(ops, parent, BlockInit::Paragraph, runs);
@@ -611,7 +618,8 @@ fn file_stem(title: &str) -> String {
         .to_owned()
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use crate::events::{BlockId, ProseCommand, tree_id};

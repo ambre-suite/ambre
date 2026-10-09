@@ -116,7 +116,8 @@ pub fn export_pdf(
         // `from_wh` only rejects a non-positive extent; `PageSize::new` clamps to
         // a positive minimum, so this is infallible in practice.
         let settings = PageSettings::from_wh(page.width as f32, page.height as f32)
-            .unwrap_or_else(|| PageSettings::from_wh(1.0, 1.0).expect("unit page is valid"));
+            .or_else(|| PageSettings::from_wh(1.0, 1.0))
+            .unwrap_or_default();
         let mut kpage = doc.start_page_with(settings);
         {
             let mut surface = kpage.surface();

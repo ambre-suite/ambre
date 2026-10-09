@@ -21,6 +21,10 @@ use crate::error::CryptoError;
 pub const SIGNATURE_LEN: usize = 64;
 
 /// Appends `len(field) as u32 LE || field` to `msg`.
+#[expect(
+    clippy::expect_used,
+    reason = "a field past 4 GiB never reaches a signature, and a wrapped length would forge the transcript"
+)]
 fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
     // A field longer than u32::MAX is not representable on the wire and never
     // occurs (nonce/tag are fixed-small, ciphertext is bounded by transport

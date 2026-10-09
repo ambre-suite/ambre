@@ -105,6 +105,10 @@ impl TextInput {
     ///
     /// When the DOM refuses to create or attach the `<textarea>`. The canvas has no
     /// keyboard entry point without it, so there is nothing to degrade to.
+    #[expect(
+        clippy::expect_used,
+        reason = "a boot without the keyboard pipe has no input path to degrade to"
+    )]
     pub fn create(document: &Document, parent: &Element) -> Self {
         let textarea: HtmlTextAreaElement = document
             .create_element("textarea")
@@ -155,6 +159,10 @@ impl TextInput {
     /// # Panics
     ///
     /// On a [`detached`](Self::detached) pipe, which has no element to attach to.
+    #[expect(
+        clippy::expect_used,
+        reason = "only the host boot asks for the element, and it holds a created pipe"
+    )]
     pub fn element(&self) -> &HtmlTextAreaElement {
         &self
             .dom

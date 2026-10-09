@@ -137,7 +137,7 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> u32 {
         return 0;
     };
     let mut ordinal = 1_u32;
-    for before in siblings[..here].iter().rev() {
+    for before in siblings.iter().take(here).rev() {
         if ordered_style_of(tree, before) != Some(style) {
             break;
         }

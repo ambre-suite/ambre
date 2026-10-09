@@ -174,18 +174,18 @@ impl SelectTool {
     ) -> SelectOutcome {
         // A single-element selection exposes transform handles; test them first so
         // a handle press starts a resize/rotate rather than a move.
-        if selection.len() == 1
+        if let [only] = selection
             && let Some(sb) = selection_bounds(selection, display)
         {
             let screen_b = world_rect_to_screen(sb, cam);
-            let rot = element_rotation(display, &selection[0]);
+            let rot = element_rotation(display, only);
             // The drawn box is `screen_b` rotated by `rot` about its center. A
             // point hits a handle iff its de-rotated image hits the axis-aligned
             // box (toile-selection). Press and hover share this de-rotation so they
             // always agree.
             let pick = unrotate_point(screen, screen_b.center(), rot);
-            if let Some(h) = selection_handle_at(&selection[0], display, screen_b, pick) {
-                let id = selection[0].clone();
+            if let Some(h) = selection_handle_at(only, display, screen_b, pick) {
+                let id = only.clone();
                 match h {
                     Handle::Rotate => {
                         let center = sb.center();
@@ -370,14 +370,14 @@ impl SelectTool {
         cam: &ViewportTransform,
         screen: Point,
     ) -> Option<Handle> {
-        if selection.len() != 1 {
+        let [only] = selection else {
             return None;
-        }
+        };
         let sb = selection_bounds(selection, display)?;
         let screen_b = world_rect_to_screen(sb, cam);
-        let rot = element_rotation(display, &selection[0]);
+        let rot = element_rotation(display, only);
         let pick = unrotate_point(screen, screen_b.center(), rot);
-        selection_handle_at(&selection[0], display, screen_b, pick)
+        selection_handle_at(only, display, screen_b, pick)
     }
 
     /// The cursor the in-flight drag calls for, so it stays stable
@@ -857,11 +857,8 @@ impl ToolMachine {
         let mut nodes = std::mem::take(&mut self.pen);
         // The finishing double-click lands a duplicate press on the last node;
         // drop trailing near-duplicates so the path is not degenerate.
-        while nodes.len() >= 2
-            && nodes[nodes.len() - 1]
-                .pt
-                .distance(nodes[nodes.len() - 2].pt)
-                < PEN_DEDUP
+        while let [.., before, last] = nodes.as_slice()
+            && last.pt.distance(before.pt) < PEN_DEDUP
         {
             nodes.pop();
         }
@@ -1022,15 +1019,14 @@ pub(crate) fn resolve_group_target(
         chain.push(g.clone());
         cur = g;
     }
-    match scope {
-        Some(s) => match chain.iter().position(|c| c == s) {
-            Some(0) => chain[0].clone(),
-            Some(pos) => chain[pos - 1].clone(),
-            // Clicked outside the entered scope: select the whole top-most group.
-            None => chain.last().cloned().unwrap_or_else(|| chain[0].clone()),
-        },
-        None => chain.last().cloned().unwrap_or_else(|| chain[0].clone()),
-    }
+    // `chain` starts with `hit`, so every lookup below finds an entry. The
+    // fallback, the top-most group the walk ended on, is never taken.
+    let picked = match scope.and_then(|s| chain.iter().position(|c| c == s)) {
+        Some(pos) => chain.get(pos.saturating_sub(1)),
+        // Clicked outside the entered scope: select the whole top-most group.
+        None => chain.last(),
+    };
+    picked.cloned().unwrap_or(cur)
 }
 
 /// The world point of an anchor on an element's AABB.
@@ -1068,8 +1064,7 @@ fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
         return p;
     };
     p.move_to(first.pt);
-    for w in nodes.windows(2) {
-        let (a, b) = (&w[0], &w[1]);
+    for (a, b) in nodes.iter().zip(nodes.iter().skip(1)) {
         if a.out.is_none() && b.out.is_none() {
             p.line_to(b.pt);
         } else {
@@ -1391,7 +1386,7 @@ mod tests {
     /// A rectangle that is a member of group `group`.
     fn member_elem(id: &str, bounds: Rect, group: &str) -> DisplayNode {
         let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
-            unreachable!()
+            panic!("rect_elem builds an element")
         };
         e.group = Some(ElementId(group.to_owned()));
         DisplayNode::Element(e)
@@ -1683,7 +1678,7 @@ mod tests {
     /// Logic derive), for the rotated hit-test / resize tests.
     fn rotated_rect_elem(id: &str, bounds: Rect, theta: f64) -> DisplayNode {
         let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
-            unreachable!()
+            panic!("rect_elem builds an element")
         };
         e.transform = rotate_about(bounds.center(), theta);
         DisplayNode::Element(e)

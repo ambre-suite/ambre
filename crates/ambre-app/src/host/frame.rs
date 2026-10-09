@@ -364,10 +364,11 @@ impl FrameHost {
         while times.front().is_some_and(|&t| now - t > 1000.0) {
             times.pop_front();
         }
-        *fps = if times.len() >= 2 {
-            (times.len() - 1) as f32 / ((now - times.front().unwrap()) / 1000.0) as f32
-        } else {
-            0.0
+        *fps = match times.front() {
+            Some(&oldest) if times.len() >= 2 => {
+                (times.len() - 1) as f32 / ((now - oldest) / 1000.0) as f32
+            }
+            _ => 0.0,
         };
     }
 

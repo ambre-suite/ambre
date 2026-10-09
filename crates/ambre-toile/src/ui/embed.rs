@@ -559,7 +559,11 @@ impl EmbedSessions {
             .copied()
             .collect();
         for document_id in gone {
-            match self.open[&document_id] {
+            // `gone` was read from `open`'s own keys, so the lookup always hits.
+            let Some(&countdown) = self.open.get(&document_id) else {
+                continue;
+            };
+            match countdown {
                 // Deadline reached: close for real, if the queue takes it.
                 Some(deadline) if now_ms >= deadline => {
                     if send(LogicCommand::CloseDocument { document_id }) {

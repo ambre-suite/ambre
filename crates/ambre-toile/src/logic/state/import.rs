@@ -303,12 +303,13 @@ impl ToileState {
         else {
             return ToileOutcome::display_only(Vec::new());
         };
-        let ready = {
-            let pending = &mut self.pending_imports[pos];
-            let slot = pending.outstanding.remove(&id).expect("id present");
-            rewrite_hash(&mut pending.batch, slot, &content_hash);
-            pending.outstanding.is_empty()
+        let Some(pending) = self.pending_imports.get_mut(pos) else {
+            return ToileOutcome::display_only(Vec::new());
         };
+        if let Some(slot) = pending.outstanding.remove(&id) {
+            rewrite_hash(&mut pending.batch, slot, &content_hash);
+        }
+        let ready = pending.outstanding.is_empty();
         if !ready {
             // More uploads still in flight; apply nothing yet.
             return ToileOutcome::display_only(Vec::new());
@@ -384,14 +385,16 @@ impl ToileState {
         }
         unit -= job.creates;
         if unit < job.styles.len() {
-            if let (Some(Some(id)), Some(style)) = (job.slot_ids.get(unit), &job.styles[unit]) {
+            if let (Some(Some(id)), Some(Some(style))) =
+                (job.slot_ids.get(unit), job.styles.get(unit))
+            {
                 self.restyle_inner(std::slice::from_ref(id), style);
             }
             return;
         }
         unit -= job.styles.len();
-        if unit < job.groups.len() {
-            let members: Vec<ElementId> = job.groups[unit]
+        if let Some(group) = job.groups.get(unit) {
+            let members: Vec<ElementId> = group
                 .members
                 .iter()
                 .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
@@ -411,7 +414,10 @@ impl ToileState {
             return;
         }
         unit -= job.groups.len();
-        let conn = &job.connectors[unit];
+        // `done` stops at the last connector, so a unit past them is no unit.
+        let Some(conn) = job.connectors.get(unit) else {
+            return;
+        };
         let (Some(from), Some(to)) = (
             self.resolve_ref(conn.from, &job.slot_ids, &job.group_ids),
             self.resolve_ref(conn.to, &job.slot_ids, &job.group_ids),

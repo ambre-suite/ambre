@@ -188,7 +188,7 @@ pub fn percentiles(samples: &[f64]) -> Option<(f64, f64)> {
     sorted.sort_by(f64::total_cmp);
     let at = |q: f64| {
         let rank = (q * (sorted.len() - 1) as f64).round() as usize;
-        sorted[rank]
+        sorted.get(rank).copied().unwrap_or_default()
     };
     Some((at(0.5), at(0.95)))
 }

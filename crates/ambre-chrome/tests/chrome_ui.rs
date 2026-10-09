@@ -15,6 +15,13 @@
 //! skips it. The pure decision logic (`key_from_dom`, `place_menu`) is covered by
 //! the `#[test]`s in `src/`.
 #![cfg(target_arch = "wasm32")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
 
 use ambre_chrome::{
     AppShell, CommandStates, FONT_SIZES, FontSizeSelect, FormatToggle, Header, PerfChip,

@@ -8,3 +8,10 @@ disallowed-types = [
     { path = "std::sync::Condvar", reason = "a condition variable waits, and the main thread may not (ARCH-020)" },
     { path = "std::sync::Barrier", reason = "a barrier waits, and the main thread may not (ARCH-020)" },
 ]
+
+# The four lines of the root `clippy.toml`, which this file shadows: a test
+# asserts by panicking, so the panic lints (`ARCH-028`) stop at its boundary.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

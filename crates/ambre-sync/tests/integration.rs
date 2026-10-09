@@ -3,6 +3,14 @@
 // Integration tests for the SYNC P1 pipeline -- session lifecycle, document CRUD,
 // multi-document open/close, and mock WebSocket transport verification.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
+
 use ambre_bus::{DocType, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand};
 use ambre_sync::mock::MockWsTransport;
 

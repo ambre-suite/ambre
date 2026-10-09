@@ -3,6 +3,11 @@
 // In-memory WebSocket transport for testing the Sync pipeline without WASM or
 // network. Two `ambre_bus::conduit` pairs form a bidirectional client<->server loop.
 
+#![allow(
+    clippy::expect_used,
+    reason = "a test double fails the test that misuses it"
+)]
+
 use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_client_msg};
 
 /// Bidirectional in-memory WebSocket transport for host tests.

@@ -54,6 +54,10 @@ pub fn shared_secret(
 /// both parties' public keys (`info = KEK_DOMAIN || sender_pk || recipient_pk`).
 /// `sender_pk` is the wrapper's public key, `recipient_pk` the holder's; both
 /// sides must agree on the ordering to reconstruct the same KEK.
+#[expect(
+    clippy::expect_used,
+    reason = "HKDF expands up to 255 digests, and 32 bytes is far below that"
+)]
 fn derive_kek(shared: &[u8; 32], sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) -> DocumentKey {
     // `SimpleHkdf` (SimpleHmac-based) is required: BLAKE2b's variable-output core
     // is not the "eager" hash the default `Hkdf<H>` (raw `Hmac`) demands.

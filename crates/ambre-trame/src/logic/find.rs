@@ -426,7 +426,7 @@ fn replace_ci(raw: &str, query: &str, replacement: &str) -> String {
     let needle = query.to_lowercase();
     let mut out = String::with_capacity(raw.len());
     let mut rest = raw;
-    while !rest.is_empty() {
+    while let Some(ch) = rest.chars().next() {
         // A non-empty needle always consumes at least one char, so `rest` shrinks
         // on every iteration whichever branch is taken.
         match ci_match_len(rest, &needle) {
@@ -435,7 +435,6 @@ fn replace_ci(raw: &str, query: &str, replacement: &str) -> String {
                 rest = &rest[len..];
             }
             _ => {
-                let ch = rest.chars().next().expect("rest is not empty");
                 out.push(ch);
                 rest = &rest[ch.len_utf8()..];
             }

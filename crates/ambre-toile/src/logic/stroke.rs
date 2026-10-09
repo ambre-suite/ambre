@@ -19,13 +19,16 @@ const SEGMENTS_PER_SPAN: usize = 8;
 /// dot or an empty stroke), so a degenerate stroke still renders.
 pub fn smooth_stroke(points: &[StrokePoint], out: &mut Vec<Point>) {
     out.clear();
-    match points.len() {
-        0 => {}
-        1 => out.push(Point::new(points[0].x as f64, points[0].y as f64)),
+    let point = |s: &StrokePoint| Point::new(s.x as f64, s.y as f64);
+    match points {
+        [] => {}
+        [only] => out.push(point(only)),
         _ => {
+            // The clamp keeps the index inside `points`, so the fallback to
+            // the origin is never taken.
             let p = |i: isize| -> Point {
                 let idx = i.clamp(0, points.len() as isize - 1) as usize;
-                Point::new(points[idx].x as f64, points[idx].y as f64)
+                points.get(idx).map_or(Point::ORIGIN, point)
             };
             out.push(p(0));
             for i in 0..points.len() as isize - 1 {

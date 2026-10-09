@@ -60,7 +60,8 @@ impl SyncState {
                                 return;
                             }
                         };
-                        if master_key_enc.len() < 24 {
+                        let Some((nonce, ciphertext)) = master_key_enc.split_first_chunk::<24>()
+                        else {
                             tracing::warn!(
                                 "Sync: master_key_enc too short ({} bytes)",
                                 master_key_enc.len()
@@ -69,9 +70,7 @@ impl SyncState {
                                 message: CORRUPT.into(),
                             });
                             return;
-                        }
-                        let nonce: &[u8; 24] = master_key_enc[..24].try_into().expect("nonce len");
-                        let ciphertext = &master_key_enc[24..];
+                        };
                         let user_key =
                             match ambre_crypto::passphrase::derive_user_key(&passphrase, &salt) {
                                 Ok(k) => k,
@@ -384,17 +383,31 @@ impl SyncState {
                     let pub_key = x25519_dalek::PublicKey::from(&exchange_key);
                     hex::encode(pub_key.as_bytes())
                 };
-                let salt = {
-                    let mut buf = [0u8; 32];
-                    getrandom::fill(&mut buf).expect("CSPRNG");
-                    buf
+                // Each step below fails only on a broken platform or a bug. The
+                // account is not created then, and the user reads why.
+                let mut salt = [0u8; 32];
+                let wrapped = getrandom::fill(&mut salt)
+                    .map_err(|e| format!("no CSPRNG for the account salt: {e}"))
+                    .and_then(|()| {
+                        ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
+                            .map_err(|e| format!("user-key derivation failed: {e}"))
+                    })
+                    .and_then(|user_key| {
+                        master_seed
+                            .wrap_for_storage(
+                                &DocumentKey::from_array(user_key),
+                                b"ambre-master-seed",
+                            )
+                            .map_err(|e| format!("master-seed wrap failed: {e}"))
+                    });
+                let (nonce, master_key_enc) = match wrapped {
+                    Ok(pair) => pair,
+                    Err(message) => {
+                        tracing::warn!("Sync: {message}");
+                        let _ = logic_tx.send(LogicEvent::AuthError { message });
+                        return;
+                    }
                 };
-                let user_key = ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
-                    .expect("key derivation");
-                let user_doc_key = DocumentKey::from_array(user_key);
-                let (nonce, master_key_enc) = master_seed
-                    .wrap_for_storage(&user_doc_key, b"ambre-master-seed")
-                    .expect("wrap master seed");
                 let mut master_key_with_nonce = nonce.to_vec();
                 master_key_with_nonce.extend_from_slice(&master_key_enc);
 

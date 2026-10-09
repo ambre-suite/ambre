@@ -324,7 +324,7 @@ fn coordinates_are_clamped_to_the_world_bound() {
             assert!(at.x.abs() <= 500.0 && at.y.abs() <= 500.0);
             assert!(size.width <= 1000.0 && size.height <= 1000.0);
         }
-        _ => unreachable!(),
+        _ => panic!("the import produced no CreateElement"),
     }
 }
 

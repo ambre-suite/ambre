@@ -236,7 +236,8 @@ mod tests {
 /// Index-equivalence property test (mandatory): for a random op sequence,
 /// the incrementally maintained tree must return the same visible set as a
 /// from-scratch bulk rebuild. Host-only (proptest does not build on wasm32).
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod prop {
     use super::*;
     use kurbo::Size;

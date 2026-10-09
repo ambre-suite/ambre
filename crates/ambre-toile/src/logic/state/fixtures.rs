@@ -9,6 +9,15 @@
 //! feature and is unreachable from any client build. The determinism seam
 //! (`ToileState::with_peer`) is *not* here -- it is engine API, documented in
 //! `toile-engine` and ungated, as is [`ToileState::import_snapshot`].
+//! A generator aborts on a corpus it cannot build, so the panic lints of
+//! `ARCH-028` do not hold here.
+
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "a fixture generator aborts on a corpus it cannot build"
+)]
 
 use std::collections::{BTreeMap, HashMap};
 

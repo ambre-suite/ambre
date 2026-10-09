@@ -13,6 +13,12 @@
 //! The sizes are printed once per corpus, on standard error, because `criterion`
 //! measures time and not bytes.
 
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "a bench aborts on a fixture it cannot build"
+)]
+
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};

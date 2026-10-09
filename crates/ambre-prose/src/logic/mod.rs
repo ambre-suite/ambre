@@ -853,10 +853,10 @@ impl ProseState {
             .unwrap_or_default();
         let tree = doc::blocks(&self.doc);
         let roots = doc::roots(&tree);
-        if roots.len() == 1
+        if let [root] = roots[..]
             && doc::grown_empty_roots(&self.doc, &tree) == roots
-            && !carried.includes_id(roots[0].id())
-            && let Err(e) = tree.delete(roots[0])
+            && !carried.includes_id(root.id())
+            && let Err(e) = tree.delete(root)
         {
             tracing::warn!("Prose: the scaffolding paragraph could not be dropped: {e:?}");
         }

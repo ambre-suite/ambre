@@ -189,13 +189,18 @@ fn solve_wrap(content: Rect, layout: &AutoLayout, children: &[Size]) -> Vec<Rect
     let mut out = vec![Rect::ZERO; children.len()];
     let mut y = content.y0;
     for row in rows {
-        let row_sizes: Vec<Size> = row.iter().map(|&i| children[i]).collect();
+        let row_sizes: Vec<Size> = row
+            .iter()
+            .filter_map(|&i| children.get(i).copied())
+            .collect();
         let row_height = row_sizes.iter().map(|s| s.height).fold(0.0_f64, f64::max);
         // Solve this row in a one-row-tall band; Fill stretches to that band.
         let band = Rect::new(content.x0, y, content.x1, y + row_height);
         let solved = solve_axis(band, layout, &row_sizes, Axis::X);
         for (&i, r) in row.iter().zip(solved) {
-            out[i] = r;
+            if let Some(slot) = out.get_mut(i) {
+                *slot = r;
+            }
         }
         y += row_height + layout.gap;
     }

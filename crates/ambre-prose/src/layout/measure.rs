@@ -204,7 +204,8 @@ impl TextMetrics {
 /// A measurer holding the faces the application ships.
 ///
 /// Tests only: it stands in for the `LoadFonts` delivery a running peer gets.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn shipped_measurer() -> Measurer {
     let mut measurer = Measurer::new();
     for bytes in fonts::shipped_faces() {

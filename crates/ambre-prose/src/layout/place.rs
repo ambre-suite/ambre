@@ -885,7 +885,8 @@ mod tests {
 }
 
 /// The universal rules placement holds over any document it is handed.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod properties {
     use proptest::prelude::*;
 

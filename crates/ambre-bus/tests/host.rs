@@ -11,6 +11,14 @@
 // move and intentionally carries no `Serialize` derive).
 // ============================================================================
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
+)]
+
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     AppCommand, CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId,
