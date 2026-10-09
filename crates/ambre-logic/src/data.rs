@@ -11,6 +11,7 @@ use super::*;
 // reaches only through `AppCommand` / `AppEvent`.
 use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
+use ambre_bus::sync_warning::SyncWarningCode;
 
 impl LogicState {
     /// Render a Toile deck to a PDF and answer with the bytes
@@ -549,6 +550,41 @@ impl LogicState {
             return;
         }
         self.apply_remote(document_id, &delta.payload);
+        self.track_waiting(document_id, &[(delta.seq, delta.payload.as_slice())]);
+    }
+
+    /// Note what the deltas just applied wait on, and drop what the document
+    /// now holds. A document left waiting for good is reported (`AUTHOR-025`).
+    fn track_waiting(&mut self, document_id: DocumentId, applied: &[(u64, &[u8])]) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        let crdt = doc.state.crdt();
+        for (seq, payload) in applied {
+            doc.waiting.note(*seq, payload, crdt);
+        }
+        doc.waiting.settle(crdt);
+        self.report_stalled(document_id);
+    }
+
+    /// Tell the user, once, that a delta waits on an operation no delta
+    /// carries (`AUTHOR-025`). Only after the replay: before it, the
+    /// operation may still be on its way.
+    pub(crate) fn report_stalled(&mut self, document_id: DocumentId) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        if !doc.ready || !doc.waiting.stalled(doc.ledger.contiguous_end()) {
+            return;
+        }
+        tracing::warn!(
+            "Logic: doc {document_id} holds a delta waiting on an operation no delta carries"
+        );
+        self.send_to_ui(UiEvent::SyncWarning {
+            document_id,
+            code: SyncWarningCode::DocumentUnreadable,
+            message: "a delta waits on an operation no delta carries".to_owned(),
+        });
     }
 
     /// Note the relay's number of a delta, and what it carries when it was
@@ -563,13 +599,13 @@ impl LogicState {
     /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
     /// checked on its own, and only the refused ones are left out.
     pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
-        let accepted: Vec<Vec<u8>> = deltas
+        let accepted: Vec<(u64, Vec<u8>)> = deltas
             .into_iter()
             .filter_map(|delta| {
                 let accepted = authored_by(&delta.payload, delta.peer);
                 self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
                 if accepted {
-                    Some(delta.payload)
+                    Some((delta.seq, delta.payload))
                 } else {
                     tracing::warn!(
                         "Logic: refused a replayed delta on doc {document_id}: an operation is \
@@ -580,9 +616,16 @@ impl LogicState {
                 }
             })
             .collect();
-        if !accepted.is_empty() {
-            self.apply_remote_batch(document_id, &accepted);
+        if accepted.is_empty() {
+            return;
         }
+        let (seqs, payloads): (Vec<u64>, Vec<Vec<u8>>) = accepted.into_iter().unzip();
+        self.apply_remote_batch(document_id, &payloads);
+        let applied: Vec<(u64, &[u8])> = seqs
+            .into_iter()
+            .zip(payloads.iter().map(Vec::as_slice))
+            .collect();
+        self.track_waiting(document_id, &applied);
     }
 
     /// Apply a remote CRDT delta to a document and forward viewport events.
@@ -744,6 +787,7 @@ impl LogicState {
             let base = doc.state.crdt().oplog_vv();
             doc.ledger.reset(covered, base);
         }
+        self.track_waiting(document_id, &[]);
     }
 
     /// Check a snapshot against the deltas this client holds, and answer the

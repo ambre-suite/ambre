@@ -71,13 +71,13 @@ derive from no key. No delta ever carries them, so every client must write them 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `AUTHOR-024` | `INV` | A client MUST write the scaffolding and each migration of a schema version as the operations every other build writes for it. | this spec section 3; `SCHEMA-020` | not built | unbuilt -- lands with the `The operations no session signs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-024` | `INV` | A client MUST write the scaffolding and each migration of a schema version as the operations every other build writes for it. | this spec section 3; `SCHEMA-020` | `ambre_trame::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the scaffolding's identity against `schema/scaffold.txt`; `ambre_toile::logic::state::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Toile; `ambre_prose::logic::schema_shape::the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version` -- the same for Prose; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section of `scaffold.txt` append-only | partial -- what each migration step writes is not frozen; lands with the `Each migration frozen with its version` Story (`ambre-roadmap.md` E5) | partial |
 
 ### 1.6 A delta that waits on an operation no session signs
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `AUTHOR-025` | `FAIL` | Given a delta that waits on a scaffolding or migration operation the client never wrote, the client MUST report the document as unreadable, never hold the delta for ever. | this spec section 3 | not built | unbuilt -- lands with the `The operations no session signs` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-025` | `FAIL` | Given a delta that waits on a scaffolding or migration operation the client never wrote, the client MUST report the document as unreadable, never hold the delta for ever. | this spec section 3 | `ambre_logic::authorship_tests::a_delta_waiting_on_a_foreign_scaffold_reports_the_document` -- reported once, after the replay, and never for this build's scaffolding; `ambre_logic::authorship_tests::a_delta_past_a_gap_is_not_reported` -- a gap below the delta may still fill; `ambre_logic::waiting::tests::a_delta_waiting_on_one_not_yet_held_is_not_reported` -- a dependency that arrives settles the delta; `ambre_sync::updates::tests::a_held_snapshot_is_checked_once_the_replay_is_done` -- the open is ready only after the held snapshot's verdict | none | verified |
 
 ### 1.7 The open, before and after the session identity
 
@@ -94,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 20 `verified`, 3 `partial`, 6 `unimplemented`. Every delta is checked, and every
+* **Verification.** 21 `verified`, 4 `partial`, 4 `unimplemented`. Every delta is checked, and every
   row on it holds by a test. Nothing checks a snapshot yet, so its author can still place any
   operation in it.
 
@@ -248,13 +248,13 @@ The binding has no control of its own.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No snapshot is checked.** A snapshot and a local restore import with no check, so their author
-  can still place any operation in them. The rows of section 1.4 close that.
+* **A local restore is not checked.** It imports with no check, so whoever wrote the local store
+  can still place any operation in it. A snapshot from the relay is checked (section 1.4).
 * **No reader resolves a PeerID yet.** The resolution is built and tested, and no surface shows an
   author. The first is the message of Murmure.
-* **The shared scaffolding never travels.** A delta built on another build's scaffolding, or on a
-  migration this client never ran, waits for operations no signed delta carries (`AUTHOR-024`,
-  `AUTHOR-025`).
+* **A migration step is held by convention alone.** The scaffolding's identity is frozen per
+  version, and what a migration step writes is not (`AUTHOR-024`). A step edited after its version
+  shipped leaves a delta waiting, and the document is then reported unreadable (`AUTHOR-025`).
 * **An edit made before the identity is lost.** The window is one message from the Sync worker,
   taken at the open (`AUTHOR-026`). A cached document waits for the same message before it shows,
   because Prose writes its restore under the session's PeerID (`AUTHOR-027`).

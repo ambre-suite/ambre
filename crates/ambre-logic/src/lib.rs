@@ -36,6 +36,8 @@ mod data;
 mod dispatch;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
+/// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
+mod waiting;
 
 /// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
@@ -451,6 +453,11 @@ struct LiveDoc {
     /// The relay's number of each delta applied since the last snapshot, and
     /// what it carries. A snapshot check reads it (`AUTHOR-016`).
     ledger: snapshot_check::SeqLedger,
+    /// The deltas still missing a dependency (`AUTHOR-025`).
+    waiting: waiting::Waiting,
+    /// Set by `DocumentReady`: every delta the relay kept is replayed, so a
+    /// delta still waiting below the ledger's contiguous end waits for ever.
+    ready: bool,
 }
 
 /// A local restore held until the document has its session identity.
@@ -468,6 +475,8 @@ impl LiveDoc {
             identity: None,
             held_restores: Vec::new(),
             ledger: snapshot_check::SeqLedger::default(),
+            waiting: waiting::Waiting::default(),
+            ready: false,
         }
     }
 }
@@ -1220,7 +1229,7 @@ mod authorship_tests {
     struct Rig {
         state: LogicState,
         sync: Receiver<SyncCommand>,
-        _ui: Receiver<UiEvent>,
+        ui: Receiver<UiEvent>,
         document_id: DocumentId,
         peer: u64,
     }
@@ -1242,7 +1251,7 @@ mod authorship_tests {
         Rig {
             state,
             sync,
-            _ui: ui,
+            ui,
             document_id,
             peer,
         }
@@ -1468,6 +1477,80 @@ mod authorship_tests {
                 _ => None,
             })
             .expect("a pending snapshot is answered")
+    }
+
+    /// A delta Alice writes on a scaffolding another build wrote under `peer`.
+    fn on_foreign_scaffold(peer: u64) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        doc.set_peer_id(peer)
+            .expect("a fresh document takes a peer id");
+        doc.get_map("meta")
+            .insert("schema_version", 99)
+            .expect("an insert");
+        doc.commit();
+        let base = doc.oplog_vv();
+        doc.set_peer_id(ALICE).expect("a peer id");
+        doc.get_map("meta").insert("note", "x").expect("an insert");
+        doc.commit();
+        doc.export(ExportMode::updates(&base)).expect("an export")
+    }
+
+    /// Whether the UI was told the document cannot be read.
+    fn told_unreadable(rig: &Rig) -> bool {
+        rig.ui.try_iter().any(|event| {
+            matches!(
+                event,
+                UiEvent::SyncWarning {
+                    code: ambre_bus::sync_warning::SyncWarningCode::DocumentUnreadable,
+                    ..
+                }
+            )
+        })
+    }
+
+    fn ready(rig: &mut Rig) {
+        rig.state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: rig.document_id,
+            role: Role::Owner,
+        });
+    }
+
+    /// `AUTHOR-025`: a delta built on a scaffolding this client never wrote
+    /// is reported once the replay is done, and only then. A delta on this
+    /// build's scaffolding is not.
+    #[test]
+    fn a_delta_waiting_on_a_foreign_scaffold_reports_the_document() {
+        let mut rig = rig();
+        receive(&mut rig, written_by(ALICE, "ours"), 1);
+        receive(&mut rig, on_foreign_scaffold(0x5CAF), 2);
+        assert!(
+            !told_unreadable(&rig),
+            "reported before the replay was done"
+        );
+        ready(&mut rig);
+        assert!(told_unreadable(&rig), "the document was not reported");
+        receive(&mut rig, on_foreign_scaffold(0x5CAF), 3);
+        assert!(!told_unreadable(&rig), "the document was reported twice");
+
+        let mut clean = rig_with_ready();
+        receive(&mut clean, written_by(ALICE, "ours"), 1);
+        assert!(!told_unreadable(&clean), "a readable delta was reported");
+    }
+
+    /// A delta waiting on one the client does not hold yet is not reported:
+    /// the gap may still fill.
+    #[test]
+    fn a_delta_past_a_gap_is_not_reported() {
+        let mut rig = rig_with_ready();
+        receive(&mut rig, on_foreign_scaffold(0x5CAF), 3);
+        assert!(!told_unreadable(&rig));
+    }
+
+    fn rig_with_ready() -> Rig {
+        let mut rig = rig();
+        ready(&mut rig);
+        rig.ui.try_iter().for_each(drop);
+        rig
     }
 
     /// `AUTHOR-016`, `AUTHOR-017`, `AUTHOR-018`: a pending snapshot holding

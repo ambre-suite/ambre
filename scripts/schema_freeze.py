@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""The frozen schema sections of `crates/*/schema/shapes.txt`, held append-only.
+"""The frozen schema sections of `crates/*/schema/*.txt`, held append-only.
 
 Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
-the value types a build writes (`SCHEMA-018`). A belt
+the value types a build writes (`SCHEMA-018`), in `shapes.txt`. It also freezes
+the identity its scaffolding is written under (`AUTHOR-024`), in
+`scaffold.txt`. Every file below says "shape" for both. A belt
 in the crate compares a build against that text. The belt alone is weak: a
 developer whose build moved the shape can regenerate the section in place and
 watch the belt go green, with the version never raised and every peer on the
@@ -41,7 +43,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GLOB = "crates/*/schema/shapes.txt"
+BELT = "the_shape_a_build_writes_is_the_shape_frozen_for_its_version"
+SCAFFOLD_BELT = "the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version"
+# Each frozen file, and the belt that compares a build against it.
+FREEZES = {"shapes.txt": BELT, "scaffold.txt": SCAFFOLD_BELT}
 # `== v3`: the line that opens a section. Everything above the first one is the
 # file's comment header, which explains the format and is free to be reworded.
 MARK = "== "
@@ -76,7 +81,7 @@ def frozen_files(base: str) -> list[Path]:
     Globbing the disk alone would let a deleted file pass unseen, which is the
     loudest way to edit a section.
     """
-    out = set(ROOT.glob(GLOB))
+    out = {p for name in FREEZES for p in ROOT.glob(f"crates/*/schema/{name}")}
     done = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", base, "crates/"],
         cwd=ROOT,
@@ -84,7 +89,7 @@ def frozen_files(base: str) -> list[Path]:
         text=True,
     )
     for line in done.stdout.splitlines():
-        if line.endswith("/schema/shapes.txt"):
+        if any(line.endswith(f"/schema/{name}") for name in FREEZES):
             out.add(ROOT / line)
     return sorted(out)
 
@@ -128,7 +133,6 @@ def resolve(base: str) -> str:
     return resolved
 
 
-BELT = "the_shape_a_build_writes_is_the_shape_frozen_for_its_version"
 # `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
 # `SCHEMA_VERSION_ABSENT` are not a stamped number.
 STAMP = re.compile(r"^pub const SCHEMA_VERSION\s*:\s*u32\s*=\s*(\d+)", re.MULTILINE)
@@ -154,33 +158,38 @@ def check_belts(errors: list[str]) -> int:
 
     Neither half is redundant. A shape file with no belt is a text nothing
     compares a build against. A stamped crate with no shape file is an
-    application that raises a number no layout is bound to.
+    application that raises a number no layout is bound to. Each frozen file
+    is read on its own, with its own belt.
     """
-    frozen = {crate_of(p): p for p in ROOT.glob(GLOB)}
     stamped = stamped_crates()
+    read: set[str] = set(stamped)
+    for name, belt in FREEZES.items():
+        frozen = {crate_of(p): p for p in ROOT.glob(f"crates/*/schema/{name}")}
+        read |= set(frozen)
+        for crate, path in sorted(frozen.items()):
+            belts = list((ROOT / "crates" / crate / "src").rglob("*.rs"))
+            if not any(belt in p.read_text() for p in belts):
+                errors.append(
+                    f"crates/{crate}: a frozen `{name}` with no belt. Nothing "
+                    f"compares a build against it, so add `{belt}`"
+                )
+            version = stamped.get(crate)
+            if version is None:
+                errors.append(
+                    f"crates/{crate}: a frozen `{name}` in a crate that stamps no version"
+                )
+            elif f"{MARK}v{version}" not in path.read_text():
+                errors.append(
+                    f"crates/{crate}: `SCHEMA_VERSION` is {version} and `{name}` "
+                    f"carries no `{MARK}v{version}` section to compare against"
+                )
 
-    for crate, path in sorted(frozen.items()):
-        belts = list((ROOT / "crates" / crate / "src").rglob("*.rs"))
-        if not any(BELT in p.read_text() for p in belts):
+        for crate in sorted(set(stamped) - set(frozen)):
             errors.append(
-                f"crates/{crate}: a frozen shape with no belt. Nothing compares "
-                f"a build against it, so add `{BELT}`"
+                f"crates/{crate}: a stamped `SCHEMA_VERSION` with no frozen "
+                f"`{name}`. A number that binds nothing raises on nothing"
             )
-        version = stamped.get(crate)
-        if version is None:
-            errors.append(f"crates/{crate}: a frozen shape in a crate that stamps no version")
-        elif f"{MARK}v{version}" not in path.read_text():
-            errors.append(
-                f"crates/{crate}: `SCHEMA_VERSION` is {version} and the shape "
-                f"file carries no `{MARK}v{version}` section to compare against"
-            )
-
-    for crate in sorted(set(stamped) - set(frozen)):
-        errors.append(
-            f"crates/{crate}: a stamped `SCHEMA_VERSION` with no frozen shape. "
-            "A number that binds no layout raises on nothing"
-        )
-    return len(frozen | {c: None for c in stamped})
+    return len(read)
 
 
 def main() -> int:

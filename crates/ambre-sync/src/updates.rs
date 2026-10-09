@@ -276,23 +276,26 @@ impl SyncState {
             SnapshotVerdict::Mismatch | SnapshotVerdict::Unchecked => false,
         };
         let mismatch = verdict == SnapshotVerdict::Mismatch;
+        let role = doc_state.role;
         match purpose {
             SnapshotPurpose::Open if passes => {
-                let Some(payload) = check.payload else {
-                    return;
-                };
-                doc_state.current_snapshot_id = snapshot_id;
-                self.send_to_logic(LogicEvent::RemoteSnapshot {
-                    document_id,
-                    payload,
-                    covered_seq: check.covered_seq.0,
-                });
+                if let Some(payload) = check.payload {
+                    doc_state.current_snapshot_id = snapshot_id;
+                    self.send_to_logic(LogicEvent::RemoteSnapshot {
+                        document_id,
+                        payload,
+                        covered_seq: check.covered_seq.0,
+                    });
+                }
+                // The open waited on this verdict (`check_held_snapshot`).
+                self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
             }
             SnapshotPurpose::Open => {
                 tracing::warn!(
                     "Sync: snapshot {snapshot_id:?} of doc {document_id:?} refused on open \
                      (mismatch: {mismatch}), staying on its reference"
                 );
+                self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
             }
             SnapshotPurpose::Confirm if passes => {
                 self.post_snapshot_vouch(document_id, snapshot_id, None);
@@ -365,12 +368,16 @@ impl SyncState {
     /// Check the snapshot the open held back, now that every delta the relay
     /// kept was replayed (`AUTHOR-022`). One that does not open is dropped,
     /// and the document stays on its reference.
-    pub(crate) fn check_held_snapshot(&mut self, document_id: DocumentId) {
+    ///
+    /// `true` when a check is now in flight. The verdict then tells Logic the
+    /// document is ready, since a delta past the snapshot waits on it until it
+    /// is adopted (`AUTHOR-025`).
+    pub(crate) fn check_held_snapshot(&mut self, document_id: DocumentId) -> bool {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            return;
+            return false;
         };
         let Some(held) = doc_state.held_snapshot.take() else {
-            return;
+            return false;
         };
         match doc_state.open_signed_snapshot(&held.blob) {
             Ok((payload, author)) => {
@@ -389,11 +396,15 @@ impl SyncState {
                     payload,
                     purpose: SnapshotPurpose::Open,
                 });
+                true
             }
-            Err(e) => tracing::warn!(
-                "Sync: the latest snapshot of doc {document_id:?} does not open ({e}), \
-                 staying on its reference"
-            ),
+            Err(e) => {
+                tracing::warn!(
+                    "Sync: the latest snapshot of doc {document_id:?} does not open ({e}), \
+                     staying on its reference"
+                );
+                false
+            }
         }
     }
 
@@ -1893,6 +1904,14 @@ mod tests {
             )),
             "the held snapshot is checked after the replay: {after_replay:?}"
         );
+        // A delta past the held snapshot waits on it, so the open is ready
+        // only once the verdict is in (`AUTHOR-025`).
+        assert!(
+            !after_replay
+                .iter()
+                .any(|e| matches!(e, LogicEvent::DocumentReady { .. })),
+            "the open was ready before the held snapshot's verdict: {after_replay:?}"
+        );
     }
 
     /// A local-only (not yet server-created) or offline open has no replay to
@@ -2098,15 +2117,20 @@ mod tests {
             };
             state.handle_snapshot_verdict(doc, held, SnapshotPurpose::Open, verdict);
             let events = drain(&rx);
+            // Either way the open that waited on the verdict is ready, after
+            // the adopted snapshot if any (`AUTHOR-025`).
             if adopted {
                 assert!(matches!(
                     &events[..],
-                    [LogicEvent::RemoteSnapshot { payload, covered_seq: 7, .. }] if payload == b"base"
+                    [
+                        LogicEvent::RemoteSnapshot { payload, covered_seq: 7, .. },
+                        LogicEvent::DocumentReady { .. },
+                    ] if payload == b"base"
                 ));
                 assert_eq!(state.documents[&doc].current_snapshot_id, held);
             } else {
                 assert!(
-                    events.is_empty(),
+                    matches!(&events[..], [LogicEvent::DocumentReady { .. }]),
                     "a refused snapshot reached Logic: {events:?}"
                 );
                 assert_eq!(state.documents[&doc].current_snapshot_id, reference);

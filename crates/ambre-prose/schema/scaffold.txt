@@ -1,0 +1,13 @@
+# ambre-prose/schema/scaffold.txt  The frozen scaffolding identities (`AUTHOR-024`).
+#
+# One section per `SCHEMA_VERSION`, each holding, as hex, the peer identity the
+# scaffolding of a new document is written under. The identity hashes the
+# scaffolding's bytes, so every build of one version must write the same one: a
+# delta that waits on a scaffolding change its reader never wrote never applies.
+#
+# Read by `logic::schema_shape`, which fails when a build's scaffolding leaves
+# the section frozen for its version. A scaffolding that moves needs a raised
+# `SCHEMA_VERSION` and a new section below, never an edit to the section above.
+
+== v9
+f6e316a722fc48b7

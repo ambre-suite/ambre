@@ -34,25 +34,32 @@ V1 = "== v1\nmeta/schema_version: i64\nmeta: map\n"
 V2 = "== v2\nmeta/schema_version: i64\nmeta: map\nrows/*: string\n"
 
 
-def belt(root: Path, crate: str, version: int = 1, named: bool = True) -> Path:
+def belt(root: Path, crate: str, version: int = 1, missing: str | None = None) -> Path:
     """A crate's source side of the pairing: the stamp, and the belt that reads
-    the frozen section. `named=False` writes the stamp without the belt."""
+    each frozen file. `missing` names a belt left out."""
     src = root / "crates" / crate / "src"
     src.mkdir(parents=True, exist_ok=True)
     body = f"pub const SCHEMA_VERSION: u32 = {version};\n"
-    if named:
-        body += f"fn {schema_freeze.BELT}() {{}}\n"
+    for name in schema_freeze.FREEZES.values():
+        if name != missing:
+            body += f"fn {name}() {{}}\n"
     path = src / "schema.rs"
     path.write_text(body)
     return path
 
 
-def shape(root: Path, crate: str, text: str = HEADER + V1) -> Path:
-    """A crate's frozen shape file."""
-    path = root / "crates" / crate / "schema" / "shapes.txt"
+def shape(root: Path, crate: str, text: str = HEADER + V1, name: str = "shapes.txt") -> Path:
+    """A crate's frozen file, the shape file unless `name` says otherwise."""
+    path = root / "crates" / crate / "schema" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return path
+
+
+def frozen(root: Path, crate: str) -> None:
+    """Every frozen file of a crate, each holding `v1`."""
+    for name in schema_freeze.FREEZES:
+        shape(root, crate, name=name)
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -88,6 +95,7 @@ class RepositoryTest(unittest.TestCase):
         self.shapes = self.root / "crates" / "ambre-x" / "schema" / "shapes.txt"
         self.shapes.parent.mkdir(parents=True)
         belt(self.root, "ambre-x", version=1)
+        shape(self.root, "ambre-x", name="scaffold.txt")
         git(self.root, "init", "-q", "-b", "main")
         git(self.root, "config", "user.email", "t@example.com")
         git(self.root, "config", "user.name", "t")
@@ -132,6 +140,12 @@ class RepositoryTest(unittest.TestCase):
 
     def test_a_published_section_dropped_is_refused(self):
         self.commit(HEADER + V2)
+        self.assertEqual(self.run_check("HEAD~1"), 1)
+
+    def test_a_published_scaffold_section_edited_is_refused(self):
+        shape(self.root, "ambre-x", HEADER + V1.replace("i64", "f64"), name="scaffold.txt")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-qm", "edit the scaffold")
         self.assertEqual(self.run_check("HEAD~1"), 1)
 
     def test_the_file_deleted_is_refused(self):
@@ -179,7 +193,7 @@ class BeltTest(unittest.TestCase):
         return errors
 
     def test_a_crate_that_freezes_and_compares_is_clean(self):
-        shape(self.root, "ambre-x")
+        frozen(self.root, "ambre-x")
         belt(self.root, "ambre-x", version=1)
         self.assertEqual(self.findings(), [])
 
@@ -188,18 +202,29 @@ class BeltTest(unittest.TestCase):
         self.assertEqual(self.findings(), [])
 
     def test_a_freeze_with_no_belt_is_refused(self):
-        shape(self.root, "ambre-x")
-        belt(self.root, "ambre-x", version=1, named=False)
+        frozen(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1, missing=schema_freeze.BELT)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_frozen_scaffold_with_no_belt_is_refused(self):
+        frozen(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1, missing=schema_freeze.SCAFFOLD_BELT)
         self.assertEqual(len(self.findings()), 1)
 
     def test_a_stamped_crate_with_no_frozen_shape_is_refused(self):
+        shape(self.root, "ambre-x", name="scaffold.txt")
+        belt(self.root, "ambre-x", version=1)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_stamped_crate_with_no_frozen_scaffold_is_refused(self):
+        shape(self.root, "ambre-x")
         belt(self.root, "ambre-x", version=1)
         self.assertEqual(len(self.findings()), 1)
 
     def test_a_bump_with_no_section_to_compare_against_is_refused(self):
-        shape(self.root, "ambre-x")
+        frozen(self.root, "ambre-x")
         belt(self.root, "ambre-x", version=2)
-        self.assertEqual(len(self.findings()), 1)
+        self.assertEqual(len(self.findings()), 2)
 
     def test_the_protocol_constants_are_not_a_stamp(self):
         # `ambre-core` declares `SCHEMA_VERSION_KEY` and

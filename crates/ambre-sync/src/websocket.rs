@@ -944,10 +944,12 @@ impl SyncState {
                 {
                     doc_state.awaiting_initial_hydration = false;
                     let role = doc_state.role;
-                    self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
                     // Every delta the relay kept is replayed: the snapshot the
-                    // open held back can be checked now (`AUTHOR-022`).
-                    self.check_held_snapshot(document_id);
+                    // open held back can be checked now (`AUTHOR-022`). Its
+                    // verdict says the document is ready instead.
+                    if !self.check_held_snapshot(document_id) {
+                        self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
+                    }
                 }
             }
 

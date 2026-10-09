@@ -334,8 +334,12 @@ impl LogicState {
                 // simply nothing to record.
                 if let Some(doc) = self.docs.get_mut(&document_id) {
                     doc.role = role;
+                    doc.ready = true;
                 }
                 self.send_to_ui(UiEvent::DocumentReady { document_id, role });
+                // The replay is done: a delta still waiting waits for ever
+                // (`AUTHOR-025`).
+                self.report_stalled(document_id);
             }
 
             LogicEvent::SyncWarning {

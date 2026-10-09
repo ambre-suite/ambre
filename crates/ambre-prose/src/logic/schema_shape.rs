@@ -34,6 +34,9 @@ use crate::schema::SCHEMA_VERSION;
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
 
+/// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
+const SCAFFOLD: &str = include_str!("../../schema/scaffold.txt");
+
 /// The source the key declarations are read from, so the coverage assertion
 /// cannot drift from the module it guards.
 const DOC_SOURCE: &str = include_str!("../doc.rs");
@@ -227,10 +230,15 @@ fn render(shape: &Shape) -> String {
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
 fn frozen_section(version: u32) -> Option<String> {
+    section_of(FROZEN, version)
+}
+
+/// The section of a frozen text that names this version.
+fn section_of(frozen: &str, version: u32) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
-    for line in FROZEN.lines() {
+    for line in frozen.lines() {
         if line.starts_with("== ") {
             if inside {
                 break;
@@ -556,6 +564,24 @@ fn the_shape_a_build_writes_is_the_shape_frozen_for_its_version() {
          SCHEMA_VERSION {SCHEMA_VERSION}. A key or a value type moved, so raise \
          SCHEMA_VERSION and freeze the new shape as its own section \
          (`SCHEMA-018`)."
+    );
+}
+
+/// Every build of one version writes the same scaffolding (`AUTHOR-024`).
+/// The identity hashes the scaffolding's bytes, so it moves with any of them.
+#[test]
+fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
+    let Some(identity) = super::scaffold_identity() else {
+        panic!("the CRDT engine refused the scaffolding");
+    };
+    let written = format!("{identity:016x}\n");
+    assert_eq!(
+        section_of(SCAFFOLD, SCHEMA_VERSION).as_deref(),
+        Some(written.as_str()),
+        "the scaffolding this build writes is not the one frozen for \
+         SCHEMA_VERSION {SCHEMA_VERSION} in `schema/scaffold.txt`. Another \
+         build of that version writes it under another identity, and a delta \
+         that waits on it never applies. Raise SCHEMA_VERSION and append a section."
     );
 }
 
