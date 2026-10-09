@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3384 rows: 2547 shipped, of which 107 partial and 520 loose. 837 unbuilt.**
+**3384 rows: 2548 shipped, of which 107 partial and 520 loose. 836 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 465 | 269 | 584 | 602 |  | 1920 |
+| `verified` | 465 | 269 | 584 | 603 |  | 1921 |
 | `partial` | 50 | 14 | 41 | 2 |  | 107 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 192 | 133 | 188 | 2 |  | 515 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
+| `unimplemented` | 204 | 57 | 28 | 108 | 439 | 836 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -134,7 +134,7 @@
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 4 | 1 | 7 | 1 |
 | `ambre-spec-toile-viewport.md` | 35 | 33 | 17 | 6 | 10 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 8 |  | 8 |  |
-| `ambre-spec-prose-schema.md` | 26 | 25 | 25 |  |  | 1 |
+| `ambre-spec-prose-schema.md` | 26 | 26 | 26 |  |  |  |
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  |  | 2 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |  |

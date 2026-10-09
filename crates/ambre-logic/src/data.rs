@@ -939,6 +939,25 @@ impl LogicState {
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
 
+    /// Remove for good the hidden Prose blocks whose session has ended, as an
+    /// edit of this session (`ambre-spec-prose-schema.md` section 2). It waits
+    /// for the session identity,
+    /// since a write under the provisional PeerID never travels.
+    pub(crate) fn sweep_hidden(&mut self, document_id: DocumentId) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        if doc.identity.is_none() {
+            return;
+        }
+        let DocState::Prose(state) = &mut doc.state else {
+            return;
+        };
+        let outcome = state.sweep_hidden();
+        let display = outcome.display.into_iter().map(AppEvent::Prose).collect();
+        self.dispatch_outcome(document_id, display, outcome.update, None, true, Vec::new());
+    }
+
     /// Import a snapshot whose contents are trusted, and count the deltas a
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
     pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: u64) {

@@ -45,6 +45,7 @@ mod marks;
 pub(crate) mod notes;
 mod presence;
 mod suggestions;
+mod sweep;
 pub(crate) mod tables;
 mod text;
 mod touched;
@@ -259,6 +260,8 @@ impl ProseState {
         undo.add_exclude_origin_prefix(LOAD_ORIGIN);
         undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
         undo.add_exclude_origin_prefix(comments::COMMENT_ORIGIN);
+        // A removal for good is no gesture either (`PROSE-121`).
+        undo.add_exclude_origin_prefix(sweep::SWEEP_ORIGIN);
         // The registry entry is bookkeeping, not prose: an undo never
         // retracts it (`AUTHOR-009`).
         undo.add_exclude_origin_prefix(ambre_core::authorship::PEERS_ORIGIN);

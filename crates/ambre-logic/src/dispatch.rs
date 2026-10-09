@@ -316,6 +316,10 @@ impl LogicState {
                         covered_seq,
                     });
                 }
+                // After the export: the snapshot holds the signed deltas alone,
+                // and the removal travels as the next one
+                // (`ambre-spec-prose-schema.md` section 2).
+                self.sweep_hidden(document_id);
             }
 
             LogicEvent::ConnectionStatus {
