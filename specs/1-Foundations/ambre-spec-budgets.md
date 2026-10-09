@@ -267,6 +267,7 @@
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
 | Server, inline delta size | < 64 KB | A delta past it keeps an object of its own (`SRV-149`) |
 | Server, inline deltas per document | 256 deltas or 256 KB, whichever comes first | Past it, the oldest move into one batch object (`SRV-150`, `SRV-151`). Bounds the register at the documents in use times this figure |
+| Server, deltas past a document's served snapshot before the relay asks for one | 500 | `SNAPSHOT_THRESHOLD` in `ambre_server::compaction` (`SRV-038`). Bounds what a cold open replays. A first estimate, to measure against open times |
 | Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
 | Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
 | Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. Measured with chat-length bodies: 5000 messages make a snapshot of 879 KB, 581 KB shallow, so the message count binds first |

@@ -1,6 +1,7 @@
 //! Blind Relay server for Ambre.
 
 mod auth;
+mod compaction;
 mod db;
 mod deletion;
 mod error;

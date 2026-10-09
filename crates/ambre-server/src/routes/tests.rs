@@ -74,7 +74,15 @@ mod handler_tests {
             )
             .route(
                 "/documents/{id}/snapshot",
-                axum::routing::post(routes::create_snapshot),
+                axum::routing::get(routes::get_snapshot_metadata).post(routes::create_snapshot),
+            )
+            .route(
+                "/documents/{id}/snapshots/{snapshot_id}/confirm",
+                axum::routing::post(routes::confirm_snapshot),
+            )
+            .route(
+                "/documents/{id}/snapshots/{snapshot_id}/report",
+                axum::routing::post(routes::report_snapshot),
             )
             .route("/ws", axum::routing::get(ws::ws_upgrade));
         Router::new().nest("/api", api_router).with_state(state)
@@ -2041,6 +2049,224 @@ mod handler_tests {
             .await
             .unwrap()
             .status()
+    }
+
+    /// Sets up an account whose signing key is `key`, so it can sign what the
+    /// relay verifies. Returns its `Authorization` header.
+    async fn setup_signing(app: &Router, email: &str, key: &ed25519_dalek::SigningKey) -> String {
+        let body = serde_json::json!({
+            "email": email,
+            "display_name": "Signer",
+            "master_key_enc": base64_encode(&[1u8; 32]),
+            "master_key_salt": base64_encode(&[2u8; 16]),
+            "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
+            "exchange_pubkey": hex::encode([8u8; 32]),
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/setup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        format!("Bearer {}", access_token_of(resp).await)
+    }
+
+    /// The owner of `setup_and_get_auth` uploads a snapshot covering `covered`,
+    /// and gets its id back.
+    async fn upload_snapshot(app: &Router, owner: &str, doc_id: &str, covered: i64) -> String {
+        let body = serde_json::json!({
+            "snapshot_id": uuid::Uuid::new_v4().to_string(),
+            "author_pubkey": hex::encode([3u8; 32]),
+            "update_clocks": {},
+            "s3_key": format!("dev-ambre/documents/{doc_id}/snapshots/{}", uuid::Uuid::new_v4()),
+            "covered_seq": covered,
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/documents/{doc_id}/snapshot"))
+                    .header("content-type", "application/json")
+                    .header("authorization", owner)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), 1024).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        json["snapshot_id"].as_str().unwrap().to_owned()
+    }
+
+    /// The snapshot an open is served, as its JSON, `None` on a 404.
+    async fn served_snapshot(app: &Router, auth: &str, doc_id: &str) -> Option<serde_json::Value> {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/documents/{doc_id}/snapshot"))
+                    .header("authorization", auth)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        if resp.status() == StatusCode::NOT_FOUND {
+            return None;
+        }
+        let bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+        Some(serde_json::from_slice(&bytes).unwrap())
+    }
+
+    /// `SRV-126`, `SRV-128`, `SRV-129`: an upload is announced to the
+    /// document's members, with the horizon it claims. Nobody is served it until
+    /// it is confirmed. Its author's confirmation makes it `self`, served beside
+    /// no reference yet, and another member's makes it `confirmed`.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_snapshot_is_served_once_confirmed(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::decode_server_msg;
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let checker = setup_named(&app, "checker@ambre.app", 43).await;
+        invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
+
+        let listener = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .unwrap();
+        let mut stream = listener.subscribe(format!("doc:{doc_id}")).await.unwrap();
+        let snap = upload_snapshot(&app, &owner, &doc_id, 0).await;
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+            .await
+            .expect("the announcement arrives")
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            decode_server_msg(heard.payload()).unwrap(),
+            WsServerMsg::SnapshotAvailable { snapshot_id, .. } if snapshot_id.to_string() == snap
+        ));
+        assert!(served_snapshot(&app, &owner, &doc_id).await.is_none());
+
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+        let status = post_json(&app, &owner, confirm.clone(), serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let served = served_snapshot(&app, &owner, &doc_id).await.unwrap();
+        assert_eq!(served["status"], "self");
+        assert_eq!(served["snapshot_id"], snap.as_str());
+        assert!(served["reference"].is_null());
+
+        let status = post_json(&app, &checker, confirm, serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
+        assert_eq!(served["status"], "confirmed");
+
+        let outsider = setup_named(&app, "outsider@ambre.app", 44).await;
+        let other = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
+        let status = post_json(&app, &outsider, other, serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    /// `SRV-133`, `SRV-134`, `SRV-135`, `AUTHOR-023`: a report signed by its
+    /// reporter drops a pending snapshot, keeps every delta, and asks the
+    /// reporter for the next one. An unsigned report changes nothing, and a
+    /// snapshot somebody confirmed outlives a report.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_signed_report_drops_a_pending_snapshot_alone(pool: sqlx::PgPool) {
+        use ambre_protocol::snapshot_report::report_transcript;
+        use ambre_protocol::ws::decode_server_msg;
+        use ed25519_dalek::Signer;
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let stub = crate::test_helpers::S3Stub::spawn([]).await;
+        let base = test_app_state(pool).await;
+        let state = crate::test_helpers::with_s3(
+            &base,
+            crate::test_helpers::offline_s3(Some(&stub.endpoint)),
+        );
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let reporter = setup_signing(&app, "reporter@ambre.app", &key).await;
+        invite(&app, &owner, &doc_id, "reporter@ambre.app", "editor").await;
+        let reporter_id = doc_user_id(&state, "reporter@ambre.app").await;
+
+        let document = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        for seq in 1..=3i64 {
+            crate::db::insert_update(
+                &state.db,
+                &document,
+                &[3u8; 32],
+                &ambre_core::SnapshotId::new(),
+                seq,
+                seq,
+                &format!("k{seq}"),
+            )
+            .await
+            .unwrap();
+        }
+        let snap = upload_snapshot(&app, &owner, &doc_id, 3).await;
+        let snapshot = ambre_core::SnapshotId::parse_str(&snap).unwrap();
+        let report = format!("/api/documents/{doc_id}/snapshots/{snap}/report");
+        let signed = |author: [u8; 32]| {
+            let transcript = report_transcript(document, snapshot, &author);
+            serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) })
+        };
+
+        // Signed over another author: refused, and the snapshot stays.
+        let status = post_json(&app, &reporter, report.clone(), signed([9u8; 32])).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        let held = crate::db::get_snapshot(&state.db, &document, &snapshot).await;
+        assert!(held.unwrap().is_some());
+
+        let listener = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .unwrap();
+        let mut stream = listener
+            .subscribe(format!("user:{reporter_id}"))
+            .await
+            .unwrap();
+        let status = post_json(&app, &reporter, report, signed([3u8; 32])).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let held = crate::db::get_snapshot(&state.db, &document, &snapshot).await;
+        assert!(held.unwrap().is_none(), "the pending snapshot is dropped");
+        let deltas = crate::db::get_updates_after(&state.db, &document, 0, 10).await;
+        assert_eq!(deltas.unwrap().len(), 3, "no delta is dropped with it");
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+            .await
+            .expect("the reporter is asked for the next snapshot")
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            decode_server_msg(heard.payload()).unwrap(),
+            WsServerMsg::SnapshotRequired { .. }
+        ));
+
+        // A snapshot the reporter itself confirmed outlives a report.
+        let kept = upload_snapshot(&app, &owner, &doc_id, 3).await;
+        let confirm = format!("/api/documents/{doc_id}/snapshots/{kept}/confirm");
+        post_json(&app, &reporter, confirm, serde_json::json!({})).await;
+        let kept_id = ambre_core::SnapshotId::parse_str(&kept).unwrap();
+        let transcript = report_transcript(document, kept_id, &[3u8; 32]);
+        let body =
+            serde_json::json!({ "signature": hex::encode(key.sign(&transcript).to_bytes()) });
+        let report = format!("/api/documents/{doc_id}/snapshots/{kept}/report");
+        assert_eq!(
+            post_json(&app, &reporter, report, body).await,
+            StatusCode::NO_CONTENT
+        );
+        let held = crate::db::get_snapshot(&state.db, &document, &kept_id).await;
+        assert!(held.unwrap().is_some(), "a confirmed snapshot stays");
     }
 
     async fn doc_user_id(state: &AppState, email: &str) -> String {

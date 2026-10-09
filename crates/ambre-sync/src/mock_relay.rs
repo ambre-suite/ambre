@@ -176,10 +176,13 @@ impl MockBlindRelay {
                 subscribers: Vec::new(),
             });
         state.snapshots.push(snapshot_id);
+        // The snapshot folds in every delta the document holds so far.
+        let covered_seq = state.updates.last().map_or(Seq(0), |(seq, _)| *seq);
         for tx in self.clients.values() {
             let _ = tx.send(WsServerMsg::SnapshotAvailable {
                 document_id,
                 snapshot_id,
+                covered_seq,
             });
         }
     }

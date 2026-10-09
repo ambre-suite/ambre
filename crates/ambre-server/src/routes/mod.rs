@@ -71,6 +71,14 @@ pub fn api_router(
             "/documents/{id}/snapshot/download-url",
             axum::routing::post(snapshot_download_url),
         )
+        .route(
+            "/documents/{id}/snapshots/{snapshot_id}/confirm",
+            axum::routing::post(confirm_snapshot),
+        )
+        .route(
+            "/documents/{id}/snapshots/{snapshot_id}/report",
+            axum::routing::post(report_snapshot),
+        )
         .route("/documents/{id}/deltas", axum::routing::get(get_deltas))
         .route(
             "/documents/{id}/share",

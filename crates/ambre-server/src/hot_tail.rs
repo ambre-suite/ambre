@@ -417,7 +417,11 @@ mod db_tests {
         assert_eq!(stub.keys(), [older.clone(), newer.clone()]);
 
         let clocks = serde_json::json!({});
-        crate::db::create_snapshot(&state.db, &doc, &[5u8; 32], None, None, &clocks, "snap", 7)
+        let snap =
+            crate::db::create_snapshot(&state.db, &doc, &[5u8; 32], None, None, &clocks, "snap", 7)
+                .await
+                .unwrap();
+        crate::db::confirm_snapshot(&state.db, &doc, &snap, &[9u8; 32])
             .await
             .unwrap();
         assert_eq!(trim(&state).await.unwrap(), 7);

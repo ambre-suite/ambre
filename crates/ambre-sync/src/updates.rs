@@ -1751,6 +1751,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::SnapshotAvailable {
             document_id: doc,
             snapshot_id: announced,
+            covered_seq: Seq(0),
         });
         assert!(
             drain(&rx).is_empty(),

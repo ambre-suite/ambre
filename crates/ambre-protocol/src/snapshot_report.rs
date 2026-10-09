@@ -1,0 +1,45 @@
+//! What a mismatch report signs (`AUTHOR-023`, `SRV-133`).
+//!
+//! A member whose deltas disagree with a pending snapshot reports it, and the
+//! relay drops the snapshot. The reporter signs the document, the snapshot and
+//! the snapshot's author. So the relay can check it, and nobody can replay it
+//! against another snapshot.
+
+use ambre_core::{DocumentId, SnapshotId};
+
+/// The domain the transcript opens with, so the signature serves no other use.
+pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
+
+/// The bytes a reporter signs: the domain, then the document, the snapshot and
+/// the author's signing key, each at a fixed length.
+#[must_use]
+pub fn report_transcript(
+    document_id: DocumentId,
+    snapshot_id: SnapshotId,
+    author: &[u8; 32],
+) -> Vec<u8> {
+    let mut transcript = Vec::with_capacity(REPORT_DOMAIN.len() + 16 + 16 + 32);
+    transcript.extend_from_slice(REPORT_DOMAIN);
+    transcript.extend_from_slice(document_id.as_uuid().as_bytes());
+    transcript.extend_from_slice(snapshot_id.as_uuid().as_bytes());
+    transcript.extend_from_slice(author);
+    transcript
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A report names one snapshot of one document by one author: changing
+    /// any of the three changes what is signed.
+    #[test]
+    fn the_transcript_names_the_document_the_snapshot_and_the_author() {
+        let doc = DocumentId::new();
+        let snap = SnapshotId::new();
+        let base = report_transcript(doc, snap, &[1; 32]);
+        assert!(base.starts_with(REPORT_DOMAIN));
+        assert_ne!(base, report_transcript(DocumentId::new(), snap, &[1; 32]));
+        assert_ne!(base, report_transcript(doc, SnapshotId::new(), &[1; 32]));
+        assert_ne!(base, report_transcript(doc, snap, &[2; 32]));
+    }
+}

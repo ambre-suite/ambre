@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (4, "2f94e9b1335e2ecf76caca243b93f196");
+const FROZEN_LAYOUT: (u8, &str) = (5, "fe1a5d6a47ebc20d0820d5b089212a98");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -334,6 +334,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::SnapshotAvailable {
             document_id: doc,
             snapshot_id: SnapshotId::from_bytes([7; 16]),
+            covered_seq: Seq(12),
         },
         S::KeyRotationRequired { document_id: doc },
         S::DocumentRevoked { document_id: doc },

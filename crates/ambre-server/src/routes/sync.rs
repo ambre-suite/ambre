@@ -31,6 +31,21 @@ pub struct SnapshotResponse {
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
     pub covered_seq: i64,
+    /// Who vouched for it: `confirmed` or `self` (`SRV-128`).
+    pub status: db::SnapshotStatus,
+    /// The author's signing key, hex, which a self-confirmed snapshot is checked
+    /// against (`AUTHOR-022`).
+    pub author_pubkey: String,
+    /// For a self-confirmed snapshot, the reference snapshot an open starts
+    /// from, `None` when no member other than an author confirmed one yet.
+    pub reference: Option<ReferenceSnapshot>,
+}
+
+/// The reference snapshot named beside a self-confirmed one (`SRV-131`).
+#[derive(serde::Serialize)]
+pub struct ReferenceSnapshot {
+    pub snapshot_id: String,
+    pub covered_seq: i64,
 }
 
 pub async fn get_snapshot_metadata(
@@ -48,11 +63,111 @@ pub async fn get_snapshot_metadata(
         .ok_or(AppError::NotFound {
             resource: "snapshot",
         })?;
+    let reference = match snap.status {
+        db::SnapshotStatus::SelfConfirmed => db::get_reference_snapshot(&state.db, &doc_id)
+            .await?
+            .map(|r| ReferenceSnapshot {
+                snapshot_id: r.id.to_string(),
+                covered_seq: r.covered_seq,
+            }),
+        _ => None,
+    };
     Ok(axum::Json(SnapshotResponse {
         snapshot_id: snap.id.to_string(),
         s3_key: snap.s3_key,
         covered_seq: snap.covered_seq,
+        status: snap.status,
+        author_pubkey: hex::encode(&snap.author_pubkey),
+        reference,
     }))
+}
+
+/// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
+/// Any member may confirm, since any member holds the deltas. The author's
+/// own confirmation makes it `self`, anyone else's `confirmed`.
+pub async fn confirm_snapshot(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((document_id, snapshot_id)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let doc_id = parse_doc_id(&document_id)?;
+    let snap_id = parse_snap_id(&snapshot_id)?;
+    db::get_document_member(&state.db, &doc_id, &auth.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    db::confirm_snapshot(&state.db, &doc_id, &snap_id, auth.signing_pubkey.as_array())
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "snapshot",
+        })?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// A signed mismatch report (`AUTHOR-023`).
+#[derive(serde::Deserialize)]
+pub struct ReportSnapshotRequest {
+    /// The reporter's Ed25519 signature over
+    /// [`ambre_protocol::snapshot_report::report_transcript`], hex.
+    pub signature: String,
+}
+
+/// Drops a pending snapshot a member found at odds with its deltas (`SRV-133`).
+/// Every delta stays (`SRV-135`), and the reporter is asked for the next
+/// snapshot (`SRV-134`). A snapshot somebody confirmed stays: one report
+/// does not outweigh a check that passed.
+pub async fn report_snapshot(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((document_id, snapshot_id)): Path<(String, String)>,
+    Json(req): Json<ReportSnapshotRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    use ed25519_dalek::{Signature, VerifyingKey};
+    let doc_id = parse_doc_id(&document_id)?;
+    let snap_id = parse_snap_id(&snapshot_id)?;
+    db::get_document_member(&state.db, &doc_id, &auth.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "snapshot",
+        })?;
+    let author: [u8; 32] = snap
+        .author_pubkey
+        .as_slice()
+        .try_into()
+        .map_err(|_| AppError::Internal("snapshot author key length".into()))?;
+    let signature = hex::decode(&req.signature)
+        .ok()
+        .and_then(|bytes| Signature::from_slice(&bytes).ok())
+        .ok_or(AppError::InvalidSignature)?;
+    let transcript = ambre_protocol::snapshot_report::report_transcript(doc_id, snap_id, &author);
+    VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
+        .and_then(|key| key.verify_strict(&transcript, &signature))
+        .map_err(|_| AppError::InvalidSignature)?;
+    if snap.status != db::SnapshotStatus::Pending {
+        return Ok(axum::http::StatusCode::NO_CONTENT);
+    }
+    if let Some(key) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
+        tracing::info!(document_id = %doc_id, snapshot_id = %snap_id, "snapshot reported, dropped");
+        if let Err(e) = state
+            .s3
+            .delete_object()
+            .bucket(&state.s3_bucket)
+            .key(&key)
+            .send()
+            .await
+        {
+            tracing::warn!(s3_key = %key, error = %e, "reported snapshot: S3 delete failed");
+        }
+        let ask = ambre_protocol::ws::encode_server_msg(
+            &ambre_protocol::ws::WsServerMsg::SnapshotRequired {
+                document_id: doc_id,
+            },
+        );
+        let _ = crate::redis_ops::user_broadcast(&state.redis, &auth.user_id, &ask).await;
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 /// Request to confirm a snapshot upload. The server inserts metadata and
@@ -128,6 +243,17 @@ pub async fn create_snapshot(
         })
         .transpose()?;
 
+    // A snapshot cannot fold in a delta the relay never numbered. A horizon past
+    // the counter would stop the relay asking for snapshots of the document.
+    // A cold counter reads 0 and bounds nothing.
+    let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
+    let covered = u64::try_from(req.covered_seq).unwrap_or(0);
+    if last > 0 && covered > last {
+        return Err(AppError::BadRequest(
+            "covered_seq past the last delta".into(),
+        ));
+    }
+
     let sid = db::create_snapshot(
         &state.db,
         &doc_id,
@@ -136,13 +262,14 @@ pub async fn create_snapshot(
         pp.as_deref(),
         &req.update_clocks,
         &req.s3_key,
-        req.covered_seq,
+        req.covered_seq.max(0),
     )
     .await?;
     let msg = ambre_protocol::ws::encode_server_msg(
         &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,
             snapshot_id: sid,
+            covered_seq: ambre_protocol::messages::Seq(covered),
         },
     );
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;

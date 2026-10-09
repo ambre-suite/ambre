@@ -406,6 +406,9 @@ pub(crate) async fn handle_update(
         // persisted above. Still surface it rather than swallowing (H1).
         tracing::error!("doc_broadcast failed doc={doc_id} seq={seq}: {e}");
     }
+    // The writer has the document open and holds every delta it covers, so it
+    // is the one asked once the history passes the threshold (`SRV-038`).
+    crate::compaction::ask_when_due(state, doc_id, seq, outbound_tx);
 }
 
 pub(crate) async fn handle_ephemeral(
@@ -993,6 +996,7 @@ mod postcard_tests {
         let msg = WsServerMsg::SnapshotAvailable {
             document_id: DocumentId::from_bytes([5u8; 16]),
             snapshot_id: SnapshotId::from_bytes([6u8; 16]),
+            covered_seq: Seq(9),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::SnapshotAvailable { .. }));

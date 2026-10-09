@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE SEQUENCE, AND WHAT SURVIVES A CRASH
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the ordering, the flush and the paged replay all ship. Nothing ever
-asks for a snapshot, so no history is ever folded and no delta is ever trimmed.
+**Implementation:** partial -- the ordering, the flush, the paged replay and the relay's half of
+compaction all ship. No client confirms a snapshot yet, so no history is folded.
 
 > The relay cannot read a change, so the one thing it can promise is order. Every accepted change
 > gets a number, and the numbers never repeat. A client that was away gets exactly what it missed.
@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-006` | `INV` | Per document and per author the accepted clock MUST increase by exactly one. | this spec section 3; `ambre-spec-delta-order.md`, `SYNC-024` | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds` -- an accepted value; `::first_update_succeeds` -- the first one; `::duplicate_clock_rejected` -- the replayed refusal; `::clock_mismatch_rejected` -- the out-of-step refusal; `::independent_clients_have_independent_clocks` -- one author's clock does not move another's, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-150` | `INV` | The deltas a document holds inline MUST stay within the inline cap of the budget register, passed by no more than the writes in flight when it is reached. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::hot_tail::db_tests::a_full_tail_takes_no_more_inline` -- a tail at its count and one at its bytes each refuse the next delta, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
-| `SRV-132` | `INV` | The deltas a document keeps past its latest confirmed snapshot MUST stop growing while a single author writes. | this spec section 3; `SRV-130` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-132` | `INV` | The deltas a document keeps past its latest confirmed snapshot MUST stop growing while a single author writes. | this spec section 3; `SRV-130` | `ambre_server::compaction::db_tests::a_self_snapshot_trims_its_author_alone` -- a snapshot its author alone confirmed drops that author's deltas past the reference, up to its horizon, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 
 ### 1.2 A delta is numbered
 
@@ -64,16 +64,16 @@ sequence has already moved.
 | `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` -- ten deltas and a snapshot covering six leave exactly the uncovered tail, correct and unreachable while `SRV-038` is unbuilt, since with no snapshot there is no horizon | none | verified |
 | `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records | none | verified |
 | `SRV-154` | `FRAME` | A trim MUST NOT drop a batch object that still holds a delta no retained snapshot covers. | this spec section 3; `SRV-083` | `ambre_server::hot_tail::db_tests::a_trim_drops_a_batch_only_once_no_row_names_it` -- a snapshot covering seven of ten deltas drops the batch of the first five and keeps the one still naming eight to ten | none | verified |
-| `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7). The request exists in the protocol and the client acts on it, and the relay sends it from nowhere, so no document is ever compacted, section 6 | unimplemented |
-| `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-127` | `FRAME` | A trim MUST NOT count a pending snapshot. | this spec section 3; `SRV-083` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-128` | `POST` | A cold open MUST be served the latest confirmed snapshot. | this spec section 3; `AUTHOR-015` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-130` | `FRAME` | A trim after a confirmation by the author MUST NOT drop a delta another user signed past the reference snapshot. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-133` | `POST` | A mismatch report MUST drop the pending snapshot it names. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-134` | `POST` | After a drop, the relay MUST ask a member client other than the author of the dropped snapshot for the next one. | this spec section 3; `SRV-038` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md`; `ambre-spec-budgets.md section 6` | `ambre_server::compaction::db_tests::the_writer_is_asked_once_past_the_threshold` -- the writer is asked at the first check past the threshold, and not again while the ask stands, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`); `ambre_server::compaction::tests::the_history_past_the_served_snapshot_decides` -- the threshold counts from the served horizon | none | verified |
+| `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- an upload is pending, its author makes it `self` and another member `confirmed`; `ambre_server::compaction::db_tests::one_author_alone_stands_past_the_reference` -- a second author may not confirm alone past the reference, and another member still may, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-127` | `FRAME` | A trim MUST NOT count a pending snapshot. | this spec section 3; `SRV-083` | `ambre_server::compaction::db_tests::a_pending_snapshot_moves_no_trim` -- nothing goes before a confirmation, and the covered deltas go after it, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-128` | `POST` | A cold open MUST be served the latest confirmed snapshot. | this spec section 3; `AUTHOR-015` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- a pending snapshot is not served, and one confirmed is, with its standing | none | verified |
+| `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- the document's topic hears the upload with its horizon | none | verified |
+| `SRV-130` | `FRAME` | A trim after a confirmation by the author MUST NOT drop a delta another user signed past the reference snapshot. | this spec section 3; `AUTHOR-022` | `ambre_server::compaction::db_tests::a_self_snapshot_trims_its_author_alone` -- the other author's deltas past the reference all stay, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | `ambre_server::compaction::db_tests::the_keep_pass_holds_the_reference_and_the_latest_self` -- a keep of one still holds the reference and the latest snapshot its author confirmed alone, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-133` | `POST` | A mismatch report MUST drop the pending snapshot it names. | this spec section 3; `AUTHOR-023` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the row and its object go, and a confirmed snapshot outlives a report | none | verified |
+| `SRV-134` | `POST` | After a drop, the relay MUST ask a member client other than the author of the dropped snapshot for the next one. | this spec section 3; `SRV-038` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the reporter's own topic hears the request | none | verified |
+| `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the three deltas the snapshot covered all stay | none | verified |
 
 ### 1.5 A client asks for what it missed
 
@@ -110,7 +110,7 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
   `SRV-001` keeps the frame out of the logs.
-* **Verification.** 17 `verified`, 3 `partial`, 6 `untested`, 20 `unimplemented`. What holds is the
+* **Verification.** 28 `verified`, 3 `partial`, 6 `untested`, 9 `unimplemented`. What holds is the
   ordering itself. The accepted and refused cases of the script, the rebuild after a reset, the
   drain lock and both halves of the trim. Where each delta lives holds too. What is loose is every
   recovery path and every refusal the replay performs.
@@ -207,7 +207,17 @@ the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snap
 another member (`SRV-134`). The trim
 removes every delta at or below the lowest horizon of the snapshots the document still keeps
 (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
-recent. **Nothing triggers any of it** (`SRV-038`).
+recent, and never the reference nor the latest snapshot its author confirmed alone (`SRV-131`).
+
+**What triggers it.** Every thirty-second delta, the relay compares the document's number with the
+horizon of its latest served snapshot. Past the threshold of `ambre-spec-budgets.md section 6`, it
+asks the writer of that delta for a snapshot (`SRV-038`). One ask stands for five minutes, so a
+client that never answers is asked again at a later crossing. The relay refuses a recorded horizon
+past the last number it gave, since a snapshot cannot fold in a delta that does not exist yet.
+
+**Why only one author confirms alone.** Two authors confirming alone past one reference would each
+drop their own deltas. Neither snapshot then holds the other's, and the deltas that proved them are
+gone. So an author's own confirmation waits while another author's stands past the reference.
 
 **A finalization.** A Murmure segment ends as one immutable snapshot
 (`5-Murmure/ambre-spec-murmure-schema.md`).
@@ -246,6 +256,7 @@ paging: the earlier pages already released the client.
 * `crates/ambre-server/src/s3.rs` -- the flush, its lock and its front counter;
 * `crates/ambre-server/src/db/content.rs` -- the index, the snapshot record and the trim;
 * `crates/ambre-server/src/routes/sync.rs` -- the snapshot record and the delta page over requests;
+* `crates/ambre-server/src/compaction.rs` -- when the relay asks for a snapshot;
 * `crates/ambre-server/src/main.rs` -- the hourly pass.
 
 ---
@@ -259,7 +270,10 @@ sees is how long a document takes to open.
 |---|---|
 | a client sends a sealed delta | it is checked, numbered, indexed, queued and fanned out |
 | a client reconnects and asks for what it missed | one paged replay, throttled to one per second per document |
-| a client asks for the current snapshot record | the most recent one, or nothing when the document has never been snapshotted |
+| a client asks for the current snapshot record | the most recent one somebody confirmed, with its standing, or nothing |
+| a member confirms a snapshot | it is served from then on, as `self` when its author confirmed it alone |
+| a member reports a pending snapshot under its signature | the snapshot is dropped, every delta stays, and the reporter is asked for the next one |
+| a document's history passes the threshold | the writer of the delta that crossed it is asked for a snapshot |
 | a client asks for a page of the index over a request | up to a thousand rows, after a number it names (`SRV-075`) |
 | a client records a snapshot it has uploaded | the row is written and every subscriber is told one is available |
 | the hour turns | the oldest snapshots beyond ten are removed, and the index is trimmed to the horizon |
@@ -291,13 +305,14 @@ sees is how long a document takes to open.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing asks for a snapshot, so no document is ever compacted.** The relay never sends the
-  request, and the client's whole compaction path -- export, seal, upload, record -- has that
-  request as its only trigger. Three consequences follow, and none is visible from any single
-  document. Every cold open replays from the first delta ever written. The index grows without
-  bound, because the trim's horizon is computed from snapshots that do not exist. And the cold-start
-  budget of `ambre-spec-budgets.md section 3` is unreachable on any document with history
-  (`SRV-038`, `SRV-039`).
+* **No client confirms a snapshot yet.** The relay asks for one, records it pending, and serves
+  it once a member confirms it. The client check that confirms or reports one lands with the
+  `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7), under `AUTHOR-016`
+  and `AUTHOR-021`. Until then every snapshot stays pending, so a cold open replays everything.
+* **A warm client below the trim cannot catch up.** A client that kept a document open offline
+  asks on reconnect for the deltas past the last number it holds. Once the trim has passed that
+  number, the replay stops at the first missing delta, and nothing sends the client to the
+  snapshot instead (`SRV-041`). No rule says what it should do.
 * **A lost delta cannot be replayed.** A page stops at the first delta the relay cannot read, and a
   retryable refusal names it. Nothing restores a delta lost from object storage, so every retry
   meets the same gap (`SRV-041`).

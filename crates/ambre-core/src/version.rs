@@ -37,6 +37,9 @@ impl Version {
     /// Version 4 - the socket authenticates by its first frame, never by its address.
     pub const V4: Self = Self(4);
 
+    /// Version 5 - an announced snapshot names the last delta it folds in.
+    pub const V5: Self = Self(5);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

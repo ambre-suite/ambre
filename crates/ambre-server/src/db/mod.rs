@@ -79,6 +79,9 @@ mod tests {
         )
         .await
         .expect("create snapshot");
+        confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
+            .await
+            .expect("confirm snapshot");
 
         // get_latest_snapshot (the open path's GET /snapshot) carries it.
         let latest = get_latest_snapshot(&pool, &document_id)
@@ -145,8 +148,9 @@ mod tests {
             .await
             .expect("insert update");
         }
-        // A snapshot folding in everything through seq 6.
-        create_snapshot(
+        // A snapshot folding in everything through seq 6, which another
+        // member confirmed.
+        let sid = create_snapshot(
             &pool,
             &document_id,
             &author,
@@ -158,6 +162,9 @@ mod tests {
         )
         .await
         .expect("create snapshot");
+        confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
+            .await
+            .expect("confirm snapshot");
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
         assert_eq!(
@@ -212,7 +219,7 @@ mod tests {
         }
         // Two retained snapshots: covered_seq 3 (oldest) and 8 (newest).
         for covered in [3i64, 8] {
-            create_snapshot(
+            let sid = create_snapshot(
                 &pool,
                 &document_id,
                 &author,
@@ -224,6 +231,9 @@ mod tests {
             )
             .await
             .expect("create snapshot");
+            confirm_snapshot(&pool, &document_id, &sid, &[9u8; 32])
+                .await
+                .expect("confirm snapshot");
         }
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");

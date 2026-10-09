@@ -15,6 +15,7 @@ pub mod key_link;
 pub mod messages;
 pub mod public_data;
 pub mod signaling;
+pub mod snapshot_report;
 pub mod version;
 pub mod ws;
 

@@ -21,8 +21,56 @@ pub struct SnapshotRow {
     /// Highest delta `seq` folded into this snapshot. Clients gate their
     /// post-open `RequestMissing` on this value to skip the replayed history.
     pub covered_seq: i64,
+    /// Who vouched for it (`SRV-126`).
+    pub status: SnapshotStatus,
     #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Who vouched for a snapshot (`SRV-126`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotStatus {
+    /// Nobody yet. Never served, and never moves a trim.
+    Pending,
+    /// Its own author. Served beside the reference snapshot.
+    #[serde(rename = "self")]
+    SelfConfirmed,
+    /// Another member. Moves the trim.
+    Confirmed,
+}
+
+impl SnapshotStatus {
+    /// The stored spelling, which the migration checks.
+    fn parse(text: &str) -> Result<Self, AppError> {
+        match text {
+            "pending" => Ok(Self::Pending),
+            "self" => Ok(Self::SelfConfirmed),
+            "confirmed" => Ok(Self::Confirmed),
+            other => Err(AppError::Internal(format!("snapshot status {other}"))),
+        }
+    }
+}
+
+/// The columns [`snapshot_row`] reads, in one place for every query.
+const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, parent_hash, \
+    parent_snapshot_proof, update_clocks, s3_key, covered_seq, status, created_at";
+
+/// One `snapshots` row, read from [`SNAPSHOT_COLUMNS`].
+fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
+    let status: String = r.try_get("status")?;
+    Ok(SnapshotRow {
+        id: r.try_get("id")?,
+        document_id: r.try_get("document_id")?,
+        author_pubkey: r.try_get("author_pubkey")?,
+        parent_hash: r.try_get("parent_hash")?,
+        parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
+        update_clocks: r.try_get("update_clocks")?,
+        s3_key: r.try_get("s3_key")?,
+        covered_seq: r.try_get("covered_seq")?,
+        status: SnapshotStatus::parse(&status)?,
+        created_at: r.try_get("created_at")?,
+    })
 }
 
 /// Row from `updates` (encrypted deltas indexed by seq).
@@ -105,33 +153,115 @@ pub async fn create_snapshot(
     Ok(ambre_core::SnapshotId::from_uuid(core_id))
 }
 
-/// Returns the most recent snapshot for a document (if any).
+/// Returns the snapshot an open is served: the most recent one somebody
+/// confirmed, its author included (`SRV-128`). A pending one is never served.
 pub async fn get_latest_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
 ) -> Result<Option<SnapshotRow>, AppError> {
     let did = id_to_uuid(*document_id);
-    let row = sqlx::query(
-        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1"
-    )
+    let row = sqlx::query(&format!(
+        "SELECT {SNAPSHOT_COLUMNS} FROM snapshots WHERE document_id = $1 \
+         AND status <> 'pending' ORDER BY created_at DESC LIMIT 1"
+    ))
     .bind(did)
     .fetch_optional(pool)
     .await?;
+    row.as_ref().map(snapshot_row).transpose()
+}
 
-    match row {
-        Some(r) => Ok(Some(SnapshotRow {
-            id: r.try_get("id")?,
-            document_id: r.try_get("document_id")?,
-            author_pubkey: r.try_get("author_pubkey")?,
-            parent_hash: r.try_get("parent_hash")?,
-            parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
-            update_clocks: r.try_get("update_clocks")?,
-            s3_key: r.try_get("s3_key")?,
-            covered_seq: r.try_get("covered_seq")?,
-            created_at: r.try_get("created_at")?,
-        })),
-        None => Ok(None),
-    }
+/// Returns the reference snapshot: the most recent one a member other than
+/// its author confirmed (`SRV-131`).
+pub async fn get_reference_snapshot(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<SnapshotRow>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let row = sqlx::query(&format!(
+        "SELECT {SNAPSHOT_COLUMNS} FROM snapshots WHERE document_id = $1 \
+         AND status = 'confirmed' ORDER BY created_at DESC LIMIT 1"
+    ))
+    .bind(did)
+    .fetch_optional(pool)
+    .await?;
+    row.as_ref().map(snapshot_row).transpose()
+}
+
+/// Records that `confirmer` vouched for a snapshot, and returns its standing
+/// after it, `None` when the document holds no such snapshot (`SRV-126`).
+///
+/// A member other than the author makes it `confirmed`. The author makes a
+/// pending one `self`, unless a snapshot another author confirmed alone
+/// already stands past the reference. The trim past the reference then drops
+/// one author's deltas only, the ones that author's snapshot holds.
+pub async fn confirm_snapshot(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    snapshot_id: &ambre_core::SnapshotId,
+    confirmer: &[u8],
+) -> Result<Option<SnapshotStatus>, AppError> {
+    let did = id_to_uuid(*document_id);
+    let sid = id_to_uuid(*snapshot_id);
+    sqlx::query(
+        "UPDATE snapshots s
+         SET status = CASE WHEN s.author_pubkey = $3 THEN 'self' ELSE 'confirmed' END
+         WHERE s.id = $1 AND s.document_id = $2 AND (
+             (s.author_pubkey <> $3 AND s.status <> 'confirmed')
+             OR (s.author_pubkey = $3 AND s.status = 'pending' AND NOT EXISTS (
+                 SELECT 1 FROM snapshots o
+                 WHERE o.document_id = s.document_id AND o.status = 'self'
+                   AND o.author_pubkey <> s.author_pubkey
+                   AND o.created_at > COALESCE(
+                       (SELECT MAX(r.created_at) FROM snapshots r
+                        WHERE r.document_id = s.document_id AND r.status = 'confirmed'),
+                       '-infinity'::timestamptz))))",
+    )
+    .bind(sid)
+    .bind(did)
+    .bind(confirmer)
+    .execute(pool)
+    .await?;
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM snapshots WHERE id = $1 AND document_id = $2")
+            .bind(sid)
+            .bind(did)
+            .fetch_optional(pool)
+            .await?;
+    status.as_deref().map(SnapshotStatus::parse).transpose()
+}
+
+/// Drops a snapshot nobody confirmed yet, and returns its object key for the
+/// caller to delete (`SRV-133`). A confirmed one stays, and so does every
+/// delta (`SRV-135`).
+pub async fn drop_pending_snapshot(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    snapshot_id: &ambre_core::SnapshotId,
+) -> Result<Option<String>, AppError> {
+    let key: Option<String> = sqlx::query_scalar(
+        "DELETE FROM snapshots WHERE id = $1 AND document_id = $2 AND status = 'pending' \
+         RETURNING s3_key",
+    )
+    .bind(id_to_uuid(*snapshot_id))
+    .bind(id_to_uuid(*document_id))
+    .fetch_optional(pool)
+    .await?;
+    Ok(key)
+}
+
+/// The highest delta a served snapshot of the document folds in, 0 with none.
+/// What lies past it is the history an open replays (`SRV-038`).
+pub async fn served_horizon(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<i64, AppError> {
+    let horizon: Option<i64> = sqlx::query_scalar(
+        "SELECT MAX(covered_seq) FROM snapshots WHERE document_id = $1 AND status <> 'pending'",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_one(pool)
+    .await?;
+    Ok(horizon.unwrap_or(0))
 }
 
 /// Fetches a specific snapshot by id, scoped to its owning document.
@@ -147,28 +277,14 @@ pub async fn get_snapshot(
 ) -> Result<Option<SnapshotRow>, AppError> {
     let sid = id_to_uuid(*snapshot_id);
     let did = id_to_uuid(*document_id);
-    let row = sqlx::query(
-        "SELECT id, document_id, author_pubkey, parent_hash, parent_snapshot_proof, update_clocks, s3_key, covered_seq, created_at FROM snapshots WHERE id = $1 AND document_id = $2"
-    )
+    let row = sqlx::query(&format!(
+        "SELECT {SNAPSHOT_COLUMNS} FROM snapshots WHERE id = $1 AND document_id = $2"
+    ))
     .bind(sid)
     .bind(did)
     .fetch_optional(pool)
     .await?;
-
-    match row {
-        Some(r) => Ok(Some(SnapshotRow {
-            id: r.try_get("id")?,
-            document_id: r.try_get("document_id")?,
-            author_pubkey: r.try_get("author_pubkey")?,
-            parent_hash: r.try_get("parent_hash")?,
-            parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
-            update_clocks: r.try_get("update_clocks")?,
-            s3_key: r.try_get("s3_key")?,
-            covered_seq: r.try_get("covered_seq")?,
-            created_at: r.try_get("created_at")?,
-        })),
-        None => Ok(None),
-    }
+    row.as_ref().map(snapshot_row).transpose()
 }
 
 /// Inserts an update metadata row (idempotent on conflict).
@@ -385,11 +501,16 @@ pub async fn get_clock_state(
 /// Trims the delta index of every `updates` row that all retained snapshots have
 /// already folded in, returning the number of rows deleted.
 ///
-/// The purge horizon per document is `MIN(covered_seq)` across its remaining
+/// The purge horizon per document is `MIN(covered_seq)` across its confirmed
 /// snapshots. A client restores from one of those snapshots, and only ever needs
 /// updates past its `covered_seq`. An update with `seq <= MIN(covered_seq)` is
-/// therefore redundant for every possible restore point. Documents with no
-/// snapshot yet are skipped (nothing covers their updates).
+/// therefore redundant for every possible restore point. A pending or
+/// self-confirmed snapshot moves nothing (`SRV-127`). Documents with no
+/// confirmed snapshot yet are skipped (nothing covers their updates).
+///
+/// The latest self-confirmed snapshot past the reference also drops its
+/// author's own deltas between the two (`SRV-130`). An open checks that
+/// snapshot against the deltas of every other user, which stay.
 ///
 /// This is the delta index's only garbage collector for a long-lived document. The
 /// `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
@@ -404,11 +525,30 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
         "WITH horizon AS (
             SELECT document_id, MIN(covered_seq) AS min_covered
             FROM snapshots
+            WHERE status = 'confirmed'
             GROUP BY document_id
+        ), reference AS (
+            SELECT DISTINCT ON (document_id) document_id, covered_seq, created_at
+            FROM snapshots
+            WHERE status = 'confirmed'
+            ORDER BY document_id, created_at DESC
+        ), author_span AS (
+            SELECT DISTINCT ON (s.document_id) s.document_id, s.author_pubkey,
+                   COALESCE(r.covered_seq, 0) AS from_seq, s.covered_seq AS to_seq
+            FROM snapshots s
+            LEFT JOIN reference r ON r.document_id = s.document_id
+            WHERE s.status = 'self' AND (r.created_at IS NULL OR s.created_at > r.created_at)
+            ORDER BY s.document_id, s.created_at DESC
         ), gone AS (
             DELETE FROM updates u
-            USING horizon h
-            WHERE u.document_id = h.document_id AND u.seq <= h.min_covered
+            WHERE EXISTS (
+                SELECT 1 FROM horizon h
+                WHERE h.document_id = u.document_id AND u.seq <= h.min_covered
+            ) OR EXISTS (
+                SELECT 1 FROM author_span a
+                WHERE a.document_id = u.document_id AND a.author_pubkey = u.author_pubkey
+                  AND u.seq > a.from_seq AND u.seq <= a.to_seq
+            )
             RETURNING u.batch_key
         )
         SELECT (SELECT COUNT(*) FROM gone),
@@ -488,7 +628,9 @@ pub struct CompactSnapshot {
 ///
 /// Returns a list of snapshot ids and their S3 keys that should be
 /// deleted. Keeps at most `keep` snapshots per document (most recent
-/// by created_at DESC).
+/// by created_at DESC). The reference snapshot and the latest self-confirmed
+/// one stay whatever their rank, since an open checks the one against the
+/// other (`SRV-131`).
 pub async fn find_compactable_snapshots(
     pool: &PgPool,
     keep: i64,
@@ -498,8 +640,14 @@ pub async fn find_compactable_snapshots(
             SELECT id, s3_key,
                    ROW_NUMBER() OVER (PARTITION BY document_id ORDER BY created_at DESC) AS rn
             FROM snapshots
+        ), held AS (
+            (SELECT DISTINCT ON (document_id) id FROM snapshots
+             WHERE status = 'confirmed' ORDER BY document_id, created_at DESC)
+            UNION
+            (SELECT DISTINCT ON (document_id) id FROM snapshots
+             WHERE status = 'self' ORDER BY document_id, created_at DESC)
         )
-        SELECT id, s3_key FROM ranked WHERE rn > $1",
+        SELECT id, s3_key FROM ranked WHERE rn > $1 AND id NOT IN (SELECT id FROM held)",
     )
     .bind(keep)
     .fetch_all(pool)

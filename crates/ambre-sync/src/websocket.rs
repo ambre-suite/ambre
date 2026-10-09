@@ -943,6 +943,7 @@ impl SyncState {
             WsServerMsg::SnapshotAvailable {
                 document_id,
                 snapshot_id,
+                ..
             } => {
                 tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
                 // Announced is not held: fetch it first (`SYNC-030`).

@@ -61,7 +61,7 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-017` | `FAIL` | Given a pending snapshot that differs from the deltas it covers, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-021` | `POST` | A client MUST confirm its own snapshot only when every operation of another user past the reference snapshot comes from a delta that user signed. | this spec section 3; `SRV-126`, `SRV-130` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-022` | `FAIL` | Given a snapshot its author confirmed, whose operations of another user past the reference snapshot differ from the deltas that user signed, the client MUST refuse it and open from the reference snapshot. | this spec section 3; `SRV-131` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the relay refuses a report signed over another author, and acts on one signed over the right one; `ambre_protocol::snapshot_report::tests::the_transcript_names_the_document_the_snapshot_and_the_author` -- what is signed changes with each of the three | none | verified |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 The operations no session signs
@@ -94,7 +94,7 @@ derive from no key. No delta ever carries them, so every client must write them 
   comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 16 `verified`, 13 `unimplemented`. Every delta is checked, and every row on it
+* **Verification.** 17 `verified`, 12 `unimplemented`. Every delta is checked, and every row on it
   holds by a test. Nothing checks a snapshot yet, so its author can still place any operation in it.
 
 ---

@@ -129,10 +129,13 @@ pub enum WsServerMsg {
     /// Too many deltas accumulated -- client must compact.
     SnapshotRequired { document_id: DocumentId },
 
-    /// New snapshot available for download via S3.
+    /// New snapshot available for download via S3. It is pending: a member who
+    /// holds the deltas it covers checks it and confirms it (`SRV-129`).
     SnapshotAvailable {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
+        /// The highest delta its author says it folds in.
+        covered_seq: Seq,
     },
 
     /// The document key was rotated: every REMAINING member must re-fetch its

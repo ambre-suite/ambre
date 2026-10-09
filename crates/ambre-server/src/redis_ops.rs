@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use rustis::client::Client;
 use rustis::commands::{
-    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands,
+    GenericCommands, HashCommands, ListCommands, PubSubCommands, ScriptingCommands, StringCommands,
 };
 use rustis::resp::RefBulkString;
 
@@ -447,6 +447,31 @@ pub async fn release_flush_lock(
         .await
         .map_err(|e| AppError::Redis(format!("flush lock release: {e}")))?;
     Ok(())
+}
+
+/// Claims the one standing snapshot request of a document for `ttl_secs`
+/// (`SRV-038`). Returns `true` when no request stood, so this caller asks. Every
+/// instance shares the claim, so one threshold crossing asks once.
+pub async fn claim_snapshot_ask(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    ttl_secs: u64,
+) -> Result<bool, AppError> {
+    let key = format!("doc:{document_id}:snapshot_asked");
+    try_acquire_flush_lock(redis, &key, "1", ttl_secs).await
+}
+
+/// The last delta number the relay gave the document, 0 when its counter is
+/// cold.
+pub async fn current_seq(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+) -> Result<u64, AppError> {
+    let seq: Option<u64> = redis
+        .get(format!("doc:{document_id}:seq"))
+        .await
+        .map_err(|e| AppError::Redis(format!("current seq: {e}")))?;
+    Ok(seq.unwrap_or(0))
 }
 
 /// Retrieves a refresh-token record from Redis.
