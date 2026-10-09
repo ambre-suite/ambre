@@ -96,6 +96,13 @@ impl TrameState {
     /// logged, not silently swallowed. The caller persists the returned bytes to
     /// IndexedDB. An empty snapshot from a dropped error would silently wipe the
     /// stored document on the next compaction.
+    /// The CRDT document, read-only. A snapshot check compares its history
+    /// with a peer's snapshot and never writes (`AUTHOR-018`).
+    #[must_use]
+    pub fn crdt(&self) -> &loro::LoroDoc {
+        &self.doc
+    }
+
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
             tracing::error!("[Logic] export_snapshot failed, returning empty snapshot: {e:?}");

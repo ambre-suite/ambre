@@ -538,7 +538,9 @@ impl LogicState {
     /// nothing (`AUTHOR-014`). The log names the document and the signer and
     /// never a byte of the payload (`ZK-001`).
     pub(crate) fn apply_signed(&mut self, document_id: DocumentId, delta: &SignedDelta) {
-        if !authored_by(&delta.payload, delta.peer) {
+        let accepted = authored_by(&delta.payload, delta.peer);
+        self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
+        if !accepted {
             tracing::warn!(
                 "Logic: refused a delta on doc {document_id}: an operation is not its signer's \
                  (user {:?})",
@@ -549,13 +551,24 @@ impl LogicState {
         self.apply_remote(document_id, &delta.payload);
     }
 
+    /// Note the relay's number of a delta, and what it carries when it was
+    /// accepted. A snapshot check reads which deltas a horizon covers from
+    /// it (`AUTHOR-016`).
+    fn record_seq(&mut self, document_id: DocumentId, seq: u64, payload: Option<&Vec<u8>>) {
+        if let Some(doc) = self.docs.get_mut(&document_id) {
+            doc.ledger.record(seq, payload.map(Vec::as_slice));
+        }
+    }
+
     /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
     /// checked on its own, and only the refused ones are left out.
     pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
         let accepted: Vec<Vec<u8>> = deltas
             .into_iter()
             .filter_map(|delta| {
-                if authored_by(&delta.payload, delta.peer) {
+                let accepted = authored_by(&delta.payload, delta.peer);
+                self.record_seq(document_id, delta.seq, accepted.then_some(&delta.payload));
+                if accepted {
                     Some(delta.payload)
                 } else {
                     tracing::warn!(
@@ -713,13 +726,57 @@ impl LogicState {
         }
     }
 
-    /// Export a document's CRDT snapshot for compaction.
-    pub(crate) fn export_snapshot(&self, document_id: DocumentId) -> Option<Vec<u8>> {
-        match &self.docs.get(&document_id)?.state {
-            DocState::Trame(state) => Some(state.export_snapshot()),
-            DocState::Toile(state) => Some(state.export_snapshot()),
-            DocState::Prose(state) => Some(state.export_snapshot()),
+    /// The snapshot for compaction, and the last delta it folds in: the last
+    /// one held with no gap below it (`SRV-083`).
+    pub(crate) fn export_covered_snapshot(
+        &self,
+        document_id: DocumentId,
+    ) -> Option<(Vec<u8>, u64)> {
+        let doc = self.docs.get(&document_id)?;
+        Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
+    }
+
+    /// Import a snapshot whose contents are trusted, and count the deltas a
+    /// later snapshot must hold from its horizon on (`AUTHOR-015`).
+    pub(crate) fn adopt_snapshot(&mut self, document_id: DocumentId, payload: &[u8], covered: u64) {
+        self.apply_remote(document_id, payload);
+        if let Some(doc) = self.docs.get_mut(&document_id) {
+            let base = doc.state.crdt().oplog_vv();
+            doc.ledger.reset(covered, base);
         }
+    }
+
+    /// Check a snapshot against the deltas this client holds, and answer the
+    /// verdict to Sync (`AUTHOR-016`, `AUTHOR-017`, `AUTHOR-022`). The live
+    /// document is only read (`AUTHOR-018`). A match on a pending snapshot
+    /// folds the deltas it covers into the ledger's base.
+    pub(crate) fn check_pending_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        covered: u64,
+        payload: &[u8],
+        purpose: SnapshotPurpose,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        let verdict = snapshot_check::check_snapshot(
+            doc.state.crdt(),
+            &doc.ledger,
+            payload,
+            covered,
+            purpose,
+        );
+        if purpose == SnapshotPurpose::Confirm && matches!(verdict, SnapshotVerdict::Match { .. }) {
+            doc.ledger.fold_through(covered);
+        }
+        self.send_to_sync(SyncCommand::SnapshotVerdict {
+            document_id,
+            snapshot_id,
+            purpose,
+            verdict,
+        });
     }
 }
 

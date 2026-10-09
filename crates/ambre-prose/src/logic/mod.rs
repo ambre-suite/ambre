@@ -869,6 +869,13 @@ impl ProseState {
         self.doc.export(ExportMode::Snapshot).unwrap_or_default()
     }
 
+    /// The CRDT document, read-only. A snapshot check compares its history
+    /// with a peer's snapshot and never writes (`AUTHOR-018`).
+    #[must_use]
+    pub fn crdt(&self) -> &loro::LoroDoc {
+        &self.doc
+    }
+
     /// Take in a whole document (`PROSE-055`).
     ///
     /// The schema gate runs first, on a scratch document, so a refused read

@@ -34,6 +34,8 @@ pub mod persistence;
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
 mod data;
 mod dispatch;
+/// The snapshot check against the signed deltas (`AUTHOR-016`).
+mod snapshot_check;
 
 /// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
@@ -46,7 +48,8 @@ pub mod fixtures;
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
-    RestEvent, Role, SignedDelta, SyncCommand, UiEvent, UserId,
+    RestEvent, Role, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
+    UiEvent, UserId,
 };
 
 use ambre_core::schema::SchemaError;
@@ -308,7 +311,7 @@ impl DocState {
     ///
     /// **Production code, ungated** (`FIXTURE-007`), and the other half of the
     /// round trip asserts on every variant.
-    /// [`LogicState::export_snapshot`] cannot serve that belt: it takes a
+    /// `LogicState::export_covered_snapshot` cannot serve that belt: it takes a
     /// `DocumentId` and needs a live registry entry, where the belt quantifies
     /// over a bare `DocState`.
     pub fn export_snapshot(&self) -> Vec<u8> {
@@ -316,6 +319,16 @@ impl DocState {
             DocState::Trame(state) => state.export_snapshot(),
             DocState::Toile(state) => state.export_snapshot(),
             DocState::Prose(state) => state.export_snapshot(),
+        }
+    }
+
+    /// The CRDT document, read-only, whichever application owns it. The
+    /// snapshot check reads it and never writes (`AUTHOR-018`).
+    fn crdt(&self) -> &loro::LoroDoc {
+        match self {
+            DocState::Trame(state) => state.crdt(),
+            DocState::Toile(state) => state.crdt(),
+            DocState::Prose(state) => state.crdt(),
         }
     }
 
@@ -435,6 +448,9 @@ struct LiveDoc {
     /// lands. A restore may write under the document's PeerID, and that write
     /// must be one the session can send.
     held_restores: Vec<HeldRestore>,
+    /// The relay's number of each delta applied since the last snapshot, and
+    /// what it carries. A snapshot check reads it (`AUTHOR-016`).
+    ledger: snapshot_check::SeqLedger,
 }
 
 /// A local restore held until the document has its session identity.
@@ -451,6 +467,7 @@ impl LiveDoc {
             role: Role::Owner,
             identity: None,
             held_restores: Vec::new(),
+            ledger: snapshot_check::SeqLedger::default(),
         }
     }
 }
@@ -1259,6 +1276,7 @@ mod authorship_tests {
 
     fn signed(payload: Vec<u8>, peer: u64) -> SignedDelta {
         SignedDelta {
+            seq: 0,
             payload,
             nonce: SessionNonce([0; 16]),
             peer,
@@ -1411,5 +1429,96 @@ mod authorship_tests {
 
         let second = edit(&mut rig, "again");
         assert_eq!(authors(&second), vec![rig.peer]);
+    }
+
+    /// A workbook snapshot holding the scaffolding and `deltas`.
+    fn snapshot_of(deltas: &[Vec<u8>]) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        doc.import(&TrameState::new().export_snapshot())
+            .expect("the scaffolding");
+        for delta in deltas {
+            doc.import(delta).expect("a delta");
+        }
+        doc.export(ExportMode::Snapshot).expect("a snapshot")
+    }
+
+    /// Alice's delta, numbered `seq` by the relay, reaches the rig.
+    fn receive(rig: &mut Rig, payload: Vec<u8>, seq: u64) {
+        let mut delta = signed(payload, ALICE);
+        delta.seq = seq;
+        rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id: rig.document_id,
+            delta,
+        });
+    }
+
+    /// The verdict Logic answers a pending snapshot covering `covered` with.
+    fn verdict(rig: &mut Rig, payload: Vec<u8>, covered: u64) -> SnapshotVerdict {
+        rig.state.handle_logic_event(LogicEvent::PendingSnapshot {
+            document_id: rig.document_id,
+            snapshot_id: SnapshotId::genesis(rig.document_id),
+            covered_seq: covered,
+            payload,
+            purpose: SnapshotPurpose::Confirm,
+        });
+        rig.sync
+            .try_iter()
+            .find_map(|cmd| match cmd {
+                SyncCommand::SnapshotVerdict { verdict, .. } => Some(verdict),
+                _ => None,
+            })
+            .expect("a pending snapshot is answered")
+    }
+
+    /// `AUTHOR-016`, `AUTHOR-017`, `AUTHOR-018`: a pending snapshot holding
+    /// the covered delta matches, a forged one does not, and neither reaches
+    /// the document.
+    #[test]
+    fn a_pending_snapshot_is_answered_and_never_imported() {
+        let mut rig = rig();
+        let hers = written_by(ALICE, "hers");
+        receive(&mut rig, hers.clone(), 1);
+        let before = held(&rig);
+        let forged = snapshot_of(&[written_by(ALICE, "forged")]);
+        assert_eq!(verdict(&mut rig, forged, 1), SnapshotVerdict::Mismatch);
+        assert_eq!(
+            verdict(&mut rig, snapshot_of(&[hers]), 1),
+            SnapshotVerdict::Match { extras: vec![] }
+        );
+        assert_eq!(held(&rig), before, "a pending snapshot was imported");
+    }
+
+    /// `AUTHOR-015`: a snapshot adopted at a horizon answers for the deltas
+    /// below it, so a later one covering less is left unchecked.
+    #[test]
+    fn an_adopted_snapshot_moves_the_horizon() {
+        let mut rig = rig();
+        let hers = written_by(ALICE, "hers");
+        rig.state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: rig.document_id,
+            payload: snapshot_of(std::slice::from_ref(&hers)),
+            covered_seq: 5,
+        });
+        assert_eq!(
+            verdict(&mut rig, snapshot_of(&[hers]), 3),
+            SnapshotVerdict::Unchecked
+        );
+    }
+
+    /// `SRV-083`: a snapshot this client builds names the last delta it holds
+    /// with no gap below it, so no trim drops a delta it lacks.
+    #[test]
+    fn a_built_snapshot_names_the_last_delta_held_without_a_gap() {
+        let mut rig = rig();
+        receive(&mut rig, written_by(ALICE, "one"), 1);
+        receive(&mut rig, written_by(ALICE, "three"), 3);
+        rig.state.handle_logic_event(LogicEvent::SnapshotNeeded {
+            document_id: rig.document_id,
+        });
+        let covered = rig.sync.try_iter().find_map(|cmd| match cmd {
+            SyncCommand::SendSnapshot { covered_seq, .. } => Some(covered_seq),
+            _ => None,
+        });
+        assert_eq!(covered, Some(1));
     }
 }

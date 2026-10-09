@@ -753,6 +753,13 @@ impl ToileState {
         events
     }
 
+    /// The CRDT document, read-only. A snapshot check compares its history
+    /// with a peer's snapshot and never writes (`AUTHOR-018`).
+    #[must_use]
+    pub fn crdt(&self) -> &loro::LoroDoc {
+        &self.doc
+    }
+
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_default()

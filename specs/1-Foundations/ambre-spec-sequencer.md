@@ -62,7 +62,7 @@ sequence has already moved.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` -- ten deltas and a snapshot covering six leave exactly the uncovered tail, correct and unreachable while `SRV-038` is unbuilt, since with no snapshot there is no horizon | none | verified |
-| `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records | none | verified |
+| `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records; `ambre_logic::authorship_tests::a_built_snapshot_names_the_last_delta_held_without_a_gap` -- a client never claims a delta past a gap | none | verified |
 | `SRV-154` | `FRAME` | A trim MUST NOT drop a batch object that still holds a delta no retained snapshot covers. | this spec section 3; `SRV-083` | `ambre_server::hot_tail::db_tests::a_trim_drops_a_batch_only_once_no_row_names_it` -- a snapshot covering seven of ten deltas drops the batch of the first five and keeps the one still naming eight to ten | none | verified |
 | `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md`; `ambre-spec-budgets.md section 6` | `ambre_server::compaction::db_tests::the_writer_is_asked_once_past_the_threshold` -- the writer is asked at the first check past the threshold, and not again while the ask stands, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`); `ambre_server::compaction::tests::the_history_past_the_served_snapshot_decides` -- the threshold counts from the served horizon | none | verified |
 | `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | `ambre_server::routes::tests::a_snapshot_is_served_once_confirmed` -- an upload is pending, its author makes it `self` and another member `confirmed`; `ambre_server::compaction::db_tests::one_author_alone_stands_past_the_reference` -- a second author may not confirm alone past the reference, and another member still may, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
@@ -305,10 +305,14 @@ sees is how long a document takes to open.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No client confirms a snapshot yet.** The relay asks for one, records it pending, and serves
-  it once a member confirms it. The client check that confirms or reports one lands with the
-  `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7), under `AUTHOR-016`
-  and `AUTHOR-021`. Until then every snapshot stays pending, so a cold open replays everything.
+* **A snapshot check reads the whole history of each peer.** It compares every operation from
+  the first one, not only those past the last snapshot it adopted. Its cost grows with the
+  document, and no budget row bounds it yet.
+* **A delta parented on a snapshot between the reference and the latest may stay quarantined.**
+  An open that refuses the latest snapshot stays on the reference, and never learns the snapshots
+  in between (`AUTHOR-022`). No rule says how it releases what rests on them.
+* **An offline open never checks the snapshot it held back.** With no replay, the check never
+  runs, and the document stays on its reference until the next open.
 * **A warm client below the trim cannot catch up.** A client that kept a document open offline
   asks on reconnect for the deltas past the last number it holds. Once the trim has passed that
   number, the replay stops at the first missing delta, and nothing sends the client to the

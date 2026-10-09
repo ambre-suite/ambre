@@ -44,8 +44,8 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
-    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId, SyncCommand,
-    UserId, UserInfo,
+    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
+    SnapshotPurpose, SnapshotVerdict, SyncCommand, UserId, UserInfo,
 };
 use ambre_core::{KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
@@ -262,6 +262,10 @@ enum SyncEvent {
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
         /// so the history already in the snapshot is not replayed.
         covered_seq: Seq,
+        /// The latest snapshot, when only its author confirmed it and that
+        /// author is another user. `snapshot_payload` is then the reference,
+        /// and this one is checked once the replay is done (`AUTHOR-022`).
+        held_snapshot: Option<HeldSnapshot>,
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
         /// with the right type on its first outbound update.
         doc_type: DocType,
@@ -421,6 +425,8 @@ enum SyncEvent {
     SnapshotFetched {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
+        /// The last delta its author says it folds in.
+        covered_seq: Seq,
         blob: Option<Vec<u8>>,
     },
     /// Media download completed: the encrypted blob was fetched from S3 and
@@ -475,7 +481,9 @@ struct SyncDocumentState {
     /// Updates held back because their parent snapshot is not yet known, keyed by
     /// that parent `snapshot_id`. Stored sealed; decrypted only on release.
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
-    quarantine: HashMap<SnapshotId, Vec<Update>>,
+    /// Each keeps the number the relay gave it, which the Logic thread's
+    /// snapshot check reads.
+    quarantine: HashMap<SnapshotId, Vec<(Seq, Update)>>,
     /// The missing history was asked for this gap: the quarantine crossed the
     /// soft threshold and has not dropped back under it since. One request per
     /// gap, never one per arrival (`SYNC-031`).
@@ -522,6 +530,29 @@ struct SyncDocumentState {
     /// Updates sent and not yet echoed, and the rotation this document owes
     /// (`SYNC-128`, `SYNC-129`).
     rekey: rekey::Rekey,
+    /// The snapshots handed to the Logic thread to check, awaiting its
+    /// verdict (`AUTHOR-016`, `AUTHOR-022`).
+    checks: HashMap<SnapshotId, PendingCheck>,
+    /// A snapshot only its author confirmed, held until the open has replayed
+    /// every delta the relay kept. It is checked then (`AUTHOR-022`).
+    held_snapshot: Option<HeldSnapshot>,
+}
+
+/// A snapshot the Logic thread is checking.
+struct PendingCheck {
+    /// The signing key its sealed blob verified under: who built it.
+    author: [u8; 32],
+    covered_seq: Seq,
+    /// The opened snapshot, kept on open only: a match adopts it.
+    payload: Option<Vec<u8>>,
+}
+
+/// A snapshot only its author confirmed, still sealed (`SRV-128`).
+#[derive(Debug, Clone)]
+pub(crate) struct HeldSnapshot {
+    pub snapshot_id: SnapshotId,
+    pub covered_seq: Seq,
+    pub blob: Vec<u8>,
 }
 
 impl SyncDocumentState {
@@ -559,6 +590,8 @@ impl SyncDocumentState {
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
+            checks: HashMap::new(),
+            held_snapshot: None,
         }
     }
 
@@ -678,11 +711,21 @@ impl SyncDocumentState {
     /// Opens a snapshot blob with the one key it names: a snapshot sealed
     /// before a rotation opens with a key the chain recovers (`SYNC-119`).
     fn open_snapshot_blob(&self, blob: &[u8]) -> Result<Vec<u8>, pipeline::PipelineError> {
+        self.open_signed_snapshot(blob).map(|(payload, _)| payload)
+    }
+
+    /// Opens a snapshot blob, and names the signing key it verified under: the
+    /// member who built it, which the snapshot check needs (`AUTHOR-021`).
+    fn open_signed_snapshot(
+        &self,
+        blob: &[u8],
+    ) -> Result<(Vec<u8>, [u8; 32]), pipeline::PipelineError> {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
-        pipeline::open_snapshot(&snapshot, &key)
+        let payload = pipeline::open_snapshot(&snapshot, &key)?;
+        Ok((payload, *snapshot.public_data.pub_key.as_array()))
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -697,16 +740,19 @@ impl SyncDocumentState {
         pipeline::open_update(update, &key)
     }
 
-    /// Opens an update and names what its signature proves. That is the PeerID
-    /// its signer and nonce derive, and the member the signer resolves to
-    /// (`SYNC-114`, `AUTHOR-013`). A body too short for its parts is refused.
+    /// Opens an update and names what its signature proves: the PeerID its
+    /// signer and nonce derive, and the member the signer resolves to
+    /// (`SYNC-114`, `AUTHOR-013`). The relay's number `seq` travels beside.
+    /// A body too short for its parts is refused.
     fn open_signed_update(
         &self,
         update: &ambre_protocol::Update,
+        seq: Seq,
     ) -> Result<SignedDelta, pipeline::PipelineError> {
         let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         let signer = *update.public_data.pub_key.as_array();
         Ok(SignedDelta {
+            seq: seq.0,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
             nonce: body.nonce,
             user: self.signing_keys.get(&signer).copied(),
@@ -1100,9 +1146,16 @@ impl SyncState {
             SyncCommand::SendSnapshot {
                 document_id,
                 payload,
+                covered_seq,
             } => {
-                self.handle_send_snapshot(document_id, payload);
+                self.handle_send_snapshot(document_id, payload, Seq(covered_seq));
             }
+            SyncCommand::SnapshotVerdict {
+                document_id,
+                snapshot_id,
+                purpose,
+                verdict,
+            } => self.handle_snapshot_verdict(document_id, snapshot_id, purpose, verdict),
             SyncCommand::SendEphemeral {
                 document_id,
                 payload,

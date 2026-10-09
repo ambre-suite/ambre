@@ -294,6 +294,59 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
     parse_json("POST", url, resp).await
 }
 
+/// HTTP POST of a JSON body to a route that answers with no body. The
+/// confirmation and the report of a snapshot use it (`SRV-126`, `SRV-133`).
+pub(crate) async fn post_json_auth_empty<T: Serialize>(
+    url: &str,
+    body: &T,
+    auth: AuthContext,
+) -> Result<(), String> {
+    let body_json =
+        serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
+    let send = |token: SecretToken| {
+        gloo_net::http::Request::post(url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", &bearer(&token))
+            .abort_signal(Some(&timeout_signal()))
+            .body(body_json.clone())
+    };
+    let resp = send(auth.access_token()?)
+        .map_err(|e| format!("POST {url}: body error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("POST {url}: {e}"))?;
+    if resp.status() == 401 {
+        auth.refresh().await?;
+        let resp = send(auth.access_token()?)
+            .map_err(|e| format!("POST {url}: body error: {e}"))?
+            .send()
+            .await
+            .map_err(|e| format!("POST {url}: {e}"))?;
+        return expect_ok("POST", url, resp).await;
+    }
+    expect_ok("POST", url, resp).await
+}
+
+/// The sealed blob of one snapshot of `document_id`: a presigned URL from the
+/// relay, then the object itself. `None` when either step fails.
+pub(crate) async fn download_snapshot(
+    url_scheme: &str,
+    api_base: &str,
+    document_id: ambre_core::DocumentId,
+    snapshot_id: &str,
+    auth: AuthContext,
+) -> Option<Vec<u8>> {
+    let url =
+        format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url");
+    let body = SnapshotDownloadUrlRequest {
+        snapshot_id: snapshot_id.to_owned(),
+    };
+    let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
+        .await
+        .ok()?;
+    fetch_bytes(&resp.download_url).await.ok()
+}
+
 pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), String> {
     let resp = gloo_net::http::Request::delete(url)
         .header("Authorization", &bearer(&auth.access_token()?))
@@ -562,6 +615,31 @@ pub(crate) struct SnapshotMetadataResponse {
     /// Highest delta `seq` folded into the snapshot: the open path gates its
     /// `RequestMissing` on this to skip the already-replayed history.
     pub covered_seq: i64,
+    /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
+    #[serde(default)]
+    pub status: String,
+    /// The author's signing key, hex. A `self` snapshot of this very user opens
+    /// as it is.
+    #[serde(default)]
+    pub author_pubkey: String,
+    /// For a `self` snapshot, the latest one another member confirmed, which
+    /// the open starts from (`SRV-131`, `AUTHOR-022`).
+    #[serde(default)]
+    pub reference: Option<ReferenceSnapshot>,
+}
+
+/// The reference snapshot named beside a `self` one (`SRV-131`).
+#[derive(Deserialize)]
+pub(crate) struct ReferenceSnapshot {
+    pub snapshot_id: String,
+    pub covered_seq: i64,
+}
+
+/// Body of `POST /api/documents/{id}/snapshots/{snapshot_id}/report`: the
+/// reporter's signature over the report transcript, hex (`AUTHOR-023`).
+#[derive(Serialize)]
+pub(crate) struct ReportSnapshotRequest {
+    pub signature: String,
 }
 
 /// Response of `POST /api/documents/{id}/snapshot/upload-url`: a presigned PUT

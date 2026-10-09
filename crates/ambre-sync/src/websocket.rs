@@ -473,6 +473,7 @@ impl SyncState {
                 snapshot_payload,
                 snapshot_id,
                 covered_seq,
+                held_snapshot,
                 doc_type,
                 server_created,
                 signing_keys,
@@ -516,6 +517,7 @@ impl SyncState {
                         self.send_to_logic(LogicEvent::RemoteSnapshot {
                             document_id,
                             payload,
+                            covered_seq: covered_seq.0,
                         });
                     }
                     Some(Err(e)) => {
@@ -529,6 +531,15 @@ impl SyncState {
                         doc_state.current_snapshot_id = snapshot_id;
                         doc_state.known_snapshots.insert(snapshot_id);
                     }
+                }
+                // A snapshot another user confirmed alone waits for the replay,
+                // then is checked (`AUTHOR-022`). The deltas parented on it are
+                // signed one by one, so they need not wait for it.
+                if let Some(held) = held_snapshot
+                    && let Some(doc_state) = self.documents.get_mut(&document_id)
+                {
+                    doc_state.known_snapshots.insert(held.snapshot_id);
+                    doc_state.held_snapshot = Some(held);
                 }
                 // Only subscribe over WS if the document actually exists
                 // server-side; a local-only doc subscribes after lazy creation.
@@ -774,8 +785,9 @@ impl SyncState {
             SyncEvent::SnapshotFetched {
                 document_id,
                 snapshot_id,
+                covered_seq,
                 blob,
-            } => self.adopt_fetched_snapshot(document_id, snapshot_id, blob),
+            } => self.adopt_fetched_snapshot(document_id, snapshot_id, covered_seq, blob),
             SyncEvent::SnapshotUploaded {
                 document_id,
                 snapshot_id,
@@ -933,6 +945,9 @@ impl SyncState {
                     doc_state.awaiting_initial_hydration = false;
                     let role = doc_state.role;
                     self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
+                    // Every delta the relay kept is replayed: the snapshot the
+                    // open held back can be checked now (`AUTHOR-022`).
+                    self.check_held_snapshot(document_id);
                 }
             }
 
@@ -943,11 +958,11 @@ impl SyncState {
             WsServerMsg::SnapshotAvailable {
                 document_id,
                 snapshot_id,
-                ..
+                covered_seq,
             } => {
                 tracing::info!("Sync: SnapshotAvailable {snapshot_id:?} for {document_id:?}");
                 // Announced is not held: fetch it first (`SYNC-030`).
-                self.fetch_announced_snapshot(document_id, snapshot_id);
+                self.fetch_announced_snapshot(document_id, snapshot_id, covered_seq);
             }
 
             WsServerMsg::KeyRotationRequired { document_id } => {

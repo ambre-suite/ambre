@@ -205,6 +205,7 @@ fn logic_event_roundtrips_through_postcard() {
     roundtrip_event(&LogicEvent::RemoteUpdate {
         document_id: doc,
         delta: ambre_bus::SignedDelta {
+            seq: 8,
             payload: vec![3, 1, 4, 1, 5, 9],
             nonce: ambre_core::SessionNonce([2; 16]),
             peer: 7,

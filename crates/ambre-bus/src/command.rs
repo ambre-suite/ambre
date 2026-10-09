@@ -21,7 +21,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
+use crate::{
+    ChannelId, DocType, DocumentId, RequestId, RestCommand, SnapshotId, SnapshotPurpose,
+    SnapshotVerdict,
+};
 
 /// Command sent from the Logic thread to the Sync thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +64,20 @@ pub enum SyncCommand {
     SendSnapshot {
         document_id: DocumentId,
         payload: Vec<u8>,
+        /// The last delta `seq` the Logic thread holds with no gap below it.
+        /// The snapshot claims to fold in every delta up to it (`SRV-083`).
+        covered_seq: u64,
+    },
+
+    /// The Logic thread's verdict on a [`LogicEvent::PendingSnapshot`]
+    /// (`ambre-spec-op-authorship.md`, `AUTHOR-016`, `AUTHOR-017`).
+    ///
+    /// [`LogicEvent::PendingSnapshot`]: crate::LogicEvent::PendingSnapshot
+    SnapshotVerdict {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        purpose: SnapshotPurpose,
+        verdict: SnapshotVerdict,
     },
 
     /// Cursor / presence data (encrypted by the Sync thread before sending).

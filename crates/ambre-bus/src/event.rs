@@ -15,7 +15,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
-use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, UserId};
+use crate::{ChannelId, DocType, DocumentId, RequestId, RestEvent, Role, SnapshotId, UserId};
 use ambre_core::SessionNonce;
 
 // -----------------------------------------------------------------------------
@@ -66,6 +66,23 @@ pub enum LogicEvent {
     RemoteSnapshot {
         document_id: DocumentId,
         payload: Vec<u8>,
+        /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
+        /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
+        covered_seq: u64,
+    },
+
+    /// A snapshot to check before anything trusts it
+    /// (`ambre-spec-op-authorship.md`, `AUTHOR-016`, `AUTHOR-022`). The Logic
+    /// thread compares it with the deltas it holds and answers with
+    /// [`SyncCommand::SnapshotVerdict`](crate::SyncCommand::SnapshotVerdict).
+    PendingSnapshot {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        /// The last delta `seq` it claims to fold in.
+        covered_seq: u64,
+        /// Decrypted and decompressed, as in `RemoteSnapshot`.
+        payload: Vec<u8>,
+        purpose: SnapshotPurpose,
     },
 
     /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id` is the
@@ -201,6 +218,30 @@ pub enum LogicEvent {
     UpdateRequired,
 }
 
+/// Why a snapshot is checked (`ambre-spec-op-authorship.md` section 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotPurpose {
+    /// A pending snapshot, which a match confirms (`AUTHOR-016`). Every delta
+    /// it covers must be held, or the check proves nothing.
+    Confirm,
+    /// A snapshot only its author confirmed, read on open (`AUTHOR-022`). The
+    /// relay trimmed that author's deltas, so gaps in the seqs are expected.
+    Open,
+}
+
+/// What the Logic thread found when it checked a snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotVerdict {
+    /// Every operation both sides hold is the same. `extras` names each PeerID
+    /// only the snapshot holds, with its registry entry. The snapshot passes
+    /// only if each entry resolves to its author (`AUTHOR-021`).
+    Match { extras: Vec<(u64, Vec<u8>)> },
+    /// The snapshot contradicts a delta it covers (`AUTHOR-017`).
+    Mismatch,
+    /// The client lacks what a verdict needs, and says nothing.
+    Unchecked,
+}
+
 /// One opened update and what its signature proves about it
 /// (`ambre-spec-sealed-envelope.md`, `SYNC-114`).
 ///
@@ -209,6 +250,9 @@ pub enum LogicEvent {
 /// (`ambre-spec-op-authorship.md`, `AUTHOR-012`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedDelta {
+    /// The number the relay gave it. The Logic thread's snapshot check reads
+    /// which deltas a horizon covers from it (`AUTHOR-016`).
+    pub seq: u64,
     /// The Loro update, decrypted and decompressed.
     pub payload: Vec<u8>,
     /// The session nonce of its author, opened from inside the ciphertext.

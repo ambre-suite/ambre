@@ -246,8 +246,26 @@ impl LogicState {
             LogicEvent::RemoteSnapshot {
                 document_id,
                 payload,
+                covered_seq,
             } => {
-                self.apply_remote(document_id, &payload);
+                self.adopt_snapshot(document_id, &payload, covered_seq);
+            }
+
+            // Checked against the deltas held, never imported (`AUTHOR-018`).
+            LogicEvent::PendingSnapshot {
+                document_id,
+                snapshot_id,
+                covered_seq,
+                payload,
+                purpose,
+            } => {
+                self.check_pending_snapshot(
+                    document_id,
+                    snapshot_id,
+                    covered_seq,
+                    &payload,
+                    purpose,
+                );
             }
 
             // Sync derived the PeerID from the signer; Logic compares it with
@@ -287,10 +305,11 @@ impl LogicState {
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {
-                if let Some(payload) = self.export_snapshot(document_id) {
+                if let Some((payload, covered_seq)) = self.export_covered_snapshot(document_id) {
                     self.send_to_sync(SyncCommand::SendSnapshot {
                         document_id,
                         payload,
+                        covered_seq,
                     });
                 }
             }
@@ -1389,6 +1408,7 @@ mod tests {
         let Ok(SyncCommand::SendSnapshot {
             document_id,
             payload,
+            ..
         }) = sync_rx.try_recv()
         else {
             panic!("a snapshot is sent");

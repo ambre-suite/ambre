@@ -59,7 +59,7 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
-            let opened = doc_state.open_signed_update(&update);
+            let opened = doc_state.open_signed_update(&update, seq);
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
@@ -73,7 +73,7 @@ impl SyncState {
             .quarantine
             .entry(snapshot_id)
             .or_default()
-            .push(update);
+            .push((seq, update));
         tracing::debug!(
             "[Sync] quarantined update doc={document_id} seq={} snapshot={snapshot_id:?}",
             seq.0,
@@ -114,8 +114,8 @@ impl SyncState {
                     updates
                         .iter()
                         .enumerate()
-                        .min_by_key(|(_, u)| u.public_data.clock.0)
-                        .map(|(idx, u)| (*snap, idx, u.public_data.clock.0))
+                        .min_by_key(|(_, (_, u))| u.public_data.clock.0)
+                        .map(|(idx, (_, u))| (*snap, idx, u.public_data.clock.0))
                 })
                 .min_by_key(|&(_, _, clock)| clock);
 
@@ -155,6 +155,7 @@ impl SyncState {
         &mut self,
         document_id: DocumentId,
         snapshot_id: SnapshotId,
+        covered_seq: Seq,
     ) {
         let Some(doc_state) = self.documents.get(&document_id) else {
             tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
@@ -191,35 +192,50 @@ impl SyncState {
             let _ = tx.send(SyncEvent::SnapshotFetched {
                 document_id,
                 snapshot_id,
+                covered_seq,
                 blob,
             });
         });
     }
 
-    /// Apply a fetched snapshot: deliver its contents to the Logic thread, then
-    /// register it as known and release what waited on it (`SYNC-030`). A
-    /// snapshot that did not arrive, or does not open, is reported and stays
-    /// unknown; the quarantine's own request for the missing history recovers.
+    /// Hand a fetched snapshot to the Logic thread to check, then register it
+    /// as known and release what waited on it (`SYNC-030`). The snapshot is
+    /// pending: the client holds the deltas it covers, so it checks them
+    /// rather than import it (`AUTHOR-016`). Each delta parented on it is
+    /// signed, so none waits on the verdict. A snapshot that did not arrive,
+    /// or does not open, is reported and stays unknown.
     pub(crate) fn adopt_fetched_snapshot(
         &mut self,
         document_id: DocumentId,
         snapshot_id: SnapshotId,
+        covered_seq: Seq,
         blob: Option<Vec<u8>>,
     ) {
-        let Some(doc_state) = self.documents.get(&document_id) else {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
         let opened = match blob {
             Some(blob) => doc_state
-                .open_snapshot_blob(&blob)
+                .open_signed_snapshot(&blob)
                 .map_err(|e| e.to_string()),
             None => Err("the snapshot could not be downloaded".to_owned()),
         };
         match opened {
-            Ok(payload) => {
-                self.send_to_logic(LogicEvent::RemoteSnapshot {
+            Ok((payload, author)) => {
+                doc_state.checks.insert(
+                    snapshot_id,
+                    PendingCheck {
+                        author,
+                        covered_seq,
+                        payload: None,
+                    },
+                );
+                self.send_to_logic(LogicEvent::PendingSnapshot {
                     document_id,
+                    snapshot_id,
+                    covered_seq: covered_seq.0,
                     payload,
+                    purpose: SnapshotPurpose::Confirm,
                 });
                 self.snapshot_known(document_id, snapshot_id);
             }
@@ -228,6 +244,156 @@ impl SyncState {
                 code: SyncWarningCode::DecryptFailed,
                 message,
             }),
+        }
+    }
+
+    /// Act on the Logic thread's verdict on a snapshot (`AUTHOR-016`,
+    /// `AUTHOR-017`, `AUTHOR-022`). Operations only the snapshot holds pass
+    /// when their registry entry resolves to its author, and to nobody else
+    /// (`AUTHOR-021`). A pending snapshot that passes is confirmed, and one
+    /// that contradicts a delta is reported. On open, one that passes is
+    /// adopted, and any other leaves the document on its reference.
+    pub(crate) fn handle_snapshot_verdict(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        purpose: SnapshotPurpose,
+        verdict: SnapshotVerdict,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some(check) = doc_state.checks.remove(&snapshot_id) else {
+            tracing::warn!("Sync: a verdict on snapshot {snapshot_id:?} nobody asked for");
+            return;
+        };
+        let passes = match &verdict {
+            SnapshotVerdict::Match { extras } => extras.iter().all(|(peer, bytes)| {
+                ambre_core::authorship::PeerEntry::from_bytes(bytes).is_some_and(|entry| {
+                    ambre_crypto::peer::entry_resolves(&entry, document_id, *peer, &check.author)
+                })
+            }),
+            SnapshotVerdict::Mismatch | SnapshotVerdict::Unchecked => false,
+        };
+        let mismatch = verdict == SnapshotVerdict::Mismatch;
+        match purpose {
+            SnapshotPurpose::Open if passes => {
+                let Some(payload) = check.payload else {
+                    return;
+                };
+                doc_state.current_snapshot_id = snapshot_id;
+                self.send_to_logic(LogicEvent::RemoteSnapshot {
+                    document_id,
+                    payload,
+                    covered_seq: check.covered_seq.0,
+                });
+            }
+            SnapshotPurpose::Open => {
+                tracing::warn!(
+                    "Sync: snapshot {snapshot_id:?} of doc {document_id:?} refused on open \
+                     (mismatch: {mismatch}), staying on its reference"
+                );
+            }
+            SnapshotPurpose::Confirm if passes => {
+                self.post_snapshot_vouch(document_id, snapshot_id, None);
+            }
+            SnapshotPurpose::Confirm if mismatch => {
+                let Some(signing_key) = self.signing_key.as_ref() else {
+                    return;
+                };
+                let transcript = ambre_protocol::snapshot_report::report_transcript(
+                    document_id,
+                    snapshot_id,
+                    &check.author,
+                );
+                let signature = ed25519_dalek::Signer::sign(signing_key, &transcript).to_bytes();
+                tracing::warn!(
+                    "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
+                     deltas, reporting it"
+                );
+                self.post_snapshot_vouch(document_id, snapshot_id, Some(hex::encode(signature)));
+            }
+            SnapshotPurpose::Confirm => {
+                tracing::info!("Sync: snapshot {snapshot_id:?} left unchecked");
+            }
+        }
+    }
+
+    /// Confirm a snapshot (`SRV-126`), or report it when `signature` carries a
+    /// signed report (`SRV-133`). Off the wasm path there is no relay to tell.
+    pub(crate) fn post_snapshot_vouch(
+        &mut self,
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        signature: Option<String>,
+    ) {
+        if self.event_tx.is_none() {
+            tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
+            return;
+        }
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let base = format!(
+                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshots/{snapshot_id}"
+            );
+            let sent = match signature {
+                None => {
+                    http::post_json_auth_empty(
+                        &format!("{base}/confirm"),
+                        &serde_json::json!({}),
+                        auth,
+                    )
+                    .await
+                }
+                Some(signature) => {
+                    http::post_json_auth_empty(
+                        &format!("{base}/report"),
+                        &http::ReportSnapshotRequest { signature },
+                        auth,
+                    )
+                    .await
+                }
+            };
+            if let Err(e) = sent {
+                tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}");
+            }
+        });
+    }
+
+    /// Check the snapshot the open held back, now that every delta the relay
+    /// kept was replayed (`AUTHOR-022`). One that does not open is dropped,
+    /// and the document stays on its reference.
+    pub(crate) fn check_held_snapshot(&mut self, document_id: DocumentId) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some(held) = doc_state.held_snapshot.take() else {
+            return;
+        };
+        match doc_state.open_signed_snapshot(&held.blob) {
+            Ok((payload, author)) => {
+                doc_state.checks.insert(
+                    held.snapshot_id,
+                    PendingCheck {
+                        author,
+                        covered_seq: held.covered_seq,
+                        payload: Some(payload.clone()),
+                    },
+                );
+                self.send_to_logic(LogicEvent::PendingSnapshot {
+                    document_id,
+                    snapshot_id: held.snapshot_id,
+                    covered_seq: held.covered_seq.0,
+                    payload,
+                    purpose: SnapshotPurpose::Open,
+                });
+            }
+            Err(e) => tracing::warn!(
+                "Sync: the latest snapshot of doc {document_id:?} does not open ({e}), \
+                 staying on its reference"
+            ),
         }
     }
 
@@ -243,7 +409,7 @@ impl SyncState {
                 .remove(&snapshot_id)
                 .unwrap_or_default()
         };
-        pending.sort_by_key(|u| u.public_data.clock.0);
+        pending.sort_by_key(|(_, u)| u.public_data.clock.0);
         if let Some(doc_state) = self.documents.get_mut(&document_id)
             && doc_state.quarantine_len() < QUARANTINE_ALERT
         {
@@ -257,7 +423,7 @@ impl SyncState {
             };
             pending
                 .iter()
-                .map(|u| doc_state.open_signed_update(u))
+                .map(|(seq, u)| doc_state.open_signed_update(u, *seq))
                 .collect()
         };
         for opened in results {
@@ -303,6 +469,12 @@ impl SyncState {
             // response. `None` only before the session is ready, which the guard
             // above already excluded on the wasm path.
             let my_user_id = self.user_id;
+            // A snapshot this user confirmed alone is this user's own work, and
+            // opens as it is (`AUTHOR-022` reads another user's).
+            let own_key = self
+                .author_pub_key()
+                .map(|key| hex::encode(key.as_array()))
+                .unwrap_or_default();
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url =
                     format!("{url_scheme}://{api_base}/api/documents/{doc_id}/members");
@@ -367,6 +539,12 @@ impl SyncState {
                 // `POST /snapshot/download-url` for a presigned S3 GET. Returns the
                 // sealed blob, the real snapshot id (to register as a known parent)
                 // and the covered seq (to gate the post-open `RequestMissing`).
+                //
+                // A snapshot only its author confirmed is not opened from when
+                // another user built it. The open starts from the reference, the
+                // latest one another member confirmed, and holds the latest one
+                // back until the replay is done (`AUTHOR-022`).
+                let mut held_snapshot = None;
                 let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if server_created {
                     let meta_url =
                         format!("{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot");
@@ -377,27 +555,45 @@ impl SyncState {
                     .await
                     {
                         Ok(Some(meta)) => {
-                            let snap_id = SnapshotId::parse_str(&meta.snapshot_id).ok();
-                            let dl_url = format!(
-                                "{url_scheme}://{api_base}/api/documents/{doc_id}/snapshot/download-url"
-                            );
-                            let body = http::SnapshotDownloadUrlRequest {
-                                snapshot_id: meta.snapshot_id,
+                            let others = meta.status == "self" && meta.author_pubkey != own_key;
+                            let (start_id, start_covered) = match (others, &meta.reference) {
+                                (false, _) => (Some(meta.snapshot_id.clone()), meta.covered_seq),
+                                (true, Some(r)) => (Some(r.snapshot_id.clone()), r.covered_seq),
+                                (true, None) => (None, 0),
                             };
-                            let payload = match http::post_json_auth::<
-                                _,
-                                http::SnapshotDownloadUrlResponse,
-                            >(&dl_url, &body, auth)
-                            .await
-                            {
-                                Ok(resp) => http::fetch_bytes(&resp.download_url).await.ok(),
-                                Err(_) => None,
+                            if others {
+                                let blob = http::download_snapshot(
+                                    url_scheme,
+                                    &api_base,
+                                    doc_id,
+                                    &meta.snapshot_id,
+                                    auth.clone(),
+                                )
+                                .await;
+                                held_snapshot = SnapshotId::parse_str(&meta.snapshot_id)
+                                    .ok()
+                                    .zip(blob)
+                                    .map(|(snapshot_id, blob)| HeldSnapshot {
+                                        snapshot_id,
+                                        covered_seq: Seq(
+                                            u64::try_from(meta.covered_seq).unwrap_or(0)
+                                        ),
+                                        blob,
+                                    });
+                            }
+                            let payload = match &start_id {
+                                Some(id) => {
+                                    http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
+                                        .await
+                                }
+                                None => None,
                             };
+                            let snap_id = start_id.and_then(|id| SnapshotId::parse_str(&id).ok());
                             // Only gate on the covered seq if the blob actually
                             // downloaded; otherwise a failed fetch would skip
                             // history that was never applied (data loss).
                             match payload {
-                                Some(_) => (payload, snap_id, meta.covered_seq),
+                                Some(_) => (payload, snap_id, start_covered),
                                 None => (None, None, 0),
                             }
                         }
@@ -421,6 +617,7 @@ impl SyncState {
                     snapshot_payload,
                     snapshot_id,
                     covered_seq: Seq(covered_seq as u64),
+                    held_snapshot,
                     doc_type,
                     server_created,
                     signing_keys,
@@ -842,7 +1039,17 @@ impl SyncState {
         });
     }
 
-    pub(crate) fn handle_send_snapshot(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+    /// Seal and upload a snapshot that folds in every delta up to
+    /// `covered_seq`, then confirm it as its author (`AUTHOR-021`).
+    ///
+    /// The author may vouch for it. Every operation of another user in it came
+    /// from a delta that user signed, or from a snapshot this client checked.
+    pub(crate) fn handle_send_snapshot(
+        &mut self,
+        document_id: DocumentId,
+        payload: Vec<u8>,
+        covered_seq: Seq,
+    ) {
         let Some(signing_key) = self.signing_key.clone() else {
             tracing::warn!("Sync: SendSnapshot before session keys ready, dropping");
             return;
@@ -890,10 +1097,10 @@ impl SyncState {
             );
             return;
         };
-        // The snapshot folds in every delta this client had received, that is, up to
-        // its high-water `last_seq`. The server stores it so other clients can
-        // gate their post-open replay and skip this history.
-        let covered_seq = doc_state.last_seq.0 as i64;
+        // The Logic thread names the last delta it holds with no gap below it,
+        // not the high-water `last_seq`. A snapshot claims every delta up to
+        // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
+        let covered_seq = i64::try_from(covered_seq.0).unwrap_or(i64::MAX);
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
@@ -940,7 +1147,7 @@ impl SyncState {
             let new_snapshot_id = match http::post_json_auth::<_, http::CreateSnapshotResponse>(
                 &confirm_url,
                 &confirm_body,
-                auth,
+                auth.clone(),
             )
             .await
             {
@@ -963,6 +1170,15 @@ impl SyncState {
                 "Sync: SendSnapshot {document_id:?} uploaded ({} bytes), snapshot_id={new_snapshot_id:?}",
                 blob.len()
             );
+            // The author's own confirmation makes it `self` (`AUTHOR-021`).
+            let vouch_url = format!(
+                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshots/{new_snapshot_id}/confirm"
+            );
+            if let Err(e) =
+                http::post_json_auth_empty(&vouch_url, &serde_json::json!({}), auth).await
+            {
+                tracing::warn!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
+            }
             let _ = tx.send(SyncEvent::SnapshotUploaded {
                 document_id,
                 snapshot_id: new_snapshot_id,
@@ -1174,7 +1390,7 @@ mod tests {
 
         let under =
             |key: &DocumentKey| make_update(document_id, snapshot, 1, b"d", key, &signing_key);
-        let opened = |key: &DocumentKey| doc_state.open_signed_update(&under(key)).unwrap();
+        let opened = |key: &DocumentKey| doc_state.open_signed_update(&under(key), Seq(1)).unwrap();
         assert_eq!(opened(&new_key).payload, b"d");
         assert_eq!(opened(&old_key).payload, b"d");
         assert_eq!(
@@ -1212,6 +1428,7 @@ mod tests {
             snapshot_payload: Some(blob),
             snapshot_id,
             covered_seq: Seq(3),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1226,7 +1443,10 @@ mod tests {
 
         let doc_state = &state.documents[&doc];
         let old = make_update(doc, snapshot_id, 1, b"d", &keys[1], &sk);
-        assert_eq!(doc_state.open_signed_update(&old).unwrap().payload, b"d");
+        assert_eq!(
+            doc_state.open_signed_update(&old, Seq(1)).unwrap().payload,
+            b"d"
+        );
         assert_eq!(doc_state.doc_key.id(), current.id());
         assert!(
             doc_state.old_keys.is_empty(),
@@ -1304,6 +1524,7 @@ mod tests {
             })
             .collect();
         let expected = SignedDelta {
+            seq: 1,
             payload: b"hello".to_vec(),
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
@@ -1443,6 +1664,7 @@ mod tests {
             snapshot_payload: Some(blob),
             snapshot_id,
             covered_seq: Seq(1500),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1482,6 +1704,7 @@ mod tests {
             snapshot_payload: None,
             snapshot_id: SnapshotId::genesis(doc),
             covered_seq: Seq(0),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1574,6 +1797,7 @@ mod tests {
             snapshot_payload: Some(blob),
             snapshot_id,
             covered_seq: Seq(0),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1620,6 +1844,57 @@ mod tests {
         );
     }
 
+    /// `AUTHOR-022`: an open that holds back its latest snapshot starts from
+    /// the reference, and checks the held one only once the replay is done.
+    #[test]
+    fn a_held_snapshot_is_checked_once_the_replay_is_done() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let reference = SnapshotId::new();
+        let held = SnapshotId::new();
+        state.handle_sync_event(SyncEvent::OpenDocumentReady {
+            document_id: doc,
+            doc_key: key.clone(),
+            snapshot_payload: Some(snapshot_blob(doc, reference, b"reference", &key, &sk)),
+            snapshot_id: reference,
+            covered_seq: Seq(3),
+            held_snapshot: Some(HeldSnapshot {
+                snapshot_id: held,
+                covered_seq: Seq(9),
+                blob: snapshot_blob(doc, held, b"latest", &key, &sk),
+            }),
+            doc_type: DocType::Trame,
+            server_created: true,
+            signing_keys: Vec::new(),
+            role: Role::Owner,
+            rotation_owed: false,
+            links: Vec::new(),
+        });
+        let at_open = drain(&rx);
+        assert!(
+            !at_open
+                .iter()
+                .any(|e| matches!(e, LogicEvent::PendingSnapshot { .. })),
+            "the held snapshot was checked before the replay: {at_open:?}"
+        );
+        assert!(state.documents[&doc].known_snapshots.contains(&held));
+
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        let after_replay = drain(&rx);
+        assert!(
+            after_replay.iter().any(|e| matches!(
+                e,
+                LogicEvent::PendingSnapshot { payload, covered_seq: 9, purpose: SnapshotPurpose::Open, .. }
+                    if payload == b"latest"
+            )),
+            "the held snapshot is checked after the replay: {after_replay:?}"
+        );
+    }
+
     /// A local-only (not yet server-created) or offline open has no replay to
     /// wait for, so `DocumentReady` fires immediately at open. Otherwise the
     /// overlay would hang forever with no `MissingUpdates` ever coming.
@@ -1633,6 +1908,7 @@ mod tests {
             snapshot_payload: None,
             snapshot_id: SnapshotId::genesis(doc),
             covered_seq: Seq(0),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1672,6 +1948,7 @@ mod tests {
             snapshot_payload: None,
             snapshot_id: SnapshotId::genesis(doc),
             covered_seq: Seq(0),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1698,6 +1975,7 @@ mod tests {
             snapshot_payload: None,
             snapshot_id: SnapshotId::genesis(doc),
             covered_seq: Seq(0),
+            held_snapshot: None,
             doc_type: DocType::Trame,
             server_created: true,
             signing_keys: Vec::new(),
@@ -1733,7 +2011,7 @@ mod tests {
         // Session keys are required to reach the seal step.
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
 
-        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec());
+        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec(), Seq(0));
 
         // No event_tx in this setup: the upload path is skipped, the current
         // snapshot id is unchanged (no SnapshotUploaded round-trip).
@@ -1763,16 +2041,77 @@ mod tests {
         state.handle_sync_event(SyncEvent::SnapshotFetched {
             document_id: doc,
             snapshot_id: announced,
+            covered_seq: Seq(0),
             blob: Some(blob),
         });
         let events = drain(&rx);
         assert!(
             matches!(&events[..], [
-                LogicEvent::RemoteSnapshot { payload: base, .. },
+                LogicEvent::PendingSnapshot {
+                    payload: base,
+                    purpose: SnapshotPurpose::Confirm,
+                    ..
+                },
                 LogicEvent::RemoteUpdate { delta: after, .. },
             ] if base == b"base" && after.payload == b"after"),
-            "the base reaches Logic before what rests on it: {events:?}"
+            "the snapshot reaches Logic to check before what rests on it: {events:?}"
         );
+    }
+
+    /// `AUTHOR-021`, `AUTHOR-022`: the snapshot an open held back is checked
+    /// once the replay is done. It is adopted when it matches and every
+    /// operation only it holds resolves to its author; otherwise the document
+    /// stays on its reference.
+    #[test]
+    fn a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author() {
+        let nonce = ambre_core::SessionNonce([7; 16]);
+        let mallory = MasterSeed::generate().derive_signing_key();
+        for (signer, verdict_is_match, adopted) in [
+            (true, true, true),
+            (false, true, false),
+            (true, false, false),
+        ] {
+            let (mut state, rx, doc, key, sk, reference) = setup();
+            let held = SnapshotId::new();
+            let blob = snapshot_blob(doc, held, b"base", &key, &sk);
+            state.documents.get_mut(&doc).expect("open").held_snapshot = Some(HeldSnapshot {
+                snapshot_id: held,
+                covered_seq: Seq(7),
+                blob,
+            });
+            state.check_held_snapshot(doc);
+            assert!(matches!(
+                &drain(&rx)[..],
+                [LogicEvent::PendingSnapshot { payload, covered_seq: 7, purpose: SnapshotPurpose::Open, .. }]
+                    if payload == b"base"
+            ));
+
+            let author = if signer { &sk } else { &mallory };
+            let (peer, entry) =
+                ambre_crypto::peer::session_identity(author, UserId::new(), doc, nonce);
+            let verdict = if verdict_is_match {
+                SnapshotVerdict::Match {
+                    extras: vec![(peer, entry.to_bytes())],
+                }
+            } else {
+                SnapshotVerdict::Mismatch
+            };
+            state.handle_snapshot_verdict(doc, held, SnapshotPurpose::Open, verdict);
+            let events = drain(&rx);
+            if adopted {
+                assert!(matches!(
+                    &events[..],
+                    [LogicEvent::RemoteSnapshot { payload, covered_seq: 7, .. }] if payload == b"base"
+                ));
+                assert_eq!(state.documents[&doc].current_snapshot_id, held);
+            } else {
+                assert!(
+                    events.is_empty(),
+                    "a refused snapshot reached Logic: {events:?}"
+                );
+                assert_eq!(state.documents[&doc].current_snapshot_id, reference);
+            }
+        }
     }
 
     /// A snapshot that does not open, or never arrived, stays unknown and is
@@ -1786,6 +2125,7 @@ mod tests {
             state.handle_sync_event(SyncEvent::SnapshotFetched {
                 document_id: doc,
                 snapshot_id: announced,
+                covered_seq: Seq(0),
                 blob,
             });
         }
@@ -1939,6 +2279,7 @@ mod tests {
                 snapshot_payload: None,
                 snapshot_id: SnapshotId::genesis(doc),
                 covered_seq: Seq(0),
+                held_snapshot: None,
                 doc_type: DocType::Trame,
                 server_created: true,
                 signing_keys: Vec::new(),
@@ -2008,6 +2349,7 @@ mod tests {
                     SnapshotId::genesis(doc)
                 },
                 covered_seq: Seq(u64::from(with_snapshot)),
+                held_snapshot: None,
                 doc_type: DocType::Trame,
                 server_created: true,
                 signing_keys: Vec::new(),
@@ -2115,7 +2457,10 @@ mod tests {
         let doc_state = &state.documents[&doc];
         assert_eq!(doc_state.doc_key.id(), k2.id());
         assert_eq!(
-            doc_state.open_signed_update(&before).unwrap().payload,
+            doc_state
+                .open_signed_update(&before, Seq(1))
+                .unwrap()
+                .payload,
             b"hello"
         );
     }
