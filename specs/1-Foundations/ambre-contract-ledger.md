@@ -20,11 +20,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3372 rows: 2455 shipped, of which 103 partial and 520 loose. 917 unbuilt.**
+**3374 rows: 2457 shipped, of which 103 partial and 520 loose. 917 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 378 | 269 | 583 | 602 |  | 1832 |
+| `verified` | 380 | 269 | 583 | 602 |  | 1834 |
 | `partial` | 46 | 14 | 41 | 2 |  | 103 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 191 | 133 | 189 | 2 |  | 515 |
@@ -53,7 +53,7 @@
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 4 |  | 12 | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 7 | 1 | 2 |  |
-| `ambre-spec-key-rotation.md` | 25 | 23 | 19 |  | 4 | 2 |
+| `ambre-spec-key-rotation.md` | 27 | 25 | 21 |  | 4 | 2 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 10 |  | 10 | 4 |
@@ -181,7 +181,7 @@
 | `ambre-spec-fixtures.md` | FIXTURE-001..035 |
 | `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
-| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130 |
+| `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..142 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..011 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101 |

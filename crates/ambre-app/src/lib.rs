@@ -256,6 +256,9 @@ struct Wiring {
     /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
     /// the auto-proceed (Trusted) path grant the intended role.
     invite_role: RwSignal<Role>,
+    /// The signed-in user, set on `SessionReady`. The share dialog reads it to
+    /// tell the user's own row from the others (`SYNC-141`).
+    me: RwSignal<Option<UserId>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<bool>>,
     /// The currently routed document, or `None` on the landing route. Read by
@@ -614,6 +617,7 @@ pub fn main() {
     let tofu_prompt = RwSignal::new(None::<TofuPrompt>);
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let invite_role = RwSignal::new(Role::Editor);
+    let me = RwSignal::new(None::<UserId>);
 
     // Status-bar signals (`trame-status-bar`): selection aggregates, set from the
     // `SelectionStats` event and cleared by the view on a single cell. Also the
@@ -885,6 +889,7 @@ pub fn main() {
         tofu_prompt,
         tofu_confirm,
         invite_role,
+        me,
         sel_stats,
         sel_stats_toile,
         present_toile,
@@ -1255,10 +1260,16 @@ pub fn main() {
                 // Session bootstrap (dev `?user=` or OIDC): show the user, and
                 // request the document list once for the landing overlay.
                 UiEvent::Rest {
-                    evt: ambre_bus::RestEvent::SessionReady { display_name, .. },
+                    evt:
+                        ambre_bus::RestEvent::SessionReady {
+                            user_id,
+                            display_name,
+                            ..
+                        },
                     ..
                 } => {
                     username.set(Some(display_name.clone()));
+                    me.set(Some(*user_id));
                     if !list_requested {
                         list_requested = true;
                         let _ = relay_tx.try_send(LogicCommand::Rest {
@@ -1316,6 +1327,20 @@ pub fn main() {
                         id: RequestId::next(),
                         cmd: RestCommand::ListDocuments,
                     });
+                }
+                // The user left a document (`SYNC-141`), and the worker has
+                // closed it. A view still on it goes back to the launcher, and
+                // the list drops its card.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::DocumentLeft { document_id },
+                    ..
+                } => {
+                    docs.update(|list| list.retain(|d| d.document_id != *document_id));
+                    if current_doc.get_untracked() == Some(*document_id)
+                        && let Some(window) = web_sys::window()
+                    {
+                        let _ = window.location().set_href("/");
+                    }
                 }
                 // A sealed file came back open (`DOCFILE-014`): what it holds
                 // is a whole plaintext container, so the ordinary open path

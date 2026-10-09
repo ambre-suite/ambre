@@ -13,6 +13,7 @@ use super::*;
 // `Wiring` via `use super::super::*`.
 mod app_root;
 mod commands;
+mod share;
 use app_root::AppRoot;
 pub(crate) use commands::{AppHandler, CommandPath};
 
@@ -49,6 +50,7 @@ pub(crate) fn mount_shell(
     tofu_prompt: RwSignal<Option<TofuPrompt>>,
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
     invite_role: RwSignal<Role>,
+    me: RwSignal<Option<UserId>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
     present_toile: RwSignal<bool>,
@@ -225,6 +227,7 @@ pub(crate) fn mount_shell(
             tofu_prompt,
             tofu_confirm,
             invite_role,
+            me,
             sel_stats,
             sel_stats_toile,
             present_toile,

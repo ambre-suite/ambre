@@ -78,6 +78,8 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 | `SYNC-128` | `POST` | A client with write access that finds a rotation owed MUST rotate before it sends a frame. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_writer_opening_an_owed_document_pays_before_its_first_frame` -- a writer sends nothing before it pays, and a reader records no debt; `ambre_sync::rekey::tests::a_debt_found_holds_the_next_edit_until_the_key_lands` -- an edit waits for the key; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- the payment wraps the key for every member; `ambre_sync::sharing::tests::a_paid_debt_posts_nothing_and_a_failed_one_is_retried` -- a debt already paid posts nothing, and a failed payment is tried again; `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- a refusal is how a writer in flight finds the debt; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- many refusals start one payment | none | verified |
 | `SYNC-129` | `POST` | A frame the relay refuses for its key MUST be sealed again under the current key and sent again. | this spec section 3; `SRV-123` | `ambre_sync::updates::tests::a_frame_refused_for_an_owed_rotation_is_sent_again_at_its_clock` -- the refused frame leaves again at its own clock under the new key, before the edits that waited; `ambre_sync::updates::tests::a_frame_refused_under_an_older_key_is_sent_again_at_once` -- a refusal of a key already replaced is answered at once; `ambre_sync::rekey::tests::a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks` -- the refused frames come back at their own clocks, in order; `ambre_sync::rekey::tests::a_refusal_of_an_older_key_resends_without_paying` -- an older key owes no payment | none | verified |
 | `SYNC-130` | `FRAME` | Leaving MUST NOT choose the next key. | this spec section 3 | `ambre_sync::sharing::tests::leaving_posts_the_removal_alone_and_chooses_no_key` -- the departure reads no member and posts no key, so there is none to choose | none | verified |
+| `SYNC-141` | `POST` | A member who does not own a document MUST be able to leave it from the sharing screen, and the screen MUST send the departure from that document alone. | this spec section 3; `SYNC-127` | `ambre_app::shell::share::tests::a_member_who_does_not_own_the_document_leaves_it_from_their_row` -- a confirmed departure sends one command, the departure from the open document; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the user's own row offers the departure | none | verified |
+| `SYNC-142` | `FRAME` | The sharing screen MUST NOT offer an owner a departure. | this spec section 3 | `ambre_app::shell::share::tests::an_owner_is_offered_no_departure` -- the owner's own row carries no departure; `ambre_app::shell::share::tests::each_row_offers_the_action_its_owner_may_take` -- the owner's row offers nothing | none | verified |
 
 * **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
   `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. The
@@ -86,7 +88,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 19 `verified`, 4 `untested`, 2 `unimplemented`. The relay half holds, as do the
+* **Verification.** 21 `verified`, 4 `untested`, 2 `unimplemented`. The relay half holds, as do the
   key wipe, the open by name, the one-request revoke, the departure's debt and the chain. The
   client's two rotation paths are loose: no test drives a notice through to the key held.
 
@@ -259,9 +261,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing on screen leaves a document.** The worker takes the command and the relay accepts it,
-  but no screen sends it yet (`SYNC-127`). The `A member can leave a document from the screen`
-  Story (`ambre-roadmap.md` E7) adds it.
+* **A departure is confirmed on screen only.** The sharing screen asks once, then sends it
+  (`SYNC-141`). Nothing asks the relay whether the user is the last owner; an owner is simply never
+  offered the departure (`SYNC-142`).
 * **A member added during a revoke keeps the previous key.** The members are read before the post,
   and a member invited between the two gets no copy of the new key. The `A member invited during a
   revoke gets the new key` Story (`ambre-roadmap.md` E7) closes it.

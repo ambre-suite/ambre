@@ -4,6 +4,7 @@
 // this tree by the per-frame route poll in `main`.
 
 use super::super::*;
+use super::share::ShareMembers;
 
 /// Perform the half of a followed link that leaves the board (`TOILE-065`,
 /// `TOILE-114`). An address opens in a fresh tab with `noopener,noreferrer`, so
@@ -82,6 +83,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         tofu_prompt,
         tofu_confirm,
         invite_role,
+        me,
         sel_stats,
         sel_stats_toile,
         present_toile,
@@ -371,10 +373,17 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // own clone and re-clones inside the handler rather than moving the sender
     // out. Moving it out would make the children `FnOnce`.
     let tx_invite = to_logic.clone();
-    // The member-row handlers live inside a `<For>` whose item template is a
-    // re-runnable `Fn`. A plain `Sender` clone would be moved into it, making it
-    // `FnOnce`. A `StoredValue` is `Copy`, so each row reads its own clone.
-    let tx_member = StoredValue::new(to_logic.clone());
+    // Every command a member row issues, stamped with a request id on its way
+    // to the worker. A `Callback` is `Copy`, so each row of the `<For>` holds it.
+    let member_send = Callback::new({
+        let tx = to_logic.clone();
+        move |cmd| {
+            let _ = tx.try_send(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd,
+            });
+        }
+    });
     let landing_signals = LandingSignals {
         docs,
         username,
@@ -560,75 +569,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 <h2>"Share document"</h2>
 
                 // Current members.
-                <ul class="ambre-share-members">
-                    <For
-                        each=move || members.get()
-                        key=|m| m.user_id
-                        let:member
-                    >
-                        {
-                            let tx_role = tx_member.get_value();
-                            let tx_revoke = tx_member.get_value();
-                            let uid = member.user_id;
-                            let cur_role = member.role;
-                            view! {
-                                <li>
-                                    <span class="ambre-share-member-name">
-                                        {member.display_name.clone()}
-                                    </span>
-                                    <span class="ambre-share-member-email">
-                                        {member.email.clone()}
-                                    </span>
-                                    <select
-                                        prop:value=cur_role.as_str()
-                                        on:change={
-                                            move |ev| {
-                                                let Some(document_id) = current_doc.get_untracked() else {
-                                                    return;
-                                                };
-                                                if let Ok(role) = event_target_value(&ev).parse::<Role>() {
-                                                    let _ = tx_role.try_send(LogicCommand::Rest {
-                                                        id: RequestId::next(),
-                                                        cmd: RestCommand::UpdateDocumentMemberRole {
-                                                            document_id,
-                                                            user_id: uid,
-                                                            role,
-                                                        },
-                                                    });
-                                                }
-                                            }
-                                        }
-                                    >
-                                        <option value="owner" selected=cur_role == Role::Owner>"Owner"</option>
-                                        <option value="editor" selected=cur_role == Role::Editor>"Editor"</option>
-                                        <option value="viewer" selected=cur_role == Role::Viewer>"Viewer"</option>
-                                    </select>
-                                    <button
-                                        class="ambre-share-revoke"
-                                        title="Revoke access"
-                                        aria-label="Revoke access"
-                                        on:click={
-                                            move |_| {
-                                                let Some(document_id) = current_doc.get_untracked() else {
-                                                    return;
-                                                };
-                                                let _ = tx_revoke.try_send(LogicCommand::Rest {
-                                                    id: RequestId::next(),
-                                                    cmd: RestCommand::RevokeFromDocument {
-                                                        document_id,
-                                                        user_id: uid,
-                                                    },
-                                                });
-                                            }
-                                        }
-                                    >
-                                        "Revoke"
-                                    </button>
-                                </li>
-                            }
-                        }
-                    </For>
-                </ul>
+                <ShareMembers
+                    members=members
+                    me=me
+                    current_doc=current_doc
+                    send=member_send
+                />
 
                 // Invite a new collaborator.
                 <form
