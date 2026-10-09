@@ -64,12 +64,37 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own. A received delta costs one metadata decode, which reads the blob
-  without importing it, and one comparison per PeerID. An application check on top of it cites its
-  own row. Checking a snapshot costs one import and one comparison.
+### 1.5 The operations no session signs
+
+The scaffolding of a new document and each schema migration write under fixed PeerIDs, which
+derive from no key. No delta ever carries them, so every client must write them alike.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `AUTHOR-024` | `INV` | A client MUST write the scaffolding and each migration of a schema version as the operations every other build writes for it. | this spec section 3; `SCHEMA-020` | not built | unbuilt -- lands with the `The operations no session signs` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 A delta that waits on an operation no session signs
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `AUTHOR-025` | `FAIL` | Given a delta that waits on a scaffolding or migration operation the client never wrote, the client MUST report the document as unreadable, never hold the delta for ever. | this spec section 3 | not built | unbuilt -- lands with the `The operations no session signs` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 The open, before and after the session identity
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `AUTHOR-026` | `POST` | An edit made before the session identity arrives MUST be applied under that identity once it arrives. | this spec section 3; `AUTHOR-008` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-027` | `POST` | A document restored from the local cache MUST be shown before the session identity arrives. | this spec section 3 | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-028` | `POST` | The edits a closed session left unsent MUST travel at the next open, under the PeerID that wrote them. | this spec section 3; `AUTHOR-002` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-029` | `FRAME` | An edit held until the session identity arrives MUST NOT reach the document under any other PeerID. | this spec section 3; `AUTHOR-008` | not built | unbuilt -- lands with the `No edit lost to the session identity` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+* **Budget.** one row of `ambre-spec-budgets.md section 1`, the check of one received delta. It
+  decodes the blob metadata without importing it, and compares one PeerID per author. An
+  application check on top of it cites its own row. Checking a snapshot costs one import and one
+  comparison.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 16 `verified`, 7 `unimplemented`. Every delta is checked, and every row on it
+* **Verification.** 16 `verified`, 13 `unimplemented`. Every delta is checked, and every row on it
   holds by a test. Nothing checks a snapshot yet, so its author can still place any operation in it.
 
 ---
@@ -226,12 +251,13 @@ The binding has no control of its own.
   can still place any operation in them. The rows of section 1.4 close that.
 * **No reader resolves a PeerID yet.** The resolution is built and tested, and no surface shows an
   author. The first is the message of Murmure.
-* **The shared scaffolding never travels.** A new document and a schema migration write under fixed
-  PeerIDs that derive from no key. A delta built on another build's scaffolding, or on a
-  concurrent migration, can wait for operations that no signed delta will ever carry. Not ruled.
+* **The shared scaffolding never travels.** A delta built on another build's scaffolding, or on a
+  migration this client never ran, waits for operations no signed delta carries (`AUTHOR-024`,
+  `AUTHOR-025`).
 * **An edit made before the identity is lost.** The window is one message from the Sync worker,
-  taken at the open. Not ruled whether to hold the edit instead.
+  taken at the open (`AUTHOR-026`). A cached document waits for the same message before it shows,
+  because Prose writes its restore under the session's PeerID (`AUTHOR-027`).
 * **Edits left unsent by a closed session never travel.** They sit under a PeerID no later session
-  writes under. This predates the binding.
+  writes under, and its nonce is gone with the session (`AUTHOR-028`). This predates the binding.
 * **The relay history of an older build no longer opens.** Its deltas carry random PeerIDs.
   Nothing has shipped, so no migration is planned.
