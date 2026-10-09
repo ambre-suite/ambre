@@ -1678,7 +1678,7 @@
   {"edge": "cites-section", "from": "PRESENCE-015", "section": "3", "to": "1-Foundations/ambre-spec-presence.md"},
   {"edge": "cites-rule", "from": "PRESENCE-015", "to": "PRESENCE-005"},
   {"edge": "cites-rule", "from": "PRESENCE-015", "to": "PRESENCE-014"},
-  {"edge": "lands-with", "from": "PRESENCE-015", "to": "A departure waits for the user's last session"},
+  {"edge": "verified-by", "from": "PRESENCE-015", "to": "ambre_server::ws::handler::message::ephemeral_binding_tests::a_departure_waits_for_the_last_session_of_its_key"},
   {"edge": "cites-section", "from": "PRESENCE-008", "section": "3", "to": "1-Foundations/ambre-spec-presence.md"},
   {"edge": "verified-by", "from": "PRESENCE-008", "to": "ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only"},
   {"edge": "cites-section", "from": "CANVAS-017", "section": "2", "to": "1-Foundations/ambre-spec-render-assets.md"},

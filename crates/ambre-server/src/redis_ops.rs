@@ -705,6 +705,73 @@ pub async fn doc_presence_remove(
     Ok(())
 }
 
+/// How long a session count lives after its last open. One user signs every
+/// session with the same key, so the count is what tells their sessions apart.
+/// An instance that dies closes none of its sessions; the expiry bounds the
+/// count that death leaves behind (`PRESENCE-015`).
+const SESSION_COUNT_TTL_SECS: u64 = 24 * 3600;
+
+/// The hash counting, per author key, the sessions watching a document.
+fn doc_sessions_key(document_id: &ambre_core::DocumentId) -> String {
+    format!("doc:{document_id}:sessions")
+}
+
+/// Counts one more session of `pub_key_hex` watching the document, on every
+/// instance (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-015`). A
+/// document being deleted takes no count (`SRV-017`).
+pub async fn doc_session_open(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    pub_key_hex: &str,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return 0
+end
+redis.call('HINCRBY', KEYS[1], ARGV[2], 1)
+redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
+return 1
+"#;
+    let key = doc_sessions_key(document_id);
+    let gone_key = document_gone_key(document_id);
+    let ttl = SESSION_COUNT_TTL_SECS.to_string();
+    let _: i64 = redis
+        .eval(
+            LUA,
+            [key.as_str(), gone_key.as_str()],
+            [ttl.as_str(), pub_key_hex],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("session open: {e}")))?;
+    Ok(())
+}
+
+/// Counts one session of `pub_key_hex` gone from the document. Answers whether
+/// it was the last, which is when the author has left (`PRESENCE-015`).
+///
+/// A count that is missing or already spent answers `true`: a departure the
+/// relay cannot count against an open session is a departure.
+pub async fn doc_session_close(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    pub_key_hex: &str,
+) -> Result<bool, AppError> {
+    const LUA: &str = r#"
+local left = redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
+if left <= 0 then
+    redis.call('HDEL', KEYS[1], ARGV[1])
+    return 1
+end
+return 0
+"#;
+    let key = doc_sessions_key(document_id);
+    let last: i64 = redis
+        .eval(LUA, [key.as_str()], [pub_key_hex])
+        .await
+        .map_err(|e| AppError::Redis(format!("session close: {e}")))?;
+    Ok(last == 1)
+}
+
 /// The tombstone of a document being deleted. While it lives, every script
 /// that writes a key of the document refuses. A write in flight when the
 /// delete lands cannot recreate what the delete purges (`SRV-017`).
@@ -731,8 +798,8 @@ pub async fn mark_document_gone(
 
 /// Removes every key the relay holds for a deleted document (`SRV-017`). That
 /// is the sequence counter, the per-author clock hash, the pending list and
-/// its dirty marker. It is also the presence hash, the dead-letter list and
-/// the mirror of an owed rotation. One script, so no reader sees a half-purged
+/// its dirty marker. It is also the presence hash, the dead-letter list, the
+/// mirror of an owed rotation and the session counts. One script, so no reader sees a half-purged
 /// document.
 ///
 /// The same script renews the tombstone for `ttl_secs`. The second sweep of
@@ -744,9 +811,9 @@ pub async fn purge_document_state(
     ttl_secs: u64,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
-redis.call('SREM', KEYS[7], KEYS[3])
-redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6])
-redis.call('SET', KEYS[8], '1', 'EX', ARGV[1])
+redis.call('SREM', KEYS[8], KEYS[3])
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7])
+redis.call('SET', KEYS[9], '1', 'EX', ARGV[1])
 return 1
 "#;
     let keys = document_state_keys(document_id);
@@ -761,6 +828,7 @@ return 1
                 keys[3].as_str(),
                 keys[4].as_str(),
                 keys[5].as_str(),
+                keys[6].as_str(),
                 FLUSH_DIRTY_SET,
                 gone_key.as_str(),
             ],
@@ -773,8 +841,8 @@ return 1
 
 /// The keys the relay holds for one document, in the order
 /// [`purge_document_state`] passes them: seq, clocks, pending, presence,
-/// dead-letter, owed rotation.
-pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 6] {
+/// dead-letter, owed rotation, session counts.
+pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 7] {
     [
         format!("doc:{document_id}:seq"),
         format!("doc:{document_id}:clocks"),
@@ -782,6 +850,7 @@ pub fn document_state_keys(document_id: &ambre_core::DocumentId) -> [String; 6] 
         format!("doc:{document_id}:presence"),
         format!("doc:{document_id}:deadletter"),
         rotation_owed_key(document_id),
+        doc_sessions_key(document_id),
     ]
 }
 

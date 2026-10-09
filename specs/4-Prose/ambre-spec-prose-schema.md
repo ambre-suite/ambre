@@ -100,8 +100,7 @@ names the style's, and the blob's own bytes decide the image's.
 * A session runs when it is the client's own, or when the user the registry names for it has a
   session open here. Each session sends a presence frame once the document is ready, and answers
   each newcomer once, so a silent one is known. A user leaves on the relay's word alone
-  (`PRESENCE-014`). Two sessions of one user read as one. Until the relay waits for the last one
-  (`PRESENCE-015`), closing one lets the other's hidden block go, and its undo brings back nothing.
+  (`PRESENCE-014`), which waits for the last of that user's sessions (`PRESENCE-015`).
 * A block's body is a **root** Text container whose name joins the tag `t` and the tree id with `:`
   -- `"t:{tree_id}"`. A `TreeID` renders as two decimal numbers joined by `@`, so it cannot contain
   the separator (`PROSE-088`).

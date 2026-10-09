@@ -128,7 +128,16 @@ pub(crate) async fn handle_subscribe(
         tracing::error!(error = %e, "subscribe: rotation debt mirror failed");
     }
 
-    conn.doc_subscriptions.insert(document_id);
+    // Count this session once, however often it re-subscribes: its departure
+    // is announced only when no other session of the same key still watches
+    // (`PRESENCE-015`). A failed count is logged; the departure then fails open.
+    if conn.doc_subscriptions.insert(document_id) {
+        let pub_key_hex = conn.signing_pubkey.to_hex();
+        if let Err(e) = redis_ops::doc_session_open(&state.redis, &document_id, &pub_key_hex).await
+        {
+            tracing::error!(error = %e, "subscribe: session count failed");
+        }
+    }
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
     // Cache the write capability so `handle_update` can reject a read-only
@@ -150,6 +159,10 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
 /// `PeerLeft`. Called on a clean unsubscribe and once per subscription when the
 /// connection closes.
 ///
+/// One user signs every session with the same key. A session that closes while
+/// another of that key still watches announces nothing. Its presence field then
+/// stays for the session that remains (`PRESENCE-015`).
+///
 /// The message carries the document id and the author key, both of which the
 /// relay already routes on, and nothing else (`ZK-001`). Fire-and-forget: a
 /// failed Redis call leaves the peer to age out of the live set, which is what
@@ -159,8 +172,16 @@ pub(crate) async fn announce_departure(
     document_id: &DocumentId,
     signing_pubkey: &ambre_core::PublicKey,
 ) {
-    let _ =
-        redis_ops::doc_presence_remove(&state.redis, document_id, &signing_pubkey.to_hex()).await;
+    let pub_key_hex = signing_pubkey.to_hex();
+    // A count the store cannot answer fails open: the departure is announced,
+    // and the session that remains re-enters the set with its next sample.
+    let last = redis_ops::doc_session_close(&state.redis, document_id, &pub_key_hex)
+        .await
+        .unwrap_or(true);
+    if !last {
+        return;
+    }
+    let _ = redis_ops::doc_presence_remove(&state.redis, document_id, &pub_key_hex).await;
     let broadcast = encode_server_msg(&WsServerMsg::PeerLeft {
         document_id: *document_id,
         pub_key: signing_pubkey.clone(),
@@ -730,7 +751,12 @@ async fn membership_still_valid(
             true
         }
         Err(_) => {
-            conn.doc_subscriptions.remove(&doc_id);
+            // The session no longer watches, so it leaves the count; a member
+            // added back later then starts from the right number (`PRESENCE-015`).
+            if conn.doc_subscriptions.remove(&doc_id) {
+                let pub_key_hex = conn.signing_pubkey.to_hex();
+                let _ = redis_ops::doc_session_close(&state.redis, &doc_id, &pub_key_hex).await;
+            }
             conn.doc_access_verified_at.remove(&doc_id);
             conn.doc_write_allowed.remove(&doc_id);
             false
@@ -1306,6 +1332,55 @@ mod ephemeral_binding_tests {
             after.is_empty(),
             "an oversized ephemeral must not write a presence entry"
         );
+
+        let _ = state.redis.del([&presence_key]).await;
+    }
+
+    /// PRESENCE-015: one user signs both their sessions with one key. The first
+    /// to close announces nothing and keeps the presence entry; the last
+    /// announces the departure.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_departure_waits_for_the_last_session_of_its_key() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let key = PublicKey::from_array([31u8; 32]);
+        let key_hex = key.to_hex();
+        let presence_key = format!("doc:{doc_id}:presence");
+        let (tx, mut rx) = mpsc::channel(8);
+        state
+            .pubsub
+            .subscribe(doc_pubsub_channel(&doc_id), "watcher".into(), tx)
+            .await
+            .unwrap();
+        for _ in 0..2 {
+            redis_ops::doc_session_open(&state.redis, &doc_id, &key_hex)
+                .await
+                .unwrap();
+        }
+        redis_ops::doc_presence_update(&state.redis, &doc_id, &key_hex, "blob", 15)
+            .await
+            .unwrap();
+
+        announce_departure(&state, &doc_id, &key).await;
+        let kept: bool = state.redis.hexists(&presence_key, &key_hex).await.unwrap();
+        assert!(kept, "a session of the same key still watches");
+
+        announce_departure(&state, &doc_id, &key).await;
+        let kept: bool = state.redis.hexists(&presence_key, &key_hex).await.unwrap();
+        assert!(!kept, "the last session took the entry with it");
+
+        // Exactly one departure reaches the watcher: the second.
+        let frame = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let msg = ambre_protocol::ws::decode_server_msg(&frame).unwrap();
+        assert!(matches!(msg, WsServerMsg::PeerLeft { pub_key, .. } if pub_key == key));
+        let more = tokio::time::timeout(Duration::from_millis(300), rx.recv()).await;
+        assert!(more.is_err(), "the first close announced nothing");
 
         let _ = state.redis.del([&presence_key]).await;
     }

@@ -480,6 +480,9 @@ mod handler_tests {
         state.redis.set(&seq, 7).await.unwrap();
         state.redis.hset(&clocks, [("aa", "3")]).await.unwrap();
         state.redis.set(&other_seq, 4).await.unwrap();
+        crate::redis_ops::doc_session_open(&state.redis, &doc, "aa")
+            .await
+            .unwrap();
 
         let resp = app
             .oneshot(
@@ -520,6 +523,9 @@ mod handler_tests {
             crate::redis_ops::doc_presence_update(redis, &doc, "aa", "blob", 15).await
         ));
         crate::redis_ops::seed_clock_state(redis, &doc, 9, &[("aa".into(), 9)])
+            .await
+            .unwrap();
+        crate::redis_ops::doc_session_open(redis, &doc, "aa")
             .await
             .unwrap();
         let prefix = format!("doc:{doc}");
