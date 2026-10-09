@@ -37,9 +37,40 @@ pub struct UpdateRow {
     pub snapshot_id: uuid::Uuid,
     pub clock: i64,
     pub seq: i64,
-    pub s3_key: String,
+    /// The object of its own, for a delta over the inline size (`SRV-149`).
+    pub s3_key: Option<String>,
+    /// The sealed frame itself, for a delta in the hot tail (`SRV-148`).
+    pub wire: Option<Vec<u8>>,
+    /// The batch object that holds the frame (`SRV-151`).
+    pub batch_key: Option<String>,
     #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// The bounds of a document's inline tail (`SRV-150`).
+#[derive(Debug, Clone, Copy)]
+pub struct InlineCap {
+    pub deltas: i64,
+    pub bytes: i64,
+}
+
+/// What an insert into the inline tail did.
+#[derive(Debug, PartialEq, Eq)]
+pub enum InlineInsert {
+    /// The row holds the frame. The tail now holds `deltas` rows and `bytes`
+    /// bytes, counting this one.
+    Stored { deltas: i64, bytes: i64 },
+    /// The tail is at its cap, and nothing was written.
+    Full,
+}
+
+/// What a trim of the delta index removed.
+#[derive(Debug, Default)]
+pub struct Trim {
+    /// The rows removed.
+    pub rows: u64,
+    /// The batch objects no row names any more, which the caller deletes.
+    pub batch_keys: Vec<String>,
 }
 
 /// Inserts snapshot metadata and returns the assigned `SnapshotId`.
@@ -166,6 +197,116 @@ pub async fn insert_update(
     Ok(())
 }
 
+/// Inserts a delta with its sealed frame in the row, unless the document's
+/// inline tail is at `cap` (`SRV-148`, `SRV-150`). The count and the insert
+/// are one statement. Two writers racing at the cap may each see room, so the
+/// tail can pass it by the writers in flight at once.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_inline_update(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    author_pubkey: &[u8],
+    snapshot_id: &ambre_core::SnapshotId,
+    clock: i64,
+    seq: i64,
+    wire: &[u8],
+    cap: InlineCap,
+) -> Result<InlineInsert, AppError> {
+    let (deltas, bytes, room): (i64, i64, bool) = sqlx::query_as(
+        "WITH tail AS ( \
+             SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(wire)), 0)::BIGINT AS bytes \
+             FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
+         ), ins AS ( \
+             INSERT INTO updates (document_id, author_pubkey, snapshot_id, clock, seq, wire) \
+             SELECT $1, $2, $3, $4, $5, $6 FROM tail \
+             WHERE tail.n < $7 AND tail.bytes + octet_length($6) <= $8 \
+             ON CONFLICT (document_id, author_pubkey, clock) DO NOTHING \
+             RETURNING 1 \
+         ) \
+         SELECT n, bytes, n < $7 AND bytes + octet_length($6) <= $8 FROM tail",
+    )
+    .bind(id_to_uuid(*document_id))
+    .bind(author_pubkey)
+    .bind(id_to_uuid(*snapshot_id))
+    .bind(clock)
+    .bind(seq)
+    .bind(wire)
+    .bind(cap.deltas)
+    .bind(cap.bytes)
+    .fetch_one(pool)
+    .await?;
+    if !room {
+        return Ok(InlineInsert::Full);
+    }
+    let size = i64::try_from(wire.len()).unwrap_or(i64::MAX);
+    Ok(InlineInsert::Stored {
+        deltas: deltas + 1,
+        bytes: bytes.saturating_add(size),
+    })
+}
+
+/// Locks the inline tail of a document, oldest first, for a move into a batch
+/// object. `None` when another move holds it.
+pub async fn lock_inline_tail(
+    tx: &mut sqlx::PgConnection,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<Vec<(i64, Vec<u8>)>>, AppError> {
+    let rows = sqlx::query_as(
+        "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
+         ORDER BY seq FOR UPDATE NOWAIT",
+    )
+    .bind(id_to_uuid(*document_id))
+    .fetch_all(tx)
+    .await;
+    match rows {
+        Ok(rows) => Ok(Some(rows)),
+        // `lock_not_available`: a move already runs.
+        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("55P03") => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Points the rows `seqs` at the batch object `batch_key`, and drops their
+/// inline frames. The caller holds their locks.
+pub async fn point_rows_at_batch(
+    tx: &mut sqlx::PgConnection,
+    document_id: &ambre_core::DocumentId,
+    seqs: &[i64],
+    batch_key: &str,
+) -> Result<u64, AppError> {
+    let moved = sqlx::query(
+        "UPDATE updates SET wire = NULL, batch_key = $3 \
+         WHERE document_id = $1 AND seq = ANY($2) AND wire IS NOT NULL",
+    )
+    .bind(id_to_uuid(*document_id))
+    .bind(seqs)
+    .bind(batch_key)
+    .execute(tx)
+    .await?
+    .rows_affected();
+    Ok(moved)
+}
+
+/// The documents with an inline tail and no write for `idle_secs`, at most
+/// `limit` (`SRV-152`).
+pub async fn idle_inline_documents(
+    pool: &PgPool,
+    idle_secs: i64,
+    limit: i64,
+) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT u.document_id FROM updates u WHERE u.wire IS NOT NULL \
+         AND NOT EXISTS (SELECT 1 FROM updates v WHERE v.document_id = u.document_id \
+                         AND v.created_at > now() - make_interval(secs => $1::BIGINT::FLOAT8)) \
+         LIMIT $2",
+    )
+    .bind(idle_secs)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// Returns updates with seq > `after_seq` for delta-sync after reconnect.
 pub async fn get_updates_after(
     pool: &PgPool,
@@ -175,7 +316,7 @@ pub async fn get_updates_after(
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT id, document_id, author_pubkey, snapshot_id, clock, seq, s3_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
+        "SELECT id, document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
     )
     .bind(did)
     .bind(after_seq)
@@ -193,6 +334,8 @@ pub async fn get_updates_after(
                 clock: r.try_get("clock")?,
                 seq: r.try_get("seq")?,
                 s3_key: r.try_get("s3_key")?,
+                wire: r.try_get("wire")?,
+                batch_key: r.try_get("batch_key")?,
                 created_at: r.try_get("created_at")?,
             })
         })
@@ -253,21 +396,39 @@ pub async fn get_clock_state(
 /// `drop_updates_snapshot_fk` migration), so deleting an old snapshot no longer
 /// cascades its deltas away. Without this pass the table would grow without bound.
 /// Run once per compaction cycle, independent of snapshot deletion.
-pub async fn purge_superseded_updates(pool: &PgPool) -> Result<u64, AppError> {
-    let deleted = sqlx::query(
+///
+/// A batch object goes only once no row names it, so a batch that still holds
+/// an uncovered delta stays (`SRV-154`).
+pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
+    let (rows, touched): (i64, Vec<String>) = sqlx::query_as(
         "WITH horizon AS (
             SELECT document_id, MIN(covered_seq) AS min_covered
             FROM snapshots
             GROUP BY document_id
+        ), gone AS (
+            DELETE FROM updates u
+            USING horizon h
+            WHERE u.document_id = h.document_id AND u.seq <= h.min_covered
+            RETURNING u.batch_key
         )
-        DELETE FROM updates u
-        USING horizon h
-        WHERE u.document_id = h.document_id AND u.seq <= h.min_covered",
+        SELECT (SELECT COUNT(*) FROM gone),
+               ARRAY(SELECT DISTINCT batch_key FROM gone WHERE batch_key IS NOT NULL)",
     )
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(deleted)
+    .fetch_one(pool)
+    .await?;
+    // The statement above reads the rows as they were before its delete, so
+    // whether a batch is still named is a second question.
+    let batch_keys: Vec<String> = sqlx::query_scalar(
+        "SELECT k FROM unnest($1::TEXT[]) AS k \
+         WHERE NOT EXISTS (SELECT 1 FROM updates WHERE batch_key = k)",
+    )
+    .bind(&touched)
+    .fetch_all(pool)
+    .await?;
+    Ok(Trim {
+        rows: u64::try_from(rows).unwrap_or(0),
+        batch_keys,
+    })
 }
 
 /// Confirms a completed S3 upload by inserting a `media` row.

@@ -4,6 +4,7 @@ mod auth;
 mod db;
 mod deletion;
 mod error;
+mod hot_tail;
 mod jwt;
 mod middleware;
 mod oidc;
@@ -329,7 +330,8 @@ async fn snapshot_compaction_task(state: state::AppState) {
     }
 }
 
-/// One compaction pass: the old snapshots, then the delta index they cover.
+/// One compaction pass: the old snapshots, the delta index they cover, then
+/// the inline tails of idle documents.
 async fn compact_once(state: &state::AppState) {
     const KEEP_PER_DOCUMENT: i64 = 10;
 
@@ -378,11 +380,14 @@ async fn compact_once(state: &state::AppState) {
     //    covering snapshot without crossing the keep threshold. Without this
     //    the `updates` table grows unbounded (the dropped snapshot FK no
     //    longer cascades old deltas away).
-    match db::purge_superseded_updates(&state.db).await {
+    match hot_tail::trim(state).await {
         Ok(0) => {}
         Ok(n) => tracing::info!(purged = n, "compaction: trimmed superseded updates"),
         Err(e) => tracing::error!("compaction: purge superseded updates failed: {e:?}"),
     }
+
+    // 3. Move the inline tail of every idle document into a batch object.
+    hot_tail::move_idle_tails(state).await;
 }
 
 #[cfg(test)]

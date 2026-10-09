@@ -53,6 +53,195 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
     ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()))
 }
 
+/// Like the state given, with another S3 client.
+pub fn with_s3(base: &AppState, s3: aws_sdk_s3::Client) -> Arc<AppState> {
+    Arc::new(AppState {
+        db: base.db.clone(),
+        redis: base.redis.clone(),
+        pubsub: base.pubsub.clone(),
+        s3,
+        s3_bucket: base.s3_bucket.clone(),
+        config: Arc::clone(&base.config),
+        jwt: Arc::clone(&base.jwt),
+        oidc_clients: Arc::clone(&base.oidc_clients),
+    })
+}
+
+/// An S3 client with static credentials and a region. It presigns offline,
+/// and it reaches `endpoint` when one is given.
+pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
+    let mut conf = aws_sdk_s3::Config::builder()
+        .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+            "test-access",
+            "test-secret",
+            None,
+            None,
+            "test",
+        ))
+        .force_path_style(true);
+    if let Some(endpoint) = endpoint {
+        conf = conf.endpoint_url(endpoint);
+    }
+    aws_sdk_s3::Client::from_conf(conf.build())
+}
+
+/// What an [`S3Stub`] holds: each object's bytes, and how often each was read.
+#[derive(Default)]
+struct StubStore {
+    objects: std::collections::BTreeMap<String, Vec<u8>>,
+    gets: HashMap<String, usize>,
+}
+
+/// An in-process object store over path-style requests. It answers the calls
+/// the relay makes: `PutObject`, `GetObject`, `DeleteObject`, `ListObjectsV2`
+/// and `DeleteObjects`.
+pub struct S3Stub {
+    store: Arc<std::sync::Mutex<StubStore>>,
+    pub endpoint: String,
+}
+
+impl S3Stub {
+    /// Starts a stub holding `keys`, each an empty object.
+    pub async fn spawn(keys: impl IntoIterator<Item = String>) -> Self {
+        use axum::body::Body;
+        use axum::http::Request;
+        let store = StubStore {
+            objects: keys.into_iter().map(|k| (k, Vec::new())).collect(),
+            gets: HashMap::new(),
+        };
+        let store = Arc::new(std::sync::Mutex::new(store));
+        let held = Arc::clone(&store);
+        let app = axum::Router::new().fallback(move |req: Request<Body>| {
+            let held = Arc::clone(&held);
+            async move { Self::answer(&held, req).await }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        Self { store, endpoint }
+    }
+
+    async fn answer(
+        held: &std::sync::Mutex<StubStore>,
+        req: axum::http::Request<axum::body::Body>,
+    ) -> axum::response::Response {
+        use axum::http::{Method, StatusCode};
+        use axum::response::IntoResponse;
+        let query = req.uri().query().unwrap_or("").to_string();
+        let key = req
+            .uri()
+            .path()
+            .trim_start_matches('/')
+            .split_once('/')
+            .map(|(_, k)| k.replace("%2F", "/"))
+            .unwrap_or_default();
+        let method = req.method().clone();
+        let chunked = req
+            .headers()
+            .get("content-encoding")
+            .is_some_and(|v| v.to_str().unwrap_or("").contains("aws-chunked"));
+        let body = axum::body::to_bytes(req.into_body(), 1 << 24)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = if chunked { unchunk(&body) } else { body };
+        let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
+        let mut store = held.lock().unwrap();
+        if method == Method::PUT && !key.is_empty() {
+            store.objects.insert(key, body);
+            return StatusCode::OK.into_response();
+        }
+        if method == Method::GET && !key.is_empty() {
+            *store.gets.entry(key.clone()).or_default() += 1;
+            return match store.objects.get(&key) {
+                Some(bytes) => bytes.clone().into_response(),
+                None => (
+                    StatusCode::NOT_FOUND,
+                    format!("<Error><Code>NoSuchKey</Code><Key>{key}</Key></Error>"),
+                )
+                    .into_response(),
+            };
+        }
+        if method == Method::DELETE && !key.is_empty() {
+            store.objects.remove(&key);
+            return StatusCode::NO_CONTENT.into_response();
+        }
+        if method == Method::POST && query.contains("delete") {
+            let text = String::from_utf8_lossy(&body);
+            for part in text.split("<Key>").skip(1) {
+                store.objects.remove(part.split("</Key>").next().unwrap());
+            }
+            return format!("<DeleteResult {xmlns}></DeleteResult>").into_response();
+        }
+        let prefix = query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("prefix="))
+            .map(|p| p.replace("%2F", "/"))
+            .unwrap_or_default();
+        let contents: String = store
+            .objects
+            .keys()
+            .filter(|k| k.starts_with(&prefix))
+            .map(|k| format!("<Contents><Key>{k}</Key><Size>1</Size></Contents>"))
+            .collect();
+        format!(
+            "<ListBucketResult {xmlns}><Name>test-bucket</Name><Prefix>{prefix}</Prefix>\
+             <IsTruncated>false</IsTruncated>{contents}</ListBucketResult>"
+        )
+        .into_response()
+    }
+
+    /// Every key held, in order.
+    pub fn keys(&self) -> Vec<String> {
+        self.store.lock().unwrap().objects.keys().cloned().collect()
+    }
+
+    /// An object a late writer puts behind the relay's back, as a presigned
+    /// upload does.
+    pub fn put(&self, key: String) {
+        self.store.lock().unwrap().objects.insert(key, Vec::new());
+    }
+
+    /// The bytes of an object, when held.
+    pub fn object(&self, key: &str) -> Option<Vec<u8>> {
+        self.store.lock().unwrap().objects.get(key).cloned()
+    }
+
+    /// How many times an object was read.
+    pub fn gets(&self, key: &str) -> usize {
+        self.store
+            .lock()
+            .unwrap()
+            .gets
+            .get(key)
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
+/// Decodes an `aws-chunked` body: hex sizes, each followed by its chunk, up
+/// to the empty chunk the trailers follow.
+fn unchunk(body: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut rest = body;
+    loop {
+        let Some(eol) = rest.windows(2).position(|w| w == b"\r\n") else {
+            return out;
+        };
+        let head = String::from_utf8_lossy(&rest[..eol]);
+        let size =
+            usize::from_str_radix(head.split(';').next().unwrap_or("0").trim(), 16).unwrap_or(0);
+        if size == 0 {
+            return out;
+        }
+        let start = eol + 2;
+        out.extend_from_slice(&rest[start..start + size]);
+        rest = &rest[start + size + 2..];
+    }
+}
+
 /// Creates a test document and adds the owner as an owner member.
 pub async fn create_test_document(
     pool: &PgPool,

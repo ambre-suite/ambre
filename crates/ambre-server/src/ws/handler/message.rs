@@ -308,18 +308,48 @@ pub(crate) async fn handle_update(
         }
     };
 
+    // A small delta lives in its index row, in the same write as the row, and
+    // takes no other path (`SRV-148`). A large one, or one that meets a full
+    // inline tail, keeps an object of its own (`SRV-149`, `SRV-150`).
     tracing::debug!("[Server->Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
-    if let Err(e) = db::insert_update(
-        &state.db,
-        &doc_id,
-        author_pubkey.as_array(),
-        &snapshot_id,
-        clock as i64,
-        seq as i64,
-        &s3_key,
-    )
-    .await
-    {
+    let mut inlined = false;
+    let mut stored = Ok(());
+    if update_wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
+        match db::insert_inline_update(
+            &state.db,
+            &doc_id,
+            author_pubkey.as_array(),
+            &snapshot_id,
+            clock as i64,
+            seq as i64,
+            &update_wire,
+            crate::hot_tail::INLINE_CAP,
+        )
+        .await
+        {
+            Ok(db::InlineInsert::Stored { deltas, bytes }) => {
+                inlined = true;
+                if crate::hot_tail::past_watermark(deltas, bytes) {
+                    crate::hot_tail::spawn_move(state, doc_id);
+                }
+            }
+            Ok(db::InlineInsert::Full) => crate::hot_tail::spawn_move(state, doc_id),
+            Err(e) => stored = Err(e),
+        }
+    }
+    if !inlined && stored.is_ok() {
+        stored = db::insert_update(
+            &state.db,
+            &doc_id,
+            author_pubkey.as_array(),
+            &snapshot_id,
+            clock as i64,
+            seq as i64,
+            &s3_key,
+        )
+        .await;
+    }
+    if let Err(e) = stored {
         // The delta index (Postgres) is the ONLY thing `handle_request_missing`
         // reads to replay this seq. The clock was already consumed atomically in
         // Redis, so we cannot cleanly reject and let the client retry. A retry at
@@ -338,7 +368,12 @@ pub(crate) async fn handle_update(
     }
 
     tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
-    match redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await {
+    let queued = if inlined {
+        Ok(())
+    } else {
+        redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
+    };
+    match queued {
         Ok(()) => {}
         // The document is being deleted: the delta has nowhere to go and must
         // not be kept anywhere, nor broadcast (`SRV-017`).
@@ -491,6 +526,7 @@ pub(crate) async fn handle_request_missing(
     const PAGE_SIZE: i64 = 1000;
     let mut cursor = after_seq.0 as i64;
     let mut first_page = true;
+    let mut batches = crate::hot_tail::BatchCache::default();
     loop {
         let updates = match db::get_updates_after(&state.db, &document_id, cursor, PAGE_SIZE).await
         {
@@ -526,29 +562,42 @@ pub(crate) async fn handle_request_missing(
         };
 
         // Rehydrate each indexed delta into the full sealed Update the client
-        // needs to decrypt and verify. The bytes live in S3 once flushed, or in
-        // the pending map until then; together they cover every seq. A delta we
-        // cannot locate or decode ends the replay at that seq, and the caller is
-        // told (`SRV-041`). A page with a hole in it is never sent.
+        // needs to decrypt and verify. A small delta's bytes are in its row,
+        // and a moved one's in a batch object, fetched once (`SRV-155`). A large
+        // one's are in its own object once flushed, or in the pending map until
+        // then. A delta we cannot locate or decode ends the replay at that seq,
+        // and the caller is told (`SRV-041`). A page with a hole in it is never
+        // sent.
         //
         // The fetches run CONCURRENTLY. A full replay (no snapshot upload yet)
         // pulls every delta since genesis. A sequential `.await` per object
         // turned the open into N serial S3 round-trips.
+        batches.load(state, &updates).await;
         let pending = &pending;
+        let held = &batches;
         let fetches = updates.into_iter().map(|row| {
             let seq = row.seq as u64;
             async move {
-                let wire =
-                    match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &row.s3_key).await {
-                        Ok(Some(bytes)) => Some(bytes),
-                        Ok(None) => pending.get(&seq).cloned(),
-                        Err(e) => {
-                            tracing::error!(seq, error = %e, "replay: S3 fetch failed");
-                            pending.get(&seq).cloned()
+                let wire = match (row.wire, row.batch_key, row.s3_key) {
+                    (Some(wire), _, _) => Some(wire),
+                    (None, Some(key), _) => held.frame(&key, row.seq),
+                    (None, None, Some(key)) => {
+                        match crate::s3::fetch_object(&state.s3, &state.s3_bucket, &key).await {
+                            Ok(Some(bytes)) => Some(bytes),
+                            Ok(None) => pending.get(&seq).cloned(),
+                            Err(e) => {
+                                tracing::error!(seq, error = %e, "replay: S3 fetch failed");
+                                pending.get(&seq).cloned()
+                            }
                         }
-                    };
+                    }
+                    (None, None, None) => None,
+                };
                 let Some(wire) = wire else {
-                    tracing::error!(seq, s3_key = %row.s3_key, "replay: delta not found in S3 or pending");
+                    tracing::error!(
+                        seq,
+                        "replay: delta not found in its row, its batch, S3 or pending"
+                    );
                     return (seq, None);
                 };
                 match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
@@ -591,6 +640,7 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         cursor = next_cursor;
+        batches.forget_through(cursor);
     }
 }
 
@@ -2059,5 +2109,168 @@ mod refusal_tests {
         assert_eq!(document_id, update.public_data.document_id);
         assert_eq!(key_id, update.public_data.key_id);
         assert_eq!(clock.0, 4);
+    }
+}
+
+// Where a delta lives once sequenced: in its index row, in a batch object, or
+// in an object of its own. Each test reads the stores back, so it needs
+// Postgres and Redis.
+#[cfg(test)]
+mod hot_tail_tests {
+    use super::*;
+    use crate::test_helpers::{
+        S3Stub, create_test_document, create_test_user, offline_s3, test_app_state, with_s3,
+    };
+    use ambre_core::{PublicKey, SnapshotId};
+    use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
+    use ambre_protocol::public_data::UpdatePublicData;
+    use rustis::commands::{GenericCommands, ListCommands};
+
+    /// A writer of a fresh document, over a state whose object store is `stub`.
+    async fn writer(
+        pool: sqlx::PgPool,
+        stub: &S3Stub,
+        key: &ed25519_dalek::SigningKey,
+    ) -> (Arc<AppState>, WsConnectionState, DocumentId) {
+        let state = with_s3(
+            &*test_app_state(pool.clone()).await,
+            offline_s3(Some(&stub.endpoint)),
+        );
+        let owner = create_test_user(&pool, "writer@ambre.app").await;
+        let doc_id = create_test_document(&pool, owner, "prose").await;
+        let conn = WsConnectionState {
+            user_id: owner,
+            signing_pubkey: PublicKey::from_array(key.verifying_key().to_bytes()),
+            doc_subscriptions: HashSet::from([doc_id]),
+            doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            last_replay_at: HashMap::new(),
+            channel_subscriptions: HashSet::new(),
+            msg_bucket: TokenBucket::new(1000, 1000),
+        };
+        (state, conn, doc_id)
+    }
+
+    /// Delta `clock` of `doc_id`, `len` bytes of ciphertext, signed by `key`.
+    fn signed_update(
+        key: &ed25519_dalek::SigningKey,
+        doc_id: DocumentId,
+        clock: u64,
+        len: usize,
+    ) -> Update {
+        use ed25519_dalek::Signer;
+        let public_data = UpdatePublicData {
+            document_id: doc_id,
+            pub_key: PublicKey::from_array(key.verifying_key().to_bytes()),
+            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+            clock: Clock(clock),
+        };
+        let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
+        let nonce = Nonce([5u8; 24]);
+        let commitment_tag = CommitmentTag([6u8; 32]);
+        let mut signed = Vec::new();
+        push_framed(&mut signed, &nonce.0);
+        push_framed(&mut signed, &ciphertext);
+        push_framed(&mut signed, &postcard::to_allocvec(&public_data).unwrap());
+        push_framed(&mut signed, &commitment_tag.0);
+        Update {
+            ciphertext: Ciphertext(ciphertext),
+            nonce,
+            public_data,
+            commitment_tag,
+            signature: Signature(key.sign(&signed).to_bytes()),
+        }
+    }
+
+    /// The frames a full replay of `doc_id` sends, as they leave the relay.
+    async fn replay(
+        state: &Arc<AppState>,
+        conn: &mut WsConnectionState,
+        doc_id: DocumentId,
+    ) -> Vec<Vec<u8>> {
+        conn.last_replay_at.clear();
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        handle_request_missing(state, conn, doc_id, ambre_protocol::messages::Seq(0), &tx).await;
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    /// `SRV-148`, `SRV-149`: a small delta is stored in its index row and takes
+    /// no other path. A delta past the inline size keeps an object of its own,
+    /// reached through the pending list.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[41u8; 32]);
+        let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
+        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
+        let pending_key = format!("doc:{doc_id}:pending");
+
+        handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
+        let rows = db::get_updates_after(&state.db, &doc_id, 0, 10)
+            .await
+            .unwrap();
+        assert!(matches!(rows.as_slice(), [r] if r.wire.is_some() && r.s3_key.is_none()));
+        let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
+        assert_eq!(pending, 0, "an inline delta takes no pending entry");
+
+        let large = crate::hot_tail::INLINE_DELTA_MAX_BYTES + 1024;
+        handle_update(
+            &state,
+            &mut conn,
+            signed_update(&key, doc_id, 2, large),
+            &tx,
+        )
+        .await;
+        let rows = db::get_updates_after(&state.db, &doc_id, 1, 10)
+            .await
+            .unwrap();
+        assert!(matches!(rows.as_slice(), [r] if r.wire.is_none() && r.s3_key.is_some()));
+        let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
+        assert_eq!(pending, 1, "a large delta waits for the flush");
+        let _: usize = state.redis.del(pending_key).await.unwrap();
+    }
+
+    /// `SRV-153`, `SRV-155`: a replay across a move sends the same frames as
+    /// before it, and reads the batch object once.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_replay_reads_the_rows_and_each_batch_once(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[42u8; 32]);
+        let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
+        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
+        for clock in 1..=6 {
+            handle_update(
+                &state,
+                &mut conn,
+                signed_update(&key, doc_id, clock, 16),
+                &tx,
+            )
+            .await;
+        }
+        let before = replay(&state, &mut conn, doc_id).await;
+        assert_eq!(before.len(), 1, "one page");
+
+        assert_eq!(
+            crate::hot_tail::move_to_batch(&state, &doc_id, Some(2))
+                .await
+                .unwrap(),
+            4
+        );
+        let batch = crate::hot_tail::batch_key(&state.config.s3_env_prefix, &doc_id, 1, 4);
+        assert_eq!(replay(&state, &mut conn, doc_id).await, before);
+        assert_eq!(
+            stub.gets(&batch),
+            1,
+            "the batch is read once for its four deltas"
+        );
     }
 }

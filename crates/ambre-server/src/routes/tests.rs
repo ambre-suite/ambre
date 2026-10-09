@@ -1792,111 +1792,15 @@ mod handler_tests {
         }
     }
 
-    /// An S3 client with static credentials and a region. It presigns offline,
-    /// and it reaches `endpoint` when one is given.
-    fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
-        let mut conf = aws_sdk_s3::Config::builder()
-            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
-            .region(aws_sdk_s3::config::Region::new("us-east-1"))
-            .credentials_provider(aws_sdk_s3::config::Credentials::new(
-                "test-access",
-                "test-secret",
-                None,
-                None,
-                "test",
-            ))
-            .force_path_style(true);
-        if let Some(endpoint) = endpoint {
-            conf = conf.endpoint_url(endpoint);
-        }
-        aws_sdk_s3::Client::from_conf(conf.build())
-    }
+    use crate::test_helpers::{S3Stub, offline_s3};
 
     /// Like [`test_app_state`], with the given S3 client.
     async fn test_app_state_with_s3(pool: sqlx::PgPool, s3: aws_sdk_s3::Client) -> Arc<AppState> {
-        let base = test_app_state(pool).await;
-        Arc::new(AppState {
-            db: base.db.clone(),
-            redis: base.redis.clone(),
-            pubsub: base.pubsub.clone(),
-            s3,
-            s3_bucket: base.s3_bucket.clone(),
-            config: Arc::clone(&base.config),
-            jwt: Arc::clone(&base.jwt),
-            oidc_clients: Arc::clone(&base.oidc_clients),
-        })
+        crate::test_helpers::with_s3(&*test_app_state(pool).await, s3)
     }
 
     async fn test_app_state_presigning(pool: sqlx::PgPool) -> Arc<AppState> {
         test_app_state_with_s3(pool, offline_s3(None)).await
-    }
-
-    /// An in-process object store that answers the two calls a purge makes,
-    /// `ListObjectsV2` and `DeleteObjects`, over a set of keys.
-    struct S3Stub {
-        keys: Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
-        endpoint: String,
-    }
-
-    impl S3Stub {
-        async fn spawn(keys: impl IntoIterator<Item = String>) -> Self {
-            let keys = Arc::new(std::sync::Mutex::new(keys.into_iter().collect()));
-            let held = Arc::clone(&keys);
-            let app = Router::new().fallback(move |req: Request<Body>| {
-                let held = Arc::clone(&held);
-                async move { Self::answer(&held, req).await }
-            });
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let endpoint = format!("http://{}", listener.local_addr().unwrap());
-            tokio::spawn(async move { axum::serve(listener, app).await });
-            Self { keys, endpoint }
-        }
-
-        async fn answer(
-            held: &std::sync::Mutex<std::collections::BTreeSet<String>>,
-            req: Request<Body>,
-        ) -> String {
-            let query = req.uri().query().unwrap_or("").to_string();
-            let method = req.method().clone();
-            let body = axum::body::to_bytes(req.into_body(), 1 << 20)
-                .await
-                .unwrap();
-            let body = String::from_utf8_lossy(&body);
-            let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
-            if method == axum::http::Method::POST && query.contains("delete") {
-                let mut held = held.lock().unwrap();
-                for part in body.split("<Key>").skip(1) {
-                    held.remove(part.split("</Key>").next().unwrap());
-                }
-                return format!("<DeleteResult {xmlns}></DeleteResult>");
-            }
-            let prefix = query
-                .split('&')
-                .find_map(|kv| kv.strip_prefix("prefix="))
-                .map(|p| p.replace("%2F", "/"))
-                .unwrap_or_default();
-            let contents: String = held
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|k| k.starts_with(&prefix))
-                .map(|k| format!("<Contents><Key>{k}</Key><Size>1</Size></Contents>"))
-                .collect();
-            format!(
-                "<ListBucketResult {xmlns}><Name>test-bucket</Name><Prefix>{prefix}</Prefix>\
-                 <IsTruncated>false</IsTruncated>{contents}</ListBucketResult>"
-            )
-        }
-
-        fn keys(&self) -> Vec<String> {
-            self.keys.lock().unwrap().iter().cloned().collect()
-        }
-
-        /// An object a late writer puts behind the relay's back, as a
-        /// presigned upload does.
-        fn put(&self, key: String) {
-            self.keys.lock().unwrap().insert(key);
-        }
     }
 
     async fn post_json(

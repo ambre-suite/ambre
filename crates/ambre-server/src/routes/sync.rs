@@ -253,13 +253,15 @@ pub struct DeltasQuery {
     pub after_seq: Option<i64>,
     pub limit: Option<i64>,
 }
-/// One delta entry in the response list. Clients fetch the actual blob from S3.
+/// One delta entry in the response list.
 #[derive(serde::Serialize)]
 pub struct DeltaEntry {
     pub seq: i64,
     pub clock: i64,
     pub author_pubkey: String,
-    pub s3_key: String,
+    /// The object of its own, for a delta over the inline size. A delta in the
+    /// hot tail or in a batch has none, and is read over the socket replay.
+    pub s3_key: Option<String>,
 }
 #[derive(serde::Serialize)]
 pub struct DeltasResponse {

@@ -26,7 +26,7 @@ fn uuid_row_to_id<T: From<ambre_core::Uuid>>(u: uuid::Uuid) -> T {
     T::from(uuid_to_core(u))
 }
 
-fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
+pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
     let core_uuid: ambre_core::Uuid = id.into();
     uuid::Uuid::from_bytes(*core_uuid.as_bytes())
 }
@@ -161,7 +161,7 @@ mod tests {
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
         assert_eq!(
-            deleted, 6,
+            deleted.rows, 6,
             "seq 1..=6 are covered by the snapshot and purged"
         );
 
@@ -227,7 +227,10 @@ mod tests {
         }
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
-        assert_eq!(deleted, 3, "MIN(3, 8) = 3, so only seq 1..=3 are purged");
+        assert_eq!(
+            deleted.rows, 3,
+            "MIN(3, 8) = 3, so only seq 1..=3 are purged"
+        );
 
         let remaining = get_updates_after(&pool, &document_id, 0, 100)
             .await

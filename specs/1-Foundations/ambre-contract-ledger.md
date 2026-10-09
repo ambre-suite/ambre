@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3377 rows: 2461 shipped, of which 103 partial and 519 loose. 916 unbuilt.**
+**3377 rows: 2469 shipped, of which 103 partial and 519 loose. 908 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 384 | 269 | 584 | 602 |  | 1839 |
+| `verified` | 392 | 269 | 584 | 602 |  | 1847 |
 | `partial` | 46 | 14 | 41 | 2 |  | 103 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 191 | 133 | 188 | 2 |  | 514 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 283 | 57 | 28 | 109 | 439 | 916 |
+| `unimplemented` | 275 | 57 | 28 | 109 | 439 | 908 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -67,7 +67,7 @@
 | `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 23 | 19 | 15 |  | 4 | 4 |
-| `ambre-spec-sequencer.md` | 46 | 18 | 9 | 3 | 6 | 28 |
+| `ambre-spec-sequencer.md` | 46 | 26 | 17 | 3 | 6 | 20 |
 | `ambre-spec-server.md` | 52 | 33 | 27 | 2 | 4 | 19 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
 | `ambre-spec-sync.md` | 29 | 29 | 15 |  | 14 |  |

@@ -299,5 +299,5 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
 | Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
-| Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | **none exists** |
+| Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | `IDLE_SECS` in `ambre_server::hot_tail`, the delay the compaction pass reads (`SRV-152`) |
 | Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |
