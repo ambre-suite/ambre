@@ -130,10 +130,10 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
   engine extrapolates numbers only, and no row above claims otherwise. It lands with the
   `A fill extrapolates a date series` Story (`ambre-roadmap.md` E6).
 * **The gesture has no test.** The mode choice reads the pointer and the modifier, so it sits in
-  `TrameView`, on the untestable side of the seam. It is the same wall as the edit session
-  (`features/ambre-spec-trame-cell-editing.md section 6`). The destination geometry does not: it is
-  a free function that takes the source, the drag corner and the block granularity and returns a
-  rectangle. Nothing but habit keeps it untested.
+  `TrameView`. A native test now builds that view, as it does for the edit session
+  (`features/ambre-spec-trame-cell-editing.md section 6`), and none drives the gesture yet. The
+  destination geometry needs no view. It is a free function that takes the source, the drag
+  corner and the block granularity and returns a rectangle. Nothing but habit keeps it untested.
 * **A fill the queue dropped still moves the selection.** `TRAME-UI-133`: the release logs the
   full queue and grows the selection over the destination anyway. The user is left selecting a
   rectangle no peer ever wrote. The resize drops the same way (`features/ambre-spec-trame-resize.md

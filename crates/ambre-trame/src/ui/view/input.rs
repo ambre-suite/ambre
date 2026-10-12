@@ -446,7 +446,7 @@ impl TrameView {
         }
         let outcome = self
             .scroll
-            .wheel(&mut self.state, dx, dy, delta_mode, self.perf.now());
+            .wheel(&mut self.state, dx, dy, delta_mode, self.clock.now_ms());
         self.note_scroll(outcome);
         true
     }
@@ -463,7 +463,7 @@ impl TrameView {
 
     /// Advance the kinetic motion by one frame, from `update`.
     pub(crate) fn step_momentum(&mut self) {
-        let outcome = self.scroll.tick(&mut self.state, self.perf.now());
+        let outcome = self.scroll.tick(&mut self.state, self.clock.now_ms());
         self.note_scroll(outcome);
     }
 
@@ -493,7 +493,9 @@ impl TrameView {
             .filter(|_| held)
             .map(|(x, y)| self.state.edge_scroll_speed(x, y))
             .filter(|&(sx, sy)| sx != 0.0 || sy != 0.0);
-        let outcome = self.scroll.edge(&mut self.state, speed, self.perf.now());
+        let outcome = self
+            .scroll
+            .edge(&mut self.state, speed, self.clock.now_ms());
         if matches!(self.note_scroll(outcome), ScrollOutcome::Moved) {
             self.follow_drag();
         }

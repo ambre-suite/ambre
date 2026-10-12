@@ -115,8 +115,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Verification.** 10 `verified`, 2 `partial`, 17 `untested`, 12 `unimplemented`. What holds is
   the commit path into the document, and where it lands once a peer moves or deletes the lines
   under it. Most rows on what an edit MUST NOT touch have nothing watching them. The session
-  lives on `TrameView`, which owns a canvas and Leptos signals, beyond the headless tier. Nine
-  unbuilt rows are the gate of section 3, whose events ship and whose handlers do nothing.
+  lives on `TrameView`, which a native test now builds and drives, though no row cites one yet.
+  Nine unbuilt rows are the gate of section 3, whose events ship and whose handlers do nothing.
 
 ---
 
@@ -337,6 +337,7 @@ at. A double-click inside selects the word.
 * **The gate covers one path, and the document has four.** The design above tests a cell write.
   Paste, autofill, replace-all and a structural delete reach the same cells and pass no gate, and no
   rule states whether they must.
-* **The session has no headless test.** Six rows above say `none` for the same reason. `TrameView`
-  is reachable only with a canvas and Leptos signals, while `TrameUiState` under it is driven by
-  tests today. The seam exists, and the session is on the wrong side of it.
+* **The session has no test of its own yet.** Six rows above say `none`. `TrameView` is now built
+  natively, on a detached pipe and a clock the test sets, and `ui::view::view_tests` drives a key to
+  the Logic thread. Each row waits on a test of that shape, under the `Trame cell editing held`
+  Story (`ambre-roadmap.md`).

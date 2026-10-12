@@ -4,15 +4,9 @@
 use super::*;
 
 impl TrameView {
+    /// A view of `document_id`, reading time from `clock`: the page's on screen,
+    /// a test's natively. The view itself never reads the browser's.
     #[allow(clippy::too_many_arguments)]
-    /// # Panics
-    ///
-    /// When the browser exposes no `window` or no Performance API. The view
-    /// measures every frame against a budget, so neither has a fallback.
-    #[expect(
-        clippy::expect_used,
-        reason = "the view measures every frame and has no fallback for a missing clock"
-    )]
     pub fn new(
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
@@ -30,6 +24,7 @@ impl TrameView {
         busy_pub: BusyPublisher,
         filter_open: FilterOpenPublisher,
         theme_ctl: ThemeControl,
+        clock: Box<dyn Clock>,
         #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_text: RwSignal<String>,
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
@@ -37,8 +32,6 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
         #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<f64>,
     ) -> Self {
-        let window = web_sys::window().expect("no window");
-        let perf = window.performance().expect("no Performance API");
         let theme = theme_ctl.get();
 
         // Focus the pipe up front so the keyboard works without a click. Park it
@@ -93,7 +86,7 @@ impl TrameView {
             caret_on: true,
             last_blink_ms: 0.0,
             pending_input_mark: None,
-            perf,
+            clock,
             text_enabled: true,
             draw_stats: DrawStats::default(),
             initial_viewport_sent: false,
@@ -283,12 +276,13 @@ impl TrameView {
     /// probe.
     pub(crate) fn reset_blink(&mut self) {
         self.caret_on = true;
-        self.last_blink_ms = self.perf.now();
+        let now = self.clock.now_ms();
+        self.last_blink_ms = now;
         self.edit_dirty = true;
         // Arm the latency probe: timestamp now (~keydown), and drop a
         // `performance.mark` so the measure shows in the browser Performance panel.
-        self.pending_input_mark = Some(self.perf.now());
-        let _ = self.perf.mark("ambre:input");
+        self.pending_input_mark = Some(now);
+        performance_mark("ambre:input");
     }
 
     /// Seed text for an editor opened on `(row, col)`: the cell's current text,

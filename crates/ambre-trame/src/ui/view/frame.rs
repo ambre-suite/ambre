@@ -282,7 +282,7 @@ impl TrameView {
         // the overlay so it redraws. Costs one overlay redraw per ~530 ms; idle
         // (non-editing) frames never touch it.
         if self.editor.is_some() {
-            let now = self.perf.now();
+            let now = self.clock.now_ms();
             if now - self.last_blink_ms >= BLINK_MS {
                 self.caret_on = !self.caret_on;
                 self.last_blink_ms = now;
@@ -501,9 +501,9 @@ impl TrameView {
         }
     }
 
-    pub fn paint_content(
+    pub fn paint_content<S: DrawSurface>(
         &mut self,
-        surface: &mut WgpuSurface<'_>,
+        surface: &mut S,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
         strip: Option<Rect>,
@@ -525,14 +525,14 @@ impl TrameView {
             text_cache,
             self.text_enabled,
             strip,
-            &PerfClock(&self.perf),
+            &*self.clock,
             &mut self.draw_stats,
         );
     }
 
-    pub fn paint_overlay(
+    pub fn paint_overlay<S: DrawSurface>(
         &mut self,
-        surface: &mut WgpuSurface<'_>,
+        surface: &mut S,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
         stats: &FrameStats,
@@ -544,7 +544,7 @@ impl TrameView {
             font_cx,
             text_cache,
             self.text_enabled,
-            &PerfClock(&self.perf),
+            &*self.clock,
             &mut self.draw_stats,
         );
 
@@ -585,10 +585,8 @@ impl TrameView {
             // panel; the duration also feeds the HUD (`inlat`). A 10 KB paste
             // travels the same Text path, so it is covered too.
             if let Some(t0) = self.pending_input_mark.take() {
-                self.draw_stats.input_latency_ms = (self.perf.now() - t0) as f32;
-                let _ = self
-                    .perf
-                    .measure_with_start_mark("ambre:input-to-caret", "ambre:input");
+                self.draw_stats.input_latency_ms = (self.clock.now_ms() - t0) as f32;
+                performance_measure("ambre:input-to-caret", "ambre:input");
             }
         }
 

@@ -18,9 +18,9 @@ use ambre_bus::{
 use ambre_canvas::{
     Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
     InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
-    Theme, ThemeControl, WgpuSurface,
+    Theme, ThemeControl,
 };
-use ambre_draw::{Clock, FontContext, Rect};
+use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
 #[cfg(target_arch = "wasm32")]
@@ -104,15 +104,26 @@ fn fill_dest(src: CellRect, row: u32, col: u32, block: (u32, u32)) -> CellRect {
     }
 }
 
-/// `Clock` adapter over the browser `performance.now()`. The renderer takes a
-/// `&dyn Clock` for its sub-phase timings so it can also run headless (tests
-/// pass `ambre_draw::testing::FixedClock`); on screen this wraps `Performance`.
-struct PerfClock<'a>(&'a web_sys::Performance);
-
-impl Clock for PerfClock<'_> {
-    fn now_ms(&self) -> f64 {
-        self.0.now()
+/// Drop a mark named `name` on the browser's Performance panel. A native build
+/// has no panel.
+fn performance_mark(name: &str) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+        let _ = perf.mark(name);
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = name;
+}
+
+/// Draw the measure `name` from the mark `start` on the browser's Performance
+/// panel. A native build has no panel.
+fn performance_measure(name: &str, start: &str) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+        let _ = perf.measure_with_start_mark(name, start);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = (name, start);
 }
 
 /// Result of folding the pixel accumulator into a viewport pan.
@@ -345,16 +356,18 @@ pub struct TrameView {
     /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
     /// to `true` (solid) on any edit interaction, as platforms do.
     caret_on: bool,
-    /// `performance.now()` of the last blink toggle (or blink reset).
+    /// The clock's time of the last blink toggle (or blink reset).
     last_blink_ms: f64,
-    /// `performance.now()` of the input awaiting its caret paint, set by an edit
+    /// The clock's time of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn. This is the
     /// keydown->caret latency probe, against the keystroke-to-draft budget of
     /// `ambre-spec-budgets.md`. `None` when idle.
     pending_input_mark: Option<f64>,
 
-    /// `performance.now()` handle for the renderer's sub-phase timings.
-    perf: web_sys::Performance,
+    /// The one clock the view reads: the blink, the scroll, the latency probe
+    /// and the renderer's sub-phase timings. The page's on screen, a test's
+    /// natively.
+    clock: Box<dyn Clock>,
 
     text_enabled: bool,
     /// Per-frame sub-phase breakdown produced by the renderer, shown on the HUD.
@@ -440,6 +453,9 @@ pub(crate) fn formula_bar_sync(input: &str, shown: &str, seed: &str) -> FormulaB
         FormulaBarSync::Idle
     }
 }
+
+#[cfg(test)]
+mod view_tests;
 
 #[cfg(test)]
 mod tests {

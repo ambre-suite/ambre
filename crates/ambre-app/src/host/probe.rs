@@ -27,6 +27,15 @@ pub(crate) fn now_ms() -> f64 {
         .map_or(0.0, |p| p.now())
 }
 
+/// The page's clock as a view takes it: the grid reads no clock of its own.
+pub(crate) struct PageClock;
+
+impl ambre_draw::Clock for PageClock {
+    fn now_ms(&self) -> f64 {
+        now_ms()
+    }
+}
+
 /// Where the probes' measures go.
 pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.

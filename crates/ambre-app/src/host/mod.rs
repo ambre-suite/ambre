@@ -58,7 +58,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 mod frame;
 mod probe;
 
-pub(crate) use probe::mark;
+pub(crate) use probe::{PageClock, mark};
 mod prose;
 mod run;
 mod web_embed;
