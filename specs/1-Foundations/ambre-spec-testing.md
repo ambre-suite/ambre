@@ -276,7 +276,7 @@ whether it blocks the current MVP.
 | `cargo-mutants` | absent | the whole suite, never adversarially checked |
 | `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
 | `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |
-| `callgrind` | wired, one budget | the CI `instructions` job holds the Toile body commit under its ceiling, and the bound its diff cap allows. Every other budget row has no ceiling yet |
+| `callgrind` | wired, two budgets | the CI `instructions` job holds the Toile body commit and the Prose text layout of a paragraph under their ceilings, and the bound the Toile diff cap allows. Every other budget row has no ceiling yet |
 | `insta` | absent | candidates: `RecordingSurface` op sequences, wire encodings, and the `KrillaSurface` primitives |
 | `loom`, `miri` | **not adopted, by decision** | zero `unsafe`, and atomics are flags and counters. Re-check with `rg 'unsafe\|Ordering::' --stats` before revisiting |
 

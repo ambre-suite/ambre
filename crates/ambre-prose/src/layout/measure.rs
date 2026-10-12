@@ -16,11 +16,13 @@ use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::layout::fonts;
-use crate::layout::run::{ParleyRunData, ShapedRun};
+use crate::layout::run::{ParleyRunData, Resume, ShapedRun};
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
-/// again (`PROSE-128`). Typing at the end of a paragraph adds one per line.
-const MAX_SEGMENTS: usize = 8;
+/// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
+/// and an edit inside it at most two. Each holds a layout alive, so the cap
+/// bounds the memory a run keeps.
+const MAX_SEGMENTS: usize = 16;
 
 /// Pixels per point at 96 DPI. Every length the document stores in points is
 /// converted here and nowhere else.
@@ -348,8 +350,8 @@ impl Measurer {
     /// The spans of `marks` are shaped bold or italic (`PROSE-UI-207`).
     ///
     /// `previous` is the run the block had before an edit. When it was shaped
-    /// alike, only its lines from the one before the edit on are shaped again
-    /// (`PROSE-128`).
+    /// alike, only a window of lines from the one before the edit is shaped
+    /// again (`PROSE-128`, `PROSE-UI-215`).
     pub fn measure_with_lines(
         &mut self,
         (text, marks): (&str, &[MarkedSpan]),
@@ -359,7 +361,7 @@ impl Measurer {
         previous: Option<&ShapedRun>,
     ) -> (TextMetrics, Vec<u32>, ShapedRun) {
         let run = previous
-            .and_then(|old| self.shape_tail(old.data(), (text, marks), style, width_px))
+            .and_then(|old| self.shape_window(old.data(), (text, marks), style, width_px))
             .unwrap_or_else(|| {
                 let layout = self.shape(text, marks, style, width_px);
                 let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
@@ -379,71 +381,34 @@ impl Measurer {
         (run_metrics(run.data()), lines, run)
     }
 
-    /// Shape `text` again from the line before the first one an edit
-    /// changed, keeping the lines of `previous` above it (`PROSE-128`).
-    ///
-    /// Lines are broken greedily, so a line ends where it would have ended
-    /// whatever follows the next one. `None` when the shortcut does not
-    /// hold. A new width, style or mark ahead of the edit breaks it. So do a
-    /// floor on the line height, justified or right-to-left text, an edit in
-    /// the first two lines, and too many segments already.
-    fn shape_tail(
+    /// Shape a window of `text` around an edit, keeping the lines of
+    /// `previous` on both sides of it (`PROSE-128`, `PROSE-UI-215`). Counted
+    /// as one run shaped, however many windows it tried.
+    fn shape_window(
         &mut self,
         previous: &ParleyRunData,
         (text, marks): (&str, &[MarkedSpan]),
         style: &EffectiveStyle,
         width_px: f32,
     ) -> Option<ShapedRun> {
-        let alike = previous.width_px() == Some(width_px)
-            && previous.style() == Some(style)
-            && style.at_least_floor_px.is_none()
-            && style.align != Align::Justify
-            && previous.segment_count() < MAX_SEGMENTS;
-        if !alike || text.chars().any(right_to_left) {
-            return None;
-        }
-        let common = previous
-            .text()
-            .bytes()
-            .zip(text.bytes())
-            .take_while(|(old, new)| old == new)
-            .count();
-        let cut = previous
-            .line_at_byte(common.saturating_sub(1))
-            .checked_sub(1)
-            .filter(|cut| *cut > 0)?;
-        let start = previous.line_start(cut)?;
-        if start > common || !text.is_char_boundary(start) {
-            return None;
-        }
-        let head = |spans: &[MarkedSpan]| -> Vec<MarkedSpan> {
-            spans
-                .iter()
-                .filter(|span| span.start < start)
-                .map(|span| MarkedSpan {
-                    end: span.end.min(start),
-                    ..*span
-                })
-                .collect()
-        };
-        if head(previous.marks()) != head(marks) {
-            return None;
-        }
-        let tail = text.get(start..)?;
-        let tail_marks: Vec<MarkedSpan> = marks
-            .iter()
-            .filter(|span| span.end > start)
-            .map(|span| MarkedSpan {
-                start: span.start.max(start) - start,
-                end: span.end - start,
-                ..*span
-            })
-            .collect();
-        // Only the paragraph's first line is indented, and it is kept.
-        let mut rest = style.clone();
-        rest.indent_first_px = 0.0;
-        let layout = self.shape(tail, &tail_marks, &rest, width_px);
-        ParleyRunData::with_tail(previous, cut, (text, marks), layout).map(ShapedRun::from_data)
+        let Self {
+            font_cx,
+            layout_cx,
+            missing,
+            ..
+        } = self;
+        let data = reshape_window(
+            previous,
+            (text, marks),
+            style,
+            width_px,
+            &mut |part, spans, style| {
+                missing.extend(fonts::missing_scripts(font_cx, part));
+                shape_paragraph(font_cx, layout_cx, (part, spans), style, width_px)
+            },
+        )?;
+        self.shaped = self.shaped.saturating_add(1);
+        Some(ShapedRun::from_data(data))
     }
 
     /// Measure one block of the document, reading its text and its style.
@@ -498,6 +463,181 @@ pub fn shape_paragraph(
         return shaped(font_cx, layout_cx, LineHeight::Absolute(floor_px));
     }
     layout
+}
+
+/// Shape a paragraph again after an edit, where `previous` is its run
+/// before it (`PROSE-UI-215`). The view takes this path while the layout
+/// that carries the edit is on its way, so a key costs a window of lines.
+///
+/// A window when `previous` allows one, and the whole paragraph otherwise.
+pub fn reshape_paragraph(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<ParleyBrush>,
+    previous: &ParleyRunData,
+    (text, marks): (&str, &[MarkedSpan]),
+    style: &EffectiveStyle,
+    width_px: f32,
+) -> ShapedRun {
+    let windowed = reshape_window(
+        previous,
+        (text, marks),
+        style,
+        width_px,
+        &mut |part, spans, style| {
+            shape_paragraph(font_cx, layout_cx, (part, spans), style, width_px)
+        },
+    );
+    match windowed {
+        Some(data) => ShapedRun::from_data(data),
+        None => {
+            let layout = shape_paragraph(font_cx, layout_cx, (text, marks), style, width_px);
+            ShapedRun::marked(text, layout, style, marks)
+        }
+    }
+}
+
+/// How far the window an edit is shaped in reaches, as an index into the
+/// lines after the edit that it may meet again. A key moves a word or two,
+/// which one of the next three lines most often takes back. A window that
+/// meets none is followed by the rest of the text, shaped once. A second,
+/// longer window would cost more than it saves when it misses too.
+const REACH: usize = 3;
+
+/// The share of the text after the edit a window may cover, as a divisor.
+/// A window that misses is shaped for nothing, so a wider one is not tried.
+/// The rest is shaped at once, and a miss costs a quarter more at most.
+const WINDOW_SHARE: usize = 4;
+
+/// What shapes one stretch of text with its marks, in a style, at the width
+/// of the paragraph. The Logic thread counts what it shapes, and the view
+/// does not.
+type ShapeFn<'a> = dyn FnMut(&str, &[MarkedSpan], &EffectiveStyle) -> Layout<ParleyBrush> + 'a;
+
+/// Shape a window of `text` from the line before an edit, and keep the
+/// lines of `previous` on both sides of it (`PROSE-128`, `PROSE-UI-215`).
+///
+/// Lines are broken greedily, so a line ends where it would have ended
+/// whatever follows the next one. Above the window, the lines of
+/// `previous` stand. Once a line of the window starts where a line of
+/// `previous` started after the edit, every line after it breaks as before.
+/// The window stops there, and the old lines follow, moved by the bytes
+/// the edit added. A window that meets none is followed by the rest of the
+/// text, shaped once.
+///
+/// `None` when the shortcut does not hold. A new width, style or mark ahead
+/// of the edit breaks it. So do a floor on the line height, justified or
+/// right-to-left text, and too many segments already. A mark changed after
+/// the edit only keeps the window from stopping early.
+pub(crate) fn reshape_window(
+    previous: &ParleyRunData,
+    (text, marks): (&str, &[MarkedSpan]),
+    style: &EffectiveStyle,
+    width_px: f32,
+    shape: &mut ShapeFn<'_>,
+) -> Option<ParleyRunData> {
+    let alike = previous.width_px() == Some(width_px)
+        && previous.style() == Some(style)
+        && style.at_least_floor_px.is_none()
+        && style.align != Align::Justify
+        && previous.segment_count() < MAX_SEGMENTS;
+    if !alike || text.chars().any(right_to_left) {
+        return None;
+    }
+    let old = previous.text();
+    let prefix: usize = old
+        .chars()
+        .zip(text.chars())
+        .take_while(|(old, new)| old == new)
+        .map(|(c, _)| c.len_utf8())
+        .sum();
+    // Counted in whole characters from the end, and never into the prefix,
+    // so both ends fall on a character boundary of both texts.
+    let suffix = old
+        .chars()
+        .rev()
+        .zip(text.chars().rev())
+        .take_while(|(old, new)| old == new)
+        .map(|(c, _)| c.len_utf8())
+        .sum::<usize>()
+        .min(old.len() - prefix)
+        .min(text.len() - prefix);
+    let delta = isize::try_from(text.len()).ok()? - isize::try_from(old.len()).ok()?;
+    let (old_suffix, new_suffix) = (old.len() - suffix, text.len() - suffix);
+    let cut = previous
+        .line_at_byte(prefix.saturating_sub(1))
+        .saturating_sub(1);
+    let start = previous.line_start(cut)?;
+    if start > prefix || !text.is_char_boundary(start) {
+        return None;
+    }
+    if clip(previous.marks(), 0, start) != clip(marks, 0, start) {
+        return None;
+    }
+    // The lines of `previous` a window may meet again: past the edit, and
+    // with the same marks after it. Each with where it starts now.
+    let same_after =
+        clip(previous.marks(), old_suffix, old.len()) == clip(marks, new_suffix, text.len());
+    let meets: Vec<(usize, usize)> = if same_after {
+        (cut + 1..previous.line_count())
+            .filter_map(|line| {
+                let at = previous.line_start(line).filter(|at| *at >= old_suffix)?;
+                Some((line, at.checked_add_signed(delta)?))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    // Only the paragraph's first line is indented, and it is kept unless
+    // the window starts there.
+    let mut window_style = style.clone();
+    if cut > 0 {
+        window_style.indent_first_px = 0.0;
+    }
+    if let Some(&(_, end)) = meets
+        .get(REACH)
+        .filter(|&&(_, end)| (end - start) * WINDOW_SHARE <= text.len() - start)
+    {
+        let window = shape(
+            text.get(start..end)?,
+            &clip(marks, start, end),
+            &window_style,
+        );
+        // The window's last line ends where its text ends, not where the
+        // paragraph would break it, so it never answers.
+        let met = (1..window.len().saturating_sub(1)).find_map(|local| {
+            let at = start + window.get(local)?.text_range().start;
+            let found = meets.binary_search_by_key(&at, |&(_, now)| now).ok()?;
+            let &(line, _) = meets.get(found)?;
+            Some(Resume {
+                kept: local,
+                line,
+                delta,
+            })
+        });
+        if met.is_some() {
+            return ParleyRunData::with_window(previous, cut, (text, marks), window, met);
+        }
+    }
+    let window = shape(
+        text.get(start..)?,
+        &clip(marks, start, text.len()),
+        &window_style,
+    );
+    ParleyRunData::with_window(previous, cut, (text, marks), window, None)
+}
+
+/// The spans of `spans` over the bytes `from..to`, cut to them and counted
+/// from `from`.
+fn clip(spans: &[MarkedSpan], from: usize, to: usize) -> Vec<MarkedSpan> {
+    spans
+        .iter()
+        .filter(|span| span.start < to && span.end > from)
+        .map(|span| MarkedSpan {
+            start: span.start.max(from) - from,
+            end: span.end.min(to) - from,
+            ..*span
+        })
+        .collect()
 }
 
 /// Shape a draft the way the block it is typed into was shaped
@@ -767,6 +907,78 @@ mod tests {
             run = next;
         }
         assert!(partial > 10, "the shortcut was taken {partial} times");
+    }
+
+    /// `PROSE-128`: an edit near the start of a long paragraph shapes a
+    /// few lines around it and keeps the rest, moved by what it added. The
+    /// run still breaks, draws and places its caret as a whole shape does.
+    #[test]
+    fn an_edit_near_the_start_shapes_a_few_lines_and_keeps_the_rest() {
+        let mut measurer = super::shipped_measurer();
+        let style = style();
+        let width = 300.0;
+        let base = LONG.repeat(12);
+        let bold = |text: &str| {
+            vec![MarkedSpan {
+                start: text.len() - 200,
+                end: text.len() - 100,
+                bold: true,
+                ..MarkedSpan::default()
+            }]
+        };
+        let (_, _, run) =
+            measurer.measure_with_lines((&base, &bold(&base)), &style, width, &[], None);
+        assert!(run.data().line_count() > 20);
+        // A letter, one in the first line, and two accented ones. A key
+        // moves a word or two, and a few lines take it back. An erased
+        // word and a pasted phrase can move every break after them, and the
+        // rest of the paragraph is shaped.
+        let edits: [(usize, &str, usize, usize); 5] = [
+            (30, "x", 0, 4),
+            (45, "", 6, usize::MAX),
+            (3, "q", 0, 4),
+            (50, "\u{e9}\u{e8}", 0, 4),
+            (60, " averyveryverylongwordindeed ", 0, usize::MAX),
+        ];
+        for (at, insert, erase, most) in edits {
+            let mut text = base.clone();
+            text.replace_range(at..at + erase, insert);
+            let marks = bold(&text);
+            let (metrics, _, windowed) =
+                measurer.measure_with_lines((&text, &marks), &style, width, &[], Some(&run));
+            let (whole_metrics, _, whole) =
+                measurer.measure_with_lines((&text, &marks), &style, width, &[], None);
+            let fresh = windowed.data().fresh_lines(run.data());
+            assert!(fresh <= most, "{fresh} lines shaped for an edit at {at}");
+            assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
+            assert_eq!(
+                picture(&windowed),
+                picture(&whole),
+                "lines after an edit at {at}"
+            );
+        }
+    }
+
+    /// `PROSE-128`: a mark changed after the edit is drawn: the window
+    /// runs to the end rather than keep lines shaped without it.
+    #[test]
+    fn a_mark_changed_past_the_edit_is_shaped_again() {
+        let mut measurer = super::shipped_measurer();
+        let style = style();
+        let text = LONG.repeat(12);
+        let (_, _, run) = measurer.measure_with_lines((&text, &[]), &style, 300.0, &[], None);
+        let edited = format!("x{text}");
+        let marks = [MarkedSpan {
+            start: edited.len() - 300,
+            end: edited.len() - 10,
+            bold: true,
+            ..MarkedSpan::default()
+        }];
+        let (_, _, windowed) =
+            measurer.measure_with_lines((&edited, &marks), &style, 300.0, &[], Some(&run));
+        let (_, _, whole) =
+            measurer.measure_with_lines((&edited, &marks), &style, 300.0, &[], None);
+        assert_eq!(picture(&windowed), picture(&whole));
     }
 
     /// `PROSE-128`: a style or a width that changed shapes the run whole.

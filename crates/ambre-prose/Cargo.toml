@@ -102,5 +102,11 @@ harness = false
 name = "keystroke"
 harness = false
 
+# Holds the "Text layout" row for a Prose paragraph by a count of instructions
+# under callgrind, through `scripts/instructions.py` (`PROSE-UI-215`).
+[[bench]]
+name = "instructions"
+harness = false
+
 [lints]
 workspace = true

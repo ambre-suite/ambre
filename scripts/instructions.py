@@ -75,6 +75,14 @@ CEILINGS = [
         row="Toile body commit, both diffs at their cap (the bound, not a budget)",
         ceiling=6_500_000,
     ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="paragraph_shape",
+        symbol="ambre_budget_prose_paragraph_shape",
+        row="Text layout (Parley, dirty paragraph), a key moving every break of 500 characters (< 2 ms)",
+        ceiling=2 * PER_MS,
+    ),
 ]
 
 

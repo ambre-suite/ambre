@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::events::{BlockId, tree_id};
 use crate::input::ProseInput;
-use crate::layout::measure::{MarkedSpan, shape_paragraph};
+use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use crate::layout::run::{ShapedRun, TableShape};
 use crate::ui::{ProseUiState, chars};
 use crate::view::hit::{Fragment, fragment};
@@ -292,14 +292,17 @@ impl ProseUiState {
                     caret,
                 });
             }
-            let layout = shape_paragraph(
+            // Only the lines around the draft are shaped again; the rest of
+            // the laid run is kept (`PROSE-UI-215`).
+            let run = reshape_paragraph(
                 font_cx,
                 layout_cx,
+                laid,
                 (&text, &marks),
                 &style,
                 style.text_width_px(width),
             );
-            runs.insert(block, ShapedRun::marked(&text, layout, &style, &marks));
+            runs.insert(block, run);
         }
         self.provisional = Provisional {
             key: Some(key),

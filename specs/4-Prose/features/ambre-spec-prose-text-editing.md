@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-206` | `OBS` | A deletion MUST NOT take off the screen the text typed before it that no layout carries yet. | this spec section 3 | `ambre_prose::input_tests::a_deletion_leaves_the_text_typed_before_it_drawn` | none | verified |
 | `PROSE-UI-203` | `OBS` | The paragraph a split opens MUST be drawn, with the text typed into it, before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::the_paragraph_a_split_opens_is_drawn_before_the_answer` | none | verified |
 | `PROSE-UI-213` | `OBS` | Text typed into a table cell MUST be drawn in the cell before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_in_a_cell_is_drawn_before_the_document_answers` | none | verified |
-| `PROSE-UI-215` | `INV` | Shaping a paragraph of up to 2 000 characters that an edit in flight changes MUST hold the text layout budget in the browser. A longer one is shaped all the same, at its own cost. | this spec section 3; `ambre-spec-budgets.md section 2` | none | unheld -- `scripts/keystroke_probes.mjs` reads the `ambre:shape-draft` probe by hand on a desktop, never on the slow devices the budget names, and no threshold fails a build; lands with the `The performance budgets given a mechanism` Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-UI-215` | `INV` | Shaping a paragraph of up to 500 characters that an edit in flight changes MUST hold the text layout budget, whatever lines the edit moves. A longer one is shaped all the same, at its own cost. | this spec section 3; `ambre-spec-budgets.md section 2` | callgrind -- the `paragraph_shape` operation of `crates/ambre-prose/benches/instructions.rs`, under its ceiling in the CI `instructions` job | none | verified |
 
 ### 1.2 Type a run of text
 
@@ -100,8 +100,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 44 `verified`, 1 `untested`. `PROSE-101` reads two tests,
-  because the paragraph the caret started in is the one a deletion does not remove.
+* **Verification.** 45 `verified`. `PROSE-101` reads two tests, because the paragraph the caret
+  started in is the one a deletion does not remove.
 
 ---
 
@@ -151,10 +151,15 @@ impl DraftBuffer {
 }
 ```
 
-**The provisional paragraph.** The UI thread shapes each block the draft changes again, whole,
-with the Logic thread's function and faces. Its lines break where the answer's will
-(`PROSE-UI-201`). A deleted range is gone from it (`PROSE-UI-202`), and text typed before the
-deletion stays (`PROSE-UI-206`). The blocks below move by what it grew.
+**The provisional paragraph.** The UI thread shapes each block the draft changes again, with the
+Logic thread's function and faces. Its lines break where the answer's will (`PROSE-UI-201`).
+A deleted range is gone from it (`PROSE-UI-202`), and text typed before the deletion stays
+(`PROSE-UI-206`). The blocks below move by what it grew.
+
+The view shapes a window from the line before the edit, and keeps the laid lines on both sides.
+The window stops where a line starts again where a laid one started. A key most often moves a word
+that the next lines take back, so the window is a few lines long. When it meets no laid line, the
+rest of the paragraph is shaped once, which `PROSE-UI-215` budgets.
 
 A split draws its block parted and the paragraph it opens below, with the text held behind it
 (`PROSE-UI-203`). A press there lands in the new block (`PROSE-UI-214`). A cell's paragraph is

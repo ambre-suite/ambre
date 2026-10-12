@@ -72,7 +72,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-100` | `POST` | A partial reflow MUST stop at the first later block whose page and page-relative position are what they already were. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_produces_what_a_full_recomputation_would_have` -- the tail it reuses past the stop is compared entry for entry with the tail a full run places | none | verified |
 | `PROSE-035` | `POST` | An edit that inserts or removes a footnote reference MUST force a full recomputation: the incremental path MUST NOT leave an ordinal or a page reservation stale. | this spec section 2 | `ambre_prose::layout::footnote_pages::a_call_added_or_removed_lays_out_what_a_full_recomputation_would` | none | verified |
 | `PROSE-127` | `POST` | A reflow after text typed alone MUST produce the layout a full recomputation would, the text typed in a note or in a block that calls one included. | this spec section 2 | `ambre_prose::layout::footnote_pages::text_typed_anywhere_lays_out_what_a_full_recomputation_would` | none | verified |
-| `PROSE-128` | `POST` | A block re-shaped from the line before an edit MUST break, draw and place its caret as the same block shaped whole. | this spec section 2 | `ambre_prose::layout::measure::tests::a_run_shaped_from_the_edit_on_matches_one_shaped_whole`; `ambre_prose::layout::measure::tests::a_new_width_shapes_the_run_whole` | none | verified |
+| `PROSE-128` | `POST` | A block re-shaped from the line before an edit, the lines around it kept, MUST break, draw and place its caret as the same block shaped whole. | this spec section 2 | `ambre_prose::layout::measure::tests::a_run_shaped_from_the_edit_on_matches_one_shaped_whole`; `ambre_prose::layout::measure::tests::a_new_width_shapes_the_run_whole`; `ambre_prose::layout::measure::tests::an_edit_near_the_start_shapes_a_few_lines_and_keeps_the_rest`; `ambre_prose::layout::measure::tests::a_mark_changed_past_the_edit_is_shaped_again` | none | verified |
 | `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_page_box_change_forces_a_full_recomputation`; `ambre_prose::layout::reflow::tests::a_document_default_change_forces_a_full_recomputation`; `ambre_prose::logic::tests::a_snapshot_import_lays_the_document_out_again` | none | verified |
 | `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_does_not_shape_a_block_it_was_not_told_about` -- it counts the runs shaped, so a reflow that re-shaped an untouched block fails it | none | verified |
 | `PROSE-123` | `POST` | A layout taken after an edit MUST re-shape the blocks the edit wrote, whether the edit is local or arrived from another peer, and whoever named them. | this spec section 2 | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into`; `ambre_prose::view::tests::an_edit_from_another_peer_reshapes_the_block_it_wrote` | none | verified |
@@ -307,8 +307,10 @@ other edit reads them on each reflow.
 
 Inside an edited block, the shaping stops short of the whole paragraph. Lines break greedily, so
 an edit cannot move a break two lines above it. The block is shaped again from the line before the
-edited one, and keeps the glyphs of the lines above (`PROSE-128`). A new width or style, a mark
-changed above the cut, justified or right-to-left text, and an `AtLeast` line height shape it whole.
+edited one, and keeps the glyphs of the lines above (`PROSE-128`). Once a new line starts where an
+old one started past the edit, every break after it is the old one. The window stops there, and
+the old lines follow, moved by what the edit added. A new width or style, a mark changed above the
+cut, justified or right-to-left text, and an `AtLeast` line height shape it whole.
 
 **The same measurement on every device.** A layout is a function of the text, the page box and
 the faces it was measured on. The first two are shared through the CRDT and the third is not, so
