@@ -72,6 +72,7 @@ def scratch(tmp: str) -> Path:
         ".label {\n    display: none;\n}\n\n@media (min-width: 600px) {\n    .label {\n"
         "        display: inline;\n    }\n}\n",
     )
+    write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     return root
 
 
@@ -97,6 +98,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_widths(errors)
             cb.check_modals_and_drags(errors)
             cb.check_key_verification(errors)
+            cb.check_accessibility(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -200,6 +202,36 @@ class CrateBoundaries(unittest.TestCase):
         errors = self.breach("crates/ambre-app/src/shell/app_root.rs", text)
         self.assertTrue(any("past the trust decision" in e for e in errors), errors)
         self.assertEqual(self.breach(cb.INVITE_OWNER, text), [])
+
+    def test_a_two_state_attribute_that_drops_false_is_refused(self):
+        bad = 'view! { <button aria-pressed=move || on.get().then_some("true") /> }\n'
+        errors = self.breach("crates/ambre-chrome/src/format.rs", bad)
+        self.assertTrue(any("drops its false state" in e for e in errors), errors)
+        good = "view! { <button aria-pressed=move || aria_bool(on.get()) /> }\n"
+        self.assertEqual(self.breach("crates/ambre-chrome/src/format.rs", good), [])
+
+    def test_a_panel_claiming_a_modal_role_is_refused(self):
+        text = 'view! { <div class="sort" role="dialog" aria-label="Sort" /> }\n'
+        errors = self.breach("crates/ambre-trame/src/chrome/sort_dialog.rs", text)
+        self.assertTrue(any("claiming a modal role" in e for e in errors), errors)
+        self.assertEqual(self.breach(cb.MODAL_OWNER, 'view! { <section role="dialog" /> }\n'), [])
+
+    def test_a_menu_without_keys_is_refused(self):
+        bare = 'view! { <ul role="menu"><li role="menuitem" /></ul> }\n'
+        errors = self.breach("crates/ambre-app/src/landing.rs", bare)
+        self.assertTrue(any("a menu with no keyboard" in e for e in errors), errors)
+        driven = bare + "fn key(ev: &E, m: &M) { on_menu_keydown(ev, m, || ()); }\n"
+        self.assertEqual(self.breach("crates/ambre-app/src/landing.rs", driven), [])
+
+    def test_a_hidden_or_unordered_pipe_is_refused(self):
+        for text, said in (
+            ('fn create() {\n    for (k, v) in [("tabindex", "-1")] {}\n}\n', "leave the tab order"),
+            ('fn create() {\n    t.set_attribute("aria-hidden", "true");\n    ("tabindex", "0");\n}\n', "hidden"),
+        ):
+            errors = self.breach(cb.PIPE, text)
+            self.assertTrue(any(said in e for e in errors), (text, errors))
+        commented = '// NOT `aria-hidden`: the pipe is the entry point.\nfn create() { ("tabindex", "0"); }\n'
+        self.assertEqual(self.breach(cb.PIPE, commented), [])
 
     def test_a_renderer_clearing_to_its_own_colour_is_refused(self):
         import tempfile

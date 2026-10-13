@@ -150,7 +150,7 @@ pub fn FindReplace(
                         <button
                             class="ambre-find-toggle"
                             aria-label=move || if replace_mode { "Hide replace" } else { "Show replace" }
-                            aria-expanded=move || replace_mode.then_some("true")
+                            aria-expanded=move || ambre_chrome::aria_bool(replace_mode)
                             on:click=move |_| toggle_mode()
                         >
                             <Icon icon=move || if replace_mode {

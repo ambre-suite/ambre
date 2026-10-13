@@ -199,22 +199,44 @@ pub fn SheetTabs(
             .collect_view()
     };
 
-    // The per-tab context menu, anchored at the click point.
+    // The per-tab context menu, anchored at the click point. It takes the focus
+    // when it opens and answers the shared menu keys (`CHROME-026`).
+    let menu_ref = NodeRef::<leptos::html::Ul>::new();
+    Effect::new(move |_| {
+        if let Some(list) = menu_ref.get() {
+            ambre_chrome::focus_first_item(&list);
+        }
+    });
     let context_menu = move || {
         menu.get().map(|(id, x, y)| {
             let style = format!("position: fixed; left: {x}px; top: {y}px; z-index: 60;");
             let id_rename = id.clone();
             let id_delete = id.clone();
             view! {
-                <ul class="ambre-tab-menu" role="menu" style=style>
+                <ul
+                    class="ambre-tab-menu"
+                    role="menu"
+                    style=style
+                    node_ref=menu_ref
+                    on:keydown=move |ev| {
+                        if let Some(list) = menu_ref.get_untracked() {
+                            ambre_chrome::on_menu_keydown(&ev, &list, || menu.set(None));
+                        }
+                    }
+                >
                     <li role="none">
-                        <button role="menuitem" on:click=move |_| start_rename(id_rename.clone())>
+                        <button
+                            role="menuitem"
+                            tabindex="-1"
+                            on:click=move |_| start_rename(id_rename.clone())
+                        >
                             "Rename"
                         </button>
                     </li>
                     <li role="none">
                         <button
                             role="menuitem"
+                            tabindex="-1"
                             on:click=move |_| {
                                 menu.set(None);
                                 on_delete.run(id_delete.clone());

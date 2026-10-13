@@ -205,6 +205,18 @@ CRYPTO_HOLDERS = ("crates/ambre-crypto/Cargo.toml", "crates/ambre-sync/Cargo.tom
 CRYPTO_FIXTURES = "crates/ambre-logic/Cargo.toml"
 INVITE = re.compile(r"\bInviteToDocument\b")
 INVITE_OWNER = "crates/ambre-app/src/tofu.rs"
+# A two-state ARIA attribute written so that its false state vanishes, a
+# panel claiming to be a modal, a rendered menu, and what drives one from the
+# keyboard (`ambre-spec-accessibility.md`).
+TWO_STATE_OMITTED = re.compile(r"aria-(?:pressed|expanded|checked|selected)\s*=[^\n]*\bthen_some\b")
+PANEL_MODAL = re.compile(r'role\s*=\s*"(?:alert)?dialog"|\baria-modal\b')
+MENU_ROLE = re.compile(r'role\s*=\s*"menu"')
+MENU_KEYS = re.compile(r"\bon_menu_keydown\b|\bmenu_key\b")
+# The content's keyboard pipe, the order it must sit in, and what would take
+# it out of the order or out of the accessibility tree.
+PIPE = "crates/ambre-canvas/src/text_input.rs"
+PIPE_ORDER = '("tabindex", "0")'
+PIPE_HIDDEN = re.compile(r"\baria-hidden\b|\binert\b|\"tabindex\",\s*\"-")
 # What holding the document looks like: a CRDT container, an export, or an
 # engine's state. A tree node's identifier is an address, not the document.
 ENGINE = re.compile(
@@ -724,6 +736,42 @@ def check_key_verification(errors: list[str]) -> int:
     return len(manifests) + len(files)
 
 
+def check_accessibility(errors: list[str]) -> int:
+    """`CHROME-025`, `-026`, `-028`, `-066`, `-067`, `-068`, `-070`: what a control may spell.
+
+    A two-state attribute always carries a value. Only the shared dialog
+    claims a modal role, so every modal is the platform's own. A file that
+    renders a menu drives it from the keyboard. The pipe stays in the tab
+    order and in the accessibility tree.
+    """
+    files = sources(UI_THREAD)
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        lines = above_tests(path)
+        for number, line in lines:
+            found = TWO_STATE_OMITTED.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a two-state attribute that drops its false state: `{found.group(0)}`")
+            found = PANEL_MODAL.search(line)
+            if found and rel != MODAL_OWNER:
+                errors.append(f"{rel}:{number}: a panel claiming a modal role: `{found.group(0)}`")
+        menus = [number for number, line in lines if MENU_ROLE.search(line)]
+        if menus and not any(MENU_KEYS.search(line) for _, line in lines):
+            errors.append(f"{rel}:{menus[0]}: a menu with no keyboard: it names neither `on_menu_keydown` nor `menu_key`")
+    pipe = ROOT / PIPE
+    if not pipe.exists():
+        errors.append(f"{PIPE}: gone from the tree, so the pipe's order and visibility are unread")
+        return len(files)
+    lines = above_tests(pipe)
+    if not any(PIPE_ORDER in line for _, line in lines):
+        errors.append(f"{PIPE}: the pipe no longer sets `{PIPE_ORDER}`, so it may leave the tab order")
+    for number, line in lines:
+        found = PIPE_HIDDEN.search(line)
+        if found:
+            errors.append(f"{PIPE}:{number}: the pipe is hidden or taken out of the order: `{found.group(0)}`")
+    return len(files) + 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -748,6 +796,7 @@ def main() -> int:
     widths = check_widths(errors)
     controls = check_modals_and_drags(errors)
     keys = check_key_verification(errors)
+    access = check_accessibility(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -766,7 +815,8 @@ def main() -> int:
         f"{subset} sources read for a compute pass or a storage buffer, "
         f"{widths} files read for a width spelled twice, "
         f"{controls} files read for a modal, a drag or a named creation, "
-        f"{keys} manifests and files read for a key hash or an invitation"
+        f"{keys} manifests and files read for a key hash or an invitation, "
+        f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe"
     )
     for line in errors:
         print(f"  {line}")
@@ -788,7 +838,9 @@ def main() -> int:
             "from the named paths, no shader leaves the shared subset, the "
             "chrome's widths live in one stylesheet, one file renders the modal, "
             "a drag control debounces, a document is created unnamed, the worker "
-            "alone hashes a key, and an invitation waits on the trust decision.",
+            "alone hashes a key, an invitation waits on the trust decision, a "
+            "two-state attribute says false, only the shared dialog is a "
+            "modal, a menu answers the keyboard, and the pipe stays reachable.",
             file=sys.stderr,
         )
         return 1

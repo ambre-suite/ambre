@@ -101,7 +101,13 @@ pub fn SortDialog(
         close();
     };
 
-    move || {
+    // The shared modal traps the focus and leaves the sheet inert
+    // (`CHROME-028`, `CHROME-068`). Its signal follows the snapshot, and a
+    // native close, Escape or the backdrop, clears the snapshot.
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(state.get().is_some()));
+
+    let body = move || {
         state.get().map(|st| {
             // The selection's columns, offered as range-relative options
             // (value = index within the range, label = absolute A1 column).
@@ -111,8 +117,7 @@ pub fn SortDialog(
             let cols = StoredValue::new(cols);
 
             view! {
-                <div class="ambre-sort-backdrop" on:click=move |_| close()></div>
-                <div class="ambre-sort-dialog" role="dialog" aria-label="Sort range">
+                <div class="ambre-sort-dialog">
                     <div class="ambre-sort-title">
                         <span class="ambre-sort-heading">"Sort range"</span>
                         <button class="ambre-sort-close" aria-label="Close" on:click=move |_| close()>
@@ -202,5 +207,16 @@ pub fn SortDialog(
                 </div>
             }
         })
+    };
+
+    view! {
+        <ambre_chrome::Dialog
+            open=open
+            class="ambre-sort-modal"
+            label="Sort range"
+            on_close=Callback::new(move |()| close())
+        >
+            {body}
+        </ambre_chrome::Dialog>
     }
 }

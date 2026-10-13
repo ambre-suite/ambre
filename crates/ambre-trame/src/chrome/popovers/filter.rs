@@ -97,14 +97,14 @@ pub fn FilterPopover(
                     <div class="ambre-filter-modes">
                         <button
                             class="mode"
-                            aria-pressed=move || by_values.get().then_some("true")
+                            aria-pressed=move || ambre_chrome::aria_bool(by_values.get())
                             on:click=move |_| by_values.set(true)
                         >
                             "By values"
                         </button>
                         <button
                             class="mode"
-                            aria-pressed=move || (!by_values.get()).then_some("true")
+                            aria-pressed=move || ambre_chrome::aria_bool(!by_values.get())
                             on:click=move |_| by_values.set(false)
                         >
                             "By condition"

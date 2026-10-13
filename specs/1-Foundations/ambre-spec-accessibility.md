@@ -1,8 +1,9 @@
 # AMBRE -- FEATURE: ACCESSIBILITY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the chrome uses the platform's own patterns. Each application mirrors
-its focused unit into the page, under a name for its own kind of document.
+**Implementation:** partial -- the chrome uses the platform's own patterns, every modal is the
+platform's, and one key map drives every menu. Each application mirrors its focused unit into the
+page, under a name for its own kind of document.
 
 > What a screen reader and a keyboard reach. The chrome is DOM, so it inherits the platform's
 > accessibility for free. The content is pixels we drew, so it reaches assistive technology only
@@ -22,32 +23,33 @@ other five documents of the DOM side.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-006` | `INV` | A toast MUST be announced to a screen reader. | this spec section 2 | `ambre_chrome::chrome_ui::toast_host_is_an_aria_live_region` -- it reads the host's role and its politeness back off a real `document`, so a host that stopped being a live region fails | none | verified |
-| `CHROME-065` | `INV` | Announcing a toast MUST NOT move focus. | this spec section 2, the pattern table; this spec section 3, row 4 | none | unheld -- the host is a polite live region, which is the mechanism that makes the rule true, and no test in the belt reads the focused element at all, before or after a toast; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-065` | `INV` | Announcing a toast MUST NOT move focus. | this spec section 2, the pattern table; this spec section 3, row 4 | `ambre_chrome::chrome_ui::a_toast_leaves_the_focus_where_it_was` -- it focuses a control, raises a toast, and reads the focused element back once the toast is in the page | none | verified |
 | `CHROME-022` | `INV` | A control carrying no text MUST carry an accessible name. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- its first assertion reads the accessible name off an icon-only toggle | none | verified |
-| `CHROME-066` | `INV` | A control with two states MUST report which one it is in. | this spec section 2 | none | unheld -- the same test asserts only that an unpressed toggle carries no pressed state. It raises the signal and never reads the element again, because the re-render lands on a later microtask, so a toggle that never reported pressed would pass; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-066` | `INV` | A control with two states MUST report which one it is in. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- it reads the pressed state at false, after the signal rises, and after it falls; ci-gate -- `scripts/crate_boundaries.py` refuses a pressed, expanded, checked or selected state written so that false drops the attribute | none | verified |
 | `CHROME-069` | `INV` | A menu trigger MUST declare that it opens a menu. | this spec section 2, the pattern table | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed` -- it reads the trigger's popup declaration off the mounted button | none | verified |
-| `CHROME-070` | `INV` | A menu trigger MUST report whether it is open. | this spec section 2, the pattern table | none | unheld -- the same test checks that the menu element is absent on mount, which is the DOM and not the declaration a screen reader reads, and nothing asserts the expanded state at either value; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-070` | `INV` | A menu trigger MUST report whether it is open. | this spec section 2, the pattern table | `ambre_chrome::chrome_ui::a_menu_trigger_reports_open_and_closed` -- it reads the expanded state at false, after a click opens the menu, and after a second click closes it; ci-gate -- the same refusal of a state whose false drops the attribute | none | verified |
 | `CHROME-023` | `OBS` | The focused unit of drawn content MUST be announced, in every application that draws content. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-009` | `ambre_trame::ui::view::tests::the_active_cell_is_announced_by_reference_and_value` -- the grid says the cell and its value, or that it is empty; `ambre_toile::ui::a11y::tests::a_board_announces_its_selection` -- one element by its kind and text, several by their count; `ambre_toile::ui::a11y::tests::an_element_is_announced_once_its_data_arrives_and_never_whole` -- a lone element waits for its data, and a long body is cut; `ambre_prose::view::a11y::tests::a_page_announces_the_block_at_the_caret` -- the block at the caret by its kind and text | none | verified |
 | `CHROME-024` | `OBS` | The name the content announces MUST describe the kind of document the view holds. | this spec section 2 | `ambre_canvas::text_input::tests::only_the_spreadsheet_names_itself_a_cell` -- three kinds, three names, and only the grid says it is a cell | none | verified |
-| `CHROME-025` | `INV` | The element that carries content focus MUST stay in the page's tab order. | this spec section 2; `ambre-spec-text-input.md` | none | unheld -- the pipe is created focusable, which is what makes it the content's entry point as well as its keyboard. Nothing refuses the change that would take it out of the order; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-067` | `INV` | The element that carries content focus MUST NOT be hidden from assistive technology. | this spec section 2; `ambre-spec-text-input.md` | none | unheld -- the pipe is never marked hidden, so the rule holds by absence. Nothing refuses the hidden marking that an element drawn as nothing invites, and `CHROME-059` is the style that invites it; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-026` | `INV` | A menu MUST be fully operable from the keyboard: move, jump to an end, jump by first letter, choose, and dismiss. | this spec section 2 | none | unheld -- the rule holds for one menu of two: the shared menu implements all five, and the launcher's document-type menu carries the roles with no key handling at all. No test drives either; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-025` | `INV` | The element that carries content focus MUST stay in the page's tab order. | this spec section 2; `ambre-spec-text-input.md` | ci-gate -- `scripts/crate_boundaries.py` refuses a pipe that no longer sets a zero tab index, or sets a negative one or `inert` | none | verified |
+| `CHROME-067` | `INV` | The element that carries content focus MUST NOT be hidden from assistive technology. | this spec section 2; `ambre-spec-text-input.md` | ci-gate -- `scripts/crate_boundaries.py` refuses `aria-hidden` and `inert` in the pipe's code, comments aside | none | verified |
+| `CHROME-026` | `INV` | A menu MUST be fully operable from the keyboard: move, jump to an end, jump by first letter, choose, and dismiss. | this spec section 2 | `ambre_chrome::chrome_ui::a_menu_is_operable_by_keyboard_alone` -- the zoom menu takes the focus, the arrows move and wrap, Enter chooses and Escape closes; `ambre_app::landing::tests::the_type_menu_is_operable_by_keyboard_alone` -- End, a first letter read from the item's name, Enter and Escape; `ambre_chrome::menu::tests::a_letter_jumps_to_the_next_item_it_starts` -- the shared key map, Home and End beside it; ci-gate -- `scripts/crate_boundaries.py` refuses a file that renders a menu and names no key handler | none | verified |
 | `CHROME-027` | `INV` | Closing a floating menu MUST return focus to what opened it. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-004` | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Focus moves into the menu and nothing puts it back, so dismissal leaves a keyboard user on the page body | unimplemented |
-| `CHROME-028` | `INV` | A modal MUST trap focus. | this spec section 2 | none | unheld -- every modal in the suite is opened through the platform's own modal call, so the trap is the browser's rather than ours. Nothing refuses a panel styled as a modal and opened as an ordinary element; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-068` | `INV` | A modal MUST make the rest of the page inert. | this spec section 2 | none | unheld -- same call, same absence: the inertness comes with the platform's modal and nothing asserts that the element behind it stops taking a click or a Tab; lands with the `Accessibility held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-028` | `INV` | A modal MUST trap focus. | this spec section 2 | `ambre_chrome::chrome_ui::an_open_modal_traps_the_focus_and_makes_the_page_inert` -- the focus moves inside on open and a control behind cannot take it; ci-gate -- `scripts/crate_boundaries.py` refuses a dialog role or `aria-modal` outside the shared dialog, so no panel poses as a modal | none | verified |
+| `CHROME-068` | `INV` | A modal MUST make the rest of the page inert. | this spec section 2 | `ambre_chrome::chrome_ui::an_open_modal_traps_the_focus_and_makes_the_page_inert` -- the control behind refuses the focus while the modal is open and takes it once it closes; ci-gate -- the same refusal of a panel posing as a modal | none | verified |
 | `CHROME-029` | `INV` | Drawn content MUST NOT be the only carrier of a state: a state the user needs MUST also reach the page. | this spec section 2 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6). The selection, the active tool, the sync state and the presence of collaborators are drawn, and only the last two also exist as chrome | unimplemented |
 
 * **Budget.** none: an announcement is a text write into a hidden element, off the frame path, and
   `ambre-spec-budgets.md` budgets no chrome operation.
 * **Boundary.** none: an announcement carries what the user already sees on their own screen, into
   their own page. It reaches no relay and crosses no thread.
-* **Verification.** 5 `verified`, 8 `untested`, 2 `unimplemented`. Every row is an `INV` or an
-  `OBS`. This document owns no gesture, the components belong to `ambre-spec-chrome.md`, and the
-  announcement belongs to the view that draws.
+* **Verification.** 13 `verified`, 2 `unimplemented`. Every row is an `INV` or an `OBS`. This
+  document owns no gesture, the components belong to `ambre-spec-chrome.md`, and the announcement
+  belongs to the view that draws.
 
-  Three verified rules are read off a mounted component. The two content rules are held by the
-  text each view composes and the name each kind carries. The write into the page is one call no
-  test observes. Everything else needs an assistive technology attached, and no tier drives one
+  The chrome rules are read off a mounted component: its states at both values, its focus, and a
+  menu driven by keys alone. Three absences hold by gate: a state that drops false, a panel posing
+  as a modal, and a pipe hidden or out of the order. The two content rules are held by the text
+  each view composes. What a screen reader says needs one attached, and no tier drives one
   (`ambre-spec-testing.md section 8`).
 ---
 
@@ -150,15 +152,13 @@ editor is drawn and says nothing, which is `CHROME-029`.
 * **Nothing states what the content owes beyond the focused unit.** A screen-reader user cannot ask
   "what is in this column". Only the focused unit exists in the page.
 * **No test in any tier drives an assistive technology.** The wasm tier mounts a component and reads
-  its attributes, which is what holds `CHROME-006` and `CHROME-022`. Nothing observes what a screen
+  its attributes and its focus, which is what holds the chrome rows. Nothing observes what a screen
   reader actually says, and nothing walks the page for an unnamed control.
 * **There is no keyboard route into the content on some paths.** Reaching the pipe requires it to
   be in the tab order, which it is. Nothing states what happens for a view whose content is not
   editable. A board with a shape selected has no text box to focus.
 * **Reduced motion, contrast and text scaling are unruled.** The tokens carry one palette pair and
   the animations are unconditional, and no row reads the user's own preferences for either.
-* **The document-type menu on the home screen has roles and no keys.** It declares itself a menu and
-  handles only a click, which is the one place `CHROME-026` fails inside our own toolkit's idiom.
 
 ---
 

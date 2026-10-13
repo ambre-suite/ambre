@@ -2379,28 +2379,19 @@ input[type="radio"] {
     margin-left: var(--space-14);
 }
 
-/* Multi-column sort dialog (`trame-sort`, "Sort range..."). A centered modal
-   over a dimmed click-to-close backdrop; ordered sort levels each pick a column
-   and a direction, with add/remove and a header-row toggle. */
-.ambre-sort-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 70;
-    background: var(--scrim);
-    backdrop-filter: blur(3px);
-}
-.ambre-sort-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 71;
+/* Multi-column sort dialog (`trame-sort`, "Sort range..."). The shared native
+   modal (`.ambre-dialog`) centres it over its click-to-close backdrop; ordered
+   sort levels each pick a column and a direction, with add/remove and a
+   header-row toggle. */
+.ambre-dialog.ambre-sort-modal {
     min-width: 360px;
     max-width: min(92vw, 460px);
-    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-high);
+}
+.ambre-dialog.ambre-sort-modal .ambre-dialog-body {
+    padding: 0;
+}
+.ambre-sort-dialog {
     padding: var(--space-7) var(--space-8);
     font-family: Roboto, system-ui, -apple-system, sans-serif;
     font-size: var(--font-ui);
@@ -2534,25 +2525,24 @@ input[type="radio"] {
 }
 
 /* ── Command palette (ambre-chrome::CommandPalette, CHROME-008) ───────────────
-   One overlay listing every command the active application declares. It sits
-   above the context menu (z-index 1001) because it can be opened over one, and
-   its own backdrop closes it on a click outside. */
-.ambre-palette-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1010;
-    /* The same veil the shared modal paints, so the two overlays read alike. */
-    background: var(--scrim);
-    backdrop-filter: blur(3px);
+   One overlay listing every command the active application declares. The
+   shared native modal carries it: the top layer puts it above the context
+   menu, and the modal's backdrop closes it on a click outside. Here the modal
+   sits high rather than centred, so the list grows downwards. */
+.ambre-dialog.ambre-palette-modal {
+    top: 12vh;
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - 32px));
+    max-width: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.ambre-dialog.ambre-palette-modal .ambre-dialog-body {
+    padding: 0;
 }
 
 .ambre-palette {
-    position: fixed;
-    z-index: 1011;
-    top: 12vh;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(560px, calc(100vw - 32px));
     display: flex;
     flex-direction: column;
     font-family: Roboto, system-ui, -apple-system, sans-serif;
@@ -2608,11 +2598,15 @@ input[type="radio"] {
 
 /* Phone: the palette takes the width and drops the top inset. */
 @media (max-width: 599px) {
-    .ambre-palette {
+    .ambre-dialog.ambre-palette-modal {
         top: 0;
         left: 0;
         transform: none;
         width: 100vw;
+        border-radius: 0;
+    }
+
+    .ambre-palette {
         border-radius: 0;
     }
 

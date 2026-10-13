@@ -49,6 +49,13 @@ pub fn ZoomChip(
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
     let presets = StoredValue::new(presets.unwrap_or_else(|| ZOOM_PRESETS.to_vec()));
     let title = title.unwrap_or_else(|| "Zoom".to_owned());
+    let menu_ref = NodeRef::<leptos::html::Ul>::new();
+    // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
+    Effect::new(move |_| {
+        if let Some(menu) = menu_ref.get() {
+            crate::menu::focus_first_item(&menu);
+        }
+    });
 
     view! {
         <div class="statusbar-zoom">
@@ -56,13 +63,22 @@ pub fn ZoomChip(
                 class="statusbar-zoom-btn"
                 title=title
                 aria-haspopup="menu"
-                aria-expanded=move || show.get().then_some("true")
+                aria-expanded=move || crate::menu::aria_bool(show.get())
                 on:click=move |_| show.update(|v| *v = !*v)
             >
                 {move || format!("{:.0} %", zoom.get() * 100.0)}
             </button>
             <Show when=move || show.get() fallback=|| ()>
-                <ul class="statusbar-zoom-menu" role="menu">
+                <ul
+                    class="statusbar-zoom-menu"
+                    role="menu"
+                    node_ref=menu_ref
+                    on:keydown=move |ev| {
+                        if let Some(menu) = menu_ref.get_untracked() {
+                            crate::menu::on_menu_keydown(&ev, &menu, || show.set(false));
+                        }
+                    }
+                >
                     {presets
                         .get_value()
                         .into_iter()
@@ -77,7 +93,7 @@ pub fn ZoomChip(
                                         role="menuitemradio"
                                         class="statusbar-zoom-item"
                                         class:selected=selected
-                                        aria-checked=move || selected().then_some("true")
+                                        aria-checked=move || crate::menu::aria_bool(selected())
                                         on:click=move |_| {
                                             zoom.set(z);
                                             show.set(false);

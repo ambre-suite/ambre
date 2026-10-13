@@ -18,6 +18,7 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
+use crate::menu::MenuKey;
 use crate::shortcut::Kbd;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -207,47 +208,23 @@ pub fn ContextMenu(
         let initials: Vec<char> = rows
             .iter()
             .filter_map(|e| match e {
-                MenuEntry::Item { label, .. } => {
-                    Some(label.chars().next().unwrap_or(' ').to_ascii_lowercase())
-                }
+                MenuEntry::Item { label, .. } => Some(crate::menu::initial(label)),
                 MenuEntry::Separator => None,
             })
             .collect();
 
-        let len = cmds.len();
+        // The shared key map decides; this menu keeps its own focus index
+        // because its items are commands, not clickable DOM handlers.
         let on_keydown = move |ev: web_sys::KeyboardEvent| {
-            let key = ev.key();
-            match key.as_str() {
-                "ArrowDown" => {
+            let at = focused.get_untracked();
+            match crate::menu::menu_key(&ev.key(), ev.shift_key(), at, &initials) {
+                MenuKey::Focus(i) => {
                     ev.prevent_default();
-                    focused.update(|i| *i = (*i + 1) % len.max(1));
+                    focused.set(i);
                 }
-                "ArrowUp" => {
+                MenuKey::Dismiss => pos.set(None),
+                MenuKey::Choose(i) => {
                     ev.prevent_default();
-                    focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
-                }
-                // Tab is trapped inside the menu (it is a transient popup): cycle
-                // like the arrows rather than letting focus escape to the page.
-                "Tab" => {
-                    ev.prevent_default();
-                    if ev.shift_key() {
-                        focused.update(|i| *i = (*i + len.saturating_sub(1)) % len.max(1));
-                    } else {
-                        focused.update(|i| *i = (*i + 1) % len.max(1));
-                    }
-                }
-                "Home" => {
-                    ev.prevent_default();
-                    focused.set(0);
-                }
-                "End" => {
-                    ev.prevent_default();
-                    focused.set(len.saturating_sub(1));
-                }
-                "Escape" => pos.set(None),
-                "Enter" | " " => {
-                    ev.prevent_default();
-                    let i = focused.get_untracked();
                     if disabled.get(i).copied().unwrap_or(false) {
                         return;
                     }
@@ -256,20 +233,7 @@ pub fn ContextMenu(
                     }
                     pos.set(None);
                 }
-                // First-letter typeahead: jump to the next item whose label
-                // starts with the typed character, wrapping around.
-                _ => {
-                    let mut chars = key.chars();
-                    if let (Some(ch), None) = (chars.next(), chars.next()) {
-                        let ch = ch.to_ascii_lowercase();
-                        let start = focused.get_untracked();
-                        if let Some(off) =
-                            (1..=len).find(|&o| initials.get((start + o) % len.max(1)) == Some(&ch))
-                        {
-                            focused.set((start + off) % len.max(1));
-                        }
-                    }
-                }
+                MenuKey::Pass => {}
             }
         };
 

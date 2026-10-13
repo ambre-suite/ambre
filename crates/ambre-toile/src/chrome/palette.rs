@@ -58,7 +58,7 @@ fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
     view! {
         <button
             aria-label=label
-            aria-pressed=move || is_active().then_some("true")
+            aria-pressed=move || ambre_chrome::aria_bool(is_active())
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| active.set(tool)
         >
@@ -107,8 +107,8 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
             <button
                 aria-label=registry::title(TOOL_STICKY, &Locale::En).unwrap_or_default()
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
-                aria-pressed=move || is_active().then_some("true")
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
+                aria-pressed=move || ambre_chrome::aria_bool(is_active())
                 on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| open.update(|o| *o = !*o)
             >

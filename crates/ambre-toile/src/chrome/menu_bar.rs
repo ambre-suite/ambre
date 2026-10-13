@@ -118,7 +118,8 @@ pub fn TopMenuBar(
             view! {
                 <button
                     aria-label=*title
-                    aria-pressed=move || (open_menu.get() == Some(id)).then_some("true")
+                    aria-haspopup="menu"
+                    aria-expanded=move || ambre_chrome::aria_bool(open_menu.get() == Some(id))
                     on:mousedown=move |ev| ev.prevent_default()
                     on:click=move |ev| {
                         if open_menu.get_untracked() == Some(id) {

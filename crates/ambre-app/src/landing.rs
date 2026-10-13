@@ -247,19 +247,35 @@ pub fn NewDocPicker(
     // Whether the type menu is expanded. A picked entry (or a re-click on the
     // button) collapses it.
     let open = RwSignal::new(false);
+    let menu_ref = NodeRef::<leptos::html::Ul>::new();
+    // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
+    Effect::new(move |_| {
+        if let Some(menu) = menu_ref.get() {
+            ambre_chrome::focus_first_item(&menu);
+        }
+    });
 
     view! {
         <div class="ambre-new-doc-picker">
             <button
                 class="ambre-new-doc"
                 aria-haspopup="menu"
-                aria-expanded=move || if open.get() { "true" } else { "false" }
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
                 on:click=move |_| open.update(|o| *o = !*o)
             >
                 "New document"
             </button>
             <Show when=move || open.get()>
-                <ul class="ambre-new-doc-menu" role="menu">
+                <ul
+                    class="ambre-new-doc-menu"
+                    role="menu"
+                    node_ref=menu_ref
+                    on:keydown=move |ev| {
+                        if let Some(menu) = menu_ref.get_untracked() {
+                            ambre_chrome::on_menu_keydown(&ev, &menu, || open.set(false));
+                        }
+                    }
+                >
                     {DocType::creatable()
                         .iter()
                         .map(|&doc_type| {
@@ -267,12 +283,14 @@ pub fn NewDocPicker(
                                 <li
                                     class="ambre-new-doc-option"
                                     role="menuitem"
+                                    tabindex="-1"
+                                    aria-label=doc_type.generic_label()
                                     on:click=move |_| {
                                         open.set(false);
                                         on_pick.run(doc_type);
                                     }
                                 >
-                                    <span class=format!(
+                                    <span aria-hidden="true" class=format!(
                                         "ambre-doc-icon ambre-doc-icon-{}",
                                         doc_type.name().to_lowercase(),
                                     )>{doc_type.icon()}</span>
@@ -698,6 +716,69 @@ mod tests {
             0
         );
 
+        container.remove();
+    }
+
+    /// Dispatch a bubbling keydown carrying `key` on `target`.
+    fn press(target: &web_sys::Element, key: &str) {
+        let init = web_sys::KeyboardEventInit::new();
+        init.set_key(key);
+        init.set_bubbles(true);
+        init.set_cancelable(true);
+        let ev =
+            web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init).unwrap();
+        target.dispatch_event(&ev).unwrap();
+    }
+
+    /// The type menu is driven by the keyboard alone: it takes the focus, End
+    /// and a letter move it, Enter picks, and Escape closes (`CHROME-026`).
+    #[wasm_bindgen_test]
+    async fn the_type_menu_is_operable_by_keyboard_alone() {
+        let owner = Owner::new();
+        owner.set();
+        let picks = RwSignal::new(Vec::<DocType>::new());
+        let on_pick = Callback::new(move |dt: DocType| picks.update(|v| v.push(dt)));
+        let container = mount_in_container(move || view! { <NewDocPicker on_pick=on_pick /> });
+        let button = container.query_selector(".ambre-new-doc").unwrap().unwrap();
+        let creatable = DocType::creatable();
+        let focused = || document().active_element();
+
+        click(&button);
+        tick().await;
+        let menu = container.query_selector("[role=menu]").unwrap().unwrap();
+        let options = menu.query_selector_all("[role=menuitem]").unwrap();
+        let at = |i: usize| options.item(i as u32).and_then(|n| n.dyn_into().ok());
+        assert_eq!(focused(), at(0), "the menu took the focus");
+
+        press(&menu, "End");
+        assert_eq!(focused(), at(creatable.len() - 1), "End jumped to the last");
+        // The letter answers to the type's word, not its monogram.
+        let last = creatable[creatable.len() - 1].generic_label();
+        let letter = last
+            .chars()
+            .next()
+            .unwrap()
+            .to_ascii_lowercase()
+            .to_string();
+        press(&menu, "Home");
+        press(&menu, &letter);
+        assert_eq!(focused(), at(creatable.len() - 1), "the letter found it");
+
+        press(&menu, "Enter");
+        tick().await;
+        assert_eq!(
+            picks.get_untracked().as_slice(),
+            &[creatable[creatable.len() - 1]]
+        );
+        assert!(container.query_selector("[role=menu]").unwrap().is_none());
+
+        click(&button);
+        tick().await;
+        let menu = container.query_selector("[role=menu]").unwrap().unwrap();
+        press(&menu, "Escape");
+        tick().await;
+        assert!(container.query_selector("[role=menu]").unwrap().is_none());
+        assert_eq!(picks.get_untracked().len(), 1, "Escape picked nothing");
         container.remove();
     }
 

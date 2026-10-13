@@ -315,8 +315,9 @@ async fn a_toggle_reports_its_click_and_waits_for_the_value() {
     leptos::task::tick().await;
     assert_eq!(clicks.get_untracked(), 1, "the click is reported");
     assert!(!pressed.get_untracked(), "the control wrote no state");
-    assert!(
-        btn.get_attribute("aria-pressed").is_none(),
+    assert_eq!(
+        btn.get_attribute("aria-pressed").as_deref(),
+        Some("false"),
         "nor showed one"
     );
 
@@ -347,8 +348,9 @@ async fn format_toggle_reflects_pressed_and_reports_clicks() {
 
     let btn = root.query_selector("button").unwrap().unwrap();
     assert_eq!(btn.get_attribute("aria-label").as_deref(), Some("Bold"));
-    // Unpressed: no aria-pressed attribute.
-    assert!(btn.get_attribute("aria-pressed").is_none());
+    // Unpressed still reads as a toggle: the state is "false", not absent
+    // (`CHROME-066`).
+    assert_eq!(btn.get_attribute("aria-pressed").as_deref(), Some("false"));
     // The signal drives the pressed state (a later microtask re-renders it).
     pressed.set(true);
 
@@ -357,8 +359,153 @@ async fn format_toggle_reflects_pressed_and_reports_clicks() {
     btn.dispatch_event(&ev).unwrap();
     assert_eq!(clicks.get_untracked(), 1);
 
-    // Settle the re-render while the owner lives.
     leptos::task::tick().await;
+    assert_eq!(btn.get_attribute("aria-pressed").as_deref(), Some("true"));
+    pressed.set(false);
+    leptos::task::tick().await;
+    assert_eq!(btn.get_attribute("aria-pressed").as_deref(), Some("false"));
+    root.remove();
+}
+
+// -- Accessibility (menu.rs, ambre-spec-accessibility.md) --------------------
+
+/// The element that holds the focus now.
+fn active() -> Option<web_sys::Element> {
+    document().active_element()
+}
+
+/// Dispatch a bubbling keydown carrying `key` on `target`.
+fn press(target: &web_sys::Element, key: &str) {
+    let init = web_sys::KeyboardEventInit::new();
+    init.set_key(key);
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    let ev = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init).unwrap();
+    target.dispatch_event(&ev).unwrap();
+}
+
+/// A menu trigger says whether its menu is open, closed included
+/// (`CHROME-070`).
+#[wasm_bindgen_test]
+async fn a_menu_trigger_reports_open_and_closed() {
+    let owner = Owner::new();
+    owner.set();
+    let zoom = RwSignal::new(1.0_f64);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let btn: web_sys::HtmlElement = root
+        .query_selector(".statusbar-zoom-btn")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    assert_eq!(btn.get_attribute("aria-expanded").as_deref(), Some("false"));
+
+    btn.click();
+    leptos::task::tick().await;
+    assert_eq!(btn.get_attribute("aria-expanded").as_deref(), Some("true"));
+
+    btn.click();
+    leptos::task::tick().await;
+    assert_eq!(btn.get_attribute("aria-expanded").as_deref(), Some("false"));
+    root.remove();
+}
+
+/// An opened menu is driven by the keyboard alone: it takes the focus, the
+/// arrows move it, Enter chooses, and Escape closes (`CHROME-026`).
+#[wasm_bindgen_test]
+async fn a_menu_is_operable_by_keyboard_alone() {
+    let owner = Owner::new();
+    owner.set();
+    let zoom = RwSignal::new(1.0_f64);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let btn: web_sys::HtmlElement = root
+        .query_selector(".statusbar-zoom-btn")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    btn.click();
+    leptos::task::tick().await;
+
+    let menu = root
+        .query_selector(".statusbar-zoom-menu")
+        .unwrap()
+        .unwrap();
+    let items = menu.query_selector_all("[role=menuitemradio]").unwrap();
+    let first = items.item(0).unwrap();
+    let second = items.item(1).unwrap();
+    assert_eq!(
+        active().as_ref(),
+        first.dyn_ref(),
+        "the menu took the focus"
+    );
+    // Every option says whether it is the live one, not only the chosen one.
+    let unchecked = (0..items.length())
+        .filter_map(|i| items.item(i))
+        .filter_map(|n| n.dyn_into::<web_sys::Element>().ok())
+        .filter(|e| e.get_attribute("aria-checked").as_deref() == Some("false"))
+        .count();
+    assert_eq!(unchecked as u32, items.length() - 1);
+
+    press(&menu, "ArrowDown");
+    assert_eq!(active().as_ref(), second.dyn_ref(), "ArrowDown moved it");
+    press(&menu, "ArrowUp");
+    press(&menu, "ArrowUp");
+    let last = items.item(items.length() - 1).unwrap();
+    assert_eq!(active().as_ref(), last.dyn_ref(), "ArrowUp wrapped");
+
+    // The presets run high to low, so the last one is the smallest.
+    press(&menu, "Enter");
+    leptos::task::tick().await;
+    assert_eq!(zoom.get_untracked(), 0.5, "Enter chose the focused preset");
+    assert!(
+        root.query_selector(".statusbar-zoom-menu")
+            .unwrap()
+            .is_none()
+    );
+
+    btn.click();
+    leptos::task::tick().await;
+    let menu = root
+        .query_selector(".statusbar-zoom-menu")
+        .unwrap()
+        .unwrap();
+    press(&menu, "Escape");
+    leptos::task::tick().await;
+    assert!(
+        root.query_selector(".statusbar-zoom-menu")
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(zoom.get_untracked(), 0.5, "Escape chose nothing");
+    root.remove();
+}
+
+/// A toast is announced without taking the focus from where it was
+/// (`CHROME-065`).
+#[wasm_bindgen_test]
+async fn a_toast_leaves_the_focus_where_it_was() {
+    let owner = Owner::new();
+    owner.set();
+    let toasts = Toasts::new();
+    let root = mount_in_container(move || {
+        view! {
+            <button class="test-focus">"Here"</button>
+            <ToastHost toasts=toasts/>
+        }
+    });
+    let here: web_sys::HtmlElement = root
+        .query_selector(".test-focus")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    here.focus().unwrap();
+
+    toasts.push(ToastKind::Error, "saved elsewhere");
+    leptos::task::tick().await;
+    assert!(root.query_selector(".ambre-toast").unwrap().is_some());
+    assert_eq!(active().as_ref(), Some(here.as_ref()));
     root.remove();
 }
 
@@ -647,6 +794,39 @@ async fn a_native_close_clears_the_signal_and_the_modal_reopens() {
     assert!(modal.dialog.open(), "the next open is not blocked");
     assert_eq!(modal.holds(), 1);
     modal.root.remove();
+}
+
+/// An open modal keeps the focus inside it (`CHROME-028`) and leaves the page
+/// behind it inert (`CHROME-068`). A control behind it cannot take the focus.
+///
+/// Closing it gives the page back, so the same control then takes the focus.
+#[wasm_bindgen_test]
+async fn an_open_modal_traps_the_focus_and_makes_the_page_inert() {
+    let outside = document().create_element("button").unwrap();
+    document().body().unwrap().append_child(&outside).unwrap();
+    let outside: web_sys::HtmlElement = outside.dyn_into().unwrap();
+
+    let open = RwSignal::new(true);
+    let modal = mount_modal(open);
+    leptos::task::tick().await;
+    assert!(modal.dialog.matches(":modal").unwrap(), "opened as a modal");
+    let inside = modal.root.query_selector(".inside").unwrap().unwrap();
+    assert_eq!(active().as_ref(), Some(&inside), "the focus moved inside");
+
+    outside.focus().unwrap();
+    assert_eq!(active().as_ref(), Some(&inside), "the page behind is inert");
+
+    let closed = modal.closed();
+    open.set(false);
+    closed.await.unwrap();
+    outside.focus().unwrap();
+    assert_eq!(
+        active().as_ref(),
+        Some(outside.as_ref()),
+        "the page is back"
+    );
+    modal.root.remove();
+    outside.remove();
 }
 
 /// A modal unmounted while open gives the loop back (`CHROME-089`). No

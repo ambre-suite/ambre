@@ -19,6 +19,7 @@
 //   - command      -- command-state store + keybinding manager
 //   - dialog       -- native <dialog> modal (rAF-suspending)
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
+//   - menu         -- the key map every menu shares, and two-state ARIA values
 //   - handler      -- what an application hands the shell for its commands
 //   - palette      -- the command palette: every declared command, filtered
 //   - passphrase   -- the passphrase prompt of a sealed `.ambre` file
@@ -38,6 +39,7 @@ mod dialog;
 mod font;
 mod format;
 mod handler;
+mod menu;
 mod palette;
 mod passphrase;
 mod shortcut;
@@ -53,6 +55,7 @@ pub use dialog::{Dialog, ModalHold};
 pub use font::{FONT_FAMILIES, FontPicker};
 pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
 pub use handler::{CommandHandler, FilePick, KeyRoute, ShellAction};
+pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};
 pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;

@@ -410,7 +410,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         title="Share"
                         aria-label="Share document"
                         aria-haspopup="dialog"
-                        aria-expanded=move || share_open.get().then_some("true")
+                        aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
                         on:click=move |_| share_open.set(true)
                     >
                         <Icon icon=icondata::AiShareAltOutlined />
@@ -421,7 +421,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     title="About"
                     aria-label="About Ambre"
                     aria-haspopup="dialog"
-                    aria-expanded=move || about_open.get().then_some("true")
+                    aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
                     on:click=move |_| about_open.set(true)
                 >
                     "?"

@@ -83,7 +83,7 @@ pub fn FormatToggle(
         <button
             aria-label=label
             title=title
-            aria-pressed=move || pressed.get().then_some("true")
+            aria-pressed=move || crate::menu::aria_bool(pressed.get())
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_toggle.run(())
         >

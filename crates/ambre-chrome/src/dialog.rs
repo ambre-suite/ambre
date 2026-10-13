@@ -83,6 +83,9 @@ pub fn Dialog(
     /// Extra class on the `<dialog>` element, for per-dialog styling.
     #[prop(optional, into)]
     class: Option<String>,
+    /// The modal's accessible name, for one with no heading to name it.
+    #[prop(optional, into)]
+    label: Option<String>,
     children: ChildrenFn,
 ) -> impl IntoView {
     let dialog_ref = NodeRef::<html::Dialog>::new();
@@ -145,6 +148,7 @@ pub fn Dialog(
         <dialog
             node_ref=dialog_ref
             class=class
+            aria-label=label
             on:close=handle_close
             on:click=handle_click
         >

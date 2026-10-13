@@ -125,7 +125,7 @@ pub fn ColorPopover(
             <button
                 aria-label=title
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
+                aria-expanded=move || crate::menu::aria_bool(open.get())
                 // Keep the canvas' focus: a button steals it on mousedown, which
                 // would clear the active selection before on:click can apply.
                 on:mousedown=move |ev| ev.prevent_default()

@@ -118,12 +118,10 @@ pub fn CommandPalette(
     };
 
     view! {
-        <Show when=move || open.get() fallback=|| ()>
-            <div
-                class="ambre-palette-backdrop"
-                on:click=move |_| open.set(false)
-            ></div>
-            <div class="ambre-palette" role="dialog" aria-label="Command palette">
+        // The shared modal traps the focus and leaves the page inert
+        // (`CHROME-028`, `CHROME-068`); its backdrop and Escape close it.
+        <crate::dialog::Dialog open=open class="ambre-palette-modal" label="Command palette">
+            <div class="ambre-palette">
                 <input
                     node_ref=input_ref
                     class="ambre-palette-query"
@@ -151,7 +149,7 @@ pub fn CommandPalette(
                                         class:focused=move || focused.get() == i
                                         role="option"
                                         aria-selected=move || {
-                                            (focused.get() == i).then_some("true")
+                                            crate::menu::aria_bool(focused.get() == i)
                                         }
                                         on:mouseenter=move |_| focused.set(i)
                                         on:click=move |_| run(id)
@@ -172,7 +170,7 @@ pub fn CommandPalette(
                     }}
                 </ul>
             </div>
-        </Show>
+        </crate::dialog::Dialog>
     }
 }
 

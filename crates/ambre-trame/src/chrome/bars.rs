@@ -231,7 +231,7 @@ pub fn FormatBar(
         // Wrap text.
         <button
             aria-label="Wrap text"
-            aria-pressed=move || style.wrap.get().then_some("true")
+            aria-pressed=move || ambre_chrome::aria_bool(style.wrap.get())
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
                 wrap: Some(!style.wrap.get_untracked()),
@@ -249,7 +249,7 @@ pub fn FormatBar(
             // The label names the command the click will send, so a merged cell
             // announces "Unmerge cells" instead of the action it will not do.
             aria-label=move || label(if style.merged.get() { UNMERGE } else { MERGE })
-            aria-pressed=move || style.merged.get().then_some("true")
+            aria-pressed=move || ambre_chrome::aria_bool(style.merged.get())
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| {
                 on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })

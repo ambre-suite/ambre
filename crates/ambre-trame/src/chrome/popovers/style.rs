@@ -94,7 +94,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             <button
                 aria-label="Borders"
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
@@ -130,7 +130,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                 class="line-style-trigger"
                                 aria-label="Border style"
                                 aria-haspopup="true"
-                                aria-expanded=move || line_open.get().then_some("true")
+                                aria-expanded=move || ambre_chrome::aria_bool(line_open.get())
                                 on:click=move |_| line_open.update(|o| *o = !*o)
                             >
                                 <Icon icon=icondata::BsBorderStyle />
@@ -246,7 +246,7 @@ pub(crate) fn NumberFormatPopover(
             <button
                 aria-label="Number format"
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
@@ -367,7 +367,7 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             <button
                 aria-label="Horizontal alignment"
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
@@ -451,7 +451,7 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             <button
                 aria-label="Vertical alignment"
                 aria-haspopup="true"
-                aria-expanded=move || open.get().then_some("true")
+                aria-expanded=move || ambre_chrome::aria_bool(open.get())
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
