@@ -598,9 +598,15 @@ mod tests {
     #[wasm_bindgen_test]
     fn only_a_consumed_key_loses_its_default() {
         let rig = Rig::new();
-        assert!(rig.key_on(rig.ta(), "a"), "an unconsumed key keeps its default");
+        assert!(
+            rig.key_on(rig.ta(), "a"),
+            "an unconsumed key keeps its default"
+        );
         rig.host.borrow_mut().consume = true;
-        assert!(!rig.key_on(rig.ta(), "ArrowDown"), "a consumed key loses it");
+        assert!(
+            !rig.key_on(rig.ta(), "ArrowDown"),
+            "a consumed key loses it"
+        );
     }
 
     /// `CHROME-021`: the copy, the cut and the paste the browser raises are
@@ -694,14 +700,8 @@ mod tests {
     #[wasm_bindgen_test]
     async fn a_paste_after_a_landed_write_reads_the_clipboard_back() {
         let rig = Rig::new();
-        let (item, _) = publish_item(
-            "x",
-            None,
-            Some("AQID"),
-            "ambre-test-token",
-            clipboard_item,
-        )
-        .expect("an item");
+        let (item, _) = publish_item("x", None, Some("AQID"), "ambre-test-token", clipboard_item)
+            .expect("an item");
         let clipboard = crate::platform::async_clipboard().expect("the clipboard API");
         let items: JsValue = js_sys::Array::of1(&item).into();
         let read = Closure::<dyn FnMut() -> js_sys::Promise>::new(move || {
@@ -712,7 +712,10 @@ mod tests {
         rig.host.borrow().published.set(true);
         let ev = rig.clip("paste", &transfer(&[("text/plain", "x")]));
         assert!(ev.default_prevented());
-        assert!(rig.host.borrow().pastes.is_empty(), "the event is not trusted");
+        assert!(
+            rig.host.borrow().pastes.is_empty(),
+            "the event is not trusted"
+        );
         settle().await;
         let _ = js_sys::Reflect::delete_property(&clipboard, &"read".into());
         {
@@ -755,7 +758,10 @@ mod tests {
             assert_eq!(data.get_data(kind).ok().as_deref(), Some(value), "{kind}");
         }
         assert_eq!(host.pastes.len(), 2);
-        assert_eq!(host.pastes[0], host.pastes[1], "the second paste is the first");
+        assert_eq!(
+            host.pastes[0], host.pastes[1],
+            "the second paste is the first"
+        );
     }
 
     /// The shell's rules for the pipe, as the page loads them.
@@ -811,7 +817,11 @@ mod tests {
             .flatten()
             .expect("a computed style");
         for property in ["color", "caret-color", "background-color"] {
-            assert_eq!(shown.get_property_value(property).ok().as_deref(), clear, "{property}");
+            assert_eq!(
+                shown.get_property_value(property).ok().as_deref(),
+                clear,
+                "{property}"
+            );
         }
         let selection = window
             .get_computed_style_with_pseudo_elt(rig.ta(), "::selection")

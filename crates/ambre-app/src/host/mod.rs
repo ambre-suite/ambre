@@ -567,8 +567,10 @@ mod tests {
     }
 
     /// Read an item back the way the Paste button does.
-    async fn read_back(item: &web_sys::ClipboardItem) -> (ambre_bus::ClipboardBlob, Option<String>) {
-        let items: wasm_bindgen::JsValue =js_sys::Array::of1(item).into();
+    async fn read_back(
+        item: &web_sys::ClipboardItem,
+    ) -> (ambre_bus::ClipboardBlob, Option<String>) {
+        let items: wasm_bindgen::JsValue = js_sys::Array::of1(item).into();
         let read = js_sys::Promise::resolve(&items);
         crate::platform::read_clipboard_blob(read)
             .await
@@ -629,7 +631,11 @@ mod tests {
         let (blob, token) = read_back(&item).await;
         assert_eq!(blob.text, "a");
         assert_eq!(blob.ambre, None);
-        assert_eq!(token.as_deref(), Some("ambre-2"), "the token rides in the HTML");
+        assert_eq!(
+            token.as_deref(),
+            Some("ambre-2"),
+            "the token rides in the HTML"
+        );
     }
 
     #[wasm_bindgen_test]

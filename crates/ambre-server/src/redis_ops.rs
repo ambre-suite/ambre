@@ -1252,17 +1252,34 @@ mod redis_integration_tests {
             .map(|redis| verify_clock_and_assign_seq(redis, &doc, "ab", 1));
         let results = futures_util::future::join_all(calls).await;
 
-        let numbered: Vec<u64> = results.iter().filter_map(|r| r.as_ref().ok()).copied().collect();
+        let numbered: Vec<u64> = results
+            .iter()
+            .filter_map(|r| r.as_ref().ok())
+            .copied()
+            .collect();
         assert_eq!(numbered, [1], "results {results:?}");
         let refused = results
             .iter()
-            .filter(|r| matches!(r, Err(AppError::ClockMismatch { expected: 2, got: 1 })))
+            .filter(|r| {
+                matches!(
+                    r,
+                    Err(AppError::ClockMismatch {
+                        expected: 2,
+                        got: 1
+                    })
+                )
+            })
             .count();
         assert_eq!(refused, 15);
         let redis = connect_redis().await;
         let seq: u64 = redis.get(format!("doc:{doc}:seq")).await.unwrap();
         assert_eq!(seq, 1);
-        assert_eq!(verify_clock_and_assign_seq(&redis, &doc, "ab", 2).await.unwrap(), 2);
+        assert_eq!(
+            verify_clock_and_assign_seq(&redis, &doc, "ab", 2)
+                .await
+                .unwrap(),
+            2
+        );
         let _ = redis
             .del([format!("doc:{doc}:seq"), format!("doc:{doc}:clocks")])
             .await;
