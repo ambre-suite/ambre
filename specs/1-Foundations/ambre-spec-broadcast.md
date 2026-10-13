@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | none | unheld -- the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- three sockets on one document across two instances count two Redis subscribers on its topic, one per process, database tier | none | verified |
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_presence_entry_is_the_ciphertext_as_received` -- the stored entry decodes to exactly the bytes the frame sealed, so the relay neither reads nor rewrites them | none | verified |
 | `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | `ambre_server::routes::tests::handler_tests::a_refused_token_closes_the_socket_with_its_own_code` -- a token that does not verify draws the authentication close code on a live socket, after the upgrade completes | none | verified |
 | `SRV-164` | `FAIL` | An upgrade refused for a key setup still owed MUST close with a code distinct from the authentication one. | `ambre-spec-session.md`, `SRV-027`; `SRV-046` | `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a session minted before the key setup draws the setup close code on a live socket, where a token that does not verify draws the authentication one | none | verified |
-| `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | none | unheld -- every watched topic is deregistered and the outbound task is stopped at the end of the connection, and no test closes a socket to observe the hub afterwards; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- once both sockets of one instance are gone, the topic counts one Redis subscriber, the other instance's, database tier | none | verified |
 
 ### 1.3 A frame arrives on the socket
 
@@ -51,7 +51,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-073` | `POST` | A frame one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | none | unheld -- each process runs one subscriber task on the shared topic and fans the frames out to its own connections, and nothing in continuous integration runs a second instance to watch a frame cross; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-073` | `POST` | A frame one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- a frame published by one hub reaches the other hub's subscriber. `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- a departure on one instance reaches a socket on the other, database tier | none | verified |
 | `SRV-088` | `FRAME` | A removal MUST reach the person removed alone: no fan-out MUST tell the remaining members who left. | `ZK-005`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_removal_reaches_the_person_removed_alone` -- the removed member's topic carries the notice, and the document's topic and the remaining member's carry only a re-key notice that names nobody | none | verified |
 
 ### 1.5 A presence entry is recorded
@@ -60,7 +60,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 |---|---|---|---|---|---|---|
 | `SRV-072` | `POST` | A presence entry MUST expire on its own. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::presence_field_self_expires` -- the field is gone after its own life runs out, on the database tier, so a person who disappears without a clean exit prunes themselves | none | verified |
 | `SRV-097` | `POST` | A person who stops watching a document MUST be dropped from its presence entries, whether they left cleanly or their connection died. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the entry itself, on the database tier | none | verified |
-| `SRV-099` | `POST` | The others watching MUST be told when a person stops watching a document. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | none | unheld -- the announcement is one publish inside the socket handler, and no test drives a socket to its close; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-099` | `POST` | The others watching MUST be told when a person stops watching a document. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- a clean close and a dropped connection each reach the remaining peer as a departure naming the author key, database tier | none | verified |
 | `SRV-089` | `FRAME` | Recording a presence entry MUST NOT touch the document's history: it MUST take no number and reach no store the replay reads. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | `ambre_server::ws::handler::message::access_tests::a_presence_frame_leaves_the_history_untouched` -- the frame is recorded, and takes no number, no clock, no pending entry and no row the replay reads | none | verified |
 
 ### 1.6 A channel is subscribed and relayed
@@ -79,10 +79,10 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 14 `verified`, 4 `untested`, 6 `unimplemented`. What holds is what a handler
-  test drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
-  everything about the connection rather than the message. Each needs a live socket, and two tests
-  alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
+* **Verification.** 18 `verified`, 6 `unimplemented`. What holds is what a handler test drives: the
+  two caps, the rate bucket, the presence expiry and its removal. What is loose is everything about
+  the connection rather than the message. Each needs a live socket, and two tests alone open one,
+  each to see it refused (`ambre-spec-testing.md section 9`).
 ---
 
 ## 2. WHAT EACH USER SEES

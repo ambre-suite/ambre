@@ -482,6 +482,65 @@ mod tests {
         assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeRect { .. })), 1);
     }
 
+    /// `PRESENCE-010`: a remote pointer that jumps is painted at its new
+    /// sample at once, exactly where a peer seen there first is painted.
+    #[test]
+    fn a_remote_pointer_that_jumps_snaps_to_its_new_sample() {
+        let at = |x: f64| PresencePayload {
+            cursor: Some(Point::new(x, x)),
+            ..Default::default()
+        };
+        // The arrow's path is not recorded, so the name chip's placement
+        // stands for the pointer's.
+        let painted = |cursors: &PeerCursors| paint(cursors, &vp_with(vec![])).ops().to_vec();
+        let mut jumped = PeerCursors::default();
+        adopt_one(&mut jumped, user(4), at(0.0));
+        let start = painted(&jumped);
+        adopt_one(&mut jumped, user(4), at(900.0));
+        let mut fresh = PeerCursors::default();
+        adopt_one(&mut fresh, user(4), at(900.0));
+
+        assert_eq!(painted(&jumped), painted(&fresh));
+        assert_ne!(painted(&jumped), start, "the pointer moved");
+    }
+
+    /// `PRESENCE-007`: a selection anchor names an element, never a position
+    /// in the board. After a structural edit deletes one element, inserts
+    /// another before it and moves it, the ghost still outlines that element.
+    #[test]
+    fn a_selection_anchor_survives_a_structural_edit() {
+        let mut cursors = PeerCursors::default();
+        adopt_one(
+            &mut cursors,
+            user(5),
+            PresencePayload {
+                selection: vec![ElementId("b".into())],
+                ..Default::default()
+            },
+        );
+        let moved = Rect::new(200.0, 200.0, 260.0, 240.0);
+        let before = vp_with(vec![
+            elem("a", Rect::new(0.0, 0.0, 50.0, 50.0)),
+            elem("b", Rect::new(100.0, 0.0, 150.0, 50.0)),
+        ]);
+        let after = vp_with(vec![
+            elem("c", Rect::new(0.0, 0.0, 30.0, 30.0)),
+            elem("b", moved),
+        ]);
+        let ghosts = |vp: &DisplayViewport| -> Vec<DrawOp> {
+            paint(&cursors, vp)
+                .ops()
+                .iter()
+                .filter(|o| matches!(o, DrawOp::StrokeRect { .. }))
+                .cloned()
+                .collect()
+        };
+
+        assert_eq!(ghosts(&before).len(), 1);
+        assert_eq!(ghosts(&after), ghosts(&vp_with(vec![elem("b", moved)])));
+        assert_ne!(ghosts(&after), ghosts(&before), "the ghost followed it");
+    }
+
     #[test]
     fn live_stroke_draws_a_polyline() {
         let mut cursors = PeerCursors::default();
@@ -649,6 +708,40 @@ mod tests {
         // afresh.
         sender.reset();
         assert!(sender.due(at(1.0), 2.0 + PRESENCE_HEARTBEAT_MS).is_some());
+    }
+
+    /// `PRESENCE-004`: a name decides nothing. Two peers under one name are
+    /// two cursors in their own colours, and a peer that renames itself keeps
+    /// its colour.
+    #[test]
+    fn a_peer_name_decides_neither_identity_nor_colour() {
+        let sample = |seed: u8, name: &str| PresenceUpdate {
+            user_id: user(seed),
+            presence: PresencePayload {
+                name: Some(name.to_owned()),
+                cursor: Some(Point::new(f64::from(seed), 0.0)),
+                ..Default::default()
+            },
+        };
+        let painted = |peers: Vec<PresenceUpdate>| {
+            let mut cursors = PeerCursors::default();
+            cursors.adopt(peers, 0.0);
+            paint(&cursors, &vp_with(vec![]))
+        };
+
+        let twins = painted(vec![sample(1, "Ada"), sample(2, "Ada")]);
+        assert_eq!(
+            twins.count(|o| matches!(o, DrawOp::FillPath { .. })),
+            2,
+            "one arrow per peer"
+        );
+        let colours = twins.fill_colors();
+        assert!(colours.contains(&peer_color(&user(1))), "{colours:?}");
+        assert!(colours.contains(&peer_color(&user(2))), "{colours:?}");
+        assert_eq!(
+            painted(vec![sample(1, "Ada")]).fill_colors(),
+            painted(vec![sample(1, "Grace")]).fill_colors()
+        );
     }
 
     #[test]

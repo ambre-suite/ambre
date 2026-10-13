@@ -1792,6 +1792,92 @@ mod handler_tests {
         assert_refused_unknown_document(&mut watcher).await;
     }
 
+    /// `SRV-045`, `SRV-051`, `SRV-073`, `SRV-099`: two instances serve one
+    /// document. Each holds one subscription on its topic, however many sockets
+    /// watch it there. A clean close and a dropped connection are both heard
+    /// on either instance. Once an instance's last socket goes, its
+    /// subscription goes with it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_live_set_crosses_instances_and_a_close_leaves_nothing(pool: sqlx::PgPool) {
+        use rustis::commands::PubSubCommands;
+
+        let one = crate::test_helpers::test_app_state(pool).await;
+        let two = crate::test_helpers::second_instance(&one).await;
+        let app = build_test_router(one.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let peer = setup_named(&app, "near@ambre.app", 5).await;
+        let far = setup_named(&app, "far@ambre.app", 6).await;
+        invite(&app, &owner, &doc_id, "near@ambre.app", "editor").await;
+        invite(&app, &owner, &doc_id, "far@ambre.app", "editor").await;
+        let document_id = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let serve = |state: Arc<AppState>| async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("ws://{}/api/ws", listener.local_addr().unwrap());
+            let app = build_test_router(state);
+            tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            url
+        };
+        let (url_one, url_two) = (serve(one.clone()).await, serve(two).await);
+        let topic = format!("doc:{document_id}");
+        let subscriptions = || async {
+            let counts: std::collections::HashMap<String, usize> =
+                one.redis.pub_sub_numsub([topic.as_str()]).await.unwrap();
+            counts.get(&topic).copied().unwrap_or(0)
+        };
+
+        let mut owner_socket = subscribed_socket(&url_one, &owner, document_id).await;
+        let peer_socket = subscribed_socket(&url_one, &peer, document_id).await;
+        let mut far_socket = subscribed_socket(&url_two, &far, document_id).await;
+        assert_eq!(subscriptions().await, 2, "one per instance, not per socket");
+
+        owner_socket.close(None).await.unwrap();
+        assert!(
+            heard_leave(&mut far_socket, document_id, 3).await,
+            "a clean close"
+        );
+        drop(peer_socket);
+        assert!(
+            heard_leave(&mut far_socket, document_id, 5).await,
+            "a dropped connection"
+        );
+
+        let mut left = subscriptions().await;
+        for _ in 0..50 {
+            if left == 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            left = subscriptions().await;
+        }
+        assert_eq!(left, 1, "only the other instance still subscribes");
+    }
+
+    /// Whether `socket` hears the peer of key `[key; 32]` leave `document_id`
+    /// before it ends or falls silent.
+    async fn heard_leave<S>(socket: &mut S, document_id: ambre_core::DocumentId, key: u8) -> bool
+    where
+        S: futures_util::Stream<
+                Item = Result<
+                    tokio_tungstenite::tungstenite::Message,
+                    tokio_tungstenite::tungstenite::Error,
+                >,
+            > + Unpin,
+    {
+        let key = ambre_core::PublicKey::from_array([key; 32]);
+        loop {
+            match next_server_msg(socket).await {
+                Some(WsServerMsg::PeerLeft {
+                    document_id: left,
+                    pub_key,
+                }) if left == document_id && pub_key == key => return true,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+    }
+
     /// A socket on `url`, authenticated with `auth` and subscribed to
     /// `document_id`. Its hub route is in place on return.
     async fn subscribed_socket(

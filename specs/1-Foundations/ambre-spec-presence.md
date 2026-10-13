@@ -28,8 +28,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PRESENCE-003` | `INV` | The author of a presence frame MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
 | `PRESENCE-005` | `INV` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that a second peer is tracked under its own identity and neither displaces the other | none | verified |
 | `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`; `::distinct_seeds_usually_differ`; `::opaque` | none | verified |
-| `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | none | unheld -- `PRESENCE-002` and `PRESENCE-003` leave the name nothing to decide, and no test drives a sample whose name contradicts its resolved author; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
-| `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | none | unheld -- Toile's payload anchors a selection by `ElementId` and a pointer by a world point, which satisfies the rule, but the type that would hold it is one application's. The rule is the suite's, Trame's and Prose's payloads are specified and built by neither, and a second sender inherits nothing from Toile's shape; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | `ambre_toile::ui::presence::tests::a_peer_name_decides_neither_identity_nor_colour` -- two peers under one name paint two cursors in their own colours, and a renamed peer keeps its colour | none | verified |
+| `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | `ambre_toile::ui::presence::tests::a_selection_anchor_survives_a_structural_edit` -- a peer's selection ghost follows its element through a deletion, an insertion before it and a move | none | verified |
 
 ### 1.2 Send a presence sample
 
@@ -47,10 +47,10 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set` -- it reads the set an event carries after a peer ages out; `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` -- the view that adopts it | none | verified |
-| `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | none | claim -- the rule holds today because no application interpolates at all, and an absence of code is not a mechanism: the first smoothing pass breaks it in silence, in whichever application writes one; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | untested |
+| `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | `ambre_toile::ui::presence::tests::a_remote_pointer_that_jumps_snaps_to_its_new_sample` -- a pointer that jumps is painted exactly as one first seen at its new sample | none | verified |
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that the snapshot and the element count are identical either side of the apply | none | verified |
 | `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame` -- it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | none | verified |
-| `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed; `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the relay's store drops the sample at once | partial -- that the relay says it on both paths is `SRV-097`, whose announcement no test drives; lands with the `Broadcast and presence hold across instances` Story (`ambre-roadmap.md` E9) | partial |
+| `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed; `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the relay's store drops the sample at once; `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- the relay announces a clean close and a dropped connection, database tier | none | verified |
 | `PRESENCE-015` | `POST` | A peer MUST leave the live set only when the last of its sessions on the document stops watching it. | this spec section 3; `PRESENCE-005`, `PRESENCE-014` | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_departure_waits_for_the_last_session_of_its_key` -- two sessions of one key, the first close keeps the entry and says nothing, the last drops it and says it once | none | verified |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` -- its peer selects an element the frame does not carry, so one ghost is painted, the other is dropped, and nothing is raised | none | verified |
 
@@ -61,17 +61,14 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 * **Boundary.** every presence frame leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
   `UserId` in `ambre-sync` first, so no peer paints under another name.
-* **Verification.** 11 `verified`, 1 `partial`, 3 `untested`. The identity half
-  is held end to end, and a departure travels twice. The relay says it, and the client ages a peer
-  out if that word is lost. The four gaps are rules held by construction: an anchor type, an absent
-  smoothing, a relay half, a cosmetic name.
+* **Verification.** 15 `verified`. A departure travels twice: the relay says it, and the client
+  ages a peer out if that word is lost.
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-Two peers over one document. The third column is the same in every row, and it is kept because the
-absence is the rule.
+Two peers over one document. The third column never changes, because the absence is the rule.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
@@ -130,10 +127,9 @@ naming the document and the author key and nothing else (`PRESENCE-015`, `SRV-09
 `ambre-sync` resolves that key as it resolves a sample's author, and drops a key it cannot resolve.
 The application then removes the peer and hands the view the set that remains.
 
-**And why the client still ages a peer out.** The message is best effort, like everything on this
-plane: a relay restart, a lost publish or a reconnect mid-departure loses it. Each application
-therefore drops a peer it has not heard from in a while, which is the floor under `PRESENCE-014`
-rather than a second mechanism.
+**And why the client still ages a peer out.** The message is best effort: a relay restart or a
+lost publish loses it. Each application drops a peer silent for a while, the floor under
+`PRESENCE-014`.
 
 **The anchor is the variation point.** Each application names the identities its own document mints,
 because a position is what a concurrent structural edit invalidates (`PRESENCE-007`).
