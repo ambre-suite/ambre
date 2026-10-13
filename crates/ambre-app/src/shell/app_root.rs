@@ -214,15 +214,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         });
     }
 
-    // TOFU verification modal (`ambre-spec-key-verification.md`). `tofu_open` mirrors
-    // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
-    // key, and this effect drives the native `<dialog>` accordingly.
-    let tofu_open = RwSignal::new(false);
-    Effect::new(move |_| tofu_open.set(tofu_prompt.get().is_some()));
-    // A native close (Escape / backdrop / Cancel) is a refusal: clear the
-    // pending prompt so nothing is pinned and phase 2 never fires.
-    let tofu_on_close = Callback::new(move |()| tofu_prompt.set(None));
-
     // Invite form state: the typed invitee (email, or a bare username in dev
     // mode). The role to grant lives in `invite_role` (shared via `Wiring`, since
     // the two-phase TOFU invite dispatches phase 2 outside this component).
@@ -651,91 +642,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             set_link=toile_set_link
         />
 
-        // TOFU key verification (`ambre-spec-key-verification.md`). A modal `Dialog`,
-        // never a toast: a possible server MITM must not auto-dismiss. Shown only
-        // for a New key (confirm before the first share) or a Changed key (a
-        // blocking alert whose default action is Cancel).
-        <Dialog
-            open=tofu_open
-            on_close=tofu_on_close
-            class="ambre-tofu"
-        >
-            {move || {
-                tofu_prompt
-                    .get()
-                    .map(|p| {
-                        let changed = p.changed;
-                        let fp_copy = p.fingerprint.clone();
-                        let confirm_p = p.clone();
-                        view! {
-                            <div class="ambre-tofu-panel">
-                                <h2>
-                                    {if changed {
-                                        "Recipient key changed"
-                                    } else {
-                                        "Verify recipient key"
-                                    }}
-                                </h2>
-                                <p class="ambre-tofu-who">
-                                    <span class="ambre-tofu-name">{p.display_name.clone()}</span>
-                                    <span class="ambre-tofu-email">{p.email.clone()}</span>
-                                </p>
-                                {changed
-                                    .then(|| {
-                                        view! {
-                                            <p class="ambre-tofu-warning" role="alert">
-                                                "This user's key differs from the one you trusted before. \
-                                                 A legitimate cause exists (they reinstalled and lost their \
-                                                 keys), but a compromised server can also substitute keys. \
-                                                 Re-verify out of band before proceeding."
-                                            </p>
-                                        }
-                                    })}
-                                <p class="ambre-tofu-fingerprint">{p.fingerprint.clone()}</p>
-                                <button
-                                    r#type="button"
-                                    class="ambre-tofu-copy"
-                                    on:click=move |_| {
-                                        if let Some(win) = web_sys::window() {
-                                            let _ = win.navigator().clipboard().write_text(&fp_copy);
-                                        }
-                                    }
-                                >
-                                    "Copy fingerprint"
-                                </button>
-                                <p class="ambre-tofu-limit">
-                                    "Without out-of-band verification (in person, phone, SMS), this \
-                                     protection reduces to trusting the server. Compare this fingerprint \
-                                     with the recipient over a channel the server does not control."
-                                </p>
-                                <div class="ambre-dialog-actions">
-                                    // Cancel is the default action: closing
-                                    // the modal pins nothing and sends no key.
-                                    <button
-                                        r#type="button"
-                                        class="ambre-tofu-cancel"
-                                        on:click=move |_| tofu_prompt.set(None)
-                                    >
-                                        "Cancel"
-                                    </button>
-                                    <button
-                                        r#type="button"
-                                        class="ambre-tofu-confirm"
-                                        on:click=move |_| {
-                                            // Hand the pin + phase-2 dispatch to the
-                                            // relay (it owns the trusted_keys store).
-                                            tofu_confirm.set(Some(confirm_p.clone()));
-                                            tofu_prompt.set(None);
-                                        }
-                                    >
-                                        {if changed { "Re-pin and invite" } else { "Confirm and invite" }}
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    })
-            }}
-        </Dialog>
+        // Key verification (`ambre-spec-key-verification.md`): a modal for a
+        // new or a changed key. The relay pins and dispatches what it confirms.
+        <crate::tofu::TofuDialog prompt=tofu_prompt confirmed=tofu_confirm />
 
         <ContextMenu pos=ctx_menu entries=ctx_entries on_command=on_command />
 

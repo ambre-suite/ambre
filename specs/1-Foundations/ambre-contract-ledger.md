@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 92 partial and 388 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 91 partial and 377 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 611 | 269 | 584 | 605 |  | 2069 |
-| `partial` | 36 | 14 | 41 | 1 |  | 92 |
+| `verified` | 623 | 269 | 584 | 605 |  | 2081 |
+| `partial` | 35 | 14 | 41 | 1 |  | 91 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 58 | 133 | 188 | 1 |  | 380 |
+| `untested` | 47 | 133 | 188 | 1 |  | 369 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
@@ -54,7 +54,7 @@
 | `ambre-spec-frame.md` | 18 | 16 | 15 | 1 |  | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |  |
 | `ambre-spec-key-rotation.md` | 28 | 27 | 27 |  |  | 1 |
-| `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
+| `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 19 |  | 1 | 4 |
 | `ambre-spec-media.md` | 13 | 13 | 11 |  | 2 |  |

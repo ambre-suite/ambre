@@ -96,6 +96,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_gpu_subset(errors)
             cb.check_widths(errors)
             cb.check_modals_and_drags(errors)
+            cb.check_key_verification(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -181,6 +182,24 @@ class CrateBoundaries(unittest.TestCase):
         text = "    pub(crate) fn trigger_lazy_create(&mut self) {\n        let b = Req { name_enc: Some(n), };\n    }\n"
         errors = self.breach(cb.LAZY_CREATE, text)
         self.assertTrue(any("does not send `name_enc: None`" in e for e in errors), errors)
+
+    def test_a_chrome_crate_declaring_the_crypto_crate_is_refused(self):
+        text = '[dependencies]\nambre-crypto = { path = "../ambre-crypto" }\n'
+        errors = self.breach("crates/ambre-chrome/Cargo.toml", text)
+        self.assertTrue(any("crypto crate outside the worker" in e for e in errors), errors)
+
+    def test_the_logic_crate_may_declare_the_crypto_crate_for_its_fixtures_only(self):
+        optional = '[dependencies]\nambre-crypto = { path = "../ambre-crypto", optional = true }\n'
+        self.assertEqual(self.breach(cb.CRYPTO_FIXTURES, optional), [])
+        always = '[dependencies]\nambre-crypto = { path = "../ambre-crypto" }\n'
+        errors = self.breach(cb.CRYPTO_FIXTURES, always)
+        self.assertTrue(any("crypto crate outside the worker" in e for e in errors), errors)
+
+    def test_an_invitation_built_outside_the_trust_decision_is_refused(self):
+        text = "fn f() { let c = RestCommand::InviteToDocument { role }; }\n"
+        errors = self.breach("crates/ambre-app/src/shell/app_root.rs", text)
+        self.assertTrue(any("past the trust decision" in e for e in errors), errors)
+        self.assertEqual(self.breach(cb.INVITE_OWNER, text), [])
 
     def test_a_renderer_clearing_to_its_own_colour_is_refused(self):
         import tempfile

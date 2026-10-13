@@ -929,6 +929,28 @@ mod wasm_tests {
         assert_eq!(store.load_trusted_key([9u8; 16]).await.unwrap(), None);
     }
 
+    /// Confirming a key again moves that recipient's pin and no other
+    /// (`CHROME-078`).
+    #[wasm_bindgen_test]
+    async fn a_repin_leaves_every_other_pin_as_it_was() {
+        let name = "ambre-test-trusted-repin";
+        delete_db(name).await;
+        let store = PersistenceStore::open_named(name)
+            .await
+            .expect("channel")
+            .expect("store opens");
+
+        let (alice, bob) = ([1u8; 16], [2u8; 16]);
+        store.save_trusted_key(alice, [0xA1; 32]);
+        store.save_trusted_key(bob, [0xB1; 32]);
+        store.save_trusted_key(alice, [0xA2; 32]);
+        assert_eq!(
+            store.load_trusted_key(alice).await.unwrap(),
+            Some([0xA2; 32])
+        );
+        assert_eq!(store.load_trusted_key(bob).await.unwrap(), Some([0xB1; 32]));
+    }
+
     #[wasm_bindgen_test]
     async fn upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots() {
         let name = "ambre-test-migration-v1-v2";

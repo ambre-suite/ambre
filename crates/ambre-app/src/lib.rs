@@ -67,6 +67,8 @@ mod landing;
 mod local_store;
 mod route;
 mod signin;
+/// The recipient's key, compared and confirmed before a share.
+mod tofu;
 
 // The crate's unit tests (pure helpers in `route`/`host`) run under headless
 // Chrome via `wasm-pack test --headless --chrome` (`just test-wasm`). `--chrome`
@@ -78,6 +80,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 use host::{AppView, ClipboardPaste, DocSwitcher};
 
 use landing::{DocItem, LandingSignals};
+use tofu::TofuPrompt;
 
 /// Capacity of every inter-thread queue.
 ///
@@ -92,31 +95,6 @@ const CHANNEL_CAPACITY: usize = 1024;
 /// (`ambre-spec-budgets.md section 6`, `SYNC-059`).
 const SYNC_INBOX_HIGH: usize = 4 * CHANNEL_CAPACITY;
 const SYNC_INBOX_LOW: usize = CHANNEL_CAPACITY;
-
-/// A pending TOFU trust decision for the share dialog
-/// (`ambre-spec-key-verification.md`). Built by the per-frame relay from a
-/// `RestEvent::InviteeKey` (phase 1), once the fetched key has been compared
-/// against the `trusted_keys` store. It is consumed by the confirmation /
-/// key-changed dialog in `AppRoot`.
-///
-/// Only the states that interrupt the user reach `AppRoot`. That is a
-/// **New** key (`changed == false`, first invitation) or a **Changed** key
-/// (`changed == true`, a divergence from the pinned value). A **Trusted**
-/// key never becomes a prompt -- the relay proceeds straight to phase 2.
-#[derive(Clone, PartialEq)]
-struct TofuPrompt {
-    document_id: DocumentId,
-    user_id: UserId,
-    display_name: String,
-    email: String,
-    /// Raw X25519 key the server just returned: pinned on confirmation and sent
-    /// as `expect_exchange_pub_key` so Sync wraps only if it still matches.
-    exchange_pub_key: [u8; 32],
-    /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
-    fingerprint: String,
-    /// `false` = New (first invitation), `true` = Changed (diverged from the pin).
-    changed: bool,
-}
 
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
@@ -1192,20 +1170,21 @@ pub fn main() {
         // owned (this relay). Writing the pin before dispatch is normative.
         if let Some(p) = tofu_confirm.get_untracked() {
             tofu_confirm.set(None);
-            if let Some(local) = persist_store_frame.borrow().as_ref() {
-                local
-                    .store()
-                    .save_trusted_key(*p.user_id.as_bytes(), p.exchange_pub_key);
-            }
-            let _ = relay_tx.try_send(LogicCommand::Rest {
-                id: RequestId::next(),
-                cmd: RestCommand::InviteToDocument {
-                    document_id: p.document_id,
-                    invitee_email: p.email.clone(),
-                    role: invite_role.get_untracked(),
-                    expect_exchange_pub_key: p.exchange_pub_key,
+            tofu::confirm(
+                &p,
+                invite_role.get_untracked(),
+                |user, key| {
+                    if let Some(local) = persist_store_frame.borrow().as_ref() {
+                        local.store().save_trusted_key(user, key);
+                    }
                 },
-            });
+                |cmd| {
+                    let _ = relay_tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd,
+                    });
+                },
+            );
         }
 
         // Relay Logic -> Sync: drain commands and postMessage them to the Sync
@@ -1448,26 +1427,16 @@ pub fn main() {
                             Some(rx) => rx.await.ok().flatten(),
                             None => None,
                         };
-                        match pinned {
+                        match tofu::classify(prompt, pinned, role_sig.get_untracked()) {
                             // Trusted: unchanged key -> proceed without interrupting.
-                            Some(k) if k == prompt.exchange_pub_key => {
+                            tofu::Next::Invite(cmd) => {
                                 let _ = relay.try_send(LogicCommand::Rest {
                                     id: RequestId::next(),
-                                    cmd: RestCommand::InviteToDocument {
-                                        document_id: prompt.document_id,
-                                        invitee_email: prompt.email.clone(),
-                                        role: role_sig.get_untracked(),
-                                        expect_exchange_pub_key: prompt.exchange_pub_key,
-                                    },
+                                    cmd,
                                 });
                             }
-                            // Changed: diverged from the pin -> blocking alert.
-                            Some(_) => prompt_sig.set(Some(TofuPrompt {
-                                changed: true,
-                                ..prompt
-                            })),
-                            // New: first invitation -> confirmation step.
-                            None => prompt_sig.set(Some(prompt)),
+                            // New or changed: the modal decides.
+                            tofu::Next::Ask(prompt) => prompt_sig.set(Some(prompt)),
                         }
                     });
                 }

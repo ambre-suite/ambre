@@ -198,6 +198,13 @@ DRAG_INPUT = re.compile(r'type\s*=\s*"(?:range|color)"')
 # new document is created on its first open, by the one function below.
 CREATE = re.compile(r"\bCreateDocument\b")
 LAZY_CREATE = "crates/ambre-sync/src/updates.rs"
+# The crates that may hash a key, the one that may only for its fixtures, and
+# the one UI file that builds an invitation (`CHROME-049`, `CHROME-050`).
+CRYPTO_DEP = re.compile(r"^ambre-crypto\s*=.*$", re.MULTILINE)
+CRYPTO_HOLDERS = ("crates/ambre-crypto/Cargo.toml", "crates/ambre-sync/Cargo.toml")
+CRYPTO_FIXTURES = "crates/ambre-logic/Cargo.toml"
+INVITE = re.compile(r"\bInviteToDocument\b")
+INVITE_OWNER = "crates/ambre-app/src/tofu.rs"
 # What holding the document looks like: a CRDT container, an export, or an
 # engine's state. A tree node's identifier is an address, not the document.
 ENGINE = re.compile(
@@ -689,6 +696,34 @@ def check_modals_and_drags(errors: list[str]) -> int:
     return len(files) + 1
 
 
+def check_key_verification(errors: list[str]) -> int:
+    """`CHROME-049`, `CHROME-050`: who may hash a key, and who may invite.
+
+    The worker alone declares the crypto crate; the Logic crate may for its
+    fixtures only. On the UI thread one file builds an invitation, behind the
+    trust decision.
+    """
+    manifests = sorted(ROOT.glob("crates/*/Cargo.toml"))
+    for path in manifests:
+        rel = path.relative_to(ROOT).as_posix()
+        for found in CRYPTO_DEP.finditer(path.read_text()):
+            if rel in CRYPTO_HOLDERS:
+                continue
+            if rel == CRYPTO_FIXTURES and "optional = true" in found.group(0):
+                continue
+            errors.append(f"{rel}: declares the crypto crate outside the worker: {found.group(0)}")
+    files = sources(UI_THREAD)
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == INVITE_OWNER:
+            continue
+        for number, line in above_tests(path):
+            found = INVITE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: an invitation built past the trust decision: `{found.group(0)}`")
+    return len(manifests) + len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -712,6 +747,7 @@ def main() -> int:
     subset = check_gpu_subset(errors)
     widths = check_widths(errors)
     controls = check_modals_and_drags(errors)
+    keys = check_key_verification(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -729,7 +765,8 @@ def main() -> int:
         f"{stores} client files read for a persistence path, "
         f"{subset} sources read for a compute pass or a storage buffer, "
         f"{widths} files read for a width spelled twice, "
-        f"{controls} files read for a modal, a drag or a named creation"
+        f"{controls} files read for a modal, a drag or a named creation, "
+        f"{keys} manifests and files read for a key hash or an invitation"
     )
     for line in errors:
         print(f"  {line}")
@@ -750,7 +787,8 @@ def main() -> int:
             "nothing and draws on the surface alone, browser storage is reached "
             "from the named paths, no shader leaves the shared subset, the "
             "chrome's widths live in one stylesheet, one file renders the modal, "
-            "a drag control debounces, and a document is created unnamed.",
+            "a drag control debounces, a document is created unnamed, the worker "
+            "alone hashes a key, and an invitation waits on the trust decision.",
             file=sys.stderr,
         )
         return 1
