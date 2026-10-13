@@ -219,6 +219,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` xlsx interop | V1 | Excel import and export: values, formulas, styles, merges, column widths |
 | `[ ]` Cell comments | V1 | a note anchored to a cell, surviving a sort and a reorder |
 | `[ ]` Media in a sheet | V1 | Trame declares images and resolves none. Wire it to the shared media flow |
+| `[ ]` Sheet PDF export | V1 | the grid draws on a canvas, so a browser print shows the viewport at best, and a sheet cannot be printed at all. Drive the surface-generic render walk onto krilla pages: one sheet, its used range or the selection, page breaks at row and column edges, fit to width, and an optional repeated first row. A page setup dialog, manual breaks, headers and footers stay out. Holds `PDF-001` to `PDF-006` for Trame |
 | `[ ]` Persisted page setup | V1 | paper size, margins and orientation stored with the document instead of asked at export |
 | `[ ]` A machine-readable error | V1 | an error carries a code a host can branch on, not only a sentence |
 | `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
@@ -488,7 +489,6 @@ owns the subsystem.
 | :--- | :--- |
 | `[ ]` Range protection | a range only its owner may edit, and the refusal the others see |
 | `[ ]` Data tools, second pass | colour scales, data bars, top-N formats, and validation by range, date or pattern |
-| `[ ]` Sheet PDF export | print a sheet to a vector PDF |
 | `[ ]` Post-V1 surface | sparklines, charts, reference autocompletion, smooth scroll |
 | `[ ]` Post-V1 interop | OpenDocument import, and the Google Sheets bridge |
 | `[ ]` Version history | named snapshots a user can return to, in place of an undo stack lost on close |
