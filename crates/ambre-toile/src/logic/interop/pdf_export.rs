@@ -414,4 +414,41 @@ mod tests {
         );
         assert_eq!(&ops[1..ops.len() - 1], screen.ops());
     }
+
+    /// A page with a shape and a word draws no image. The text is glyphs and
+    /// the shape is a path, both vector (`PDF-006`). A walk that
+    /// rasterized either one would record an image paint here.
+    #[test]
+    fn a_page_without_a_picture_paints_no_image() {
+        use ambre_draw::testing::{DrawOp, RecordingSurface};
+
+        let palette = Theme::Light.palette();
+        let mut font_cx = ambre_draw::sealed_font_context();
+        for bytes in shipped_faces() {
+            font_cx.collection.register_fonts(bytes.into(), None);
+        }
+        let mut tc = TextCache::new(1.0);
+        let mut page = RecordingSurface::new();
+        paint_page(
+            &mut page,
+            &a_page_with_text(),
+            palette,
+            &mut font_cx,
+            &mut tc,
+            &ImageStore::new(),
+        );
+        assert!(
+            page.count(|op| matches!(op, DrawOp::Glyphs { .. })) >= 1,
+            "the word is drawn as glyphs"
+        );
+        assert!(
+            page.count(|op| matches!(op, DrawOp::FillPath { .. } | DrawOp::FillRect { .. })) >= 1,
+            "the shape is drawn as a vector fill"
+        );
+        assert_eq!(
+            page.count(|op| matches!(op, DrawOp::DrawImage { .. })),
+            0,
+            "a page with no picture rasterized something"
+        );
+    }
 }

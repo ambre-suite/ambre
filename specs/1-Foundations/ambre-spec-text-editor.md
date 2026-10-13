@@ -28,8 +28,8 @@ rules live beside the design they constrain, rather than in the thread's own doc
 | `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit: it MUST NOT carry a per-range style. | this spec section 2 | type-level -- the pinned style is one value with five fields, so a range-addressed style has nowhere to be stored | none | verified |
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
 | `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | none | verified |
-| `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | none | unheld -- both use `fill_path`, which a rotation maps, rather than `fill_rect`, which maps a bounding box alone, and no test observes a rotated edit; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-037` | `INV` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the five replay one operation corpus through the wrapper and through the core | partial -- Toile's wrapper has no such belt; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | partial |
+| `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | `ambre_canvas::editor::tests::the_caret_and_selection_are_drawn_as_paths` -- it renders a selection and a caret under a pushed rotation and finds both as path fills and no rect fill, which a rotation maps by its bounding box alone | none | verified |
+| `CANVAS-037` | `INV` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the five replay one operation corpus through the wrapper and through the core; `ambre_toile::ui::view::view_tests::the_board_editor_drives_the_shared_core` -- Toile's belt replays its keys through the board view and the intents through a bare core, and compares the text and the selection after every step | none | verified |
 | `UI-THREAD-014` | `INV` | Every editor in the suite MUST take its input pipe, its composition machine, its caret and its selection model from this one substrate. | this spec section 2; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the `One text-editing substrate` Story (`ambre-roadmap.md` E8). `CANVAS-037` holds the caret and selection half for the two wrappers that exist; the input pipe is a second crate and the third application has no crate at all | unimplemented |
 | `UI-THREAD-018` | `INV` | The moving end of a selection MUST be named the focus and the fixed one the anchor, in every application and in this core. | this spec section 2 | not built | unbuilt -- lands with the `One name for the moving selection end` Story (`ambre-roadmap.md` E8). This core and the board already say focus; the grid says active beside its anchor, so one selection has two vocabularies and nothing refuses a third | unimplemented |
 
@@ -41,8 +41,8 @@ what was asked for and stops there.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-036` | `POST` | An editing action MUST be recorded without a font. | this spec section 2 | type-level -- an `EditIntent` names no font type and no layout type, so an action that needs a live font context has no shape to be queued in | none | verified |
-| `CANVAS-039` | `PRE` | A pointer position MUST reach the core in the editor's own frame, never in screen space. | this spec section 2 | none | unheld -- the core holds no camera, so a screen point is a valid pair of numbers that lands the caret somewhere else. The host subtracts the text origin before it queues one, and a caller that forgot would corrupt the caret in silence; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-049` | `FRAME` | Recording an editing action MUST NOT change the buffer. | this spec section 2, the seam; derived | none | unheld -- recording is the whole reason the queue exists: the buffer moves at paint time and nowhere else. Nothing reads the buffer back across a recording, so an intent that applied itself early would pass; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-039` | `PRE` | A pointer position MUST reach the core in the editor's own frame, never in screen space. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_press_reaches_the_editor_in_its_own_frame` -- a press on the first character of a sticky placed far from the origin puts the caret there, so a screen point would land past the end; `ambre_trame::ui::view::view_tests::a_press_reaches_the_editor_in_its_own_frame` -- the same press on a cell away from the corner of the grid | none | verified |
+| `CANVAS-049` | `FRAME` | Recording an editing action MUST NOT change the buffer. | this spec section 2, the seam; derived | `ambre_canvas::editor::tests::recording_an_action_leaves_the_buffer_alone` -- three actions recorded, and the buffer and the selection read back unchanged before the flush | none | verified |
 
 ### 1.3 Flush the queue at paint time
 
@@ -51,8 +51,8 @@ everything recorded since the last frame.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | none | unheld -- the flush takes the queue and drives it, and no test records two actions and reads both effects back. It is the half `CANVAS-036` carried and the type system cannot hold; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | none | unheld -- the drain takes the queue by value and replaces it with an empty one, so the rule holds by one line. An action left behind applies again on the next frame, which is a keystroke typed twice; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | `ambre_canvas::editor::tests::every_recorded_action_applies_at_the_flush` -- two inserts with motion between them, and one flush shows each one at its place | none | verified |
+| `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | `ambre_canvas::editor::tests::a_flush_leaves_the_queue_empty` -- it reads the queue empty after a flush, and a second flush with nothing recorded leaves the buffer as it was | none | verified |
 
 ### 1.4 Close an edit
 
@@ -60,7 +60,7 @@ The host compares the body it captured when the edit opened against the one the 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-038` | `FAIL` | Closing an edit that changed nothing MUST commit nothing. | this spec section 2 | none | unheld -- the body at open time is kept and compared on close, and no test drives an open-and-close with no keystroke between them; lands with the `The text editor and the PDF export held` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-038` | `FAIL` | Closing an edit that changed nothing MUST commit nothing. | this spec section 2 | `ambre_canvas::editor::tests::an_unchanged_buffer_commits_nothing` -- a caret that only moved yields no commit; `ambre_toile::ui::view::view_tests::an_untouched_editor_closes_without_a_write` -- an editor opened and closed with no keystroke sends no command | none | verified |
 
 * **Budget.** the text-layout row of `ambre-spec-budgets.md section 2`: under 2 ms for a dirty
   paragraph. This core pays it on the UI thread on every flush, because the editor re-shapes its
@@ -68,10 +68,9 @@ The host compares the body it captured when the edit opened against the one the 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 4 `verified`, 1 `partial`, 6 `untested`, 2 `unimplemented`. The four held rules
-  are the two the compiler holds and the two assertions of one host-tier test. What is loose is
-  everything the gestures owe. The parity belt that proves a wrapper delegates covers one wrapper of
-  two, and the drain at paint time is a call nothing checks.
+* **Verification.** 11 `verified`, 2 `unimplemented`. Host-tier tests hold the queue, the drain at
+  paint time, the drawn paths and the no-op close. A parity belt per wrapper proves each one
+  delegates to the core. What is loose is the two rules nothing has built yet.
 
 ---
 
@@ -140,14 +139,15 @@ origin when it renders, and may push a transform first (`CANVAS-041`).
 | the committed text, and whether it changed | turning a commit into a document operation |
 
 **Two wrappers**, Trame's cell editor and Toile's element editor. Each is a shim: a method queues
-one intent and adds nothing. Trame's belt replays an operation corpus through the wrapper and the
-bare core, comparing after every step. A shim wired to the wrong intent therefore fails
-(`CANVAS-037`).
+one intent and adds nothing. Each application's belt replays an operation corpus through its
+wrapper and through the bare core, comparing after every step. A shim wired to the wrong intent
+therefore fails (`CANVAS-037`).
 
 **Code:** `crates/ambre-canvas/src/editor.rs` holds the core, the intents and the pinned style.
 The wrappers are `crates/ambre-trame/src/ui/grid` with its rendering in
 `crates/ambre-trame/src/ui/renderer/edit.rs`, and `crates/ambre-toile/src/ui/edit.rs`. The parity
-belt is `crates/ambre-trame/src/ui/grid/tests/editor_parity.rs`.
+belts are `crates/ambre-trame/src/ui/grid/tests/editor_parity.rs` and
+`crates/ambre-toile/src/ui/view_tests.rs`.
 
 ---
 
@@ -190,9 +190,6 @@ reports, so an input method opens its window in the right place.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Toile's wrapper has no parity belt.** `CANVAS-037` is held for one of the two applications,
-  and Toile's wrapper is the larger of the two. It carries a rotation, a card background and a
-  growing box.
 * **The parity corpus is single-line ASCII.** It is what a spreadsheet cell holds. The belt proves
   nothing about a wrapped line, a word jump across a line break, or a grapheme cluster.
 * **Nothing rules on undo inside an edit.** The core has no history, so a wrapper that wants

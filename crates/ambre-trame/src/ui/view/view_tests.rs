@@ -408,3 +408,38 @@ fn an_empty_answer_clears_the_highlight() {
         cursor
     );
 }
+
+/// `CANVAS-039`: a press reaches the cell editor in its own frame. The cell
+/// sits far from the screen origin, so a press at its left edge is a small
+/// local x. Read as a screen point, it would land past the end of the text.
+#[test]
+fn a_press_reaches_the_editor_in_its_own_frame() {
+    let mut rig = Rig::new();
+    rig.frame();
+    for _ in 0..3 {
+        rig.key("ArrowRight");
+        rig.key("ArrowDown");
+    }
+    rig.type_text("hi");
+    rig.frame();
+    let (x, y, _w, h) = rig.view.state.cell_pixel_rect(3, 3).expect("D4 is in view");
+    let at = (x + 1.0, y + h / 2.0);
+    rig.view.handle_input(&InputEvent::PointerDown {
+        x: at.0,
+        y: at.1,
+        button: 0,
+        shift: false,
+        ctrl: false,
+    });
+    rig.view.handle_input(&InputEvent::PointerUp {
+        x: at.0,
+        y: at.1,
+        button: 0,
+        ctrl: false,
+    });
+    rig.type_text("X");
+    rig.frame();
+    let editor = rig.view.editor.as_ref().expect("still open");
+    assert_eq!((editor.row, editor.col), (3, 3));
+    assert_eq!(editor.text(), "Xhi");
+}

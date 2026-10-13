@@ -219,9 +219,22 @@ fn trigger_download(filename: &str, data: &[u8]) {
 }
 
 /// Host-build stub: no DOM to download into outside the browser. Kept so the
-/// exhaustive event dispatch compiles in the headless tests.
+/// exhaustive event dispatch compiles in the headless tests. A host test reads
+/// back each file the view handed over (`PDF-003`).
 #[cfg(not(target_arch = "wasm32"))]
-fn trigger_download(_filename: &str, _data: &[u8]) {}
+fn trigger_download(filename: &str, data: &[u8]) {
+    #[cfg(test)]
+    DOWNLOADS.with(|d| d.borrow_mut().push((filename.to_owned(), data.to_vec())));
+    #[cfg(not(test))]
+    let _ = (filename, data);
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+thread_local! {
+    /// Each file the host stub was handed, in order: its name and its bytes.
+    pub(crate) static DOWNLOADS: std::cell::RefCell<Vec<(String, Vec<u8>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
 
 pub struct ToileView {
     document_id: DocumentId,

@@ -799,3 +799,128 @@ fn the_current_match_is_brought_into_view() {
         "the focus is in view"
     );
 }
+
+/// A press reaches the editor in its own frame, never in screen space. The
+/// note sits far from the screen origin, so a press at its left edge is a
+/// small local x. Read as a screen point, it would land past the end of the
+/// text (`CANVAS-039`).
+#[test]
+fn a_press_reaches_the_editor_in_its_own_frame() {
+    let far = Rect::new(600.0, 400.0, 800.0, 520.0);
+    let mut rig = Rig::with_stickies(&[("b", far)]);
+    rig.click(700.0, 460.0);
+    rig.double_click(700.0, 460.0);
+    rig.paint();
+    rig.click(far.x0 + 2.0, 460.0);
+    rig.type_text("X");
+    rig.paint();
+    let ed = rig.view.editor.as_ref().expect("still open");
+    assert_eq!(ed.committed_text().as_deref(), Some("Xhi"));
+}
+
+/// The board's editor reimplements no caret motion and no selection. A gesture
+/// goes through the view, and its intent goes into a bare core. After each
+/// step, both hold the same text and selection (`CANVAS-037`).
+#[test]
+fn the_board_editor_drives_the_shared_core() {
+    use ambre_canvas::TextEditor;
+    let key = |key: &str, alt: bool, shift: bool| InputEvent::Key {
+        key: key.to_owned(),
+        ctrl: false,
+        alt,
+        shift,
+        meta: false,
+    };
+    let text = |s: &str| InputEvent::Text { text: s.to_owned() };
+    let left = |select, word| EditIntent::Left { select, word };
+    let right = |select, word| EditIntent::Right { select, word };
+    let corpus: Vec<(InputEvent, EditIntent)> = vec![
+        (text(" ab cd"), EditIntent::Insert(" ab cd".to_owned())),
+        (key("ArrowLeft", false, false), left(false, false)),
+        (key("ArrowLeft", false, true), left(true, false)),
+        (key("Backspace", false, false), EditIntent::Backspace),
+        (key("ArrowLeft", true, false), left(false, true)),
+        (key("ArrowRight", true, true), right(true, true)),
+        (text("X"), EditIntent::Insert("X".to_owned())),
+        (
+            key("Home", false, false),
+            EditIntent::LineStart { select: false },
+        ),
+        (key("Delete", false, false), EditIntent::Delete),
+        (
+            key("End", false, true),
+            EditIntent::LineEnd { select: true },
+        ),
+        (key("ArrowRight", false, false), right(false, false)),
+        (
+            key("Home", false, true),
+            EditIntent::LineStart { select: true },
+        ),
+        (
+            InputEvent::Key {
+                key: "a".to_owned(),
+                ctrl: true,
+                alt: false,
+                shift: false,
+                meta: false,
+            },
+            EditIntent::SelectAll,
+        ),
+        (text("new"), EditIntent::Insert("new".to_owned())),
+    ];
+
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.key("End", false, false);
+    rig.paint();
+    let style = rig.view.editor.as_ref().expect("open").style().clone();
+    let mut core = TextEditor::new("hi", style);
+    let mut font_cx = FontContext::new();
+    core.flush(&mut font_cx, 1000.0, 1.0);
+
+    for (step, (event, intent)) in corpus.into_iter().enumerate() {
+        rig.input(event);
+        rig.paint();
+        core.push(intent);
+        core.flush(&mut font_cx, 1000.0, 1.0);
+        let ed = rig.view.editor.as_ref().expect("still open");
+        let board_text = ed
+            .committed_text()
+            .unwrap_or_else(|| ed.opened_text().to_owned());
+        assert_eq!(board_text, core.text(), "text after step {step}");
+        assert_eq!(
+            ed.selected_text(),
+            core.selected_text(),
+            "selection after step {step}"
+        );
+    }
+}
+
+/// A finished export reaches the browser as one download, and nothing else
+/// happens. No command leaves the view, the selection holds and the board
+/// paints the same pixels (`PDF-003`).
+#[test]
+fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.frame();
+    let _ = rig.sent();
+    let selection = rig.view.selection.clone();
+    assert_eq!(selection, [eid("a")]);
+    let before = rig.paint();
+    DOWNLOADS.with(|d| d.borrow_mut().clear());
+
+    rig.answer(ToileEvent::ExportComplete {
+        filename: "deck.pdf".to_owned(),
+        data: b"%PDF-1.7".to_vec(),
+        skipped: Vec::new(),
+    });
+    rig.frame();
+
+    let handed = DOWNLOADS.with(|d| d.borrow().clone());
+    assert_eq!(handed, [("deck.pdf".to_owned(), b"%PDF-1.7".to_vec())]);
+    assert!(rig.sent().is_empty(), "the handoff sent a command");
+    assert_eq!(rig.view.selection, selection);
+    assert_eq!(rig.paint().ops(), before.ops(), "the board changed");
+}

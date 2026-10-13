@@ -286,6 +286,21 @@ mod tests {
         assert!(pdf.starts_with(b"%PDF-"), "a PDF header: {:?}", &pdf[..8]);
     }
 
+    /// A PDF export writes nothing: the oplog's version vector is the same after
+    /// it, so no delta can leave for a peer (`PDF-002`). The receiver is shared,
+    /// but the `LoroDoc` mutates through one, so the type does not hold this.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_pdf_export_leaves_the_oplog_unchanged() {
+        let st = board_with_a_rect();
+        let before = st.doc.oplog_vv();
+        let mut fonts = ambre_draw::FontContext::default();
+        st.export_pdf_document(Default::default(), &mut fonts)
+            .expect("a board with content renders");
+        assert_eq!(st.doc.oplog_vv(), before, "the export wrote to the board");
+        assert_eq!(st.doc.state_vv(), before);
+    }
+
     /// A board with nothing on it has no page to draw. The caller turns the
     /// refusal into a message rather than handing the user an empty file.
     #[cfg(feature = "pdf")]

@@ -679,4 +679,86 @@ mod tests {
             "committed text should not stay underlined"
         );
     }
+
+    /// Recording moves nothing: the buffer reads the same until the flush
+    /// (`CANVAS-049`).
+    #[test]
+    fn recording_an_action_leaves_the_buffer_alone() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("abc", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Insert("X".to_owned()));
+        ed.push(EditIntent::Backspace);
+        ed.push(EditIntent::SelectAll);
+        assert_eq!(ed.text(), "abc", "a recorded action applied itself early");
+        assert_eq!(ed.selected_text(), None);
+        assert_eq!(ed.committed_text(), None);
+    }
+
+    /// Every recorded action lands at paint time, in order: two inserts and a
+    /// motion between them all show in the buffer after one flush
+    /// (`CANVAS-047`).
+    #[test]
+    fn every_recorded_action_applies_at_the_flush() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("ab", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Insert("1".to_owned()));
+        ed.push(left());
+        ed.push(left());
+        ed.push(EditIntent::Insert("2".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "a2b1");
+    }
+
+    /// The flush drains the queue: nothing is left behind, and a second flush
+    /// with no new action changes nothing (`CANVAS-050`).
+    #[test]
+    fn a_flush_leaves_the_queue_empty() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("ab", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Insert("X".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert!(ed.intents.is_empty(), "an action stayed in the queue");
+        assert_eq!(ed.text(), "abX");
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.text(), "abX", "a second flush typed the key again");
+    }
+
+    /// Under a caller transform, the selection band and the caret are paths,
+    /// so the transform carries them. No `fill_rect` is recorded, which maps a
+    /// bounding box alone (`CANVAS-041`).
+    #[test]
+    fn the_caret_and_selection_are_drawn_as_paths() {
+        use ambre_draw::testing::{DrawOp, RecordingSurface};
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("abc", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(EditIntent::Left {
+            select: true,
+            word: false,
+        });
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.selected_text().as_deref(), Some("c"));
+
+        let selection = Color::from_rgba8(0, 0, 255, 255);
+        let mut surface = RecordingSurface::new();
+        surface.push_transform(Affine::rotate(0.5));
+        ed.render(&mut surface, Point::new(10.0, 20.0), selection, true);
+        surface.pop_transform();
+
+        let band = selection.with_alpha(0.30);
+        let ink = style().color;
+        let paths = |c: Color| {
+            surface.count(|op| matches!(op, DrawOp::FillPath { color: Some(k) } if *k == c))
+        };
+        assert!(paths(band) >= 1, "the selection band is not a path");
+        assert!(paths(ink) >= 1, "the caret is not a path");
+        assert_eq!(
+            surface.count(|op| matches!(op, DrawOp::FillRect { .. })),
+            0,
+            "a fill_rect maps only its bounding box under a rotation"
+        );
+    }
 }

@@ -1826,6 +1826,23 @@ mod tests {
         }
     }
 
+    /// A deck export sends nothing to Sync: no delta leaves for a peer
+    /// (`PDF-002`).
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_deck_export_sends_no_delta() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
+        assert!(matches!(
+            answer,
+            ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+        ));
+        assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
+    }
+
     /// An export reads the board and writes nothing, so a read-only viewer keeps
     /// the right to take a copy out (`ARCH-ROLE-GATE`).
     #[test]
