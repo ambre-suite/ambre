@@ -2307,3 +2307,63 @@ fn a_finger_that_barely_moves_is_a_tap() {
     assert_eq!(rig.ui.viewport.scroll_y, 0.0);
     assert_eq!(rig.ui.fling_speed(), None);
 }
+
+// -- The input pipe -----------------------------------------------------------
+
+/// Paint the view once, and answer the caret bar it drew, in canvas pixels.
+fn paint_caret(rig: &mut Rig) -> Option<ambre_draw::Rect> {
+    let ink = ambre_draw::Color::from_rgba8(20, 20, 20, 255);
+    let palette = crate::view::paint::PagePalette {
+        sheet: ink,
+        sheet_border: ink,
+        shadow: ink,
+        text: ink,
+        accent: ink,
+        warning: ink,
+        success: ink,
+        error: ink,
+    };
+    let mut surface = ambre_draw::testing::RecordingSurface::new();
+    rig.ui.paint(&mut surface, &palette);
+    rig.ui.caret_drawn
+}
+
+/// The caret bar a paint draws, where the rig has one.
+fn caret_drawn(rig: &mut Rig) -> ambre_draw::Rect {
+    paint_caret(rig).expect("the paint drew a caret")
+}
+
+/// `CHROME-007`: the paint reports the caret where it drew it, at any zoom and
+/// scroll. The report follows the caret as the text grows before it.
+#[test]
+fn the_pipe_spot_is_the_caret_the_paint_drew() {
+    let long = words(50);
+    let paragraphs: Vec<&str> = vec![long.as_str(); 20];
+    let mut rig = Rig::new(&paragraphs);
+    let block = rig.blocks()[12];
+    for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
+        rig.ui.viewport.zoom = zoom;
+        rig.ui.viewport.scroll_y = 0.0;
+        rig.ui.scroll_by(scroll * zoom);
+        for offset in [0, 9, 42] {
+            caret_at(&mut rig, block, offset);
+            let (x, y) = rig.point_of(block, offset);
+            let bar = caret_drawn(&mut rig);
+            let half = 0.5 * f64::from(rig.ui.viewport.scale());
+            assert!((bar.x0 - (f64::from(x) - half)).abs() < 0.01, "zoom {zoom}");
+            assert!(
+                bar.y0 < f64::from(y) && f64::from(y) < bar.y1,
+                "zoom {zoom}"
+            );
+        }
+    }
+    let before = caret_drawn(&mut rig).x0;
+    rig.type_text("abc");
+    rig.deliver();
+    rig.lay();
+    assert!(caret_drawn(&mut rig).x0 > before, "the caret moved right");
+
+    // No caret, no spot: the host leaves the pipe where it last was.
+    rig.ui.cursor = None;
+    assert_eq!(paint_caret(&mut rig), None);
+}

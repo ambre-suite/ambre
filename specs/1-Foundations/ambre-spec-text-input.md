@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE TEXT INPUT PIPE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the pipe, the composition window and the clipboard events ship. No
-test drives any of them, and one label is written for a spreadsheet.
+**Implementation:** implemented -- the pipe, the composition window and the clipboard events ship.
+Each view places the pipe on its caret.
 
 > A text area that shows nothing, sits under the caret, and is the real keyboard focus of the
 > canvas. Every keystroke, every input-method composition and every clipboard event the content
@@ -23,7 +23,7 @@ other five documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | `ambre_app::host::pipe::tests::the_pipe_moves_by_a_transform_to_the_point_it_is_given` -- the pipe lands where the view puts it | partial -- Toile places it on the editor's caret. Trame parks it on the cell, not on the caret inside it, and Prose never places it, so the input-method window opens off the caret; lands with the `The input pipe follows every caret` Story (`ambre-roadmap.md` E9) | partial |
+| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | `ambre_app::host::pipe::tests::the_pipe_moves_by_a_transform_to_the_point_it_is_given` -- the pipe lands where the view puts it. `ambre_prose::input_tests::the_pipe_spot_is_the_caret_the_paint_drew`; `ambre_trame::ui::view::view_tests::the_pipe_follows_the_caret_inside_the_cell`; `ambre_toile::ui::view::view_tests::the_pipe_follows_the_caret_inside_the_element` -- each view's paint reports the caret it drew, which follows the text as it grows | none | verified |
 | `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | `ambre_app::host::pipe::tests::the_pipe_displays_nothing` -- the shipped rules applied, the computed text, caret, background and selection colours read back transparent | none | verified |
 | `CHROME-016` | `INV` | The pipe MUST be moved by a transform, never by an offset that reflows the page. | this spec section 2 | `ambre_app::host::pipe::tests::the_pipe_moves_by_a_transform_to_the_point_it_is_given` -- a placement writes a transform and no offset | none | verified |
 
@@ -63,10 +63,10 @@ The browser maps every clipboard chord, the legacy set included, onto three even
   is the first hop of that path, and the figure is measured nowhere.
 * **Boundary.** the operating system clipboard, and nothing else. What the copy and the paste may
   carry is `UI-THREAD-006`; the pipe opens no socket, holds no key and writes no store.
-* **Verification.** 12 `verified`, 1 `partial`. The wasm tier wires the six listeners onto a real
-  pipe and raises the events an input method and the keyboard send. It reads the shipped styles
-  back as computed. Each view is held on host for the keys it leaves to the text path. The partial
-  row is the placement: two of the three views do not follow their caret.
+* **Verification.** 13 `verified`. The wasm tier wires the six listeners onto a real pipe and
+  raises the events an input method and the keyboard send. It reads the shipped styles back as
+  computed. Each view is held on host for the keys it leaves to the text path, and for the caret
+  its paint hands the pipe.
 
 ---
 
@@ -126,9 +126,9 @@ constructed in a mode that does not steal focus from the host document.
 
 **Code:** `crates/ambre-canvas/src/text_input.rs` creates and places the element.
 `crates/ambre-app/src/host/pipe.rs` attaches the six listeners and reads the composition flag. Its
-wasm tests raise their events. The placement callers are
-`crates/ambre-trame/src/ui/view/lifecycle.rs` and `crates/ambre-toile/src/ui/view.rs`, and the
-style is `crates/ambre-app/styles.css`.
+wasm tests raise their events. The placement callers are `crates/ambre-trame/src/ui/view/frame.rs`,
+`crates/ambre-toile/src/ui/view.rs` and `crates/ambre-app/src/host/prose.rs`, and the style is
+`crates/ambre-app/styles.css`.
 
 ---
 
@@ -167,13 +167,9 @@ The user never sees this element. What they see is whether typing lands where th
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The accessible label is written for a spreadsheet.** The element is created in the shared crate
-  with a fixed label and role description naming a spreadsheet cell. A board and a page therefore
-  announce themselves as one. It is a defect of `ambre-spec-accessibility.md`'s surface, not of this pipe's
-  behaviour. That is where the label rule belongs.
-* **No test in any tier drives a composition.** Six of the seven rows above describe what happens
-  between the first and last composition event. The mechanism that would observe it does not exist:
-  a headless browser sends key events, not input-method events.
+* **No test in any tier drives a real input method.** The wasm tier raises the composition events
+  by hand. A headless browser sends key events, not input-method events, so the window itself is
+  never observed.
 * **Nothing rules on a composition interrupted by a remote change.** A concurrent edit that moves
   the text under a running composition has no stated behaviour. `UI-THREAD-014` names the reanchor
   as part of the substrate it schedules.

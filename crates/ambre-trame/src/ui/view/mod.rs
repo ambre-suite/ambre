@@ -356,6 +356,9 @@ pub struct TrameView {
     /// Caret blink phase: `true` = caret drawn. Toggled every `BLINK_MS`, reset
     /// to `true` (solid) on any edit interaction, as platforms do.
     caret_on: bool,
+    /// Where the last paint laid out the in-cell caret, in canvas pixels. The
+    /// pipe sits there while a cell is edited (`CHROME-007`).
+    caret_drawn: Option<ambre_draw::Rect>,
     /// The clock's time of the last blink toggle (or blink reset).
     last_blink_ms: f64,
     /// The clock's time of the input awaiting its caret paint, set by an edit

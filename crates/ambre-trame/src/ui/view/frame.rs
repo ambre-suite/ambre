@@ -569,8 +569,9 @@ impl TrameView {
         // draw_edit flushes the editor's queued intents (a FontContext is live
         // here), so the buffer is final afterwards. That is why a deferred commit
         // is resolved below, not in the key handler.
+        self.caret_drawn = None;
         if let Some(editor) = &mut self.editor {
-            renderer::draw_edit(
+            let caret = renderer::draw_edit(
                 surface,
                 &self.state,
                 self.theme.palette(),
@@ -578,6 +579,13 @@ impl TrameView {
                 self.caret_on,
                 font_cx,
             );
+            // The pipe leaves the cell's corner for the caret inside it, so
+            // the IME popup follows the text being typed (`CHROME-007`).
+            if let Some(caret) = caret {
+                self.text_input
+                    .set_caret(caret.x0, caret.y0, caret.height().max(1.0));
+            }
+            self.caret_drawn = caret;
 
             // The caret was just drawn: close the input->caret latency probe.
             // Measured at CPU-paint completion (one GPU submit, ~0.5-1 ms, still

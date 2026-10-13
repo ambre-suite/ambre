@@ -265,3 +265,31 @@ fn a_paste_writes_nothing_back() {
     rig.view.paste_clipboard(clip(3, "read"), false);
     assert_eq!(rig.view.poll_clipboard(), None);
 }
+
+/// Covers `CHROME-007`: in an open editor the pipe sits on the caret inside
+/// the cell and follows it as the text grows. A closed editor holds none.
+#[test]
+fn the_pipe_follows_the_caret_inside_the_cell() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert_eq!(rig.view.caret_drawn, None, "no editor, no caret");
+    rig.type_text("x");
+    rig.frame();
+    let first = rig.view.caret_drawn.expect("the editor drew a caret");
+    let (x, y, w, h) = rig.view.state.cell_pixel_rect(0, 0).expect("A1 is in view");
+    assert!(
+        first.x0 > x && first.x0 < x + w,
+        "inside the cell: {first:?}"
+    );
+    assert!(
+        first.y0 >= y && first.y1 <= y + h,
+        "inside the cell: {first:?}"
+    );
+    rig.type_text("yyyy");
+    rig.frame();
+    let later = rig.view.caret_drawn.expect("the editor drew a caret");
+    assert!(later.x0 > first.x0, "the caret moved right: {later:?}");
+    assert!(rig.key("Escape"));
+    rig.frame();
+    assert_eq!(rig.view.caret_drawn, None, "the editor closed");
+}

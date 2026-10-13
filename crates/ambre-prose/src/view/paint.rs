@@ -327,6 +327,7 @@ impl ProseUiState {
     /// The bands and the footnotes follow (`PROSE-UI-115`), and the carets of
     /// the other peers come last (`PROSE-UI-118`).
     pub fn paint<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette) {
+        self.caret_drawn = None;
         let Some(pages) = self.column.built_pages(&self.viewport) else {
             return;
         };
@@ -338,6 +339,7 @@ impl ProseUiState {
         for page in pages {
             let top = f64::from(self.column.page_top_y(page));
             surface.push_transform(Affine::translate((0.0, top)));
+            self.page_frame = camera * Affine::translate((0.0, top));
             self.paint_page(surface, palette, page);
             surface.pop_transform();
         }
@@ -425,10 +427,9 @@ impl ProseUiState {
                     );
                     if let Some(caret) = ghost.caret {
                         let rect = to_rect(&placed, &data.caret_box(caret));
-                        surface.fill_rect(
-                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
-                            palette.accent,
-                        );
+                        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
+                        surface.fill_rect(bar, palette.accent);
+                        self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
                     }
                 }
             }
@@ -548,10 +549,10 @@ impl ProseUiState {
                 surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
                 rect.x0 += width;
             }
-            surface.fill_rect(
-                Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
-                palette.accent,
-            );
+            let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
+            surface.fill_rect(bar, palette.accent);
+            // The host places the input pipe on this bar (`CHROME-007`).
+            self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
         }
     }
 

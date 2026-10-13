@@ -494,6 +494,12 @@ impl ProseView {
         let backdrop = Rect::new(0.0, 0.0, f64::from(self.size.0), f64::from(self.size.1));
         surface.fill_rect(backdrop, self.theme.palette().content_pending);
         self.state.paint(surface, &page_palette(self.theme));
+        // The input pipe follows the caret the paint just drew, so the IME
+        // popup opens beside it (`CHROME-007`).
+        if let Some(bar) = self.state.caret_drawn {
+            self.text_input
+                .set_caret(bar.x0, bar.y0, bar.height().max(1.0));
+        }
         let painted = self.probe.painted(super::probe::now_ms());
         self.timeline.record(painted);
     }

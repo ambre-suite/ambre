@@ -14,6 +14,9 @@ use ambre_canvas::TextEditorStyle;
 /// after `draw_overlay`, so it sits above the active-cell border and the grid.
 /// Clipped to the cell, itself clipped to the scrollable area (never under the
 /// header strip).
+///
+/// Answers where the caret was laid out, in canvas pixels, so the host can
+/// place the input pipe on it (`CHROME-007`).
 pub fn draw_edit<S: DrawSurface>(
     surface: &mut S,
     state: &TrameUiState,
@@ -21,10 +24,9 @@ pub fn draw_edit<S: DrawSurface>(
     editor: &mut CellEditor,
     caret_visible: bool,
     font_cx: &mut FontContext,
-) {
-    let Some((x, y, cw, ch)) = state.cell_pixel_rect(editor.row, editor.col) else {
-        return; // active cell scrolled out of view; nothing to draw
-    };
+) -> Option<Rect> {
+    // An active cell scrolled out of view: nothing to draw.
+    let (x, y, cw, ch) = state.cell_pixel_rect(editor.row, editor.col)?;
 
     // Match the cell's pinned formatting so the edit looks like the result.
     let (bold, italic) = state
@@ -73,4 +75,11 @@ pub fn draw_edit<S: DrawSurface>(
         .core
         .render(surface, origin, palette.selection, caret_visible);
     surface.pop_clip();
+    let caret = editor.core.caret_local()?;
+    Some(Rect::new(
+        origin.x + caret.x0,
+        origin.y + caret.y0,
+        origin.x + caret.x1,
+        origin.y + caret.y1,
+    ))
 }

@@ -42,7 +42,7 @@ use ambre_canvas::{
     PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl,
 };
 use ambre_draw::kinetic::Release;
-use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
+use ambre_draw::{FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
 use crate::logic::text_merge::merge_text;
@@ -316,6 +316,9 @@ pub struct ToileView {
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
+    /// Where the last paint laid out the editor's caret, in canvas pixels. The
+    /// pipe sits there while a text is edited (`CHROME-007`).
+    caret_drawn: Option<ambre_draw::Rect>,
     /// A queued edit intent / open / close marked the editor overlay dirty
     /// (`toile-text-editing`).
     edit_dirty: bool,
@@ -665,6 +668,7 @@ impl ToileView {
             edit_open_on_create: None,
             next_create_token: 1,
             edit_closing: false,
+            caret_drawn: None,
             edit_dirty: false,
             edit_pointer_down: false,
             click_edit_candidate: None,
@@ -3300,6 +3304,7 @@ impl ToileView {
         surface: &mut S,
         font_cx: &mut FontContext,
     ) {
+        self.caret_drawn = None;
         let Some(target) = self.editor.as_ref().map(|ed| ed.target().clone()) else {
             return;
         };
@@ -3344,7 +3349,17 @@ impl ToileView {
                 if !self.edit_closing
                     && let Some(caret) = ed.caret_local()
                 {
-                    set_caret_pipe(&self.text_input, origin, caret);
+                    // The editor's local caret, moved to the screen pixels the
+                    // pipe wants, so the IME box anchors there (`CANVAS-032`).
+                    let spot = ambre_draw::Rect::new(
+                        origin.x + caret.x0,
+                        origin.y + caret.y0,
+                        origin.x + caret.x1,
+                        origin.y + caret.y1,
+                    );
+                    self.text_input
+                        .set_caret(spot.x0, spot.y0, spot.height().max(1.0));
+                    self.caret_drawn = Some(spot);
                 }
             }
             // Element gone/culled: commit whatever the last flush produced.
@@ -4098,15 +4113,6 @@ impl ToileView {
         // freshly-routed board without a click.
         self.text_input.focus();
     }
-}
-
-/// Position the transparent `<textarea>` pipe at the editor caret so the IME
-/// candidate box anchors there (`toile-text-editing`). `origin` is the editor's
-/// text origin in screen pixels; `caret` is the caret box in the editor's local
-/// frame. Screen pixels are the CSS pixels the pipe wants (`CANVAS-032`).
-fn set_caret_pipe(pipe: &ambre_canvas::TextInput, origin: ambre_draw::Point, caret: BoundingBox) {
-    let line_h = (caret.y1 - caret.y0).max(1.0);
-    pipe.set_caret(origin.x + caret.x0, origin.y + caret.y0, line_h);
 }
 
 /// The author's wall clock in milliseconds, stamped on a comment command

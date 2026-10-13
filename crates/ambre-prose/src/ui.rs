@@ -385,6 +385,12 @@ pub struct ProseUiState {
     /// The caret sits at the end of the line before a wrap point rather than
     /// at the start of the line after it (`PROSE-UI-159`).
     pub caret_upstream: bool,
+    /// Where the last paint drew the local caret, in canvas pixels. The host
+    /// places the input pipe there (`CHROME-007`).
+    pub caret_drawn: Option<ambre_draw::Rect>,
+    /// The canvas transform of the page being painted, which takes a caret
+    /// drawn on it to `caret_drawn`.
+    pub(crate) page_frame: ambre_draw::Affine,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
     pub(crate) x_goal: Option<f32>,
     /// The page whose header or footer holds the caret. A band is drawn on

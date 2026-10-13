@@ -731,3 +731,32 @@ fn a_printable_key_in_an_editor_is_not_consumed() {
         assert!(!rig.key(key, false, false), "{key:?} was consumed");
     }
 }
+
+/// Covers `CHROME-007`: in an open editor the pipe sits on the caret inside
+/// the element and follows it as the text grows. A closed editor holds none.
+#[test]
+fn the_pipe_follows_the_caret_inside_the_element() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.paint();
+    assert_eq!(rig.view.caret_drawn, None, "no editor, no caret");
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.paint();
+    let first = rig.view.caret_drawn.expect("the editor drew a caret");
+    let (left, top) = rig.screen(A.x0, A.y0);
+    let (right, bottom) = rig.screen(A.x1, A.y1);
+    let on_screen = Rect::new(left, top, right, bottom);
+    assert!(
+        on_screen.contains(Point::new(first.x0, first.y0)),
+        "inside the element: {first:?}"
+    );
+    rig.input(InputEvent::Text {
+        text: "!!!".to_owned(),
+    });
+    rig.paint();
+    let later = rig.view.caret_drawn.expect("the editor drew a caret");
+    assert!(later.x0 > first.x0, "the caret moved right: {later:?}");
+    rig.key("Escape", false, false);
+    rig.paint();
+    assert_eq!(rig.view.caret_drawn, None, "the editor closed");
+}

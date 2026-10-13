@@ -84,6 +84,7 @@ impl TrameView {
             hover_cursor: String::new(),
             edit_dirty: false,
             caret_on: true,
+            caret_drawn: None,
             last_blink_ms: 0.0,
             pending_input_mark: None,
             clock,
