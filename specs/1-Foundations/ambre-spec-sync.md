@@ -32,14 +32,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
 | `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token` -- the socket address holds no token, and the token pair prints with the token redacted, and the raw form is reachable only through `expose` | none | verified |
 | `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
-| `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | none | unheld -- none is possible on host: the property is about a browser event loop. The loop awaits two channels whose producers both live in this worker, which is what makes the historical freeze unreachable by construction; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | `ambre_sync::run_tests::the_loop_yields_to_the_tasks_beside_it` -- on one thread, a task beside the waiting loop runs, and closing the commands from it wakes the loop | none | verified |
 
 ### 1.2 The worker starts
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | none | unheld -- the worker announces itself as the last step of its start, and the relay on the other side holds every command until it sees that announcement. No test boots a worker slowly to see the first command survive; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | none | unheld -- the edit is buffered and replayed once the document is open, and no test issues an edit before a session: the host path seeds its keys before anything runs; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | `ambre_bus::start::tests::no_command_is_posted_before_the_worker_announces_itself` -- commands queued before the announcement are posted after it, in order, and an encoded event never reads as one | none | verified |
+| `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | `ambre_sync::updates::tests::an_edit_before_the_session_is_held_then_sent` -- two edits made with no signing key are sent, in order, once the key is set and the replay lands | none | verified |
 | `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::held_commands_are_released_in_order` -- the held opens subscribe in order, and the held edits leave in order at rising clocks | none | verified |
 
 ### 1.3 The socket connects, and reconnects
@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::a_refused_token_is_renewed_and_the_request_replayed_once` -- the replay carries the renewed token; `ambre_sync::http::tests::a_request_is_replayed_at_most_once` -- a second refusal or a refused renewal ends it | none | verified |
-| `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | none | unheld -- every call attaches a thirty-second abort signal, and no test drives a request that never answers: the request path is the browser fetch; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | `ambre_sync::http::tests::a_request_with_no_answer_is_abandoned_at_its_deadline` -- a transport that never answers ends the request with an error at its thirty-second deadline, sent once | none | verified |
 | `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::each_answer_maps_to_its_error` -- a 403, a 409, a 500, a 404 and no answer each send one request, with no renewal | none | verified |
 
 ### 1.5 Content leaves for the relay
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 21 `verified`, 8 `untested`. The crate graph holds the keys and the CRDT apart.
+* **Verification.** 25 `verified`, 4 `untested`. The crate graph holds the keys and the CRDT apart.
   Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
   document. A gate refuses browser storage in the worker. Each gap left is a browser property the
   wasm tier cannot boot, `ambre-spec-testing.md section 9`.

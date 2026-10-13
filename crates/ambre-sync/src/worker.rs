@@ -90,9 +90,8 @@ pub fn start() {
     // race where a command posted during the worker's async wasm bootstrap
     // (before `onmessage` existed) was silently dropped. The boot `DevLogin` was
     // the notable one: its loss left the session key unset and every
-    // `OpenDocument` queued forever behind the loading overlay. An empty payload
-    // is the sentinel: a postcard-encoded LogicEvent is never zero-length.
-    post_bytes(&scope, &[]);
+    // `OpenDocument` queued forever behind the loading overlay (`SYNC-057`).
+    post_bytes(&scope, ambre_bus::start::ANNOUNCEMENT);
 
     wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
 }

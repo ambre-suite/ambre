@@ -183,6 +183,9 @@ pub(crate) struct Incoming {
 pub(crate) trait Transport {
     /// Sends `request`. An error is a request that got no answer at all.
     async fn send(&self, request: &Outgoing) -> Result<Incoming, String>;
+
+    /// Resolves once `ms` milliseconds have passed.
+    async fn elapse(&self, ms: u32);
 }
 
 /// The browser's `fetch`, the transport of the running worker.
@@ -233,6 +236,23 @@ impl Transport for Fetch {
             status: resp.status(),
             body,
         })
+    }
+
+    async fn elapse(&self, ms: u32) {
+        use wasm_bindgen::JsCast;
+
+        let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() else {
+            // No timer to wait on: never resolve, and leave the abort signal
+            // to end the request.
+            return std::future::pending().await;
+        };
+        let timer = js_sys::Promise::new(&mut |resolve, _reject| {
+            let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
+                &resolve,
+                i32::try_from(ms).unwrap_or(i32::MAX),
+            );
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(timer).await;
     }
 }
 
@@ -336,10 +356,17 @@ fn read_json<R: serde::de::DeserializeOwned>(
 /// Sends `request` once. A request that got no answer reads as its method
 /// and its URL, then the transport's reason.
 async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Incoming, String> {
-    transport
-        .send(request)
-        .await
-        .map_err(|e| format!("{} {}: {e}", request.method.as_str(), request.url))
+    use futures_util::future::{Either, select};
+
+    // The deadline is raced here, not left to the transport alone, so a
+    // request that never answers is abandoned on every transport (`SYNC-071`).
+    let send = std::pin::pin!(transport.send(request));
+    let deadline = std::pin::pin!(transport.elapse(request.timeout_ms));
+    let answer = match select(send, deadline).await {
+        Either::Left((answer, _)) => answer,
+        Either::Right(((), _)) => Err(format!("no answer within {} ms", request.timeout_ms)),
+    };
+    answer.map_err(|e| format!("{} {}: {e}", request.method.as_str(), request.url))
 }
 
 /// Sends `request` under the session's access token. A 401 renews the pair
@@ -996,15 +1023,20 @@ pub(crate) struct ConfirmUploadRequest {
 #[cfg(test)]
 pub(crate) mod scripted {
     use super::*;
+    use std::cell::Cell;
     use std::collections::VecDeque;
 
     /// Answers each request with the next scripted answer. A request past the
-    /// script gets no answer at all.
+    /// script fails at once, or never answers once `silent` is set.
     #[derive(Default)]
     pub(crate) struct Scripted {
         answers: RefCell<VecDeque<Result<Incoming, String>>>,
         /// Every request handed over, in order.
         pub sent: RefCell<Vec<Outgoing>>,
+        /// Whether a request past the script hangs instead of failing.
+        pub silent: Cell<bool>,
+        /// Every deadline a silent transport waited out, in milliseconds.
+        pub waited: RefCell<Vec<u32>>,
     }
 
     impl Scripted {
@@ -1024,7 +1056,7 @@ pub(crate) mod scripted {
                 .collect();
             Self {
                 answers: RefCell::new(answers),
-                sent: RefCell::default(),
+                ..Self::default()
             }
         }
 
@@ -1041,10 +1073,21 @@ pub(crate) mod scripted {
     impl Transport for Scripted {
         async fn send(&self, request: &Outgoing) -> Result<Incoming, String> {
             self.sent.borrow_mut().push(request.clone());
-            self.answers
-                .borrow_mut()
-                .pop_front()
-                .unwrap_or_else(|| Err("no answer scripted".to_owned()))
+            let answer = self.answers.borrow_mut().pop_front();
+            match answer {
+                Some(answer) => answer,
+                None if self.silent.get() => std::future::pending().await,
+                None => Err("no answer scripted".to_owned()),
+            }
+        }
+
+        /// A silent transport's clock jumps straight to the deadline. Any
+        /// other never reaches it, so a scripted answer always wins.
+        async fn elapse(&self, ms: u32) {
+            if !self.silent.get() {
+                return std::future::pending().await;
+            }
+            self.waited.borrow_mut().push(ms);
         }
     }
 
@@ -1154,6 +1197,31 @@ mod tests {
             2,
             "no replay without a token"
         );
+    }
+
+    /// `SYNC-071`: a request the relay never answers ends with an error once
+    /// its deadline passes. It is sent once, and nothing is replayed.
+    #[tokio::test]
+    async fn a_request_with_no_answer_is_abandoned_at_its_deadline() {
+        let transport = Scripted::default();
+        transport.silent.set(true);
+        let url = "https://relay.test/api/documents";
+
+        let error = post_json_auth_via::<_, serde_json::Value>(
+            &transport,
+            url,
+            &serde_json::json!({}),
+            &session("access-1", "refresh-1"),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            format!("POST {url}: no answer within {REQUEST_TIMEOUT_MS} ms")
+        );
+        assert_eq!(transport.calls(), [(Method::Post, url.to_owned())]);
+        assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT_MS]);
     }
 
     /// Each answer reads as what the caller acts on. A refusal keeps the

@@ -31,7 +31,7 @@
 
 #![cfg(target_arch = "wasm32")]
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
@@ -823,15 +823,14 @@ pub fn main() {
     // onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic). Kept
     // alive for the whole session by being captured in the relay closure.
     //
-    // `sync_ready` gates the Logic->Sync relay: the worker installs its inbound
+    // `sync_start` gates the Logic->Sync relay: the worker installs its inbound
     // onmessage only at the end of its async wasm bootstrap. Any command posted
-    // before then is dropped. The relay buffers commands (they wait in
-    // `logic_to_sync_rx`) until the worker posts its readiness sentinel, which
-    // flips this flag. Without it the boot `DevLogin`, enqueued above before
-    // this spawn, raced the bootstrap and was lost whenever the worker came up
-    // slowly. The session key stayed unset and the document stuck hydrating.
-    let sync_ready = Rc::new(Cell::new(false));
-    let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_ready));
+    // before then is dropped. The relay holds commands (they wait in
+    // `logic_to_sync_rx`) until the worker announces itself (`SYNC-057`).
+    // Without it the boot `DevLogin`, enqueued above before this spawn, raced
+    // the bootstrap and was lost whenever the worker came up slowly.
+    let sync_start = Rc::new(RefCell::new(ambre_bus::start::StartGate::new()));
+    let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_start));
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
@@ -1222,21 +1221,18 @@ pub fn main() {
         // Relay Logic -> Sync: drain commands and postMessage them to the Sync
         // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
         // captured here, which is what keeps the worker alive for the session.
-        // Held back until the worker signals readiness (`sync_ready`): commands
-        // stay buffered in `logic_to_sync_rx`. None is posted into the worker's
-        // bootstrap window, where onmessage does not yet exist (order preserved).
+        // Held back until the worker announces itself (`sync_start`): commands
+        // stay in `logic_to_sync_rx`, in order, through the worker's bootstrap.
         // Sync -> Logic: re-offer what the channel refused on an earlier turn.
         sync_inbox.borrow_mut().flush();
         relay_pressure(&sync_inbox, &sync_worker);
 
-        if sync_ready.get() {
-            while let Ok(cmd) = logic_to_sync_rx.try_recv() {
-                match postcard::to_allocvec(&cmd) {
-                    Ok(bytes) => post_to_worker(&sync_worker, &bytes),
-                    Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
-                }
-            }
-        }
+        sync_start
+            .borrow()
+            .drain(&logic_to_sync_rx, |cmd| match postcard::to_allocvec(&cmd) {
+                Ok(bytes) => post_to_worker(&sync_worker, &bytes),
+                Err(e) => tracing::error!("[UI->Sync] failed to encode SyncCommand: {e}"),
+            });
 
         // Re-offer what a child's queue could not take on an earlier turn
         // (`TOILE-UI-340`). Ordered, and ahead of the fresh stream, so a child

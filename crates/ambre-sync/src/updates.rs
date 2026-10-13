@@ -2965,6 +2965,31 @@ mod tests {
         );
     }
 
+    /// `SYNC-065`: an edit made before the session is ready is held. It is
+    /// sent, in order, once the session is up and the document's replay
+    /// has landed.
+    #[test]
+    fn an_edit_before_the_session_is_held_then_sent() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        assert!(sent_bodies(&ws_rx, &key).is_empty(), "no session to sign");
+
+        state.signing_key = Some(sk);
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: Vec::new(),
+        });
+        let deltas: Vec<Vec<u8>> = sent_bodies(&ws_rx, &key)
+            .into_iter()
+            .map(|(_, delta)| delta)
+            .collect();
+        assert_eq!(deltas, [b"a".to_vec(), b"b".to_vec()]);
+    }
+
     /// Holds `SYNC-023`: a frame that fails a check delivers none of its
     /// payload, and its neighbours in the same replay arrive whole.
     #[test]

@@ -308,7 +308,7 @@ pub(crate) type SyncInbox = Rc<RefCell<ambre_bus::conduit::Backlog<LogicEvent>>>
 )]
 pub(crate) fn spawn_sync_worker(
     to_logic: SyncInbox,
-    sync_ready: Rc<Cell<bool>>,
+    start: Rc<RefCell<ambre_bus::start::StartGate>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
     let worker = web_sys::Worker::new(SYNC_WORKER_URL).expect("failed to spawn Sync worker");
@@ -317,12 +317,9 @@ pub(crate) fn spawn_sync_worker(
     let onmessage =
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
             let bytes = js_sys::Uint8Array::new(&e.data()).to_vec();
-            // Empty payload = the worker's readiness sentinel (its inbound
-            // onmessage is now installed). Flip the gate so the relay starts
-            // draining buffered commands to it. A real LogicEvent is never
-            // zero-length (postcard always emits at least a discriminant byte).
-            if bytes.is_empty() {
-                sync_ready.set(true);
+            // The worker's announcement opens the gate, so the relay starts
+            // draining the commands held for it (`SYNC-057`).
+            if start.borrow_mut().read(&bytes).is_none() {
                 return;
             }
             match postcard::from_bytes::<LogicEvent>(&bytes) {

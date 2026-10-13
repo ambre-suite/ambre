@@ -31,6 +31,7 @@ pub mod lossy;
 pub mod outbox;
 pub mod rest;
 pub mod sink;
+pub mod start;
 pub mod sync_warning;
 pub mod ui;
 

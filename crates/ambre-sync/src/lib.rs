@@ -1411,11 +1411,18 @@ pub async fn run_wasm(
     logic_sink: LogicSink,
     api_base: String,
 ) {
+    tracing::info!("Ambre Sync worker starting (wasm async)");
+    run(cmd_rx, SyncState::new(logic_sink, api_base, None)).await;
+    tracing::info!("Ambre Sync worker exiting (command channel closed)");
+}
+
+/// The worker's loop: one wait over the commands relayed in and the events
+/// of its own socket and requests. Between them it yields, so the tasks
+/// beside it keep running (`SYNC-058`). It returns once the commands close.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+async fn run(cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>, mut state: SyncState) {
     use futures_util::future::FutureExt;
 
-    tracing::info!("Ambre Sync worker starting (wasm async)");
-
-    let mut state = SyncState::new(logic_sink, api_base, None);
     let (event_tx, event_rx) = ambre_bus::conduit::unbounded::<SyncEvent>();
     state.set_event_tx(event_tx);
 
@@ -1426,15 +1433,48 @@ pub async fn run_wasm(
                 // Command queue closed: the Main instance is gone (teardown).
                 Err(_) => break,
             },
-            ev = event_rx.recv().fuse() => match ev {
-                Ok(ev) => state.handle_sync_event(ev),
-                // event_tx is held by `state`, so this only errors at teardown.
-                Err(_) => {}
+            // event_tx is held by `state`, so this only errors at teardown.
+            ev = event_rx.recv().fuse() => if let Ok(ev) = ev {
+                state.handle_sync_event(ev);
             },
         }
     }
+}
 
-    tracing::info!("Ambre Sync worker exiting (command channel closed)");
+#[cfg(test)]
+mod run_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// `SYNC-058`: the loop waits without holding the thread. A task beside
+    /// it, as a socket callback would be, runs while it waits. Closing the
+    /// commands from that task wakes the loop, which then returns.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_loop_yields_to_the_tasks_beside_it() {
+        let local = tokio::task::LocalSet::new();
+        local
+            .run_until(async {
+                let (sink, _logic_rx) = LogicSink::channel();
+                let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
+                let looped = tokio::task::spawn_local(run(
+                    cmd_rx,
+                    SyncState::new(sink, String::new(), None),
+                ));
+                tokio::task::yield_now().await;
+
+                let ran = Rc::new(Cell::new(false));
+                let beside = Rc::clone(&ran);
+                tokio::task::spawn_local(async move {
+                    beside.set(true);
+                    drop(cmd_tx);
+                })
+                .await
+                .unwrap();
+                assert!(ran.get(), "the task beside the loop ran");
+                looped.await.unwrap();
+            })
+            .await;
+    }
 }
 
 #[cfg(test)]
