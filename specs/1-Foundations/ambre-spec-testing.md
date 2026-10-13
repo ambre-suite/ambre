@@ -202,6 +202,7 @@ the relay, a second instance. Both sides follow the same rule.
   it without sleeping. The timer shell only turns a deadline into a `setTimeout`.
 * **Two instances means two states, not two processes.** Each `AppState` owns its own hub and
   connection tables. Sharing the stores is exactly what the deployment shares.
+  `test_helpers::second_instance` builds the second one beside any test state.
 * **What never extracts:** the browser's own behaviour under a real network -- a proxy, a dropped
   TCP connection, a CORS refusal. That stays with `The browser-driven belt`.
 

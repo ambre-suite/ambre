@@ -37,6 +37,27 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
     })
 }
 
+/// A second relay instance beside `base`, as a deployment runs it: the same
+/// Postgres, Redis server, keys and configuration. It opens its own Redis
+/// connection, because a subscription belongs to one, and spawns its own hub
+/// (`ambre-spec-testing.md` section 5.C).
+pub async fn second_instance(base: &AppState) -> Arc<AppState> {
+    let redis = rustis::client::Client::connect("redis://localhost:6379")
+        .await
+        .expect("need Redis for tests");
+    let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+    Arc::new(AppState {
+        db: base.db.clone(),
+        redis,
+        pubsub,
+        s3: base.s3.clone(),
+        s3_bucket: base.s3_bucket.clone(),
+        config: Arc::clone(&base.config),
+        jwt: Arc::clone(&base.jwt),
+        oidc_clients: Arc::clone(&base.oidc_clients),
+    })
+}
+
 /// Creates a test user directly in the database (bypasses OIDC flow).
 pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId {
     let user = db::create_user(

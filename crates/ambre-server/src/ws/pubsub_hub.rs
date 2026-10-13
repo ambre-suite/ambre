@@ -255,6 +255,42 @@ pub(crate) mod tests {
             .flatten()
     }
 
+    /// A document frame published by one instance reaches a connection that
+    /// subscribed on the other, and one on its own. Each instance routes
+    /// through its own hub over its own Redis connection.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_frame_from_one_instance_reaches_a_subscriber_of_the_other(pool: sqlx::PgPool) {
+        let one = crate::test_helpers::test_app_state(pool).await;
+        let other = crate::test_helpers::second_instance(&one).await;
+        let document_id = ambre_core::DocumentId::new();
+        let topic = format!("doc:{document_id}");
+
+        let (there_tx, mut there) = mpsc::channel(8);
+        other
+            .pubsub
+            .subscribe(topic.clone(), "there".into(), there_tx)
+            .await
+            .expect("the other instance routes the topic");
+        let (here_tx, mut here) = mpsc::channel(8);
+        one.pubsub
+            .subscribe(topic, "here".into(), here_tx)
+            .await
+            .expect("this instance routes the topic");
+
+        crate::redis_ops::doc_broadcast(&one.redis, &document_id, b"frame")
+            .await
+            .expect("publish");
+        assert_eq!(
+            next_message(&mut there).await.as_deref(),
+            Some(&b"frame"[..])
+        );
+        assert_eq!(
+            next_message(&mut here).await.as_deref(),
+            Some(&b"frame"[..])
+        );
+    }
+
     /// `SRV-101`: a panic while the hub handles one connection's request
     /// refuses that request alone. Every other connection keeps its route,
     /// and a broadcast published after the panic still reaches it.
