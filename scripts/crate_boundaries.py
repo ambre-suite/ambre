@@ -174,6 +174,93 @@ TESTS_START = re.compile(r"^\s*#\[cfg\(test\)\]")
 # What embedding a font looks like: an include macro naming a font file.
 FONT_EMBED = re.compile(r"\binclude_bytes!\s*\([^)]*\.(?:ttf|otf|ttc|woff2?)\b", re.IGNORECASE)
 
+# The code that runs on the UI thread: the page's own crates, and the view,
+# render and chrome modules of each application.
+UI_THREAD = (
+    "crates/ambre-app/src",
+    "crates/ambre-chrome/src",
+    "crates/ambre-canvas/src",
+    "crates/ambre-trame/src/ui",
+    "crates/ambre-trame/src/render",
+    "crates/ambre-trame/src/chrome",
+    "crates/ambre-toile/src/ui",
+    "crates/ambre-toile/src/chrome",
+    "crates/ambre-prose/src/ui.rs",
+    "crates/ambre-prose/src/view",
+    "crates/ambre-prose/src/chrome",
+)
+# The one file that renders the native modal, and what a modal looks like.
+MODAL_OWNER = "crates/ambre-chrome/src/dialog.rs"
+MODAL = re.compile(r"<dialog\b")
+# A control that reports on every pixel of a drag.
+DRAG_INPUT = re.compile(r'type\s*=\s*"(?:range|color)"')
+# The command that creates a named document, which the page never sends. A
+# new document is created on its first open, by the one function below.
+CREATE = re.compile(r"\bCreateDocument\b")
+LAZY_CREATE = "crates/ambre-sync/src/updates.rs"
+# What holding the document looks like: a CRDT container, an export, or an
+# engine's state. A tree node's identifier is an address, not the document.
+ENGINE = re.compile(
+    r"\bLoro[A-Z]\w*|\bloro::(?!TreeID\b)\w+|\bExportMode\b|\b(?:Trame|Toile|Prose|Murmure)State\b"
+)
+# What waiting looks like: the conduit's parking handle or its parking send,
+# a parked thread, a futex, a condition, or an executor run to completion.
+BLOCKING = re.compile(
+    r"\bWaiter\b|\.wait\(\)|\bthread::park\w*|\bAtomics::wait\w*|\bblock_on\b"
+    r"|\bWorkerSender\b|\bCondvar\b"
+)
+# What drawing looks like from a page element: a canvas, or a context on one.
+DRAWING = re.compile(
+    r"\bHtmlCanvasElement\b|\bget_context\w*|\bCanvasRenderingContext2d\b|\bOffscreenCanvas\w*"
+    r"|\bWebGl\w*|create_element\(\"canvas\"\)|<canvas\b"
+)
+# The surface itself: the drawing crate, the host that boots it, and the
+# shell cell that holds the element.
+DRAWING_OWNERS = (
+    "crates/ambre-canvas/src/",
+    "crates/ambre-app/src/host/",
+    "crates/ambre-chrome/src/app_shell.rs",
+)
+# The persistence paths `UI-THREAD-004` names: the local store, and the
+# sign-in's own state for one tab and for the development identity.
+STORAGE_OWNERS = (
+    "crates/ambre-logic/src/persistence.rs",
+    "crates/ambre-app/src/signin.rs",
+    "crates/ambre-app/src/platform.rs",
+)
+# The storage call as the browser's interface spells it, so a field that
+# happens to be named `caches` is not one.
+CLIENT_STORAGE = re.compile(
+    r"\blocal_storage\b|\bsession_storage\b|\bweb_sys::Storage\b|\bindexed_db\b|\bIdb[A-Z]\w+"
+    r"|\.caches\(\)|\bCacheStorage\b|\bStorageManager\b|\bget_directory\b|\.cookie\(\)|\bset_cookie\b"
+)
+# What leaves the subset both graphics back ends share.
+COMPUTE = re.compile(
+    r"\bComputePass\w*|\bComputePipeline\w*|\bcreate_compute_pipeline\b|\bBufferUsages::STORAGE\b"
+    r"|\bBufferBindingType::Storage\b|\bStorageTexture\w*|var<storage|@compute|\btexture_storage_\w+"
+)
+
+# The shell stylesheet, the three width queries it may hold, and what hiding
+# looks like inside one.
+STYLESHEET = "crates/ambre-app/styles.css"
+WIDTH_QUERIES = ("(max-width: 599px)", "(min-width: 600px)", "(min-width: 1025px)")
+WIDTH_MEDIA = re.compile(r"@media[^{]*\((?:min|max)-width:[^)]*\)[^{]*\{")
+HIDING = re.compile(r"\bdisplay:\s*none\b|\bvisibility:\s*hidden\b")
+# A width threshold spelled anywhere else: a width query, or a media read.
+THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_media\b|\bmatchMedia\b")
+# A content view reading the window rather than the box it is given.
+CONTENT_VIEWS = (
+    "crates/ambre-trame/src/ui",
+    "crates/ambre-trame/src/render",
+    "crates/ambre-toile/src/ui",
+    "crates/ambre-prose/src/ui.rs",
+    "crates/ambre-prose/src/view",
+)
+WINDOW_READ = re.compile(
+    r"\binner_(?:width|height)\b|\bouter_(?:width|height)\b|\bavail_(?:width|height)\b"
+    r"|\.screen\(\)|\bmatch_media\b"
+)
+
 
 def read(rel: str) -> str:
     """The file's text, or an empty string when it is gone."""
@@ -444,6 +531,164 @@ def check_fonts(errors: list[str]) -> int:
     return len(files)
 
 
+def sources(prefixes: tuple[str, ...]) -> list[Path]:
+    """Every Rust file under each prefix, a prefix naming a file or a directory."""
+    found: list[Path] = []
+    for prefix in prefixes:
+        path = ROOT / prefix
+        if path.is_file():
+            found.append(path)
+        elif path.is_dir():
+            found.extend(sorted(path.rglob("*.rs")))
+    return found
+
+
+def above_tests(path: Path) -> list[tuple[int, str]]:
+    """Each numbered line of the file above its test module, comments removed."""
+    lines: list[tuple[int, str]] = []
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if TESTS_START.match(line):
+            break
+        lines.append((number, code(line)))
+    return lines
+
+
+def check_ui_thread(errors: list[str]) -> int:
+    """`UI-THREAD-001`, `-002`, `-020`, `-050`, `-051`: what the UI thread may name.
+
+    No CRDT and no engine state, no blocking wait, and no canvas or drawing
+    context outside the surface.
+    """
+    files = sources(UI_THREAD)
+    if not files:
+        errors.append(f"{UI_THREAD[0]}: gone from the tree, so the UI thread reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = ENGINE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the UI thread holds the document: `{found.group(0)}`")
+            found = BLOCKING.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the UI thread waits: `{found.group(0)}`")
+            found = DRAWING.search(line)
+            if found and not rel.startswith(DRAWING_OWNERS):
+                errors.append(f"{rel}:{number}: a page element draws: `{found.group(0)}`")
+    return len(files)
+
+
+def check_client_storage(errors: list[str]) -> int:
+    """`UI-THREAD-004`: browser storage is reached from the paths the rule names."""
+    files = [
+        path
+        for path in rust_files()
+        if not path.relative_to(ROOT).as_posix().startswith(NETWORK_CRATES)
+        and path.relative_to(ROOT).as_posix() not in STORAGE_OWNERS
+    ]
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = CLIENT_STORAGE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a persistence path the rule does not name: `{found.group(0)}`")
+    if not files:
+        errors.append(f"{CRATES}: no Rust file read, so the persistence boundary holds nothing")
+    return len(files)
+
+
+def check_gpu_subset(errors: list[str]) -> int:
+    """`UI-THREAD-005`: no compute pass and no storage buffer, in Rust or WGSL."""
+    files = rust_files() + sorted(
+        p for p in (ROOT / CRATES).rglob("*.wgsl") if "/target/" not in p.as_posix()
+    )
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = COMPUTE.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: outside the shared graphics subset: `{found.group(0)}`")
+    if not files:
+        errors.append(f"{CRATES}: no source read, so the graphics subset holds nothing")
+    return len(files)
+
+
+def check_widths(errors: list[str]) -> int:
+    """`CHROME-030`, `-031`, `-056`, `-034`: the widths live in one sheet.
+
+    The sheet queries three widths and hides nothing inside one. No other file
+    spells a width query, and no content view reads the window.
+    """
+    sheet = read(STYLESHEET)
+    if not sheet:
+        errors.append(f"{STYLESHEET}: gone from the tree, so the widths read nothing")
+        return 0
+    depth, inside = 0, False
+    for number, line in enumerate(sheet.splitlines(), 1):
+        found = WIDTH_MEDIA.search(line)
+        if found and depth == 0:
+            query = re.search(r"\((?:min|max)-width:[^)]*\)", found.group(0))
+            if query and query.group(0) not in WIDTH_QUERIES:
+                errors.append(f"{STYLESHEET}:{number}: a width the chrome does not declare: `{query.group(0)}`")
+            inside = True
+        elif inside and HIDING.search(line):
+            errors.append(f"{STYLESHEET}:{number}: a width query hides, so the narrow layout is not the base")
+        depth += line.count("{") - line.count("}")
+        if depth == 0:
+            inside = False
+    held = 1
+    others = [
+        p
+        for p in (ROOT / CRATES).rglob("*")
+        if p.suffix in (".rs", ".css", ".html") and "/target/" not in p.as_posix()
+    ]
+    for path in sorted(others):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in (STYLESHEET, DENSITY):
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = THRESHOLD.search(code(line) if path.suffix == ".rs" else line)
+            if found:
+                errors.append(f"{rel}:{number}: a width spelled outside the stylesheet: `{found.group(0)}`")
+        held += 1
+    for path in sources(CONTENT_VIEWS):
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = WINDOW_READ.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a content view reads the window: `{found.group(0)}`")
+    return held
+
+
+def check_modals_and_drags(errors: list[str]) -> int:
+    """`CHROME-011`, `-015`, `-037`, `-084`: what a chrome control may spell.
+
+    One file renders the native modal. A drag control lives in a file that
+    debounces, and the UI thread never builds a document itself.
+    """
+    files = sources(UI_THREAD)
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        lines = above_tests(path)
+        debounces = any("Debouncer" in line for _, line in lines)
+        for number, line in lines:
+            found = MODAL.search(line)
+            if found and rel != MODAL_OWNER:
+                errors.append(f"{rel}:{number}: a modal outside the shared dialog: `{found.group(0)}`")
+            found = DRAG_INPUT.search(line)
+            if found and not debounces:
+                errors.append(f"{rel}:{number}: a drag control that is not debounced: `{found.group(0)}`")
+            found = CREATE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the UI thread creates a document: `{found.group(0)}`")
+    lazy = read(LAZY_CREATE)
+    body = lazy.split("fn trigger_lazy_create", 1)[1].split("\n    }\n", 1)[0] if lazy else ""
+    names = re.findall(r"name_enc:\s*[^,\n]+", body)
+    if names != ["name_enc: None"]:
+        errors.append(f"{LAZY_CREATE}: the open-time create does not send `name_enc: None`: {names}")
+    return len(files) + 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -462,6 +707,11 @@ def main() -> int:
     pdf = check_pdf(errors)
     fonts = check_fonts(errors)
     colors = check_renderer_colors(errors)
+    ui_thread = check_ui_thread(errors)
+    stores = check_client_storage(errors)
+    subset = check_gpu_subset(errors)
+    widths = check_widths(errors)
+    controls = check_modals_and_drags(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -474,7 +724,12 @@ def main() -> int:
         f"{lints} member manifests read for the workspace lints, "
         f"{pdf} Rust files read for the PDF back end, "
         f"{fonts} Rust files read for an embedded font, "
-        f"{colors} renderer files read for a colour of their own"
+        f"{colors} renderer files read for a colour of their own, "
+        f"{ui_thread} UI-thread files read for the document, a wait or a drawing, "
+        f"{stores} client files read for a persistence path, "
+        f"{subset} sources read for a compute pass or a storage buffer, "
+        f"{widths} files read for a width spelled twice, "
+        f"{controls} files read for a modal, a drag or a named creation"
     )
     for line in errors:
         print(f"  {line}")
@@ -490,8 +745,12 @@ def main() -> int:
             "the worker writes nothing to browser storage, no request "
             "it sends names a passphrase, every crate inherits the "
             "workspace lints, the PDF back end is called from the Logic "
-            "thread alone, the renderer holds no colour, and no font is "
-            "embedded in a binary.",
+            "thread alone, the renderer holds no colour, no font is "
+            "embedded in a binary, the UI thread holds no document, waits on "
+            "nothing and draws on the surface alone, browser storage is reached "
+            "from the named paths, no shader leaves the shared subset, the "
+            "chrome's widths live in one stylesheet, one file renders the modal, "
+            "a drag control debounces, and a document is created unnamed.",
             file=sys.stderr,
         )
         return 1

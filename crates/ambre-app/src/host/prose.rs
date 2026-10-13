@@ -38,6 +38,7 @@ use ambre_prose::probe::{CONFIRM_FRAMES, KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
+use ambre_prose::view::ruler::RulerState;
 
 /// The pixels one wheel line scrolls, for a device that reports lines.
 const LINE_PX: f64 = 40.0;
@@ -72,6 +73,24 @@ fn to_css(x: f32, y: f32) -> (f32, f32) {
             (r.left() as f32, r.top() as f32)
         });
     (left + x, top + y)
+}
+
+/// The ruler the view published, moved into CSS pixels by `to_css`. The scale
+/// keeps its ratio to the column, so each handle lands where the view put it
+/// (`PROSE-UI-065`).
+fn ruler_in_css(mut ruler: RulerState, to_css: impl Fn(f32, f32) -> (f32, f32)) -> RulerState {
+    let (left, top) = to_css(ruler.page_left_px, 0.0);
+    let (right, _) = to_css(ruler.page_left_px + ruler.content_width_px, 0.0);
+    let factor = if ruler.content_width_px > 0.0 {
+        (right - left) / ruler.content_width_px
+    } else {
+        1.0
+    };
+    ruler.page_left_px = left;
+    ruler.top_px = top;
+    ruler.content_width_px = right - left;
+    ruler.px_per_pt *= factor;
+    ruler
 }
 
 fn rect_to_css(rect: ScreenRect) -> ScreenRect {
@@ -289,18 +308,7 @@ impl ProseView {
     /// Publish the ruler in CSS pixels. The release comes back in points, so
     /// the pixels it was measured in never reach the view.
     fn publish_ruler(&self) {
-        let mut ruler = self.state.ruler();
-        let (left, top) = to_css(ruler.page_left_px, 0.0);
-        let (right, _) = to_css(ruler.page_left_px + ruler.content_width_px, 0.0);
-        let factor = if ruler.content_width_px > 0.0 {
-            (right - left) / ruler.content_width_px
-        } else {
-            1.0
-        };
-        ruler.page_left_px = left;
-        ruler.top_px = top;
-        ruler.content_width_px = right - left;
-        ruler.px_per_pt *= factor;
+        let ruler = ruler_in_css(self.state.ruler(), to_css);
         if self
             .annotations
             .ruler
@@ -762,4 +770,45 @@ fn download(filename: &str, media_type: &str, data: &[u8]) {
         anchor.click();
     }
     let _ = web_sys::Url::revoke_object_url(&url);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_prose::view::ruler::RulerHandle;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// The ruler moves with the canvas and keeps its scale, at any zoom and any
+    /// column offset (`PROSE-UI-065`). Each handle lands at the canvas
+    /// position plus the canvas's own offset on the page.
+    #[wasm_bindgen_test]
+    fn the_ruler_in_css_pixels_follows_the_canvas_offset() {
+        let origin = |x: f32, y: f32| (x + 40.0, y + 64.0);
+        for (zoom, column_left) in [(1.0, 80.0), (2.0, 15.0), (0.5, 300.0)] {
+            let canvas = RulerState {
+                visible: true,
+                top_px: 0.0,
+                page_left_px: column_left,
+                content_width_px: 451.0 * zoom,
+                px_per_pt: 4.0 / 3.0 * zoom,
+                indent_first: 18.0,
+                indent_left: 36.0,
+                indent_right: 12.0,
+            };
+            let css = ruler_in_css(canvas, origin);
+            assert_eq!(css.top_px, 64.0);
+            assert_eq!(css.content_width_px, canvas.content_width_px);
+            for handle in [
+                RulerHandle::IndentFirst,
+                RulerHandle::IndentLeft,
+                RulerHandle::IndentRight,
+            ] {
+                let moved = css.handle_x(handle) - canvas.handle_x(handle);
+                assert!(
+                    (moved - 40.0).abs() < 1e-3,
+                    "zoom {zoom}: {handle:?} moved {moved}"
+                );
+            }
+        }
+    }
 }

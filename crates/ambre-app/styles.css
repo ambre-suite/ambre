@@ -1592,18 +1592,17 @@ input[type="radio"] {
 }
 
 /* -- Delete confirmation dialog ------------------------------------------- */
-.ambre-confirm-dialog {
+/* A `Dialog`: the padding sits on the body, so a hit on the element itself is
+   a backdrop click. */
+.ambre-dialog.ambre-confirm-dialog {
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text);
-    padding: var(--space-8);
     max-width: 380px;
     font-family: system-ui, sans-serif;
 }
 
-.ambre-confirm-dialog::backdrop {
-    background: var(--scrim);
+.ambre-confirm-dialog .ambre-dialog-body {
+    padding: var(--space-8);
 }
 
 .ambre-confirm-dialog h3 {
@@ -2607,8 +2606,8 @@ input[type="radio"] {
     padding-left: var(--space-8);
 }
 
-/* Narrow viewports: the palette takes the width and drops the top inset. */
-@media (max-width: 600px) {
+/* Phone: the palette takes the width and drops the top inset. */
+@media (max-width: 599px) {
     .ambre-palette {
         top: 0;
         left: 0;

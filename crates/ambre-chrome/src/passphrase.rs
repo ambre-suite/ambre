@@ -60,16 +60,7 @@ pub fn PassphraseDialog(
     /// The passphrase the user settled on. Fired once per submission.
     #[prop(into)]
     on_submit: Callback<String>,
-    /// Fired after the modal opens (the launcher suspends the canvas rAF).
-    /// Absent where there is no canvas to suspend -- the landing screen.
-    #[prop(optional, into)]
-    on_open: Option<Callback<()>>,
-    /// Fired after the modal closes (the launcher resumes it).
-    #[prop(optional, into)]
-    on_close: Option<Callback<()>>,
 ) -> impl IntoView {
-    let on_open = on_open.unwrap_or_else(|| Callback::new(|()| {}));
-    let on_close = on_close.unwrap_or_else(|| Callback::new(|()| {}));
     let first = RwSignal::new(String::new());
     let second = RwSignal::new(String::new());
     let error = RwSignal::new(None::<&'static str>);
@@ -113,12 +104,7 @@ pub fn PassphraseDialog(
     };
 
     view! {
-        <Dialog
-            open=open
-            on_open=on_open
-            on_close=on_close
-            class="ambre-passphrase"
-        >
+        <Dialog open=open class="ambre-passphrase">
             <div class="ambre-passphrase-panel">
                 <h2>{heading}</h2>
                 <p class="ambre-passphrase-note">{note}</p>

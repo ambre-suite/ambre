@@ -12,7 +12,7 @@
 // ============================================================================
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
 use parley::FontContext;
@@ -22,16 +22,22 @@ use crate::text_cache::TextCache;
 use crate::theme::{FONT_BODY, FONT_HEADING};
 
 /// Handle to gate the rAF loop, so the chrome can freeze the canvas behind a
-/// fullscreen `<dialog>`. While paused the loop keeps ticking but does no
-/// work: no dispatch, no render. The canvas holds its last frame, a
-/// `backdrop-filter: blur()` over it is free, and the GPU stays idle.
+/// fullscreen `<dialog>` or the launcher. While suspended the loop keeps
+/// ticking but does no work: no dispatch, no render. The canvas holds its last
+/// frame, a `backdrop-filter: blur()` over it is free, and the GPU stays idle.
 ///
-/// Backed by an `Arc<AtomicBool>` so it is `Send + Sync` and can ride inside a
-/// Leptos `Callback`. A literal `cancelAnimationFrame` would stop the loop, and
+/// Two writers share it, and neither may undo the other. The route sets
+/// `away` while the launcher covers the canvas. Each open modal takes a hold
+/// and releases it on close. The loop runs with no hold and not away, so a
+/// modal closed at home leaves the loop suspended.
+///
+/// Backed by atomics so it is `Send + Sync` and can ride inside a Leptos
+/// `Callback`. A literal `cancelAnimationFrame` would stop the loop, and
 /// resuming it needs the `!Send` JS closure, which cannot cross that callback.
 #[derive(Clone)]
 pub struct RafControl {
-    running: Arc<AtomicBool>,
+    away: Arc<AtomicBool>,
+    holds: Arc<AtomicU32>,
 }
 
 impl Default for RafControl {
@@ -41,26 +47,36 @@ impl Default for RafControl {
 }
 
 impl RafControl {
-    /// A control that starts running.
+    /// A control that starts running: not away, no hold.
     pub fn new() -> Self {
         Self {
-            running: Arc::new(AtomicBool::new(true)),
+            away: Arc::new(AtomicBool::new(false)),
+            holds: Arc::new(AtomicU32::new(0)),
         }
     }
 
-    /// Freeze the canvas: the loop ticks but skips all per-frame work.
-    pub fn pause(&self) {
-        self.running.store(false, Ordering::Relaxed);
+    /// Record whether the launcher covers the canvas.
+    pub fn set_away(&self, away: bool) {
+        self.away.store(away, Ordering::Relaxed);
     }
 
-    /// Resume rendering.
-    pub fn resume(&self) {
-        self.running.store(true, Ordering::Relaxed);
+    /// Take a hold: an open modal freezes the canvas.
+    pub fn hold(&self) {
+        self.holds.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Release one hold. A release with none taken stays at zero.
+    pub fn release(&self) {
+        let _ = self
+            .holds
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                Some(n.saturating_sub(1))
+            });
     }
 
     /// Whether the frame runs on the next tick.
     pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
+        !self.away.load(Ordering::Relaxed) && self.holds.load(Ordering::Relaxed) == 0
     }
 }
 
@@ -234,13 +250,43 @@ mod tests {
             );
         };
         tick(&control);
-        control.pause();
+        control.hold();
         tick(&control);
         tick(&control);
         assert_eq!((relayed.get(), framed.get()), (3, 1), "paused: relay only");
-        control.resume();
+        control.release();
         tick(&control);
-        assert_eq!(framed.get(), 2, "a resume takes effect on the next tick");
+        assert_eq!(framed.get(), 2, "a release takes effect on the next tick");
+    }
+
+    /// An open modal suspends the loop and its close resumes it (`CHROME-089`).
+    ///
+    /// Closing it at home leaves the loop suspended, since the launcher still
+    /// covers the canvas (`CHROME-042`). With one shared flag, the close would
+    /// resume a loop the route had paused.
+    #[test]
+    fn a_closed_modal_resumes_only_what_it_suspended() {
+        let control = RafControl::new();
+        control.hold();
+        assert!(!control.is_running(), "a modal suspends the loop");
+        control.release();
+        assert!(control.is_running(), "its close resumes the loop");
+
+        control.set_away(true);
+        assert!(!control.is_running(), "the launcher suspends the loop");
+        control.hold();
+        control.release();
+        assert!(!control.is_running(), "a modal closed at home");
+        control.set_away(false);
+        assert!(control.is_running(), "back in a document");
+
+        control.hold();
+        control.hold();
+        control.release();
+        assert!(!control.is_running(), "one of two modals still open");
+        control.release();
+        control.release();
+        assert!(control.is_running(), "an extra release stays at zero");
     }
 
     /// Once fatal, the frame paints the terminal screen once, then idles

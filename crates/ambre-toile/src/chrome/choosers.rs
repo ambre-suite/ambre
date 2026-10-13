@@ -49,10 +49,6 @@ pub fn ToileChoosers(
     placed: RwSignal<Option<PlacedEmbed>>,
     /// Where a chosen link is published for the view to set.
     set_link: RwSignal<Option<LinkEdit>>,
-    /// Fired after a chooser opens, to pause the canvas.
-    on_open: Callback<()>,
-    /// Fired after a chooser closes, to resume the canvas.
-    on_close: Callback<()>,
 ) -> impl IntoView {
     let ToileDialogs {
         embed_web_open,
@@ -78,7 +74,7 @@ pub fn ToileChoosers(
 
     view! {
         // Embed a web page (`TOILE-087`).
-        <Dialog open=embed_web_open on_open=on_open on_close=on_close class="ambre-embed-web">
+        <Dialog open=embed_web_open class="ambre-embed-web">
             <div class="ambre-embed-panel">
                 <h2>"Embed a web page"</h2>
                 <input
@@ -108,7 +104,7 @@ pub fn ToileChoosers(
         // Embed another Ambre document (`TOILE-086`). The list is the one the
         // launcher already holds: this opens no document, so it touches none
         // (`TOILE-225`).
-        <Dialog open=embed_doc_open on_open=on_open on_close=on_close class="ambre-embed-doc">
+        <Dialog open=embed_doc_open class="ambre-embed-doc">
             <div class="ambre-embed-panel">
                 <h2>"Embed a document"</h2>
                 <ul class="ambre-embed-docs">
@@ -137,7 +133,7 @@ pub fn ToileChoosers(
         // no more: an address, a frame on this board, or another document. The
         // frame list is the deck's, which holds every frame. That includes the
         // off-screen ones a link exists to reach.
-        <Dialog open=link_open on_open=on_open on_close=on_close class="ambre-link-chooser">
+        <Dialog open=link_open class="ambre-link-chooser">
             <div class="ambre-embed-panel">
                 <h2>"Link this element"</h2>
                 <h3>"To a web page"</h3>

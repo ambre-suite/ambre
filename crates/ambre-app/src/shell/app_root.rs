@@ -6,6 +6,18 @@
 use super::super::*;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
+use ambre_bus::DocType;
+
+/// The table the command palette searches: the booted application's whole
+/// declaration, never a menu's subset (`CHROME-008`). Murmure has no view yet
+/// and falls on the Trame side, like every non-Toile, non-Prose kind.
+pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::Command] {
+    match kind {
+        DocType::Toile => ambre_toile::ui::commands::COMMANDS,
+        DocType::Prose => ambre_prose::commands::COMMANDS,
+        DocType::Trame | DocType::Murmure => trame_chrome::COMMANDS,
+    }
+}
 
 /// Perform the half of a followed link that leaves the board (`TOILE-065`,
 /// `TOILE-114`). An address opens in a fresh tab with `noopener,noreferrer`, so
@@ -57,7 +69,6 @@ fn follow_shell_nav(
 pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
-        raf,
         theme_ctl,
         toggles,
         toile_toggles,
@@ -135,26 +146,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // document `data-theme` (CSS custom properties) are the real switches.
     let theme_sig = RwSignal::new(theme_ctl.get());
 
-    // About modal: opening it suspends the canvas rAF, closing it resumes.
+    // About modal. Every `Dialog` suspends the canvas rAF through the
+    // `ModalHold` the shell provides, so no modal here wires the loop.
     let about_open = RwSignal::new(false);
-    let on_open = Callback::new({
-        let raf = raf.clone();
-        move |()| raf.pause()
-    });
-    let on_close = Callback::new({
-        let raf = raf.clone();
-        move |()| raf.resume()
-    });
 
-    // Share modal: same rAF suspend/resume. Opening it requests the current
-    // member list so the dialog renders it; the relay fills `members` on the
-    // `DocumentMembers` response.
+    // Share modal. Opening it requests the current member list so the dialog
+    // renders it; the relay fills `members` on the `DocumentMembers` response.
     let share_open = RwSignal::new(false);
     let share_on_open = Callback::new({
-        let raf = raf.clone();
         let to_logic = to_logic.clone();
         move |()| {
-            raf.pause();
             if let Some(document_id) = current_doc.get_untracked() {
                 let _ = to_logic.try_send(LogicCommand::Rest {
                     id: RequestId::next(),
@@ -162,10 +163,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 });
             }
         }
-    });
-    let share_on_close = Callback::new({
-        let raf = raf.clone();
-        move |()| raf.resume()
     });
 
     // Follow the outbound half of a link the board handed back (`toile-links`).
@@ -219,23 +216,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
     // TOFU verification modal (`ambre-spec-key-verification.md`). `tofu_open` mirrors
     // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
-    // key, and this effect drives the native `<dialog>` accordingly. Same rAF
-    // suspend/resume as the other modals.
+    // key, and this effect drives the native `<dialog>` accordingly.
     let tofu_open = RwSignal::new(false);
     Effect::new(move |_| tofu_open.set(tofu_prompt.get().is_some()));
-    let tofu_on_open = Callback::new({
-        let raf = raf.clone();
-        move |()| raf.pause()
-    });
-    let tofu_on_close = Callback::new({
-        let raf = raf.clone();
-        // A native close (Escape / backdrop / Cancel) is a refusal: clear the
-        // pending prompt so nothing is pinned and phase 2 never fires.
-        move |()| {
-            raf.resume();
-            tofu_prompt.set(None);
-        }
-    });
+    // A native close (Escape / backdrop / Cancel) is a refusal: clear the
+    // pending prompt so nothing is pinned and phase 2 never fires.
+    let tofu_on_close = Callback::new(move |()| tofu_prompt.set(None));
 
     // Invite form state: the typed invitee (email, or a bare username in dev
     // mode). The role to grant lives in `invite_role` (shared via `Wiring`, since
@@ -536,8 +522,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <ambre_chrome::PassphraseDialog
             open=seal_open
             intent=ambre_chrome::PassphraseIntent::Seal
-            on_open=on_open
-            on_close=on_close
             on_submit=Callback::new({
                 // The application wraps the passphrase in its sealed-save
                 // command, and nothing else holds it (`ARCH-004`).
@@ -546,7 +530,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             })
         />
 
-        <Dialog open=about_open on_open=on_open on_close=on_close class="ambre-about">
+        <Dialog open=about_open class="ambre-about">
             <div class="ambre-about-panel">
                 <h2>"Ambre"</h2>
                 <p>"Collaborative office suite, 100% Rust, E2EE encrypted."</p>
@@ -559,7 +543,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         <Dialog
             open=share_open
             on_open=share_on_open
-            on_close=share_on_close
             class="ambre-share"
         >
             <div class="ambre-share-panel">
@@ -666,8 +649,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
             deck=toile_deck
             placed=toile_placed_embed
             set_link=toile_set_link
-            on_open=on_open
-            on_close=on_close
         />
 
         // TOFU key verification (`ambre-spec-key-verification.md`). A modal `Dialog`,
@@ -676,7 +657,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // blocking alert whose default action is Cancel).
         <Dialog
             open=tofu_open
-            on_open=tofu_on_open
             on_close=tofu_on_close
             class="ambre-tofu"
         >
@@ -772,13 +752,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // overlay for both, fed by the app's own table.
         <ambre_chrome::CommandPalette
             open=palette_open
-            table=if boot_is_toile {
-                ambre_toile::ui::commands::COMMANDS
-            } else if boot_is_prose {
-                ambre_prose::commands::COMMANDS
-            } else {
-                trame_chrome::COMMANDS
-            }
+            table=palette_table(crate::route::booted_kind(boot_is_toile, boot_is_prose))
             on_command=on_command
         />
         // Find panel, pinned top-right. Trame ships `trame-find-replace`;
@@ -987,5 +961,28 @@ pub(super) fn read_clipboard(
         ));
     } else {
         toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// The palette is fed each application's whole table, not a menu's subset
+    /// (`CHROME-008`). A Toile menu lists fewer ids than the board declares.
+    #[wasm_bindgen_test]
+    fn the_palette_is_fed_the_whole_declared_table() {
+        let ids = |table: &[ambre_chrome::commands::Command]| {
+            table.iter().map(|c| c.id).collect::<Vec<_>>()
+        };
+        let fed = |kind| ids(palette_table(kind));
+        assert_eq!(
+            fed(DocType::Toile),
+            ids(ambre_toile::ui::commands::COMMANDS)
+        );
+        assert_eq!(fed(DocType::Prose), ids(ambre_prose::commands::COMMANDS));
+        assert_eq!(fed(DocType::Trame), ids(trame_chrome::COMMANDS));
+        assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
 }

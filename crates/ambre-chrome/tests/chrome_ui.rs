@@ -160,14 +160,52 @@ fn app_shell_owns_the_named_canvas_cell() {
 
 // -- Shared status-bar chips (status.rs) -------------------------------------
 
+/// The readout follows the factor after a change, not only at mount
+/// (`CHROME-086`).
+///
+/// A re-render lands on a later microtask, so the change is read after one
+/// reactive tick.
+#[wasm_bindgen_test]
+async fn the_zoom_readout_follows_its_signal() {
+    let owner = Owner::new();
+    owner.set();
+    let zoom = RwSignal::new(1.25_f64);
+    let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
+    let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
+    assert_eq!(btn.text_content().as_deref(), Some("125 %"));
+
+    zoom.set(2.0);
+    leptos::task::tick().await;
+    assert_eq!(btn.text_content().as_deref(), Some("200 %"));
+
+    root.remove();
+}
+
+/// The fps readout follows its signal after a change (`CHROME-086`).
+#[wasm_bindgen_test]
+async fn the_fps_readout_follows_its_signal() {
+    let owner = Owner::new();
+    owner.set();
+    let fps = RwSignal::new(58.0_f32);
+    let root = mount_in_container(move || {
+        view! { <PerfChip fps=Signal::derive(move || fps.get()) /> }
+    });
+    let btn = root.query_selector(".statusbar-fps").unwrap().unwrap();
+    assert_eq!(btn.text_content().as_deref(), Some("58 fps"));
+
+    fps.set(30.0);
+    leptos::task::tick().await;
+    assert_eq!(btn.text_content().as_deref(), Some("30 fps"));
+
+    root.remove();
+}
+
 #[wasm_bindgen_test]
 fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     let owner = Owner::new();
     owner.set();
     // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
-    // is collapsed on mount (only the button shows). Reactive re-render on click
-    // flushes on a later microtask, so a straight-line post-click DOM query would
-    // race; we assert the synchronous initial render only.
+    // is collapsed on mount (only the button shows).
     let zoom = RwSignal::new(1.25_f64);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
 
@@ -207,10 +245,91 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     root.remove();
 }
 
+/// Resolve after `ms` milliseconds, on a later task.
+async fn sleep(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        let window = web_sys::window().unwrap();
+        window
+            .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
+            .unwrap();
+    });
+    wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+}
+
+// -- The debouncer (debounce.rs) ---------------------------------------------
+
+/// A burst of calls runs once, after the burst (`CHROME-015`), and the run is
+/// the burst's last value (`CHROME-090`).
+///
+/// The burst ends before the delay does. A debouncer that dropped the tail
+/// would leave the control showing a value the document never received.
+#[wasm_bindgen_test]
+async fn a_burst_runs_once_with_its_last_value() {
+    let owner = Owner::new();
+    owner.set();
+    let runs = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let debouncer = ambre_chrome::Debouncer::new();
+    for value in 0..5 {
+        let runs = runs.clone();
+        debouncer.call(std::time::Duration::from_millis(30), move || {
+            runs.borrow_mut().push(value);
+        });
+    }
+    assert!(runs.borrow().is_empty(), "nothing runs during the burst");
+
+    sleep(100).await;
+    assert_eq!(*runs.borrow(), vec![4], "one run, with the last value");
+}
+
 // -- Shared text-format controls (format.rs) ---------------------------------
 
+/// A click leaves as a report and the pressed state does not move until its
+/// signal does (`CHROME-087`).
+///
+/// The signal is read-only to the control. This test reads the DOM after the
+/// click, so a control that showed its own guess would fail here.
 #[wasm_bindgen_test]
-fn format_toggle_reflects_pressed_and_reports_clicks() {
+async fn a_toggle_reports_its_click_and_waits_for_the_value() {
+    let owner = Owner::new();
+    owner.set();
+    let pressed = RwSignal::new(false);
+    let clicks = RwSignal::new(0u32);
+    let root = mount_in_container(move || {
+        view! {
+            <FormatToggle
+                label="Bold"
+                icon=icondata::BsTypeBold
+                pressed=pressed.into()
+                on_toggle=Callback::new(move |()| clicks.update(|c| *c += 1))
+            />
+        }
+    });
+    let btn: web_sys::HtmlElement = root
+        .query_selector("button")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+
+    btn.click();
+    leptos::task::tick().await;
+    assert_eq!(clicks.get_untracked(), 1, "the click is reported");
+    assert!(!pressed.get_untracked(), "the control wrote no state");
+    assert!(
+        btn.get_attribute("aria-pressed").is_none(),
+        "nor showed one"
+    );
+
+    // The value comes back from the Logic thread, and only then is shown.
+    pressed.set(true);
+    leptos::task::tick().await;
+    assert_eq!(btn.get_attribute("aria-pressed").as_deref(), Some("true"));
+
+    root.remove();
+}
+
+#[wasm_bindgen_test]
+async fn format_toggle_reflects_pressed_and_reports_clicks() {
     let owner = Owner::new();
     owner.set();
     let pressed = RwSignal::new(false);
@@ -238,6 +357,8 @@ fn format_toggle_reflects_pressed_and_reports_clicks() {
     btn.dispatch_event(&ev).unwrap();
     assert_eq!(clicks.get_untracked(), 1);
 
+    // Settle the re-render while the owner lives.
+    leptos::task::tick().await;
     root.remove();
 }
 
@@ -352,8 +473,12 @@ fn palette_lists_every_declared_command() {
 /// DOM test: selecting a row invokes that command through the shared sink and
 /// closes the overlay. A click handler runs synchronously, so both are readable
 /// straight after it.
+///
+/// The close re-renders on a later microtask, so the test awaits it while
+/// its owner lives. An effect left pending would read a disposed signal in
+/// the next async test.
 #[wasm_bindgen_test]
-fn palette_row_invokes_its_command_and_closes() {
+async fn palette_row_invokes_its_command_and_closes() {
     let owner = Owner::new();
     owner.set();
     let open = RwSignal::new(true);
@@ -375,5 +500,165 @@ fn palette_row_invokes_its_command_and_closes() {
     assert_eq!(invoked.get_untracked(), Some(CommandId("t.merge")));
     assert!(!open.get_untracked(), "selecting a row closes the palette");
 
+    leptos::task::tick().await;
     root.remove();
+}
+
+// -- The modal (dialog.rs) ---------------------------------------------------
+
+/// A mounted modal, the hold count its `ModalHold` reached, and its element.
+struct Modal {
+    root: web_sys::Element,
+    dialog: web_sys::HtmlDialogElement,
+    holds: std::sync::Arc<std::sync::atomic::AtomicI32>,
+    /// The mount's handle: dropping it unmounts the modal.
+    handle: Option<Box<dyn std::any::Any>>,
+}
+
+impl Modal {
+    fn holds(&self) -> i32 {
+        self.holds.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Resolves on the element's next `close` event, after the dialog's own
+    /// handler, which was registered first. Call it before the close.
+    fn closed(&self) -> wasm_bindgen_futures::JsFuture {
+        let dialog = self.dialog.clone();
+        let promise = js_sys::Promise::new(&mut |resolve, _| {
+            dialog
+                .add_event_listener_with_callback("close", &resolve)
+                .unwrap();
+        });
+        wasm_bindgen_futures::JsFuture::from(promise)
+    }
+}
+
+/// Mount a `Dialog` under a `ModalHold` that counts takes and releases, as
+/// the launcher provides one.
+fn mount_modal(open: RwSignal<bool>) -> Modal {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicI32, Ordering};
+    let holds = Arc::new(AtomicI32::new(0));
+    let hold = {
+        let holds = holds.clone();
+        ambre_chrome::ModalHold::new(move |held| {
+            holds.fetch_add(if held { 1 } else { -1 }, Ordering::Relaxed);
+        })
+    };
+    let root = document().create_element("div").unwrap();
+    document().body().unwrap().append_child(&root).unwrap();
+    let target: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
+    let handle = mount_to(target, move || {
+        provide_context(hold);
+        view! {
+            <ambre_chrome::Dialog open=open>
+                <button class="inside">"Inside"</button>
+            </ambre_chrome::Dialog>
+        }
+        .into_any()
+    });
+    let dialog = root
+        .query_selector("dialog")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    Modal {
+        root,
+        dialog,
+        holds,
+        handle: Some(Box::new(handle)),
+    }
+}
+
+/// Setting the signal shows the modal (`CHROME-012`) and suspends the loop
+/// (`CHROME-011`). Clearing it hides the modal (`CHROME-091`) and gives the
+/// loop back (`CHROME-089`).
+#[wasm_bindgen_test]
+async fn a_modal_follows_its_signal_and_holds_the_loop_while_open() {
+    let open = RwSignal::new(false);
+    let modal = mount_modal(open);
+    assert!(!modal.dialog.open());
+    assert_eq!(modal.holds(), 0);
+
+    open.set(true);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open(), "the element is shown");
+    assert_eq!(modal.holds(), 1, "the loop is held");
+
+    let closed = modal.closed();
+    open.set(false);
+    closed.await.unwrap();
+    assert!(!modal.dialog.open(), "the element is hidden");
+    assert_eq!(modal.holds(), 0, "the loop is released");
+    modal.root.remove();
+}
+
+/// A click on the backdrop closes the modal (`CHROME-088`) and clears its
+/// signal (`CHROME-092`). A click inside it does neither.
+#[wasm_bindgen_test]
+async fn a_backdrop_click_dismisses_the_modal_and_clears_its_signal() {
+    let open = RwSignal::new(true);
+    let modal = mount_modal(open);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open());
+
+    let inside: web_sys::HtmlElement = modal
+        .root
+        .query_selector(".inside")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    inside.click();
+    leptos::task::tick().await;
+    sleep(10).await;
+    assert!(open.get_untracked(), "a click inside keeps the modal");
+
+    let closed = modal.closed();
+    let click = web_sys::MouseEvent::new("click").unwrap();
+    modal.dialog.dispatch_event(&click).unwrap();
+    closed.await.unwrap();
+    assert!(!modal.dialog.open(), "the backdrop closes it");
+    assert!(!open.get_untracked(), "and clears the signal");
+    assert_eq!(modal.holds(), 0);
+    modal.root.remove();
+}
+
+/// A native close, the one Escape performs, clears the signal (`CHROME-088`,
+/// `CHROME-092`), so the next open opens.
+///
+/// A headless browser drops a synthetic Escape, so the test closes the
+/// element as the browser does, then reopens it through the signal.
+#[wasm_bindgen_test]
+async fn a_native_close_clears_the_signal_and_the_modal_reopens() {
+    let open = RwSignal::new(true);
+    let modal = mount_modal(open);
+    leptos::task::tick().await;
+
+    let closed = modal.closed();
+    modal.dialog.close();
+    closed.await.unwrap();
+    assert!(!open.get_untracked(), "the signal follows the element");
+    assert_eq!(modal.holds(), 0, "the loop is released");
+
+    open.set(true);
+    leptos::task::tick().await;
+    assert!(modal.dialog.open(), "the next open is not blocked");
+    assert_eq!(modal.holds(), 1);
+    modal.root.remove();
+}
+
+/// A modal unmounted while open gives the loop back (`CHROME-089`). No
+/// `close` event fires, so only the cleanup can release the hold.
+#[wasm_bindgen_test]
+async fn an_open_modal_unmounted_releases_the_loop() {
+    let open = RwSignal::new(true);
+    let mut modal = mount_modal(open);
+    leptos::task::tick().await;
+    assert_eq!(modal.holds(), 1);
+
+    drop(modal.handle.take());
+    assert_eq!(modal.holds(), 0, "the unmount released the hold");
+    modal.root.remove();
 }

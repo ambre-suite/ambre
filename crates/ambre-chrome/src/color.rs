@@ -13,7 +13,13 @@
 // stroke). The native `<input type="color">` still drives the RGB channel, since
 // the widget has no alpha. An extra `<input type="range">` drives the top alpha
 // byte, and the two combine into the ARGB the caller stores.
+//
+// Both widgets fire on every step of a drag, so each reports through its own
+// `Debouncer`: a drag leaves as one pick, the last (`CHROME-015`). A swatch is
+// a click and reports at once.
 // ============================================================================
+
+use crate::debounce::{DRAG_DEBOUNCE, Debouncer};
 
 use leptos::html;
 use leptos::prelude::*;
@@ -94,6 +100,7 @@ pub fn ColorPopover(
     alpha: bool,
 ) -> impl IntoView {
     let open = RwSignal::new(false);
+    let (rgb_drag, alpha_drag) = (Debouncer::new(), Debouncer::new());
     // The wrapper node, so a global pointerdown can tell clicks inside the popover
     // apart from clicks elsewhere (another cell, the canvas, a sibling control).
     let root_ref = NodeRef::<html::Span>::new();
@@ -173,7 +180,8 @@ pub fn ColorPopover(
                             on:input=move |ev| {
                                 if let Some(rgb) = parse_hex_color(&event_target_value(&ev)) {
                                     let a = alpha_of(current.get_untracked());
-                                    on_pick.run(Some(pack(rgb, a, alpha)));
+                                    let picked = pack(rgb, a, alpha);
+                                    rgb_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                 }
                             }
                         />
@@ -195,7 +203,8 @@ pub fn ColorPopover(
                                                 .parse::<u8>()
                                                 .unwrap_or(0xff);
                                             let rgb = current.get_untracked().unwrap_or(default.get_untracked());
-                                            on_pick.run(Some(pack(rgb, a, true)));
+                                            let picked = pack(rgb, a, true);
+                                            alpha_drag.call(DRAG_DEBOUNCE, move || on_pick.run(Some(picked)));
                                         }
                                     />
                                     "Opacity"

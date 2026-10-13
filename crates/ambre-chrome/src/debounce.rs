@@ -15,6 +15,10 @@
 
 use std::time::Duration;
 
+/// How long a drag must rest before its value leaves as a command. Short
+/// enough to read as live, long enough to fold a burst into one command.
+pub const DRAG_DEBOUNCE: Duration = Duration::from_millis(120);
+
 /// A rescheduling debouncer. `Copy`, so a component keeps one and hands it to
 /// several event handlers.
 #[derive(Clone, Copy)]

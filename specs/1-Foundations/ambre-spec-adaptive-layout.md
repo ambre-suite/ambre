@@ -20,23 +20,23 @@ other five documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | none | unheld -- three width queries sit in one stylesheet, at under 600, from 600 and over 1024. Nothing refuses a fourth added beside them; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none | unheld -- no file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none | unheld -- each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none | unheld -- the style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a width query in the shell stylesheet other than the three it declares | none | verified |
+| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a width threshold in any Rust, CSS or HTML file outside the shell stylesheet and the density module | none | verified |
+| `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a `display: none` or `visibility: hidden` inside a width query, so a query only adds | none | verified |
+| `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | `ambre_app::shell::narrow::a_phone_menu_is_a_sheet_on_the_bottom_edge` -- the context menu opened at a click point in a frame of 360, 599 and 600 pixels, its edges read off the layout | none | verified |
 | `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- a chord chip mounted in a frame of 400, 599, 600, 1024 and 1025 pixels, read off the computed style | none | verified |
 | `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- the sync badge mounted with the shell stylesheet at each side of 600, the label read off the computed style | none | verified |
 | `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
-| `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none | unheld -- no code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | ci-gate -- `scripts/crate_boundaries.py` refuses a window size read in a content view's source | none | verified |
 
 * **Budget.** none: adaptation is style, resolved by the browser, and
   `ambre-spec-budgets.md` budgets no chrome operation. A resize does cost a frame,
   and that is charged to `ambre-spec-frame.md`.
 * **Boundary.** none: the window width is read from the browser and never leaves the client. It is a
   signal the page already carries, and nothing sends it anywhere.
-* **Verification.** 2 `verified`, 5 `untested`, 1 `unimplemented`. A width query reads the viewport
-  of its own frame. The browser tier sets a width by mounting a component in a sized frame.
-  The rules of absence wait on a scan of the source.
+* **Verification.** 7 `verified`, 1 `unimplemented`. A width query reads the viewport of its own
+  frame. The browser tier sets a width by mounting a component in a sized frame. The rules of
+  absence are held by a scan of the source.
 ---
 
 ## 2. MODEL

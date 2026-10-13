@@ -96,8 +96,10 @@ constrains, and the table below lists them.
 | `FIXTURE-024` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | `ambre-spec-fixtures.md` |
 | `FIXTURE-032` | A committed artifact MUST NOT come from a real user document. | `ambre-spec-fixtures.md` |
 | `KINETIC-001` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | `ambre-spec-kinetic-scroll.md` |
+| `CHROME-080` | A composed name MUST NOT be stored. | `ambre-spec-launcher.md` |
 | `SCHEMA-017` | A change to what a key's value means, the key and its type unchanged, MUST raise the schema version in the same commit as the change. | `ambre-spec-schema-version.md` |
 | `SRV-001` | The relay MUST NOT store or log a plaintext document payload. | `ambre-spec-server.md` |
+| `UI-THREAD-001` | The drawing surface MUST own the content, the caret, the selections and content hit-testing. | `ambre-spec-ui.md` |
 | `UI-THREAD-003` | A piece of interface state MUST NOT be held twice: a value the dispatcher pushes into a signal MUST NOT also live in a view's own state. | `ambre-spec-ui.md` |
 | `ZK-006` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-zero-knowledge.md` |
 <!-- end of the human-review rows -->

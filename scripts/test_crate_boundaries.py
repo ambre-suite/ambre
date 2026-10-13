@@ -61,6 +61,17 @@ def scratch(tmp: str) -> Path:
     )
     write(root, f"{cb.WORKER}/http.rs", "fn put() { gloo_net::http::Request::put(url); }\n")
     write(root, cb.NETWORK_EXCEPTIONS[0], "fn font() { window.fetch_with_str(url); }\n")
+    write(
+        root,
+        cb.LAZY_CREATE,
+        "    pub(crate) fn trigger_lazy_create(&mut self) {\n        let b = Req { name_enc: None, };\n    }\n",
+    )
+    write(
+        root,
+        cb.STYLESHEET,
+        ".label {\n    display: none;\n}\n\n@media (min-width: 600px) {\n    .label {\n"
+        "        display: inline;\n    }\n}\n",
+    )
     return root
 
 
@@ -80,7 +91,96 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_pdf(errors)
             cb.check_fonts(errors)
             cb.check_renderer_colors(errors)
+            cb.check_ui_thread(errors)
+            cb.check_client_storage(errors)
+            cb.check_gpu_subset(errors)
+            cb.check_widths(errors)
+            cb.check_modals_and_drags(errors)
             return errors
+
+    def breach(self, rel: str, text: str) -> list[str]:
+        """The errors of the passing tree with one file written into it."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, rel, text)
+            return self.run_checks(root)
+
+    def test_a_view_holding_the_document_is_refused(self):
+        for line in (
+            "fn draw(d: &loro::LoroDoc) {}\n",
+            "fn draw(s: &ProseState) {}\n",
+            "fn load(b: &[u8]) { let m = ExportMode::Snapshot; }\n",
+        ):
+            errors = self.breach("crates/ambre-toile/src/ui/view.rs", line)
+            self.assertTrue(any("holds the document" in e for e in errors), (line, errors))
+
+    def test_a_tree_address_and_a_test_engine_stay_free(self):
+        text = "fn hit(id: loro::TreeID) {}\n\n#[cfg(test)]\nmod tests {\n    fn s() -> ProseState {}\n}\n"
+        self.assertEqual(self.breach("crates/ambre-prose/src/view/hit.rs", text), [])
+
+    def test_a_view_that_waits_is_refused(self):
+        for line in ("fn next(w: &Waiter) { w.wait(); }\n", "fn run() { futures::executor::block_on(f); }\n"):
+            errors = self.breach("crates/ambre-trame/src/ui/view.rs", line)
+            self.assertTrue(any("the UI thread waits" in e for e in errors), (line, errors))
+
+    def test_a_component_that_draws_is_refused_and_the_surface_is_not(self):
+        line = "fn chart(c: &HtmlCanvasElement) { c.get_context(\"2d\"); }\n"
+        errors = self.breach("crates/ambre-chrome/src/chart.rs", line)
+        self.assertTrue(any("a page element draws" in e for e in errors), errors)
+        self.assertEqual(self.breach("crates/ambre-canvas/src/host.rs", line), [])
+
+    def test_a_storage_path_the_rule_does_not_name_is_refused(self):
+        line = "fn keep() { window.local_storage(); }\n"
+        errors = self.breach("crates/ambre-chrome/src/theme.rs", line)
+        self.assertTrue(any("a persistence path the rule does not name" in e for e in errors), errors)
+        self.assertEqual(self.breach(cb.STORAGE_OWNERS[2], line), [])
+
+    def test_a_compute_shader_is_refused(self):
+        errors = self.breach("crates/ambre-canvas/src/render/blur.wgsl", "@compute @workgroup_size(8)\nfn main() {}\n")
+        self.assertTrue(any("outside the shared graphics subset" in e for e in errors), errors)
+
+    def test_a_fourth_width_is_refused(self):
+        errors = self.breach(cb.STYLESHEET, "@media (max-width: 600px) {\n    .p {\n        top: 0;\n    }\n}\n")
+        self.assertTrue(any("a width the chrome does not declare" in e for e in errors), errors)
+
+    def test_a_width_query_that_hides_is_refused(self):
+        text = "@media (max-width: 599px) {\n    .bar {\n        display: none;\n    }\n}\n"
+        errors = self.breach(cb.STYLESHEET, text)
+        self.assertTrue(any("a width query hides" in e for e in errors), errors)
+
+    def test_a_width_spelled_outside_the_stylesheet_is_refused(self):
+        errors = self.breach("crates/ambre-chrome/src/sidebar.rs", "fn narrow() { w.match_media(\"(max-width: 599px)\"); }\n")
+        self.assertTrue(any("a width spelled outside the stylesheet" in e for e in errors), errors)
+
+    def test_a_content_view_reading_the_window_is_refused(self):
+        errors = self.breach("crates/ambre-trame/src/ui/view.rs", "fn fit() { let w = window.inner_width(); }\n")
+        self.assertTrue(any("a content view reads the window" in e for e in errors), errors)
+
+    def test_a_modal_outside_the_shared_dialog_is_refused(self):
+        errors = self.breach("crates/ambre-app/src/about.rs", 'fn v() { view! { <dialog open=true /> } }\n')
+        self.assertTrue(any("a modal outside the shared dialog" in e for e in errors), errors)
+        errors = self.breach(cb.MODAL_OWNER, 'fn v() { view! { <dialog open=true /> } }\n')
+        self.assertFalse(any("a modal outside" in e for e in errors), errors)
+
+    def test_a_drag_control_without_a_debouncer_is_refused(self):
+        line = 'fn v() { view! { <input type="range" on:input=commit /> } }\n'
+        errors = self.breach("crates/ambre-toile/src/chrome/style.rs", line)
+        self.assertTrue(any("a drag control that is not debounced" in e for e in errors), errors)
+        held = "use ambre_chrome::Debouncer;\n" + line
+        errors = self.breach("crates/ambre-toile/src/chrome/style.rs", held)
+        self.assertFalse(any("not debounced" in e for e in errors), errors)
+
+    def test_a_page_creating_a_document_is_refused(self):
+        line = "fn new() { send(RestCommand::CreateDocument { doc_type, name }); }\n"
+        errors = self.breach("crates/ambre-app/src/landing.rs", line)
+        self.assertTrue(any("the UI thread creates a document" in e for e in errors), errors)
+
+    def test_an_open_time_create_carrying_a_name_is_refused(self):
+        text = "    pub(crate) fn trigger_lazy_create(&mut self) {\n        let b = Req { name_enc: Some(n), };\n    }\n"
+        errors = self.breach(cb.LAZY_CREATE, text)
+        self.assertTrue(any("does not send `name_enc: None`" in e for e in errors), errors)
 
     def test_a_renderer_clearing_to_its_own_colour_is_refused(self):
         import tempfile

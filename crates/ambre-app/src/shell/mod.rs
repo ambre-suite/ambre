@@ -13,6 +13,8 @@ use super::*;
 // `Wiring` via `use super::super::*`.
 mod app_root;
 mod commands;
+#[cfg(test)]
+mod narrow;
 mod share;
 mod sync_badge;
 use app_root::AppRoot;
@@ -196,12 +198,21 @@ pub(crate) fn mount_shell(
         };
         *commands_slot.borrow_mut() = Some(commands.clone());
 
+        // Every modal suspends the frame loop while open (`CHROME-011`).
+        // `Dialog` takes and releases this hold; no caller wires the loop.
+        provide_context(ambre_chrome::ModalHold::new(move |held| {
+            if held {
+                raf.hold();
+            } else {
+                raf.release();
+            }
+        }));
+
         // Provide the wiring via context rather than as a prop: `<Router>`'s
         // children must be `Fn` (re-runnable), so the children closure cannot
         // consume a moved `wiring`. `AppRoot` clones it back out of context.
         provide_context(Wiring {
             to_logic,
-            raf,
             theme_ctl,
             toggles,
             toile_toggles,

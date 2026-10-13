@@ -4,15 +4,64 @@
 //
 // `showModal()` gives focus trap, inertness of the rest of the page, Escape to
 // close and a `::backdrop` for free. None of it needs reimplementing. The
-// component only bridges that native element to a Leptos `open` signal, and
-// fires `on_open`/`on_close` so the launcher can suspend/resume the canvas rAF.
+// component only bridges that native element to a Leptos `open` signal.
+//
 // A fullscreen modal freezes the canvas: battery saving, plus a free backdrop
-// blur.
+// blur. The launcher provides a `ModalHold` once, and every `Dialog` takes it
+// on open and gives it back on close or unmount. No caller wires the pause, so
+// no caller can forget the resume.
 // ============================================================================
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use leptos::html;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
+
+/// What an open modal does to the frame loop, provided once by the launcher
+/// as a context. `true` takes a hold, `false` releases it.
+#[derive(Clone)]
+pub struct ModalHold(Arc<dyn Fn(bool) + Send + Sync>);
+
+impl ModalHold {
+    /// A hold that calls `set(true)` when a modal opens and `set(false)` when
+    /// it closes.
+    pub fn new(set: impl Fn(bool) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(set))
+    }
+
+    /// The hold one dialog owns: taken at most once, released at most once.
+    fn owned(self) -> OwnedHold {
+        OwnedHold {
+            hold: self,
+            held: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+
+/// One dialog's share of the `ModalHold`. The flag pairs every take with one
+/// release, so a close event repeated, or a close after an unmount, releases
+/// nothing twice.
+#[derive(Clone)]
+struct OwnedHold {
+    hold: ModalHold,
+    held: Arc<AtomicBool>,
+}
+
+impl OwnedHold {
+    fn take(&self) {
+        if !self.held.swap(true, Ordering::Relaxed) {
+            (self.hold.0)(true);
+        }
+    }
+
+    fn release(&self) {
+        if self.held.swap(false, Ordering::Relaxed) {
+            (self.hold.0)(false);
+        }
+    }
+}
 
 /// A modal dialog driven by an `open` signal.
 ///
@@ -24,10 +73,11 @@ pub fn Dialog(
     /// Visibility. Set `false` to close; the component flips it back on Escape
     /// and backdrop click so it always reflects the true state.
     open: RwSignal<bool>,
-    /// Fired after the modal opens (for example to pause the canvas rAF).
+    /// Fired after the modal opens, for work of the caller's own. The frame
+    /// loop is the `ModalHold`'s, not this callback's.
     #[prop(optional, into)]
     on_open: Option<Callback<()>>,
-    /// Fired after the modal closes (for example to resume the canvas rAF).
+    /// Fired after the modal closes.
     #[prop(optional, into)]
     on_close: Option<Callback<()>>,
     /// Extra class on the `<dialog>` element, for per-dialog styling.
@@ -36,13 +86,23 @@ pub fn Dialog(
     children: ChildrenFn,
 ) -> impl IntoView {
     let dialog_ref = NodeRef::<html::Dialog>::new();
+    let hold = use_context::<ModalHold>().map(ModalHold::owned);
+    // A dialog unmounted while open fires no `close` event: give the hold
+    // back here, or the loop stays suspended.
+    if let Some(hold) = hold.clone() {
+        on_cleanup(move || hold.release());
+    }
 
     // Reflect `open` into the native modal state.
+    let open_hold = hold.clone();
     Effect::new(move |_| {
         let want_open = open.get();
         let Some(el) = dialog_ref.get() else { return };
         if want_open && !el.open() {
             let _ = el.show_modal();
+            if let Some(hold) = &open_hold {
+                hold.take();
+            }
             if let Some(cb) = on_open {
                 cb.run(());
             }
@@ -51,10 +111,13 @@ pub fn Dialog(
         }
     });
 
-    // Native close (Escape, or el.close()): sync the signal and notify. Both
-    // are idempotent, so this is safe whatever initiated the close.
+    // Native close (Escape, or el.close()): sync the signal and notify. All
+    // three are idempotent, so this is safe whatever initiated the close.
     let handle_close = move |_| {
         open.set(false);
+        if let Some(hold) = &hold {
+            hold.release();
+        }
         if let Some(cb) = on_close {
             cb.run(());
         }

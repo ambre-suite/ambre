@@ -25,12 +25,12 @@ other five documents of the DOM side.
 |---|---|---|---|---|---|---|
 | `CHROME-035` | `INV` | The home screen MUST list every kind of document through one view: it MUST NOT belong to an application. | this spec section 2 | `ambre_app::landing::tests::creatable_types_round_trip_through_doc_path` -- every creatable kind walks one path builder and one parser, so a kind the view named separately would not round-trip | none | verified |
 | `CHROME-038` | `INV` | The kind picker MUST offer exactly the kinds whose engine can be instantiated, naming no kind of its own. | this spec section 2 | `ambre_app::landing::tests::picker_lists_creatable_types_and_reports_pick` -- the picker mounted in a real document carries one entry per creatable kind in order under its generic label, and the pick is reported | none | verified |
-| `CHROME-044` | `INV` | The home screen MUST perform no cryptography: a name MUST reach it already decrypted. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `UI-THREAD-004` | none | unheld -- the launcher declares no crypto crate, and the names arrive on the display payload the Sync thread filled. The crate graph is the same fact `CHROME-001` reads, and no lint holds it here; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-080` | `INV` | A composed name MUST NOT be stored. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- the tab title is recomputed each frame and written only when it changes, so nothing composed is persisted today. It is the half of `CHROME-043` with a consequence: a composition sent to the server as a name puts the generic kind word inside the document's own sealed name, for every reader, for good; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-036` | `OBS` | A card MUST show the document's decrypted name. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- the card renders the name it was handed and nothing reads a card back; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-079` | `OBS` | An unnamed document MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- the card has no branch that reaches for an identifier, and nothing refuses the fallback a later author would add. It is the half that leaks: a name is absent by design, and an identifier on screen is routing metadata the user never asked to see; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | none | unheld -- the tab title is recomputed each frame from the name and the label, and no test reads a title; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | none | unheld -- the panel renders a neutral placeholder while the answer is absent and branches once it arrives. Nothing refuses a default that would flash the wrong sign-in for one frame; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-044` | `INV` | The home screen MUST perform no cryptography: a name MUST reach it already decrypted. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `UI-THREAD-004` | cargo-deny -- `deny.toml` lets only `ambre-sync` and `ambre-logic` declare `ambre-crypto`, and only the crypto wrappers declare a cipher, so the page's crate cannot name one | none | verified |
+| `CHROME-080` | `INV` | A composed name MUST NOT be stored. | this spec section 2; `ambre-spec-zero-knowledge.md` | human-review -- the reviewer reads each caller of `tab_title` in `crates/ambre-app/src/route.rs`, the one composition, for a use other than the tab title | unheld -- `intent` -- a composed name is a `String` like a typed one, and a rename sent with it compiles and passes every test | human-review |
+| `CHROME-036` | `OBS` | A card MUST show the document's decrypted name. | this spec section 2; `ambre-spec-zero-knowledge.md` | `ambre_app::landing::tests::a_card_shows_the_name_or_the_placeholder` -- a named card mounted and read back | none | verified |
+| `CHROME-079` | `OBS` | An unnamed document MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | `ambre_app::landing::tests::a_card_shows_the_name_or_the_placeholder` -- an unnamed card reads the placeholder, which is no creatable kind's word | none | verified |
+| `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | `ambre_app::route::tests::a_tab_title_composes_the_name_with_the_kind_label` -- the one function the tab title is set from | none | verified |
+| `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | `ambre_app::landing::tests::the_sign_in_waits_for_the_answer` -- the panel mounted with no answer shows neither route, then the answer shows its own | none | verified |
 | `CHROME-099` | `OBS` | The recovery words MUST be shown once, at the setup, and be readable nowhere afterwards. | this spec section 2; `ambre-spec-zero-knowledge.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Resolve a path
@@ -51,7 +51,7 @@ The route changed. Either the booted engine can draw what was asked for, or the 
 |---|---|---|---|---|---|---|
 | `CHROME-039` | `POST` | An open whose render kind equals the booted one MUST swap in place. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the two of its four combinations where the kinds agree | none | verified |
 | `CHROME-083` | `POST` | An open whose render kind differs from the booted one MUST reload the page. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the two combinations where they differ, one engine being booted per page, so this is the rule that keeps a board from being drawn by a grid | none | verified |
-| `CHROME-042` | `FRAME` | Going back home MUST NOT unmount the content surface: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | none | unheld -- the overlay covers the canvas cell and the route poll pauses the loop, so the GPU surface, the Logic thread and the Sync worker survive. Nothing observes that the loop is actually paused; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-042` | `FRAME` | Going back home MUST NOT unmount the content surface: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_canvas::frame::tests::a_closed_modal_resumes_only_what_it_suspended` -- a route away stops the loop, and a modal closing over it does not restart it; `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- a stopped loop does no frame work | none | verified |
 
 ### 1.4 Create a document
 
@@ -59,8 +59,8 @@ The user picks a kind. Nothing is named.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-037` | `POST` | A new document MUST be created unnamed. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- creation sends no name at all, so the rule holds by absence. `SYNC-067` holds the ciphertext half; nothing holds this one; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-084` | `FRAME` | Creating a document MUST NOT store a placeholder as its name. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- it is the half `CHROME-037` carried, and the one that is permanent: an unnamed document can be named later, and a document born holding the word "Untitled" as its sealed name never reads as unnamed again; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-037` | `POST` | A new document MUST be created unnamed. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- `scripts/crate_boundaries.py` refuses `CreateDocument`, the command that carries a name, in any UI-thread file, and refuses the open-time create unless it sends `name_enc: None` | none | verified |
+| `CHROME-084` | `FRAME` | Creating a document MUST NOT store a placeholder as its name. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- the same gate as `CHROME-037`: the open-time create sends no name field at all, so no placeholder can ride it | none | verified |
 
 ### 1.5 Delete a document
 
@@ -68,7 +68,7 @@ There is no recovery, so the gesture is gated on the user reading the name back.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-041` | `FAIL` | A delete MUST be confirmed against the document's own name before anything is dispatched. | this spec section 2; README pillar "E2EE" | none | unheld -- the card stores the target and opens a modal that renders the name, and the dispatch sits behind the confirming action. Nothing refuses a second delete path added without the modal, and there is no recovery from one; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-041` | `FAIL` | A delete MUST be confirmed against the document's own name before anything is dispatched. | this spec section 2; README pillar "E2EE" | `ambre_app::landing::tests::a_delete_waits_for_the_confirmation_on_the_name` -- the card's delete dispatches nothing, the modal names the document, and only its confirm dispatches | none | verified |
 
 ### 1.6 Sign in, then unlock or set up
 
@@ -88,12 +88,12 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
   `ambre-spec-frame.md`.
 * **Boundary.** the routing metadata the list shows is plaintext by design, and the name beside it
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
-  unauthenticated same-origin read of the sign-in configuration, a second exception to the UI
-  thread's ban, recorded in section 5.
-* **Verification.** 10 `verified`, 10 `untested`, 4 `unimplemented`. What holds is what a pure
-  function or one mounted control carries. That is the path mapping, its fallback, the reload
-  predicate, the kind list and the provider sign-in. The rest are properties of a whole page against
-  a live session.
+  unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
+  owns the local store. Each is an exception `UI-THREAD-004` names.
+* **Verification.** 19 `verified`, 1 `human-review`, 4 `unimplemented`. What holds is what a pure
+  function or one mounted control carries, and what a scan of the source refuses. Creation is held
+  by the gate that keeps the named command off the page. Where a composed name goes is held by
+  review.
 ---
 
 ## 2. MODEL
@@ -236,14 +236,6 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The launcher opens a request `UI-THREAD-004` does not name.** It reads the server's sign-in
-  configuration over an unauthenticated same-origin request, before any session exists. The rule as
-  written names one exception, same-origin fonts, and its verification cell claims a single request
-  in the whole client. There are two, and this is the second.
-* **The launcher also owns the local store.** The snapshots and the pinned keys live in a browser
-  database opened on this thread, because its callbacks need a live event loop
-  (`ambre-spec-architecture.md section 2`). That is a persistence path on the UI thread, which is
-  the other half of the same rule, and it is deliberate.
 * **The list has no order, no grouping and no search.** Documents arrive in whatever order the
   server returned them, and a user with a hundred of them has a hundred rows.
 * **Nothing rules on a failed sign-in.** A refused development name, an identity provider that

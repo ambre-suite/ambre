@@ -122,11 +122,10 @@ pub fn landing_view(
         })
     };
 
-    // Confirmation dialog for the irreversible delete (E2EE: no server-side
-    // trash). Holds the pending target so the dialog can name it before the user
-    // confirms; `<dialog>` provides focus trap / Escape / backdrop for free.
+    // The irreversible delete (E2EE: no server-side trash). A card only names
+    // its target here; `DeleteConfirm` renders the name and holds the dispatch
+    // behind its confirming action (`CHROME-041`).
     let pending_delete = RwSignal::new(None::<(DocumentId, String)>);
-    let dialog_ref = NodeRef::<html::Dialog>::new();
 
     // Distinct clones for the two view sites (the `view!` macro's capture
     // analysis cannot share one binding across both closures).
@@ -135,20 +134,14 @@ pub fn landing_view(
 
     let confirm_delete = {
         let to_logic = to_logic.clone();
-        move || {
-            if let Some((document_id, _)) = pending_delete.get() {
-                let _ = to_logic.try_send(LogicCommand::Rest {
-                    id: RequestId::next(),
-                    cmd: RestCommand::DeleteDocument { document_id },
-                });
-                // Optimistic removal -- the relay also re-lists on `DocumentDeleted`.
-                docs.update(|v| v.retain(|d| d.document_id != document_id));
-            }
-            pending_delete.set(None);
-            if let Some(dlg) = dialog_ref.get() {
-                let _ = dlg.close();
-            }
-        }
+        Callback::new(move |document_id: DocumentId| {
+            let _ = to_logic.try_send(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd: RestCommand::DeleteDocument { document_id },
+            });
+            // Optimistic removal -- the relay also re-lists on `DocumentDeleted`.
+            docs.update(|v| v.retain(|d| d.document_id != document_id));
+        })
     };
 
     view! {
@@ -184,7 +177,7 @@ pub fn landing_view(
                         children={
                             let to_logic = to_logic_cards.clone();
                             move |d: DocItem| {
-                                doc_card(d, docs, to_logic.clone(), pending_delete, dialog_ref, booted)
+                                doc_card(d, docs, to_logic.clone(), pending_delete, booted)
                             }
                         }
                     />
@@ -204,43 +197,9 @@ pub fn landing_view(
                 }
             </Show>
 
-            // Delete confirmation -- native `<dialog>`, opened imperatively when a
-            // card requests a delete (the target name is rendered reactively).
-            <dialog node_ref=dialog_ref class="ambre-confirm-dialog">
-                <h3>"Delete document?"</h3>
-                <p>
-                    "\""
-                    {move || {
-                        pending_delete
-                            .get()
-                            .map(|(_, label)| label)
-                            .unwrap_or_default()
-                    }}
-                    "\" will be permanently deleted. This cannot be undone."
-                </p>
-                <div class="ambre-confirm-actions">
-                    <button
-                        class="ambre-btn-secondary"
-                        on:click=move |_| {
-                            pending_delete.set(None);
-                            if let Some(dlg) = dialog_ref.get() {
-                                let _ = dlg.close();
-                            }
-                        }
-                    >
-                        "Cancel"
-                    </button>
-                    <button
-                        class="ambre-btn-danger"
-                        on:click=move |_| confirm_delete()
-                    >
-                        "Delete"
-                    </button>
-                </div>
-            </dialog>
+            <DeleteConfirm pending=pending_delete on_confirm=confirm_delete />
 
-            // The passphrase of a sealed file. No `on_open`/`on_close`: this
-            // overlay already covers the canvas, and its rAF already stopped.
+            // The passphrase of a sealed file.
             <ambre_chrome::PassphraseDialog
                 open=passphrase_open
                 intent=ambre_chrome::PassphraseIntent::Open
@@ -338,7 +297,6 @@ fn doc_card(
     docs: RwSignal<Vec<DocItem>>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     pending_delete: RwSignal<Option<(DocumentId, String)>>,
-    dialog_ref: NodeRef<html::Dialog>,
     booted: DocType,
 ) -> impl IntoView {
     let doc_type = d.doc_type;
@@ -391,20 +349,7 @@ fn doc_card(
             <div class="ambre-doc-main" on:click=on_open>
                 <Show
                     when=move || editing.get()
-                    fallback=move || {
-                        let name = display_name.clone();
-                        view! {
-                            <span class=move || {
-                                if name.is_some() {
-                                    "ambre-doc-name"
-                                } else {
-                                    "ambre-doc-name ambre-doc-name-untitled"
-                                }
-                            }>
-                                {name.clone().unwrap_or_else(|| "Untitled".to_owned())}
-                            </span>
-                        }
-                    }
+                    fallback=move || card_name(display_name.clone())
                 >
                     {
                         let commit_rename = commit_rename.clone();
@@ -464,17 +409,71 @@ fn doc_card(
                             .iter()
                             .find(|x| x.document_id == id)
                             .and_then(|x| x.name.clone())
-                            .unwrap_or_else(|| "Untitled".to_owned());
+                            .unwrap_or_else(|| UNTITLED.to_owned());
                         pending_delete.set(Some((id, label)));
-                        if let Some(dlg) = dialog_ref.get() {
-                            let _ = dlg.show_modal();
-                        }
                     }
                 >
                     "Delete"
                 </button>
             </div>
         </li>
+    }
+}
+
+/// What a card shows for a document never named (`CHROME-079`).
+const UNTITLED: &str = "Untitled";
+
+/// A card's name: the decrypted name (`CHROME-036`), or a dimmed placeholder.
+///
+/// It takes the name alone, so no fallback can reach for the identifier or
+/// the kind (`CHROME-079`).
+fn card_name(name: Option<String>) -> impl IntoView {
+    let class = if name.is_some() {
+        "ambre-doc-name"
+    } else {
+        "ambre-doc-name ambre-doc-name-untitled"
+    };
+    view! { <span class=class>{name.unwrap_or_else(|| UNTITLED.to_owned())}</span> }
+}
+
+/// The confirmation every delete passes through (`CHROME-041`).
+///
+/// A card only sets `pending`: the modal names the target, and only its
+/// confirming action runs `on_confirm`. Cancel, Escape and the backdrop clear
+/// `pending` and dispatch nothing.
+#[component]
+fn DeleteConfirm(
+    /// The document a card asked to delete, with the name to confirm against.
+    pending: RwSignal<Option<(DocumentId, String)>>,
+    /// The dispatch, run with the confirmed document.
+    on_confirm: Callback<DocumentId>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    Effect::new(move |_| open.set(pending.get().is_some()));
+    let on_close = Callback::new(move |()| pending.set(None));
+    let confirm = move |_| {
+        if let Some((document_id, _)) = pending.get_untracked() {
+            on_confirm.run(document_id);
+        }
+        pending.set(None);
+    };
+    view! {
+        <ambre_chrome::Dialog open=open on_close=on_close class="ambre-confirm-dialog">
+            <h3>"Delete document?"</h3>
+            <p>
+                "\""
+                {move || pending.get().map(|(_, label)| label).unwrap_or_default()}
+                "\" will be permanently deleted. This cannot be undone."
+            </p>
+            <div class="ambre-confirm-actions">
+                <button class="ambre-btn-secondary" on:click=move |_| pending.set(None)>
+                    "Cancel"
+                </button>
+                <button class="ambre-btn-danger" on:click=confirm>
+                    "Delete"
+                </button>
+            </div>
+        </ambre_chrome::Dialog>
     }
 }
 
@@ -730,6 +729,125 @@ mod tests {
         assert_eq!(
             web_sys::window().unwrap().location().href().unwrap(),
             before
+        );
+        container.remove();
+    }
+
+    /// A card shows the decrypted name it was handed (`CHROME-036`). An
+    /// unnamed document shows the dimmed placeholder, and no identifier or
+    /// kind word (`CHROME-079`).
+    #[wasm_bindgen_test]
+    fn a_card_shows_the_name_or_the_placeholder() {
+        let named = mount_in_container(|| card_name(Some("Budget 2026".to_owned())));
+        let span = named.query_selector(".ambre-doc-name").unwrap().unwrap();
+        assert_eq!(span.text_content().as_deref(), Some("Budget 2026"));
+        assert_eq!(span.class_name(), "ambre-doc-name");
+        named.remove();
+
+        let unnamed = mount_in_container(|| card_name(None));
+        let span = unnamed.query_selector(".ambre-doc-name").unwrap().unwrap();
+        assert_eq!(span.text_content().as_deref(), Some(UNTITLED));
+        assert!(span.class_name().contains("ambre-doc-name-untitled"));
+        for &kind in DocType::creatable() {
+            assert_ne!(UNTITLED, kind.generic_label(), "never the kind's word");
+        }
+        unnamed.remove();
+    }
+
+    /// A delete is confirmed against the document's own name before anything
+    /// is dispatched (`CHROME-041`).
+    ///
+    /// Asking opens the modal on the name and dispatches nothing. Cancel
+    /// dispatches nothing, and only the confirming action dispatches.
+    #[wasm_bindgen_test]
+    async fn a_delete_waits_for_the_confirmation_on_the_name() {
+        let owner = Owner::new();
+        owner.set();
+        let pending = RwSignal::new(None::<(DocumentId, String)>);
+        let confirmed = RwSignal::new(Vec::<DocumentId>::new());
+        let on_confirm = Callback::new(move |id| confirmed.update(|v| v.push(id)));
+        let container = mount_in_container(move || {
+            view! { <DeleteConfirm pending=pending on_confirm=on_confirm /> }
+        });
+        let dialog: web_sys::HtmlDialogElement = container
+            .query_selector("dialog")
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        let button = |class: &str| {
+            container
+                .query_selector(&format!(".{class}"))
+                .unwrap()
+                .unwrap()
+        };
+
+        let id = DocumentId::new();
+        pending.set(Some((id, "Payroll".to_owned())));
+        leptos::task::tick().await;
+        assert!(dialog.open(), "a delete opens the confirmation");
+        let text = dialog.text_content().unwrap_or_default();
+        assert!(text.contains("\"Payroll\""), "it names the target: {text}");
+        assert!(
+            confirmed.get_untracked().is_empty(),
+            "nothing dispatched yet"
+        );
+
+        click(&button("ambre-btn-secondary"));
+        tick().await;
+        assert!(!dialog.open(), "cancel closes it");
+        assert!(pending.get_untracked().is_none());
+        assert!(
+            confirmed.get_untracked().is_empty(),
+            "cancel dispatches nothing"
+        );
+
+        pending.set(Some((id, "Payroll".to_owned())));
+        leptos::task::tick().await;
+        click(&button("ambre-btn-danger"));
+        tick().await;
+        assert_eq!(
+            confirmed.get_untracked(),
+            vec![id],
+            "the confirmation dispatches"
+        );
+        assert!(!dialog.open());
+        container.remove();
+    }
+
+    /// The sign-in panel shows neither route until the server has answered
+    /// which one applies (`CHROME-045`).
+    #[wasm_bindgen_test]
+    async fn the_sign_in_waits_for_the_answer() {
+        let owner = Owner::new();
+        owner.set();
+        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(8);
+        let dev_mode = RwSignal::new(None);
+        let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
+        let routes = |c: &web_sys::Element| {
+            (
+                c.query_selector(".ambre-signin-input").unwrap().is_some(),
+                c.query_selector(".ambre-signin-btn").unwrap().is_some(),
+            )
+        };
+        assert_eq!(
+            routes(&container),
+            (false, false),
+            "no route before the answer"
+        );
+        assert!(
+            container
+                .query_selector(".ambre-signin-loading")
+                .unwrap()
+                .is_some()
+        );
+
+        dev_mode.set(Some(true));
+        tick().await;
+        assert_eq!(
+            routes(&container),
+            (true, true),
+            "the dev route once answered"
         );
         container.remove();
     }

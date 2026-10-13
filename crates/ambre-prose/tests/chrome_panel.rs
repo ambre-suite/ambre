@@ -190,3 +190,59 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     assert!(text.contains("Your reply was not posted"), "{text}");
     root.remove();
 }
+
+/// The ruler element sits where the host placed the column, and each handle
+/// is centred on the position the state gives it (`PROSE-UI-065`). The
+/// element adds no offset of its own, at any zoom.
+#[wasm_bindgen_test]
+async fn the_ruler_element_sits_on_the_column_it_was_given() {
+    use ambre_prose::view::ruler::{RulerHandle, RulerState};
+    for zoom in [0.5_f32, 1.0, 2.0] {
+        let signals = ProseSignals::new();
+        let ruler = RulerState {
+            visible: true,
+            top_px: 30.0,
+            page_left_px: 120.0,
+            content_width_px: 451.0 * zoom,
+            px_per_pt: 4.0 / 3.0 * zoom,
+            indent_first: 18.0,
+            indent_left: 36.0,
+            indent_right: 12.0,
+        };
+        signals.ruler.set(ruler);
+        let container =
+            mount_in_container(move || view! { <chrome::ProseRuler signals=signals /> });
+        leptos::task::tick().await;
+
+        let rect = container
+            .query_selector(".ambre-prose-ruler")
+            .unwrap()
+            .expect("the ruler is on screen")
+            .get_bounding_client_rect();
+        assert_eq!(rect.left() as f32, 120.0, "zoom {zoom}");
+        assert_eq!(rect.top() as f32, 30.0, "zoom {zoom}");
+        assert!(
+            (rect.width() as f32 - ruler.content_width_px).abs() < 0.5,
+            "zoom {zoom}"
+        );
+        let handles = container
+            .query_selector_all(".ambre-prose-ruler-handle")
+            .unwrap();
+        assert_eq!(handles.length(), 3);
+        let order = [
+            RulerHandle::IndentFirst,
+            RulerHandle::IndentLeft,
+            RulerHandle::IndentRight,
+        ];
+        for (i, handle) in order.into_iter().enumerate() {
+            let el: web_sys::Element = handles.item(i as u32).unwrap().dyn_into().unwrap();
+            let r = el.get_bounding_client_rect();
+            let centre = (r.left() + r.width() / 2.0) as f32;
+            assert!(
+                (centre - ruler.handle_x(handle)).abs() < 0.5,
+                "zoom {zoom}: {handle:?} at {centre}"
+            );
+        }
+        container.remove();
+    }
+}

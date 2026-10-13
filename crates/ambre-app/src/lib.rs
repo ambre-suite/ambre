@@ -225,7 +225,6 @@ fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
 #[derive(Clone)]
 struct Wiring {
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     /// The active app's command toggle signals (the store's reactive view,
     /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
@@ -1108,23 +1107,18 @@ pub fn main() {
                     if let Some(sw) = route_switcher.borrow().as_ref() {
                         sw.set_document(document_id);
                     }
-                    route_raf.resume();
+                    route_raf.set_away(false);
                 }
                 // Freeze the canvas behind the landing overlay (the relay below
                 // keeps running -- only the render is gated).
-                None => route_raf.pause(),
+                None => route_raf.set_away(true),
             }
             prev_route = Some(cur_route);
         }
 
-        // Browser tab title. Icon-less context: compose the document's plaintext
-        // name (decrypted into `docs`) with the generic localized type label
-        // (`DocType::generic_label`, not the brand `name()`) --
-        // `ambre-spec-launcher.md`, CHROME-043. Recomputed each frame so a rename
-        // or a late-arriving document list
-        // updates the tab; the DOM write happens only when the title changes. An
-        // open doc with no resolved name falls back to "Untitled - <label>"; the
-        // landing is "Ambre".
+        // Browser tab title (`route::tab_title`). Recomputed each frame so a
+        // rename or a late-arriving document list updates the tab; the DOM
+        // write happens only when the title changes.
         let title = match cur_doc {
             Some((doc_type, document_id)) => {
                 let name = docs.with_untracked(|list| {
@@ -1132,13 +1126,9 @@ pub fn main() {
                         .find(|d| d.document_id == document_id)
                         .and_then(|d| d.name.clone())
                 });
-                let label = doc_type.generic_label();
-                match name {
-                    Some(n) if !n.trim().is_empty() => format!("{n} - {label}"),
-                    _ => format!("Untitled - {label}"),
-                }
+                route::tab_title(Some((doc_type, name.as_deref())))
             }
-            None => "Ambre".to_owned(),
+            None => route::tab_title(None),
         };
         if last_title.as_deref() != Some(title.as_str()) {
             if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
