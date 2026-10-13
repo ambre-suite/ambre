@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 104 partial and 508 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 101 partial and 507 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 480 | 269 | 584 | 604 |  | 1937 |
-| `partial` | 47 | 14 | 41 | 2 |  | 104 |
+| `verified` | 484 | 269 | 584 | 604 |  | 1941 |
+| `partial` | 44 | 14 | 41 | 2 |  | 101 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 181 | 133 | 188 | 1 |  | 503 |
+| `untested` | 180 | 133 | 188 | 1 |  | 502 |
 | `human-review` | 5 |  |  |  |  | 5 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
@@ -61,7 +61,7 @@
 | `ambre-spec-membership.md` | 30 | 30 | 29 | 1 |  |  |
 | `ambre-spec-message-bus.md` | 28 | 26 | 13 | 4 | 9 | 2 |
 | `ambre-spec-object-store.md` | 18 | 12 | 10 |  | 2 | 6 |
-| `ambre-spec-op-authorship.md` | 29 | 29 | 26 | 3 |  |  |
+| `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |  |
 | `ambre-spec-organizations.md` | 11 | 9 | 7 |  | 2 | 2 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 15 | 15 | 11 | 1 | 3 |  |
@@ -72,7 +72,7 @@
 | `ambre-spec-sequencer.md` | 46 | 37 | 37 |  |  | 9 |
 | `ambre-spec-server.md` | 52 | 34 | 28 | 2 | 4 | 18 |
 | `ambre-spec-session.md` | 17 | 17 | 12 | 1 | 4 |  |
-| `ambre-spec-sync.md` | 29 | 29 | 15 |  | 14 |  |
+| `ambre-spec-sync.md` | 29 | 29 | 16 |  | 13 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 1 |  | 12 |  |
 | `ambre-spec-ui.md` | 17 | 11 | 3 | 1 | 7 | 6 |

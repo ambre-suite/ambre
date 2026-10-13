@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gloo_net::http::Response;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -71,12 +70,21 @@ impl AuthContext {
             .ok_or_else(|| "auth required: no refresh token".to_owned())
     }
 
+    /// Renews the token pair over the browser's `fetch`. The socket calls it
+    /// on its own refusal, which only the wasm build reaches.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) async fn refresh(&self) -> Result<(), String> {
+        self.refresh_via(&Fetch).await
+    }
+
+    /// Renews the token pair through `transport`. The refresh token is the
+    /// one credential the request carries.
+    async fn refresh_via(&self, transport: &impl Transport) -> Result<(), String> {
         let url = format!("{}://{}/api/auth/refresh", self.url_scheme, self.api_base);
         let body = RefreshRequest {
             refresh_token: self.refresh_token()?,
         };
-        let next = post_json::<_, TokenPair>(&url, &body).await?;
+        let next = post_json_via::<_, TokenPair>(transport, &url, &body).await?;
         *self.tokens.borrow_mut() = Some(next);
         Ok(())
     }
@@ -92,15 +100,140 @@ fn bearer(token: &SecretToken) -> Zeroizing<String> {
 /// forever (the browser `fetch` has no default timeout).
 const REQUEST_TIMEOUT_MS: u32 = 30_000;
 
-/// Fresh `AbortSignal` that fires after [`REQUEST_TIMEOUT_MS`], aborting the
-/// associated `fetch`. A new signal is minted per request because a timeout
-/// signal starts counting down the moment it is created.
-///
-/// gloo-net copies the signal into the request's `RequestInit` (a JS object) as
-/// soon as `abort_signal` is called. The returned value may then be dropped on
-/// the Rust side while `fetch` still holds it alive.
-fn timeout_signal() -> web_sys::AbortSignal {
-    web_sys::AbortSignal::timeout_with_u32(REQUEST_TIMEOUT_MS)
+/// The method of one request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Method {
+    /// `GET`.
+    Get,
+    /// `POST`.
+    Post,
+    /// `PUT`.
+    Put,
+    /// `PATCH`.
+    Patch,
+    /// `DELETE`.
+    Delete,
+}
+
+impl Method {
+    /// The method's name, as an error message carries it.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+        }
+    }
+}
+
+/// One request as the transport sends it. The policy below builds it, and
+/// the transport only moves it.
+#[derive(Clone)]
+pub(crate) struct Outgoing {
+    /// The method.
+    pub method: Method,
+    /// Where it goes.
+    pub url: String,
+    /// The `Authorization` value, on a request to the relay that needs one.
+    pub bearer: Option<Zeroizing<String>>,
+    /// The content type and the bytes of the body, if any.
+    pub body: Option<(&'static str, Vec<u8>)>,
+    /// How long the transport waits before it aborts the request.
+    pub timeout_ms: u32,
+}
+
+impl Outgoing {
+    /// A request with no body and no credential, under the per-request
+    /// timeout.
+    fn new(method: Method, url: &str) -> Self {
+        Self {
+            method,
+            url: url.to_owned(),
+            bearer: None,
+            body: None,
+            timeout_ms: REQUEST_TIMEOUT_MS,
+        }
+    }
+
+    /// A request carrying `body` as JSON.
+    fn json<T: Serialize>(method: Method, url: &str, body: &T) -> Result<Self, String> {
+        let bytes = serde_json::to_vec(body)
+            .map_err(|e| format!("{} {url}: serialize error: {e}", method.as_str()))?;
+        Ok(Self {
+            body: Some(("application/json", bytes)),
+            ..Self::new(method, url)
+        })
+    }
+}
+
+/// One answer: its status and its body.
+pub(crate) struct Incoming {
+    /// The HTTP status.
+    pub status: u16,
+    /// The body, empty when there is none.
+    pub body: Vec<u8>,
+}
+
+/// What moves a request and brings its answer back. The renewal, the replay
+/// and the error mapping live above it, so a host test drives them through a
+/// scripted transport.
+#[allow(async_fn_in_trait)] // single-threaded worker; futures are intentionally !Send
+pub(crate) trait Transport {
+    /// Sends `request`. An error is a request that got no answer at all.
+    async fn send(&self, request: &Outgoing) -> Result<Incoming, String>;
+}
+
+/// The browser's `fetch`, the transport of the running worker.
+pub(crate) struct Fetch;
+
+impl Method {
+    /// The same method, as gloo-net names it.
+    fn gloo(self) -> gloo_net::http::Method {
+        match self {
+            Self::Get => gloo_net::http::Method::GET,
+            Self::Post => gloo_net::http::Method::POST,
+            Self::Put => gloo_net::http::Method::PUT,
+            Self::Patch => gloo_net::http::Method::PATCH,
+            Self::Delete => gloo_net::http::Method::DELETE,
+        }
+    }
+}
+
+impl Transport for Fetch {
+    async fn send(&self, request: &Outgoing) -> Result<Incoming, String> {
+        // A new signal per request, because a timeout signal starts counting
+        // down the moment it is created. gloo-net copies it into the request,
+        // so it may be dropped here while `fetch` still holds it.
+        let signal = web_sys::AbortSignal::timeout_with_u32(request.timeout_ms);
+        let mut builder = gloo_net::http::RequestBuilder::new(&request.url)
+            .method(request.method.gloo())
+            .abort_signal(Some(&signal));
+        if let Some(bearer) = &request.bearer {
+            builder = builder.header("Authorization", bearer);
+        }
+        let sent = match &request.body {
+            Some((content_type, bytes)) => {
+                builder
+                    .header("Content-Type", content_type)
+                    .body(bytes.clone())
+                    .map_err(|e| format!("body error: {e}"))?
+                    .send()
+                    .await
+            }
+            None => builder.send().await,
+        };
+        let resp = sent.map_err(|e| e.to_string())?;
+        let body = resp
+            .binary()
+            .await
+            .map_err(|e| format!("binary error: {e}"))?;
+        Ok(Incoming {
+            status: resp.status(),
+            body,
+        })
+    }
 }
 
 /// The relay's error code for a request refused because the account still owes
@@ -164,34 +297,129 @@ pub(crate) fn is_log_moved(message: &str) -> bool {
     message.ends_with(&format!(": {LOG_MOVED}"))
 }
 
-async fn refused(method: &str, url: &str, resp: Response) -> String {
-    let status = resp.status();
-    let code = if status == 403 || status == 409 {
-        resp.json::<RefusalBody>().await.ok().map(|body| body.error)
+/// The error a refused answer reads as, or `Ok` for a success. The relay's
+/// code is read from the body only on the statuses that may carry one.
+fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
+    if (200..300).contains(&resp.status) {
+        return Ok(());
+    }
+    let code = if resp.status == 403 || resp.status == 409 {
+        serde_json::from_slice::<RefusalBody>(&resp.body)
+            .ok()
+            .map(|body| body.error)
     } else {
         None
     };
-    refusal(method, url, status, code.as_deref())
+    Err(refusal(
+        request.method.as_str(),
+        &request.url,
+        resp.status,
+        code.as_deref(),
+    ))
 }
 
-async fn parse_json<T: serde::de::DeserializeOwned>(
-    method: &str,
-    url: &str,
-    resp: Response,
-) -> Result<T, String> {
-    if !resp.ok() {
-        return Err(refused(method, url, resp).await);
-    }
-    resp.json::<T>()
+/// The JSON body of a successful answer.
+fn read_json<R: serde::de::DeserializeOwned>(
+    request: &Outgoing,
+    resp: &Incoming,
+) -> Result<R, String> {
+    expect_ok(request, resp)?;
+    serde_json::from_slice(&resp.body).map_err(|e| {
+        format!(
+            "{} {}: parse error: {e}",
+            request.method.as_str(),
+            request.url
+        )
+    })
+}
+
+/// Sends `request` once. A request that got no answer reads as its method
+/// and its URL, then the transport's reason.
+async fn exchange(transport: &impl Transport, request: &Outgoing) -> Result<Incoming, String> {
+    transport
+        .send(request)
         .await
-        .map_err(|e| format!("{method} {url}: parse error: {e}"))
+        .map_err(|e| format!("{} {}: {e}", request.method.as_str(), request.url))
 }
 
-async fn expect_ok(method: &str, url: &str, resp: Response) -> Result<(), String> {
-    if !resp.ok() {
-        return Err(refused(method, url, resp).await);
+/// Sends `request` under the session's access token. A 401 renews the pair
+/// and replays the request once, with the new token (`SYNC-062`). The
+/// answer to that replay is the caller's, whatever it is.
+async fn exchange_auth(
+    transport: &impl Transport,
+    auth: &AuthContext,
+    request: &mut Outgoing,
+) -> Result<Incoming, String> {
+    request.bearer = Some(bearer(&auth.access_token()?));
+    let resp = exchange(transport, request).await?;
+    if resp.status != 401 {
+        return Ok(resp);
     }
-    Ok(())
+    auth.refresh_via(transport).await?;
+    request.bearer = Some(bearer(&auth.access_token()?));
+    exchange(transport, request).await
+}
+
+/// An authenticated GET of JSON, reading `404 Not Found` as `Ok(None)`.
+pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &str,
+    auth: &AuthContext,
+) -> Result<Option<T>, String> {
+    let mut request = Outgoing::new(Method::Get, url);
+    let resp = exchange_auth(transport, auth, &mut request).await?;
+    if resp.status == 404 {
+        return Ok(None);
+    }
+    read_json(&request, &resp).map(Some)
+}
+
+/// An authenticated GET of JSON.
+pub(crate) async fn get_json_auth_via<T: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &str,
+    auth: &AuthContext,
+) -> Result<T, String> {
+    let mut request = Outgoing::new(Method::Get, url);
+    let resp = exchange_auth(transport, auth, &mut request).await?;
+    read_json(&request, &resp)
+}
+
+/// A POST of JSON that carries no credential, answered with JSON.
+pub(crate) async fn post_json_via<T: Serialize, R: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &str,
+    body: &T,
+) -> Result<R, String> {
+    let request = Outgoing::json(Method::Post, url, body)?;
+    let resp = exchange(transport, &request).await?;
+    read_json(&request, &resp)
+}
+
+/// An authenticated POST of JSON, answered with JSON.
+pub(crate) async fn post_json_auth_via<T: Serialize, R: serde::de::DeserializeOwned>(
+    transport: &impl Transport,
+    url: &str,
+    body: &T,
+    auth: &AuthContext,
+) -> Result<R, String> {
+    let mut request = Outgoing::json(Method::Post, url, body)?;
+    let resp = exchange_auth(transport, auth, &mut request).await?;
+    read_json(&request, &resp)
+}
+
+/// An authenticated request carrying `body` as JSON, to a route that answers
+/// with no body.
+pub(crate) async fn send_json_auth_via<T: Serialize>(
+    transport: &impl Transport,
+    method: Method,
+    url: &str,
+    body: &T,
+    auth: &AuthContext,
+) -> Result<(), String> {
+    let mut request = Outgoing::json(method, url, body)?;
+    let resp = exchange_auth(transport, auth, &mut request).await?;
+    expect_ok(&request, &resp)
 }
 
 /// HTTP GET to JSON, treating `404 Not Found` as `Ok(None)`.
@@ -199,80 +427,29 @@ pub(crate) async fn get_json_opt_auth<T: serde::de::DeserializeOwned>(
     url: &str,
     auth: AuthContext,
 ) -> Result<Option<T>, String> {
-    let resp = gloo_net::http::Request::get(url)
-        .header("Authorization", &bearer(&auth.access_token()?))
-        .abort_signal(Some(&timeout_signal()))
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
-    if resp.status() == 404 {
-        return Ok(None);
-    }
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = gloo_net::http::Request::get(url)
-            .header("Authorization", &bearer(&auth.access_token()?))
-            .abort_signal(Some(&timeout_signal()))
-            .send()
-            .await
-            .map_err(|e| format!("GET {url}: {e}"))?;
-        if resp.status() == 404 {
-            return Ok(None);
-        }
-        return parse_json("GET", url, resp).await.map(Some);
-    }
-    parse_json("GET", url, resp).await.map(Some)
+    get_json_opt_via(&Fetch, url, &auth).await
 }
 
 /// HTTP GET to JSON deserialized response.
 #[allow(dead_code)]
 pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
-    let resp = gloo_net::http::Request::get(url)
-        .abort_signal(Some(&timeout_signal()))
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
-    parse_json("GET", url, resp).await
+    let request = Outgoing::new(Method::Get, url);
+    let resp = exchange(&Fetch, &request).await?;
+    read_json(&request, &resp)
 }
 
 pub(crate) async fn get_json_auth<T: serde::de::DeserializeOwned>(
     url: &str,
     auth: AuthContext,
 ) -> Result<T, String> {
-    let resp = gloo_net::http::Request::get(url)
-        .header("Authorization", &bearer(&auth.access_token()?))
-        .abort_signal(Some(&timeout_signal()))
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = gloo_net::http::Request::get(url)
-            .header("Authorization", &bearer(&auth.access_token()?))
-            .abort_signal(Some(&timeout_signal()))
-            .send()
-            .await
-            .map_err(|e| format!("GET {url}: {e}"))?;
-        return parse_json("GET", url, resp).await;
-    }
-    parse_json("GET", url, resp).await
+    get_json_auth_via(&Fetch, url, &auth).await
 }
 
 pub(crate) async fn post_json<T: Serialize, R: serde::de::DeserializeOwned>(
     url: &str,
     body: &T,
 ) -> Result<R, String> {
-    let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
-    let resp = gloo_net::http::Request::post(url)
-        .header("Content-Type", "application/json")
-        .abort_signal(Some(&timeout_signal()))
-        .body(body_json)
-        .map_err(|e| format!("POST {url}: body error: {e}"))?
-        .send()
-        .await
-        .map_err(|e| format!("POST {url}: {e}"))?;
-    parse_json("POST", url, resp).await
+    post_json_via(&Fetch, url, body).await
 }
 
 pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>(
@@ -280,63 +457,7 @@ pub(crate) async fn post_json_auth<T: Serialize, R: serde::de::DeserializeOwned>
     body: &T,
     auth: AuthContext,
 ) -> Result<R, String> {
-    let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
-    let send = |token: SecretToken| {
-        gloo_net::http::Request::post(url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", &bearer(&token))
-            .abort_signal(Some(&timeout_signal()))
-            .body(body_json.clone())
-    };
-    let resp = send(auth.access_token()?)
-        .map_err(|e| format!("POST {url}: body error: {e}"))?
-        .send()
-        .await
-        .map_err(|e| format!("POST {url}: {e}"))?;
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = send(auth.access_token()?)
-            .map_err(|e| format!("POST {url}: body error: {e}"))?
-            .send()
-            .await
-            .map_err(|e| format!("POST {url}: {e}"))?;
-        return parse_json("POST", url, resp).await;
-    }
-    parse_json("POST", url, resp).await
-}
-
-/// HTTP POST of a JSON body to a route that answers with no body. The
-/// confirmation and the report of a snapshot use it (`SRV-126`, `SRV-133`).
-pub(crate) async fn post_json_auth_empty<T: Serialize>(
-    url: &str,
-    body: &T,
-    auth: AuthContext,
-) -> Result<(), String> {
-    let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("POST {url}: serialize error: {e}"))?;
-    let send = |token: SecretToken| {
-        gloo_net::http::Request::post(url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", &bearer(&token))
-            .abort_signal(Some(&timeout_signal()))
-            .body(body_json.clone())
-    };
-    let resp = send(auth.access_token()?)
-        .map_err(|e| format!("POST {url}: body error: {e}"))?
-        .send()
-        .await
-        .map_err(|e| format!("POST {url}: {e}"))?;
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = send(auth.access_token()?)
-            .map_err(|e| format!("POST {url}: body error: {e}"))?
-            .send()
-            .await
-            .map_err(|e| format!("POST {url}: {e}"))?;
-        return expect_ok("POST", url, resp).await;
-    }
-    expect_ok("POST", url, resp).await
+    post_json_auth_via(&Fetch, url, body, &auth).await
 }
 
 /// The sealed blob of one snapshot of `document_id`: a presigned URL from the
@@ -360,23 +481,9 @@ pub(crate) async fn download_snapshot(
 }
 
 pub(crate) async fn delete_auth(url: &str, auth: AuthContext) -> Result<(), String> {
-    let resp = gloo_net::http::Request::delete(url)
-        .header("Authorization", &bearer(&auth.access_token()?))
-        .abort_signal(Some(&timeout_signal()))
-        .send()
-        .await
-        .map_err(|e| format!("DELETE {url}: {e}"))?;
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = gloo_net::http::Request::delete(url)
-            .header("Authorization", &bearer(&auth.access_token()?))
-            .abort_signal(Some(&timeout_signal()))
-            .send()
-            .await
-            .map_err(|e| format!("DELETE {url}: {e}"))?;
-        return expect_ok("DELETE", url, resp).await;
-    }
-    expect_ok("DELETE", url, resp).await
+    let mut request = Outgoing::new(Method::Delete, url);
+    let resp = exchange_auth(&Fetch, &auth, &mut request).await?;
+    expect_ok(&request, &resp)
 }
 
 /// PUTs a sealed blob to a presigned object-storage URL. It takes what the seal
@@ -387,15 +494,22 @@ pub(crate) async fn put_sealed(
     url: &str,
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), String> {
-    let resp = gloo_net::http::Request::put(url)
-        .header("Content-Type", "application/octet-stream")
-        .abort_signal(Some(&timeout_signal()))
-        .body(blob.as_bytes().to_vec())
-        .map_err(|e| format!("PUT {url}: body error: {e}"))?
-        .send()
-        .await
-        .map_err(|e| format!("PUT {url}: {e}"))?;
-    expect_ok("PUT", url, resp).await
+    put_sealed_via(&Fetch, url, blob).await
+}
+
+/// A sealed blob to a presigned object-storage link, with no credential: the
+/// link is its own.
+pub(crate) async fn put_sealed_via(
+    transport: &impl Transport,
+    url: &str,
+    blob: &crate::pipeline::SealedBlob,
+) -> Result<(), String> {
+    let request = Outgoing {
+        body: Some(("application/octet-stream", blob.as_bytes().to_vec())),
+        ..Outgoing::new(Method::Put, url)
+    };
+    let resp = exchange(transport, &request).await?;
+    expect_ok(&request, &resp)
 }
 
 pub(crate) async fn patch_json_auth<T: Serialize>(
@@ -403,7 +517,7 @@ pub(crate) async fn patch_json_auth<T: Serialize>(
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
-    send_json_auth("PATCH", gloo_net::http::Request::patch, url, body, auth).await
+    send_json_auth_via(&Fetch, Method::Patch, url, body, &auth).await
 }
 
 /// HTTP DELETE carrying a JSON body: a departure sends the entry it signs
@@ -413,56 +527,14 @@ pub(crate) async fn delete_json_auth<T: Serialize>(
     body: &T,
     auth: AuthContext,
 ) -> Result<(), String> {
-    send_json_auth("DELETE", gloo_net::http::Request::delete, url, body, auth).await
-}
-
-/// Sends `body` as JSON with the `method` that `builder` opens, retried once
-/// after a refresh, to a route that answers with no body.
-async fn send_json_auth<T: Serialize>(
-    method: &str,
-    builder: fn(&str) -> gloo_net::http::RequestBuilder,
-    url: &str,
-    body: &T,
-    auth: AuthContext,
-) -> Result<(), String> {
-    let body_json =
-        serde_json::to_vec(body).map_err(|e| format!("{method} {url}: serialize error: {e}"))?;
-    let send = |token: SecretToken| {
-        builder(url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", &bearer(&token))
-            .abort_signal(Some(&timeout_signal()))
-            .body(body_json.clone())
-    };
-    let resp = send(auth.access_token()?)
-        .map_err(|e| format!("{method} {url}: body error: {e}"))?
-        .send()
-        .await
-        .map_err(|e| format!("{method} {url}: {e}"))?;
-    if resp.status() == 401 {
-        auth.refresh().await?;
-        let resp = send(auth.access_token()?)
-            .map_err(|e| format!("{method} {url}: body error: {e}"))?
-            .send()
-            .await
-            .map_err(|e| format!("{method} {url}: {e}"))?;
-        return expect_ok(method, url, resp).await;
-    }
-    expect_ok(method, url, resp).await
+    send_json_auth_via(&Fetch, Method::Delete, url, body, &auth).await
 }
 
 pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let resp = gloo_net::http::Request::get(url)
-        .abort_signal(Some(&timeout_signal()))
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?;
-    if !resp.ok() {
-        return Err(format!("GET {url}: HTTP {}", resp.status()));
-    }
-    resp.binary()
-        .await
-        .map_err(|e| format!("GET {url}: binary error: {e}"))
+    let request = Outgoing::new(Method::Get, url);
+    let resp = exchange(&Fetch, &request).await?;
+    expect_ok(&request, &resp)?;
+    Ok(resp.body)
 }
 
 /// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
@@ -919,9 +991,199 @@ pub(crate) struct ConfirmUploadRequest {
     pub size_bytes: i64,
 }
 
+/// A transport that answers from a script and keeps every request it was
+/// handed, for the host tests of the request policy.
+#[cfg(test)]
+pub(crate) mod scripted {
+    use super::*;
+    use std::collections::VecDeque;
+
+    /// Answers each request with the next scripted answer. A request past the
+    /// script gets no answer at all.
+    #[derive(Default)]
+    pub(crate) struct Scripted {
+        answers: RefCell<VecDeque<Result<Incoming, String>>>,
+        /// Every request handed over, in order.
+        pub sent: RefCell<Vec<Outgoing>>,
+    }
+
+    impl Scripted {
+        /// A transport answering with `answers`, as a status and a JSON body,
+        /// or as no answer at all.
+        pub(crate) fn new(
+            answers: impl IntoIterator<Item = Result<(u16, serde_json::Value), String>>,
+        ) -> Self {
+            let answers = answers
+                .into_iter()
+                .map(|answer| {
+                    answer.map(|(status, body)| Incoming {
+                        status,
+                        body: serde_json::to_vec(&body).unwrap(),
+                    })
+                })
+                .collect();
+            Self {
+                answers: RefCell::new(answers),
+                sent: RefCell::default(),
+            }
+        }
+
+        /// The method and the URL of each request handed over.
+        pub(crate) fn calls(&self) -> Vec<(Method, String)> {
+            self.sent
+                .borrow()
+                .iter()
+                .map(|r| (r.method, r.url.clone()))
+                .collect()
+        }
+    }
+
+    impl Transport for Scripted {
+        async fn send(&self, request: &Outgoing) -> Result<Incoming, String> {
+            self.sent.borrow_mut().push(request.clone());
+            self.answers
+                .borrow_mut()
+                .pop_front()
+                .unwrap_or_else(|| Err("no answer scripted".to_owned()))
+        }
+    }
+
+    /// A session holding the access token `access` and the refresh token
+    /// `refresh`, against `https://relay.test`.
+    pub(crate) fn session(access: &str, refresh: &str) -> AuthContext {
+        AuthContext {
+            api_base: "relay.test".to_owned(),
+            url_scheme: "https",
+            tokens: Rc::new(RefCell::new(Some(TokenPair {
+                access_token: access.to_owned().into(),
+                refresh_token: refresh.to_owned().into(),
+                access_expires_in: 900,
+            }))),
+        }
+    }
+
+    /// A fresh token pair as the relay's refresh route answers it.
+    pub(crate) fn renewed(access: &str) -> serde_json::Value {
+        serde_json::json!({
+            "access_token": access,
+            "refresh_token": "refresh-2",
+            "access_expires_in": 900,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::scripted::{Scripted, renewed, session};
     use super::*;
+
+    /// The `Authorization` value a request carried, if any.
+    fn bearer_of(request: &Outgoing) -> Option<String> {
+        request.bearer.as_ref().map(|b| b.as_str().to_owned())
+    }
+
+    /// `SYNC-062`: a request refused for an expired token renews the pair
+    /// once, with the refresh token alone. It then replays the same request
+    /// under the new token. Every request carries the per-request timeout.
+    #[tokio::test]
+    async fn a_refused_token_is_renewed_and_the_request_replayed_once() {
+        let transport = Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((200, serde_json::json!({ "ok": 1 }))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let url = "https://relay.test/api/documents";
+
+        let answer: serde_json::Value =
+            post_json_auth_via(&transport, url, &serde_json::json!({ "n": 7 }), &auth)
+                .await
+                .unwrap();
+
+        assert_eq!(answer, serde_json::json!({ "ok": 1 }));
+        let sent = transport.sent.borrow();
+        let [first, renewal, replay] = sent.as_slice() else {
+            panic!("expected three requests, got {}", sent.len());
+        };
+        assert_eq!(bearer_of(first).as_deref(), Some("Bearer access-1"));
+        assert_eq!(renewal.url, "https://relay.test/api/auth/refresh");
+        assert_eq!(
+            bearer_of(renewal),
+            None,
+            "the renewal carries no access token"
+        );
+        let asked: serde_json::Value =
+            serde_json::from_slice(&renewal.body.as_ref().unwrap().1).unwrap();
+        assert_eq!(asked, serde_json::json!({ "refresh_token": "refresh-1" }));
+        assert_eq!(bearer_of(replay).as_deref(), Some("Bearer access-2"));
+        assert_eq!(
+            (replay.method, &replay.url, &replay.body),
+            (first.method, &first.url, &first.body)
+        );
+        assert!(sent.iter().all(|r| r.timeout_ms == REQUEST_TIMEOUT_MS));
+    }
+
+    /// `SYNC-062`: the replay is the only one. A second refusal, or a renewal
+    /// the relay refuses, ends the request with an error.
+    #[tokio::test]
+    async fn a_request_is_replayed_at_most_once() {
+        let url = "https://relay.test/api/documents";
+        let refused_twice = Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((200, renewed("access-2"))),
+            Ok((401, serde_json::json!({}))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let err = get_json_auth_via::<serde_json::Value>(&refused_twice, url, &auth)
+            .await
+            .unwrap_err();
+        assert_eq!(err, format!("GET {url}: HTTP 401"));
+        assert_eq!(refused_twice.sent.borrow().len(), 3);
+
+        let renewal_refused = Scripted::new([
+            Ok((401, serde_json::json!({}))),
+            Ok((401, serde_json::json!({}))),
+        ]);
+        let auth = session("access-1", "refresh-1");
+        let err = get_json_auth_via::<serde_json::Value>(&renewal_refused, url, &auth)
+            .await
+            .unwrap_err();
+        assert!(err.ends_with("/api/auth/refresh: HTTP 401"), "{err}");
+        assert_eq!(
+            renewal_refused.sent.borrow().len(),
+            2,
+            "no replay without a token"
+        );
+    }
+
+    /// Each answer reads as what the caller acts on. A refusal keeps the
+    /// relay's code on the status that carries it, and a 404 is an absence.
+    /// A request with no answer names its method and its URL.
+    #[tokio::test]
+    async fn each_answer_maps_to_its_error() {
+        let url = "https://relay.test/api/documents/d/members";
+        let auth = session("access-1", "refresh-1");
+        let body = serde_json::json!({});
+        let answer = |status: u16, code: &str| Ok((status, serde_json::json!({ "error": code })));
+        let transport = Scripted::new([
+            answer(409, MEMBERS_CHANGED),
+            answer(403, SETUP_REQUIRED),
+            answer(500, SETUP_REQUIRED),
+            Ok((404, serde_json::json!({}))),
+            Err("network down".to_owned()),
+        ]);
+        let send = || send_json_auth_via(&transport, Method::Patch, url, &body, &auth);
+
+        assert!(is_members_changed(&send().await.unwrap_err()));
+        assert!(is_setup_refusal(&send().await.unwrap_err()));
+        assert_eq!(send().await.unwrap_err(), format!("PATCH {url}: HTTP 500"));
+        let absent = get_json_opt_via::<serde_json::Value>(&transport, url, &auth).await;
+        assert_eq!(absent, Ok(None));
+        assert_eq!(
+            send().await.unwrap_err(),
+            format!("PATCH {url}: network down")
+        );
+    }
 
     /// Only a 403 carrying the setup code reads as a setup refusal, and no
     /// URL makes another status read as one (`SYNC-134`).

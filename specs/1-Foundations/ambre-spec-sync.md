@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | none | unheld -- every request helper renews once and replays, and no test drives a refusal: the helpers are the browser fetch path, and the transport the host tier substitutes is above them; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | `ambre_sync::http::tests::a_refused_token_is_renewed_and_the_request_replayed_once` -- the replay carries the renewed token; `ambre_sync::http::tests::a_request_is_replayed_at_most_once` -- a second refusal or a refused renewal ends it | none | verified |
 | `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | none | unheld -- every call attaches a thirty-second abort signal, and no test drives a request that never answers: the request path is the browser fetch; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | none | unheld -- the retry is keyed on the one status a stale token produces, and nothing asserts the other refusals fall through. Replaying a write refused for a missing permission sends it twice against a relay that already said no; lands with the `The Sync worker rides out the network` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 15 `verified`, 14 `untested`. The crate graph holds the keys and the CRDT apart.
+* **Verification.** 16 `verified`, 13 `untested`. The crate graph holds the keys and the CRDT apart.
   Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
   document. A gate refuses browser storage in the worker. Each gap left is a browser property the
   wasm tier cannot boot, `ambre-spec-testing.md section 9`.

@@ -1338,7 +1338,11 @@ mod tests {
             .collect();
         assert_eq!(subscribed, cursors.keys().copied().collect());
         assert_eq!(pulled, cursors);
-        assert_eq!(sent.len(), 4, "one subscription and one pull each: {sent:?}");
+        assert_eq!(
+            sent.len(),
+            4,
+            "one subscription and one pull each: {sent:?}"
+        );
     }
 
     /// The socket address carries no query, so no log line, proxy record or

@@ -197,7 +197,7 @@ the relay, a second instance. Both sides follow the same rule.
 
 * **The send trait is the precedent already in the crate.** `MediaHttp` and `ShareHttp` put the media
   and sharing calls behind a trait, and the socket has an in-memory `MockWsTransport`. The request
-  policy gets the same treatment.
+  policy sits above `http::Transport`, which only the browser's `fetch` implements outside tests.
 * **The clock is a value, not a call.** The lifecycle reads time from a parameter, so a test advances
   it without sleeping. The timer shell only turns a deadline into a `setTimeout`.
 * **Two instances means two states, not two processes.** Each `AppState` owns its own hub and

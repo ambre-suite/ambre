@@ -264,19 +264,20 @@ impl SyncState {
     /// (`AUTHOR-021`). A pending snapshot that passes is confirmed, and one
     /// that contradicts a delta is reported. On open, one that passes is
     /// adopted, and any other leaves the document on its reference.
+    ///
+    /// Returns what the relay is to be told about a pending snapshot, which
+    /// the caller posts with [`send_vouch`].
     pub(crate) fn handle_snapshot_verdict(
         &mut self,
         document_id: DocumentId,
         snapshot_id: SnapshotId,
         purpose: SnapshotPurpose,
         verdict: SnapshotVerdict,
-    ) {
-        let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            return;
-        };
+    ) -> Option<Vouch> {
+        let doc_state = self.documents.get_mut(&document_id)?;
         let Some(check) = doc_state.checks.remove(&snapshot_id) else {
             tracing::warn!("Sync: a verdict on snapshot {snapshot_id:?} nobody asked for");
-            return;
+            return None;
         };
         let passes = match &verdict {
             SnapshotVerdict::Match { extras } => extras.iter().all(|(peer, bytes)| {
@@ -300,6 +301,7 @@ impl SyncState {
                 }
                 // The open waited on this verdict (`check_held_snapshot`).
                 self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
+                None
             }
             SnapshotPurpose::Open => {
                 tracing::warn!(
@@ -307,14 +309,11 @@ impl SyncState {
                      (mismatch: {mismatch}), staying on its reference"
                 );
                 self.send_to_logic(LogicEvent::DocumentReady { document_id, role });
+                None
             }
-            SnapshotPurpose::Confirm if passes => {
-                self.post_snapshot_vouch(document_id, snapshot_id, None);
-            }
+            SnapshotPurpose::Confirm if passes => Some(Vouch::Confirm),
             SnapshotPurpose::Confirm if mismatch => {
-                let Some(signing_key) = self.signing_key.as_ref() else {
-                    return;
-                };
+                let signing_key = self.signing_key.as_ref()?;
                 let transcript = ambre_protocol::snapshot_report::report_transcript(
                     document_id,
                     snapshot_id,
@@ -325,51 +324,32 @@ impl SyncState {
                     "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
                      deltas, reporting it"
                 );
-                self.post_snapshot_vouch(document_id, snapshot_id, Some(hex::encode(signature)));
+                Some(Vouch::Report(hex::encode(signature)))
             }
             SnapshotPurpose::Confirm => {
                 tracing::info!("Sync: snapshot {snapshot_id:?} left unchecked");
+                None
             }
         }
     }
 
-    /// Confirm a snapshot (`SRV-126`), or report it when `signature` carries a
-    /// signed report (`SRV-133`). Off the wasm path there is no relay to tell.
+    /// Posts `vouch` on a snapshot. Off the wasm path there is no relay to
+    /// tell.
     pub(crate) fn post_snapshot_vouch(
         &mut self,
         document_id: DocumentId,
         snapshot_id: SnapshotId,
-        signature: Option<String>,
+        vouch: Vouch,
     ) {
         if self.event_tx.is_none() {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
         }
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
+        let base = format!("{}://{}", self.url_scheme, self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let base = format!(
-                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshots/{snapshot_id}"
-            );
-            let sent = match signature {
-                None => {
-                    http::post_json_auth_empty(
-                        &format!("{base}/confirm"),
-                        &serde_json::json!({}),
-                        auth,
-                    )
-                    .await
-                }
-                Some(signature) => {
-                    http::post_json_auth_empty(
-                        &format!("{base}/report"),
-                        &http::ReportSnapshotRequest { signature },
-                        auth,
-                    )
-                    .await
-                }
-            };
+            let sent =
+                send_vouch(&http::Fetch, &auth, &base, document_id, snapshot_id, &vouch).await;
             if let Err(e) = sent {
                 tracing::warn!("Sync: snapshot {snapshot_id:?} vouch failed: {e}");
             }
@@ -1212,88 +1192,24 @@ impl SyncState {
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
         let covered_seq = i64::try_from(covered_seq.0).unwrap_or(i64::MAX);
-        let api_base = self.api_base.clone();
-        let url_scheme = self.url_scheme;
+        let base = format!("{}://{}", self.url_scheme, self.api_base);
         let auth = self.auth_context();
-
-        // upload-url -> S3 PUT -> confirm metadata, on the media-upload template.
+        let upload = SnapshotUpload {
+            document_id,
+            author_pubkey,
+            covered_seq,
+            blob,
+        };
         wasm_bindgen_futures::spawn_local(async move {
-            let upload_url_req = format!(
-                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/upload-url"
-            );
-            let (upload_url, s3_key) =
-                match http::post_json_auth::<serde_json::Value, http::SnapshotUploadUrlResponse>(
-                    &upload_url_req,
-                    &serde_json::json!({ "size_bytes": blob.len() }),
-                    auth.clone(),
-                )
-                .await
-                {
-                    Ok(resp) => (resp.upload_url, resp.s3_key),
-                    Err(e) => {
-                        tracing::error!(
-                            "Sync: SendSnapshot upload-url failed for {document_id:?}: {e}"
-                        );
-                        return;
-                    }
-                };
-
-            // Presigned PUT goes straight to S3 (no session, no CSRF header).
-            if let Err(e) = http::put_sealed(&upload_url, &blob).await {
-                tracing::error!("Sync: SendSnapshot S3 PUT failed for {document_id:?}: {e}");
-                return;
-            }
-
-            let confirm_url =
-                format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot");
-            let confirm_body = http::CreateSnapshotRequest {
-                snapshot_id: SnapshotId::new().to_string(),
-                author_pubkey,
-                parent_hash: None,
-                parent_snapshot_proof: None,
-                update_clocks: serde_json::json!({}),
-                s3_key,
-                covered_seq,
-            };
-            let new_snapshot_id = match http::post_json_auth::<_, http::CreateSnapshotResponse>(
-                &confirm_url,
-                &confirm_body,
-                auth.clone(),
-            )
-            .await
-            {
-                Ok(resp) => match SnapshotId::parse_str(&resp.snapshot_id) {
-                    Ok(id) => id,
-                    Err(e) => {
-                        tracing::error!(
-                            "Sync: SendSnapshot bad snapshot_id for {document_id:?}: {e}"
-                        );
-                        return;
-                    }
-                },
-                Err(e) => {
-                    tracing::error!("Sync: SendSnapshot confirm failed for {document_id:?}: {e}");
-                    return;
+            match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
+                Ok(snapshot_id) => {
+                    let _ = tx.send(SyncEvent::SnapshotUploaded {
+                        document_id,
+                        snapshot_id,
+                    });
                 }
-            };
-
-            tracing::info!(
-                "Sync: SendSnapshot {document_id:?} uploaded ({} bytes), snapshot_id={new_snapshot_id:?}",
-                blob.len()
-            );
-            // The author's own confirmation makes it `self` (`AUTHOR-021`).
-            let vouch_url = format!(
-                "{url_scheme}://{api_base}/api/documents/{document_id}/snapshots/{new_snapshot_id}/confirm"
-            );
-            if let Err(e) =
-                http::post_json_auth_empty(&vouch_url, &serde_json::json!({}), auth).await
-            {
-                tracing::warn!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
+                Err(e) => tracing::error!("Sync: SendSnapshot failed for {document_id:?}: {e}"),
             }
-            let _ = tx.send(SyncEvent::SnapshotUploaded {
-                document_id,
-                snapshot_id: new_snapshot_id,
-            });
         });
     }
 
@@ -1321,6 +1237,113 @@ impl SyncState {
             Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }
     }
+}
+
+/// What a client tells the relay about another author's pending snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Vouch {
+    /// The snapshot matches the deltas it covers (`SRV-126`).
+    Confirm,
+    /// It contradicts them: the hex signature of the report (`SRV-133`).
+    Report(String),
+}
+
+/// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
+/// session's token.
+pub(crate) async fn send_vouch(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    base: &str,
+    document_id: DocumentId,
+    snapshot_id: SnapshotId,
+    vouch: &Vouch,
+) -> Result<(), String> {
+    let url = format!("{base}/api/documents/{document_id}/snapshots/{snapshot_id}");
+    let post = http::Method::Post;
+    match vouch {
+        Vouch::Confirm => {
+            let body = serde_json::json!({});
+            http::send_json_auth_via(transport, post, &format!("{url}/confirm"), &body, auth).await
+        }
+        Vouch::Report(signature) => {
+            let body = http::ReportSnapshotRequest {
+                signature: signature.clone(),
+            };
+            http::send_json_auth_via(transport, post, &format!("{url}/report"), &body, auth).await
+        }
+    }
+}
+
+/// One sealed snapshot on its way to the relay.
+pub(crate) struct SnapshotUpload {
+    /// The document it compacts.
+    pub document_id: DocumentId,
+    /// Its author's signing key, in hex.
+    pub author_pubkey: String,
+    /// The last delta it covers.
+    pub covered_seq: i64,
+    /// The sealed blob.
+    pub blob: pipeline::SealedBlob,
+}
+
+/// Uploads a sealed snapshot, then confirms it as its author (`AUTHOR-021`).
+/// The steps run in order: the upload link, the object, the metadata, the
+/// confirmation. Returns the id the relay gave it, or the first step that
+/// failed. A failed confirmation leaves the snapshot pending, so it is
+/// logged and the id is still returned.
+pub(crate) async fn upload_snapshot(
+    transport: &impl http::Transport,
+    auth: &http::AuthContext,
+    base: &str,
+    upload: SnapshotUpload,
+) -> Result<SnapshotId, String> {
+    let SnapshotUpload {
+        document_id,
+        author_pubkey,
+        covered_seq,
+        blob,
+    } = upload;
+    let link: http::SnapshotUploadUrlResponse = http::post_json_auth_via(
+        transport,
+        &format!("{base}/api/documents/{document_id}/snapshot/upload-url"),
+        &serde_json::json!({ "size_bytes": blob.len() }),
+        auth,
+    )
+    .await?;
+    // The presigned link is its own credential: no session token goes there.
+    http::put_sealed_via(transport, &link.upload_url, &blob).await?;
+    let metadata = http::CreateSnapshotRequest {
+        snapshot_id: SnapshotId::new().to_string(),
+        author_pubkey,
+        parent_hash: None,
+        parent_snapshot_proof: None,
+        update_clocks: serde_json::json!({}),
+        s3_key: link.s3_key,
+        covered_seq,
+    };
+    let created: http::CreateSnapshotResponse = http::post_json_auth_via(
+        transport,
+        &format!("{base}/api/documents/{document_id}/snapshot"),
+        &metadata,
+        auth,
+    )
+    .await?;
+    let snapshot_id =
+        SnapshotId::parse_str(&created.snapshot_id).map_err(|e| format!("bad snapshot_id: {e}"))?;
+    // The author's own confirmation makes it `self` (`AUTHOR-021`).
+    if let Err(e) = send_vouch(
+        transport,
+        auth,
+        base,
+        document_id,
+        snapshot_id,
+        &Vouch::Confirm,
+    )
+    .await
+    {
+        tracing::warn!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
+    }
+    Ok(snapshot_id)
 }
 
 /// What an open reads out of one members answer (`SYNC-092`).
@@ -1364,6 +1387,7 @@ impl<T> MembersAnswer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::http::scripted::{Scripted, session};
     use ambre_protocol::SeqUpdate;
 
     #[test]
@@ -2294,6 +2318,142 @@ mod tests {
                 );
                 assert_eq!(state.documents[&doc].current_snapshot_id, reference);
             }
+        }
+    }
+
+    /// `AUTHOR-016`, `AUTHOR-017`: a pending snapshot the Logic thread matched
+    /// is confirmed to the relay. One that contradicts its deltas is reported
+    /// instead, signed over its author, and one left unchecked is neither.
+    #[tokio::test]
+    async fn a_checked_snapshot_is_confirmed_or_reported_to_the_relay() {
+        let base = "https://relay.test";
+        for verdict in [
+            SnapshotVerdict::Match { extras: Vec::new() },
+            SnapshotVerdict::Mismatch,
+            SnapshotVerdict::Unchecked,
+        ] {
+            let (mut state, rx, doc, key, author, _) = setup();
+            let reporter = MasterSeed::generate().derive_signing_key();
+            state.signing_key = Some(reporter.clone());
+            let pending = SnapshotId::new();
+            let blob = snapshot_blob(doc, pending, b"base", &key, &author);
+            state.adopt_fetched_snapshot(doc, pending, Seq(3), Some(blob));
+            drain(&rx);
+            let expected = match verdict {
+                SnapshotVerdict::Match { .. } => Some("confirm"),
+                SnapshotVerdict::Mismatch => Some("report"),
+                SnapshotVerdict::Unchecked => None,
+            };
+
+            let vouch =
+                state.handle_snapshot_verdict(doc, pending, SnapshotPurpose::Confirm, verdict);
+
+            let Some(route) = expected else {
+                assert_eq!(
+                    vouch, None,
+                    "an unchecked snapshot is neither confirmed nor reported"
+                );
+                continue;
+            };
+            let vouch = vouch.expect("a checked snapshot is answered");
+            let transport = Scripted::new([Ok((204, serde_json::Value::Null))]);
+            let auth = session("access-1", "refresh-1");
+            send_vouch(&transport, &auth, base, doc, pending, &vouch)
+                .await
+                .expect("posted");
+            let url = format!("{base}/api/documents/{doc}/snapshots/{pending}/{route}");
+            assert_eq!(transport.calls(), [(http::Method::Post, url)]);
+            if let Vouch::Report(signature) = vouch {
+                let transcript = ambre_protocol::snapshot_report::report_transcript(
+                    doc,
+                    pending,
+                    &author.verifying_key().to_bytes(),
+                );
+                let bytes: [u8; 64] = hex::decode(&signature).unwrap().try_into().unwrap();
+                let signature = ed25519_dalek::Signature::from_bytes(&bytes);
+                assert!(
+                    reporter
+                        .verifying_key()
+                        .verify_strict(&transcript, &signature)
+                        .is_ok()
+                );
+                let sent = transport.sent.borrow();
+                let body: serde_json::Value =
+                    serde_json::from_slice(&sent[0].body.as_ref().unwrap().1).unwrap();
+                assert_eq!(body, serde_json::json!({ "signature": hex::encode(bytes) }));
+            }
+        }
+    }
+
+    /// `AUTHOR-021`: a snapshot its author uploads is confirmed by that
+    /// author, under the id the relay gave it, once the relay holds its
+    /// metadata. A step that fails confirms nothing.
+    #[tokio::test]
+    async fn an_uploaded_snapshot_is_confirmed_by_its_author_once_stored() {
+        let base = "https://relay.test";
+        let (_state, _rx, doc, key, sk, reference) = setup();
+        let upload = || {
+            let public_data = SnapshotPublicData {
+                document_id: doc,
+                pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+                key_id: key.id(),
+                snapshot_id: reference,
+                parent_snapshot_proof: Vec::new(),
+                parent_snapshot_update_clocks: Vec::new(),
+            };
+            SnapshotUpload {
+                document_id: doc,
+                author_pubkey: hex::encode(sk.verifying_key().to_bytes()),
+                covered_seq: 3,
+                blob: pipeline::snapshot_blob(b"base", public_data, &key, &sk).unwrap(),
+            }
+        };
+        let link = serde_json::json!({ "upload_url": "https://store.test/o?sig=x", "s3_key": "k" });
+        let given = SnapshotId::new();
+        let steps = |stored: u16| {
+            vec![
+                (
+                    http::Method::Post,
+                    format!("{base}/api/documents/{doc}/snapshot/upload-url"),
+                ),
+                (http::Method::Put, "https://store.test/o?sig=x".to_owned()),
+                (
+                    http::Method::Post,
+                    format!("{base}/api/documents/{doc}/snapshot"),
+                ),
+            ]
+            .into_iter()
+            .chain((stored == 200).then(|| {
+                let url = format!("{base}/api/documents/{doc}/snapshots/{given}/confirm");
+                (http::Method::Post, url)
+            }))
+            .collect::<Vec<_>>()
+        };
+
+        for stored in [200, 500] {
+            let transport = Scripted::new([
+                Ok((200, link.clone())),
+                Ok((200, serde_json::Value::Null)),
+                Ok((
+                    stored,
+                    serde_json::json!({ "snapshot_id": given.to_string() }),
+                )),
+                Ok((204, serde_json::Value::Null)),
+            ]);
+            let auth = session("access-1", "refresh-1");
+
+            let uploaded = upload_snapshot(&transport, &auth, base, upload()).await;
+
+            assert_eq!(uploaded.is_ok(), stored == 200, "{uploaded:?}");
+            if stored == 200 {
+                assert_eq!(uploaded, Ok(given));
+            }
+            assert_eq!(transport.calls(), steps(stored));
+            let sent = transport.sent.borrow();
+            assert!(
+                sent[1].bearer.is_none(),
+                "the presigned link carries no session token"
+            );
         }
     }
 

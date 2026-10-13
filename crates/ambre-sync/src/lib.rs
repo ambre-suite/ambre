@@ -1177,7 +1177,13 @@ impl SyncState {
                 snapshot_id,
                 purpose,
                 verdict,
-            } => self.handle_snapshot_verdict(document_id, snapshot_id, purpose, verdict),
+            } => {
+                if let Some(vouch) =
+                    self.handle_snapshot_verdict(document_id, snapshot_id, purpose, verdict)
+                {
+                    self.post_snapshot_vouch(document_id, snapshot_id, vouch);
+                }
+            }
             SyncCommand::SendEphemeral {
                 document_id,
                 payload,
