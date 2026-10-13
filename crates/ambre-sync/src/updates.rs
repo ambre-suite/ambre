@@ -2606,6 +2606,118 @@ mod tests {
         );
     }
 
+    /// The rotation notice closes nothing (`SYNC-081`), and taking on the new
+    /// key installs it and caches the previous one (`SYNC-080`). The document
+    /// stays open throughout, and no departure reaches the Logic thread.
+    #[test]
+    fn a_rotation_installs_the_new_key_and_keeps_the_document_open() {
+        let (mut state, rx, doc, k1, sk, snap) = setup();
+        state.handle_ws_message(WsServerMsg::KeyRotationRequired { document_id: doc });
+        assert!(state.documents.contains_key(&doc));
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            links: Vec::new(),
+        });
+        let doc_state = &state.documents[&doc];
+        assert_eq!(doc_state.doc_key.id(), k2.id());
+        let cached: Vec<_> = doc_state.old_keys.iter().map(DocumentKey::id).collect();
+        assert_eq!(cached, vec![k1.id()]);
+        let late = make_update(doc, snap, 1, b"late", &k1, &sk);
+        assert_eq!(
+            doc_state.open_signed_update(&late, Seq(1)).unwrap().payload,
+            b"late"
+        );
+        let departed = drain(&rx).into_iter().any(|e| {
+            matches!(
+                e,
+                LogicEvent::MemberRevoked { .. } | LogicEvent::ApiError { .. }
+            )
+        });
+        assert!(!departed, "a rotation reports no departure");
+    }
+
+    /// The cache of previous keys holds ten (`SYNC-044`). Eleven rotations
+    /// keep the ten latest previous keys, newest first, and the first key
+    /// no longer opens anything without a link.
+    #[test]
+    fn the_previous_key_cache_holds_ten() {
+        let (mut state, _rx, doc, first, _sk, _snap) = setup();
+        let mut held = vec![first.clone()];
+        for _ in 0..11 {
+            let next = DocumentKey::generate();
+            state.handle_sync_event(SyncEvent::KeyRotated {
+                document_id: doc,
+                new_doc_key: next.clone(),
+                links: Vec::new(),
+            });
+            held.push(next);
+        }
+        let doc_state = &state.documents[&doc];
+        let cached: Vec<_> = doc_state.old_keys.iter().map(DocumentKey::id).collect();
+        let expected: Vec<_> = held[1..11].iter().rev().map(DocumentKey::id).collect();
+        assert_eq!(cached, expected);
+        assert!(doc_state.key_named(first.id()).is_none());
+    }
+
+    /// A copy unwraps against the exchange key of whoever wrapped it, never
+    /// against its holder's (`SYNC-034`). A row from an older relay names no
+    /// wrapper: it reads as self-wrapped, so a copy a peer wrapped fails.
+    #[test]
+    fn a_copy_unwraps_against_its_wrapper_and_never_its_holder() {
+        let me = UserId::new();
+        let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
+        let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
+        let doc_key = DocumentKey::generate();
+        // The row `wrapper` wrapped, its wrapper field rewritten to `named`.
+        let unwrapped = |wrapper: &x25519_dalek::StaticSecret, named: Option<String>| {
+            let mut row = member_row(me, &my_xk, wrapper, &doc_key, "editor");
+            if let Some(named) = named {
+                row.wrapper_exchange_pub_key = named;
+            }
+            SyncState::unwrap_document_key(&my_xk, &[row]).map(|key| key.id())
+        };
+        let mine = hex::encode(x25519_dalek::PublicKey::from(&my_xk).to_bytes());
+
+        assert_eq!(unwrapped(&peer_xk, None), Ok(doc_key.id()));
+        assert!(unwrapped(&peer_xk, Some(mine)).is_err());
+        assert!(unwrapped(&peer_xk, Some(String::new())).is_err());
+        assert_eq!(unwrapped(&my_xk, Some(String::new())), Ok(doc_key.id()));
+    }
+
+    /// Every refusal of a live frame reaches the Logic thread as one warning
+    /// naming the document (`SYNC-091`). Its message names the check that
+    /// failed, so a missed re-key reads apart from a corrupt frame.
+    #[test]
+    fn every_refused_frame_reaches_logic_as_a_warning() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let mut unsigned = make_update(doc, snap, 1, b"a", &key, &sk);
+        unsigned.signature.0 = [0; 64];
+        let stranger = DocumentKey::generate();
+        let under_stranger = make_update(doc, snap, 2, b"b", &stranger, &sk);
+        let mut corrupt = make_update(doc, snap, 3, b"c", &key, &sk);
+        corrupt.commitment_tag.0 = [0; 32];
+
+        let mut messages = Vec::new();
+        for (seq, update) in [(1, unsigned), (2, under_stranger), (3, corrupt)] {
+            state.receive_update(Seq(seq), update);
+            match drain(&rx).as_slice() {
+                [
+                    LogicEvent::SyncWarning {
+                        document_id,
+                        code: SyncWarningCode::DecryptFailed,
+                        message,
+                    },
+                ] if *document_id == doc => messages.push(message.clone()),
+                other => panic!("one warning per refused frame, got {other:?}"),
+            }
+        }
+        assert_ne!(messages[0], messages[1]);
+        assert_ne!(messages[1], messages[2]);
+    }
+
     /// A writer that opens a document owing a rotation sends nothing before it
     /// pays; a reader records no debt (`SYNC-128`).
     #[test]

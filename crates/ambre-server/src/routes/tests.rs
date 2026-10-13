@@ -3203,6 +3203,78 @@ mod handler_tests {
         assert!(!debt_mirrored(&state, &doc_id).await);
     }
 
+    /// `SYNC-047`: the rotation notice follows the stored copies. A revoke the
+    /// store refuses publishes nothing, and a member that hears the notice of
+    /// one that lands already reads the new copy.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_rotation_notice_follows_the_stored_copies(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let _ = setup_named(&app, "leaving@test.com", 80).await;
+        let stayer = setup_named(&app, "staying@test.com", 81).await;
+        invite(&app, &owner, &doc_id, "leaving@test.com", "editor").await;
+        invite(&app, &owner, &doc_id, "staying@test.com", "editor").await;
+        let leaving_uid = doc_user_id(&state, "leaving@test.com").await;
+        let kept: Vec<String> = list_members(&app, &owner, &doc_id)
+            .await
+            .iter()
+            .map(|m| m["user_id"].as_str().unwrap().to_string())
+            .filter(|uid| *uid != leaving_uid)
+            .collect();
+
+        let (tx, mut notices) = tokio::sync::mpsc::channel(8);
+        state
+            .pubsub
+            .subscribe(format!("doc:{doc_id}"), "watcher".into(), tx)
+            .await
+            .unwrap();
+        let new_key = base64_encode(&[0xE7; 32]);
+        let revoke_keeping = |read: &[String]| {
+            let keys: Vec<_> = read
+                .iter()
+                .map(|uid| serde_json::json!({ "user_id": uid, "doc_key_enc": new_key }))
+                .collect();
+            serde_json::json!({
+                "user_id": leaving_uid,
+                "keys": keys,
+                "members": read,
+                "link": link_text(&doc_id, 2, 1),
+            })
+        };
+        let revoke = || Request::post(format!("/api/documents/{doc_id}/revoke"));
+
+        // The read misses the member who stays, so the store refuses it whole.
+        let refused = status_of(&app, revoke(), &owner, Some(revoke_keeping(&kept[..1]))).await;
+        assert_eq!(refused, StatusCode::CONFLICT);
+        let quiet = tokio::time::timeout(std::time::Duration::from_millis(300), notices.recv());
+        assert!(quiet.await.is_err(), "a refused store publishes no notice");
+
+        let landing = tokio::spawn({
+            let app = app.clone();
+            let owner = owner.clone();
+            let body = revoke_keeping(&kept);
+            let request = revoke();
+            async move { status_of(&app, request, &owner, Some(body)).await }
+        });
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), notices.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            ambre_protocol::ws::decode_server_msg(&heard),
+            Ok(WsServerMsg::KeyRotationRequired { .. })
+        ));
+        let read = list_members(&app, &stayer, &doc_id).await;
+        assert!(
+            read.iter().all(|m| m["doc_key_enc"] == new_key),
+            "the notice found every copy stored: {read:?}"
+        );
+        assert_eq!(landing.await.unwrap(), StatusCode::OK);
+    }
+
     /// `SRV-167`, `SRV-168`: an invitation and a revoke race on one document.
     /// The revoke read the members before the invitation landed, so it is
     /// refused whole; read again, it wraps for the newcomer too. An invitation

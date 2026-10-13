@@ -71,6 +71,64 @@ fn commitment_tag_wrong_aad_rejected() {
     );
 }
 
+/// Every seal draws its own 192-bit nonce (`SYNC-003`). One payload sealed
+/// many times under one key never repeats a nonce, nor a ciphertext.
+#[test]
+fn every_seal_draws_a_fresh_nonce() {
+    let doc_key = fixed_doc_key();
+    let signing = fixed_seed().derive_signing_key();
+    let sealed: Vec<_> = (0..64)
+        .map(|_| envelope::seal(b"same payload", b"aad", &doc_key, &signing).unwrap())
+        .collect();
+    let nonces: std::collections::HashSet<[u8; 24]> = sealed.iter().map(|s| s.nonce).collect();
+    let ciphertexts: std::collections::HashSet<&[u8]> =
+        sealed.iter().map(|s| s.ciphertext.as_slice()).collect();
+    assert_eq!(nonces.len(), sealed.len());
+    assert_eq!(ciphertexts.len(), sealed.len());
+}
+
+/// The open checks the signature first, the tag second and the cipher last
+/// (`SYNC-089`). One forged frame fails all three, and each re-signing peels
+/// one check away, so the refusal named is always the earliest one.
+#[test]
+fn the_signature_is_checked_before_the_tag_and_the_cipher() {
+    use crate::signature;
+
+    let doc_key = fixed_doc_key();
+    let other_key = DocumentKey::from_array([0x33; 32]);
+    let signing = fixed_seed().derive_signing_key();
+    let author = signing.verifying_key().to_bytes();
+    let aad = b"aad";
+    let mut forged = envelope::seal(b"payload", aad, &other_key, &signing).unwrap();
+    forged.ciphertext[0] ^= 0xFF;
+    let resign = |sealed: &mut envelope::Sealed| {
+        sealed.signature = signature::sign(
+            &signing,
+            &sealed.nonce,
+            &sealed.ciphertext,
+            aad,
+            &sealed.commitment_tag,
+        );
+    };
+
+    assert_eq!(
+        envelope::open(&forged, aad, &doc_key, &author),
+        Err(CryptoError::InvalidSignature)
+    );
+    resign(&mut forged);
+    assert_eq!(
+        envelope::open(&forged, aad, &doc_key, &author),
+        Err(CryptoError::CommitmentMismatch)
+    );
+    forged.commitment_tag =
+        commitment::commitment_tag(&doc_key, &forged.nonce, &forged.ciphertext, aad);
+    resign(&mut forged);
+    assert_eq!(
+        envelope::open(&forged, aad, &doc_key, &author),
+        Err(CryptoError::AeadFailed)
+    );
+}
+
 #[test]
 fn invalid_signature_rejected() {
     let doc_key = fixed_doc_key();

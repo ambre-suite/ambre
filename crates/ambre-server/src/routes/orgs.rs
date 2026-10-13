@@ -1046,6 +1046,90 @@ mod tests {
             );
         }
 
+        /// Holds `SRV-064` and `SRV-077`. Each release writes one record naming
+        /// the organization, the subject and the caller, and leaves the
+        /// subject's row as it was. A release whose record fails answers no key.
+        #[sqlx::test]
+        #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+        async fn every_release_is_recorded_and_changes_no_key(pool: sqlx::PgPool) {
+            let state = crate::test_helpers::test_app_state(pool).await;
+            let app = build_org_router(state.clone());
+            let owner = setup_org_user(&app, "owner@ambre.app", 63).await;
+            let _member = setup_org_user(&app, "member@ambre.app", 64).await;
+            let owner_uid = user_id(&state, "owner@ambre.app").await;
+            let member_uid = user_id(&state, "member@ambre.app").await;
+            let org_id = create_org(&app, &owner).await;
+            assert_eq!(
+                post_member(&app, &owner, &org_id, &member_uid, "member").await,
+                StatusCode::CREATED
+            );
+            let member = uuid::Uuid::parse_str(&member_uid).unwrap();
+            sqlx::query("UPDATE users SET org_master_key_enc = $1 WHERE id = $2")
+                .bind(vec![0xA5u8; 48])
+                .bind(member)
+                .execute(&state.db)
+                .await
+                .unwrap();
+            let subject_row = || async {
+                sqlx::query_scalar::<_, serde_json::Value>(
+                    "SELECT to_jsonb(u) FROM users u WHERE id = $1",
+                )
+                .bind(member)
+                .fetch_one(&state.db)
+                .await
+                .unwrap()
+            };
+            let before = subject_row().await;
+            let release = || async {
+                let resp = app
+                    .clone()
+                    .oneshot(
+                        Request::post(format!("/api/organizations/{org_id}/recover/{member_uid}"))
+                            .header("authorization", &owner)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = resp.status();
+                let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+                (status, String::from_utf8_lossy(&bytes).into_owned())
+            };
+
+            for released in 1..=2 {
+                let (status, body) = release().await;
+                assert_eq!(status, StatusCode::OK);
+                assert!(body.contains(&hex::encode([0xA5u8; 48])));
+                let records: Vec<(String, String, String)> = sqlx::query_as(
+                    "SELECT org_id::text, target_user_id::text, recovered_by::text \
+                     FROM org_recovery_log",
+                )
+                .fetch_all(&state.db)
+                .await
+                .unwrap();
+                assert_eq!(records.len(), released, "one record per release");
+                assert!(records.iter().all(|record| {
+                    *record == (org_id.clone(), member_uid.clone(), owner_uid.clone())
+                }));
+                assert_eq!(
+                    subject_row().await,
+                    before,
+                    "the escrow is read, never rewritten"
+                );
+            }
+
+            sqlx::query("ALTER TABLE org_recovery_log RENAME TO org_recovery_log_gone")
+                .execute(&state.db)
+                .await
+                .unwrap();
+            let (status, body) = release().await;
+            assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+            assert!(
+                !body.contains(&hex::encode([0xA5u8; 48])),
+                "an unrecorded release answers no key"
+            );
+        }
+
         // -- Last-owner lockout (B1) ----------------------------------------
 
         /// The sole owner must not be able to remove themselves: with no owner

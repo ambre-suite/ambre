@@ -31,7 +31,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 |  |
-| `sync` | The one part of the client that talks to the network. | implemented | 29 | 3 |
+| `sync` | The one part of the client that talks to the network. | implemented | 29 | 2 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 8 |
@@ -41,15 +41,15 @@
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 13 |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 15 | 3 |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 | 12 |
-| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 | 4 |
+| `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 | 10 |
 | `message-bus` | The contract the three threads talk over. | partial | 28 | 9 |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 |  |
-| `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 2 |
+| `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 | 2 |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 | 7 |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 | 1 |
-| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 | 4 |
+| `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 |  |
 | `server` | The one process every client talks to. | partial | 52 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 6 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 158 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 147 loose.**

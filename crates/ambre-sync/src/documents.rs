@@ -424,6 +424,30 @@ mod tests {
     use super::*;
     use ambre_crypto::MasterSeed;
 
+    /// The seal that create and rename send holds the name under the
+    /// document key (`SYNC-067`). The relay's bytes carry no plaintext, name
+    /// that key, and open under it alone.
+    #[test]
+    fn a_document_name_reaches_the_relay_sealed_under_the_document_key() {
+        let document_id = DocumentId::new();
+        let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let doc_key = DocumentKey::generate();
+        let name = "Quarterly budget";
+        let sent =
+            SyncState::seal_document_name(document_id, &doc_key, &signing_key, name).unwrap();
+        let bytes = base64::engine::general_purpose::URL_SAFE
+            .decode(sent)
+            .unwrap();
+        assert!(!bytes.windows(name.len()).any(|w| w == name.as_bytes()));
+        assert_eq!(pipeline::object_key(&bytes).unwrap(), doc_key.id());
+        assert_eq!(
+            open_name(document_id, &doc_key, &bytes, Vec::new()).as_deref(),
+            Some(name)
+        );
+        let other = DocumentKey::generate();
+        assert_eq!(open_name(document_id, &other, &bytes, Vec::new()), None);
+    }
+
     /// A name sealed three rotations ago opens with the current key and the
     /// chain, and stays closed without the chain (`SYNC-042`).
     #[test]

@@ -855,6 +855,30 @@ mod tests {
         assert_eq!(open_snapshot(&snapshot, &doc_key).unwrap(), payload);
     }
 
+    /// The seal runs the wire checks a relay never runs on a snapshot
+    /// (`SYNC-022`). A parent clock list naming one author twice is refused
+    /// with the check's own error, and nothing is returned to upload.
+    #[test]
+    fn a_snapshot_that_fails_a_wire_check_is_never_sealed() {
+        use ambre_protocol::error::ValidationError;
+
+        let (doc_key, signing, author) = keys();
+        let pd = SnapshotPublicData {
+            document_id: DocumentId::new(),
+            pub_key: author.clone(),
+            key_id: key_id(),
+            snapshot_id: SnapshotId::new(),
+            parent_snapshot_proof: Vec::new(),
+            parent_snapshot_update_clocks: vec![(author.clone(), Clock(1)), (author, Clock(2))],
+        };
+        assert!(matches!(
+            seal_snapshot(b"board", pd, &doc_key, &signing),
+            Err(PipelineError::Validation(
+                ValidationError::DuplicatePublicKey
+            ))
+        ));
+    }
+
     /// The frame with its four sealed parts blanked: what the relay reads of
     /// it, the public metadata and the shape around it.
     fn readable_part(update: &Update) -> Vec<u8> {
