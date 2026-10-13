@@ -1064,6 +1064,62 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::CONFLICT);
     }
 
+    /// A session opened on one instance is served, renewed and ended on the
+    /// other. The token minted by one is accepted by the other (`SRV-024`).
+    /// No state of the session lives in either process (`SRV-021`). After a
+    /// sign-out, the refresh token is refused on both (`SRV-026`).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_session_crosses_instances_and_a_sign_out_ends_it_on_both(pool: sqlx::PgPool) {
+        let one = crate::test_helpers::test_app_state(pool.clone()).await;
+        let other = crate::test_helpers::second_instance(&one).await;
+        let (app_one, app_other) = (shipped_router(one.clone()), shipped_router(other));
+        let user_id = crate::test_helpers::create_test_user(&pool, "both@ambre.app").await;
+        let key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let minted = crate::auth::issue_session(&one, user_id, Some(key))
+            .await
+            .unwrap();
+        let refresh = |app: &Router, token: &str| {
+            let request = Request::post("/api/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "refresh_token": token }).to_string(),
+                ))
+                .unwrap();
+            app.clone().oneshot(with_peer(request))
+        };
+
+        let bearer = format!("Bearer {}", minted.access_token);
+        let (listed, _) = status_and_code(&app_other, get_with("/api/documents", &bearer)).await;
+        assert_eq!(listed, StatusCode::OK, "a token minted elsewhere");
+
+        let renewed = refresh(&app_other, &minted.refresh_token).await.unwrap();
+        assert_eq!(renewed.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(renewed.into_body(), 4096)
+            .await
+            .unwrap();
+        let pair: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let (access, refresh_token) = (
+            format!("Bearer {}", pair["access_token"].as_str().unwrap()),
+            pair["refresh_token"].as_str().unwrap().to_owned(),
+        );
+        let (listed, _) = status_and_code(&app_one, get_with("/api/documents", &access)).await;
+        assert_eq!(listed, StatusCode::OK, "a token renewed elsewhere");
+
+        let sign_out = json_request(
+            "POST",
+            "/api/auth/logout",
+            &access,
+            &serde_json::json!({ "refresh_token": refresh_token }),
+        );
+        let (signed_out, _) = status_and_code(&app_other, sign_out).await;
+        assert_eq!(signed_out, StatusCode::OK);
+        for app in [&app_one, &app_other] {
+            let refused = refresh(app, &refresh_token).await.unwrap();
+            assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+        }
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn logout_clears_session(pool: sqlx::PgPool) {
@@ -1200,7 +1256,11 @@ mod handler_tests {
                 .unwrap();
             assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
             let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(page["deltas"].as_array().unwrap().len(), served, "limit={asked}");
+            assert_eq!(
+                page["deltas"].as_array().unwrap().len(),
+                served,
+                "limit={asked}"
+            );
         }
     }
 
@@ -2173,6 +2233,118 @@ mod handler_tests {
                 StatusCode::OK,
                 "{path}"
             );
+        }
+    }
+
+    // `SRV-078`: issuing a link neither reads nor writes the object it names.
+    // Storage here refuses every connection, so any such call would fail.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn issuing_a_link_never_touches_the_object(pool: sqlx::PgPool) {
+        let state = test_app_state_with_s3(pool, offline_s3(Some("http://127.0.0.1:1"))).await;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &owner).await;
+        let hash = "e".repeat(64);
+        let confirm = serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
+        let uri = format!("/api/documents/{doc_id}/media");
+        assert_eq!(post_json(&app, &owner, uri, confirm).await, StatusCode::OK);
+        let snapshot_id = upload_snapshot(&app, &owner, &doc_id, 0).await;
+        let links = [
+            (
+                "media/upload-url",
+                serde_json::json!({ "content_hash": hash, "size_bytes": 7 }),
+            ),
+            (
+                "media/download-url",
+                serde_json::json!({ "content_hash": hash }),
+            ),
+            (
+                "snapshot/upload-url",
+                serde_json::json!({ "size_bytes": 7 }),
+            ),
+            (
+                "snapshot/download-url",
+                serde_json::json!({ "snapshot_id": snapshot_id }),
+            ),
+        ];
+
+        for (path, body) in links {
+            let uri = format!("/api/documents/{doc_id}/{path}");
+            let status = post_json(&app, &owner, uri, body).await;
+            assert_eq!(status, StatusCode::OK, "{path}");
+        }
+    }
+
+    // `SRV-055`: a blob never exceeds the cap its kind declares. Media is
+    // refused above its cap on the link and on the confirmation, a snapshot
+    // on the link. Each upload link signs the declared length.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_blob_above_its_kind_cap_is_refused(pool: sqlx::PgPool) {
+        let state = test_app_state_presigning(pool).await;
+        let media_cap = state.config.media_max_bytes;
+        let snapshot_cap = state.config.snapshot_max_bytes;
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc_id = create_test_doc(&setup, &owner).await;
+        let hash = "f".repeat(64);
+        let media = |size: u64| serde_json::json!({ "content_hash": hash, "size_bytes": size });
+        let snapshot = |size: u64| serde_json::json!({ "size_bytes": size });
+        let cases = [
+            ("media/upload-url", media(media_cap), StatusCode::OK),
+            (
+                "media/upload-url",
+                media(media_cap + 1),
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
+            ("media/upload-url", media(0), StatusCode::PAYLOAD_TOO_LARGE),
+            ("media", media(media_cap + 1), StatusCode::PAYLOAD_TOO_LARGE),
+            ("media", media(media_cap), StatusCode::OK),
+            (
+                "snapshot/upload-url",
+                snapshot(snapshot_cap),
+                StatusCode::OK,
+            ),
+            (
+                "snapshot/upload-url",
+                snapshot(snapshot_cap + 1),
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
+            (
+                "snapshot/upload-url",
+                snapshot(0),
+                StatusCode::PAYLOAD_TOO_LARGE,
+            ),
+        ];
+
+        for (path, body, expected) in cases {
+            let uri = format!("/api/documents/{doc_id}/{path}");
+            let status = post_json(&app, &owner, uri, body.clone()).await;
+            assert_eq!(status, expected, "{path} {body}");
+        }
+        for path in ["media/upload-url", "snapshot/upload-url"] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::post(format!("/api/documents/{doc_id}/{path}"))
+                        .header("content-type", "application/json")
+                        .header("authorization", &owner)
+                        .body(Body::from(media(7).to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let bytes = axum::body::to_bytes(resp.into_body(), 4096).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            let url = json["upload_url"].as_str().unwrap();
+            let signed = url
+                .split(['?', '&'])
+                .find_map(|kv| kv.strip_prefix("X-Amz-SignedHeaders="))
+                .unwrap();
+            assert!(signed.contains("content-length"), "{path}: {url}");
         }
     }
 

@@ -184,3 +184,32 @@ pub fn unix_now() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `SRV-090`: the token check reads no store. Both stores are closed
+    /// before it runs, so any read would fail, and the session still resolves.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_token_check_reads_no_store(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool.clone()).await;
+        let user = crate::test_helpers::create_test_user(&pool, "local@ambre.app").await;
+        let key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let pair = issue_session(&state, user, Some(key)).await.unwrap();
+        pool.close().await;
+        state.redis.clone().close().await.unwrap();
+
+        let (mut parts, ()) = axum::http::Request::get("/api/documents")
+            .header(AUTHORIZATION, format!("Bearer {}", pair.access_token))
+            .body(())
+            .unwrap()
+            .into_parts();
+        let session = AuthSession::from_request_parts(&mut parts, &state)
+            .await
+            .unwrap();
+        assert_eq!(session.user_id, user);
+        assert!(crate::db::get_user(&state.db, &user).await.is_err());
+    }
+}

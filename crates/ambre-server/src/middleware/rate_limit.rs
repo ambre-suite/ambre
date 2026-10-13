@@ -51,25 +51,27 @@ static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 static INSTANCE_ID: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
 
-/// Rate-limiting key derived from the request.
+/// The bucket a request lands in.
 ///
 /// Prefers the authenticated user id (verified statelessly from the
 /// `Authorization: Bearer <jwt>` access token), falling back to the client IP
-/// address. No Redis lookup: the JWT carries the user id in its claims.
-fn rate_limit_key(
-    state: &AppState,
-    auth_header: &str,
-    x_forwarded_for: Option<&str>,
-    remote_ip: &str,
-) -> String {
-    if let Some(token) = auth_header.strip_prefix("Bearer ")
-        && let Ok(claims) = state.jwt.verify(token.trim())
+/// address (`SRV-019`, `SRV-094`). No Redis lookup: the JWT carries the user id
+/// in its claims. `X-Forwarded-For` is read only when `trust_proxy` says a
+/// proxy overwrites it. Otherwise it is the caller's to forge, so the socket
+/// peer decides.
+fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: bool, req: &Request) -> String {
+    let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
+    if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
+        && let Ok(claims) = jwt.verify(token.trim())
     {
         return format!("user:{}", claims.sub);
     }
-
-    let ip = client_ip_str(x_forwarded_for, remote_ip);
-    format!("ip:{ip}")
+    let x_forwarded_for = header("x-forwarded-for").filter(|_| trust_proxy);
+    let remote_ip = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map_or_else(|| "unknown".to_owned(), |a| a.0.ip().to_string());
+    format!("ip:{}", client_ip_str(x_forwarded_for, &remote_ip))
 }
 
 /// Extracts the client IP address from headers or socket address.
@@ -160,31 +162,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
     let category = RateLimitCategory::classify(&path, &method);
     let (max_req, window_secs) = category.limits();
 
-    // Extract request metadata before any await.
-    let auth_header = req
-        .headers()
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    // Only consult `X-Forwarded-For` when the operator has vouched for a proxy
-    // that overwrites it. Otherwise it is attacker-controlled and must be
-    // ignored, so the socket peer address is authoritative.
-    let x_forwarded_for = if state.config.trust_proxy_headers {
-        req.headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string())
-    } else {
-        None
-    };
-    let remote_ip = req
-        .extensions()
-        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map(|a| a.0.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let key = rate_limit_key(&state, &auth_header, x_forwarded_for.as_deref(), &remote_ip);
+    let key = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -316,6 +294,88 @@ mod tests {
             client_ip_str(Some("  1.2.3.4  , 5.6.7.8"), "remote"),
             "1.2.3.4"
         );
+    }
+
+    // -- request_bucket ----------------------------------------------------
+
+    /// A request from `peer`, with the headers given.
+    fn request_from(peer: [u8; 4], headers: &[(&str, &str)]) -> Request {
+        let mut builder = axum::http::Request::get("/api/documents");
+        for (name, value) in headers {
+            builder = builder.header(*name, *value);
+        }
+        let mut req = builder.body(axum::body::Body::empty()).unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                peer, 0,
+            ))));
+        req
+    }
+
+    /// A bearer header for a fresh caller, under `jwt`.
+    fn bearer_for(jwt: &crate::jwt::JwtKeys) -> (ambre_core::UserId, String) {
+        let user = ambre_core::UserId::new();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = crate::jwt::Claims {
+            sub: user.to_string(),
+            spk: None,
+            iat: now,
+            exp: now + 900,
+        };
+        (user, format!("Bearer {}", jwt.mint(&claims).unwrap()))
+    }
+
+    /// `SRV-019`: an authenticated request is bucketed by its caller, from
+    /// whatever address it comes. A token that does not verify is no caller.
+    #[test]
+    fn an_authenticated_request_is_bucketed_by_its_caller() {
+        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let (user, bearer) = bearer_for(&jwt);
+        for peer in [[10, 0, 0, 1], [10, 0, 0, 2]] {
+            let req = request_from(peer, &[("authorization", &bearer)]);
+            assert_eq!(request_bucket(&jwt, false, &req), format!("user:{user}"));
+        }
+        let forged = crate::jwt::JwtKeys::from_seed(&[6u8; 32]);
+        let req = request_from([10, 0, 0, 1], &[("authorization", &bearer)]);
+        assert_eq!(request_bucket(&forged, false, &req), "ip:10.0.0.1");
+    }
+
+    /// `SRV-094`: a request with no caller is bucketed by its socket peer. A
+    /// forwarded address counts only where the deployment declares a proxy.
+    #[test]
+    fn an_anonymous_request_is_bucketed_by_its_peer() {
+        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let req = request_from([10, 0, 0, 1], &[("x-forwarded-for", "203.0.113.9")]);
+        assert_eq!(request_bucket(&jwt, false, &req), "ip:10.0.0.1");
+        assert_eq!(request_bucket(&jwt, true, &req), "ip:203.0.113.9");
+    }
+
+    /// `SRV-095`: two callers never share a bucket, whether they sign in or
+    /// not. Two anonymous peers that forge one forwarded address stay apart
+    /// when no proxy is declared.
+    #[test]
+    fn two_callers_never_share_a_bucket() {
+        let jwt = crate::jwt::JwtKeys::from_seed(&[5u8; 32]);
+        let (_, alice) = bearer_for(&jwt);
+        let (_, bob) = bearer_for(&jwt);
+        let signed = [
+            request_from([10, 0, 0, 1], &[("authorization", &alice)]),
+            request_from([10, 0, 0, 1], &[("authorization", &bob)]),
+        ];
+        let forged = ("x-forwarded-for", "203.0.113.9");
+        let anonymous = [
+            request_from([10, 0, 0, 1], &[forged]),
+            request_from([10, 0, 0, 2], &[forged]),
+        ];
+        for [first, second] in [signed, anonymous] {
+            assert_ne!(
+                request_bucket(&jwt, false, &first),
+                request_bucket(&jwt, false, &second)
+            );
+        }
     }
 
     // -- RateLimitCategory --------------------------------------------------

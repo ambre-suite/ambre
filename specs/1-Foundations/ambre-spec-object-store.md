@@ -36,11 +36,11 @@ refusals are the same set whichever way the bytes will travel, so the two share 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-053` | `POST` | A presigned upload link MUST bind the size the caller declared. | this spec section 3 | `ambre_server::s3::tests::presigned_upload_url_signs_content_length` -- the length is among the signed headers, which is what makes object storage refuse a body of any other size | none | verified |
-| `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | none | unheld -- the relay signs a name and the transfer goes straight to storage, which is what keeps the bytes out of this process. Nothing refuses the convenience fetch that would put them back in it, and the rule is the reason no row here budgets a blob; lands with the `The relay's sessions and limits hold on every instance` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | `ambre_server::routes::tests::handler_tests::issuing_a_link_never_touches_the_object` -- storage refuses every connection, and all four links are still issued | none | verified |
 | `SRV-002` | `FAIL` | A caller who is not a member MUST be refused a link. | `ZK-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four links, upload and download, media and snapshot | none | verified |
 | `SRV-056` | `FAIL` | A read-only member MUST NOT obtain an upload link. | `SRV-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the confirmation, which is the write the link leads to; `::a_presigned_url_is_signed_only_after_the_access_check` -- a viewer is refused both upload links, which an owner obtains | none | verified |
 | `SRV-054` | `FAIL` | An object name a caller supplies MUST resolve inside the document the caller named. | audit `C4`, `C5`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- a foreign prefix, a traversal, an empty name and a nested one; `::content_hash_validation` -- everything that is not sixty-four lowercase hexadecimal characters | none | verified |
-| `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | none | unheld -- the inline delta half is `SRV-010`. The media and snapshot halves are compared against a figure of the deployment before the link is issued and again on the confirmation, and no test drives either comparison; lands with the `The relay's sessions and limits hold on every instance` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_blob_above_its_kind_cap_is_refused` -- media is refused above its cap on the link and on the confirmation, a snapshot on the link. Each upload link signs the declared length, so storage refuses a longer body. The inline delta half is `SRV-010` | none | verified |
 | `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_download_link_names_an_object_the_document_holds` -- the link is signed only after the media index shows the document holds that address | none | verified |
 
 ### 1.3 Delete a document
@@ -70,9 +70,9 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 10 `verified`, 2 `untested`, 6 `unimplemented`. What holds is the name: the
-  scoping, the shapes refused, the size bound into an upload link, and who may hold a link. What
-  is loose is a link that touches no object, and the cap per blob kind.
+* **Verification.** 12 `verified`, 6 `unimplemented`. What holds is the name: the scoping, the
+  shapes refused, the size bound into an upload link, and who may hold a link. What is loose is a
+  link that touches no object, and the cap per blob kind.
 ---
 
 ## 2. WHAT EACH USER SEES

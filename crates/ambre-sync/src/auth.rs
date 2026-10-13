@@ -493,6 +493,7 @@ impl SyncState {
         if let Some(ws) = self.ws.take() {
             let _ = ws.close();
         }
+        self.mock_ws_tx = None;
         self._onmessage = None;
         self._onclose = None;
         self._onerror = None;

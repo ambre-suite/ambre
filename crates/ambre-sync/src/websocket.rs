@@ -1214,6 +1214,53 @@ mod tests {
         assert_eq!(fire_at(&mut state, 5000), 3, "one open per deadline");
     }
 
+    /// `SYNC-066`: a sign-out closes the socket and clears every key. A drop
+    /// reported after it reopens nothing, where the same drop before it does.
+    #[test]
+    fn a_sign_out_closes_the_socket_and_clears_every_key() {
+        // A drop, then the reconnect timer once the backoff has passed.
+        let reopens = |state: &mut SyncState| {
+            let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
+            let clock = now.clone();
+            state.clock = std::rc::Rc::new(move || clock.get());
+            state.handle_sync_event(closed(1006));
+            now.set(60_000);
+            state.handle_sync_event(SyncEvent::ReconnectNow);
+            state.socket_opens
+        };
+        let (mut control, _rx) = with_open_document();
+        assert_eq!(reopens(&mut control), 1, "control: a drop reopens");
+
+        let (mut state, rx) = with_open_document();
+        let master_seed = MasterSeed::from_array([7u8; 32]);
+        state.signing_key = Some(master_seed.derive_signing_key());
+        state.exchange_key = Some(master_seed.derive_exchange_key());
+        state.master_seed = Some(master_seed);
+        let id = *state.documents.keys().next().expect("one document");
+        state
+            .session_nonces
+            .insert(id, ambre_core::SessionNonce([1; 16]));
+        *state.tokens.borrow_mut() = Some(TokenPair {
+            access_token: SecretToken::from("access".to_owned()),
+            refresh_token: SecretToken::from("refresh".to_owned()),
+            access_expires_in: 60,
+        });
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+
+        state.handle_logout();
+        assert!(wire.is_disconnected(), "the socket is closed");
+        assert!(state.master_seed.is_none());
+        assert!(state.signing_key.is_none());
+        assert!(state.exchange_key.is_none());
+        assert!(state.tokens.borrow().is_none());
+        assert!(state.documents.is_empty());
+        assert!(state.session_nonces.is_empty());
+
+        assert_eq!(reopens(&mut state), 0, "nothing reopens");
+        assert!(rx.try_iter().next().is_none(), "nothing reaches Logic");
+    }
+
     /// A socket refused for a key setup still owed is neither renewed nor
     /// retried, by a timer armed before or a renewal landing after (`SYNC-133`).
     /// Once a session with keys is stored, it reopens.

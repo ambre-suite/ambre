@@ -94,18 +94,44 @@ pub struct OidcAuthState {
     pub nonce: Nonce,
 }
 
-/// Discovers Google's OIDC provider metadata and initializes an `OidcClient`.
+/// The issuer the `google` provider is discovered at.
+pub const GOOGLE_ISSUER: &str = "https://accounts.google.com";
+
+/// The provider clients the relay starts with. An empty client id means
+/// provider sign-in is off, and nothing is discovered. A configured provider
+/// that does not answer is an error, so the start stops (`SRV-074`).
+pub async fn start_oidc_clients(
+    google_issuer: &str,
+    google_client_id: &str,
+    google_client_secret: &str,
+    google_redirect_uri: &str,
+) -> Result<OidcClients, AppError> {
+    if google_client_id.is_empty() {
+        return Ok(Arc::new(HashMap::new()));
+    }
+    init_oidc_clients(
+        google_issuer,
+        google_client_id,
+        google_client_secret,
+        google_redirect_uri,
+    )
+    .await
+}
+
+/// Discovers the `google` provider's metadata at `google_issuer` and
+/// initializes an `OidcClient`.
 ///
 /// The resulting `OidcClients` map is stored in `AppState` and used by
 /// the `/auth/{provider}/login` and `/auth/{provider}/callback` routes.
-pub async fn init_oidc_clients(
+async fn init_oidc_clients(
+    google_issuer: &str,
     google_client_id: &str,
     google_client_secret: &str,
     google_redirect_uri: &str,
 ) -> Result<OidcClients, AppError> {
     let http_client = reqwest::Client::new();
 
-    let google_issuer = IssuerUrl::new("https://accounts.google.com".to_string())
+    let google_issuer = IssuerUrl::new(google_issuer.to_string())
         .map_err(|e| AppError::Oidc(format!("invalid google issuer URL: {e}")))?;
 
     let provider_metadata = CoreProviderMetadata::discover_async(google_issuer, &http_client)
@@ -220,4 +246,66 @@ pub async fn exchange_code(
         .map_err(|e| AppError::Oidc(format!("id token verification failed: {e}")))?;
 
     Ok(claims)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An issuer nothing listens on.
+    const SILENT_ISSUER: &str = "http://127.0.0.1:1";
+
+    /// A provider that publishes its discovery document and an empty key set.
+    /// Returns its issuer.
+    async fn spawn_provider() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let issuer = format!("http://{}", listener.local_addr().unwrap());
+        let metadata = serde_json::json!({
+            "issuer": issuer,
+            "authorization_endpoint": format!("{issuer}/authorize"),
+            "token_endpoint": format!("{issuer}/token"),
+            "jwks_uri": format!("{issuer}/jwks"),
+            "response_types_supported": ["code"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+        });
+        let app = axum::Router::new()
+            .route(
+                "/.well-known/openid-configuration",
+                axum::routing::get(move || async move { axum::Json(metadata) }),
+            )
+            .route(
+                "/jwks",
+                axum::routing::get(|| async { axum::Json(serde_json::json!({ "keys": [] })) }),
+            );
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        issuer
+    }
+
+    /// `SRV-074`: a configured provider that does not answer stops the start.
+    /// With no client id configured nothing is discovered, and sign-in is off.
+    #[tokio::test]
+    async fn a_configured_provider_that_does_not_answer_stops_the_start() {
+        let started = start_oidc_clients(SILENT_ISSUER, "client", "secret", "https://app/cb").await;
+        assert!(matches!(started, Err(AppError::Oidc(_))));
+        let off = start_oidc_clients(SILENT_ISSUER, "", "", "").await.unwrap();
+        assert!(off.is_empty());
+    }
+
+    /// `SRV-022`: a sign-in with a configured provider is sent to that
+    /// provider's authorization endpoint, under the configured client.
+    #[tokio::test]
+    async fn a_sign_in_is_sent_to_the_configured_provider() {
+        let issuer = spawn_provider().await;
+        let clients = start_oidc_clients(&issuer, "client", "secret", "https://app/cb")
+            .await
+            .unwrap();
+        let (login, _) = login_url(&clients["google"]).await.unwrap();
+        assert!(
+            login.url.starts_with(&format!("{issuer}/authorize?")),
+            "{}",
+            login.url
+        );
+        assert!(login.url.contains("client_id=client"), "{}", login.url);
+    }
 }

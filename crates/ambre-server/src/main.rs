@@ -168,8 +168,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // login). But when credentials ARE configured, a discovery failure is a
     // misconfiguration we must not silently swallow into "login disabled". Log
     // at ERROR and fail-fast, so the operator notices at startup (M7).
-    let oidc_configured = !oidc_google_client_id.is_empty();
-    let oidc_clients = match oidc::init_oidc_clients(
+    let oidc_clients = match oidc::start_oidc_clients(
+        oidc::GOOGLE_ISSUER,
         &oidc_google_client_id,
         &oidc_google_client_secret,
         &oidc_google_redirect_uri,
@@ -177,15 +177,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     {
         Ok(clients) => clients,
-        Err(e) if oidc_configured => {
+        Err(e) => {
             tracing::error!("OIDC discovery failed with configured credentials: {e}");
             return Err(format!("OIDC initialization failed: {e}").into());
         }
-        Err(e) => {
-            tracing::warn!("OIDC not configured (provider login disabled): {e}");
-            Default::default()
-        }
     };
+    if oidc_clients.is_empty() {
+        tracing::warn!("OIDC not configured (provider login disabled)");
+    }
 
     // One process-wide PubSub subscriber on the shared RESP3 connection, fanned
     // out in-process to interested WS connections. Cloned into every AppState.
@@ -408,5 +407,29 @@ mod cors_tests {
         assert!(parse_cors_origins("").is_empty());
         assert!(parse_cors_origins("   ").is_empty());
         assert!(parse_cors_origins(" , , ").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod isolation_tests {
+    /// The development server's configuration, the one page server this
+    /// repository ships.
+    const TRUNK: &str = include_str!("../../../Trunk.toml");
+
+    /// `SRV-069`: the page that loads the client is served cross-origin
+    /// isolated, both headers set on the development server.
+    #[test]
+    fn the_page_is_served_cross_origin_isolated() {
+        let headers = TRUNK
+            .split("[serve.headers]")
+            .nth(1)
+            .and_then(|rest| rest.split("\n[").next())
+            .unwrap_or("");
+        for line in [
+            r#""Cross-Origin-Opener-Policy" = "same-origin""#,
+            r#""Cross-Origin-Embedder-Policy" = "credentialless""#,
+        ] {
+            assert!(headers.lines().any(|l| l.trim() == line), "{line}");
+        }
     }
 }

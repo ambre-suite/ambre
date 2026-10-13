@@ -32,15 +32,19 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         s3,
         s3_bucket: "test-bucket".into(),
         config: Arc::new(Config::default()),
-        jwt: Arc::new(JwtKeys::from_seed(&[9u8; 32])),
+        jwt: Arc::new(JwtKeys::from_seed(&TEST_JWT_SEED)),
         oidc_clients: empty_oidc_clients(),
     })
 }
 
+/// The token signing seed every test instance derives its keys from, as a
+/// deployment's instances share `JWT_SIGNING_SEED`.
+const TEST_JWT_SEED: [u8; 32] = [9u8; 32];
+
 /// A second relay instance beside `base`, as a deployment runs it: the same
-/// Postgres, Redis server, keys and configuration. It opens its own Redis
-/// connection, because a subscription belongs to one, and spawns its own hub
-/// (`ambre-spec-testing.md` section 5.C).
+/// Postgres, Redis server and configuration, and keys derived from the same
+/// seed. It opens its own Redis connection, because a subscription belongs
+/// to one, and spawns its own hub (`ambre-spec-testing.md` section 5.C).
 pub async fn second_instance(base: &AppState) -> Arc<AppState> {
     let redis = rustis::client::Client::connect("redis://localhost:6379")
         .await
@@ -53,7 +57,7 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
         s3: base.s3.clone(),
         s3_bucket: base.s3_bucket.clone(),
         config: Arc::clone(&base.config),
-        jwt: Arc::clone(&base.jwt),
+        jwt: Arc::new(JwtKeys::from_seed(&TEST_JWT_SEED)),
         oidc_clients: Arc::clone(&base.oidc_clients),
     })
 }

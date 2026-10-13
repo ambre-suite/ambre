@@ -76,7 +76,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | none | unheld -- the keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply; lands with the `The relay's sessions and limits hold on every instance` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | `ambre_sync::websocket::tests::a_sign_out_closes_the_socket_and_clears_every_key` -- the transport is disconnected, the seed, both keys, the tokens and every document are gone, and a later drop reopens nothing | none | verified |
 | `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | `ambre_sync::websocket::tests::session_tokens_wipe_on_drop` -- both tokens are held in a type that wipes itself when dropped, so ending the session clears them | none | verified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 25 `verified`, 4 `untested`. The crate graph holds the keys and the CRDT apart.
+* **Verification.** 26 `verified`, 3 `untested`. The crate graph holds the keys and the CRDT apart.
   Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
   document. A gate refuses browser storage in the worker. Each gap left is a browser property the
   wasm tier cannot boot, `ambre-spec-testing.md section 9`.
