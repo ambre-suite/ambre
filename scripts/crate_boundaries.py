@@ -56,6 +56,18 @@ spells one.
 root table binds only the crates that inherit it, and a new crate starts with
 the default set. So the root carries `[workspace.lints]`, and every member of
 the workspace inherits it.
+
+**The PDF back end runs in the Logic thread** (`CANVAS-028`). The crate graph
+keeps krilla out of the startup bundle, but says nothing about which thread
+calls it. So outside `ambre-pdf`, no Rust line names krilla, `ambre_pdf` or
+`KrillaSurface` unless it sits under a crate's `src/logic/`.
+
+**The renderer holds no colour** (`CANVAS-060`). Every colour it paints or
+clears to comes from the view's palette. So no line of `render/` above its
+tests names a colour constant or builds one from components.
+
+**No font is embedded in a binary** (`CANVAS-018`). The faces are fetched from
+the page origin. So no Rust line includes the bytes of a font file.
 """
 
 from __future__ import annotations
@@ -146,6 +158,21 @@ WORKSPACE = "Cargo.toml"
 MEMBERS = re.compile(r"^members\s*=\s*\[([^\]]*)\]", re.MULTILINE)
 LINT_TABLE = re.compile(r"^\[workspace\.lints(?:\.\w+)?\]", re.MULTILINE)
 INHERITS_LINTS = re.compile(r"^\[lints\]\s*\n\s*workspace\s*=\s*true\b", re.MULTILINE)
+
+# The PDF back end's own crate, the one directory per crate allowed to call
+# it, and what calling it looks like from Rust.
+PDF_CRATE = "crates/ambre-pdf/"
+LOGIC_DIR = "/src/logic/"
+PDF_CALL = re.compile(r"\bkrilla\b|\bambre_pdf\b|\bKrillaSurface\b")
+
+# The renderer's source, and what a colour of its own looks like there: a
+# named constant or one built from components.
+RENDERER = "crates/ambre-canvas/src/render"
+COLOR_LITERAL = re.compile(r"\bColor::(?:[A-Z][A-Z0-9_]*\b|from_rgba?8\b|from_rgb\b|new\b)")
+TESTS_START = re.compile(r"^\s*#\[cfg\(test\)\]")
+
+# What embedding a font looks like: an include macro naming a font file.
+FONT_EMBED = re.compile(r"\binclude_bytes!\s*\([^)]*\.(?:ttf|otf|ttc|woff2?)\b", re.IGNORECASE)
 
 
 def read(rel: str) -> str:
@@ -363,6 +390,60 @@ def check_lints(errors: list[str]) -> int:
     return held
 
 
+def rust_files() -> list[Path]:
+    """Every Rust file of the crates, build output left out."""
+    return [p for p in sorted((ROOT / CRATES).rglob("*.rs")) if "/target/" not in p.as_posix()]
+
+
+def check_pdf(errors: list[str]) -> int:
+    """`CANVAS-028`: the PDF back end is named from a Logic directory alone."""
+    files = rust_files()
+    held = 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(PDF_CRATE) or LOGIC_DIR in rel:
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = PDF_CALL.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: the PDF back end outside the Logic thread: `{found.group(0)}`")
+        held += 1
+    if not held:
+        errors.append(f"{CRATES}: no Rust file read, so the PDF boundary holds nothing")
+    return held
+
+
+def check_renderer_colors(errors: list[str]) -> int:
+    """`CANVAS-060`: no line of the renderer above its tests names a colour."""
+    files = sorted((ROOT / RENDERER).rglob("*.rs"))
+    if not files:
+        errors.append(f"{RENDERER}: gone from the tree, so the colour boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if TESTS_START.match(line):
+                break
+            found = COLOR_LITERAL.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: the renderer holds a colour of its own: `{found.group(0)}`")
+    return len(files)
+
+
+def check_fonts(errors: list[str]) -> int:
+    """`CANVAS-018`: no Rust line embeds a font file."""
+    files = rust_files()
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            found = FONT_EMBED.search(code(line))
+            if found:
+                errors.append(f"{rel}:{number}: a font embedded in the binary: `{found.group(0)}`")
+    if not files:
+        errors.append(f"{CRATES}: no Rust file read, so the font boundary holds nothing")
+    return len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -378,6 +459,9 @@ def main() -> int:
     storage = check_storage(errors)
     secrets = check_passphrase(errors)
     lints = check_lints(errors)
+    pdf = check_pdf(errors)
+    fonts = check_fonts(errors)
+    colors = check_renderer_colors(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -387,7 +471,10 @@ def main() -> int:
         f"{network} manifests and Rust files read for a network call, "
         f"{storage} worker files read for browser storage, "
         f"{secrets} worker files read for a passphrase in a request, "
-        f"{lints} member manifests read for the workspace lints"
+        f"{lints} member manifests read for the workspace lints, "
+        f"{pdf} Rust files read for the PDF back end, "
+        f"{fonts} Rust files read for an embedded font, "
+        f"{colors} renderer files read for a colour of their own"
     )
     for line in errors:
         print(f"  {line}")
@@ -401,8 +488,10 @@ def main() -> int:
             "command, event or command id, only density.rs may read the "
             "display density, the network leaves from the Sync worker alone, "
             "the worker writes nothing to browser storage, no request "
-            "it sends names a passphrase, and every crate inherits the "
-            "workspace lints.",
+            "it sends names a passphrase, every crate inherits the "
+            "workspace lints, the PDF back end is called from the Logic "
+            "thread alone, the renderer holds no colour, and no font is "
+            "embedded in a binary.",
             file=sys.stderr,
         )
         return 1

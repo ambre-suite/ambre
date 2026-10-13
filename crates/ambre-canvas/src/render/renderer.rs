@@ -595,19 +595,7 @@ impl QuadRenderer {
         });
 
         // -- Image sampler --
-        // Trilinear: linear within a mip level and linear between two, so a
-        // picture shrinking under a zoom crosses levels without the visible step
-        // a `Nearest` mipmap filter leaves. `ClampToEdge` keeps the border texel
-        // from wrapping onto the opposite edge of the quad.
-        let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("image_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            ..Default::default()
-        });
+        let image_sampler = device.create_sampler(&mipmap::sampler());
 
         // -- Blit sampler --
         // NonFiltering nearest-neighbour: the offscreen is 1:1 with the
@@ -1144,11 +1132,11 @@ impl QuadRenderer {
 
     // -- Frame flush ----------------------------------------------------------
 
-    /// Encode the three-pass dirty-rect rendering for this frame.
+    /// Encode the three-pass dirty-rect rendering for this frame, as `plan` asks.
     ///
-    /// `cells`:
-    /// - `Full`   : clear the destination offscreen, render the freshly pushed
-    ///   cells geometry.
+    /// `plan.content`:
+    /// - `Full`   : clear the destination offscreen to `backdrop`, render the
+    ///   freshly pushed cells geometry.
     /// - `Scroll` : `copy_texture_to_texture` from the current offscreen to
     ///   the other with the requested pixel offset, then render
     ///   the cells geometry over the exposed strip.
@@ -1156,7 +1144,7 @@ impl QuadRenderer {
     ///   The orchestrator must NOT have called
     ///   `begin_layer(Layer::Content)` this frame.
     ///
-    /// `overlay`:
+    /// `plan.overlay`:
     /// - `Redraw` : upload the freshly pushed overlay geometry and re-issue
     ///   the draw call.
     /// - `Reuse`  : reuse the previously uploaded GPU buffer (idle frames).
@@ -1169,9 +1157,10 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         swapchain_view: &wgpu::TextureView,
-        cells: ContentRepaint,
-        overlay: OverlayRepaint,
+        plan: &crate::view::RepaintPlan,
     ) {
+        let (cells, overlay) = (plan.content, plan.overlay);
+        let backdrop = clear_color(plan.backdrop);
         // -- 0. Uniform + atlas + conditional batch uploads. ------------------
         let vp: [f32; 4] = [self.width, self.height, 0.0, 0.0];
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::cast_slice(&vp));
@@ -1224,7 +1213,7 @@ impl QuadRenderer {
 
         if cells_dirty {
             let load_op = match cells {
-                ContentRepaint::Full => wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                ContentRepaint::Full => wgpu::LoadOp::Clear(backdrop),
                 ContentRepaint::Scroll { .. } => wgpu::LoadOp::Load,
                 ContentRepaint::Reuse => wgpu::LoadOp::Load,
             };
@@ -1302,7 +1291,7 @@ impl QuadRenderer {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        load: wgpu::LoadOp::Clear(backdrop),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-043` | `INV` | An application MUST NOT read the display density. | this spec section 2; section 4, row 4 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a Rust line outside `crates/ambre-canvas/src/density.rs` naming the browser's density | none | verified |
 | `CANVAS-032` | `INV` | A view MUST reason in logical coordinates. | this spec section 2 | type-level -- `SurfaceSize` keeps the density private to `ambre-canvas`, so a view has no factor to scale by; ci-gate -- `scripts/crate_boundaries.py` refuses a second read of the density | none | verified |
 | `CANVAS-044` | `INV` | A physical size MUST NOT cross the boundary into a view. | this spec section 2 | type-level -- `SurfaceSize::physical` is crate-private, and `resize` takes the logical size | none | verified |
-| `CANVAS-033` | `OBS` | A glyph MUST be rasterized at the physical resolution of the display, never at the logical one. | this spec section 2 | `ambre_canvas::render::surface::tests::a_glyph_is_rasterized_at_the_physical_size` | partial -- the test reads the raster size and the box the surface asks for. Nothing reads a rendered glyph back; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | partial |
+| `CANVAS-033` | `OBS` | A glyph MUST be rasterized at the physical resolution of the display, never at the logical one. | this spec section 2 | `ambre_canvas::render::surface::tests::a_glyph_is_rasterized_at_the_physical_size` -- the raster size and the box the surface asks for; `ambre_canvas::render::atlas::tests::a_dense_raster_has_the_physical_resolution` -- the texels of the raster itself | none | verified |
 
 ### 1.2 The display density changes
 
@@ -36,8 +36,8 @@ through a query that fires once and then stops matching.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-035` | `POST` | A density change MUST resize the drawing buffer, even when the CSS size did not change. | this spec section 2 | none | unheld -- the launcher arms a `matchMedia` watch on the current density, because a `ResizeObserver` does not fire when only the density moves. No test drives the path; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
-| `CANVAS-045` | `POST` | A density change MUST leave a watch armed on the new density. | this spec section 2, the resize path; section 4, row 3 | none | unheld -- the handler re-arms a fresh query for the new density, because the query that just fired no longer matches. The first implementation watched for the existence of the feature instead and fired never, and no test would have caught it; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-035` | `POST` | A density change MUST resize the drawing buffer, even when the CSS size did not change. | this spec section 2 | `ambre_app::host::tests::a_density_change_resizes_and_rearms_the_watch` -- a `change` raised on the armed query runs the resize, in the browser tier | none | verified |
+| `CANVAS-045` | `POST` | A density change MUST leave a watch armed on the new density. | this spec section 2, the resize path; section 4, row 3 | `ambre_app::host::tests::a_density_change_resizes_and_rearms_the_watch` -- the armed query matches the current density, and each change leaves a fresh one armed while the spent one stays silent | none | verified |
 | `CANVAS-034` | `POST` | A density change MUST re-rasterize every glyph at the new density. | this spec section 2 | `ambre_canvas::render::surface::tests::a_density_change_asks_for_a_new_raster` | none | verified |
 | `CANVAS-046` | `FRAME` | A density change MUST NOT change the logical geometry of anything a view laid out. | this spec section 2, the two units; derived | `ambre_canvas::density::tests::a_density_change_keeps_the_logical_size`; type-level -- a view is handed `SurfaceSize::logical` alone | none | verified |
 | `CANVAS-071` | `POST` | A scroll shift that lands between two device pixels MUST repaint the content in full. | this spec section 2, the scroll copy | `ambre_canvas::density::tests::a_shift_between_two_device_pixels_repaints_in_full`; `::a_scroll_shift_is_copied_in_device_pixels` | none | verified |
@@ -47,8 +47,8 @@ through a query that fires once and then stops matching.
   `ambre-spec-budgets.md section 6`, charged where they are budgeted. No row here adds a figure.
 * **Boundary.** none: the display density is read from the browser and never leaves the client. It
   is a fingerprinting signal the page already carries, and nothing here sends it anywhere.
-* **Verification.** 7 `verified`, 1 `partial`, 2 `untested`. The two watches are driven by no test,
-  and no rendered glyph is read back.
+* **Verification.** 10 `verified`. A browser test raises the density watch and observes the resize
+  and the re-arm; a host test counts the texels of a dense raster.
 ---
 
 ## 2. MODEL

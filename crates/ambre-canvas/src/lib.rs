@@ -34,6 +34,9 @@ pub mod density;
 // -- Process-global fatal latch (canvas terminal screen on unrecoverable error)
 pub mod fatal;
 
+// -- The decisions one animation frame takes, on every target ---------------
+pub mod frame;
+
 // -- UI Thread host plumbing (GPU bootstrap + rAF primitives, wasm32-only) ----
 #[cfg(target_arch = "wasm32")]
 pub mod host;
@@ -68,11 +71,12 @@ pub use anchor::{Anchor, AnchorPublisher};
 pub use busy::BusyPublisher;
 pub use density::SurfaceSize;
 #[cfg(target_arch = "wasm32")]
-pub use density::{density_query, size_backing_store};
+pub use density::{DensityWatch, density_query, size_backing_store};
 pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
 pub use fatal::{fatal_message, signal_fatal};
+pub use frame::{FATAL_BACKDROP, Phases, RafControl, Tick, drive_frame, paint_fatal};
 #[cfg(target_arch = "wasm32")]
-pub use host::{GpuState, RafControl, bootstrap_gpu, start_raf_loop};
+pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};
 pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, OverlayRepaint, QuadRenderer, WgpuSurface};

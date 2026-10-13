@@ -539,6 +539,31 @@ mod tests {
         let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
     }
 
+    /// `CANVAS-009`: the canvas is not the end of the accessibility tree. The
+    /// pipe beside it is a focusable box in the tab order, and a polite live
+    /// region beside it carries what a view announces.
+    #[wasm_bindgen_test]
+    fn the_canvas_content_has_a_presence_in_the_page() {
+        let rig = Rig::new();
+        let ta = rig.ta();
+        assert_eq!(ta.get_attribute("tabindex").as_deref(), Some("0"));
+        assert_eq!(ta.get_attribute("aria-hidden"), None, "reachable");
+        ta.focus().expect("focusable");
+        let active = rig.document.active_element().expect("a focus");
+        assert!(active.is_same_node(Some(ta)), "the pipe takes the focus");
+
+        let live = rig
+            .cell
+            .query_selector("[aria-live]")
+            .ok()
+            .flatten()
+            .expect("a live region beside the canvas");
+        assert_eq!(live.get_attribute("aria-live").as_deref(), Some("polite"));
+        assert_eq!(live.get_attribute("role").as_deref(), Some("status"));
+        rig.pipe.announce("B2, 42");
+        assert_eq!(live.text_content().as_deref(), Some("B2, 42"));
+    }
+
     /// `CHROME-061` and `CHROME-017`: a typed run reaches the view whole, in one
     /// call, and the pipe is empty after it. A second run is not the first one
     /// again.

@@ -154,7 +154,7 @@ fn argb(v: u32, opacity: f32) -> Color {
 /// A closed rectangle as a path (so it maps through the active transform and
 /// honors element rotation, unlike the axis-aligned `fill_rect` fast path).
 fn rect_path(b: Rect) -> BezPath {
-    let mut p = BezPath::new();
+    let mut p = BezPath::with_capacity(5);
     p.move_to((b.x0, b.y0));
     p.line_to((b.x1, b.y0));
     p.line_to((b.x1, b.y1));
@@ -163,24 +163,68 @@ fn rect_path(b: Rect) -> BezPath {
     p
 }
 
-/// An axis-aligned ellipse inscribed in `b`, as a flattened path.
+/// The control-point distance of a cubic quarter circle, as a share of r.
+const KAPPA: f64 = 0.552_284_749_830_793_4;
+
+/// The widest radius four cubics draw within 0.1 of the true ellipse. Their
+/// error is 0.027 % of the radius.
+const ELLIPSE_FOUR_CUBICS_MAX_R: f64 = 370.0;
+
+/// An axis-aligned ellipse inscribed in `b`, as a path.
+///
+/// Up to `ELLIPSE_FOUR_CUBICS_MAX_R`, four cubics are written directly. kurbo
+/// pays a `sincos` per arc, the largest cost of a busy board (`CANVAS-005`).
 fn ellipse_path(b: Rect) -> BezPath {
     let c = b.center();
-    let ell = kurbo::Ellipse::new(c, (b.width() / 2.0, b.height() / 2.0), 0.0);
-    let mut p = BezPath::new();
-    p.extend(kurbo::Shape::path_elements(&ell, 0.1));
+    let (rx, ry) = (b.width().abs() / 2.0, b.height().abs() / 2.0);
+    if rx.max(ry) > ELLIPSE_FOUR_CUBICS_MAX_R {
+        let ell = kurbo::Ellipse::new(c, (rx, ry), 0.0);
+        let mut p = BezPath::new();
+        p.extend(kurbo::Shape::path_elements(&ell, 0.1));
+        return p;
+    }
+    let (kx, ky) = (rx * KAPPA, ry * KAPPA);
+    let mut p = BezPath::with_capacity(6);
+    p.move_to((c.x + rx, c.y));
+    p.curve_to((c.x + rx, c.y + ky), (c.x + kx, c.y + ry), (c.x, c.y + ry));
+    p.curve_to((c.x - kx, c.y + ry), (c.x - rx, c.y + ky), (c.x - rx, c.y));
+    p.curve_to((c.x - rx, c.y - ky), (c.x - kx, c.y - ry), (c.x, c.y - ry));
+    p.curve_to((c.x + kx, c.y - ry), (c.x + rx, c.y - ky), (c.x + rx, c.y));
+    p.close_path();
     p
 }
 
-/// A rounded rectangle inscribed in `b`, as a flattened path. Used for the
+/// A rounded rectangle inscribed in `b`, as a path. Used for the
 /// sticky-note card and its shadow; with `radius = 0` (the sticky default) it is
 /// a plain rectangle. The radius is clamped to half the shorter side so a tiny
 /// card stays a valid shape.
+///
+/// Each corner is one cubic quarter-arc, written directly. kurbo's arcs cost a
+/// `sincos` per corner even at radius zero, which was half of a busy board's
+/// frame (`CANVAS-005`).
 fn roundrect_path(b: Rect, radius: f64) -> BezPath {
     let r = radius.min(b.width() / 2.0).min(b.height() / 2.0).max(0.0);
-    let rr = kurbo::RoundedRect::from_rect(b, r);
-    let mut p = BezPath::new();
-    p.extend(kurbo::Shape::path_elements(&rr, 0.1));
+    let (x0, y0, x1, y1) = (b.x0, b.y0, b.x1, b.y1);
+    let mut p = BezPath::with_capacity(10);
+    if r <= 0.0 {
+        p.move_to((x0, y0));
+        p.line_to((x1, y0));
+        p.line_to((x1, y1));
+        p.line_to((x0, y1));
+        p.close_path();
+        return p;
+    }
+    let k = r * (1.0 - KAPPA);
+    p.move_to((x0 + r, y0));
+    p.line_to((x1 - r, y0));
+    p.curve_to((x1 - k, y0), (x1, y0 + k), (x1, y0 + r));
+    p.line_to((x1, y1 - r));
+    p.curve_to((x1, y1 - k), (x1 - k, y1), (x1 - r, y1));
+    p.line_to((x0 + r, y1));
+    p.curve_to((x0 + k, y1), (x0, y1 - k), (x0, y1 - r));
+    p.line_to((x0, y0 + r));
+    p.curve_to((x0, y0 + k), (x0 + k, y0), (x0 + r, y0));
+    p.close_path();
     p
 }
 
@@ -1081,6 +1125,45 @@ mod tests {
 
     fn cam() -> ViewportTransform {
         ViewportTransform::new(1000.0, 800.0)
+    }
+
+    /// The direct cubics draw the shape kurbo's arcs drew: the same box and,
+    /// to a thousandth, the same area, at every radius a card takes.
+    #[test]
+    fn a_rounded_card_keeps_the_shape_of_its_arcs() {
+        use kurbo::Shape;
+        let b = Rect::new(10.0, 20.0, 210.0, 140.0);
+        for radius in [0.0, 3.0, 12.0, 60.0, 500.0] {
+            let ours = roundrect_path(b, radius);
+            let r = radius.min(60.0);
+            let theirs = kurbo::RoundedRect::from_rect(b, r).to_path(0.1);
+            let (o, t) = (ours.bounding_box(), theirs.bounding_box());
+            let drift = [o.x0 - t.x0, o.y0 - t.y0, o.x1 - t.x1, o.y1 - t.y1];
+            assert!(
+                drift.iter().all(|d| d.abs() < 1e-9),
+                "radius {radius}: {o:?}"
+            );
+            let (a, e) = (ours.area().abs(), theirs.area().abs());
+            assert!((a - e).abs() / e < 1e-3, "radius {radius}: {a} against {e}");
+        }
+    }
+
+    /// The four direct cubics draw the ellipse kurbo's arcs drew. The box holds
+    /// within 0.1 and the area to a thousandth, on both sides of the switch.
+    #[test]
+    fn an_ellipse_keeps_the_shape_of_its_arcs() {
+        use kurbo::Shape;
+        for (w, h) in [(20.0, 20.0), (200.0, 80.0), (740.0, 300.0), (2000.0, 900.0)] {
+            let b = Rect::new(10.0, 20.0, 10.0 + w, 20.0 + h);
+            let ours = ellipse_path(b);
+            let ell = kurbo::Ellipse::new(b.center(), (w / 2.0, h / 2.0), 0.0);
+            let theirs = ell.to_path(0.1);
+            let (o, t) = (ours.bounding_box(), theirs.bounding_box());
+            let drift = [o.x0 - t.x0, o.y0 - t.y0, o.x1 - t.x1, o.y1 - t.y1];
+            assert!(drift.iter().all(|d| d.abs() < 0.1), "{w}x{h}: {o:?}");
+            let (a, e) = (ours.area().abs(), theirs.area().abs());
+            assert!((a - e).abs() / e < 1e-3, "{w}x{h}: {a} against {e}");
+        }
     }
 
     /// `TOILE-253`: a named frame carries a title band above its own top-left

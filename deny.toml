@@ -130,6 +130,19 @@ wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 name = "flume"
 wrappers = ["goose"]
 
+# The GPU binding. Its `unsafe` stays behind the rendering layer
+# (`CANVAS-057`), and the Sync worker compiles none of it (`SYNC-096`). The
+# launcher names it to own the device it hands the canvas.
+[[bans.deny]]
+name = "wgpu"
+wrappers = ["ambre-canvas", "ambre-app"]
+
+# The glyph rasterizer, the other `unsafe` render crate (`CANVAS-057`). An
+# application draws text through the canvas, never through swash.
+[[bans.deny]]
+name = "swash"
+wrappers = ["ambre-canvas", "parley"]
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"

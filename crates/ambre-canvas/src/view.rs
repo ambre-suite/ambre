@@ -14,7 +14,7 @@
 // target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
-use ambre_draw::Rect;
+use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, OverlayRepaint};
 
@@ -58,6 +58,9 @@ pub struct RepaintPlan {
     pub content: ContentRepaint,
     pub content_strip: Option<Rect>,
     pub overlay: OverlayRepaint,
+    /// The colour a full rebuild clears to, read from the view's palette. The
+    /// renderer holds no colour of its own (`CANVAS-060`).
+    pub backdrop: Color,
 }
 
 /// A raw input event forwarded from the DOM by the host's event listeners.

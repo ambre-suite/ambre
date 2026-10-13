@@ -20,15 +20,15 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 97 partial and 445 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 95 partial and 419 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 550 | 269 | 584 | 604 |  | 2007 |
-| `partial` | 40 | 14 | 41 | 2 |  | 97 |
+| `verified` | 578 | 269 | 584 | 604 |  | 2035 |
+| `partial` | 38 | 14 | 41 | 2 |  | 95 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 118 | 133 | 188 | 1 |  | 440 |
-| `human-review` | 5 |  |  |  |  | 5 |
+| `untested` | 91 | 133 | 188 | 1 |  | 413 |
+| `human-review` | 6 |  |  |  |  | 6 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
 
@@ -46,13 +46,13 @@
 | `ambre-spec-clipboard.md` | 18 | 17 | 16 |  | 1 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
 | `ambre-spec-delta-order.md` | 20 | 20 | 20 |  |  |  |
-| `ambre-spec-design-tokens.md` | 6 | 6 | 3 |  | 3 |  |
+| `ambre-spec-design-tokens.md` | 6 | 6 | 6 |  |  |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 | 1 |  |  |
-| `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 1 | 3 | 4 |
+| `ambre-spec-drawing-surface.md` | 15 | 11 | 10 |  | 1 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
-| `ambre-spec-frame.md` | 18 | 16 | 4 |  | 12 | 2 |
-| `ambre-spec-high-density.md` | 10 | 10 | 7 | 1 | 2 |  |
+| `ambre-spec-frame.md` | 18 | 16 | 15 | 1 |  | 2 |
+| `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |  |
 | `ambre-spec-key-rotation.md` | 28 | 27 | 27 |  |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 6 | 1 | 11 |  |
 | `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
@@ -65,7 +65,7 @@
 | `ambre-spec-organizations.md` | 11 | 9 | 9 |  |  | 2 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 3 | 2 | 1 |
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |  |
-| `ambre-spec-render-assets.md` | 17 | 14 | 6 | 1 | 7 | 3 |
+| `ambre-spec-render-assets.md` | 17 | 14 | 14 |  |  | 3 |
 | `ambre-spec-residency.md` | 20 | 19 | 17 | 1 | 1 | 1 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 22 | 22 |  |  | 2 |

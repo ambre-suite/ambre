@@ -81,6 +81,11 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
     })
 }
 
+/// Drives one [`AppView`] across the GPU and the requestAnimationFrame loop.
+///
+/// App-agnostic at this level: it owns the [`GpuState`], measures frame timings,
+/// decides which layers to encode from the view's [`RepaintPlan`], and presents
+/// the swapchain. Everything document-specific lives behind the `AppView` match.
 pub struct FrameHost {
     gpu: Option<GpuState>,
     view: AppView,
@@ -377,12 +382,15 @@ impl FrameHost {
         // Fatal latch first: once set, the Logic thread feeding the view may be
         // aborted, so we must not keep draining it. Paint the terminal screen a
         // single time and then idle (the rAF loop keeps ticking harmlessly).
-        if let Some(message) = fatal_message() {
-            if !self.fatal_painted {
-                self.render_fatal(&message);
+        let fatal = fatal_message();
+        match Tick::of(fatal.is_some(), self.fatal_painted) {
+            Tick::Render => {}
+            Tick::PaintFatal => {
+                self.render_fatal(fatal.as_deref().unwrap_or_default());
                 self.fatal_painted = true;
+                return;
             }
-            return;
+            Tick::Idle => return,
         }
 
         let t_drain = self.perf.now();
@@ -469,9 +477,10 @@ impl FrameHost {
         // rAF only starts after GPU init, so `self.gpu` is always Some here.
         let Some(gpu) = self.gpu.as_mut() else { return };
 
-        let content_active = !matches!(plan.content, ContentRepaint::Reuse);
-        let overlay_redraw = matches!(plan.overlay, OverlayRepaint::Redraw);
-        let any_dirty = content_active || overlay_redraw;
+        let phases = Phases::of(plan.content, plan.overlay);
+        let content_active = phases.build_content;
+        let overlay_redraw = phases.build_overlay;
+        let any_dirty = phases.any_build();
 
         let stats = FrameStats {
             fps: self.render_fps,
@@ -568,6 +577,10 @@ impl FrameHost {
         };
 
         // -- GPU encoding + present. ------------------------------------------
+        // Every frame presents, a reused layer re-blitted (`CANVAS-010`).
+        if !phases.present {
+            return;
+        }
         let t_gpu_start = self.perf.now();
         let surface_tex = match gpu.surface.get_current_texture() {
             Ok(t) => t,
@@ -595,8 +608,7 @@ impl FrameHost {
             &gpu.queue,
             &mut encoder,
             &target_view,
-            plan.content,
-            plan.overlay,
+            &plan,
         );
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -621,73 +633,16 @@ impl FrameHost {
         let Some(gpu) = self.gpu.as_mut() else { return };
 
         let (w, h) = gpu.size.logical();
-        let (w, h) = (w as f32, h as f32);
-
-        // Fixed colours (no theme dependency on the fatal path): a near-black
-        // backdrop, a red title, and a dim grey body. ASCII strings only.
-        const BACKDROP: Color = Color::from_rgba8(0x1a, 0x1a, 0x2e, 255);
-        const TITLE: Color = Color::from_rgba8(0xe0, 0x5a, 0x5a, 255);
-        const BODY: Color = Color::from_rgba8(0x9a, 0xa0, 0xa6, 255);
-        const TITLE_TEXT: &str = "Ambre encountered a fatal error and must reload.";
-
-        // Wrap the title/message to a centered column at most 640 logical px wide.
-        let col_w = (w * 0.8).min(640.0);
-        let origin_x = ((w as f64) - col_w as f64) / 2.0;
-
         gpu.quad_renderer.begin_frame(gpu.size);
         {
             let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
             surface.begin_layer(Layer::Content);
-            surface.fill_rect(Rect::new(0.0, 0.0, w as f64, h as f64), BACKDROP);
-
-            // Lay out both blocks first so we can vertically center the stack.
-            let title = gpu.text_cache.get_or_build(
-                &mut gpu.font_cx,
-                TITLE_TEXT,
-                FONT_HEADING,
-                col_w,
-                Alignment::Center,
-                false,
-                false,
-            );
-            let title_h = title.height() as f64;
-            let body = gpu.text_cache.get_or_build(
-                &mut gpu.font_cx,
-                message,
-                FONT_BODY,
-                col_w,
-                Alignment::Center,
-                false,
-                false,
-            );
-            let body_h = body.height() as f64;
-
-            let gap = 16.0;
-            let total_h = title_h + gap + body_h;
-            let title_y = ((h as f64) - total_h) / 2.0;
-            let body_y = title_y + title_h + gap;
-
-            draw_centered_text(
+            paint_fatal(
                 &mut surface,
                 &mut gpu.font_cx,
                 &mut gpu.text_cache,
-                TITLE_TEXT,
-                FONT_HEADING,
-                col_w,
-                origin_x,
-                title_y,
-                TITLE,
-            );
-            draw_centered_text(
-                &mut surface,
-                &mut gpu.font_cx,
-                &mut gpu.text_cache,
+                (w as f32, h as f32),
                 message,
-                FONT_BODY,
-                col_w,
-                origin_x,
-                body_y,
-                BODY,
             );
         }
 
@@ -705,8 +660,12 @@ impl FrameHost {
             &gpu.queue,
             &mut encoder,
             &target_view,
-            ContentRepaint::Full,
-            OverlayRepaint::Redraw,
+            &RepaintPlan {
+                content: ContentRepaint::Full,
+                content_strip: None,
+                overlay: OverlayRepaint::Redraw,
+                backdrop: FATAL_BACKDROP,
+            },
         );
         gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_tex.present();

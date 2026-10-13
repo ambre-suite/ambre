@@ -75,6 +75,16 @@ CEILINGS = [
         row="Toile body commit, both diffs at their cap (the bound, not a budget)",
         ceiling=6_500_000,
     ),
+    # The walk of the busiest frame. Tessellation and the GPU submit fall
+    # outside the count, so the walk is held to the frame's typical total.
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="board_paint",
+        symbol="ambre_budget_toile_board_paint",
+        row="Toile board paint, 2 000 visible elements, its content walk (< 5 ms of the 16 ms)",
+        ceiling=5 * PER_MS,
+    ),
     Ceiling(
         crate="ambre-prose",
         bench="instructions",

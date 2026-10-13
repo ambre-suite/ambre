@@ -472,6 +472,7 @@ impl ProseView {
             } else {
                 OverlayRepaint::Reuse
             },
+            backdrop: self.theme.palette().content_bg,
         }
     }
 

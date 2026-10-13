@@ -116,6 +116,65 @@ pub fn density_query() -> String {
     format!("(resolution: {}dppx)", read())
 }
 
+/// A watch on the density, re-armed on a fresh query each time it fires.
+///
+/// A `ResizeObserver` stays silent when only the density moves, so the host
+/// resizes from here (`CANVAS-035`). The query that fired no longer matches,
+/// so each change arms the next one (`CANVAS-045`).
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone)]
+pub struct DensityWatch {
+    /// The query armed now, and its listener. `None` once the browser refused one.
+    armed: std::rc::Rc<std::cell::RefCell<Option<Armed>>>,
+}
+
+/// One armed query and the listener on it, kept so the listener can be removed.
+#[cfg(target_arch = "wasm32")]
+struct Armed {
+    query: web_sys::MediaQueryList,
+    listener: wasm_bindgen::JsValue,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl DensityWatch {
+    /// Arm the watch on the current density. `on_change` runs at each move.
+    pub fn arm(on_change: std::rc::Rc<dyn Fn()>) -> Self {
+        let watch = Self {
+            armed: std::rc::Rc::default(),
+        };
+        watch.rearm(on_change);
+        watch
+    }
+
+    /// The query armed now, so a test can raise its `change`.
+    pub fn armed(&self) -> Option<web_sys::MediaQueryList> {
+        self.armed.borrow().as_ref().map(|a| a.query.clone())
+    }
+
+    /// Drop the listener on the query that fired, then arm one on the new
+    /// density. The old listener runs once only, so it must not stay attached.
+    fn rearm(&self, on_change: std::rc::Rc<dyn Fn()>) {
+        use wasm_bindgen::JsCast;
+        if let Some(old) = self.armed.borrow_mut().take() {
+            let _ = old
+                .query
+                .remove_event_listener_with_callback("change", old.listener.unchecked_ref());
+        }
+        let Some(query) =
+            web_sys::window().and_then(|w| w.match_media(&density_query()).ok().flatten())
+        else {
+            return;
+        };
+        let watch = self.clone();
+        let listener = wasm_bindgen::closure::Closure::once_into_js(move |_: web_sys::Event| {
+            on_change();
+            watch.rearm(on_change);
+        });
+        let _ = query.add_event_listener_with_callback("change", listener.unchecked_ref());
+        *self.armed.borrow_mut() = Some(Armed { query, listener });
+    }
+}
+
 /// The browser's density. The one read of it in the workspace (`CANVAS-031`).
 #[cfg(target_arch = "wasm32")]
 fn read() -> f64 {
@@ -132,6 +191,7 @@ mod tests {
             content: ContentRepaint::Scroll { dx_px, dy_px },
             content_strip: Some(ambre_draw::Rect::new(0.0, 0.0, 10.0, 10.0)),
             overlay: OverlayRepaint::Reuse,
+            backdrop: ambre_draw::Color::WHITE,
         }
     }
 

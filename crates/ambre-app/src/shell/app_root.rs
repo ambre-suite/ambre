@@ -409,9 +409,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     on:click={
                         let theme_ctl = theme_ctl.clone();
                         move |_| {
-                            let next = theme_ctl.toggle();
+                            let next = switch_theme(&theme_ctl);
                             theme_sig.set(next);
-                            apply_theme_attr(next);
                             let label = if next == ambre_canvas::Theme::Dark {
                                 "Dark theme"
                             } else {

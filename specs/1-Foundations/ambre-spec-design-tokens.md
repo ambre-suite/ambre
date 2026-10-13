@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- one source generates both sides and the theme switch works. The
-shell stylesheet spells out no value of its own. No test drives a switch.
+shell stylesheet spells out no value of its own. A browser test drives a switch.
 
 > The interface is drawn twice, once by the browser and once by the graphics card. The two halves
 > must not disagree about what a surface, an accent or a body size looks like. One file
@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_shell_stylesheet_spells_out_no_colour_and_no_scale` -- every declaration of the shell sheet is read, and a colour, a spacing, a radius or a type size spelled out fails it with its line; `ambre_canvas::theme::stylesheet_tests::the_literal_check_catches_each_kind_and_spares_a_token` -- the check catches a literal of each kind and spares a token, a zero, a hairline and a comment | none | verified |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
 | `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | `ambre_canvas::theme::stylesheet_tests::the_stylesheet_reads_only_declared_tokens` -- every name the shell sheet reads is checked against the names the token source emits and the sheet declares | none | verified |
-| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | `ambre_canvas::theme::stylesheet_tests::the_unmarked_block_carries_the_light_set` -- reads the generated stylesheet | none | verified |
 
 ### 1.2 Switch the theme
 
@@ -34,17 +34,16 @@ The user flips the theme control. One act must move both halves, and it must mov
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none | unheld -- one control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
-| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none | unheld -- the generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field, so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads; lands with the `The frame and the render path held` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | `ambre_app::platform::tests::a_theme_switch_reaches_both_halves` -- one switch, read back from the control and the document attribute, in the browser tier | none | verified |
+| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | `ambre_canvas::theme::stylesheet_tests::a_theme_switch_changes_no_scale` -- the dark block declares colours and effects alone | none | verified |
 
 * **Budget.** none: a token is a constant resolved at build time, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 3 `verified`, 3 `untested`. The compiler holds the half that matters: the two
-  sides cannot come from two sources. Two tests read the shell sheet: it reads only declared names,
-  and it spells out no value of its own. What nothing holds is a switch, driven and observed.
+* **Verification.** 6 `verified`. The compiler keeps the two sides on one source; host tests read
+  the generated sheets, and a browser test drives a switch.
 
 ---
 
@@ -84,21 +83,17 @@ component, not a shared value. A hairline of one pixel is a border width, not a 
 zero is no value at all. Everything else the shell sheet sets for a colour, a padding, a margin,
 a gap, a radius or a type size reads a token (`UI-THREAD-029`).
 
-**The boot screen is drawn before any token exists.** The page shows it while the binary loads,
-and the generated sheet is injected only once the binary runs. So its few colours and sizes are
-written in the page itself, and it is gone at readiness. The fatal error overlay comes after the
-injection, so it reads the tokens.
+**The boot screen is drawn before any token exists.** Its few colours and sizes are written in the
+page itself, and it is gone at readiness. The fatal error overlay comes after the injection, so it
+reads the tokens.
 
 **Where the two halves diverge, and why that is correct.** The chrome names a surface and the
-content names a grid line, and neither needs the other's vocabulary. What they must agree on is the
-accent, the text colour and the scales. Those are the entries that appear in both groups under the
-same name.
+content a grid line. They agree on the entries both groups share by name: the accent, the text
+colour and the scales.
 
-**The theme is a run-time value, not a build one.** Both palettes are in the binary and the active
-one is selected by a control the chrome writes and the render loop reads. An attribute on the
-document root selects the browser
-half. The light set is the unmarked default, the dark set the attributed one. A page
-that fails to set the attribute is light rather than unstyled.
+**The theme is a run-time value, not a build one.** Both palettes are in the binary. A control the
+chrome writes and the render loop reads selects one, and an attribute on the document root selects
+the browser half. The light set is the unmarked default (`UI-THREAD-033`).
 
 **Code.**
 
@@ -139,9 +134,6 @@ The user touches one thing: the theme control. Everything else is what they see.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The sheets are checked by reading.** One test holds that every token the shell sheet reads is
-  declared (`UI-THREAD-031`), and another that it spells out no value (`UI-THREAD-029`). Neither
-  tier constructs a palette or drives a switch.
 * **The check reads the shell sheet alone.** The boot screen in the page is drawn before the
   tokens exist, and writes its own. A style an application sets from Rust is not read either:
   today that is one zero border, on an embedded page.

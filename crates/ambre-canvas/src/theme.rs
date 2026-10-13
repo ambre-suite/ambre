@@ -360,4 +360,82 @@ mod stylesheet_tests {
             assert_eq!(caught(token), 0, "flagged {token}");
         }
     }
+
+    /// The body of the first `selector { ... }` block of the generated sheet.
+    fn block(selector: &str) -> &'static str {
+        let open = THEME_CSS
+            .find(&format!("{selector} {{"))
+            .unwrap_or_else(|| panic!("no `{selector}` block"));
+        let body = &THEME_CSS[open..];
+        let start = body.find('{').unwrap_or(0) + 1;
+        let end = body.find('}').unwrap_or(body.len());
+        &body[start..end]
+    }
+
+    /// The value `body` declares for `name`, trimmed.
+    fn value<'a>(body: &'a str, name: &str) -> Option<&'a str> {
+        body.lines()
+            .filter_map(|line| line.trim().strip_prefix(name)?.strip_prefix(':'))
+            .map(|rest| rest.trim().trim_end_matches(';').trim())
+            .next()
+    }
+
+    /// A palette colour as the sheet spells it.
+    fn hex(color: super::Color) -> String {
+        let [r, g, b, _] = color.to_rgba8().to_u8_array();
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
+
+    /// `UI-THREAD-033`: the unmarked block carries the light colours, so a page
+    /// that never sets the theme attribute renders light, not unstyled.
+    ///
+    /// The generator writes both blocks; nothing else notices the day the two
+    /// are swapped.
+    #[test]
+    fn the_unmarked_block_carries_the_light_set() {
+        let light = super::CHROME_LIGHT;
+        let unmarked = block(":root");
+        let expected = [
+            ("--bg", light.bg),
+            ("--surface", light.surface),
+            ("--border", light.border),
+            ("--text", light.text),
+            ("--text-dim", light.text_dim),
+            ("--accent", light.accent),
+            ("--error", light.error),
+        ];
+        for (name, colour) in expected {
+            assert_eq!(value(unmarked, name), Some(hex(colour).as_str()), "{name}");
+        }
+        let dark = block(":root[data-theme=\"dark\"]");
+        assert_ne!(value(unmarked, "--bg"), value(dark, "--bg"));
+    }
+
+    /// `UI-THREAD-034`: a theme switch changes colours and effects, never a
+    /// spacing, a radius or a type size.
+    ///
+    /// The dark block declares no scale, and nothing the unmarked block does
+    /// not declare too, so every scale is the same under either theme.
+    #[test]
+    fn a_theme_switch_changes_no_scale() {
+        let unmarked = declared(block(":root"));
+        let dark = declared(block(":root[data-theme=\"dark\"]"));
+        let scales: Vec<_> = dark
+            .iter()
+            .filter(|name| {
+                ["--space", "--radius", "--font"]
+                    .iter()
+                    .any(|p| name.starts_with(p))
+            })
+            .collect();
+        assert!(scales.is_empty(), "the dark block redeclares {scales:?}");
+        assert!(
+            dark.is_subset(&unmarked),
+            "the dark block declares a token of its own"
+        );
+        assert!(
+            unmarked.iter().any(|name| name.starts_with("--space")),
+            "the unmarked block carries the scales"
+        );
+    }
 }

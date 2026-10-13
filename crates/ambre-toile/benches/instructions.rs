@@ -16,12 +16,20 @@
     reason = "a bench aborts on a fixture it cannot run"
 )]
 
+use std::collections::HashMap;
 use std::hint::black_box;
 
+use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementStyle, ShapeKind};
+use ambre_canvas::{TextCache, Theme};
+use ambre_draw::FontContext;
+use ambre_draw::testing::RecordingSurface;
+use ambre_toile::logic::command::DisplayViewport;
+use ambre_toile::ui::render::{ImageStore, paint_content};
+use ambre_toile::ui::viewport::ViewportTransform;
 use ambre_toile::{
     ElementId, ElementKind, InitContent, ToileCommand, ToileEvent, ToileOutcome, ToileState,
 };
-use kurbo::{Point, Size};
+use kurbo::{Affine, Point, Rect, Size};
 
 /// Characters in the body the "Toile body commit" row names: 4 KB of ASCII.
 const BODY_LEN: usize = 4096;
@@ -137,10 +145,102 @@ fn body_commit_at_cap() {
     close(base, &stored, typed, ambre_bound_toile_body_commit);
 }
 
+/// Elements the "Toile board paint" row names, all of them visible.
+const BOARD_ELEMENTS: usize = 2000;
+
+/// One visible element of the busy board: every fourth a sticky holding a
+/// word, the rest shapes of the three kinds.
+fn busy_node(i: usize) -> DisplayNode {
+    let (x, y) = ((i % 50) as f64 * 24.0, (i / 50) as f64 * 24.0);
+    let (kind, geom) = match i % 4 {
+        0 => (
+            ElementKind::Sticky,
+            DisplayGeom::Sticky(format!("note {i}")),
+        ),
+        1 => (ElementKind::Shape(ShapeKind::Ellipse), DisplayGeom::Ellipse),
+        2 => (
+            ElementKind::Shape(ShapeKind::Triangle),
+            DisplayGeom::Triangle,
+        ),
+        _ => (ElementKind::Shape(ShapeKind::Rect), DisplayGeom::Rect),
+    };
+    DisplayNode::Element(DisplayElement {
+        id: ElementId(format!("e{i}")),
+        kind,
+        transform: Affine::IDENTITY,
+        bounds: Rect::new(x, y, x + 20.0, y + 20.0),
+        locked: false,
+        style: ElementStyle::default(),
+        geom,
+        link: None,
+        group: None,
+    })
+}
+
+/// The whole content walk of one frame. Counted alone by `callgrind`.
+#[inline(never)]
+fn ambre_budget_toile_board_paint(
+    viewport: &DisplayViewport,
+    camera: &ViewportTransform,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+) -> usize {
+    walk(viewport, camera, font_cx, cache)
+}
+
+/// The content walk onto a recording surface, returning the ops it drew.
+fn walk(
+    viewport: &DisplayViewport,
+    camera: &ViewportTransform,
+    font_cx: &mut FontContext,
+    cache: &mut TextCache,
+) -> usize {
+    let mut surface = RecordingSurface::new();
+    paint_content(
+        &mut surface,
+        viewport,
+        camera,
+        Theme::Light.palette(),
+        font_cx,
+        cache,
+        None,
+        &ImageStore::new(),
+        &HashMap::new(),
+        false,
+    );
+    surface.ops().len()
+}
+
+/// A frame of the busy board the row names, the text cache warm from the frame
+/// before, as it is while a board is panned.
+fn board_paint() {
+    let viewport = DisplayViewport {
+        reactions: Default::default(),
+        pins: Vec::new(),
+        viewport: Default::default(),
+        nodes: (0..BOARD_ELEMENTS).map(busy_node).collect(),
+    };
+    let camera = ViewportTransform::new(1280.0, 1000.0);
+    let mut font_cx = ambre_draw::sealed_font_context();
+    let face = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../ambre-app/fonts/NotoSans-Regular.ttf"
+    );
+    let bytes = std::fs::read(face).expect("the workspace ships its faces");
+    font_cx.collection.register_fonts(bytes.into(), None);
+    let mut cache = TextCache::new(1.0);
+    // The frame before, outside the counted function: it fills the cache.
+    walk(&viewport, &camera, &mut font_cx, &mut cache);
+    let ops =
+        ambre_budget_toile_board_paint(black_box(&viewport), &camera, &mut font_cx, &mut cache);
+    assert!(ops >= BOARD_ELEMENTS, "every element was drawn");
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 2] = [
+const OPERATIONS: [(&str, fn()); 3] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
+    ("board_paint", board_paint),
 ];
 
 fn main() {

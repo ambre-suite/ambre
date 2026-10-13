@@ -115,21 +115,17 @@ where
         // active GPU frames from frame 1. Empty early frames make it lock to 60
         // Hz.
         wasm_bindgen_futures::spawn_local(async move {
-            if let Some(gpu) = bootstrap_gpu(canvas_c, size).await {
+            let (settled, gpu) = bootstrap_gpu(canvas_c, size).await;
+            if let Some(gpu) = gpu {
                 host_c.borrow_mut().install_gpu(gpu);
             }
             // `pre_frame` is the route-independent relay: Logic<->Sync, the
             // dispatcher, the SPA route poll. It must run EVERY frame, even when
-            // the canvas is frozen behind a modal or the landing overlay. So the
-            // outer loop is always-on and only the render is gated by `raf_c`.
+            // the canvas is frozen behind a modal or the landing overlay. So
+            // `drive_frame` gates only the render on `raf_c`.
             start_raf_loop(
-                move |ts| {
-                    pre_frame();
-                    if raf_c.is_running() {
-                        host_c.borrow_mut().render(ts);
-                    }
-                },
-                RafControl::new(),
+                move |ts| drive_frame(&raf_c, &mut pre_frame, || host_c.borrow_mut().render(ts)),
+                settled,
             );
         });
     }
@@ -160,29 +156,16 @@ where
     // CSS size stays the same but the density changes. ResizeObserver does not
     // fire in that case, so we watch resolution changes separately.
     //
-    // A `MediaQueryList` only fires `change` when it crosses ITS OWN threshold,
-    // so the old `match_media("(resolution)")` -- a feature-existence query with
-    // no threshold -- never fired. The correct pattern is to query the CURRENT
-    // `Ndppx` and re-arm a fresh listener after each change, since the new
-    // density needs a new query. `arm_dpi_watch` does exactly that.
-    fn arm_dpi_watch(host: Rc<RefCell<FrameHost>>, canvas: HtmlCanvasElement) {
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        let Ok(Some(mql)) = window.match_media(&density_query()) else {
-            return;
-        };
-        let cb = Closure::once_into_js(move |_event: web_sys::MediaQueryListEvent| {
+    // `DensityWatch` re-arms itself on the new density after each change.
+    {
+        let host = Rc::clone(&host);
+        let canvas = canvas.clone();
+        DensityWatch::arm(Rc::new(move || {
             if let Some(size) = size_backing_store(&canvas) {
                 host.borrow_mut().resize(size);
             }
-            // Re-arm for the new density: this listener has fired and its
-            // query no longer matches.
-            arm_dpi_watch(host.clone(), canvas.clone());
-        });
-        let _ = mql.add_event_listener_with_callback("change", cb.unchecked_ref());
+        }));
     }
-    arm_dpi_watch(Rc::clone(&host), canvas.clone());
 
     // -- GPU context loss / restore -> host. -----------------------------------
     // A WebGL/WebGPU context can be dropped by the browser (GPU reset, the tab

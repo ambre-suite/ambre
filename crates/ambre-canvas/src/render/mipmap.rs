@@ -67,6 +67,24 @@ pub fn level_count(width: u32, height: u32) -> u32 {
     32 - longest.leading_zeros()
 }
 
+/// The sampler a picture is drawn through.
+///
+/// Trilinear: linear within a mip level and linear between two. A picture
+/// shrinking under a zoom then crosses levels without the step a `Nearest`
+/// mipmap filter leaves (`CANVAS-065`). `ClampToEdge` keeps the border texel from
+/// wrapping onto the opposite edge of the quad.
+pub fn sampler() -> wgpu::SamplerDescriptor<'static> {
+    wgpu::SamplerDescriptor {
+        label: Some("image_sampler"),
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    }
+}
+
 /// Average each 2x2 block of `src` into one texel of the destination.
 ///
 /// * The average stays in the sample space the pixels arrive in, never in
@@ -116,6 +134,22 @@ mod tests {
         assert_eq!(dims, vec![(4, 4), (2, 2), (1, 1)]);
         // The chain omits level 0, so it holds one level less than wgpu counts.
         assert_eq!(chain.len() as u32 + 1, level_count(8, 8));
+    }
+
+    /// A picture is sampled through its chain: linear inside a level and
+    /// between two (`CANVAS-065`).
+    ///
+    /// A `Nearest` mipmap filter steps visibly between levels, and a sampler
+    /// with no minifying filter reads the full-size texels alone.
+    #[test]
+    fn a_picture_is_sampled_trilinearly() {
+        let s = sampler();
+        assert_eq!(s.min_filter, wgpu::FilterMode::Linear);
+        assert_eq!(s.mag_filter, wgpu::FilterMode::Linear);
+        assert_eq!(s.mipmap_filter, wgpu::MipmapFilterMode::Linear);
+        assert!(s.lod_max_clamp >= 32.0, "every level stays reachable");
+        assert_eq!(s.address_mode_u, wgpu::AddressMode::ClampToEdge);
+        assert_eq!(s.address_mode_v, wgpu::AddressMode::ClampToEdge);
     }
 
     /// A non-square image keeps halving on the axis that still can

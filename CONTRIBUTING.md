@@ -91,6 +91,7 @@ constrains, and the table below lists them.
 | Row | What the reviewer holds | Spec |
 | :--- | :--- | :--- |
 | `DOCFILE-008` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | `ambre-spec-docfile.md` |
+| `CANVAS-056` | A drawing primitive MUST NOT hold screen-only state. | `ambre-spec-drawing-surface.md` |
 | `FIXTURE-005` | Every committed artifact MUST trace to a generator run from a seed. | `ambre-spec-fixtures.md` |
 | `FIXTURE-024` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | `ambre-spec-fixtures.md` |
 | `FIXTURE-032` | A committed artifact MUST NOT come from a real user document. | `ambre-spec-fixtures.md` |

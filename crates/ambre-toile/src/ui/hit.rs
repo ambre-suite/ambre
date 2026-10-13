@@ -87,7 +87,7 @@ pub fn ellipse_contains(bounds: Rect, local: Point) -> bool {
 /// The Phase-0 triangle inscribed in `bounds`: apex at the top-center, base along
 /// the bottom edge. Kept identical to the renderer so hit-test matches paint.
 pub fn triangle_path(bounds: Rect) -> BezPath {
-    let mut p = BezPath::new();
+    let mut p = BezPath::with_capacity(4);
     p.move_to((bounds.center().x, bounds.y0));
     p.line_to((bounds.x1, bounds.y1));
     p.line_to((bounds.x0, bounds.y1));

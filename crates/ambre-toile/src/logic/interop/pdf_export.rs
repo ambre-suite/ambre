@@ -111,7 +111,6 @@ pub fn export_pdf(
     }
 
     let mut doc = Document::new();
-    let no_anim = HashMap::new();
     for pdf_page in pages {
         // `from_wh` only rejects a non-positive extent; `PageSize::new` clamps to
         // a positive minimum, so this is infallible in practice.
@@ -122,36 +121,51 @@ pub fn export_pdf(
         {
             let mut surface = kpage.surface();
             let mut s = KrillaSurface::new(&mut surface);
-
-            // Clip to the frame rect (mapped world -> page space through the same
-            // camera the walk uses), so the page carries only slide content.
-            let clipped = pdf_page.clip.is_some();
-            if let Some(world) = pdf_page.clip {
-                s.push_clip(map_rect(pdf_page.camera.world_to_screen(), world));
-            }
-
-            paint_content(
-                &mut s,
-                &pdf_page.viewport,
-                &pdf_page.camera,
-                palette,
-                font_cx,
-                text_cache,
-                None, // nothing is under inline edit off-screen
-                images,
-                &no_anim, // no Smart Animate transition on export
-                true,     // present mode: no board grid
-            );
-
-            if clipped {
-                s.pop_clip();
-            }
+            paint_page(&mut s, pdf_page, palette, font_cx, text_cache, images);
         }
         kpage.finish();
     }
 
     doc.finish()
         .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
+}
+
+/// Paint one page onto any surface: the screen's content walk inside the
+/// frame clip (`CANVAS-029`).
+///
+/// It names no surface type, so the page a test records is the page krilla
+/// writes.
+fn paint_page<S: DrawSurface>(
+    s: &mut S,
+    pdf_page: &PdfPage,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    images: &ImageStore,
+) {
+    // Clip to the frame rect (mapped world -> page space through the same
+    // camera the walk uses), so the page carries only slide content.
+    let clipped = pdf_page.clip.is_some();
+    if let Some(world) = pdf_page.clip {
+        s.push_clip(map_rect(pdf_page.camera.world_to_screen(), world));
+    }
+
+    paint_content(
+        s,
+        &pdf_page.viewport,
+        &pdf_page.camera,
+        palette,
+        font_cx,
+        text_cache,
+        None, // nothing is under inline edit off-screen
+        images,
+        &HashMap::new(), // no Smart Animate transition on export
+        true,            // present mode: no board grid
+    );
+
+    if clipped {
+        s.pop_clip();
+    }
 }
 
 /// Map an axis-aligned rect through a scale + translate affine, the camera's
@@ -352,5 +366,52 @@ mod tests {
         )
         .expect("export must succeed");
         assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    /// Covers `CANVAS-029`: a page is the screen's walk, unchanged, inside the
+    /// frame clip.
+    ///
+    /// Both walks record onto the same kind of surface, from the same faces.
+    /// What the page adds is the clip and nothing else.
+    #[test]
+    fn the_page_and_the_screen_share_one_walk() {
+        use ambre_draw::testing::{DrawOp, RecordingSurface};
+
+        let palette = Theme::Light.palette();
+        let page = a_page_with_text();
+        let mut font_cx = ambre_draw::sealed_font_context();
+        for bytes in shipped_faces() {
+            font_cx.collection.register_fonts(bytes.into(), None);
+        }
+        let mut tc = TextCache::new(1.0);
+        let images = ImageStore::new();
+
+        let mut printed = RecordingSurface::new();
+        paint_page(&mut printed, &page, palette, &mut font_cx, &mut tc, &images);
+        let mut screen = RecordingSurface::new();
+        paint_content(
+            &mut screen,
+            &page.viewport,
+            &page.camera,
+            palette,
+            &mut font_cx,
+            &mut tc,
+            None,
+            &images,
+            &HashMap::new(),
+            true,
+        );
+
+        let ops = printed.ops();
+        assert!(
+            matches!(ops.first(), Some(DrawOp::PushClip { .. })),
+            "{ops:?}"
+        );
+        assert_eq!(ops.last(), Some(&DrawOp::PopClip));
+        assert!(
+            screen.ops().len() > 1,
+            "the walk drew the shape and the word"
+        );
+        assert_eq!(&ops[1..ops.len() - 1], screen.ops());
     }
 }

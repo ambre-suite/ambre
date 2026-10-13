@@ -37,15 +37,13 @@ use web_sys::HtmlCanvasElement;
 
 use ambre_bus::app::toile::ElementId;
 use ambre_bus::{DocType, DocumentId, LogicCommand};
-use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
-    ContentRepaint, FrameStats, GpuState, InputEvent, Layer, OverlayRepaint, RafControl,
-    RepaintPlan, SurfaceSize, TextCache, TextInput, WgpuSurface, bootstrap_gpu, density_query,
-    fatal_message, size_backing_store, start_raf_loop,
+    ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
+    OverlayRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
+    WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal, size_backing_store,
+    start_raf_loop,
 };
-use ambre_draw::{
-    Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect, Size,
-};
+use ambre_draw::{DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
 use ambre_trame::ui::TrameView;
@@ -428,54 +426,6 @@ impl AppView {
 }
 
 // -----------------------------------------------------------------------------
-// FrameHost -- per-frame driver over an AppView
-// -----------------------------------------------------------------------------
-
-/// Drives one [`AppView`] across the GPU and the requestAnimationFrame loop.
-///
-/// App-agnostic at this level: it owns the [`GpuState`], measures frame timings,
-/// decides which layers to encode from the view's [`RepaintPlan`], and presents
-/// the swapchain. Everything document-specific lives behind the `AppView` match.
-/// Draw `text` as centered glyph runs at `(origin_x, origin_y)` over `max_width`.
-/// Mirrors the per-line glyph loop used by the Trame renderer.
-#[allow(clippy::too_many_arguments)]
-fn draw_centered_text(
-    surface: &mut WgpuSurface<'_>,
-    font_cx: &mut FontContext,
-    cache: &mut TextCache,
-    text: &str,
-    font_size: f32,
-    max_width: f32,
-    origin_x: f64,
-    origin_y: f64,
-    color: Color,
-) {
-    if text.is_empty() {
-        return;
-    }
-    let layout = cache.get_or_build(
-        font_cx,
-        text,
-        font_size,
-        max_width,
-        Alignment::Center,
-        false,
-        false,
-    );
-    let brush = Brush::Solid(color);
-    for line in layout.lines() {
-        for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(run) = item else {
-                continue;
-            };
-            let tx = origin_x + run.offset() as f64;
-            let ty = origin_y + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // DocSwitcher -- route-driven document swap handle
 // -----------------------------------------------------------------------------
 
@@ -529,6 +479,34 @@ mod tests {
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// `CANVAS-011`: the loop keeps ticking while the frame draws nothing, so an
+    /// event queued meanwhile is drained on the next frame. It starts only once
+    /// the GPU bootstrap hands over its token (`CANVAS-004`).
+    #[wasm_bindgen_test]
+    async fn the_loop_ticks_while_the_content_is_static() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let canvas: web_sys::HtmlCanvasElement =
+            wasm_bindgen::JsCast::dyn_into(document.create_element("canvas").expect("a canvas"))
+                .expect("a canvas element");
+        let (settled, _gpu) =
+            ambre_canvas::bootstrap_gpu(canvas, ambre_canvas::SurfaceSize::UNSIZED).await;
+        let ticks = Rc::new(Cell::new(0u32));
+        let seen = Rc::clone(&ticks);
+        // A frame with nothing to draw: it only counts.
+        ambre_canvas::start_raf_loop(move |_| seen.set(seen.get() + 1), settled);
+        let wait = js_sys::Promise::new(&mut |resolve, _| {
+            let _ = web_sys::window()
+                .expect("a window")
+                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 300);
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(wait).await;
+        assert!(ticks.get() >= 3, "{} ticks in 300 ms", ticks.get());
+    }
+
     #[wasm_bindgen_test]
     fn base64_roundtrips() {
         for bytes in [
@@ -564,6 +542,33 @@ mod tests {
             FrameHost::tick_fps(&mut times, &mut fps, i as f64 * 1000.0 / 60.0);
         }
         assert!((fps - 60.0).abs() < 1.0, "expected ~60 fps, got {fps}");
+    }
+
+    /// `CANVAS-035` and `CANVAS-045`: the watch queries the density it starts
+    /// on, so it fires when that density is left. Each change runs the resize
+    /// once and leaves a fresh query armed, and the spent one stays silent.
+    #[wasm_bindgen_test]
+    fn a_density_change_resizes_and_rearms_the_watch() {
+        use ambre_canvas::DensityWatch;
+        use std::cell::Cell;
+        use std::rc::Rc;
+        let resized = Rc::new(Cell::new(0));
+        let count = Rc::clone(&resized);
+        let watch = DensityWatch::arm(Rc::new(move || count.set(count.get() + 1)));
+        let change = || web_sys::Event::new("change").expect("an event");
+
+        let first = watch.armed().expect("a watch is armed");
+        assert!(first.media().contains("dppx"), "{}", first.media());
+        assert!(first.matches(), "the query holds the current density");
+        first.dispatch_event(&change()).expect("dispatched");
+        assert_eq!(resized.get(), 1, "one change, one resize");
+
+        let second = watch.armed().expect("re-armed");
+        assert!(second != first, "a fresh query");
+        first.dispatch_event(&change()).expect("dispatched");
+        assert_eq!(resized.get(), 1, "the spent query stays silent");
+        second.dispatch_event(&change()).expect("dispatched");
+        assert_eq!(resized.get(), 2, "the fresh query fires in turn");
     }
 
     /// Read an item back the way the Paste button does.

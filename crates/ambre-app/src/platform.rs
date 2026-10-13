@@ -381,6 +381,16 @@ pub(crate) fn inject_theme(theme: ambre_canvas::Theme) {
     apply_theme_attr(theme);
 }
 
+/// Flip the theme for both halves at once, and return the new one.
+///
+/// The control is what the canvas reads on its next frame; the attribute is
+/// what the stylesheet keys on. One act sets both (`UI-THREAD-032`).
+pub(crate) fn switch_theme(control: &ambre_canvas::ThemeControl) -> ambre_canvas::Theme {
+    let next = control.toggle();
+    apply_theme_attr(next);
+    next
+}
+
 /// Set the document element's `data-theme`, switching the active CSS custom-property
 /// set (`:root` light vs `:root[data-theme="dark"]`).
 pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
@@ -599,5 +609,44 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
     let path = crate::route::doc_path(header.doc_type, header.document_id.into());
     if let Some(window) = web_sys::window() {
         let _ = window.location().set_href(&path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// The document's `data-theme`, as the stylesheet reads it.
+    fn document_theme() -> Option<String> {
+        web_sys::window()?
+            .document()?
+            .document_element()?
+            .get_attribute("data-theme")
+    }
+
+    /// One switch reaches the canvas control and the document attribute
+    /// together (`UI-THREAD-032`).
+    ///
+    /// A switch that set one half alone would leave the chrome and the
+    /// canvas in different themes.
+    #[wasm_bindgen_test]
+    fn a_theme_switch_reaches_both_halves() {
+        let control = ambre_canvas::ThemeControl::new(ambre_canvas::Theme::Dark);
+        apply_theme_attr(control.get());
+        assert_eq!(document_theme().as_deref(), Some("dark"));
+
+        let next = switch_theme(&control);
+        assert_eq!(next, ambre_canvas::Theme::Light);
+        assert_eq!(control.get(), ambre_canvas::Theme::Light, "the canvas half");
+        assert_eq!(
+            document_theme().as_deref(),
+            Some("light"),
+            "the browser half"
+        );
+
+        switch_theme(&control);
+        assert_eq!(control.get(), ambre_canvas::Theme::Dark);
+        assert_eq!(document_theme().as_deref(), Some("dark"));
     }
 }

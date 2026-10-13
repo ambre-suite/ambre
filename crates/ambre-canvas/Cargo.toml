@@ -37,5 +37,9 @@ js-sys               = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 tracing              = { workspace = true }
 
+[dev-dependencies]
+# The recording surface the fatal screen is painted on in a host test.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+
 [lints]
 workspace = true

@@ -5,7 +5,7 @@
 //   GpuState            wgpu Device/Queue/Surface + QuadRenderer + text stack.
 //   bootstrap_gpu       async wgpu init (WebGL2 by default, ?webgpu opt-in).
 //   start_raf_loop      requestAnimationFrame driver over a frame callback.
-//   RafControl          gate to freeze the rAF loop behind a modal/overlay.
+//   GpuSettled          the token that orders the loop after the GPU init.
 //   fetch_bytes         same-origin asset fetch (fonts).
 //
 // This module owns no application state and names no per-app view. The frame
@@ -21,8 +21,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -93,66 +91,30 @@ fn surface_config(
 // rAF loop
 // -----------------------------------------------------------------------------
 
-/// Handle to gate the rAF loop, so the chrome can freeze the canvas behind a
-/// fullscreen `<dialog>`. While paused the loop keeps ticking but does no
-/// work: no dispatch, no render. The canvas holds its last frame, a
-/// `backdrop-filter: blur()` over it is free, and the GPU stays idle.
+/// Proof that GPU initialization has settled, whether it succeeded or not.
 ///
-/// Backed by an `Arc<AtomicBool>` so it is `Send + Sync` and can ride inside a
-/// Leptos `Callback`. (A literal `cancelAnimationFrame` would stop the loop
-/// entirely. Resuming it needs main-thread access to the JS closure, which is
-/// `!Send` and cannot cross a Leptos callback boundary. Gating is the clean
-/// equivalent here.)
-#[derive(Clone)]
-pub struct RafControl {
-    running: Arc<AtomicBool>,
-}
+/// Only [`bootstrap_gpu`] mints one, and [`start_raf_loop`] takes it, so the
+/// loop cannot start first (`CANVAS-004`). Firefox calibrates vsync on the
+/// first frames; empty ones lock the loop to 60 Hz for good.
+pub struct GpuSettled(());
 
-impl Default for RafControl {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RafControl {
-    pub fn new() -> Self {
-        Self {
-            running: Arc::new(AtomicBool::new(true)),
-        }
-    }
-
-    /// Freeze the canvas: the loop ticks but skips all per-frame work.
-    pub fn pause(&self) {
-        self.running.store(false, Ordering::Relaxed);
-    }
-
-    /// Resume rendering.
-    pub fn resume(&self) {
-        self.running.store(true, Ordering::Relaxed);
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-}
-
-/// Start the requestAnimationFrame loop, invoking `frame(timestamp)` once per
-/// frame while `control` is running (skipped while paused).
+/// Start the requestAnimationFrame loop, invoking `frame(timestamp)` on every
+/// frame, once the GPU has settled.
+///
+/// The loop re-arms on every tick, whatever the frame did (`CANVAS-011`). A
+/// static document still ticks, so an inbound event drains on the next frame.
+/// Pausing is the frame's business ([`crate::frame::drive_frame`]).
 ///
 /// One `Closure` is kept alive for the app lifetime and reused every frame,
 /// with zero per-frame allocation. The naive allocate-and-forget pattern
 /// leaks a closure per frame. At 240 Hz that grows the JS heap and makes
 /// Firefox throttle rAF down to 60 Hz as self-protection.
-pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl) {
+pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, _settled: GpuSettled) {
     let cb: Rc<FrameSlot> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
-        if control.is_running() {
-            frame(ts);
-        }
-        // Always reschedule: a paused frame is just a flag check, and keeping
-        // the loop alive is what lets `resume` take effect without re-arming.
+        frame(ts);
         request_frame(&cb_clone);
     }));
     request_frame(&cb);
@@ -185,7 +147,12 @@ fn request_frame(slot: &FrameSlot) {
 // -----------------------------------------------------------------------------
 
 /// Bring the GPU up on `canvas`, whose backing store `size` describes.
-pub async fn bootstrap_gpu(canvas: HtmlCanvasElement, size: SurfaceSize) -> Option<GpuState> {
+///
+/// The token says the attempt is over, the state is `None` when it failed.
+pub async fn bootstrap_gpu(
+    canvas: HtmlCanvasElement,
+    size: SurfaceSize,
+) -> (GpuSettled, Option<GpuState>) {
     // WebGPU on Mesa/Intel Firefox has a compositor bug. The render pipeline
     // produces correct pixels (confirmed via GPU readback), but the browser
     // compositor silently fails to display the canvas on screen.
@@ -204,7 +171,8 @@ pub async fn bootstrap_gpu(canvas: HtmlCanvasElement, size: SurfaceSize) -> Opti
         wgpu::Backends::GL
     };
 
-    create_gpu_state(canvas, size, backends).await
+    let gpu = create_gpu_state(canvas, size, backends).await;
+    (GpuSettled(()), gpu)
 }
 
 fn url_flag(flag: &str) -> bool {

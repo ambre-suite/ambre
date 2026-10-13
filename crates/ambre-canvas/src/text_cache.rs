@@ -294,7 +294,101 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::registered_family_name;
+    use super::{TextCache, registered_family_name};
+    use parley::{Alignment, FontContext};
+
+    /// A context holding the shipped Noto Sans face, read from the tree.
+    fn font_cx() -> FontContext {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ambre-app/fonts/NotoSans-Regular.ttf"
+        );
+        let face = std::fs::read(path).unwrap_or_default();
+        crate::fonts::font_context_from_bytes([face])
+    }
+
+    /// Shape `text` through the cache and return its width and glyph count.
+    fn shape(cache: &mut TextCache, cx: &mut FontContext, text: &str) -> (f32, usize) {
+        let layout = cache.get_or_build(cx, text, 14.0, 400.0, Alignment::Start, false, false);
+        let glyphs = layout
+            .lines()
+            .flat_map(|line| line.items())
+            .map(|item| match item {
+                parley::PositionedLayoutItem::GlyphRun(run) => run.glyphs().count(),
+                parley::PositionedLayoutItem::InlineBox(_) => 0,
+            })
+            .sum();
+        (layout.width(), glyphs)
+    }
+
+    /// An overflow drops the coldest layouts and keeps the hot ones
+    /// (`CANVAS-022`).
+    ///
+    /// Clearing the cache whole would cost a full re-shape on the frame that
+    /// is already the busiest.
+    #[test]
+    fn an_overflow_evicts_the_coldest_layouts_and_keeps_the_rest() {
+        let mut cx = font_cx();
+        let mut cache = TextCache::new(1.0);
+        for i in 0..10 {
+            shape(&mut cache, &mut cx, &format!("cell {i}"));
+        }
+        // Touch the two oldest, so they are the hottest now.
+        shape(&mut cache, &mut cx, "cell 0");
+        shape(&mut cache, &mut cx, "cell 1");
+
+        cache.evict_if_oversized(8);
+        assert_eq!(cache.cache_size(), 6, "the cache trims to three quarters");
+
+        cache.reset_frame_stats();
+        for hot in ["cell 0", "cell 1", "cell 9"] {
+            shape(&mut cache, &mut cx, hot);
+        }
+        assert_eq!(cache.frame_misses, 0, "a hot layout survives the overflow");
+        shape(&mut cache, &mut cx, "cell 2");
+        assert_eq!(cache.frame_misses, 1, "the coldest layout is gone");
+    }
+
+    /// A layout that survives an eviction draws what it drew before
+    /// (`CANVAS-054`).
+    #[test]
+    fn an_eviction_changes_nothing_a_surviving_layout_draws() {
+        let mut cx = font_cx();
+        let mut cache = TextCache::new(1.0);
+        let before = shape(&mut cache, &mut cx, "Quarterly revenue");
+        assert!(before.1 > 0, "the face shaped the string");
+        for i in 0..10 {
+            shape(&mut cache, &mut cx, &format!("filler {i}"));
+        }
+        shape(&mut cache, &mut cx, "Quarterly revenue");
+
+        cache.evict_if_oversized(8);
+        cache.reset_frame_stats();
+        let after = shape(&mut cache, &mut cx, "Quarterly revenue");
+        assert_eq!(cache.frame_hits, 1, "the layout survived");
+        assert_eq!(after, before);
+    }
+
+    /// The frame that meets a missing script shapes at once and arms the
+    /// fetch; the face lands on a later frame (`CANVAS-053`).
+    ///
+    /// Its arrival clears the layouts, which shaped without it.
+    #[test]
+    fn a_missing_script_arms_a_fetch_and_its_face_lands_later() {
+        let mut cx = font_cx();
+        let mut cache = TextCache::new(1.0);
+        shape(&mut cache, &mut cx, "中文");
+        assert_eq!(cache.lazy_fonts.requested_count(), 1, "the fetch is armed");
+        assert_eq!(cache.cache_size(), 1, "the frame shaped without waiting");
+        assert!(
+            cache.poll_lazy_fonts(&mut cx).is_empty(),
+            "nothing arrived yet"
+        );
+
+        cache.lazy_fonts.deliver(b"face".to_vec());
+        assert_eq!(cache.poll_lazy_fonts(&mut cx).len(), 1);
+        assert_eq!(cache.cache_size(), 0, "the stale layouts are dropped");
+    }
 
     #[test]
     fn family_labels_map_to_registered_faces() {

@@ -146,10 +146,29 @@ struct LayerBatches {
     /// same draws against the same buffer, as the `drawn_*` counts do for the
     /// other three batches.
     drawn_image_runs: Vec<(ImageKey, u32, u32)>,
-    /// Set to `true` by `begin_rebuild()`. When set, `upload_if_rebuilding()`
+    /// Armed by `begin_rebuild()`. When armed, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
     /// the GPU buffer state is preserved across frames.
-    rebuilding: bool,
+    rebuilding: RebuildLatch,
+}
+
+/// Armed when a layer's CPU batch is rebuilt, taken by its upload.
+///
+/// A layer the frame never begins is never armed, so a `Reuse` plan uploads
+/// nothing (`CANVAS-003`). One rebuild uploads once.
+#[derive(Default)]
+struct RebuildLatch(bool);
+
+impl RebuildLatch {
+    /// The batch is being rebuilt this frame.
+    fn arm(&mut self) {
+        self.0 = true;
+    }
+
+    /// Whether an upload is owed, disarming the latch.
+    fn take(&mut self) -> bool {
+        std::mem::take(&mut self.0)
+    }
 }
 
 impl LayerBatches {
@@ -226,7 +245,7 @@ impl LayerBatches {
             drawn_glyph_indices: 0,
             drawn_color_glyph_indices: 0,
             drawn_image_runs: Vec::new(),
-            rebuilding: false,
+            rebuilding: RebuildLatch::default(),
         }
     }
 
@@ -242,7 +261,7 @@ impl LayerBatches {
         self.image_vertices.clear();
         self.image_indices.clear();
         self.image_runs.clear();
-        self.rebuilding = true;
+        self.rebuilding.arm();
     }
 
     /// Upload the CPU batches to the GPU only if `begin_rebuild` was called
@@ -254,10 +273,9 @@ impl LayerBatches {
         queue: &wgpu::Queue,
         label_prefix: &str,
     ) {
-        if !self.rebuilding {
+        if !self.rebuilding.take() {
             return;
         }
-        self.rebuilding = false;
         if !self.quad_indices.is_empty() {
             grow_buffer_if_needed(
                 device,
@@ -372,6 +390,13 @@ fn color_f32(c: Color) -> [f32; 4] {
     c.components
 }
 
+/// The clear colour of a pass, in the same components a vertex carries, so a
+/// cleared pixel and a filled one agree (`CANVAS-060`).
+fn clear_color(c: Color) -> wgpu::Color {
+    let [r, g, b, a] = color_f32(c).map(f64::from);
+    wgpu::Color { r, g, b, a }
+}
+
 /// Recreate `buf` if `needed_bytes` exceeds its current size.
 /// Allocates at 2x the needed size to amortize future resizes.
 fn grow_buffer_if_needed(
@@ -482,4 +507,40 @@ fn copy_offscreen_with_offset(
             depth_or_array_layers: 1,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RebuildLatch, clear_color, color_f32};
+
+    /// A layer the frame never began uploads nothing, and a rebuilt one
+    /// uploads once (`CANVAS-003`).
+    ///
+    /// A skipped upload that still ran would cost frame time and look correct
+    /// on screen.
+    #[test]
+    fn a_layer_uploads_only_on_the_frame_that_rebuilt_it() {
+        let mut latch = RebuildLatch::default();
+        assert!(!latch.take(), "a reused layer owes no upload");
+        latch.arm();
+        assert!(latch.take(), "a rebuilt layer uploads");
+        assert!(!latch.take(), "and only once");
+    }
+
+    /// Covers `CANVAS-060`: a full rebuild clears to the colour the view
+    /// handed over, in the components its fills carry.
+    #[test]
+    fn a_pass_clears_to_the_palette_colour() {
+        for theme in [crate::Theme::Light, crate::Theme::Dark] {
+            let bg = theme.palette().content_bg;
+            let clear = clear_color(bg);
+            let [r, g, b, a] = color_f32(bg).map(f64::from);
+            assert_eq!((clear.r, clear.g, clear.b, clear.a), (r, g, b, a));
+        }
+        assert_ne!(
+            clear_color(crate::Theme::Dark.palette().content_bg),
+            wgpu::Color::WHITE,
+            "a dark frame no longer clears to white"
+        );
+    }
 }

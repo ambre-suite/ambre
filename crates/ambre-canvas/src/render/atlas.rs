@@ -206,6 +206,12 @@ impl GlyphCache {
         }
     }
 
+    /// Whether the colour atlas must be grown to full size now. Only a colour
+    /// glyph already seen asks for it, and only once.
+    pub(super) fn color_atlas_due(&self) -> bool {
+        self.color_wanted && !self.color_ready
+    }
+
     /// Advance the frame clock that ages glyphs, and run a compaction the
     /// previous frame deferred.
     pub(super) fn begin_frame(&mut self) {
@@ -422,7 +428,7 @@ impl GlyphAtlas {
     /// knows to rebuild the color bind group over the new `color_view`. A no-op
     /// (returning `false`) once allocated or while no color glyph has appeared.
     pub fn ensure_color_atlas(&mut self, device: &wgpu::Device) -> bool {
-        if self.glyphs.color_ready || !self.glyphs.color_wanted {
+        if !self.glyphs.color_atlas_due() {
             return false;
         }
         self.color_texture = Self::new_color_texture(device, ATLAS_SIZE);
@@ -456,43 +462,15 @@ impl GlyphAtlas {
             return Some(slot);
         }
 
-        // Rasterize via Swash.
         let font_ref =
             swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize)?;
-
-        // Source order: prefer an embedded color bitmap (CBDT color emoji),
-        // then a color outline (COLR), then the plain outline. swash returns
-        // `Content::Color` (RGBA) for the bitmap case and `Content::Mask` for
-        // the outline case; we branch on `image.content` below. `Format::Alpha`
-        // only governs how outlines are rasterized -- it does not flatten an
-        // embedded color bitmap to a mask (verified with Noto Color Emoji).
-        let image = swash::scale::Render::new(&[
-            swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
-            swash::scale::Source::ColorOutline(0),
-            swash::scale::Source::Outline,
-        ])
-        .format(swash::zeno::Format::Alpha)
-        .render(
-            &mut self
-                .scale_cx
-                .builder(font_ref)
-                .size(font_size)
-                .normalized_coords(normalized_coords)
-                .build(),
+        let raster = rasterize(
+            &mut self.scale_cx,
+            font_ref,
+            font_size,
+            normalized_coords,
             glyph_id,
         )?;
-
-        // A color glyph (color emoji) comes back as straight-alpha RGBA and is
-        // packed into the parallel color atlas. Everything else is a coverage
-        // mask on the R8 atlas.
-        let raster = Raster {
-            w: image.placement.width,
-            h: image.placement.height,
-            left: image.placement.left,
-            top: image.placement.top,
-            is_color: matches!(image.content, swash::scale::image::Content::Color),
-            data: image.data,
-        };
         self.glyphs.insert(key, raster)
     }
 
@@ -508,6 +486,45 @@ impl GlyphAtlas {
             upload_glyph(queue, &self.color_texture, x, y, w, h, 4, data);
         }
     }
+}
+
+/// Rasterize one glyph at `size`, in device pixels, through Swash.
+///
+/// The caller passes the logical size times the density (`CANVAS-033`). A
+/// colour glyph comes back as straight-alpha RGBA, anything else as an R8
+/// coverage mask.
+pub(super) fn rasterize(
+    scale_cx: &mut swash::scale::ScaleContext,
+    font: swash::FontRef<'_>,
+    size: f32,
+    normalized_coords: &[swash::NormalizedCoord],
+    glyph_id: u16,
+) -> Option<Raster> {
+    // Source order: an embedded colour bitmap (CBDT emoji), then a colour
+    // outline (COLR), then the plain outline. `Format::Alpha` only governs how
+    // outlines are rasterized; it never flattens a colour bitmap to a mask.
+    let image = swash::scale::Render::new(&[
+        swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
+        swash::scale::Source::ColorOutline(0),
+        swash::scale::Source::Outline,
+    ])
+    .format(swash::zeno::Format::Alpha)
+    .render(
+        &mut scale_cx
+            .builder(font)
+            .size(size)
+            .normalized_coords(normalized_coords)
+            .build(),
+        glyph_id,
+    )?;
+    Some(Raster {
+        w: image.placement.width,
+        h: image.placement.height,
+        left: image.placement.left,
+        top: image.placement.top,
+        is_color: matches!(image.content, swash::scale::image::Content::Color),
+        data: image.data,
+    })
 }
 
 /// Upload one rasterized glyph bitmap to `texture` at `(x, y)`.
@@ -587,6 +604,51 @@ mod tests {
         (at(slot.uv_min[0]), at(slot.uv_min[1]))
     }
 
+    /// Rasterize the glyph `ch` of a shipped face at `size` device pixels.
+    fn raster_of(file: &str, ch: char, size: f32) -> Raster {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        let bytes = std::fs::read(format!("{dir}{file}")).expect("a shipped face");
+        let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
+        let glyph = font.charmap().map(ch);
+        let mut scale_cx = swash::scale::ScaleContext::new();
+        rasterize(&mut scale_cx, font, size, &[], glyph).expect("a raster")
+    }
+
+    /// A glyph rasterized for a density of 2 has twice the texels of the
+    /// logical one (`CANVAS-033`).
+    ///
+    /// A raster at the logical size, stretched over a dense screen, would
+    /// draw blurred.
+    #[test]
+    fn a_dense_raster_has_the_physical_resolution() {
+        let logical = raster_of("NotoSans-Regular.ttf", 'H', 14.0);
+        let dense = raster_of("NotoSans-Regular.ttf", 'H', 28.0);
+        assert!(logical.h > 0 && !logical.is_color);
+        assert!(
+            dense.h.abs_diff(2 * logical.h) <= 1,
+            "{} vs {}",
+            dense.h,
+            logical.h
+        );
+        assert!(
+            dense.w.abs_diff(2 * logical.w) <= 1,
+            "{} vs {}",
+            dense.w,
+            logical.w
+        );
+    }
+
+    /// An emoji rasterizes to colour and a letter to a mask, which is what
+    /// routes each to its own atlas (`CANVAS-019`).
+    #[test]
+    fn an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask() {
+        let emoji = raster_of("NotoColorEmoji.ttf", '\u{1F44D}', 28.0);
+        assert!(emoji.is_color && emoji.h > 0);
+        assert_eq!(emoji.data.len(), (emoji.w * emoji.h * 4) as usize, "RGBA");
+        let letter = raster_of("NotoSans-Regular.ttf", 'a', 28.0);
+        assert_eq!(letter.data.len(), (letter.w * letter.h) as usize, "R8");
+    }
+
     /// A glyph goes right of the last one, with one pixel of padding. When
     /// the row is full, a shelf opens below the row's tallest glyph. A glyph
     /// taller than what is left does not fit.
@@ -622,7 +684,7 @@ mod tests {
 
     /// A full atlas drops the glyph for this frame and moves nothing. The
     /// next frame repacks the glyphs drawn lately, the most recent first, and
-    /// drops the ones not drawn for more than two frames.
+    /// drops the ones not drawn for more than two frames (`CANVAS-021`).
     #[test]
     fn an_overflow_repacks_the_hot_glyphs_at_the_next_frame() {
         let mut cache = GlyphCache::new(16);
@@ -636,7 +698,10 @@ mod tests {
         let hot = cache.insert(key(3), mask(4, 3)).expect("hot fits");
         cache.take_uploads();
 
-        assert!(cache.insert(key(4), mask(16, 4)).is_none(), "the atlas is full");
+        assert!(
+            cache.insert(key(4), mask(16, 4)).is_none(),
+            "the atlas is full"
+        );
         // Drawn again this frame: the hot glyph keeps its place until the next.
         let unmoved = cache.lookup(&key(3)).expect("still cached");
         assert_eq!(unmoved.uv_min, hot.uv_min, "nothing moves mid-frame");
@@ -651,6 +716,64 @@ mod tests {
         let (masks, _) = cache.take_uploads();
         let bytes: Vec<u8> = masks.iter().map(|upload| upload.4[0]).collect();
         assert_eq!(bytes, [3, 2], "both are uploaded again, from their bitmaps");
+        assert_eq!(cache.size, 16, "the atlas repacks and never grows");
+    }
+
+    /// Covers `CANVAS-054`: a glyph that survives a repack draws what it drew.
+    /// Its bitmap, size and bearings are the ones it was rasterized with.
+    #[test]
+    fn a_repack_moves_a_surviving_glyph_and_changes_nothing_it_draws() {
+        let mut cache = GlyphCache::new(16);
+        cache.begin_frame();
+        cache.insert(key(1), mask(4, 1)).expect("cold fits");
+        cache.begin_frame();
+        cache.begin_frame();
+        cache.begin_frame();
+        let mut glyph = mask(5, 0);
+        glyph.data = (0..25).collect();
+        let before = cache.insert(key(2), glyph).expect("hot fits");
+        cache.take_uploads();
+        assert!(
+            cache.insert(key(3), mask(16, 3)).is_none(),
+            "the atlas is full"
+        );
+        cache.begin_frame();
+        let after = cache.lookup(&key(2)).expect("the hot glyph survives");
+        assert_ne!(after.uv_min, before.uv_min, "the repack moved it");
+        let size = |s: AtlasSlot| (s.pixel_width, s.pixel_height, s.bearing_left, s.bearing_top);
+        assert_eq!(size(after), size(before));
+        let (masks, _) = cache.take_uploads();
+        let (x, y) = origin(after, 16);
+        let expected: Vec<u8> = (0..25).collect();
+        assert_eq!(
+            masks,
+            vec![(x, y, 5, 5, expected)],
+            "its own bitmap, at its new place"
+        );
+    }
+
+    /// Covers `CANVAS-020`: a session drawing no colour glyph never asks for
+    /// the full colour atlas. The first colour glyph asks for it once.
+    #[test]
+    fn the_color_atlas_is_grown_only_for_a_color_glyph() {
+        let mut cache = GlyphCache::new(64);
+        for glyph in 0..20 {
+            cache.begin_frame();
+            cache.insert(key(glyph), mask(4, 1));
+        }
+        assert!(!cache.color_atlas_due(), "no colour glyph, no colour atlas");
+        let emoji = Raster {
+            is_color: true,
+            data: vec![5; 4 * 4 * 4],
+            ..mask(4, 0)
+        };
+        assert!(cache.insert(key(99), emoji).is_none());
+        assert!(
+            cache.color_atlas_due(),
+            "the first colour glyph asks for it"
+        );
+        cache.color_ready = true;
+        assert!(!cache.color_atlas_due(), "grown once");
     }
 
     /// An invisible glyph takes no space and queues nothing, and a
@@ -666,7 +789,10 @@ mod tests {
         let slot = cache.insert(key(1), blank).expect("a blank slot");
         assert_eq!((slot.pixel_width, slot.uv_max), (0, [0.0, 0.0]));
         assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
-        assert!(cache.insert(key(2), mask(8, 1)).is_none(), "the atlas is full");
+        assert!(
+            cache.insert(key(2), mask(8, 1)).is_none(),
+            "the atlas is full"
+        );
         cache.begin_frame();
         assert!(cache.lookup(&key(1)).is_some(), "the blank slot survives");
     }

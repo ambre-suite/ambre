@@ -498,6 +498,7 @@ impl TrameView {
             content,
             content_strip,
             overlay,
+            backdrop: self.theme.palette().content_bg,
         }
     }
 

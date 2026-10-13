@@ -43,6 +43,98 @@ fn glyph_box(slot: &AtlasSlot, density: f32) -> (f32, f32, f32, f32) {
     )
 }
 
+/// The two batches a placed glyph lands in.
+///
+/// A `tint` of `Some` names the alpha atlas, drawn in that colour. `None` names
+/// the colour atlas, drawn untinted. [`QuadRenderer`] is the frame's sink.
+pub(super) trait GlyphSink {
+    /// An axis-aligned quad, as `[x, y, width, height]` in screen pixels.
+    fn glyph(&mut self, rect: [f32; 4], uv: [[f32; 2]; 2], tint: Option<Color>);
+    /// A rotated quad, by its four screen corners.
+    fn glyph_corners(&mut self, corners: [[f32; 2]; 4], uv: [[f32; 2]; 2], tint: Option<Color>);
+}
+
+impl GlyphSink for QuadRenderer {
+    fn glyph(&mut self, [x, y, w, h]: [f32; 4], [min, max]: [[f32; 2]; 2], tint: Option<Color>) {
+        match tint {
+            Some(color) => self.push_glyph(x, y, w, h, min, max, color),
+            None => self.push_color_glyph(x, y, w, h, min, max),
+        }
+    }
+
+    fn glyph_corners(&mut self, corners: [[f32; 2]; 4], uv: [[f32; 2]; 2], tint: Option<Color>) {
+        match tint {
+            Some(color) => self.push_glyph_quad(corners, uv[0], uv[1], color),
+            None => self.push_color_glyph_quad(corners, uv[0], uv[1]),
+        }
+    }
+}
+
+/// Where one glyph of a run is drawn.
+struct GlyphPlacement {
+    /// The glyph origin on the baseline, in screen space.
+    origin: Point,
+    /// The run's linear part when it is rotated; `None` draws axis-aligned.
+    linear: Option<Affine>,
+    /// Device pixels per logical pixel.
+    density: f32,
+    /// The active clip, which trims an axis-aligned glyph.
+    clip: Option<Rect>,
+    /// The run's colour, which tints a mask glyph.
+    color: Color,
+}
+
+/// Place one rasterized glyph and hand it to the batch its atlas names.
+///
+/// A colour glyph goes to the colour batch untinted; a mask glyph goes to the
+/// alpha batch in the run's colour (`CANVAS-019`). An axis-aligned glyph
+/// straddling the clip is trimmed, its UVs remapped, never drawn whole.
+fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) {
+    let tint = (!slot.is_color).then_some(at.color);
+    let (bl, bt, sw, sh) = glyph_box(slot, at.density);
+    let origin = at.origin;
+
+    // Rotated run: corners = origin + linear * local offset. A rotated run
+    // carries no cell clip, so it skips the trim below.
+    if let Some(linear) = at.linear {
+        let (bl, bt, w, h) = (bl as f64, bt as f64, sw as f64, sh as f64);
+        let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
+        let corners = local.map(|(ox, oy)| {
+            let v = linear * Point::new(ox, oy);
+            [(origin.x + v.x) as f32, (origin.y + v.y) as f32]
+        });
+        sink.glyph_corners(corners, [slot.uv_min, slot.uv_max], tint);
+        return;
+    }
+
+    // Bitmap top-left in screen space. The top bearing points up, so subtract.
+    let (x0, y0) = (origin.x as f32 + bl, origin.y as f32 - bt);
+    let (x1, y1) = (x0 + sw, y0 + sh);
+    let Some(clip) = at.clip else {
+        sink.glyph([x0, y0, sw, sh], [slot.uv_min, slot.uv_max], tint);
+        return;
+    };
+    // A glyph straddling the clip is trimmed and its UVs remapped. Drawn whole,
+    // an overflowing cell's last glyph spills into its neighbour.
+    let (cx0, cy0, cx1, cy1) = (
+        clip.x0 as f32,
+        clip.y0 as f32,
+        clip.x1 as f32,
+        clip.y1 as f32,
+    );
+    if x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 {
+        return;
+    }
+    let (nx0, nx1) = (x0.max(cx0), x1.min(cx1));
+    let (ny0, ny1) = (y0.max(cy0), y1.min(cy1));
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+    let u0 = lerp(slot.uv_min[0], slot.uv_max[0], (nx0 - x0) / sw);
+    let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
+    let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
+    let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
+    sink.glyph([nx0, ny0, nx1 - nx0, ny1 - ny0], [[u0, v0], [u1, v1]], tint);
+}
+
 // ============================================================================
 // WgpuSurface
 // ============================================================================
@@ -258,83 +350,14 @@ impl DrawSurface for WgpuSurface<'_> {
 
             // Transform the glyph origin from run-local to screen space.
             let origin = transform * Point::new(gx as f64, gy as f64);
-
-            // Rotated run: emit a rotated quad (corners = origin + linear * local
-            // offset) and skip the axis-aligned path below.
-            if rotated {
-                let (bl, bt, w, h) = glyph_box(&slot, density);
-                let (bl, bt, w, h) = (bl as f64, bt as f64, w as f64, h as f64);
-                let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
-                let corners = local.map(|(ox, oy)| {
-                    let v = linear * Point::new(ox, oy);
-                    [(origin.x + v.x) as f32, (origin.y + v.y) as f32]
-                });
-                if slot.is_color {
-                    self.renderer
-                        .push_color_glyph_quad(corners, slot.uv_min, slot.uv_max);
-                } else {
-                    self.renderer
-                        .push_glyph_quad(corners, slot.uv_min, slot.uv_max, color);
-                }
-                continue;
-            }
-
-            // Bitmap top-left in screen space.
-            // bearing_top is positive upward (font convention), so subtract.
-            let (bl, bt, sw, sh) = glyph_box(&slot, density);
-            let sx = origin.x as f32 + bl;
-            let sy = origin.y as f32 - bt;
-
-            // Clip the glyph quad to the active clip rect. A glyph straddling an
-            // edge must be *trimmed* (with its UVs remapped proportionally), not
-            // drawn whole. Otherwise an overflowing cell's last glyph spills a
-            // full character into its neighbour (`trame-cell-rendering`).
-            let (x0, y0, x1, y1) = (sx, sy, sx + sw, sy + sh);
-            if let Some(clip) = clip {
-                let (cx0, cy0) = (clip.x0 as f32, clip.y0 as f32);
-                let (cx1, cy1) = (clip.x1 as f32, clip.y1 as f32);
-                // Fully outside: skip.
-                if x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 {
-                    continue;
-                }
-                // Clamp the quad, then map the clamped extents back to UV space
-                // by the (axis-aligned) linear glyph mapping.
-                let (nx0, nx1) = (x0.max(cx0), x1.min(cx1));
-                let (ny0, ny1) = (y0.max(cy0), y1.min(cy1));
-                let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
-                let u0 = lerp(slot.uv_min[0], slot.uv_max[0], (nx0 - x0) / sw);
-                let u1 = lerp(slot.uv_min[0], slot.uv_max[0], (nx1 - x0) / sw);
-                let v0 = lerp(slot.uv_min[1], slot.uv_max[1], (ny0 - y0) / sh);
-                let v1 = lerp(slot.uv_min[1], slot.uv_max[1], (ny1 - y0) / sh);
-                // Color emoji route to the RGBA color atlas/pipeline (untinted);
-                // regular glyphs stay on the tinted coverage-mask path.
-                if slot.is_color {
-                    self.renderer.push_color_glyph(
-                        nx0,
-                        ny0,
-                        nx1 - nx0,
-                        ny1 - ny0,
-                        [u0, v0],
-                        [u1, v1],
-                    );
-                } else {
-                    self.renderer.push_glyph(
-                        nx0,
-                        ny0,
-                        nx1 - nx0,
-                        ny1 - ny0,
-                        [u0, v0],
-                        [u1, v1],
-                        color,
-                    );
-                }
-            } else if slot.is_color {
-                self.renderer
-                    .push_color_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max);
-            } else {
-                self.renderer
-                    .push_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max, color);
-            }
+            let placement = GlyphPlacement {
+                origin,
+                linear: rotated.then_some(linear),
+                density,
+                clip,
+                color,
+            };
+            emit_glyph(&mut *self.renderer, &slot, &placement);
         }
     }
 
@@ -473,9 +496,7 @@ fn stroke_mesh(path: &BezPath, stroke: &Stroke, t: Affine, tolerance: f32) -> Op
         .tessellate_path(
             &build_lyon_path(path),
             &opts,
-            &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
-                screen_vertex(v.position(), t)
-            }),
+            &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| screen_vertex(v.position(), t)),
         )
         .ok()?;
     Some(mesh)
@@ -579,6 +600,75 @@ mod tests {
                 f64::from(cross.abs()) / 2.0
             })
             .sum()
+    }
+
+    /// Records each glyph a run hands over, with the tint that routes it.
+    #[derive(Default)]
+    struct Batches {
+        quads: Vec<([f32; 4], Option<Color>)>,
+        corners: Vec<Option<Color>>,
+    }
+
+    impl GlyphSink for Batches {
+        fn glyph(&mut self, rect: [f32; 4], _: [[f32; 2]; 2], tint: Option<Color>) {
+            self.quads.push((rect, tint));
+        }
+        fn glyph_corners(&mut self, _: [[f32; 2]; 4], _: [[f32; 2]; 2], tint: Option<Color>) {
+            self.corners.push(tint);
+        }
+    }
+
+    /// A 10x10 slot standing on the baseline, a mask glyph or a colour one.
+    fn glyph(is_color: bool) -> AtlasSlot {
+        AtlasSlot {
+            is_color,
+            ..slot(0, 10, 10, 10)
+        }
+    }
+
+    /// A run mixing a letter and an emoji paints both, each through its own
+    /// atlas (`CANVAS-019`).
+    ///
+    /// The letter is tinted from the alpha atlas; the emoji is drawn untinted
+    /// from the colour one, flat or rotated.
+    #[test]
+    fn a_mask_glyph_and_a_colour_glyph_land_in_their_own_batch() {
+        let red = Color::from_rgb8(200, 0, 0);
+        let at = |linear| GlyphPlacement {
+            origin: Point::new(0.0, 10.0),
+            linear,
+            density: 1.0,
+            clip: None,
+            color: red,
+        };
+        let mut batches = Batches::default();
+        emit_glyph(&mut batches, &glyph(false), &at(None));
+        emit_glyph(&mut batches, &glyph(true), &at(None));
+        let tints: Vec<_> = batches.quads.iter().map(|q| q.1).collect();
+        assert_eq!(tints, vec![Some(red), None]);
+
+        let turned = Some(Affine::rotate(0.5));
+        emit_glyph(&mut batches, &glyph(false), &at(turned));
+        emit_glyph(&mut batches, &glyph(true), &at(turned));
+        assert_eq!(batches.corners, vec![Some(red), None]);
+    }
+
+    /// A glyph straddling the clip is trimmed to it, and one outside is
+    /// dropped.
+    #[test]
+    fn a_glyph_is_trimmed_to_the_clip() {
+        let at = |x| GlyphPlacement {
+            origin: Point::new(x, 10.0),
+            linear: None,
+            density: 1.0,
+            clip: Some(Rect::new(0.0, 0.0, 15.0, 20.0)),
+            color: Color::BLACK,
+        };
+        let mut batches = Batches::default();
+        emit_glyph(&mut batches, &glyph(false), &at(10.0));
+        emit_glyph(&mut batches, &glyph(false), &at(20.0));
+        assert_eq!(batches.quads.len(), 1, "the glyph past the clip is dropped");
+        assert_eq!(batches.quads[0].0, [10.0, 0.0, 5.0, 10.0]);
     }
 
     /// A closed triangle with a base of 10 and a height of 10.

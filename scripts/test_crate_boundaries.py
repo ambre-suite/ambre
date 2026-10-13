@@ -47,6 +47,7 @@ def scratch(tmp: str) -> Path:
         "fn keys() { register(trame_chrome::COMMANDS); }\n",
     )
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
+    write(root, f"{cb.RENDERER}/mod.rs", "fn quad(c: Color) -> [f32; 4] { c.components }\n")
     write(
         root,
         "crates/ambre-sync/Cargo.toml",
@@ -76,7 +77,59 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_storage(errors)
             cb.check_passphrase(errors)
             cb.check_lints(errors)
+            cb.check_pdf(errors)
+            cb.check_fonts(errors)
+            cb.check_renderer_colors(errors)
             return errors
+
+    def test_a_renderer_clearing_to_its_own_colour_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, f"{cb.RENDERER}/renderer.rs", "fn pass() { Clear(wgpu::Color::WHITE); }\n")
+            errors = self.run_checks(root)
+        self.assertTrue(any("a colour of its own: `Color::WHITE`" in e for e in errors), errors)
+
+    def test_a_colour_in_the_renderer_tests_stays_free(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(
+                root,
+                f"{cb.RENDERER}/surface.rs",
+                "fn draw(c: Color) {}\n\n#[cfg(test)]\nmod tests {\n    const RED: Color = Color::from_rgb8(200, 0, 0);\n}\n",
+            )
+            errors = self.run_checks(root)
+        self.assertEqual(errors, [])
+
+    def test_a_pdf_call_outside_the_logic_thread_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-toile/src/ui/export.rs", "fn save() { let s = KrillaSurface::new(); }\n")
+            errors = self.run_checks(root)
+        self.assertTrue(any("outside the Logic thread: `KrillaSurface`" in e for e in errors), errors)
+
+    def test_a_pdf_call_under_the_logic_directory_stays_free(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-toile/src/logic/pdf.rs", "fn save() { krilla::Document::new(); }\n")
+            errors = self.run_checks(root)
+        self.assertEqual(errors, [])
+
+    def test_an_embedded_font_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            write(root, "crates/ambre-canvas/src/fonts.rs", 'static F: &[u8] = include_bytes!("NotoSans.ttf");\n')
+            errors = self.run_checks(root)
+        self.assertTrue(any("a font embedded in the binary" in e for e in errors), errors)
 
     def test_the_real_tree_is_clean(self):
         self.assertEqual(self.run_checks(cb.ROOT), [])

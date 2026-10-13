@@ -40,7 +40,7 @@ use rustc_hash::FxHashSet;
 /// demand by [`LazyFontLoader`]. Same-origin URLs (no CDN, `UI-THREAD-004`); a
 /// missing file logs a warning and leaves that face absent rather than failing
 /// boot.
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(test, target_arch = "wasm32"))]
 const BASE_FONTS: [(&str, &str); 6] = [
     ("/fonts/NotoSans-Regular.ttf", "NotoSans-Regular.ttf"),
     ("/fonts/NotoSans-Bold.ttf", "NotoSans-Bold.ttf"),
@@ -202,7 +202,7 @@ impl LazyFontLoader {
     /// Stand in for a resolved fetch, so a test can drain what a browser would
     /// have delivered.
     #[cfg(test)]
-    fn deliver(&self, bytes: Vec<u8>) {
+    pub(crate) fn deliver(&self, bytes: Vec<u8>) {
         self.inbox.borrow_mut().pending.push(bytes);
     }
 }
@@ -287,6 +287,21 @@ mod tests {
                 font_cx.collection.family_id(family).is_none(),
                 "the UI context found `{family}` on the machine"
             );
+        }
+    }
+
+    /// Every face, base or lazy, is fetched from a path on the page's own
+    /// origin (`CANVAS-051`).
+    ///
+    /// A scheme, a host or a protocol-relative prefix would tell a third party
+    /// which scripts a user reads.
+    #[test]
+    fn every_face_is_fetched_from_the_page_origin() {
+        let base = BASE_FONTS.iter().map(|(url, _)| *url);
+        let lazy = LazyFont::ALL.iter().map(|font| font.asset_url());
+        for url in base.chain(lazy) {
+            assert!(url.starts_with("/fonts/"), "`{url}` leaves the origin");
+            assert!(!url.contains("//"), "`{url}` names a host");
         }
     }
 
