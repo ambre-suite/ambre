@@ -14,6 +14,7 @@ use super::*;
 mod app_root;
 mod commands;
 mod share;
+mod sync_badge;
 use app_root::AppRoot;
 pub(crate) use commands::{AppHandler, CommandPath};
 

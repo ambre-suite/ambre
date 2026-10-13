@@ -24,8 +24,8 @@ other five documents of the DOM side.
 | `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none | unheld -- no file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none | unheld -- each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none | unheld -- the style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | none | unheld -- the chip is hidden at the base and restored over 1024, and a chord names a key a phone has not got. No test drives a narrow viewport, so nothing reads the chip at any width; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | none | unheld -- the label is hidden at the base and restored from 600, and nothing reads it at either width; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- a chord chip mounted in a frame of 400, 599, 600, 1024 and 1025 pixels, read off the computed style | none | verified |
+| `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- the sync badge mounted with the shell stylesheet at each side of 600, the label read off the computed style | none | verified |
 | `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
 | `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none | unheld -- no code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it; lands with the `The chrome shell and the launcher held` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -34,9 +34,9 @@ other five documents of the DOM side.
   and that is charged to `ambre-spec-frame.md`.
 * **Boundary.** none: the window width is read from the browser and never leaves the client. It is a
   signal the page already carries, and nothing sends it anywhere.
-* **Verification.** 0 `verified`, 7 `untested`, 1 `unimplemented`. Nothing holds a single row, for
-  one reason. Every rule is a property of a rendered page at a given width, and no tier resizes a
-  viewport. What the stylesheet declares is checked by looking at it.
+* **Verification.** 2 `verified`, 5 `untested`, 1 `unimplemented`. A width query reads the viewport
+  of its own frame. The browser tier sets a width by mounting a component in a sized frame.
+  The rules of absence wait on a scan of the source.
 ---
 
 ## 2. MODEL

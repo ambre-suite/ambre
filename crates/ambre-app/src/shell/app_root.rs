@@ -5,6 +5,7 @@
 
 use super::super::*;
 use super::share::ShareMembers;
+use super::sync_badge::SyncBadge;
 
 /// Perform the half of a followed link that leaves the board (`TOILE-065`,
 /// `TOILE-114`). An address opens in a fresh tab with `noopener,noreferrer`, so
@@ -398,10 +399,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <Header slot>
                 <span class="title">"Ambre"</span>
                 <span class="spacer"></span>
-                <span class="ambre-sync">
-                    <span class=move || chrome_status.get().dot_class()></span>
-                    <span class="label">{move || chrome_status.get().label()}</span>
-                </span>
+                <SyncBadge status=chrome_status.into() />
                 <button
                     class="icon"
                     title="Toggle theme"

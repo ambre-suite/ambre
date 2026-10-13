@@ -35,7 +35,7 @@
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 8 |
-| `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
+| `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 5 |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 24 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 1 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 97 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 95 loose.**
