@@ -156,3 +156,112 @@ fn the_caret_blinks_on_the_clock_the_view_is_handed() {
     rig.frame();
     assert!(!rig.view.caret_on, "half a period passed");
 }
+
+/// A blob carrying a grid payload whose `src_row` names where it came from,
+/// with `text` as its `text/plain` mirror.
+fn clip(src_row: u32, text: &str) -> ambre_bus::ClipboardBlob {
+    let payload = ambre_bus::ClipboardPayload {
+        src_row,
+        rows: 1,
+        cols: 1,
+        ..Default::default()
+    };
+    ambre_bus::ClipboardBlob {
+        text: text.to_owned(),
+        html: None,
+        ambre: postcard::to_allocvec(&payload).ok(),
+        plain: false,
+    }
+}
+
+/// The payload one `PasteRange` carried, or `None` for any other traffic.
+fn pasted(sent: &[TrameCommand]) -> Option<&ambre_bus::ClipboardPayload> {
+    match sent {
+        [TrameCommand::PasteRange { payload, .. }] => Some(payload),
+        _ => None,
+    }
+}
+
+/// Covers `CHROME-062`: a printable key is left to the text path, on the grid
+/// and in an open editor alike.
+#[test]
+fn a_printable_key_is_not_consumed() {
+    let mut rig = Rig::new();
+    for key in ["a", "Z", "é", " ", "1", "="] {
+        assert!(!rig.key(key), "{key:?} was consumed on the grid");
+    }
+    rig.type_text("x");
+    for key in ["a", "Z", "é", " ", "1", "="] {
+        assert!(!rig.key(key), "{key:?} was consumed in the editor");
+    }
+}
+
+/// Covers `UI-THREAD-045`: with the Logic thread gone, the copy is refused, so
+/// no cut is armed and no later paste clears the range.
+#[test]
+fn a_cut_whose_copy_went_nowhere_arms_nothing() {
+    let Rig {
+        mut view, to_logic, ..
+    } = Rig::new();
+    drop(to_logic);
+    view.state.select_rect(0, 0, 1, 1);
+    assert_eq!(view.clipboard_write(true), ambre_bus::CopyOutcome::Nothing);
+    assert!(!view.cut_pending, "no cut is armed");
+    assert_eq!(view.state.clipboard_anchor, None, "no range is marked");
+}
+
+/// Covers `UI-THREAD-022` and `UI-THREAD-046`: the kept copy answers on our
+/// token, the clipboard's bytes on another, and its text when it has no bytes.
+#[test]
+fn a_paste_takes_the_highest_rung_it_can_serve() {
+    let mut rig = Rig::new();
+    rig.view.last_clip = Some(clip(7, "kept"));
+    rig.sent();
+    rig.view.paste_clipboard(clip(3, "read"), true);
+    assert_eq!(pasted(&rig.sent()).map(|p| p.src_row), Some(7), "own copy");
+    rig.view.paste_clipboard(clip(3, "read"), false);
+    assert_eq!(
+        pasted(&rig.sent()).map(|p| p.src_row),
+        Some(3),
+        "another copy"
+    );
+    let foreign = ambre_bus::ClipboardBlob {
+        ambre: None,
+        ..clip(3, "plain")
+    };
+    rig.view.paste_clipboard(foreign, false);
+    let sent = rig.sent();
+    let cells = pasted(&sent).map(|p| p.cells.iter().map(|c| c.raw.as_str()).collect::<Vec<_>>());
+    assert_eq!(cells, Some(vec!["plain"]), "no bytes: the text, as cells");
+}
+
+/// Covers `UI-THREAD-046`: an open editor is the highest rung, so the text
+/// goes in at the caret and no range is pasted.
+#[test]
+fn a_paste_into_an_open_editor_inserts_the_text() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("4");
+    rig.view.paste_clipboard(clip(3, "2"), false);
+    assert!(rig.key("Enter"));
+    rig.frame();
+    let sent = rig.sent();
+    assert!(
+        sent.iter()
+            .any(|c| matches!(c, TrameCommand::CommitCellEdit { text, .. } if text == "42")),
+        "sent {sent:?}"
+    );
+    assert!(
+        !sent
+            .iter()
+            .any(|c| matches!(c, TrameCommand::PasteRange { .. }))
+    );
+}
+
+/// Covers `UI-THREAD-047`: a paste leaves no blob for the host to write.
+#[test]
+fn a_paste_writes_nothing_back() {
+    let mut rig = Rig::new();
+    rig.view.paste_clipboard(clip(3, "read"), false);
+    assert_eq!(rig.view.poll_clipboard(), None);
+}

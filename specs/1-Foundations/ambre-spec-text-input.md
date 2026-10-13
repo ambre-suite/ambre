@@ -23,9 +23,9 @@ other five documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | none | unheld -- the placement is a transform the view refreshes as the caret moves. If it drifts, the input-method window opens in the wrong corner of the screen, and no test in the wasm tier drives a composition; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | none | unheld -- the rule is four style declarations in the shell stylesheet, and nothing reads them back. A drifting one draws a second caret or a doubled selection under the one the canvas paints; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-016` | `INV` | The pipe MUST be moved by a transform, never by an offset that reflows the page. | this spec section 2 | none | unheld -- the placement writes a transform and a height and nothing else, so the element stays off the layout path. Nothing refuses the offset that would put it back on; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | `ambre_app::host::pipe::tests::the_pipe_moves_by_a_transform_to_the_point_it_is_given` -- the pipe lands where the view puts it | partial -- Toile places it on the editor's caret. Trame parks it on the cell, not on the caret inside it, and Prose never places it, so the input-method window opens off the caret; lands with the `The input pipe follows every caret` Story (`ambre-roadmap.md` E9) | partial |
+| `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | `ambre_app::host::pipe::tests::the_pipe_displays_nothing` -- the shipped rules applied, the computed text, caret, background and selection colours read back transparent | none | verified |
+| `CHROME-016` | `INV` | The pipe MUST be moved by a transform, never by an offset that reflows the page. | this spec section 2 | `ambre_app::host::pipe::tests::the_pipe_moves_by_a_transform_to_the_point_it_is_given` -- a placement writes a transform and no offset | none | verified |
 
 ### 1.2 Type a character
 
@@ -34,10 +34,10 @@ gets there: it rides the chord path instead.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-061` | `POST` | A typed character MUST reach the view as one committed run. | this spec section 2, the three paths in | none | unheld -- the buffer listener forwards the whole buffer as one run, and no test in the wasm tier types into the pipe; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | none | unheld -- the host clears after each committed run and an opening edit clears again. A missed clear repeats the whole buffer into the document on the next keystroke; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-062` | `FRAME` | The chord path MUST NOT consume a printable character. | this spec section 2, the three paths in; this spec section 3, row 5 | none | unheld -- every key reaches the view first, and the buffer event fires only for the keys it leaves unconsumed, because a consumed key has its default prevented. A view that consumed a letter would silence typing, and nothing asserts it does not; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-020` | `FAIL` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | none | unheld -- the document listener tests the event's target against the pipe and against the editable tags, input, textarea, select and contenteditable, and returns early. Nothing refuses a listener added later without that test, which is a formula-bar Enter committing the cell twice; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-061` | `POST` | A typed character MUST reach the view as one committed run. | this spec section 2, the three paths in | `ambre_app::host::pipe::tests::a_typed_run_reaches_the_view_whole_and_the_pipe_empties` -- a buffer holding several characters reaches the view as one run | none | verified |
+| `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | `ambre_app::host::pipe::tests::a_typed_run_reaches_the_view_whole_and_the_pipe_empties` -- the buffer reads empty after each run, and the next keystroke carries itself alone | none | verified |
+| `CHROME-062` | `FRAME` | The chord path MUST NOT consume a printable character. | this spec section 2, the three paths in; this spec section 3, row 5 | `ambre_app::host::pipe::tests::only_a_consumed_key_loses_its_default` -- the host half. `ambre_trame::ui::view::view_tests::a_printable_key_is_not_consumed`; `ambre_toile::ui::view::view_tests::a_printable_key_in_an_editor_is_not_consumed`; `ambre_prose::input_tests::a_printable_character_is_not_a_key` -- each view leaves a letter, a digit, an accented letter and the space | none | verified |
+| `CHROME-020` | `FAIL` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | `ambre_app::host::pipe::tests::a_key_aimed_at_another_editable_element_never_reaches_the_view` -- a key raised on an input, a textarea, a select and a contenteditable host reaches nothing, and the same key on the pipe does | none | verified |
 
 ### 1.3 Compose with an input method
 
@@ -46,10 +46,10 @@ be read.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-063` | `POST` | The preview MUST come from the composition events. | this spec section 2, the composition window | none | unheld -- each update event forwards the running preview and the canvas draws it as unconfirmed text. No test drives an input method, in any tier; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-019` | `POST` | A composition MUST end by committing its final text. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | none | unheld -- the last composition event forwards the final run and the editing core replaces the preview with it. No test drives an input method, in any tier; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-064` | `POST` | A composition MUST end by clearing the preview. | this spec section 2, the composition window | none | unheld -- the last event lowers the flag and clears the buffer, and the editing core drops the preview when the final run replaces it. A preview left behind is text the canvas keeps drawing and the document does not hold; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
-| `CHROME-018` | `FRAME` | While a composition is running, the buffer MUST NOT be read. | this spec section 2 | none | unheld -- a shared flag is raised on the first composition event and lowered on the last, and the buffer listener returns early while it is up. Nothing asserts the two stay in step, and a stuck flag silences typing altogether; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-063` | `POST` | The preview MUST come from the composition events. | this spec section 2, the composition window | `ambre_app::host::pipe::tests::a_composition_drives_the_preview_and_ends_in_one_commit` -- raised composition events, each update forwarded as the preview | none | verified |
+| `CHROME-019` | `POST` | A composition MUST end by committing its final text. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | `ambre_app::host::pipe::tests::a_composition_drives_the_preview_and_ends_in_one_commit` -- the end event forwards the final run once. `ambre_prose::input_tests::a_composition_ends_in_one_insertion` -- the editing core commits it | none | verified |
+| `CHROME-064` | `POST` | A composition MUST end by clearing the preview. | this spec section 2, the composition window | `ambre_app::host::pipe::tests::a_composition_drives_the_preview_and_ends_in_one_commit` -- the end empties the pipe and lowers the flag. `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- the editing core drops the preview at the end | none | verified |
+| `CHROME-018` | `FRAME` | While a composition is running, the buffer MUST NOT be read. | this spec section 2 | `ambre_app::host::pipe::tests::a_composition_drives_the_preview_and_ends_in_one_commit` -- buffer events raised mid-composition reach nothing, and typing reads the buffer again after the end | none | verified |
 
 ### 1.4 Copy, cut or paste
 
@@ -57,17 +57,16 @@ The browser maps every clipboard chord, the legacy set included, onto three even
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-021` | `POST` | A copy, a cut and a paste MUST be serviced as the events the browser already sends. | this spec section 2; `ambre-spec-clipboard.md` | none | unheld -- three listeners sit on the pipe, so the legacy chords work for free. No test in the wasm tier raises one; lands with the `The clipboard and the text input held` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-021` | `POST` | A copy, a cut and a paste MUST be serviced as the events the browser already sends. | this spec section 2; `ambre-spec-clipboard.md` | `ambre_app::host::pipe::tests::the_three_clipboard_events_reach_the_host` -- a raised `copy`, `cut` and `paste` each reach the host | none | verified |
 | `CHROME-060` | `FRAME` | Servicing a clipboard event MUST NOT decode its chord a second time. | this spec section 2; `ambre-spec-commands.md`, `UI-THREAD-011` | `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`; `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- the seeding refuses the three identities, so a table that declares their chords still binds none of them and a fourth binding fails the belt rather than pasting twice | none | verified |
 * **Budget.** the keystroke-to-draft row of `ambre-spec-budgets.md section 1`. This element
   is the first hop of that path, and the figure is measured nowhere.
 * **Boundary.** the operating system clipboard, and nothing else. What the copy and the paste may
   carry is `UI-THREAD-006`; the pipe opens no socket, holds no key and writes no store.
-* **Verification.** 1 `verified`, 12 `untested`. The one held row is the one that is pure data:
-  `CHROME-060`, the chords a table may bind. The other twelve are loose for a single reason: every
-  rule here is a property of a live browser with an input method attached. The wasm tier drives a
-  document but not an input method (`ambre-spec-testing.md section 8`). The gap is one gap, not
-  twelve.
+* **Verification.** 12 `verified`, 1 `partial`. The wasm tier wires the six listeners onto a real
+  pipe and raises the events an input method and the keyboard send. It reads the shipped styles
+  back as computed. Each view is held on host for the keys it leaves to the text path. The partial
+  row is the placement: two of the three views do not follow their caret.
 
 ---
 
@@ -125,11 +124,11 @@ recognised and what a cut means per application are `ambre-spec-clipboard.md`.
 **One pipe, and a child view reuses it.** A document opened inside another gets the same element,
 constructed in a mode that does not steal focus from the host document.
 
-**Code:** `crates/ambre-canvas/src/text_input.rs` creates and places the element, and
-`crates/ambre-app/src/host/run.rs` attaches the six listeners and owns the composition flag.
-`crates/ambre-app/src/host/mod.rs` holds the test that keeps a key aimed at another field away from
-the content. The placement callers are `crates/ambre-trame/src/ui/view/lifecycle.rs` and
-`crates/ambre-toile/src/ui/view.rs`, and the style is `crates/ambre-app/styles.css`.
+**Code:** `crates/ambre-canvas/src/text_input.rs` creates and places the element.
+`crates/ambre-app/src/host/pipe.rs` attaches the six listeners and reads the composition flag. Its
+wasm tests raise their events. The placement callers are
+`crates/ambre-trame/src/ui/view/lifecycle.rs` and `crates/ambre-toile/src/ui/view.rs`, and the
+style is `crates/ambre-app/styles.css`.
 
 ---
 

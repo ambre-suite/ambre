@@ -450,8 +450,10 @@ impl TrameView {
         }
         // Authoritative build lives on the Logic thread; the UI holds only the
         // marching-ants anchor and the cut flag (both UI state), set now.
-        if let Err(SendError::Refused) = self.send_command_lossless(TrameCommand::CopyRange) {
-            tracing::error!("Trame: the outbox is full, the copy was dropped");
+        // A copy that went nowhere arms no cut, so it clears nothing
+        // (`UI-THREAD-045`).
+        if self.send_command_lossless(TrameCommand::CopyRange).is_err() {
+            tracing::error!("Trame: the copy went nowhere, so the cut is not armed");
             return CopyOutcome::Nothing;
         }
         self.state.clipboard_anchor = Some(self.state.selection.bounds());

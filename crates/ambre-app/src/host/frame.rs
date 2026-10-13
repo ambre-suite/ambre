@@ -394,8 +394,7 @@ impl FrameHost {
         // comparing the token, then hands the blob to the active view
         // (`UI-THREAD-024`, `UI-THREAD-025`).
         while let Ok(paste) = self.paste_rx.try_recv() {
-            let own_copy = paste.token.as_deref() == Some(&self.clip_token);
-            self.view.paste_clipboard(paste.blob, own_copy);
+            super::pipe::button_paste(self, paste);
         }
 
         // A `Deferred` copy earlier this frame, or the previous one, had its

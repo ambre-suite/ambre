@@ -182,4 +182,48 @@ mod clipboard_tests {
         };
         assert_eq!(ClipboardBlob::source(Some(&kept), &plain, true), &plain);
     }
+
+    /// Every `.rs` file under `dir`, at any depth.
+    fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for path in entries.flatten().map(|entry| entry.path()) {
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// `UI-THREAD-043`: no source but the launcher's clipboard module spells a
+    /// clipboard type, so no application can declare one of its own.
+    #[test]
+    fn only_the_launcher_names_a_clipboard_type() {
+        // A private type is an `x-` type or a `web ` one. Comments may name
+        // them; code may not. The needles are built from pieces, so this file
+        // does not match its own scan.
+        let needles = [concat!("/", "x-"), concat!("\"web", " ")];
+        let spells = |source: String| {
+            source
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .any(|line| needles.iter().any(|n| line.contains(n)))
+        };
+        let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let owner = std::path::Path::new("ambre-app/src/host/mod.rs");
+        let mut files = Vec::new();
+        rust_files(&crates, &mut files);
+        assert!(files.len() > 100, "the scan reads the workspace");
+        let offenders: Vec<_> = files
+            .iter()
+            .filter(|path| !path.ends_with(owner))
+            .filter(|path| std::fs::read_to_string(path).is_ok_and(spells))
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "clipboard types named in {offenders:?}"
+        );
+    }
 }

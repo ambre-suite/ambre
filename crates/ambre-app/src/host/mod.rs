@@ -56,6 +56,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
 mod frame;
+mod pipe;
 mod probe;
 
 pub(crate) use probe::{PageClock, mark};
@@ -141,24 +142,14 @@ pub(crate) fn async_write_clipboard(
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        let text = ("text/plain", Some(tsv.as_str()));
-        let marked = html
-            .as_deref()
-            .map(|h| ambre_bus::ClipboardBlob::mark_html(h, &token));
-        let html = ("text/html", html.as_deref());
-        let payload = (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64.as_deref());
-        let token = (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token.as_str()));
-        // Firefox rejects the `web ` types in the ClipboardItem constructor
-        // (throwaway Firefox 156 run). The copy event left only the token, so
-        // without a second attempt no other application could paste the copy.
-        // The standard write carries the token in an HTML comment where the
-        // view wrote HTML (`UI-THREAD-055`, `UI-THREAD-056`).
-        let (item, web) = match clipboard_item(&[text, html, payload, token]) {
-            Some(item) => (item, true),
-            None => match clipboard_item(&[text, ("text/html", marked.as_deref())]) {
-                Some(item) => (item, false),
-                None => return,
-            },
+        let Some((item, web)) = publish_item(
+            &tsv,
+            html.as_deref(),
+            payload_b64.as_deref(),
+            &token,
+            clipboard_item,
+        ) else {
+            return;
         };
         let items = js_sys::Array::of1(&item);
         let written = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
@@ -166,6 +157,36 @@ pub(crate) fn async_write_clipboard(
         // paste event's reach (`UI-THREAD-054`).
         published.set(web && written.is_ok());
     });
+}
+
+/// The item the asynchronous write publishes, and whether it carries the `web `
+/// types. `build` makes an item from `(type, value)` pairs, or refuses it.
+///
+/// The first attempt carries the mirror, the HTML, the prefixed private bytes
+/// and the prefixed token (`UI-THREAD-006`, `UI-THREAD-023`). Firefox rejects
+/// the `web ` types in the item constructor (throwaway Firefox 156 run). The copy
+/// event left only the token, so without a second attempt no other application
+/// could paste the copy. The second carries the token in an HTML comment where
+/// the view wrote HTML (`UI-THREAD-055`, `UI-THREAD-056`).
+fn publish_item<T>(
+    tsv: &str,
+    html: Option<&str>,
+    payload_b64: Option<&str>,
+    token: &str,
+    build: impl Fn(&[(&str, Option<&str>)]) -> Option<T>,
+) -> Option<(T, bool)> {
+    let text = ("text/plain", Some(tsv));
+    let full = [
+        text,
+        ("text/html", html),
+        (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64),
+        (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token)),
+    ];
+    if let Some(item) = build(&full) {
+        return Some((item, true));
+    }
+    let marked = html.map(|h| ambre_bus::ClipboardBlob::mark_html(h, token));
+    build(&[text, ("text/html", marked.as_deref())]).map(|item| (item, false))
 }
 
 /// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
@@ -501,7 +522,10 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 // the `wasm-bindgen-test-runner` (node, no DOM). See ambre-spec-testing.md.
 #[cfg(test)]
 mod tests {
-    use super::{FrameHost, base64_decode, base64_encode};
+    use super::{
+        AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, AMBRE_CLIPBOARD_WEB_TYPE, FrameHost, base64_decode,
+        base64_encode, clipboard_item, publish_item,
+    };
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -540,6 +564,72 @@ mod tests {
             FrameHost::tick_fps(&mut times, &mut fps, i as f64 * 1000.0 / 60.0);
         }
         assert!((fps - 60.0).abs() < 1.0, "expected ~60 fps, got {fps}");
+    }
+
+    /// Read an item back the way the Paste button does.
+    async fn read_back(item: &web_sys::ClipboardItem) -> (ambre_bus::ClipboardBlob, Option<String>) {
+        let items: wasm_bindgen::JsValue =js_sys::Array::of1(item).into();
+        let read = js_sys::Promise::resolve(&items);
+        crate::platform::read_clipboard_blob(read)
+            .await
+            .expect("the item reads back")
+    }
+
+    fn types(item: &web_sys::ClipboardItem) -> Vec<String> {
+        let mut types: Vec<String> = item.types().iter().filter_map(|t| t.as_string()).collect();
+        types.sort();
+        types
+    }
+
+    /// `UI-THREAD-006` and `UI-THREAD-023`: where the browser takes the `web `
+    /// types, the asynchronous item carries the mirror, the HTML, the private
+    /// bytes and the token. Read back, each holds what the copy published.
+    #[wasm_bindgen_test]
+    async fn the_asynchronous_item_carries_everything_the_copy_published() {
+        let bytes = [1u8, 2, 3];
+        let (item, web) = publish_item(
+            "a\tb",
+            Some("<p>a</p>"),
+            Some(&base64_encode(&bytes)),
+            "ambre-1",
+            clipboard_item,
+        )
+        .expect("an item");
+        assert!(web, "Chrome takes the `web ` types");
+        assert_eq!(
+            types(&item),
+            vec![
+                "text/html",
+                "text/plain",
+                AMBRE_CLIPBOARD_WEB_TYPE,
+                AMBRE_CLIPBOARD_WEB_TOKEN_TYPE,
+            ]
+        );
+        let (blob, token) = read_back(&item).await;
+        assert_eq!(blob.text, "a\tb");
+        assert_eq!(blob.html.as_deref(), Some("<p>a</p>"));
+        assert_eq!(blob.ambre.as_deref(), Some(&bytes[..]));
+        assert_eq!(token.as_deref(), Some("ambre-1"));
+    }
+
+    /// `UI-THREAD-055`: where the browser refuses the `web ` types, the second
+    /// attempt still publishes the mirror and the HTML, the token in the HTML.
+    #[wasm_bindgen_test]
+    async fn a_browser_refusing_the_web_types_still_gets_the_mirror_and_the_html() {
+        let refusing = |entries: &[(&str, Option<&str>)]| {
+            let web = entries
+                .iter()
+                .any(|(kind, value)| value.is_some() && kind.starts_with("web "));
+            if web { None } else { clipboard_item(entries) }
+        };
+        let (item, web) = publish_item("a", Some("<p>a</p>"), Some("AQID"), "ambre-2", refusing)
+            .expect("the second attempt");
+        assert!(!web);
+        assert_eq!(types(&item), vec!["text/html", "text/plain"]);
+        let (blob, token) = read_back(&item).await;
+        assert_eq!(blob.text, "a");
+        assert_eq!(blob.ambre, None);
+        assert_eq!(token.as_deref(), Some("ambre-2"), "the token rides in the HTML");
     }
 
     #[wasm_bindgen_test]

@@ -1932,6 +1932,31 @@ fn a_refused_copy_deletes_nothing() {
     assert!(matches!(sent[0], ProseCommand::CopyRange { .. }));
 }
 
+/// `UI-THREAD-044`: a copy sends the copy request alone and leaves the
+/// document as it was.
+#[test]
+fn a_copy_leaves_the_document_unchanged() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.ui.select_all();
+    assert!(rig.input(ProseInput::Copy { cut: false }));
+    assert!(matches!(
+        rig.sent.as_slice(),
+        [ProseCommand::CopyRange { .. }]
+    ));
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello world"));
+}
+
+/// `CHROME-062`: no printable character is read as a key, so each one is left
+/// to the text path.
+#[test]
+fn a_printable_character_is_not_a_key() {
+    for name in ["a", "A", "Z", "é", " ", "1", "="] {
+        assert_eq!(ProseKey::from_name(name, false), None, "{name:?}");
+    }
+}
+
 /// `PROSE-UI-043`: the kept payload serves only on this tab's token, and
 /// the same text without it is another copy.
 #[test]

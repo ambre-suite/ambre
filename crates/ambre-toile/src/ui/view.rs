@@ -2458,8 +2458,12 @@ impl ToileView {
             self.notices.publish(NO_FRAME_CONTAINS);
             return;
         }
+        // A refused command ends the sequence: a cut whose copy went nowhere
+        // deletes nothing (`UI-THREAD-045`).
         for cmd in cmds {
-            self.send_edit(cmd);
+            if !self.send_edit(cmd) {
+                break;
+            }
         }
         self.needs_full = true;
     }
@@ -3993,7 +3997,11 @@ impl ToileView {
             return ambre_bus::CopyOutcome::Nothing;
         }
         let ids = self.selection.clone();
-        self.send_edit(ToileCommand::CopyElements { ids: ids.clone() });
+        // A copy that went nowhere is no copy, and its cut deletes nothing
+        // (`UI-THREAD-045`).
+        if !self.send_edit(ToileCommand::CopyElements { ids: ids.clone() }) {
+            return ambre_bus::CopyOutcome::Nothing;
+        }
         if cut {
             self.send_edit(ToileCommand::DeleteElements { ids });
             self.selection.clear();

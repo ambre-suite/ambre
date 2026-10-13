@@ -606,3 +606,128 @@ fn zoom_to_selection_with_nothing_selected_says_so() {
     ));
     assert!(rig.notices.take().is_empty(), "a done entry says nothing");
 }
+
+/// The bytes Toile's own copy reply leaves in a blob, standing in for a
+/// payload whose `origin` names where it came from.
+fn clip(origin: Rect) -> ambre_bus::ClipboardBlob {
+    let payload = ToileClipboardPayload {
+        elements: Vec::new(),
+        connectors: Vec::new(),
+        membership: Vec::new(),
+        origin,
+    };
+    ambre_bus::ClipboardBlob {
+        text: "mirror".to_owned(),
+        html: None,
+        ambre: postcard::to_allocvec(&payload).ok(),
+        plain: false,
+    }
+}
+
+/// The origin of the payload one `PasteElements` carried, which names the rung
+/// that answered.
+fn pasted(sent: &[ToileCommand]) -> Option<Rect> {
+    match sent {
+        [ToileCommand::PasteElements { payload, .. }] => Some(payload.origin),
+        _ => None,
+    }
+}
+
+/// Covers `UI-THREAD-045`: with the Logic thread gone, the copy is refused, so
+/// the cut deletes nothing and the selection stays.
+#[test]
+fn a_cut_whose_copy_went_nowhere_deletes_nothing() {
+    let Rig {
+        mut view,
+        to_logic,
+        from_logic: _f,
+        notices: _n,
+    } = Rig::with_stickies(&[("a", A)]);
+    drop(to_logic);
+    view.selection = vec![eid("a")];
+    assert_eq!(view.clipboard_write(true), ambre_bus::CopyOutcome::Nothing);
+    assert_eq!(view.selection, [eid("a")], "the cut kept the selection");
+}
+
+/// Covers `UI-THREAD-010` and `UI-THREAD-044`: a copy of a selection that
+/// reaches past the viewport names every id, and sends nothing else.
+#[test]
+fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
+    assert!(rig.key("a", true, false));
+    rig.sent();
+    assert_eq!(
+        rig.view.clipboard_write(false),
+        ambre_bus::CopyOutcome::Deferred
+    );
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::CopyElements { ids }] if ids == &[eid("a"), eid("far")]
+    ));
+    assert_eq!(rig.view.selection.len(), 2, "a copy leaves the selection");
+}
+
+/// Covers `UI-THREAD-022` and `UI-THREAD-046`: the kept copy answers when the
+/// token is ours, and the clipboard's own bytes answer when it is not.
+#[test]
+fn a_paste_takes_the_highest_rung_it_can_serve() {
+    let mut rig = Rig::new();
+    let kept = Rect::new(1.0, 1.0, 2.0, 2.0);
+    let read = Rect::new(5.0, 5.0, 6.0, 6.0);
+    rig.answer(ToileEvent::Clipboard(ToileClipboardPayload {
+        elements: Vec::new(),
+        connectors: Vec::new(),
+        membership: Vec::new(),
+        origin: kept,
+    }));
+    rig.sent();
+    rig.view.paste_clipboard(clip(read), true);
+    assert_eq!(
+        pasted(&rig.sent()),
+        Some(kept),
+        "own copy: the kept payload"
+    );
+    rig.view.paste_clipboard(clip(read), false);
+    assert_eq!(
+        pasted(&rig.sent()),
+        Some(read),
+        "another copy: the bytes read"
+    );
+}
+
+/// Covers `UI-THREAD-046`: an open editor is the highest rung, so the text
+/// goes in at the caret and no element is pasted.
+#[test]
+fn a_paste_into_an_open_editor_inserts_the_text() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.view.paste_clipboard(clip(B), false);
+    rig.key("Escape", false, false);
+    rig.paint();
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::SetText { text, .. }] if text == "himirror"
+    ));
+}
+
+/// Covers `UI-THREAD-047`: a paste leaves no blob for the host to write.
+#[test]
+fn a_paste_writes_nothing_back() {
+    let mut rig = Rig::new();
+    rig.view.paste_clipboard(clip(B), false);
+    assert_eq!(rig.view.poll_clipboard(), None);
+}
+
+/// Covers `CHROME-062`: in an open editor, a printable key, the space
+/// included, is left to the text path.
+#[test]
+fn a_printable_key_in_an_editor_is_not_consumed() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    for key in ["a", "Z", "é", " ", "1"] {
+        assert!(!rig.key(key, false, false), "{key:?} was consumed");
+    }
+}

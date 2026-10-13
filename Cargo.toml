@@ -135,8 +135,11 @@ web-sys = { version = "0.3.85", features = [
     "CanvasRenderingContext2d",
     "Clipboard",
     "ClipboardEvent",
+    # The wasm tier raises real pipe events (`ambre-spec-text-input.md`).
+    "ClipboardEventInit",
     "ClipboardItem",
     "CompositionEvent",
+    "CompositionEventInit",
     "DataTransfer",
     "DragEvent",
     "CssStyleDeclaration",
@@ -156,6 +159,7 @@ web-sys = { version = "0.3.85", features = [
     "ImageData",
     "InputEvent",
     "KeyboardEvent",
+    "KeyboardEventInit",
     "Node",
     # `query_selector_all`. The DOM belts already call it; it built only because
     # a larger dependency graph unified the feature in, so a crate tested alone
