@@ -383,18 +383,7 @@ impl DrawSurface for WgpuSurface<'_> {
         if self.path_outside_clip(path, t) {
             return;
         }
-        let tol = self.tolerance(t);
-        let lpath = build_lyon_path(path);
-        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-        let opts = FillOptions::tolerance(tol).with_fill_rule(FillRule::NonZero);
-        let ok = FillTessellator::new()
-            .tessellate_path(
-                &lpath,
-                &opts,
-                &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| screen_vertex(v.position(), t)),
-            )
-            .is_ok();
-        if ok {
+        if let Some(mesh) = fill_mesh(path, t, self.tolerance(t)) {
             self.renderer
                 .push_mesh(&mesh.vertices, &mesh.indices, color);
         }
@@ -411,27 +400,7 @@ impl DrawSurface for WgpuSurface<'_> {
         if self.path_outside_clip_padded(path, t, stroke.width * 0.5) {
             return;
         }
-        let tol = self.tolerance(t);
-        let lpath = build_lyon_path(path);
-        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-        // Tessellate in model space: the line width is in model units. It
-        // therefore scales with the transform when we map vertices to screen
-        // space, which is what a Toile zoom expects.
-        let opts = StrokeOptions::tolerance(tol)
-            .with_line_width(stroke.width as f32)
-            .with_line_cap(line_cap(stroke.start_cap))
-            .with_line_join(line_join(stroke.join))
-            .with_miter_limit(stroke.miter_limit as f32);
-        let ok = StrokeTessellator::new()
-            .tessellate_path(
-                &lpath,
-                &opts,
-                &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
-                    screen_vertex(v.position(), t)
-                }),
-            )
-            .is_ok();
-        if ok {
+        if let Some(mesh) = stroke_mesh(path, stroke, t, self.tolerance(t)) {
             self.renderer
                 .push_mesh(&mesh.vertices, &mesh.indices, color);
         }
@@ -469,6 +438,48 @@ impl DrawSurface for WgpuSurface<'_> {
 // ============================================================================
 // lyon tessellation helpers
 // ============================================================================
+
+/// A tessellated path: screen-space vertices and the triangles over them.
+type Mesh = VertexBuffers<[f32; 2], u32>;
+
+/// Tessellate the inside of `path` under the non-zero rule, at `tolerance`
+/// in model units. Vertices come out mapped through `t` to the screen.
+/// `None` when the tessellator refuses the path.
+fn fill_mesh(path: &BezPath, t: Affine, tolerance: f32) -> Option<Mesh> {
+    let mut mesh = Mesh::new();
+    let opts = FillOptions::tolerance(tolerance).with_fill_rule(FillRule::NonZero);
+    FillTessellator::new()
+        .tessellate_path(
+            &build_lyon_path(path),
+            &opts,
+            &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| screen_vertex(v.position(), t)),
+        )
+        .ok()?;
+    Some(mesh)
+}
+
+/// Tessellate `stroke` along `path`, at `tolerance` in model units.
+/// Tessellating in model space keeps the line width in model units, so it
+/// scales with `t` as a Toile zoom expects. `None` when the tessellator
+/// refuses the path.
+fn stroke_mesh(path: &BezPath, stroke: &Stroke, t: Affine, tolerance: f32) -> Option<Mesh> {
+    let mut mesh = Mesh::new();
+    let opts = StrokeOptions::tolerance(tolerance)
+        .with_line_width(stroke.width as f32)
+        .with_line_cap(line_cap(stroke.start_cap))
+        .with_line_join(line_join(stroke.join))
+        .with_miter_limit(stroke.miter_limit as f32);
+    StrokeTessellator::new()
+        .tessellate_path(
+            &build_lyon_path(path),
+            &opts,
+            &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
+                screen_vertex(v.position(), t)
+            }),
+        )
+        .ok()?;
+    Some(mesh)
+}
 
 /// Build a lyon `Path` from a kurbo `BezPath`, mapping each element one-to-one.
 /// Subpaths left open (no `ClosePath`) are ended unclosed so their edges are
@@ -554,62 +565,54 @@ fn line_join(join: kurbo::Join) -> LineJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lyon::tessellation::{
-        BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
-        StrokeVertex, VertexBuffers,
-    };
 
-    /// A closed triangle fills to a non-empty, index-consistent mesh.
-    #[test]
-    fn fill_triangle_tessellates() {
+    /// The area a mesh covers, summed over its triangles, after checking
+    /// every index names a vertex.
+    fn area(mesh: &Mesh) -> f64 {
+        assert_eq!(mesh.indices.len() % 3, 0, "whole triangles");
+        mesh.indices
+            .chunks(3)
+            .map(|tri| {
+                let p = |i: u32| mesh.vertices[i as usize];
+                let (a, b, c) = (p(tri[0]), p(tri[1]), p(tri[2]));
+                let cross = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+                f64::from(cross.abs()) / 2.0
+            })
+            .sum()
+    }
+
+    /// A closed triangle with a base of 10 and a height of 10.
+    fn triangle() -> BezPath {
         let mut path = BezPath::new();
         path.move_to((0.0, 0.0));
         path.line_to((10.0, 0.0));
         path.line_to((5.0, 10.0));
         path.close_path();
-
-        let lpath = build_lyon_path(&path);
-        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-        FillTessellator::new()
-            .tessellate_path(
-                &lpath,
-                &FillOptions::tolerance(0.1),
-                &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| {
-                    screen_vertex(v.position(), Affine::IDENTITY)
-                }),
-            )
-            .unwrap();
-
-        assert!(!mesh.vertices.is_empty());
-        assert_eq!(mesh.indices.len() % 3, 0);
-        assert!(
-            mesh.indices
-                .iter()
-                .all(|&i| (i as usize) < mesh.vertices.len())
-        );
+        path
     }
 
-    /// An open two-point path strokes to a non-empty mesh (open contour).
+    /// A fill covers the path's area, in screen pixels. The transform is
+    /// applied, so a scale of 3 covers nine times the area.
     #[test]
-    fn stroke_open_line_tessellates() {
+    fn a_fill_covers_the_path_in_screen_space() {
+        let mesh = fill_mesh(&triangle(), Affine::IDENTITY, 0.1).expect("a mesh");
+        assert!((area(&mesh) - 50.0).abs() < 1e-3, "{}", area(&mesh));
+        let scaled = fill_mesh(&triangle(), Affine::scale(3.0), 0.1).expect("a mesh");
+        assert!((area(&scaled) - 450.0).abs() < 1e-2, "{}", area(&scaled));
+    }
+
+    /// An open line strokes to a band of its length by its width. A butt
+    /// cap adds nothing, and the transform scales the width with the length.
+    #[test]
+    fn a_stroke_covers_its_length_by_its_width() {
         let mut path = BezPath::new();
         path.move_to((0.0, 0.0));
         path.line_to((20.0, 0.0));
-
-        let lpath = build_lyon_path(&path);
-        let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-        StrokeTessellator::new()
-            .tessellate_path(
-                &lpath,
-                &StrokeOptions::tolerance(0.1).with_line_width(2.0),
-                &mut BuffersBuilder::new(&mut mesh, |v: StrokeVertex| {
-                    screen_vertex(v.position(), Affine::IDENTITY)
-                }),
-            )
-            .unwrap();
-
-        assert!(!mesh.vertices.is_empty());
-        assert_eq!(mesh.indices.len() % 3, 0);
+        let stroke = Stroke::new(2.0).with_caps(kurbo::Cap::Butt);
+        let mesh = stroke_mesh(&path, &stroke, Affine::IDENTITY, 0.1).expect("a mesh");
+        assert!((area(&mesh) - 40.0).abs() < 1e-3, "{}", area(&mesh));
+        let scaled = stroke_mesh(&path, &stroke, Affine::scale(2.0), 0.1).expect("a mesh");
+        assert!((area(&scaled) - 160.0).abs() < 1e-2, "{}", area(&scaled));
     }
 
     fn slot(left: i32, top: i32, w: u32, h: u32) -> AtlasSlot {

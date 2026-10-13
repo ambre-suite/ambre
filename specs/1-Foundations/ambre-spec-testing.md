@@ -172,16 +172,17 @@ Rendering splits across the `DrawSurface` boundary in `ambre-draw`.
 | Half | Where it lives | How it is verified |
 | :--- | :--- | :--- |
 | **What to draw** | the application render layer, which never names wgpu. It emits `fill_rect`, `stroke_line`, `draw_glyphs`, `push_clip` | `RecordingSurface` (`ambre-draw`, feature `testing`) on host, no GPU. Assert the ordered `DrawOp` sequence: geometry, colours, clip balance, glyph-run counts. **This is where the vast majority of render defects live** |
-| **How to draw it** | `ambre-canvas`: `QuadRenderer`, `WgpuSurface`, `GlyphAtlas` -- tessellation, WGSL shaders, atlas packing | not unit-tested, by decision: it needs a real `wgpu::Device`. Thin, stable plumbing, validated visually through `/run` |
+| **How to draw it** | `ambre-canvas`: `QuadRenderer`, `WgpuSurface`, `GlyphAtlas` -- the upload and the WGSL shaders | the device calls are not unit-tested, by decision: they need a real `wgpu::Device`. Thin, stable plumbing, validated visually through `/run`. The CPU work beside them is host-tested, below |
 | **The page** | `KrillaSurface`, the PDF surface | a snapshot over simple primitives, plus byte determinism: two exports of one unchanged document produce identical bytes |
 
 A headless software adapter and golden-image readback are both reserved for a precise critical need.
 The first is driver-dependent, the second brittle under antialiasing drift. The default is the
 `DrawSurface` contract plus a visual check.
 
-The "how to draw" half still carries CPU work that needs no device: atlas packing, eviction order and
-tessellation into vertex buffers. That work extracts to plain functions over plain buffers, tested on
-host like the DOM seam's decision logic. Only the upload and the shader stay behind the device.
+The "how to draw" half carries CPU work that needs no device, and it is extracted. `GlyphCache` packs
+the atlas, repacks it on overflow and queues the uploads. `fill_mesh` and `stroke_mesh` tessellate a
+path into screen-space vertex buffers. `ImageCache` orders the eviction. Each is tested on host like
+the DOM seam's decision logic. Only the upload and the shader stay behind the device.
 
 ### C. The transport seam
 
@@ -293,7 +294,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 | An `ambre-app` end-to-end headless boot | a real boot spawns the Logic thread, a second wasm artifact for Sync, and a wgpu surface. The `wasm-bindgen-test` harness provisions none of the three: no shared-memory page, no worker loader, no GPU adapter. A true belt needs browser automation against a served build, outside the unit-test runner |
 | An end-to-end command across the canvas and DOM boundary | three cases need a real canvas and a driven browser, so they wait on the same automation as the boot above: a click travelling `CommandId` -> `LogicCommand` -> `UiEvent` -> chrome toggle plus canvas repaint, one IME composition cycle (`CHROME-007`), and rAF suspension and resumption behind a modal |
 | `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
-| The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them extracts to host, and nothing has been extracted yet |
+| The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them is extracted and host-tested |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |
 | A real S3 round trip | nothing in the suite performs one, and the CI minio service is missing. A presigned upload against a local minio is the check to run before this reaches an environment that matters |
 

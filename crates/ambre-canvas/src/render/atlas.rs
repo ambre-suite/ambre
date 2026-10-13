@@ -134,15 +134,45 @@ pub struct GlyphAtlas {
     /// Parallel RGBA color atlas for `Content::Color` glyphs (color emoji).
     pub color_texture: wgpu::Texture,
     pub color_view: wgpu::TextureView,
+    /// Everything the atlas decides without a device: the packing, the
+    /// eviction order and the queued uploads.
+    glyphs: GlyphCache,
+    scale_cx: swash::scale::ScaleContext,
+}
+
+/// One queued texture upload: `(x, y, w, h, bytes)`.
+type Upload = (u32, u32, u32, u32, Vec<u8>);
+
+/// One glyph as the rasterizer returned it, before it is packed.
+pub(super) struct Raster {
+    /// Bitmap width in pixels; zero for an invisible glyph.
+    pub(super) w: u32,
+    /// Bitmap height in pixels; zero for an invisible glyph.
+    pub(super) h: u32,
+    /// Horizontal offset from the glyph origin to the bitmap's left edge.
+    pub(super) left: i32,
+    /// Vertical offset from the baseline to the bitmap's top edge.
+    pub(super) top: i32,
+    /// Whether the bytes are RGBA colour rather than an R8 coverage mask.
+    pub(super) is_color: bool,
+    /// The bitmap, one byte per pixel for a mask and four for colour.
+    pub(super) data: Vec<u8>,
+}
+
+/// The CPU half of the glyph atlas. It owns the slot of every cached glyph,
+/// the two shelf packers, the eviction order and the uploads still to send.
+/// No device is named here, so a host test drives it whole.
+pub(super) struct GlyphCache {
+    /// The side of both atlases, in pixels.
+    size: u32,
     cache: FxHashMap<GlyphKey, CachedGlyph>,
     packer: ShelfPacker,
     /// Independent shelf packer for the color atlas.
     color_packer: ShelfPacker,
-    scale_cx: swash::scale::ScaleContext,
-    /// Queued R8 texture uploads: (x, y, w, h, alpha_data).
-    pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
-    /// Queued RGBA color texture uploads: (x, y, w, h, rgba_data).
-    color_pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
+    /// Queued R8 texture uploads.
+    pending: Vec<Upload>,
+    /// Queued RGBA color texture uploads.
+    color_pending: Vec<Upload>,
     /// The color atlas is allocated lazily: a full 2048x2048 RGBA texture is 16
     /// MB, wasted on the many documents with no color emoji. Until the first
     /// color glyph appears the texture is a 1x1 placeholder. `color_ready` gates
@@ -159,37 +189,14 @@ pub struct GlyphAtlas {
     needs_compact: bool,
 }
 
-impl GlyphAtlas {
-    pub fn new(device: &wgpu::Device) -> Self {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("glyph_atlas"),
-            size: wgpu::Extent3d {
-                width: ATLAS_SIZE,
-                height: ATLAS_SIZE,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&Default::default());
-
-        // Lazy: a 1x1 placeholder until the first color glyph (see `color_ready`).
-        let color_texture = Self::new_color_texture(device, 1);
-        let color_view = color_texture.create_view(&Default::default());
-
+impl GlyphCache {
+    /// An empty cache over two atlases of `size` x `size` pixels.
+    pub(super) fn new(size: u32) -> Self {
         Self {
-            texture,
-            view,
-            color_texture,
-            color_view,
+            size,
             cache: FxHashMap::default(),
-            packer: ShelfPacker::new(ATLAS_SIZE),
-            color_packer: ShelfPacker::new(ATLAS_SIZE),
-            scale_cx: swash::scale::ScaleContext::new(),
+            packer: ShelfPacker::new(size),
+            color_packer: ShelfPacker::new(size),
             pending: Vec::new(),
             color_pending: Vec::new(),
             color_ready: false,
@@ -199,44 +206,9 @@ impl GlyphAtlas {
         }
     }
 
-    /// Create an `Rgba8Unorm` color-atlas texture of `size` x `size`.
-    fn new_color_texture(device: &wgpu::Device, size: u32) -> wgpu::Texture {
-        device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("glyph_color_atlas"),
-            size: wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        })
-    }
-
-    /// Grow the color atlas to its full size the first time a color glyph is
-    /// wanted. Returns `true` when it (re)allocated the texture, so the renderer
-    /// knows to rebuild the color bind group over the new `color_view`. A no-op
-    /// (returning `false`) once allocated or while no color glyph has appeared.
-    pub fn ensure_color_atlas(&mut self, device: &wgpu::Device) -> bool {
-        if self.color_ready || !self.color_wanted {
-            return false;
-        }
-        self.color_texture = Self::new_color_texture(device, ATLAS_SIZE);
-        self.color_view = self.color_texture.create_view(&Default::default());
-        self.color_ready = true;
-        true
-    }
-
-    /// Called at the start of each frame. Advances the frame clock used to age
-    /// glyphs for LRU compaction. It also runs a deferred compaction if the
-    /// atlas overflowed on the previous frame. Deferring it means the UVs of
-    /// glyphs already emitted into that frame's vertex buffer are never
-    /// rewritten.
-    pub fn begin_frame(&mut self) {
+    /// Advance the frame clock that ages glyphs, and run a compaction the
+    /// previous frame deferred.
+    pub(super) fn begin_frame(&mut self) {
         self.frame += 1;
         if self.needs_compact {
             self.compact();
@@ -251,8 +223,9 @@ impl GlyphAtlas {
     /// `KEEP_FRAMES` frames, re-pack them from their retained bitmaps (no
     /// re-rasterization), and re-queue those bitmaps for upload.
     fn compact(&mut self) {
-        // Keep the current frame plus a little history so glyphs that flicker
-        // in and out across a couple of frames are not thrashed.
+        // Keep the frame that overflowed and the one before it, so glyphs that
+        // flicker in and out across a couple of frames are not thrashed. This
+        // runs at the start of a frame, which has drawn nothing yet.
         const KEEP_FRAMES: u64 = 2;
         let cutoff = self.frame.saturating_sub(KEEP_FRAMES);
 
@@ -267,11 +240,11 @@ impl GlyphAtlas {
         let mut entries: Vec<(GlyphKey, CachedGlyph)> = self
             .cache
             .drain()
-            .filter(|(_, c)| c.last_used > cutoff)
+            .filter(|(_, c)| c.last_used >= cutoff)
             .collect();
         entries.sort_by_key(|(_, c)| std::cmp::Reverse(c.last_used));
 
-        let inv = 1.0 / ATLAS_SIZE as f32;
+        let inv = 1.0 / self.size as f32;
         for (key, mut cached) in entries {
             match &cached.bitmap {
                 // Zero-size (invisible) glyph: no atlas space, keep as-is.
@@ -299,65 +272,34 @@ impl GlyphAtlas {
         self.cache = survivors;
     }
 
-    /// Look up a glyph in the cache. If absent, rasterize it via Swash and
-    /// queue the bitmap for upload. Returns `None` for invisible glyphs (for example
-    /// whitespace) or if the atlas just became full (will clear next frame).
-    pub fn get_or_rasterize(
-        &mut self,
-        font_data: &parley::FontData,
-        font_size: f32,
-        normalized_coords: &[swash::NormalizedCoord],
-        glyph_id: u16,
-    ) -> Option<AtlasSlot> {
-        let key = GlyphKey::new(font_data.data.id(), glyph_id, font_size);
+    /// The slot of a cached glyph, stamped as drawn this frame.
+    pub(super) fn lookup(&mut self, key: &GlyphKey) -> Option<AtlasSlot> {
+        let cached = self.cache.get_mut(key)?;
+        cached.last_used = self.frame;
+        Some(cached.slot)
+    }
 
-        if let Some(cached) = self.cache.get_mut(&key) {
-            cached.last_used = self.frame;
-            return Some(cached.slot);
-        }
-
-        // Rasterize via Swash.
-        let font_ref =
-            swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize)?;
-
-        // Source order: prefer an embedded color bitmap (CBDT color emoji),
-        // then a color outline (COLR), then the plain outline. swash returns
-        // `Content::Color` (RGBA) for the bitmap case and `Content::Mask` for
-        // the outline case; we branch on `image.content` below. `Format::Alpha`
-        // only governs how outlines are rasterized -- it does not flatten an
-        // embedded color bitmap to a mask (verified with Noto Color Emoji).
-        let image = swash::scale::Render::new(&[
-            swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
-            swash::scale::Source::ColorOutline(0),
-            swash::scale::Source::Outline,
-        ])
-        .format(swash::zeno::Format::Alpha)
-        .render(
-            &mut self
-                .scale_cx
-                .builder(font_ref)
-                .size(font_size)
-                .normalized_coords(normalized_coords)
-                .build(),
-            glyph_id,
-        )?;
-
-        let w = image.placement.width;
-        let h = image.placement.height;
-        // A color glyph (color emoji) comes back as straight-alpha RGBA and is
-        // packed into the parallel color atlas. Everything else is a coverage
-        // mask on the R8 atlas.
-        let is_color = matches!(image.content, swash::scale::image::Content::Color);
-
+    /// Cache a freshly rasterized glyph and queue its upload. Answers `None`
+    /// when it cannot be drawn this frame. Either the colour atlas is not
+    /// grown yet, or the atlas is full and compacts at the next frame.
+    pub(super) fn insert(&mut self, key: GlyphKey, raster: Raster) -> Option<AtlasSlot> {
+        let Raster {
+            w,
+            h,
+            left,
+            top,
+            is_color,
+            data,
+        } = raster;
         // Invisible glyph (for example space): cache a zero-size slot, no upload.
-        if w == 0 || h == 0 || image.data.is_empty() {
+        if w == 0 || h == 0 || data.is_empty() {
             let slot = AtlasSlot {
                 uv_min: [0.0; 2],
                 uv_max: [0.0; 2],
                 pixel_width: 0,
                 pixel_height: 0,
-                bearing_left: image.placement.left,
-                bearing_top: image.placement.top,
+                bearing_left: left,
+                bearing_top: top,
                 is_color,
             };
             self.cache.insert(
@@ -387,50 +329,181 @@ impl GlyphAtlas {
         } else {
             (&mut self.packer, &mut self.pending)
         };
-        let (ax, ay) = match packer.allocate(w, h) {
-            Some(pos) => pos,
-            None => {
-                self.needs_compact = true;
-                return None;
-            }
+        let Some((ax, ay)) = packer.allocate(w, h) else {
+            self.needs_compact = true;
+            return None;
         };
 
-        let inv = 1.0 / ATLAS_SIZE as f32;
+        let inv = 1.0 / self.size as f32;
         let slot = AtlasSlot {
             uv_min: [ax as f32 * inv, ay as f32 * inv],
             uv_max: [(ax + w) as f32 * inv, (ay + h) as f32 * inv],
             pixel_width: w,
             pixel_height: h,
-            bearing_left: image.placement.left,
-            bearing_top: image.placement.top,
+            bearing_left: left,
+            bearing_top: top,
             is_color,
         };
 
-        pending.push((ax, ay, w, h, image.data.clone()));
+        pending.push((ax, ay, w, h, data.clone()));
         self.cache.insert(
             key,
             CachedGlyph {
                 slot,
                 last_used: self.frame,
-                bitmap: Some(GlyphBitmap {
-                    w,
-                    h,
-                    data: image.data,
-                }),
+                bitmap: Some(GlyphBitmap { w, h, data }),
             },
         );
         Some(slot)
     }
 
+    /// The uploads queued since the last call: the mask atlas's, then the
+    /// colour atlas's.
+    pub(super) fn take_uploads(&mut self) -> (Vec<Upload>, Vec<Upload>) {
+        (
+            std::mem::take(&mut self.pending),
+            std::mem::take(&mut self.color_pending),
+        )
+    }
+}
+
+impl GlyphAtlas {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("glyph_atlas"),
+            size: wgpu::Extent3d {
+                width: ATLAS_SIZE,
+                height: ATLAS_SIZE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+
+        // Lazy: a 1x1 placeholder until the first color glyph (see `color_ready`).
+        let color_texture = Self::new_color_texture(device, 1);
+        let color_view = color_texture.create_view(&Default::default());
+
+        Self {
+            texture,
+            view,
+            color_texture,
+            color_view,
+            glyphs: GlyphCache::new(ATLAS_SIZE),
+            scale_cx: swash::scale::ScaleContext::new(),
+        }
+    }
+
+    /// Create an `Rgba8Unorm` color-atlas texture of `size` x `size`.
+    fn new_color_texture(device: &wgpu::Device, size: u32) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("glyph_color_atlas"),
+            size: wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+    }
+
+    /// Grow the color atlas to its full size the first time a color glyph is
+    /// wanted. Returns `true` when it (re)allocated the texture, so the renderer
+    /// knows to rebuild the color bind group over the new `color_view`. A no-op
+    /// (returning `false`) once allocated or while no color glyph has appeared.
+    pub fn ensure_color_atlas(&mut self, device: &wgpu::Device) -> bool {
+        if self.glyphs.color_ready || !self.glyphs.color_wanted {
+            return false;
+        }
+        self.color_texture = Self::new_color_texture(device, ATLAS_SIZE);
+        self.color_view = self.color_texture.create_view(&Default::default());
+        self.glyphs.color_ready = true;
+        true
+    }
+
+    /// Called at the start of each frame. Advances the frame clock used to age
+    /// glyphs for LRU compaction. It also runs a deferred compaction if the
+    /// atlas overflowed on the previous frame. Deferring it means the UVs of
+    /// glyphs already emitted into that frame's vertex buffer are never
+    /// rewritten.
+    pub fn begin_frame(&mut self) {
+        self.glyphs.begin_frame();
+    }
+
+    /// Look up a glyph in the cache. If absent, rasterize it via Swash and
+    /// queue the bitmap for upload. Returns `None` for invisible glyphs (for example
+    /// whitespace) or if the atlas just became full (will clear next frame).
+    pub fn get_or_rasterize(
+        &mut self,
+        font_data: &parley::FontData,
+        font_size: f32,
+        normalized_coords: &[swash::NormalizedCoord],
+        glyph_id: u16,
+    ) -> Option<AtlasSlot> {
+        let key = GlyphKey::new(font_data.data.id(), glyph_id, font_size);
+
+        if let Some(slot) = self.glyphs.lookup(&key) {
+            return Some(slot);
+        }
+
+        // Rasterize via Swash.
+        let font_ref =
+            swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize)?;
+
+        // Source order: prefer an embedded color bitmap (CBDT color emoji),
+        // then a color outline (COLR), then the plain outline. swash returns
+        // `Content::Color` (RGBA) for the bitmap case and `Content::Mask` for
+        // the outline case; we branch on `image.content` below. `Format::Alpha`
+        // only governs how outlines are rasterized -- it does not flatten an
+        // embedded color bitmap to a mask (verified with Noto Color Emoji).
+        let image = swash::scale::Render::new(&[
+            swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
+            swash::scale::Source::ColorOutline(0),
+            swash::scale::Source::Outline,
+        ])
+        .format(swash::zeno::Format::Alpha)
+        .render(
+            &mut self
+                .scale_cx
+                .builder(font_ref)
+                .size(font_size)
+                .normalized_coords(normalized_coords)
+                .build(),
+            glyph_id,
+        )?;
+
+        // A color glyph (color emoji) comes back as straight-alpha RGBA and is
+        // packed into the parallel color atlas. Everything else is a coverage
+        // mask on the R8 atlas.
+        let raster = Raster {
+            w: image.placement.width,
+            h: image.placement.height,
+            left: image.placement.left,
+            top: image.placement.top,
+            is_color: matches!(image.content, swash::scale::image::Content::Color),
+            data: image.data,
+        };
+        self.glyphs.insert(key, raster)
+    }
+
     /// Upload all pending rasterized glyphs to the two GPU textures.
     pub fn flush_uploads(&mut self, queue: &wgpu::Queue) {
+        let (pending, color_pending) = self.glyphs.take_uploads();
         // R8 mask atlas: 1 byte/px.
-        let pending = std::mem::take(&mut self.pending);
         for (x, y, w, h, data) in pending {
             upload_glyph(queue, &self.texture, x, y, w, h, 1, data);
         }
         // RGBA color atlas: 4 bytes/px.
-        let color_pending = std::mem::take(&mut self.color_pending);
         for (x, y, w, h, data) in color_pending {
             upload_glyph(queue, &self.color_texture, x, y, w, h, 4, data);
         }
@@ -486,4 +559,139 @@ fn upload_glyph(
             depth_or_array_layers: 1,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A square mask glyph of side `side`, filled with `fill`.
+    fn mask(side: u32, fill: u8) -> Raster {
+        Raster {
+            w: side,
+            h: side,
+            left: 1,
+            top: 2,
+            is_color: false,
+            data: vec![fill; (side * side) as usize],
+        }
+    }
+
+    fn key(glyph: u16) -> GlyphKey {
+        GlyphKey::new(7, glyph, 16.0)
+    }
+
+    /// The pixel origin of a slot in an atlas of side `size`.
+    fn origin(slot: AtlasSlot, size: u32) -> (u32, u32) {
+        let at = |uv: f32| (uv * size as f32).round() as u32;
+        (at(slot.uv_min[0]), at(slot.uv_min[1]))
+    }
+
+    /// A glyph goes right of the last one, with one pixel of padding. When
+    /// the row is full, a shelf opens below the row's tallest glyph. A glyph
+    /// taller than what is left does not fit.
+    #[test]
+    fn a_shelf_opens_below_when_a_row_is_full() {
+        let mut packer = ShelfPacker::new(10);
+        assert_eq!(packer.allocate(4, 3), Some((0, 0)));
+        assert_eq!(packer.allocate(4, 2), Some((5, 0)));
+        assert_eq!(packer.allocate(4, 5), Some((0, 4)));
+        assert_eq!(packer.allocate(3, 7), None);
+        packer.reset();
+        assert_eq!(packer.allocate(4, 3), Some((0, 0)));
+    }
+
+    /// A packed glyph is found again with the slot it was given. Its bitmap
+    /// is queued once, and the queue empties when the uploads are taken.
+    #[test]
+    fn a_packed_glyph_is_found_and_uploaded_once() {
+        let mut cache = GlyphCache::new(64);
+        cache.begin_frame();
+        let slot = cache.insert(key(1), mask(4, 9)).expect("the glyph fits");
+        assert_eq!((slot.pixel_width, slot.pixel_height), (4, 4));
+        assert_eq!((slot.bearing_left, slot.bearing_top), (1, 2));
+        assert_eq!(slot.uv_max, [4.0 / 64.0, 4.0 / 64.0]);
+        let again = cache.lookup(&key(1)).expect("the glyph is cached");
+        assert_eq!((again.uv_min, again.uv_max), (slot.uv_min, slot.uv_max));
+        assert!(cache.lookup(&key(2)).is_none());
+        let (masks, colors) = cache.take_uploads();
+        assert_eq!(masks, vec![(0, 0, 4, 4, vec![9; 16])]);
+        assert!(colors.is_empty());
+        assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
+    }
+
+    /// A full atlas drops the glyph for this frame and moves nothing. The
+    /// next frame repacks the glyphs drawn lately, the most recent first, and
+    /// drops the ones not drawn for more than two frames.
+    #[test]
+    fn an_overflow_repacks_the_hot_glyphs_at_the_next_frame() {
+        let mut cache = GlyphCache::new(16);
+        cache.begin_frame();
+        cache.insert(key(1), mask(4, 1)).expect("cold fits");
+        for _ in 0..3 {
+            cache.begin_frame();
+        }
+        cache.insert(key(2), mask(4, 2)).expect("warm fits");
+        cache.begin_frame();
+        let hot = cache.insert(key(3), mask(4, 3)).expect("hot fits");
+        cache.take_uploads();
+
+        assert!(cache.insert(key(4), mask(16, 4)).is_none(), "the atlas is full");
+        // Drawn again this frame: the hot glyph keeps its place until the next.
+        let unmoved = cache.lookup(&key(3)).expect("still cached");
+        assert_eq!(unmoved.uv_min, hot.uv_min, "nothing moves mid-frame");
+        assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
+
+        cache.begin_frame();
+        assert!(cache.lookup(&key(1)).is_none(), "the cold glyph is dropped");
+        let hot = cache.lookup(&key(3)).expect("the hot glyph survives");
+        let warm = cache.lookup(&key(2)).expect("the warm glyph survives");
+        assert_eq!(origin(hot, 16), (0, 0), "the most recent goes first");
+        assert_eq!(origin(warm, 16), (5, 0));
+        let (masks, _) = cache.take_uploads();
+        let bytes: Vec<u8> = masks.iter().map(|upload| upload.4[0]).collect();
+        assert_eq!(bytes, [3, 2], "both are uploaded again, from their bitmaps");
+    }
+
+    /// An invisible glyph takes no space and queues nothing, and a
+    /// compaction keeps it.
+    #[test]
+    fn an_invisible_glyph_takes_no_space() {
+        let mut cache = GlyphCache::new(8);
+        cache.begin_frame();
+        let blank = Raster {
+            data: Vec::new(),
+            ..mask(0, 0)
+        };
+        let slot = cache.insert(key(1), blank).expect("a blank slot");
+        assert_eq!((slot.pixel_width, slot.uv_max), (0, [0.0, 0.0]));
+        assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
+        assert!(cache.insert(key(2), mask(8, 1)).is_none(), "the atlas is full");
+        cache.begin_frame();
+        assert!(cache.lookup(&key(1)).is_some(), "the blank slot survives");
+    }
+
+    /// A colour glyph seen before the colour atlas is grown is dropped and
+    /// asks for it. Once grown, it packs into the colour atlas alone.
+    #[test]
+    fn a_color_glyph_waits_for_the_color_atlas() {
+        let mut cache = GlyphCache::new(32);
+        cache.begin_frame();
+        let emoji = || Raster {
+            is_color: true,
+            data: vec![5; 4 * 4 * 4],
+            ..mask(4, 0)
+        };
+        assert!(cache.insert(key(1), emoji()).is_none());
+        assert!(cache.color_wanted, "the first sighting asks for the atlas");
+        cache.color_ready = true;
+        let slot = cache.insert(key(1), emoji()).expect("the atlas is grown");
+        assert!(slot.is_color);
+        assert_eq!(origin(slot, 32), (0, 0));
+        let mask_slot = cache.insert(key(2), mask(4, 1)).expect("a mask fits");
+        assert_eq!(origin(mask_slot, 32), (0, 0), "each atlas packs alone");
+        let (masks, colors) = cache.take_uploads();
+        assert_eq!((masks.len(), colors.len()), (1, 1));
+        assert_eq!(colors[0].4.len(), 64, "four bytes a pixel");
+    }
 }
