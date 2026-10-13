@@ -87,11 +87,13 @@ pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
     aws_sdk_s3::Client::from_conf(conf.build())
 }
 
-/// What an [`S3Stub`] holds: each object's bytes, and how often each was read.
+/// What an [`S3Stub`] holds: each object's bytes, how often each was read, and
+/// how long a read of each is held before it is answered.
 #[derive(Default)]
 struct StubStore {
     objects: std::collections::BTreeMap<String, Vec<u8>>,
     gets: HashMap<String, usize>,
+    delays: HashMap<String, std::time::Duration>,
 }
 
 /// An in-process object store over path-style requests. It answers the calls
@@ -109,7 +111,7 @@ impl S3Stub {
         use axum::http::Request;
         let store = StubStore {
             objects: keys.into_iter().map(|k| (k, Vec::new())).collect(),
-            gets: HashMap::new(),
+            ..StubStore::default()
         };
         let store = Arc::new(std::sync::Mutex::new(store));
         let held = Arc::clone(&store);
@@ -147,6 +149,12 @@ impl S3Stub {
             .unwrap()
             .to_vec();
         let body = if chunked { unchunk(&body) } else { body };
+        let delay = held.lock().unwrap().delays.get(&key).copied();
+        if let Some(delay) = delay
+            && method == Method::GET
+        {
+            tokio::time::sleep(delay).await;
+        }
         let xmlns = r#"xmlns="http://s3.amazonaws.com/doc/2006-03-01/""#;
         let mut store = held.lock().unwrap();
         if method == Method::PUT && !key.is_empty() {
@@ -202,6 +210,12 @@ impl S3Stub {
     /// upload does.
     pub fn put(&self, key: String) {
         self.store.lock().unwrap().objects.insert(key, Vec::new());
+    }
+
+    /// Holds every read of `key` for `delay` before answering it, so reads
+    /// issued together complete in the order the test picks.
+    pub fn delay(&self, key: String, delay: std::time::Duration) {
+        self.store.lock().unwrap().delays.insert(key, delay);
     }
 
     /// The bytes of an object, when held.

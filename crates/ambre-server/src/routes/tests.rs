@@ -41,6 +41,10 @@ mod handler_tests {
                     .patch(routes::rename_document),
             )
             .route(
+                "/documents/{id}/deltas",
+                axum::routing::get(routes::get_deltas),
+            )
+            .route(
                 "/documents/{id}/share",
                 axum::routing::post(routes::invite_to_document),
             )
@@ -1159,6 +1163,45 @@ mod handler_tests {
             .await
             .unwrap();
         assert!(resp.status().is_success() || resp.status().is_client_error());
+    }
+
+    /// `SRV-075`: a page of the delta index never passes a thousand rows,
+    /// whatever the caller asks, and never falls below one.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_delta_page_never_exceeds_the_declared_cap(pool: sqlx::PgPool) {
+        let state = test_app_state(pool.clone()).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let snapshot = ambre_core::SnapshotId::from_bytes([0u8; 16]);
+        for seq in 1..=1_005 {
+            crate::db::insert_update(&pool, &doc, &[1u8; 32], &snapshot, seq, seq, "k")
+                .await
+                .unwrap();
+        }
+        for (asked, served) in [("5000", 1_000), ("0", 1), ("-3", 1)] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::get(format!(
+                        "/api/documents/{doc_id}/deltas?after_seq=0&limit={asked}"
+                    ))
+                    .header("authorization", &auth)
+                    .body(Body::empty())
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = resp.status();
+            let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+            let page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(page["deltas"].as_array().unwrap().len(), served, "limit={asked}");
+        }
     }
 
     fn base64_encode(data: &[u8]) -> String {

@@ -1287,6 +1287,60 @@ mod tests {
         assert_eq!(sent.len(), 3);
     }
 
+    /// A reopened socket subscribes again to every document the relay holds
+    /// (`SYNC-033`), and asks each for what it missed past its own cursor
+    /// (`SYNC-086`). A document the relay never created gets neither.
+    #[test]
+    fn a_reconnect_resubscribes_and_pulls_every_relay_document() {
+        use ambre_protocol::messages::Seq;
+        use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
+
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let mut cursors = std::collections::HashMap::new();
+        for last in [7, 12] {
+            let id = DocumentId::new();
+            let mut doc = SyncDocumentState::new(id, DocumentKey::generate(), DocType::Trame, true);
+            doc.last_seq = Seq(last);
+            state.documents.insert(id, doc);
+            cursors.insert(id, Seq(last));
+        }
+        let local = DocumentId::new();
+        state.documents.insert(
+            local,
+            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, false),
+        );
+
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        state.handle_sync_event(SyncEvent::WsOpened);
+        let sent: Vec<WsClientMsg> = wire
+            .try_iter()
+            .filter_map(|bytes| decode_client_msg(&bytes).ok())
+            .collect();
+
+        let subscribed: std::collections::HashSet<DocumentId> = sent
+            .iter()
+            .filter_map(|m| match m {
+                WsClientMsg::Subscribe { document_id } => Some(*document_id),
+                _ => None,
+            })
+            .collect();
+        let pulled: std::collections::HashMap<DocumentId, Seq> = sent
+            .iter()
+            .filter_map(|m| match m {
+                WsClientMsg::RequestMissing {
+                    document_id,
+                    after_seq,
+                } => Some((*document_id, *after_seq)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(subscribed, cursors.keys().copied().collect());
+        assert_eq!(pulled, cursors);
+        assert_eq!(sent.len(), 4, "one subscription and one pull each: {sent:?}");
+    }
+
     /// The socket address carries no query, so no log line, proxy record or
     /// URL holds a token (`SYNC-061`, `SRV-031`).
     #[test]

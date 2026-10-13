@@ -361,6 +361,29 @@ pub async fn insert_inline_update(
     })
 }
 
+/// Puts the sealed frame of delta `seq` in its index row, the fallback when
+/// its object can never be queued (`SRV-034`). The row drops the object key it
+/// pointed at, since a delta has one home. A row already holding its frame or
+/// pointing at a batch is left as it is. Returns whether a row took it.
+pub async fn attach_wire(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    seq: i64,
+    wire: &[u8],
+) -> Result<bool, AppError> {
+    let attached = sqlx::query(
+        "UPDATE updates SET wire = $3, s3_key = NULL \
+         WHERE document_id = $1 AND seq = $2 AND wire IS NULL AND batch_key IS NULL",
+    )
+    .bind(id_to_uuid(*document_id))
+    .bind(seq)
+    .bind(wire)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(attached == 1)
+}
+
 /// Locks the inline tail of a document, oldest first, for a move into a batch
 /// object. `None` when another move holds it.
 pub async fn lock_inline_tail(

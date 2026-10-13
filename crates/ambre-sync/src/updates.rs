@@ -1780,6 +1780,34 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_LIMIT - 1);
     }
 
+    /// `SYNC-007`: the overflow drops the update with the lowest clock, across
+    /// every parent it waits on. That update arrives neither first nor last,
+    /// so dropping by arrival at either end fails.
+    #[test]
+    fn a_quarantine_overflow_drops_the_lowest_clock() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        let parents = [SnapshotId::new(), SnapshotId::new()];
+        // Clock 2 first, clock 1 second, then 3 up to the cap, alternating
+        // between the two parents.
+        let clocks = [2, 1].into_iter().chain(3..=(QUARANTINE_LIMIT as u64));
+        for (i, clock) in clocks.enumerate() {
+            let parent = parents[i % 2];
+            state.receive_update(
+                Seq(i as u64 + 1),
+                make_update(doc, parent, clock, b"x", &key, &sk),
+            );
+        }
+        let held: std::collections::BTreeSet<u64> = state.documents[&doc]
+            .quarantine
+            .values()
+            .flatten()
+            .map(|(_, u)| u.public_data.clock.0)
+            .collect();
+        assert_eq!(held.len(), QUARANTINE_LIMIT - 1);
+        assert!(!held.contains(&1), "the lowest clock left");
+        assert!(held.contains(&2) && held.contains(&(QUARANTINE_LIMIT as u64)));
+    }
+
     // -- Snapshot lifecycle (upload adoption + cold-start seq gating) ----------
 
     /// Drain the WsClientMsg this state sent to its mock WS, decoded.
@@ -2559,6 +2587,62 @@ mod tests {
         state.receive_update(Seq(9), update(9, parent).update);
         state.receive_update(Seq(9), update(9, parent).update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
+    }
+
+    /// `SYNC-027`: a replay of several deltas reaches the Logic thread as one
+    /// batch, in the order of their numbers, and as no single event.
+    #[test]
+    fn a_history_replay_reaches_logic_as_one_batch() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let updates = (1..=5)
+            .map(|seq| SeqUpdate {
+                seq: Seq(seq),
+                update: make_update(doc, snap, seq, &[seq as u8], &key, &sk),
+            })
+            .collect();
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates,
+        });
+        let deltas: Vec<Vec<Vec<u8>>> = drain(&rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { .. } => Some(Vec::new()),
+                LogicEvent::RemoteUpdateBatch { deltas, .. } => {
+                    Some(deltas.into_iter().map(|d| d.payload).collect())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(deltas, [vec![vec![1], vec![2], vec![3], vec![4], vec![5]]]);
+    }
+
+    /// `SYNC-025`: after a reload, the relay's echo of this client's own
+    /// update carries its clock forward. The next frame takes the clock after
+    /// it. A peer's higher clock moves nothing.
+    #[test]
+    fn a_reload_takes_its_clock_from_the_echo_of_its_own_update() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let peer = MasterSeed::generate().derive_signing_key();
+        state.receive_update(Seq(1), make_update(doc, snap, 41, b"mine", &key, &sk));
+        state.receive_update(Seq(2), make_update(doc, snap, 99, b"peer", &key, &peer));
+        assert_eq!(state.documents[&doc].local_clock, 41);
+
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: doc,
+            payload: b"next".to_vec(),
+        });
+        let clocks: Vec<u64> = drain_ws(&ws_rx)
+            .into_iter()
+            .filter_map(|m| match m {
+                WsClientMsg::Update(u) => Some(u.public_data.clock.0),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(clocks, [42]);
     }
 
     /// Holds `SYNC-032`: an update held in quarantine is not opened on arrival.

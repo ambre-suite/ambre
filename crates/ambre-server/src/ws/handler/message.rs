@@ -293,7 +293,6 @@ pub(crate) async fn handle_update(
 
     let pub_key_hex = author_pubkey.to_hex();
     let clock = update.public_data.clock.0;
-    let snapshot_id = update.public_data.snapshot_id;
 
     let seq =
         match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock)
@@ -329,47 +328,24 @@ pub(crate) async fn handle_update(
         }
     };
 
-    // A small delta lives in its index row, in the same write as the row, and
-    // takes no other path (`SRV-148`). A large one, or one that meets a full
-    // inline tail, keeps an object of its own (`SRV-149`, `SRV-150`).
+    // The index write is retried. A refused statement is most often the pool or
+    // the register briefly unavailable. The number is already spent, so a write
+    // given up on is a delta the index never names (`SRV-033`).
     tracing::debug!("[Server->Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
-    let mut inlined = false;
-    let mut stored = Ok(());
-    if update_wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
-        match db::insert_inline_update(
-            &state.db,
-            &doc_id,
-            author_pubkey.as_array(),
-            &snapshot_id,
-            clock as i64,
-            seq as i64,
-            &update_wire,
-            crate::hot_tail::INLINE_CAP,
-        )
-        .await
-        {
-            Ok(db::InlineInsert::Stored { deltas, bytes }) => {
-                inlined = true;
-                if crate::hot_tail::past_watermark(deltas, bytes) {
-                    crate::hot_tail::spawn_move(state, doc_id);
+    let mut attempt = 0;
+    let stored = loop {
+        match store_index_row(state, doc_id, &update, seq, &s3_key, &update_wire).await {
+            Err(e) if attempt < INDEX_WRITE_BACKOFF.len() => {
+                tracing::warn!("insert_update refused doc={doc_id} seq={seq}, retrying: {e}");
+                if let Some(pause) = INDEX_WRITE_BACKOFF.get(attempt) {
+                    tokio::time::sleep(*pause).await;
                 }
+                attempt += 1;
             }
-            Ok(db::InlineInsert::Full) => crate::hot_tail::spawn_move(state, doc_id),
-            Err(e) => stored = Err(e),
+            other => break other,
         }
-    }
-    if !inlined && stored.is_ok() {
-        stored = db::insert_update(
-            &state.db,
-            &doc_id,
-            author_pubkey.as_array(),
-            &snapshot_id,
-            clock as i64,
-            seq as i64,
-            &s3_key,
-        )
-        .await;
-    }
+    };
+    let inlined = matches!(stored, Ok(true));
     if let Err(e) = stored {
         // The delta index (Postgres) is the ONLY thing `handle_request_missing`
         // reads to replay this seq. The clock was already consumed atomically in
@@ -404,10 +380,16 @@ pub(crate) async fn handle_update(
         }
         Err(e) => {
             // The pending list is the only path this sequenced delta takes to S3. A
-            // failed push loses it durably after the seq was already assigned and
-            // will be acknowledged. Log loudly and dead-letter the full wire so an
-            // operator can replay it (H1).
+            // failed push would lose it after the seq was already assigned and
+            // broadcast. Its index row takes the frame instead, so a replay still
+            // finds it (`SRV-034`). Log loudly and dead-letter the full wire as well,
+            // so an operator sees the failure and can replay it (H1).
             tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
+            match db::attach_wire(&state.db, &doc_id, seq as i64, &update_wire).await {
+                Ok(true) => {}
+                Ok(false) => tracing::error!("no index row took the frame doc={doc_id} seq={seq}"),
+                Err(e) => tracing::error!("attach_wire failed doc={doc_id} seq={seq}: {e}"),
+            }
             if let Err(dl) =
                 redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
             {
@@ -430,6 +412,65 @@ pub(crate) async fn handle_update(
     // The writer has the document open and holds every delta it covers, so it
     // is the one asked once the history passes the threshold (`SRV-038`).
     crate::compaction::ask_when_due(state, doc_id, seq, outbound_tx);
+}
+
+/// The pauses between the attempts of an index write: three retries, a third
+/// of a second in all. That bounds how long one frame holds its connection.
+const INDEX_WRITE_BACKOFF: [Duration; 3] = [
+    Duration::from_millis(20),
+    Duration::from_millis(80),
+    Duration::from_millis(240),
+];
+
+/// Writes the index row of delta `seq`. A small delta lives in its row, in the
+/// same write as the row, and takes no other path (`SRV-148`). A large one, or
+/// one that meets a full inline tail, keeps an object of its own (`SRV-149`,
+/// `SRV-150`). Returns whether the row holds the frame. Both inserts ignore a
+/// row already written, so a retry never doubles one.
+async fn store_index_row(
+    state: &Arc<AppState>,
+    doc_id: DocumentId,
+    update: &ambre_protocol::Update,
+    seq: u64,
+    s3_key: &str,
+    wire: &[u8],
+) -> Result<bool, AppError> {
+    let author = update.public_data.pub_key.as_array();
+    let snapshot_id = &update.public_data.snapshot_id;
+    let clock = update.public_data.clock.0 as i64;
+    if wire.len() < crate::hot_tail::INLINE_DELTA_MAX_BYTES {
+        let inline = db::insert_inline_update(
+            &state.db,
+            &doc_id,
+            author,
+            snapshot_id,
+            clock,
+            seq as i64,
+            wire,
+            crate::hot_tail::INLINE_CAP,
+        )
+        .await?;
+        match inline {
+            db::InlineInsert::Stored { deltas, bytes } => {
+                if crate::hot_tail::past_watermark(deltas, bytes) {
+                    crate::hot_tail::spawn_move(state, doc_id);
+                }
+                return Ok(true);
+            }
+            db::InlineInsert::Full => crate::hot_tail::spawn_move(state, doc_id),
+        }
+    }
+    db::insert_update(
+        &state.db,
+        &doc_id,
+        author,
+        snapshot_id,
+        clock,
+        seq as i64,
+        s3_key,
+    )
+    .await?;
+    Ok(false)
 }
 
 pub(crate) async fn handle_ephemeral(
@@ -556,7 +597,15 @@ pub(crate) async fn handle_request_missing(
         {
             Ok(u) => u,
             Err(e) => {
+                // An accepted request is always answered (`SRV-040`). The pages
+                // already sent stand, and a retryable refusal names where the
+                // replay stopped, so the client asks again from there.
                 tracing::error!(error = %e, "failed to get updates after seq");
+                let msg = encode_server_msg(&WsServerMsg::Error {
+                    code: 503,
+                    message: format!("replay incomplete after delta {cursor}, retry later"),
+                });
+                let _ = outbound_tx.send(msg).await;
                 return;
             }
         };
@@ -2195,6 +2244,9 @@ mod refusal_tests {
 // in an object of its own. Each test reads the stores back, so it needs
 // Postgres and Redis.
 #[cfg(test)]
+mod delivery_tests;
+
+#[cfg(test)]
 mod hot_tail_tests {
     use super::*;
     use crate::test_helpers::{
@@ -2206,7 +2258,7 @@ mod hot_tail_tests {
     use rustis::commands::{GenericCommands, ListCommands};
 
     /// A writer of a fresh document, over a state whose object store is `stub`.
-    async fn writer(
+    pub(super) async fn writer(
         pool: sqlx::PgPool,
         stub: &S3Stub,
         key: &ed25519_dalek::SigningKey,
@@ -2231,7 +2283,7 @@ mod hot_tail_tests {
     }
 
     /// Delta `clock` of `doc_id`, `len` bytes of ciphertext, signed by `key`.
-    fn signed_update(
+    pub(super) fn signed_update(
         key: &ed25519_dalek::SigningKey,
         doc_id: DocumentId,
         clock: u64,
@@ -2263,7 +2315,7 @@ mod hot_tail_tests {
     }
 
     /// The frames a full replay of `doc_id` sends, as they leave the relay.
-    async fn replay(
+    pub(super) async fn replay(
         state: &Arc<AppState>,
         conn: &mut WsConnectionState,
         doc_id: DocumentId,

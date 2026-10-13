@@ -38,7 +38,7 @@ A sealed delta arrives from the relay. Either its base is one this client holds,
 |---|---|---|---|---|---|---|
 | `SYNC-006` | `POST` | Released updates MUST be applied in parent-snapshot then clock order. | this spec section 3 | `ambre_sync::updates::tests::quarantine_released_in_clock_order` -- several updates held behind one unknown parent, and the release order read back | none | verified |
 | `SYNC-082` | `POST` | An update whose parent snapshot is known MUST be delivered immediately. | this spec section 3 | `ambre_sync::updates::tests::update_with_known_snapshot_delivered_immediately` -- the delivery that makes the quarantine an exception rather than a stage every delta passes through | none | verified |
-| `SYNC-007` | `POST` | A quarantine overflow MUST drop the oldest entry. | this spec section 3 | none | unheld -- `::quarantine_overflow_drops_oldest_and_warns` is named for this rule and does not assert it: it counts the warning and reads the quarantine's length, never which entry left. An overflow dropping the newest, the one whose base is most likely to land next, passes; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-007` | `POST` | A quarantine overflow MUST drop the oldest entry. | this spec section 3 | `ambre_sync::updates::tests::a_quarantine_overflow_drops_the_lowest_clock` -- the lowest clock arrives neither first nor last and waits on one of two parents, so a drop by arrival or by parent fails | none | verified |
 | `SYNC-084` | `POST` | A quarantine overflow MUST emit exactly one warning. | this spec section 3 | `ambre_sync::updates::tests::quarantine_overflow_drops_oldest_and_warns` -- its warning count, one at the hard cap, so a warning per further arrival fails | none | verified |
 | `SYNC-032` | `FRAME` | Receiving an update MUST NOT open one it quarantines. | `ZK-001`; this spec section 3 | `ambre_sync::updates::tests::a_quarantined_update_is_not_opened_on_arrival` -- an update sealed under a key this client lacks is held, and its arrival raises no failure to open | none | verified |
 | `SYNC-101` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3 | type-level -- Toile's and Prose's remote paths answer display events and no outcome, so neither has a field a delta could leave by; Prose `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast`; Toile `ambre_toile::logic::convergence_tests::a_remote_change_is_never_re_broadcast`; Trame `ambre_trame::logic::tests::group3::a_remote_change_is_never_re_broadcast` -- in each, the next local delta carries none of the remote peer's operations | none | verified |
@@ -52,7 +52,7 @@ The client asks for a document it may hold nothing of, part of, or all of.
 |---|---|---|---|---|---|---|
 | `SYNC-028` | `POST` | The post-open replay MUST start after the last delta the downloaded snapshot already contains. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_gates_request_missing_on_covered_seq`; `::open_document_ready_without_snapshot_requests_full_history` | none | verified |
 | `SYNC-029` | `POST` | A document MUST be reported ready once per open, after its first replay has landed. | this spec section 3 | `ambre_sync::updates::tests::open_document_ready_deferred_to_initial_replay`; `::open_document_ready_immediate_without_replay`; `::document_ready_carries_the_role_on_both_paths` | none | verified |
-| `SYNC-027` | `POST` | A history replay MUST reach the Logic thread as one batch, never as one event per delta. | this spec section 3 | none | unheld -- the replay collects every opened payload and sends one batch event, and no test counts the events a replay of several deltas produces; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-027` | `POST` | A history replay MUST reach the Logic thread as one batch, never as one event per delta. | this spec section 3 | `ambre_sync::updates::tests::a_history_replay_reaches_logic_as_one_batch` -- a replay of five deltas yields exactly one batch event carrying the five payloads in order, and no single-delta event | none | verified |
 | `SYNC-131` | `POST` | The Logic thread MUST import a history replay in slices that each fit the frame budget, and yield between them. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_logic::replay::tests::a_long_replay_lands_in_slices_and_yields_between_them` -- each pass imports at most a slice, the loop comes back unasked, and the end of the replay waits for the last slice | none | verified |
 | `SYNC-031` | `POST` | The quarantine MUST ask the relay for the missing history once per gap, not once per arrival. | this spec section 3 | `ambre_sync::updates::tests::the_quarantine_asks_once_per_gap` -- arrivals held behind one gap send a single history request for it | none | verified |
 | `SYNC-085` | `FRAME` | Opening a document MUST NOT emit an update. | this spec section 3; derived | `ambre_sync::updates::tests::an_open_sends_no_update` -- with a snapshot to read or without one, the open sends a history request and no update | none | verified |
@@ -64,9 +64,9 @@ relay.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-033` | `POST` | A reconnect MUST resubscribe every document that exists on the relay. | this spec section 3 | none | unheld -- the resubscription runs from the socket's open callback, once per document, and no host test drives an open callback: the mock transport has none; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-086` | `POST` | A reconnect MUST pull what each document missed. | this spec section 3 | none | unheld -- it is the half that decides whether the reconnection is worth anything: a resubscription with no pull leaves the client subscribed to a future it cannot place, because every delta arriving next has a base it never received; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-025` | `POST` | A reload MUST recover the clock from the relay's echo of this client's own updates. | this spec section 3 | none | unheld -- the recovery reads the author key of every inbound update and raises the counter to its clock, and no test replays a client's own update to see the counter move; lands with the `No delta is lost between the relay and the client` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-033` | `POST` | A reconnect MUST resubscribe every document that exists on the relay. | this spec section 3 | `ambre_sync::websocket::tests::a_reconnect_resubscribes_and_pulls_every_relay_document` -- the open event, driven over the mock transport, subscribes exactly the documents the relay created and skips the one it never saw | none | verified |
+| `SYNC-086` | `POST` | A reconnect MUST pull what each document missed. | this spec section 3 | `ambre_sync::websocket::tests::a_reconnect_resubscribes_and_pulls_every_relay_document` -- each subscribed document is asked for what lies past its own cursor, so a pull from zero or from another document's cursor fails | none | verified |
+| `SYNC-025` | `POST` | A reload MUST recover the clock from the relay's echo of this client's own updates. | this spec section 3 | `ambre_sync::updates::tests::a_reload_takes_its_clock_from_the_echo_of_its_own_update` -- the echo of its own clock-41 update moves the counter, a peer's clock 99 does not, and the next frame leaves with clock 42 | none | verified |
 | `SYNC-087` | `FRAME` | A reconnect MUST NOT apply an update the client already applied. | this spec section 3; derived | `ambre_sync::updates::tests::a_reconnect_replay_applies_nothing_twice` -- a replay overlapping a broadcast already received delivers the overlap once, and a held copy is not held twice | none | verified |
 
 * **Budget.** the release of 100 quarantined updates under 1 ms, a row of
@@ -76,10 +76,10 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 15 `verified`, 5 `untested`. What holds is the quarantine
-  itself. An update ahead of its snapshot waits, one whose base is known is delivered, the release
-  runs in clock order, and the overflow warns once. What is loose is everything about the clock and
-  the socket, both needing a driven transport the host tier does not have.
+* **Verification.** 20 `verified`. What holds is the quarantine itself. An update ahead of its
+  snapshot waits, and one whose base is known is delivered. The release runs in clock order, and
+  the overflow drops the lowest clock and warns once. The clock recovery, the batched replay and the
+  pull after a reconnect are driven over the mock transport, whose open event the host tier fires.
 
 ---
 
@@ -92,11 +92,11 @@ example to its verification.
 |---|---|---|---|---|
 | edits twice | watches | both edits, in Alice's order | both edits in the order Alice made them | `updates::tests::update_with_known_snapshot_delivered_immediately` |
 | edits after compacting | opens the document | the snapshot and the edit | Bob waits on the snapshot, then sees the edit | `updates::tests::quarantine_released_in_clock_order` |
-| edits a thousand times while Bob's base is missing | watches | Alice's edits | Bob loses the oldest, and is told (`SYNC-007`) | `updates::tests::quarantine_overflow_drops_oldest_and_warns` |
+| edits a thousand times while Bob's base is missing | watches | Alice's edits | Bob loses the oldest, and is told (`SYNC-007`) | `updates::tests::a_quarantine_overflow_drops_the_lowest_clock` |
 | edits a document neither peer has snapshotted | opens it | Alice's edits | Bob sees them: both derived the same parent (`SYNC-026`) | none -- section 5 |
-| edits while Bob is offline | reconnects | Alice's edits | Bob receives them as one repaint, not one per edit (`SYNC-027`) | none -- section 5 |
+| edits while Bob is offline | reconnects | Alice's edits | Bob receives them as one repaint, not one per edit (`SYNC-027`) | `updates::tests::a_history_replay_reaches_logic_as_one_batch` |
 | compacts the document | is editing it | the new snapshot | Bob keeps his base until the snapshot is downloaded and opened (`SYNC-030`) | `updates::tests::an_announced_snapshot_releases_nothing_until_fetched` |
-| reloads the page and edits | watches | Alice's edit | Alice's edit reaches Bob rather than being refused (`SYNC-025`) | none -- section 5 |
+| reloads the page and edits | watches | Alice's edit | Alice's edit reaches Bob rather than being refused (`SYNC-025`) | `updates::tests::a_reload_takes_its_clock_from_the_echo_of_its_own_update` |
 
 ---
 
@@ -196,8 +196,6 @@ That is a document that exists on this client alone, or an open with no connecti
   nothing is checked (`ambre-spec-sealed-envelope.md`).
 * **A release does not cascade.** Two snapshots waiting on each other stay held until each arrives
   on its own, which is correct and untested.
-* **No host test drives a socket callback.** The resubscription, the reconnect and the replay all
-  run from a browser callback. The mock transport has none, so `SYNC-033` is held by reading it.
 * **Nothing bounds how long a document may hold a gap.** A parent that never arrives leaves the
   document permanently behind, with a bounded quarantine and no report beyond the overflow warning.
 
