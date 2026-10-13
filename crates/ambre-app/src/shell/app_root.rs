@@ -341,7 +341,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
         } else if boot_is_prose {
-            ambre_prose::chrome::context_entries()
+            ambre_prose::chrome::context_entries(prose_signals.history.get())
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
         }

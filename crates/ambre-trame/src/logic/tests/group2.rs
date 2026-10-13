@@ -126,21 +126,56 @@ fn mutating_command_reports_undo_state() {
     );
 }
 
-/// Undo with an empty stack is a no-op: no `DataReset`, no broadcast, just the
-/// (unchanged) availability so the chrome can disable the button.
+/// Undo with an empty stack is a no-op: no `DataReset`, no broadcast, and no
+/// availability either, since the one the chrome holds is still true.
 #[test]
 fn undo_with_empty_stack_is_a_noop() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::Undo);
     assert!(evts.update.is_none());
-    assert_eq!(evts.display.len(), 1);
-    assert!(matches!(
-        evts.display[0],
-        TrameEvent::UndoState {
-            can_undo: false,
-            can_redo: false
-        }
-    ));
+    assert!(evts.display.is_empty(), "{:?}", evts.display);
+}
+
+/// `UNDO-009`: a command that changes nothing refreshes no affordance. Each
+/// of these leaves the stacks as they were, after a first edit made one.
+#[test]
+fn a_command_that_changes_nothing_reports_no_undo_state() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "x".to_owned(),
+    });
+    for no_op in [
+        TrameCommand::Redo,
+        TrameCommand::SetActiveCell {
+            row: 2,
+            col: 2,
+            anchor_row: 2,
+            anchor_col: 2,
+            extra: vec![],
+            kind: crate::SelectionKind::Cells,
+        },
+        TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "x".to_owned(),
+        },
+    ] {
+        let label = format!("{no_op:?}");
+        let evts = state.handle_command(no_op);
+        assert!(evts.update.is_none(), "{label} wrote");
+        assert!(
+            !evts
+                .display
+                .iter()
+                .any(|e| matches!(e, TrameEvent::UndoState { .. })),
+            "{label} refreshed the history",
+        );
+    }
+    state.handle_command(TrameCommand::Undo);
+    let evts = state.handle_command(TrameCommand::Undo);
+    assert!(evts.update.is_none() && evts.display.is_empty());
 }
 
 /// Undo is local-only (`trame-undo`): `UndoManager` tracks only this peer's

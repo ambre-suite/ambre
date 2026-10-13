@@ -246,3 +246,87 @@ async fn the_ruler_element_sits_on_the_column_it_was_given() {
         container.remove();
     }
 }
+
+/// Each control of the format bar announces the title its command's
+/// description carries (`UI-THREAD-036`).
+#[wasm_bindgen_test]
+async fn the_format_bar_announces_the_registry_labels() {
+    let signals = ProseSignals::new();
+    signals
+        .toolbar
+        .set(ambre_prose::view::toolbar::ToolbarState {
+            anchor: Some((200.0, 100.0)),
+            active: None,
+        });
+    let root = mount_in_container(move || view! { <chrome::ProseFormatBar signals=signals /> });
+    leptos::task::tick().await;
+
+    for (id, _) in ambre_prose::commands::FORMAT_BAR {
+        let command = ambre_commands::find(ambre_prose::commands::COMMANDS, id)
+            .expect("the control is described");
+        let expected = (command.title)(&ambre_commands::Locale::En);
+        let found = root
+            .query_selector(&format!("[aria-label=\"{expected}\"]"))
+            .unwrap();
+        assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
+    }
+    root.remove();
+}
+
+/// The labels of the menu rows the user cannot pick.
+fn disabled_rows(root: &web_sys::Element) -> Vec<String> {
+    let rows = root.query_selector_all("[aria-disabled=\"true\"]").unwrap();
+    (0..rows.length())
+        .filter_map(|i| rows.item(i))
+        .map(|row| row.text_content().unwrap_or_default())
+        .collect()
+}
+
+/// `UNDO-006`: the page menu's undo and redo rows follow the history state the
+/// Logic thread reports. The menu counts nothing itself: an event that is not
+/// a history state leaves the rows as they were.
+#[wasm_bindgen_test]
+async fn the_history_rows_follow_the_reported_state() {
+    let signals = ProseSignals::new();
+    let pos = RwSignal::new(Some((10.0, 10.0)));
+    let entries = Signal::derive(move || chrome::context_entries(signals.history.get()));
+    let root = mount_in_container(move || {
+        view! { <ambre_chrome::ContextMenu pos=pos entries=entries on_command=Callback::new(|_| ()) /> }
+    });
+    let report = |event: ProseEvent| {
+        signals.mirror_event(&UiEvent::Viewport {
+            document_id: DocumentId::new(),
+            event: AppEvent::Prose(event),
+        });
+    };
+    leptos::task::tick().await;
+    assert!(
+        disabled_rows(&root).iter().any(|row| row.contains("Undo"))
+            && disabled_rows(&root).iter().any(|row| row.contains("Redo")),
+        "a fresh page has no history: {:?}",
+        disabled_rows(&root)
+    );
+
+    report(ProseEvent::UndoState {
+        can_undo: true,
+        can_redo: false,
+    });
+    leptos::task::tick().await;
+    let rows = disabled_rows(&root);
+    assert!(!rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
+    assert!(rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
+
+    report(ProseEvent::Synced { acked: 1 });
+    leptos::task::tick().await;
+    assert_eq!(disabled_rows(&root), rows);
+
+    report(ProseEvent::UndoState {
+        can_undo: false,
+        can_redo: true,
+    });
+    leptos::task::tick().await;
+    let rows = disabled_rows(&root);
+    assert!(rows.iter().any(|row| row.contains("Undo")), "{rows:?}");
+    assert!(!rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
+    root.remove();
+}

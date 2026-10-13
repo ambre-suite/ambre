@@ -379,6 +379,53 @@ pub(crate) mod tests {
         );
     }
 
+    /// `FIND-004`: each step of a search brings its current match into the
+    /// window. When the layout in force does not hold the match, the view
+    /// asks for its pages. A match already in the window moves nothing.
+    #[test]
+    fn each_step_of_a_search_brings_its_match_into_view() {
+        let (mut state, _) = laid_out(0, 0);
+        append(&mut state, BlockInit::Paragraph, "needle at the top");
+        let body = vec!["word"; 60].join(" ");
+        for _ in 0..400 {
+            append(&mut state, BlockInit::Paragraph, &body);
+        }
+        append(&mut state, BlockInit::Paragraph, "needle at the end");
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_event(&state.layout_event().expect("a layout"));
+        let in_view = |ui: &ProseUiState| {
+            let hit = ui.find_matches[ui.find_current.expect("a current match") as usize];
+            let (top, bottom) = ui
+                .flow_span(hit.block_id, hit.range.0, false)
+                .expect("the match is laid out");
+            let scroll = ui.viewport.scroll_y;
+            top >= scroll && bottom <= scroll + ui.viewport.visible_height()
+        };
+        let mut step = |ui: &mut ProseUiState, command| {
+            for event in state.handle_command(command).display {
+                ui.apply_event(&event);
+            }
+            follow(ui, &mut state);
+        };
+
+        step(
+            &mut ui,
+            ProseCommand::FindStart {
+                query: crate::events::FindQuery {
+                    text: "needle".to_owned(),
+                    ..Default::default()
+                },
+            },
+        );
+        assert_eq!(ui.viewport.scroll_y, 0.0, "the first match is in view");
+        step(&mut ui, ProseCommand::FindNext);
+        assert!(ui.viewport.scroll_y > 0.0);
+        assert!(in_view(&ui), "the last match is brought into view");
+        step(&mut ui, ProseCommand::FindNext);
+        assert!(in_view(&ui), "the wrap brings the first one back");
+    }
+
     /// `PROSE-UI-205`: the view takes the layout the Logic thread handed by
     /// its pointer, with the indices built beside it, and copies nothing.
     #[test]

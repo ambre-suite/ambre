@@ -38,6 +38,10 @@ pub enum ProseKey {
     Enter,
     Escape,
     SelectAll,
+    /// `Ctrl+Z`; with `Shift` it redoes (`UNDO-010`, `UNDO-011`).
+    Undo,
+    /// `Ctrl+Y`, the second redo chord.
+    Redo,
 }
 
 impl ProseKey {
@@ -59,6 +63,8 @@ impl ProseKey {
             "Enter" => Self::Enter,
             "Escape" => Self::Escape,
             "a" | "A" if ctrl => Self::SelectAll,
+            "z" | "Z" if ctrl => Self::Undo,
+            "y" | "Y" if ctrl => Self::Redo,
             _ => return None,
         })
     }
@@ -647,6 +653,18 @@ impl ProseUiState {
         ctrl: bool,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
+        // A history step needs no caret: the engine places it after
+        // (`UNDO-010`, `UNDO-011`). The key is the view's whether or not the
+        // command was taken, so the pipe never runs its own undo.
+        if matches!(key, ProseKey::Undo | ProseKey::Redo) {
+            let redo = key == ProseKey::Redo || shift;
+            send(if redo {
+                ProseCommand::Redo
+            } else {
+                ProseCommand::Undo
+            });
+            return true;
+        }
         if self.cursor.is_none() {
             return false;
         }
@@ -674,6 +692,8 @@ impl ProseUiState {
                 self.select_all();
                 return true;
             }
+            // Taken above, before the caret is asked for.
+            ProseKey::Undo | ProseKey::Redo => return true,
         };
         self.move_cursor(direction, shift);
         true

@@ -523,9 +523,22 @@ impl ProseState {
         // on the way out (`PROSE-105`).
         let refused = command.name();
         self.catchup.predicting = catchup::Prediction::drawn_by(&command);
-        let outcome = self.dispatch(command).named(refused);
+        let mut outcome = self.dispatch(command).named(refused);
         self.catchup.predicting = catchup::Prediction::None;
+        self.report_history(&mut outcome);
         outcome
+    }
+
+    /// Tell the chrome what the history holds, after a command that wrote
+    /// (`UNDO-006`). A command that wrote nothing exports no delta, and so
+    /// sends no refresh (`UNDO-009`).
+    fn report_history(&self, outcome: &mut ProseOutcome) {
+        if outcome.update.is_some() {
+            outcome.display.push(ProseEvent::UndoState {
+                can_undo: self.undo.can_undo(),
+                can_redo: self.undo.can_redo(),
+            });
+        }
     }
 
     /// [`handle_command`](Self::handle_command) for a command the view sent
@@ -542,6 +555,7 @@ impl ProseState {
         };
         let mut outcome = self.dispatch(command).named(refused);
         self.settle(&mut outcome);
+        self.report_history(&mut outcome);
         outcome
     }
 
@@ -1288,7 +1302,7 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{BlockId, BlockInit};
+    use crate::events::{BlockId, BlockInit, CursorPosition};
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {
@@ -1671,6 +1685,61 @@ mod tests {
         );
         assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
         assert!(restored.cached_media("a-hash").is_none());
+    }
+
+    /// The history state each command reports, if any.
+    fn history_of(outcome: &ProseOutcome) -> Vec<(bool, bool)> {
+        outcome
+            .display
+            .iter()
+            .filter_map(|event| match event {
+                ProseEvent::UndoState { can_undo, can_redo } => Some((*can_undo, *can_redo)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `UNDO-006`, `UNDO-009`: a command that writes reports the history state
+    /// once, read from the stack. A command that writes nothing reports none,
+    /// so the menu is not refreshed for it.
+    #[test]
+    fn a_write_reports_the_history_and_a_no_op_reports_none() {
+        let mut state = ProseState::with_peer(13).expect("a document is built");
+        let block = state.root_blocks()[0];
+        let insert = ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "text".to_owned(),
+        };
+        assert_eq!(history_of(&state.handle_command(insert)), [(true, false)]);
+        assert_eq!(
+            history_of(&state.handle_command(ProseCommand::Undo)),
+            [(false, true)]
+        );
+        assert_eq!(
+            history_of(&state.handle_command(ProseCommand::Redo)),
+            [(true, false)]
+        );
+
+        // Nothing to redo, a move of the caret, and an empty deletion.
+        for no_op in [
+            ProseCommand::Redo,
+            ProseCommand::UpdateCursor {
+                pos: CursorPosition {
+                    block_id: block,
+                    offset: 1,
+                    anchor: None,
+                },
+            },
+            ProseCommand::DeleteText {
+                block_id: block,
+                range: (0, 0),
+            },
+        ] {
+            let outcome = state.handle_command(no_op);
+            assert!(outcome.update.is_none());
+            assert_eq!(history_of(&outcome), []);
+        }
     }
 
     #[test]

@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 91 partial and 369 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 82 partial and 365 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 631 | 269 | 584 | 605 |  | 2089 |
-| `partial` | 35 | 14 | 41 | 1 |  | 91 |
+| `verified` | 644 | 269 | 584 | 605 |  | 2102 |
+| `partial` | 26 | 14 | 41 | 1 |  | 82 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 39 | 133 | 188 | 1 |  | 361 |
+| `untested` | 35 | 133 | 188 | 1 |  | 357 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
@@ -44,12 +44,12 @@
 | `ambre-spec-broadcast.md` | 24 | 18 | 18 |  |  | 6 |
 | `ambre-spec-chrome.md` | 23 | 20 | 20 |  |  | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 16 |  | 1 | 1 |
-| `ambre-spec-commands.md` | 13 | 13 | 9 | 3 | 1 |  |
+| `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-delta-order.md` | 20 | 20 | 20 |  |  |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 6 |  |  |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 | 1 |  |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 10 |  | 1 | 4 |
-| `ambre-spec-find.md` | 10 | 10 | 1 | 7 | 2 |  |
+| `ambre-spec-find.md` | 10 | 10 | 5 | 5 |  |  |
 | `ambre-spec-fixtures.md` | 35 | 35 | 32 |  | 3 |  |
 | `ambre-spec-frame.md` | 18 | 16 | 15 | 1 |  | 2 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |  |
@@ -76,7 +76,7 @@
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 1 | 6 | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-ui.md` | 17 | 11 | 9 |  | 2 | 6 |
-| `ambre-spec-undo.md` | 11 | 11 | 3 | 6 | 2 |  |
+| `ambre-spec-undo.md` | 11 | 11 | 8 | 2 | 1 |  |
 | `ambre-spec-zero-knowledge.md` | 16 | 14 | 13 | 1 |  | 2 |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 1 | 6 |  |

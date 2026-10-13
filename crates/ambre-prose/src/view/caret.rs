@@ -299,13 +299,27 @@ impl ProseUiState {
     /// bottom, in document pixels.
     pub(crate) fn caret_span(&self) -> Option<(f32, f32)> {
         let cursor = self.cursor.as_ref()?;
-        let laid = self.to_laid(cursor.block_id, cursor.offset);
-        let Some(index) = self.flow_index(&tree_id(cursor.block_id)) else {
+        if self.flow_index(&tree_id(cursor.block_id)).is_none() {
+            let laid = self.to_laid(cursor.block_id, cursor.offset);
             return self.band_caret_span(cursor.block_id, laid);
-        };
+        }
+        self.flow_span(cursor.block_id, cursor.offset, self.caret_upstream)
+    }
+
+    /// Where a caret at a document offset of a body block would be drawn,
+    /// from the top of the column. `None` for a block the layout in force
+    /// does not carry in its flow.
+    pub(crate) fn flow_span(
+        &self,
+        block_id: BlockId,
+        offset: u32,
+        upstream: bool,
+    ) -> Option<(f32, f32)> {
+        let laid = self.to_laid(block_id, offset);
+        let index = self.flow_index(&tree_id(block_id))?;
         let block = self.shaped.block(index)?;
-        let run = self.run_of(cursor.block_id)?;
-        let caret = run.caret_box_at(laid, self.caret_upstream);
+        let run = self.run_of(block_id)?;
+        let caret = run.caret_box_at(laid, upstream);
         let (y0, y1) = (caret.y0 as f32, caret.y1 as f32);
         let body_top = self.shaped.layout.body_top_px();
         let last = *block.page_span().end();
@@ -361,9 +375,30 @@ impl ProseUiState {
     /// Scroll the least that brings the caret back into the window
     /// (`PROSE-UI-158`). A caret already in it moves nothing.
     pub(crate) fn reveal_caret(&mut self) {
-        let Some((top, bottom)) = self.caret_span() else {
+        if let Some(span) = self.caret_span() {
+            self.reveal_span(span);
+        }
+    }
+
+    /// Bring the current match of the search into the window (`FIND-004`).
+    /// A match already in it moves nothing. A match in a block the layout in
+    /// force does not carry is asked for, and shown once a layout carries it.
+    pub(crate) fn reveal_current_match(&mut self) {
+        let Some(hit) = self
+            .find_current
+            .and_then(|at| self.find_matches.get(at as usize))
+            .copied()
+        else {
             return;
         };
+        match self.flow_span(hit.block_id, hit.range.0, false) {
+            Some(span) => self.reveal_span(span),
+            None => self.reveal_block(hit.block_id),
+        }
+    }
+
+    /// Scroll the least that brings a span of the column into the window.
+    fn reveal_span(&mut self, (top, bottom): (f32, f32)) {
         let visible = self.viewport.visible_height();
         let scroll = self.viewport.scroll_y;
         let wanted = if top < scroll {

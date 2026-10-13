@@ -46,8 +46,9 @@ fn entries_for(id: MenuId, toggles: Toggles) -> Vec<MenuEntry> {
         .filter_map(|row| match row {
             MenuRow::Separator => Some(MenuEntry::separator()),
             MenuRow::Command(command) => {
-                let entry = MenuEntry::new(command, registry::title(command, &Locale::En)?);
-                let entry = match registry::chord(command) {
+                let cmd = ambre_chrome::commands::find(registry::COMMANDS, command)?;
+                let entry = MenuEntry::command(cmd, &Locale::En);
+                let entry = match cmd.chord() {
                     Some(kb) => entry.shortcut(kb),
                     None => entry,
                 };

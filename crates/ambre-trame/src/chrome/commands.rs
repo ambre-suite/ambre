@@ -233,10 +233,10 @@ fn entry(row: registry::MenuRow) -> Option<MenuEntry> {
         registry::MenuRow::Command(id) => id,
     };
     let cmd = ambre_chrome::commands::find(COMMANDS, id)?;
-    let label = (cmd.title)(&Locale::En);
+    let entry = MenuEntry::command(cmd, &Locale::En);
     Some(match cmd.icon.and_then(icons::resolve) {
-        Some(icon) => MenuEntry::with_icon(id, label, icon),
-        None => MenuEntry::new(id, label),
+        Some(icon) => entry.icon(icon),
+        None => entry,
     })
 }
 

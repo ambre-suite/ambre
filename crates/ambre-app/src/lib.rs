@@ -1235,6 +1235,9 @@ pub fn main() {
             // so the menu bar disables the two rows from the Logic thread's
             // `UndoState` alone (`UNDO-006`).
             toile_chrome::mirror_event(&toile_store, &ev);
+            // Prose's history availability, into the signals its context
+            // menu reads (`UNDO-006`).
+            prose_signals.mirror_event(&ev);
             // Mirror the active cell's rich style into the formatting toolbar
             // (`trame-cell-styles`). A no-op for non-style events.
             trame_chrome::apply_style_event(&style_state, &ev);

@@ -2,8 +2,9 @@
 //! (`ambre-spec-commands.md`, `UI-THREAD-019`).
 //!
 //! Only the commands the shell routes live here. The text chords (typing,
-//! moving the caret, undo) are decoded by the view from the input pipe, and no
-//! table names them.
+//! moving the caret) are decoded by the view from the input pipe, and no
+//! table names them. Undo and redo are described here for their menu rows,
+//! and the view decodes their chords too: the shell binds none of them.
 
 use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap, Locale};
 
@@ -15,6 +16,13 @@ const FORMAT: CommandCategory = CommandCategory("format");
 const CLIPBOARD: CommandCategory = CommandCategory("clipboard");
 /// Commands that belong to the application shell rather than the document.
 const GENERAL: CommandCategory = CommandCategory("general");
+/// Stepping through the local history.
+const HISTORY: CommandCategory = CommandCategory("history");
+
+/// Undo this peer's last change (`UNDO-001`).
+pub const UNDO: CommandId = CommandId("prose.history.undo");
+/// Redo the last change undone.
+pub const REDO: CommandId = CommandId("prose.history.redo");
 
 /// Open the command palette: a UI-only intent the shell intercepts
 /// (`CHROME-008`).
@@ -37,8 +45,9 @@ pub const PASTE: CommandId = ambre_commands::shared::PASTE;
 /// Paste the text alone, every richer format dropped (`PROSE-UI-227`).
 pub const PASTE_PLAIN: CommandId = ambre_commands::shared::PASTE_PLAIN;
 
-/// The entries of the page's context menu, in the order it shows them.
-pub const CONTEXT_MENU: [CommandId; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
+/// The entries of the page's context menu, in the order it shows them. The
+/// history group comes first, then the clipboard group.
+pub const CONTEXT_MENU: [CommandId; 6] = [UNDO, REDO, CUT, COPY, PASTE, PASTE_PLAIN];
 
 /// The five controls of the format bar. A control and its chord invoke the
 /// same id, and the id resolves to one mark key (`PROSE-UI-056`).
@@ -101,6 +110,14 @@ fn paste_title(_: &Locale) -> String {
 
 fn paste_plain_title(_: &Locale) -> String {
     "Paste as plain text".into()
+}
+
+fn undo_title(_: &Locale) -> String {
+    "Undo".into()
+}
+
+fn redo_title(_: &Locale) -> String {
+    "Redo".into()
 }
 
 fn palette_title(_: &Locale) -> String {
@@ -207,6 +224,20 @@ pub const COMMANDS: &[Command] = &[
         category: CLIPBOARD,
     },
     Command {
+        id: UNDO,
+        title: undo_title,
+        icon: Some(IconId("undo")),
+        keybindings: ambre_commands::shared::UNDO_CHORDS,
+        category: HISTORY,
+    },
+    Command {
+        id: REDO,
+        title: redo_title,
+        icon: Some(IconId("redo")),
+        keybindings: ambre_commands::shared::REDO_CHORDS,
+        category: HISTORY,
+    },
+    Command {
         id: PALETTE,
         title: palette_title,
         icon: None,
@@ -227,6 +258,14 @@ pub fn bind_keys(keymap: &mut Keymap) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each command is described once, with a title in every locale, a
+    /// group, no blank icon and no chord another command holds
+    /// (`UI-THREAD-019`, `UI-THREAD-037`).
+    #[test]
+    fn the_table_has_no_defect() {
+        assert_eq!(ambre_commands::table_defects(COMMANDS), []);
+    }
 
     /// `PROSE-IO-028`, `PROSE-IO-027`: the save, import and export entries
     /// are declared once each, so the palette lists them.

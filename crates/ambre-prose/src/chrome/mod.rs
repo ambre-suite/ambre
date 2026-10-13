@@ -61,6 +61,18 @@ pub struct ProseSignals {
     pub ruler: RwSignal<RulerState>,
     /// A released ruler handle, until the view drains it (`PROSE-UI-063`).
     pub ruler_release: RwSignal<Option<RulerRelease>>,
+    /// Whether the local history holds a step to undo, and one to redo, as
+    /// the Logic thread last reported it. The chrome counts nothing
+    /// (`UNDO-006`).
+    pub history: RwSignal<History>,
+}
+
+/// What the local history holds, as the Logic thread last reported it. A
+/// fresh document holds neither step.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct History {
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 impl Default for ProseSignals {
@@ -85,6 +97,24 @@ impl ProseSignals {
             slash_pick: RwSignal::new(None),
             ruler: RwSignal::new(RulerState::default()),
             ruler_release: RwSignal::new(None),
+            history: RwSignal::new(History::default()),
+        }
+    }
+
+    /// Take in the history's availability from a Prose
+    /// [`UndoState`](crate::events::ProseEvent::UndoState). Every other event
+    /// leaves it as it was (`UNDO-006`).
+    pub fn mirror_event(&self, ev: &ambre_bus::UiEvent) {
+        if let ambre_bus::UiEvent::Viewport {
+            event:
+                ambre_bus::AppEvent::Prose(crate::events::ProseEvent::UndoState { can_undo, can_redo }),
+            ..
+        } = ev
+        {
+            self.history.set(History {
+                can_undo: *can_undo,
+                can_redo: *can_redo,
+            });
         }
     }
 

@@ -760,3 +760,42 @@ fn the_pipe_follows_the_caret_inside_the_element() {
     rig.paint();
     assert_eq!(rig.view.caret_drawn, None, "the editor closed");
 }
+
+/// A find step asks for the geometry of its focus, which may sit far outside
+/// the camera, and the answer brings it into view. A reply that no step asked
+/// for moves nothing (`FIND-004`).
+#[test]
+fn the_current_match_is_brought_into_view() {
+    use ambre_bus::app::toile::{FindResults, SelectionStats};
+    let far = Rect::new(1.0e6, 1.0e6, 1.0e6 + 100.0, 1.0e6 + 80.0);
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    assert!(!rig.view.cam.visible_world().contains(far.center()));
+    let stats = |kind| {
+        ToileEvent::SelectionStats(SelectionStats {
+            count: 1,
+            bounds: Some(far),
+            kind,
+        })
+    };
+
+    rig.answer(stats(StatsRequestKind::FindFocus));
+    assert!(
+        !rig.view.cam.visible_world().contains(far.center()),
+        "an unasked reply moves nothing"
+    );
+
+    rig.answer(ToileEvent::FindResults(FindResults {
+        hits: vec![eid("a"), eid("far")],
+        focus: Some(eid("far")),
+    }));
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::RequestSelectionStats { ids, kind: StatsRequestKind::FindFocus }]
+            if ids == &[eid("far")]
+    ));
+    rig.answer(stats(StatsRequestKind::FindFocus));
+    assert!(
+        rig.view.cam.visible_world().contains(far.center()),
+        "the focus is in view"
+    );
+}

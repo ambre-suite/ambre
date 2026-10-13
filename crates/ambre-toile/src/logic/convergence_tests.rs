@@ -1119,6 +1119,57 @@ fn find_focus_wraps_after_from() {
     assert_eq!(r.focus, Some(a.clone()));
 }
 
+/// `FIND-010`: an edit took the resume point out of the hits, so it is no
+/// longer usable. The step elects the first hit, not the one after it.
+#[test]
+fn a_resume_point_edited_away_restarts_at_the_first_hit() {
+    let mut st = ToileState::new();
+    let a = create_sticky(&mut st, Point::ZERO, "match");
+    let b = create_sticky(&mut st, Point::new(200.0, 0.0), "match");
+    let c = create_sticky(&mut st, Point::new(400.0, 0.0), "match");
+    let opts = crate::logic::command::FindOptions::default();
+    assert_eq!(
+        find(&mut st, "match", opts, Some(b.clone())).focus,
+        Some(c.clone())
+    );
+
+    set_body(&mut st, &b, "match", "gone");
+    for backward in [false, true] {
+        let r = find_dir(&mut st, "match", opts, Some(b.clone()), backward);
+        assert_eq!(r.hits, vec![a.clone(), c.clone()]);
+        assert_eq!(r.focus, Some(a.clone()), "backward: {backward}");
+    }
+}
+
+/// `FIND-002`: the walk covers the whole board, not the camera. A hit far
+/// outside the visible set is found and elected.
+#[test]
+fn a_search_finds_a_hit_far_outside_the_camera() {
+    let mut st = ToileState::new();
+    let near = create_sticky(&mut st, Point::ZERO, "needle");
+    let far = create_sticky(&mut st, Point::new(1.0e6, 1.0e6), "needle");
+    st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
+        center: Point::ZERO,
+        zoom: 1.0,
+        size: Size::new(800.0, 600.0),
+    }));
+    let visible: Vec<ElementId> = st
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .filter_map(|node| match node {
+            DisplayNode::Element(e) => Some(e.id),
+            DisplayNode::Connector(_) => None,
+        })
+        .collect();
+    assert_eq!(visible, vec![near.clone()], "the far note is off camera");
+
+    let opts = crate::logic::command::FindOptions::default();
+    let r = find(&mut st, "needle", opts, Some(near.clone()));
+    assert_eq!(r.hits, vec![near, far.clone()]);
+    assert_eq!(r.focus, Some(far));
+}
+
 #[test]
 fn find_backward_steps_to_previous_hit_wrapping() {
     let mut st = ToileState::new();
@@ -2631,6 +2682,27 @@ fn undo_reverts_create_and_redo_restores() {
     st.handle_command(ToileCommand::Redo);
     assert_eq!(st.element_count(), 1);
     assert_eq!(st.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
+}
+
+/// `UNDO-002`: an undo and a redo each leave as an ordinary delta, and a
+/// second peer that applies them reads the board the author reads.
+#[test]
+fn a_history_step_reaches_the_other_peer_as_a_delta() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let id = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    b.apply_remote(&a.export_snapshot());
+    assert_eq!(b.element_count(), 1);
+
+    let undo = a.handle_command(ToileCommand::Undo);
+    b.apply_remote(&undo.update.expect("an undo writes"));
+    assert_eq!(b.element_count(), 0);
+    assert!(b.bounds_of(&id).is_none());
+
+    let redo = a.handle_command(ToileCommand::Redo);
+    b.apply_remote(&redo.update.expect("a redo writes"));
+    assert_eq!(b.element_count(), 1);
+    assert_eq!(b.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
 #[test]

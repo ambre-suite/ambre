@@ -319,6 +319,14 @@ mod tests {
         }
     }
 
+    /// Each command is described once, with a title in every locale, a
+    /// group, no blank icon and no chord another command holds
+    /// (`UI-THREAD-019`, `UI-THREAD-037`).
+    #[test]
+    fn the_table_has_no_defect() {
+        assert_eq!(ambre_commands::table_defects(COMMANDS), []);
+    }
+
     /// A command carries its own label, and a view reads it from here. An empty
     /// title is a command no menu and no palette can show.
     #[test]

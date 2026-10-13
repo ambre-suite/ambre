@@ -197,6 +197,14 @@ mod tests {
         }
     }
 
+    /// Each command is described once, with a title in every locale, a
+    /// group, no blank icon and no chord another command holds
+    /// (`UI-THREAD-019`, `UI-THREAD-037`).
+    #[test]
+    fn the_table_has_no_defect() {
+        assert_eq!(ambre_commands::table_defects(COMMANDS), []);
+    }
+
     /// `DOCFILE-009`: the surface that offers the export states that the file
     /// carries no encryption of its own. The label is where a user reads it
     /// before clicking. Trame asserts the same on its own label -- the rule is

@@ -3,7 +3,7 @@
 // reads the viewport of the frame it runs in. So each test mounts into an
 // iframe of the width it reads.
 
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{Command, CommandCategory, CommandId, Locale};
 use ambre_chrome::{ContextMenu, MenuEntry};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -33,13 +33,14 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
     inner.head().unwrap().append_child(&sheet).unwrap();
 
     let pos = RwSignal::new(Some((150.0, 60.0)));
-    let entries = Signal::stored(vec![MenuEntry::Item {
-        command: CommandId("clipboard.copy"),
-        label: "Copy".to_owned(),
+    let copy = Command {
+        id: CommandId("clipboard.copy"),
+        title: |_| "Copy".to_owned(),
         icon: None,
-        shortcut: None,
-        disabled: false,
-    }]);
+        keybindings: &[],
+        category: CommandCategory("edit"),
+    };
+    let entries = Signal::stored(vec![MenuEntry::command(&copy, &Locale::En)]);
     let handle = mount_to(inner.body().unwrap(), move || {
         view! { <ContextMenu pos=pos entries=entries on_command=Callback::new(|_| {}) /> }
     });

@@ -49,7 +49,7 @@ mod toast;
 pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
 pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
-pub use context_menu::{ContextMenu, MenuEntry};
+pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};
 pub use font::{FONT_FAMILIES, FontPicker};

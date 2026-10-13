@@ -658,8 +658,12 @@ impl ProseUiState {
                 self.find_matches = matches.clone();
                 self.find_current = *current;
                 self.index_highlights();
+                self.reveal_current_match();
             }
-            ProseEvent::FindUpdated { current } => self.find_current = *current,
+            ProseEvent::FindUpdated { current } => {
+                self.find_current = *current;
+                self.reveal_current_match();
+            }
             ProseEvent::BandsUpdated { bands } => self.bands = bands.clone(),
             ProseEvent::RemoteCursors { cursors } => {
                 self.remote_cursors = cursors.clone();
@@ -673,11 +677,12 @@ impl ProseUiState {
             }
             // A picture arriving, a masked cell, a refusal and an error each
             // repaint or warn, and none of them touches what is being typed
-            // (`PROSE-UI-027`).
+            // (`PROSE-UI-027`). The history's availability is the chrome's.
             ProseEvent::MediaArrived { .. }
             | ProseEvent::MergeConflictDetected { .. }
             | ProseEvent::DocumentRefused { .. }
             | ProseEvent::ImportCompleted { .. }
+            | ProseEvent::UndoState { .. }
             | ProseEvent::Error(_) => {}
         }
     }

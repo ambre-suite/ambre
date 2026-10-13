@@ -14,13 +14,14 @@ use crate::formula::types::CellId;
 impl TrameState {
     /// Scan the active sheet for cells whose **displayed** value matches `query`
     /// and reply with a [`TrameEvent::FindResult`] (`trame-find-replace`).
-    /// Read-only: no CRDT
-    /// delta. `matches` lists every hit in row-major order; `active` is the index
-    /// of the first hit strictly after the tracked active cell, wrapping to the
-    /// top. The UI moves the active cell onto that hit, so a repeated `FindNext`
-    /// advances naturally. An empty `query` clears the highlight (no matches).
+    /// Read-only: the receiver is shared, so the search cannot write the
+    /// document (`FIND-001`). `matches` lists every hit of the sheet in
+    /// row-major order. `active` is the index of the first hit strictly after
+    /// the tracked active cell, wrapping to the top. The UI moves the active
+    /// cell onto that hit, so a repeated `FindNext` advances naturally. An
+    /// empty `query` clears the highlight (no matches).
     pub(super) fn find_next(
-        &mut self,
+        &self,
         query: String,
         match_case: bool,
         whole_cell: bool,

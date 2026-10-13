@@ -168,6 +168,55 @@ pub fn find(commands: &[Command], id: CommandId) -> Option<&Command> {
     commands.iter().find(|c| c.id == id)
 }
 
+/// What makes a command table unfit to describe its commands
+/// (`ambre-spec-commands.md`, `UI-THREAD-019`, `UI-THREAD-037`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TableDefect {
+    /// The table describes the identity twice, so `find` reaches one of them.
+    DescribedTwice(CommandId),
+    /// The command has no label in a locale, so a view has nothing to show.
+    Unlabelled(CommandId, Locale),
+    /// The command belongs to no group, so the palette cannot place it.
+    Ungrouped(CommandId),
+    /// The command names an icon with no name, which no icon set resolves.
+    BlankIcon(CommandId),
+    /// Two entries declare one default chord. Seeding keeps the last one, so
+    /// the first silently leaves the keyboard.
+    SharedChord(KeyBinding, CommandId, CommandId),
+}
+
+/// Every defect of `table`, in declaration order. An empty answer is a table
+/// whose every command carries one whole description.
+///
+/// An icon and a chord are optional: a command may have neither. A command
+/// that declares one must declare a usable one.
+pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
+    let mut defects = Vec::new();
+    let mut chords: HashMap<KeyBinding, CommandId> = HashMap::new();
+    for (i, cmd) in table.iter().enumerate() {
+        if table.iter().take(i).any(|c| c.id == cmd.id) {
+            defects.push(TableDefect::DescribedTwice(cmd.id));
+        }
+        for locale in [Locale::Fr, Locale::En] {
+            if (cmd.title)(&locale).trim().is_empty() {
+                defects.push(TableDefect::Unlabelled(cmd.id, locale));
+            }
+        }
+        if cmd.category.0.trim().is_empty() {
+            defects.push(TableDefect::Ungrouped(cmd.id));
+        }
+        if cmd.icon.is_some_and(|icon| icon.0.trim().is_empty()) {
+            defects.push(TableDefect::BlankIcon(cmd.id));
+        }
+        for &kb in cmd.keybindings {
+            if let Some(first) = chords.insert(kb, cmd.id) {
+                defects.push(TableDefect::SharedChord(kb, first, cmd.id));
+            }
+        }
+    }
+    defects
+}
+
 /// Resolves keyboard chords to commands: a `HashMap<KeyBinding, CommandId>`.
 ///
 /// Seeded from each command's declared chords; the chrome may later rebind
@@ -334,6 +383,89 @@ mod tests {
             Some(CommandId("prose.format.italic"))
         );
         assert!(km.resolve(KeyBinding::primary('b')).is_none());
+    }
+
+    /// A rebinding reaches its own chord and no other: every chord it did not
+    /// name resolves to the command it resolved to before (`UI-THREAD-042`).
+    #[test]
+    fn a_rebinding_leaves_every_other_chord_alone() {
+        let mut km = Keymap::from_commands([COMMANDS, EDITING]);
+        let chords: Vec<KeyBinding> = COMMANDS
+            .iter()
+            .chain(EDITING)
+            .flat_map(|c| c.keybindings.iter().copied())
+            .chain([KeyBinding::primary('q'), KeyBinding::primary_shift('b')])
+            .collect();
+        let before: Vec<Option<CommandId>> = chords.iter().map(|&kb| km.resolve(kb)).collect();
+
+        let rebound = KeyBinding::primary('b');
+        km.bind(rebound, CommandId("prose.format.italic"));
+        km.bind(KeyBinding::primary('q'), CommandId("prose.format.bold"));
+
+        for (kb, was) in chords.iter().zip(before) {
+            if *kb == rebound || *kb == KeyBinding::primary('q') {
+                continue;
+            }
+            assert_eq!(km.resolve(*kb), was, "{kb} moved");
+        }
+    }
+
+    fn blank(_: &Locale) -> String {
+        String::new()
+    }
+
+    fn english_only(l: &Locale) -> String {
+        match l {
+            Locale::Fr => " ".into(),
+            Locale::En => "Bold".into(),
+        }
+    }
+
+    /// A whole table has no defect, and each part of a description that goes
+    /// missing is named (`UI-THREAD-019`, `UI-THREAD-037`).
+    #[test]
+    fn a_table_names_each_missing_part_of_a_description() {
+        assert_eq!(table_defects(COMMANDS), []);
+        assert_eq!(table_defects(EDITING), []);
+
+        let bold = CommandId("prose.format.bold");
+        let other = CommandId("prose.format.other");
+        const CHORD: &[KeyBinding] = &[KeyBinding::primary('b')];
+        let broken = [
+            Command {
+                id: bold,
+                title: blank,
+                icon: Some(IconId(" ")),
+                keybindings: CHORD,
+                category: CommandCategory(""),
+            },
+            Command {
+                id: other,
+                title: english_only,
+                icon: None,
+                keybindings: CHORD,
+                category: FORMAT,
+            },
+            Command {
+                id: bold,
+                title: bold_title,
+                icon: None,
+                keybindings: &[],
+                category: FORMAT,
+            },
+        ];
+        assert_eq!(
+            table_defects(&broken),
+            [
+                TableDefect::Unlabelled(bold, Locale::Fr),
+                TableDefect::Unlabelled(bold, Locale::En),
+                TableDefect::Ungrouped(bold),
+                TableDefect::BlankIcon(bold),
+                TableDefect::Unlabelled(other, Locale::Fr),
+                TableDefect::SharedChord(KeyBinding::primary('b'), bold, other),
+                TableDefect::DescribedTwice(bold),
+            ]
+        );
     }
 
     #[test]

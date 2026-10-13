@@ -16,11 +16,11 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 32 | 10 |
-| `commands` | Everything the user can ask for has one name. | implemented | 13 | 1 |
+| `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 20 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 |  |
-| `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 2 |
+| `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
@@ -33,7 +33,7 @@
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 |  |
 | `sync` | The one part of the client that talks to the network. | implemented | 29 | 2 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 |  |
-| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 2 |
+| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 1 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 24 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 47 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 43 loose.**

@@ -242,6 +242,78 @@ fn find_next_honors_case_and_whole_cell() {
     assert_eq!(find_result(&out).0, vec![(0, 0), (3, 0)]);
 }
 
+/// `FIND-002`: the walk covers the whole sheet, not the rows the view asked
+/// for. A match far past the requested window is reported and elected.
+#[test]
+fn a_search_reads_past_the_requested_window() {
+    let mut state = TrameState::new();
+    for (row, col) in [(0, 0), (900, 60)] {
+        state.handle_command(TrameCommand::SetCellText {
+            row,
+            col,
+            text: "needle".to_owned(),
+        });
+    }
+    state.handle_command(TrameCommand::ScrollViewport {
+        version: 1,
+        row_start: 0,
+        row_end: 30,
+        col_start: 0,
+        col_end: 10,
+    });
+    let out = state.handle_command(TrameCommand::FindNext {
+        query: "needle".to_owned(),
+        match_case: false,
+        whole_cell: false,
+    });
+    assert_eq!(find_result(&out), (vec![(0, 0), (900, 60)], Some(1)));
+}
+
+/// `FIND-009`: a replace-all rewrites the matched text and nothing else.
+/// The text around a match reads back as it was. So does a cell the query
+/// never matched, and a match on a sheet out of scope.
+#[test]
+fn a_replace_all_leaves_every_unmatched_text_alone() {
+    let mut state = TrameState::new();
+    seed_find(&mut state); // A1 "apple", A2 "Apple pie", A3 "banana", A4 "APPLE"
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 1,
+        text: "grape".to_owned(),
+    });
+    state.handle_command(TrameCommand::CreateSheet {
+        name: "Sheet2".to_owned(),
+    });
+    let s2 = second_sheet_id(&state);
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: s2.clone(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "apple".to_owned(),
+    });
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: "s0".to_owned(),
+    });
+
+    let out = state.handle_command(TrameCommand::ReplaceAll {
+        query: "apple".to_owned(),
+        replacement: "fig".to_owned(),
+        match_case: false,
+        whole_cell: false,
+        in_formulas: false,
+        all_sheets: false,
+    });
+    assert_eq!(replaced_count(&out), 3);
+    assert_eq!(read_cell(&mut state, 1, 0), "fig pie");
+    assert_eq!(read_cell(&mut state, 2, 0), "banana");
+    assert_eq!(read_cell(&mut state, 0, 1), "grape");
+    assert_eq!(read_cell(&mut state, 5, 5), "");
+    state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
+    assert_eq!(read_cell(&mut state, 0, 0), "apple", "out of scope");
+}
+
 /// ReplaceAll rewrites the raw text of every match, reports the count, and is
 /// a single undo group (one Undo restores all cells).
 #[test]

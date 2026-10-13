@@ -364,7 +364,7 @@ fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::comma
     entries
         .iter()
         .filter_map(|e| match e {
-            ambre_chrome::MenuEntry::Item { command, .. } => Some(*command),
+            ambre_chrome::MenuEntry::Item(item) => Some(item.command()),
             ambre_chrome::MenuEntry::Separator => None,
         })
         .collect()

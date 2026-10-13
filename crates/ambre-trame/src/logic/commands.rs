@@ -375,7 +375,8 @@ impl TrameState {
     /// reseeded from the new document state. Returns the same `DataReset` +
     /// active-cell state the UI needs to repaint, plus an [`UndoState`]
     /// reporting the new stack availability. When the requested stack is empty
-    /// the call is a no-op and only the (unchanged) availability is reported.
+    /// the call is a no-op and reports nothing: the availability the chrome
+    /// holds is still true (`UNDO-009`).
     ///
     /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, undo: bool) -> TrameOutcome {
@@ -387,7 +388,7 @@ impl TrameState {
         .unwrap_or(false);
 
         if !changed {
-            return TrameOutcome::display_only(vec![self.undo_state_event()]);
+            return TrameOutcome::display_only(Vec::new());
         }
 
         // The inverse ops are already committed by undo()/redo(); reseed the

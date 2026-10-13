@@ -13,7 +13,7 @@
 // "Bold" therefore runs the exact same command, decoupled from the trigger.
 // ============================================================================
 
-use ambre_commands::{CommandId, KeyBinding};
+use ambre_commands::{Command, CommandId, KeyBinding, Locale};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -29,59 +29,83 @@ use wasm_bindgen::closure::Closure;
 /// navigation and carries no command.
 #[derive(Clone, PartialEq)]
 pub enum MenuEntry {
-    /// A selectable command, with an optional leading icon and an optional
-    /// trailing keybinding chip (shown right-aligned, for example a menu-bar accelerator).
-    /// `disabled` entries render inert: they announce `aria-disabled` and fire no
-    /// command (`UNDO-006`).
-    Item {
-        command: CommandId,
-        label: String,
-        icon: Option<icondata::Icon>,
-        shortcut: Option<KeyBinding>,
-        disabled: bool,
-    },
+    /// A selectable command. See [`MenuItem`].
+    Item(MenuItem),
     /// A horizontal divider between two groups of items.
     Separator,
 }
 
+/// A selectable command row, with an optional leading icon and an optional
+/// trailing keybinding chip (shown right-aligned, for example a menu-bar
+/// accelerator). A disabled row renders inert: it announces `aria-disabled`
+/// and fires no command (`UNDO-006`).
+///
+/// The fields are private and the one constructor takes the command's
+/// description, so a menu cannot show a label of its own (`UI-THREAD-036`).
+#[derive(Clone, PartialEq)]
+pub struct MenuItem {
+    command: CommandId,
+    label: String,
+    icon: Option<icondata::Icon>,
+    shortcut: Option<KeyBinding>,
+    disabled: bool,
+}
+
+impl MenuItem {
+    /// The command the row invokes.
+    #[must_use]
+    pub const fn command(&self) -> CommandId {
+        self.command
+    }
+
+    /// The label the row shows, read from the command's description.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+}
+
 impl MenuEntry {
-    /// A plain (icon-less) command entry.
-    pub fn new(command: CommandId, label: impl Into<String>) -> Self {
-        Self::Item {
-            command,
-            label: label.into(),
+    /// The entry for `command`, labelled in `locale` from its description.
+    /// No icon and no chip until a builder below adds one.
+    #[must_use]
+    pub fn command(command: &Command, locale: &Locale) -> Self {
+        Self::Item(MenuItem {
+            command: command.id,
+            label: (command.title)(locale),
             icon: None,
             shortcut: None,
             disabled: false,
-        }
+        })
     }
 
-    /// A command entry with a leading icon.
-    pub fn with_icon(command: CommandId, label: impl Into<String>, icon: icondata::Icon) -> Self {
-        Self::Item {
-            command,
-            label: label.into(),
-            icon: Some(icon),
-            shortcut: None,
-            disabled: false,
+    /// Attach a leading icon to an `Item` (no-op on a separator). The icon
+    /// is the one the application resolves from the command's icon handle.
+    #[must_use]
+    pub fn icon(mut self, icon: icondata::Icon) -> Self {
+        if let Self::Item(item) = &mut self {
+            item.icon = Some(icon);
         }
+        self
     }
 
     /// Attach a trailing keybinding chip to an `Item` (no-op on a separator).
-    /// Chainable on `new` / `with_icon`, so a menu-bar row can show its
-    /// accelerator (`toile-menus`) while a context-menu row stays chip-less.
+    /// A menu-bar row shows its accelerator (`toile-menus`), and a
+    /// context-menu row stays chip-less.
+    #[must_use]
     pub fn shortcut(mut self, binding: KeyBinding) -> Self {
-        if let Self::Item { shortcut, .. } = &mut self {
-            *shortcut = Some(binding);
+        if let Self::Item(item) = &mut self {
+            item.shortcut = Some(binding);
         }
         self
     }
 
     /// Mark an `Item` inert: it renders with `aria-disabled`, fires no command
     /// and answers no keyboard selection (`UNDO-006`). No-op on a separator.
+    #[must_use]
     pub fn disabled(mut self) -> Self {
-        if let Self::Item { disabled, .. } = &mut self {
-            *disabled = true;
+        if let Self::Item(item) = &mut self {
+            item.disabled = true;
         }
         self
     }
@@ -191,7 +215,7 @@ pub fn ContextMenu(
         let cmds: Vec<CommandId> = rows
             .iter()
             .filter_map(|e| match e {
-                MenuEntry::Item { command, .. } => Some(*command),
+                MenuEntry::Item(item) => Some(item.command),
                 MenuEntry::Separator => None,
             })
             .collect();
@@ -200,7 +224,7 @@ pub fn ContextMenu(
         let disabled: Vec<bool> = rows
             .iter()
             .filter_map(|e| match e {
-                MenuEntry::Item { disabled, .. } => Some(*disabled),
+                MenuEntry::Item(item) => Some(item.disabled),
                 MenuEntry::Separator => None,
             })
             .collect();
@@ -208,7 +232,7 @@ pub fn ContextMenu(
         let initials: Vec<char> = rows
             .iter()
             .filter_map(|e| match e {
-                MenuEntry::Item { label, .. } => Some(crate::menu::initial(label)),
+                MenuEntry::Item(item) => Some(crate::menu::initial(&item.label)),
                 MenuEntry::Separator => None,
             })
             .collect();
@@ -248,13 +272,13 @@ pub fn ContextMenu(
                     <li class="ambre-ctx-sep" role="separator"></li>
                 }
                 .into_any(),
-                MenuEntry::Item {
+                MenuEntry::Item(MenuItem {
                     command,
                     label,
                     icon,
                     shortcut,
                     disabled: is_disabled,
-                } => {
+                }) => {
                     let i = focus_idx;
                     focus_idx += 1;
                     view! {

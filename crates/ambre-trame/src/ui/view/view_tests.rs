@@ -30,8 +30,8 @@ impl Clock for TestClock {
 struct Rig {
     view: TrameView,
     to_logic: Receiver<LogicCommand>,
-    /// Held so the view's inbound channel stays open.
-    _from_logic: ambre_bus::conduit::Sender<UiEvent>,
+    /// The Logic thread's end of the view's inbound channel.
+    from_logic: ambre_bus::conduit::Sender<UiEvent>,
     clock: TestClock,
     /// The switch the chrome toggles, shared with the view.
     theme: ThemeControl,
@@ -61,7 +61,7 @@ impl Rig {
         Self {
             view,
             to_logic,
-            _from_logic: from_logic,
+            from_logic,
             clock,
             theme,
         }
@@ -99,6 +99,16 @@ impl Rig {
             &mut cache,
             &FrameStats::default(),
         );
+    }
+
+    /// Answer as the Logic thread does, and run the frame that reads it.
+    fn answer(&mut self, event: TrameEvent) {
+        let sent = self.from_logic.try_send(UiEvent::Viewport {
+            document_id: DocumentId::new(),
+            event: AppEvent::Trame(event),
+        });
+        assert!(sent.is_ok(), "the view's inbound channel is open");
+        self.frame();
     }
 
     /// The grid commands the view sent since the last call, in order.
@@ -334,5 +344,67 @@ fn a_theme_switch_repaints_the_content_in_the_new_palette() {
     assert!(
         !fills.contains(&next.toggled().palette().content_pending),
         "{fills:?}"
+    );
+}
+
+/// Whether the cell is inside the grid's visible window.
+fn in_view(rig: &Rig, (row, col): (u32, u32)) -> bool {
+    let state = &rig.view.state;
+    row >= state.top_row
+        && state.visible_offset(row) < i64::from(state.viewport_rows)
+        && col >= state.left_col
+        && col < state.left_col + state.viewport_cols
+}
+
+/// `FIND-004`: the match the Logic thread elects is brought into view, even
+/// far outside the window, and the active cell lands on it.
+#[test]
+fn the_current_match_is_brought_into_view() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    let far = (900, 60);
+    assert!(!in_view(&rig, far), "the match starts off screen");
+
+    rig.answer(TrameEvent::FindResult {
+        matches: vec![(0, 0), far],
+        active: Some(1),
+    });
+    assert!(in_view(&rig, far), "the elected match is in view");
+    assert_eq!(
+        (rig.view.state.active_row(), rig.view.state.active_col()),
+        far
+    );
+    let sent = rig.sent();
+    assert!(
+        sent.iter().any(
+            |c| matches!(c, TrameCommand::ScrollViewport { row_start, row_end, .. }
+                if (*row_start..=*row_end).contains(&far.0))
+        ),
+        "the window asks for the rows it now shows: {sent:?}"
+    );
+}
+
+/// `FIND-005`: the empty answer an empty query or a closed panel gets clears
+/// the highlight, and leaves the cursor where it was.
+#[test]
+fn an_empty_answer_clears_the_highlight() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.answer(TrameEvent::FindResult {
+        matches: vec![(2, 1), (4, 1)],
+        active: Some(0),
+    });
+    assert_eq!(rig.view.state.find_matches, vec![(2, 1), (4, 1)]);
+    let cursor = (rig.view.state.active_row(), rig.view.state.active_col());
+
+    rig.answer(TrameEvent::FindResult {
+        matches: Vec::new(),
+        active: None,
+    });
+    assert!(rig.view.state.find_matches.is_empty());
+    assert_eq!(
+        (rig.view.state.active_row(), rig.view.state.active_col()),
+        cursor
     );
 }

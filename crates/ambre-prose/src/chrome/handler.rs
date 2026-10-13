@@ -15,7 +15,8 @@ use ambre_commands::CommandId;
 use leptos::prelude::*;
 
 use crate::commands::{
-    COPY, CUT, EXPORT_MARKDOWN, IMPORT_MARKDOWN, PALETTE, PASTE, PASTE_PLAIN, SAVE_FILE, mark_key,
+    COPY, CUT, EXPORT_MARKDOWN, IMPORT_MARKDOWN, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE,
+    UNDO, mark_key,
 };
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
@@ -47,6 +48,9 @@ impl CommandHandler for ProseHandler {
                     })
                 }),
             }),
+            // A menu row or the palette; the chords are the view's.
+            UNDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Undo)),
+            REDO => ShellAction::Send(AppCommand::Prose(ProseCommand::Redo)),
             COPY | CUT => ShellAction::Copy { cut: id == CUT },
             PASTE | PASTE_PLAIN => ShellAction::Paste {
                 plain: id == PASTE_PLAIN,

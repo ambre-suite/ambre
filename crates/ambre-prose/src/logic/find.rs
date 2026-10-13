@@ -432,6 +432,48 @@ mod tests {
         assert_eq!(state.document().oplog_vv(), before);
     }
 
+    /// An empty query answers with no match and no current one, which is how
+    /// the panel clears its highlight (`FIND-005`).
+    #[test]
+    fn an_empty_query_clears_the_highlight() {
+        let (mut state, _) = document(&["needle"]);
+        let found = state.handle_command(ProseCommand::FindStart {
+            query: query("needle"),
+        });
+        assert_eq!(results(&found).0.len(), 1);
+        let cleared = state.handle_command(ProseCommand::FindStart { query: query("") });
+        assert_eq!(results(&cleared), (Vec::new(), None));
+        assert!(cleared.update.is_none());
+    }
+
+    /// A fresh search starts at the first hit. A resume point an edit took out
+    /// of the list restarts there too, and nothing is replaced (`FIND-010`).
+    #[test]
+    fn a_resume_point_edited_away_restarts_at_the_first_hit() {
+        let (mut state, ids) = document(&["needle one", "needle two", "needle three"]);
+        let opened = state.handle_command(ProseCommand::FindStart {
+            query: query("needle"),
+        });
+        assert_eq!(results(&opened).1, Some(0));
+        state.handle_command(ProseCommand::FindNext);
+        state.handle_command(ProseCommand::FindNext);
+        for id in &ids[1..] {
+            state.handle_command(ProseCommand::DeleteText {
+                block_id: *id,
+                range: (0, 6),
+            });
+        }
+        let outcome = state.handle_command(ProseCommand::ReplaceOne {
+            replacement: "pin".to_owned(),
+        });
+        let (matches, current) = results(&outcome);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].block_id, ids[0]);
+        assert_eq!(current, Some(0));
+        assert!(outcome.update.is_none(), "a stale hit is not replaced");
+        assert_eq!(texts(&state, &ids), vec!["needle one", " two", " three"]);
+    }
+
     #[test]
     fn closing_drops_the_session_and_clears_the_highlight() {
         let (mut state, _) = document(&["x"]);

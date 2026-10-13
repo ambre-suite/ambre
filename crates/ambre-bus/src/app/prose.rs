@@ -1423,6 +1423,10 @@ pub enum ProseEvent {
     },
     /// The current match moved; the list did not (`PROSE-FEAT-152`).
     FindUpdated { current: Option<u32> },
+    /// What the local history holds after a command that wrote. The chrome
+    /// disables its undo and redo affordances from this alone (`UNDO-006`),
+    /// and a command that wrote nothing sends none (`UNDO-009`).
+    UndoState { can_undo: bool, can_redo: bool },
     /// A command the engine could not honour. The value names what was
     /// refused and why (`PROSE-105`).
     Error(ProseError),

@@ -427,6 +427,95 @@ fn selection_toolbar_delete_fires_command() {
     root.remove();
 }
 
+/// Assert that `root` holds a control announcing the registry title of each
+/// of `ids`.
+fn assert_registry_labels(root: &web_sys::Element, ids: &[CommandId]) {
+    for &id in ids {
+        let expected = ambre_toile::ui::commands::title(id, &ambre_commands::Locale::En)
+            .expect("the command is described");
+        let found = root
+            .query_selector(&format!("[aria-label=\"{expected}\"]"))
+            .unwrap();
+        assert!(found.is_some(), "{id:?}: no control announces {expected:?}");
+    }
+}
+
+/// The tool palette, the zoom cluster and the selection toolbar announce the
+/// title each command's description carries (`UI-THREAD-036`).
+#[wasm_bindgen_test]
+fn the_button_bars_announce_the_registry_labels() {
+    use ambre_toile::ui::menu_bar::{ZOOM_FIT, ZOOM_OUT, ZOOM_RESET, ZOOM_TO_SELECTION};
+    use ambre_toile::ui::palette::{
+        TOOL_COMMENT, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_LASER, TOOL_PEN, TOOL_SELECT,
+        TOOL_SHAPE, TOOL_STICKY, TOOL_TEXT,
+    };
+    let owner = Owner::new();
+    owner.set();
+
+    let active = RwSignal::new(Tool::Select);
+    let palette = mount_in_container(move || view! { <ToolPalette active=active /> });
+    assert_registry_labels(
+        &palette,
+        &[
+            TOOL_SELECT,
+            TOOL_PEN,
+            TOOL_STICKY,
+            TOOL_SHAPE,
+            TOOL_CONNECTOR,
+            TOOL_DRAW,
+            TOOL_TEXT,
+            TOOL_COMMENT,
+            TOOL_LASER,
+            TOOL_HAND,
+        ],
+    );
+    palette.remove();
+
+    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
+    ambre_toile::chrome::init_command_states(&store);
+    let toggles = Toggles::from_store(&store);
+    let zoom = RwSignal::new(1.0);
+    let on_command = Callback::new(|_: CommandId| {});
+    let menu_bar = mount_in_container(move || {
+        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
+    });
+    assert_registry_labels(
+        &menu_bar,
+        &[ZOOM_OUT, ZOOM_RESET, ZOOM_IN, ZOOM_FIT, ZOOM_TO_SELECTION],
+    );
+    menu_bar.remove();
+
+    // A grouped selection holding a locked and an unlocked element shows every
+    // command button the bar has.
+    let bar = RwSignal::new(Some(FloatBar {
+        x: 40.0,
+        y: 20.0,
+        multi: true,
+        has_group: true,
+        any_locked: true,
+        any_unlocked: true,
+        fill: None,
+        mixed: Default::default(),
+    }));
+    let model = RwSignal::new(None::<StyleModel>);
+    let on_style = Callback::new(move |_e: StyleEdit| {});
+    let toolbar = mount_in_container(move || {
+        view! { <SelectionToolbar bar=bar model=model on_command=on_command on_style=on_style /> }
+    });
+    assert_registry_labels(
+        &toolbar,
+        &[
+            menu::DUPLICATE,
+            menu::DELETE,
+            menu::GROUP,
+            menu::UNGROUP,
+            menu::LOCK,
+            menu::UNLOCK,
+        ],
+    );
+    toolbar.remove();
+}
+
 // -- Presenter overlay panel (toile-presentation), input ---------------------
 
 /// Mount a `PresenterPanel` with the given initial state, returning the container

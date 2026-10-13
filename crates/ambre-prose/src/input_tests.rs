@@ -2367,3 +2367,59 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
     rig.ui.cursor = None;
     assert_eq!(paint_caret(&mut rig), None);
 }
+
+// -- History ----------------------------------------------------------------
+
+/// The key name a browser reports for a chord, as the host hands it over.
+fn key_name(chord: ambre_commands::KeyBinding) -> String {
+    match chord.key {
+        ambre_commands::Key::Char(c) if chord.mods.shift => c.to_ascii_uppercase().to_string(),
+        ambre_commands::Key::Char(c) => c.to_string(),
+        other => panic!("a history chord is a letter, not {other:?}"),
+    }
+}
+
+/// Press one chord the way the host hands it over, and return what it sent.
+fn press_chord(rig: &mut Rig, chord: ambre_commands::KeyBinding) -> Vec<ProseCommand> {
+    let key = ProseKey::from_name(&key_name(chord), chord.mods.primary)
+        .expect("the view decodes the chord");
+    let before = rig.sent.len();
+    assert!(rig.key(key, chord.mods.shift, chord.mods.primary));
+    rig.sent[before..].to_vec()
+}
+
+/// `UNDO-010`, `UNDO-011`: the view decodes each chord the table declares
+/// for undo and redo, and sends the one history command. The text reverts,
+/// then comes back, once the Logic thread answers.
+#[test]
+fn the_history_chords_undo_and_redo_the_typing() {
+    let chords = |id| {
+        ambre_commands::find(crate::commands::COMMANDS, id)
+            .expect("declared")
+            .keybindings
+    };
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    assert!(rig.type_text(" world"));
+    rig.deliver();
+    let text = |rig: &Rig| rig.logic.text_of(&block);
+    assert_eq!(text(&rig).as_deref(), Some("hello world"));
+
+    for chord in chords(crate::commands::UNDO) {
+        assert_eq!(press_chord(&mut rig, *chord), [ProseCommand::Undo]);
+        rig.deliver();
+        assert_eq!(text(&rig).as_deref(), Some("hello"));
+        rig.key(ProseKey::Redo, false, true);
+        rig.deliver();
+        assert_eq!(text(&rig).as_deref(), Some("hello world"));
+    }
+    for chord in chords(crate::commands::REDO) {
+        rig.key(ProseKey::Undo, false, true);
+        rig.deliver();
+        assert_eq!(text(&rig).as_deref(), Some("hello"));
+        assert_eq!(press_chord(&mut rig, *chord), [ProseCommand::Redo]);
+        rig.deliver();
+        assert_eq!(text(&rig).as_deref(), Some("hello world"));
+    }
+}

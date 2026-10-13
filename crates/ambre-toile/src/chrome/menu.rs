@@ -22,10 +22,11 @@ use super::icons;
 /// `None` for an identity the registry does not describe, which no layout below
 /// produces.
 fn entry(id: CommandId) -> Option<MenuEntry> {
-    let label = registry::title(id, &Locale::En)?;
-    Some(match registry::icon(id).and_then(icons::resolve) {
-        Some(icon) => MenuEntry::with_icon(id, label, icon),
-        None => MenuEntry::new(id, label),
+    let cmd = ambre_chrome::commands::find(registry::COMMANDS, id)?;
+    let entry = MenuEntry::command(cmd, &Locale::En);
+    Some(match cmd.icon.and_then(icons::resolve) {
+        Some(icon) => entry.icon(icon),
+        None => entry,
     })
 }
 

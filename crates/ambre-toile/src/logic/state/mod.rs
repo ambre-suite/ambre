@@ -869,8 +869,10 @@ impl ToileState {
             self.undo.redo()
         }
         .unwrap_or(false);
+        // An empty stack changes nothing, so it refreshes nothing
+        // (`UNDO-009`).
         if !changed {
-            return ToileOutcome::display_only(vec![self.undo_state_event()]);
+            return ToileOutcome::display_only(Vec::new());
         }
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
@@ -1530,5 +1532,47 @@ mod undo_state_tests {
                 .any(|e| matches!(e, ToileEvent::UndoState { .. })),
             "a read-only command does not touch the history stacks",
         );
+    }
+
+    /// `UNDO-009`: a command that changes nothing refreshes no affordance, the
+    /// history steps on an empty stack included.
+    #[test]
+    fn a_command_that_changes_nothing_reports_no_undo_state() {
+        let mut st = ToileState::new();
+        st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::ZERO,
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: 0,
+        });
+        for no_op in [
+            ToileCommand::Redo,
+            ToileCommand::ReadDeck,
+            ToileCommand::DeleteElements { ids: Vec::new() },
+            ToileCommand::MoveElements {
+                ids: Vec::new(),
+                delta: kurbo::Vec2::new(5.0, 5.0),
+            },
+            ToileCommand::LockElements {
+                ids: Vec::new(),
+                locked: true,
+            },
+        ] {
+            let label = format!("{no_op:?}");
+            let evts = st.handle_command(no_op);
+            assert!(evts.update.is_none(), "{label} wrote");
+            assert!(
+                !evts
+                    .display
+                    .iter()
+                    .any(|e| matches!(e, ToileEvent::UndoState { .. })),
+                "{label} refreshed the history",
+            );
+        }
+        st.handle_command(ToileCommand::Undo);
+        let evts = st.handle_command(ToileCommand::Undo);
+        assert!(evts.update.is_none() && evts.display.is_empty());
     }
 }
