@@ -1158,7 +1158,8 @@ mod tests {
 
     /// Each answer reads as what the caller acts on. A refusal keeps the
     /// relay's code on the status that carries it, and a 404 is an absence.
-    /// A request with no answer names its method and its URL.
+    /// A request with no answer names its method and its URL. None of them
+    /// renews the token or replays the request (`SYNC-099`).
     #[tokio::test]
     async fn each_answer_maps_to_its_error() {
         let url = "https://relay.test/api/documents/d/members";
@@ -1183,6 +1184,8 @@ mod tests {
             send().await.unwrap_err(),
             format!("PATCH {url}: network down")
         );
+        assert_eq!(transport.calls().len(), 5, "one request per answer");
+        assert!(transport.calls().iter().all(|(_, called)| called == url));
     }
 
     /// Only a 403 carrying the setup code reads as a setup refusal, and no

@@ -129,6 +129,7 @@ mod channels;
 mod docfile;
 mod documents;
 mod http;
+mod lifecycle;
 mod light;
 mod media;
 mod members;
@@ -847,10 +848,11 @@ pub struct SyncState {
     /// Closure kept alive for the pending reconnect `setTimeout`, if any.
     #[allow(dead_code)]
     _reconnect_timer: Option<Closure<dyn FnMut()>>,
-    /// Consecutive failed/closed connection count, reset to 0 once a socket
-    /// actually opens. Drives the exponential reconnect backoff so a server that
-    /// rejects the upgrade (for example 429 rate limit) is not hammered into a storm.
-    reconnect_attempts: u32,
+    /// The socket's reconnect state: the backoff and its deadline. A relay
+    /// that rejects the upgrade (for example a 429) is not hammered.
+    lifecycle: lifecycle::Lifecycle,
+    /// The clock the lifecycle reads. A host test advances its own.
+    clock: lifecycle::Clock,
     /// Set when the relay refused the socket for a key setup still owed, and
     /// cleared once a session with keys is stored. While set, no timer or
     /// renewal reopens the socket (`SYNC-133`).
@@ -946,7 +948,8 @@ impl SyncState {
             _onerror: None,
             _onopen: None,
             _reconnect_timer: None,
-            reconnect_attempts: 0,
+            lifecycle: lifecycle::Lifecycle::default(),
+            clock: lifecycle::system_clock(),
             setup_owed: false,
             update_owed: false,
             inbound_held: false,

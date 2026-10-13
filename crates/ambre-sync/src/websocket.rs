@@ -172,22 +172,55 @@ impl SyncState {
         }
     }
 
-    /// Schedules a reconnect attempt after an exponential backoff (with jitter)
-    /// so a rejected upgrade does not trigger a tight reconnect storm. An HTTP
-    /// 429 from the rate limiter is one. Each failed attempt lengthens the delay;
-    /// a successful open resets the counter via [`SyncEvent::WsConnected`].
-    #[cfg(target_arch = "wasm32")]
+    /// Arms the reconnect backoff after a failed attempt, so a rejected
+    /// upgrade does not trigger a tight reconnect storm.
     pub(crate) fn schedule_reconnect(&mut self) {
+        let next = self.lifecycle.back_off((self.clock)(), Self::jitter());
+        self.follow(next);
+    }
+
+    /// Carries out what the socket lifecycle decided.
+    fn follow(&mut self, next: lifecycle::Next) {
+        match next {
+            lifecycle::Next::Idle => {}
+            lifecycle::Next::Open => {
+                // Only when still wanted and not already reopened. A timer
+                // armed before a setup refusal must not retry it.
+                if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
+                    self.open_websocket();
+                }
+            }
+            lifecycle::Next::Renew => self.reauthenticate(),
+            lifecycle::Next::Wait { delay_ms } => self.arm_reconnect_timer(delay_ms),
+            lifecycle::Next::SetupOwed => {
+                // The socket reopens once a session with keys is stored
+                // (`SYNC-133`). Meanwhile the client is told a setup is owed
+                // (`SYNC-134`).
+                self.setup_owed = true;
+                self.send_to_logic(LogicEvent::SetupRequired);
+            }
+        }
+    }
+
+    /// The fraction of a reconnect delay added to it, so clients cut off
+    /// together do not all return together.
+    #[cfg(target_arch = "wasm32")]
+    fn jitter() -> f64 {
+        js_sys::Math::random()
+    }
+
+    /// Native: no jitter, so a host test reads the exact delays.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn jitter() -> f64 {
+        0.0
+    }
+
+    /// Asks the worker's timers for a [`SyncEvent::ReconnectNow`] in
+    /// `delay_ms`. The shell only schedules: the lifecycle decides what the
+    /// timer means when it fires.
+    #[cfg(target_arch = "wasm32")]
+    fn arm_reconnect_timer(&mut self, delay_ms: u64) {
         use wasm_bindgen::JsCast;
-
-        let attempt = self.reconnect_attempts;
-        self.reconnect_attempts = attempt.saturating_add(1);
-
-        // 250 ms base, doubling, capped at 10 s, plus up to 100% jitter.
-        let base = 250u32.saturating_mul(1u32 << attempt.min(6));
-        let capped = base.min(10_000);
-        let jitter = (js_sys::Math::random() * capped as f64) as u32;
-        let delay_ms = (capped + jitter) as i32;
 
         let Some(tx) = self.event_tx.clone() else {
             return;
@@ -195,26 +228,21 @@ impl SyncState {
         let cb = Closure::wrap(Box::new(move || {
             let _ = tx.send(SyncEvent::ReconnectNow);
         }) as Box<dyn FnMut()>);
-
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.as_ref().unchecked_ref(),
-                delay_ms,
+                i32::try_from(delay_ms).unwrap_or(i32::MAX),
             );
-            tracing::warn!(
-                "Sync: reconnect scheduled in {delay_ms}ms (attempt {})",
-                attempt + 1
-            );
+            tracing::warn!("Sync: reconnect scheduled in {delay_ms}ms");
         }
         // Keep the closure alive until it fires (replaces any previous pending one).
         self._reconnect_timer = Some(cb);
     }
 
-    /// Native / host-test stub: reconnect immediately (mock transport, no timer).
+    /// Native: no timer. A host test advances the clock and sends
+    /// [`SyncEvent::ReconnectNow`] itself.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn schedule_reconnect(&mut self) {
-        self.open_websocket();
-    }
+    fn arm_reconnect_timer(&mut self, _delay_ms: u64) {}
 
     /// Silently renews the access token after a WS auth rejection (close
     /// [`WS_CLOSE_UNAUTHORIZED`]) and signals the outcome via
@@ -275,7 +303,7 @@ impl SyncState {
         }
         self.inbound_held = false;
         if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
-            self.reconnect_attempts = 0;
+            self.lifecycle.reset();
             self.open_websocket();
         }
     }
@@ -296,6 +324,16 @@ impl SyncState {
                 connected: false,
             });
         }
+    }
+
+    /// Hands a close with `code`, or an error read as code 0, to the
+    /// lifecycle, then carries out what it decided.
+    fn socket_closed(&mut self, code: u16) {
+        let wanted = !self.documents.is_empty();
+        let next = self
+            .lifecycle
+            .closed(code, wanted, (self.clock)(), Self::jitter());
+        self.follow(next);
     }
 
     /// Processes one [`SyncEvent`] received from the internal event queue.
@@ -324,31 +362,13 @@ impl SyncState {
             }
             SyncEvent::WsDisconnected { code, reason } => {
                 self.handle_ws_disconnected(code, reason);
-                if code == WS_CLOSE_SETUP_REQUIRED {
-                    // A renewed session would have no keys either, so neither
-                    // renew nor retry. The socket reopens once a session with
-                    // keys is stored (`SYNC-133`). Meanwhile the rest of the
-                    // client is told a setup is owed (`SYNC-134`).
-                    self.setup_owed = true;
-                    self.send_to_logic(LogicEvent::SetupRequired);
-                } else if self.documents.is_empty() {
-                    // No open document: nothing to reconnect for.
-                } else if code == WS_CLOSE_UNAUTHORIZED {
-                    // The server rejected our (expired/rotated) JWT. Refresh the
-                    // token silently and reopen, instead of hammering with a
-                    // dead token (which the backoff alone could never fix).
-                    self.reauthenticate();
-                } else {
-                    self.schedule_reconnect();
-                }
+                self.socket_closed(code);
             }
             SyncEvent::Reauthenticated { ok } => {
                 if ok {
                     // New access token in the shared store: reopen promptly.
-                    self.reconnect_attempts = 0;
-                    if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
-                        self.open_websocket();
-                    }
+                    let next = self.lifecycle.renewed();
+                    self.follow(next);
                 } else if let Some(username) = self.dev_username.clone() {
                     // Refresh token also dead (for example server restarted with a fresh
                     // ephemeral key and empty Redis): re-login with the same
@@ -374,17 +394,12 @@ impl SyncState {
                 // `ReconnectNow` guard (`self.ws.is_none()`). A following
                 // `onclose`, if any, is idempotent here.
                 self.handle_ws_disconnected(0, "ws error".to_owned());
-                if !self.documents.is_empty() {
-                    self.schedule_reconnect();
-                }
+                self.socket_closed(0);
             }
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
-                // Only reconnect if still wanted and not already reconnected. A
-                // timer armed before a setup refusal must not retry it.
-                if self.ws.is_none() && !self.documents.is_empty() && !self.setup_owed {
-                    self.open_websocket();
-                }
+                let next = self.lifecycle.poll((self.clock)());
+                self.follow(next);
             }
             SyncEvent::SessionReady {
                 id,
@@ -825,7 +840,7 @@ impl SyncState {
         // firing `onopen` without ever sending a frame. Resetting on `onopen`
         // there would spin a tight reconnect loop (storm). A rejected connection
         // never reaches this point, so its backoff keeps growing as intended.
-        self.reconnect_attempts = 0;
+        self.lifecycle.frame();
         match server_msg {
             WsServerMsg::Subscribed { document_id } => {
                 self.send_to_logic(LogicEvent::ConnectionStatus {
@@ -1162,6 +1177,41 @@ mod tests {
             code,
             reason: String::new(),
         }
+    }
+
+    /// `SYNC-064`, `SYNC-098`: the worker walks its lifecycle on its own
+    /// clock. A dropped socket waits out the backoff before it reopens, and a
+    /// timer that fires early opens nothing. A refusal before any frame
+    /// doubles the wait, and a frame resets it.
+    #[test]
+    fn a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait() {
+        let (mut state, _rx) = with_open_document();
+        let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
+        let clock = now.clone();
+        state.clock = std::rc::Rc::new(move || clock.get());
+        let fire_at = |state: &mut SyncState, at: u64| {
+            now.set(at);
+            state.handle_sync_event(SyncEvent::ReconnectNow);
+            state.socket_opens
+        };
+
+        state.handle_sync_event(closed(1006));
+        assert_eq!(fire_at(&mut state, 249), 0, "early: nothing reopens");
+        assert_eq!(fire_at(&mut state, 250), 1);
+
+        // Opened, then refused before any frame: the wait doubles.
+        state.handle_sync_event(SyncEvent::WsOpened);
+        state.handle_sync_event(closed(1006));
+        assert_eq!(fire_at(&mut state, 749), 1);
+        assert_eq!(fire_at(&mut state, 750), 2);
+
+        // A frame proves the session live, so the next wait is the first.
+        let document_id = *state.documents.keys().next().expect("one document");
+        state.handle_ws_message(ambre_protocol::ws::WsServerMsg::Subscribed { document_id });
+        state.handle_sync_event(closed(1006));
+        assert_eq!(fire_at(&mut state, 999), 2);
+        assert_eq!(fire_at(&mut state, 1000), 3);
+        assert_eq!(fire_at(&mut state, 5000), 3, "one open per deadline");
     }
 
     /// A socket refused for a key setup still owed is neither renewed nor
