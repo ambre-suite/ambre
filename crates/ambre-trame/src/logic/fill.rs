@@ -49,6 +49,17 @@ impl TrameState {
         // One undo group for the whole fill (sealed by the next command's fallback
         // `group_end`), mirroring `paste_range`.
         let _ = self.undo_manager.group_start();
+        // Materialize every destination cell up front (`TRAME-UI-073`). Each
+        // `materialize` is its own excluded-origin commit, and one between two
+        // value writes splits the fill into one undo item per cell. Done first,
+        // the value writes land in one trailing commit, as `paste_range` does.
+        for row in dr1..=dr2 {
+            for col in dc1..=dc2 {
+                if !(sr1..=sr2).contains(&row) || !(sc1..=sc2).contains(&col) {
+                    let _ = self.materialize(row, col);
+                }
+            }
+        }
 
         // A source tiled by equal merged blocks (one block or a uniform grid of
         // them) fills block by block, not cell by cell. Every tile is re-merged
@@ -99,8 +110,9 @@ impl TrameState {
     /// re-merges every tile to the block span. Each lane perpendicular to the drag
     /// extrapolates independently from its own source blocks: a numeric series
     /// progresses, otherwise the source blocks are copied cyclically. A copied
-    /// formula's relative refs reindex by the tile offset. The UI snaps `dest` to
-    /// whole blocks, so the tiles align; source tiles are skipped.
+    /// formula's relative refs reindex by the tile offset. Tiles align on the
+    /// source, and a tile the drag edge cuts is written to that edge
+    /// (`TRAME-UI-134`); source tiles are skipped.
     #[allow(clippy::too_many_arguments)]
     fn fill_merged(
         &mut self,
@@ -127,16 +139,11 @@ impl TrameState {
                     .collect();
                 let series = series_params(mode, &sources);
                 let k = sources.len() as i64;
-                let mut top = dr1;
-                while top + bh - 1 <= dr2 {
-                    if top < sr1 || top > sr2 {
-                        let tidx = (top as i64 - sr1 as i64).div_euclid(bh as i64);
-                        let sidx = tidx.rem_euclid(k) as usize;
-                        let src_top = sr1 + sidx as u32 * bh;
-                        let raw = sources.get(sidx).cloned().unwrap_or_default();
-                        self.fill_merged_tile(top, left, bh, bw, tidx, &raw, src_top, left, series);
-                    }
-                    top += bh;
+                for (tidx, top, h) in merged_tiles(sr1, sr2, dr1, dr2, bh) {
+                    let sidx = tidx.rem_euclid(k) as usize;
+                    let src_top = sr1 + sidx as u32 * bh;
+                    let raw = sources.get(sidx).cloned().unwrap_or_default();
+                    self.fill_merged_tile(top, left, h, bw, tidx, &raw, src_top, left, series);
                 }
                 left += bw;
             }
@@ -150,16 +157,11 @@ impl TrameState {
                     .collect();
                 let series = series_params(mode, &sources);
                 let k = sources.len() as i64;
-                let mut left = dc1;
-                while left + bw - 1 <= dc2 {
-                    if left < sc1 || left > sc2 {
-                        let tidx = (left as i64 - sc1 as i64).div_euclid(bw as i64);
-                        let sidx = tidx.rem_euclid(k) as usize;
-                        let src_left = sc1 + sidx as u32 * bw;
-                        let raw = sources.get(sidx).cloned().unwrap_or_default();
-                        self.fill_merged_tile(top, left, bh, bw, tidx, &raw, top, src_left, series);
-                    }
-                    left += bw;
+                for (tidx, left, w) in merged_tiles(sc1, sc2, dc1, dc2, bw) {
+                    let sidx = tidx.rem_euclid(k) as usize;
+                    let src_left = sc1 + sidx as u32 * bw;
+                    let raw = sources.get(sidx).cloned().unwrap_or_default();
+                    self.fill_merged_tile(top, left, bh, w, tidx, &raw, top, src_left, series);
                 }
                 top += bh;
             }
@@ -224,7 +226,10 @@ impl TrameState {
             ..Default::default()
         };
         self.apply_pasted_style(top, left, &cell);
-        self.insert_merge_entry(top, left, top + bh - 1, left + bw - 1);
+        // A tile cut down to one cell by the drag edge is a plain cell.
+        if bh > 1 || bw > 1 {
+            self.insert_merge_entry(top, left, top + bh - 1, left + bw - 1);
+        }
     }
 
     /// Fill the rows of `[dr1..=dr2] \ [sr1..=sr2]` for every source column,
@@ -351,6 +356,35 @@ fn normalize(g: GridRange) -> (u32, u32, u32, u32) {
         g.row.max(g.row_end),
         g.col.max(g.col_end),
     )
+}
+
+/// The tiles a merged fill writes along one axis (`TRAME-UI-134`). Each tile is
+/// its signed block offset from the source, its first line and its length.
+///
+/// Tiles sit on the source's own block grid, so an upward fill never lands on
+/// the source. A tile the destination edge cuts is kept, cut to that edge, so
+/// every line between the source and the edge is written. Source tiles are
+/// left out.
+pub(super) fn merged_tiles(s1: u32, s2: u32, d1: u32, d2: u32, block: u32) -> Vec<(i64, u32, u32)> {
+    let b = i64::from(block.max(1));
+    let (s1, s2, d1, d2) = (i64::from(s1), i64::from(s2), i64::from(d1), i64::from(d2));
+    let first = (d1 - s1).div_euclid(b);
+    let last = (d2 - s1).div_euclid(b);
+    (first..=last)
+        .filter_map(|tidx| {
+            let start = s1 + tidx * b;
+            let end = start + b - 1;
+            if start <= s2 && end >= s1 {
+                return None;
+            }
+            let (lo, hi) = (start.max(d1), end.min(d2));
+            Some((
+                tidx,
+                u32::try_from(lo).ok()?,
+                u32::try_from(hi - lo + 1).ok()?,
+            ))
+        })
+        .collect()
 }
 
 /// Decide whether a fill line extrapolates a numeric arithmetic series, and with

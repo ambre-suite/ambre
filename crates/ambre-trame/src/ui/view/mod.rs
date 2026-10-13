@@ -24,7 +24,7 @@ use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
 #[cfg(target_arch = "wasm32")]
-use leptos::prelude::{Get, GetUntracked, Set};
+use leptos::prelude::{GetUntracked, Set};
 
 use super::grid::{
     COL_WIDTH, CellEditor, CellRect, CursorMove, HeaderHit, ROW_HEIGHT, SelKind, Selection,
@@ -32,7 +32,6 @@ use super::grid::{
 };
 use super::renderer::{self, DrawStats};
 use crate::TOTAL_COLS;
-#[cfg(target_arch = "wasm32")]
 use crate::render::{CommitDirection, FormulaAction};
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
@@ -283,10 +282,9 @@ pub struct TrameView {
     formula_ref: RwSignal<String>,
     #[cfg(target_arch = "wasm32")]
     formula_text: RwSignal<String>,
-    /// The text the view last wrote into the formula bar. The user typed in it
-    /// exactly when the bar reads something else (`TRAME-UI-155`).
-    #[cfg(target_arch = "wasm32")]
-    formula_shown: String,
+    /// The formula bar the sync reads and writes. In the browser the frame
+    /// copies the signals in before the sync and back out after it.
+    formula: FormulaBar,
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
     /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu
@@ -457,7 +455,28 @@ pub(crate) fn formula_bar_sync(input: &str, shown: &str, seed: &str) -> FormulaB
     }
 }
 
-#[cfg(test)]
+/// The formula bar as the view sees it for one frame (`trame-cell-editing`).
+///
+/// The browser copies its signals and its focus in before the sync, and copies
+/// the result back out. A host test sets the fields itself.
+#[derive(Debug, Default)]
+pub(crate) struct FormulaBar {
+    /// The reference of the cell an edit will reach (`TRAME-UI-091`).
+    pub(crate) reference: String,
+    /// The text the bar holds.
+    pub(crate) text: String,
+    /// The text the view last wrote. The user typed in the bar exactly when
+    /// `text` reads something else (`TRAME-UI-155`).
+    pub(crate) shown: String,
+    /// A commit or a cancel the bar raised, not served yet.
+    pub(crate) action: Option<FormulaAction>,
+    /// Whether the bar holds the keyboard focus.
+    pub(crate) focused: bool,
+}
+
+// The view as a host test drives it, on a detached pipe and no DOM. The
+// browser constructor also takes the chrome signals, so wasm leaves it out.
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod view_tests;
 
 #[cfg(test)]

@@ -33,16 +33,16 @@ workbook scope reaches and what it leaves alone.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-083` | `POST` | A workbook-scoped replace MUST reach every sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group6::replace_all_spans_sheets` -- it rewrites a match on an inactive sheet and reads it back | none | verified |
 | `TRAME-UI-080` | `POST` | A case-insensitive replace MUST leave the rest of the cell byte for byte. | this spec section 3 | `ambre_trame::logic::find::tests::case_insensitive_replace_survives_a_non_length_preserving_lowercase`; `::case_insensitive_replace_handles_the_ordinary_cases`; `::whole_cell_rewrite_swaps_the_entire_content` -- one rewrite serves both gestures | none | verified |
-| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | none | unheld -- the other sheets are rewritten by id, through their cells map, and the active sheet is never switched, and no test reads the active tab after the replace; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | `ambre_trame::logic::tests::group10::a_workbook_replace_keeps_the_active_sheet` | none | verified |
 
 * **Budget.** none: a search is one walk over the cells a sheet holds, and `ambre-spec-budgets.md`
   budgets no search. A replace lands under the batch row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a replace is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 5 `verified`, 1 `untested`; the shared rules and their coverage are
-  `ambre-spec-find.md`. What holds is what a Trame match is. Both options reach both gestures, a
-  formula is read only on request, and a rewrite preserves the bytes around the match. What is loose
-  is the workbook scope, whose frame condition nothing reads back.
+* **Verification.** 6 `verified`; the shared rules and their coverage are `ambre-spec-find.md`. What
+  holds is what a Trame match is. Both options reach both gestures, a formula is read only on
+  request, and a rewrite preserves the bytes around the match. A workbook replace keeps the active
+  sheet, which a test reads back.
 
 ---
 

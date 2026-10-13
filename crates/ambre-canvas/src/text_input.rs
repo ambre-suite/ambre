@@ -74,6 +74,9 @@ pub struct TextInput {
     /// host's `input` listener so it skips the half-formed value mid-composition
     /// (the canvas shows the preview from the composition events instead).
     composing: Rc<Cell<bool>>,
+    /// How many times a view asked for the focus. A host test reads it to state
+    /// that a gesture left the focus where it was.
+    focus_requests: Rc<Cell<u32>>,
 }
 
 #[derive(Clone)]
@@ -92,6 +95,7 @@ impl TextInput {
         Self {
             dom: None,
             composing: Rc::new(Cell::new(false)),
+            focus_requests: Rc::new(Cell::new(0)),
         }
     }
 
@@ -151,6 +155,7 @@ impl TextInput {
         Self {
             dom: Some(Pipe { textarea, live }),
             composing: Rc::new(Cell::new(false)),
+            focus_requests: Rc::new(Cell::new(0)),
         }
     }
 
@@ -190,9 +195,16 @@ impl TextInput {
     /// canvas pointer handler (a click in the content focuses the pipe) and when
     /// an edit session opens.
     pub fn focus(&self) {
+        self.focus_requests
+            .set(self.focus_requests.get().saturating_add(1));
         if let Some(dom) = &self.dom {
             let _ = dom.textarea.focus();
         }
+    }
+
+    /// How many times [`focus`](Self::focus) was called on this pipe.
+    pub fn focus_requests(&self) -> u32 {
+        self.focus_requests.get()
     }
 
     /// Empty the buffer. The host clears after each committed `Text`, and an

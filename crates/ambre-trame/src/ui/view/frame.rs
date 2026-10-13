@@ -296,104 +296,25 @@ impl TrameView {
             self.edit_dirty = true;
         }
 
-        // Sync the HTML formula bar with the grid (`trame-cell-editing`).
+        // Sync the HTML formula bar with the grid (`trame-cell-editing`). The
+        // browser copies the bar in, the sync runs on plain state, and the
+        // result goes back out.
         #[cfg(target_arch = "wasm32")]
         {
-            self.formula_ref.set(self.active_cell_ref());
-
-            // While the formula input is focused it OWNS the text. The user is
-            // typing there, so the view must not overwrite what they typed (that
-            // would fight the caret). A text the view did not write means an
-            // edit is in progress -- open / drive an edit session from the
-            // input's content (`formula_bar_sync`). While the input is NOT
-            // focused, the formula bar is read-only: mirror the in-cell editor
-            // buffer (live), or the active cell's stored value when idle.
-            if formula_input_focused() {
-                let text = self.formula_text.get_untracked();
-                if let Some(ed) = self.editor.as_mut() {
-                    if ed.text() != text {
-                        ed.set_text(&text);
-                        self.edit_dirty = true;
-                    }
-                } else {
-                    let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
-                    match super::formula_bar_sync(&text, &self.formula_shown, &seed) {
-                        // First typed character in the formula bar: open an edit
-                        // session on the active cell, seeded with what was typed.
-                        super::FormulaBarSync::OpenSession => {
-                            self.begin_edit_external();
-                            if let Some(ed) = self.editor.as_mut() {
-                                ed.set_text(&text);
-                                self.edit_dirty = true;
-                            }
-                        }
-                        super::FormulaBarSync::Refresh => self.show_formula_text(seed),
-                        super::FormulaBarSync::Idle => {}
-                    }
-                }
-            } else if let Some(ed) = self.editor.as_ref() {
-                let buffer = ed.text();
-                if self.formula_text.get_untracked() != buffer {
-                    self.show_formula_text(buffer);
-                }
-            } else {
-                let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
-                if self.formula_text.get_untracked() != seed {
-                    self.show_formula_text(seed);
-                }
+            self.formula.text = self.formula_text.get_untracked();
+            self.formula.action = self.formula_action.get_untracked();
+            self.formula.focused = formula_input_focused();
+        }
+        self.sync_formula_bar();
+        #[cfg(target_arch = "wasm32")]
+        {
+            if self.formula_ref.get_untracked() != self.formula.reference {
+                self.formula_ref.set(self.formula.reference.clone());
             }
-            // Unfocused, the bar holds only what the view wrote. That text is
-            // the base a later keystroke is told apart from.
-            if !formula_input_focused() {
-                self.formula_shown = self.formula_text.get_untracked();
+            if self.formula_text.get_untracked() != self.formula.text {
+                self.formula_text.set(self.formula.text.clone());
             }
-
-            // Handle formula bar commit / cancel actions from the DOM input.
-            if let Some(action) = self.formula_action.get_untracked() {
-                match action {
-                    FormulaAction::Commit(dir) => {
-                        if let Some(ed) = self.editor.as_mut() {
-                            ed.set_text(&self.formula_text.get_untracked());
-                        }
-                        self.commit_edit();
-                        match dir {
-                            CommitDirection::Down => {
-                                self.nav_move(1, 0, false);
-                            }
-                            CommitDirection::Right => {
-                                self.nav_move(0, 1, false);
-                            }
-                            CommitDirection::Stay => {}
-                        }
-                        // Return focus to the grid and reset the formula text to
-                        // the cell we landed on. Without this reset `formula_text`
-                        // still holds the just-committed value. If the input keeps
-                        // DOM focus for even one frame, the focused branch above
-                        // would see `text != seed` on the NEW cell. It would then
-                        // re-open an edit there, writing the value into the cell
-                        // below too.
-                        self.text_input.focus();
-                        self.show_formula_text(
-                            self.cell_seed(self.state.active_row(), self.state.active_col()),
-                        );
-                    }
-                    // Ctrl/Cmd+Enter: fill the value into every selected cell and
-                    // keep the selection put (no cursor advance).
-                    FormulaAction::CommitFill => {
-                        if let Some(ed) = self.editor.as_mut() {
-                            ed.set_text(&self.formula_text.get_untracked());
-                        }
-                        self.commit_edit_filled();
-                        self.text_input.focus();
-                        self.show_formula_text(
-                            self.cell_seed(self.state.active_row(), self.state.active_col()),
-                        );
-                    }
-                    FormulaAction::Cancel => {
-                        self.cancel_edit();
-                        self.text_input.focus();
-                    }
-                }
+            if self.formula.action.is_none() && self.formula_action.get_untracked().is_some() {
                 self.formula_action.set(None);
             }
         }

@@ -64,8 +64,7 @@ impl TrameView {
             formula_ref,
             #[cfg(target_arch = "wasm32")]
             formula_text,
-            #[cfg(target_arch = "wasm32")]
-            formula_shown: String::new(),
+            formula: FormulaBar::default(),
             #[cfg(target_arch = "wasm32")]
             formula_action,
             #[cfg(target_arch = "wasm32")]
@@ -246,7 +245,6 @@ impl TrameView {
 
     /// The active cell's spreadsheet reference (for example `"B2"`), shown in the
     /// formula bar's name box (`trame-cell-editing`).
-    #[cfg(target_arch = "wasm32")]
     pub(crate) fn active_cell_ref(&self) -> String {
         format!(
             "{}{}",
@@ -316,7 +314,6 @@ impl TrameView {
         self.text_input.focus();
         self.park_input_on(row, col);
         self.reset_blink();
-        #[cfg(target_arch = "wasm32")]
         self.show_formula_text(seed);
     }
 
@@ -325,7 +322,6 @@ impl TrameView {
     /// input, which keeps DOM focus and owns the buffer. The in-cell editor is
     /// only the rendering/commit vehicle. Stealing focus to the textarea pipe
     /// (as [`begin_edit`](Self::begin_edit) does) would abort the user's typing.
-    #[cfg(target_arch = "wasm32")]
     pub(crate) fn begin_edit_external(&mut self) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
         let seed = self.cell_seed(row, col);
@@ -367,7 +363,6 @@ impl TrameView {
         self.text_input.clear();
         self.text_input
             .announce("A collaborator deleted the cell you were editing. Nothing was written.");
-        #[cfg(target_arch = "wasm32")]
         self.show_formula_text(self.cell_seed(self.state.active_row(), self.state.active_col()));
     }
 
@@ -496,19 +491,117 @@ impl TrameView {
             // and could re-open an edit that clears the cell.
             self.edit_dirty = true;
             self.text_input.clear();
-            #[cfg(target_arch = "wasm32")]
             self.show_formula_text(
                 self.cell_seed(self.state.active_row(), self.state.active_col()),
             );
         }
     }
 
+    /// Sync the formula bar with the grid, once per frame (`trame-cell-editing`).
+    ///
+    /// While the bar has the focus, it owns the text, and the view must not
+    /// overwrite what the user typed. A text the view did not write means an
+    /// edit is in progress, which opens or drives a session (`TRAME-UI-155`).
+    /// Without the focus, the bar mirrors the editor buffer, or the stored
+    /// value when no session is open (`TRAME-UI-055`).
+    pub(crate) fn sync_formula_bar(&mut self) {
+        self.formula.reference = self.active_cell_ref();
+        if self.formula.focused {
+            let text = self.formula.text.clone();
+            if let Some(ed) = self.editor.as_mut() {
+                if ed.text() != text {
+                    ed.set_text(&text);
+                    self.edit_dirty = true;
+                }
+            } else {
+                let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+                match super::formula_bar_sync(&text, &self.formula.shown, &seed) {
+                    // The first character typed in the bar opens a session on
+                    // the active cell, seeded with what was typed. The focus
+                    // stays in the bar (`TRAME-UI-092`).
+                    super::FormulaBarSync::OpenSession => {
+                        self.begin_edit_external();
+                        if let Some(ed) = self.editor.as_mut() {
+                            ed.set_text(&text);
+                            self.edit_dirty = true;
+                        }
+                    }
+                    super::FormulaBarSync::Refresh => self.show_formula_text(seed),
+                    super::FormulaBarSync::Idle => {}
+                }
+            }
+        } else if let Some(ed) = self.editor.as_ref() {
+            let buffer = ed.text();
+            if self.formula.text != buffer {
+                self.show_formula_text(buffer);
+            }
+        } else {
+            let seed = self.cell_seed(self.state.active_row(), self.state.active_col());
+            if self.formula.text != seed {
+                self.show_formula_text(seed);
+            }
+        }
+        // Without the focus, the bar holds only what the view wrote. That text
+        // is the base a later keystroke is told apart from.
+        if !self.formula.focused {
+            self.formula.shown = self.formula.text.clone();
+        }
+        let Some(action) = self.formula.action.take() else {
+            return;
+        };
+        match action {
+            // A commit from the bar writes the bar's text (`TRAME-UI-169`).
+            FormulaAction::Commit(dir) => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.set_text(&self.formula.text);
+                }
+                self.commit_edit();
+                match dir {
+                    CommitDirection::Down => {
+                        self.nav_move(1, 0, false);
+                    }
+                    CommitDirection::Right => {
+                        self.nav_move(0, 1, false);
+                    }
+                    CommitDirection::Stay => {}
+                }
+                // Return the focus to the grid and reset the bar to the cell we
+                // landed on. Otherwise the bar still holds the committed value.
+                // Say the bar keeps the focus for one frame. The focused branch
+                // above then reads that value as typed on the new cell. It
+                // opens an edit there and writes the value into that cell too.
+                self.text_input.focus();
+                self.show_formula_text(
+                    self.cell_seed(self.state.active_row(), self.state.active_col()),
+                );
+            }
+            // Ctrl/Cmd+Enter: fill the value into every selected cell and keep
+            // the selection put (no cursor advance).
+            FormulaAction::CommitFill => {
+                if let Some(ed) = self.editor.as_mut() {
+                    ed.set_text(&self.formula.text);
+                }
+                self.commit_edit_filled();
+                self.text_input.focus();
+                self.show_formula_text(
+                    self.cell_seed(self.state.active_row(), self.state.active_col()),
+                );
+            }
+            FormulaAction::Cancel => {
+                self.cancel_edit();
+                self.text_input.focus();
+            }
+        }
+    }
+
     /// Write `text` into the formula bar, remembering it as the view's own
-    /// (`TRAME-UI-155`).
-    #[cfg(target_arch = "wasm32")]
+    /// (`TRAME-UI-155`). The browser signal takes it at once, so the next
+    /// frame copies the same text back in.
     pub(crate) fn show_formula_text(&mut self, text: String) {
-        self.formula_shown.clone_from(&text);
-        self.formula_text.set(text);
+        self.formula.shown.clone_from(&text);
+        #[cfg(target_arch = "wasm32")]
+        self.formula_text.set(text.clone());
+        self.formula.text = text;
     }
 }
 

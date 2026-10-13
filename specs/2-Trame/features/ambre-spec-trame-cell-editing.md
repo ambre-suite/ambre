@@ -26,59 +26,59 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-011` | `INV` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`; `::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
 | `TRAME-UI-050` | `INV` | The editor MUST hold no buffer of its own: every buffer operation resolves to the shared text core. | this spec section 3 | type-level -- `CellEditor` owns a `TextEditor` and nothing else, and reaches it through `Deref` and `DerefMut`, so no second buffer can exist; `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the behaviour equal to the core's | none | verified |
-| `TRAME-UI-055` | `INV` | The formula bar and the in-cell editor MUST show one buffer, never two. | this spec section 4 | none | unheld -- the mirroring runs on browser-only signals (`ui/view/frame.rs`), which no headless test can reach; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | `ambre_trame::ui::view::tests::only_a_typed_text_opens_an_edit_from_the_formula_bar` | partial -- the test holds the decision; the frame hook feeding it the bar, the text the view last wrote and the stored value is wasm glue no host test reaches; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-UI-055` | `INV` | The formula bar and the in-cell editor MUST show one buffer, never two. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_and_the_cell_show_one_buffer` -- without the focus the bar reads the buffer, and with it the buffer reads the bar | none | verified |
+| `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | `ambre_trame::ui::view::tests::only_a_typed_text_opens_an_edit_from_the_formula_bar` -- the decision; `ambre_trame::ui::view::view_tests::only_a_text_typed_in_the_bar_opens_a_session` -- the frame sync feeding it: the focus alone opens nothing | none | verified |
 | `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-010` | `OBS` | An optimistic commit MUST NOT display the formula source as its own result. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
-| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | none | unheld -- the reference is a browser-only signal set beside the active cell, and no headless test reaches it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_names_the_active_cell` | none | verified |
 
 ### 1.2 Open an edit session and type
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-156` | `POST` | Opening a session on a cell that holds a formula MUST seed the buffer with the formula, never with its result. | this spec section 4 | none | unheld -- `cell_seed` reads the cache's `raw` field, which `TRAME-UI-011` keeps, and the seeding itself lives on `TrameView`, where no test drives it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-157` | `POST` | `Alt+Enter` MUST be the only way to put a newline inside a cell. | this spec section 4 | none | unheld -- `interact.rs` routes `Enter` with `alt` to the buffer's `newline` and every other `Enter` to a commit, and nothing drives either; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | none | unheld -- `begin_edit` sends `BeginCellEdit`, whose handler only pins the cell, and the only writes leave from `commit_edit` and `commit_edit_filled`. No test states the absence; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-159` | `FRAME` | While a session is open, a key that edits the buffer MUST NOT move the grid selection. | this spec section 4 | none | unheld -- the edit-mode arm of `interact.rs` returns before the grid keymap for every buffer key, `Ctrl+A` included, and nothing asserts the grid stayed put; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-056` | `FRAME` | A composition in progress MUST NOT reach the document before it ends. | this spec section 4 | none | unheld -- `CompositionUpdate` writes only the editor preedit and `CompositionEnd` commits it into the buffer, and no test drives either; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-156` | `POST` | Opening a session on a cell that holds a formula MUST seed the buffer with the formula, never with its result. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_session_on_a_formula_starts_from_the_formula` -- a cell shown as `3` opens on `=1+2` | none | verified |
+| `TRAME-UI-157` | `POST` | `Alt+Enter` MUST be the only way to put a newline inside a cell. | this spec section 4 | `ambre_trame::ui::view::view_tests::alt_enter_is_the_newline` -- `Alt+Enter` leaves the session open, and the bare `Enter` commits the two lines | none | verified |
+| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | `ambre_trame::ui::view::view_tests::an_open_session_writes_nothing_and_holds_the_grid` -- typing, a composition and the buffer keys send no write | none | verified |
+| `TRAME-UI-159` | `FRAME` | While a session is open, a key that edits the buffer MUST NOT move the grid selection. | this spec section 4 | `ambre_trame::ui::view::view_tests::an_open_session_writes_nothing_and_holds_the_grid` -- the arrows, `Home`, `End`, the deletes, `Shift` and `Ctrl+A` leave the active cell and the selection put, and send no move | none | verified |
+| `TRAME-UI-056` | `FRAME` | A composition in progress MUST NOT reach the document before it ends. | this spec section 4 | `ambre_trame::ui::view::view_tests::an_open_session_writes_nothing_and_holds_the_grid` -- a composition update and its end send no write | none | verified |
 
 ### 1.3 Commit the edit
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | none | unheld -- a grid commit parks a `PendingCommit` and the tail of `ui/view/frame.rs` drains it after `draw_edit` flushes, which holds by the order of two statements in one function. Nothing in the types forbids a second drain site, and no test reads the buffer at key time to show the difference; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_grid_commit_reads_the_buffer_after_the_flush` -- at key time nothing is committed, and the commit after the paint carries both queued insertions | none | verified |
 | `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_commit_past_the_used_range_follows_an_insert_above`; `ambre_trame::ui::grid::tests::session::a_commit_names_the_session_and_no_position`; `::only_its_own_session_moves_the_editor` | none | verified |
 | `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` -- it writes a value, then commits an empty `SetCellText`, and reads the cell back blank | none | verified |
 | `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item` | none | verified |
-| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit, and no test drives it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit, and no test drives it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right` | none | verified |
+| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | `ambre_trame::ui::view::view_tests::enter_moves_down_and_tab_moves_right` | none | verified |
 | `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 2; section 3 | `ambre_trame::logic::tests::group9::a_commit_lands_on_its_cell_after_a_peer_inserts_a_row_above`; `::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write` | none | verified |
 | `TRAME-UI-176` | `FAIL` | Given a sheet, row or column a peer deletes while a session is open on it, the session MUST close with no write and tell the user the cell is gone. | this spec section 2; `features/ambre-spec-trame-sheets.md` (`TRAME-075`) | `ambre_trame::logic::tests::group9::a_peer_delete_of_the_row_or_column_closes_the_session_with_no_write`; `::a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another`; `::an_ended_session_writes_nothing`; `::a_commit_after_a_tab_switch_lands_on_the_session_sheet`; `ambre_trame::tests::chrome_ui::a_lost_edit_reaches_the_user` | none | verified |
-| `TRAME-UI-163` | `FAIL` | A commit the queue cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::the_hold_bound_refuses_rather_than_grows` | partial -- the tests hold the outbox: a full queue holds the commit and retries it, and a refusal is reported. `commit_edit` updating the cache only on an accepted send is wasm glue no host test reaches; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-UI-163` | `FAIL` | A commit the queue cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::the_hold_bound_refuses_rather_than_grows` -- the outbox; `ambre_trame::ui::view::view_tests::a_refused_commit_leaves_the_stored_value` -- a commit the Logic thread never receives leaves the cell on its stored value | none | verified |
 | `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | `ambre_trame::logic::tests::group3::write_beyond_the_cap_is_refused_and_said` | none | verified |
 
 ### 1.4 Cancel the edit
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | none | unheld -- `cancel_edit` drops the editor and resets the formula text from `cell_seed`, and both live on `TrameView`; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-015` | `FRAME` | Escape MUST emit no `TrameCommand`. | this spec section 4 | none | unheld -- the handler exists (`ui/view/lifecycle.rs::cancel_edit`) and the absence of an outbound command is asserted nowhere, which is exactly what a test has to state; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | `ambre_trame::ui::view::view_tests::escape_closes_the_session_with_no_write` -- the cell and the bar read the stored value | none | verified |
+| `TRAME-UI-015` | `FRAME` | Escape MUST send no write: the release of the session MUST be the only command it emits. | this spec section 4 | `ambre_trame::ui::view::view_tests::escape_closes_the_session_with_no_write` -- the release is the one command sent | none | verified |
 
 ### 1.5 Fill the selection with one value
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-053` | `POST` | One value typed into a multi-cell selection MUST be one undo item, not one per cell. | this spec section 4 | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item` | none | verified |
-| `TRAME-UI-166` | `POST` | A filled formula MUST reach every selected cell as typed, with no reference shifted. | this spec section 4 | none | unheld -- `commit_edit_filled` clones one string per cell, so the text cannot shift, and no test fills a formula and reads a reference back; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-167` | `POST` | A fill MUST keep the selection and the active cell where they were. | this spec section 4 | none | unheld -- `commit_edit_filled` moves neither, unlike the `Nav` commit beside it, and nothing asserts it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-168` | `FRAME` | A fill MUST NOT reach a cell outside the selection. | this spec section 4 | none | unheld -- the batch is built from `selection.selected_cells()`, and nothing watches a cell beside the selection; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-166` | `POST` | A filled formula MUST reach every selected cell as typed, with no reference shifted. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_filled_formula_reaches_each_selected_cell_as_typed` | none | verified |
+| `TRAME-UI-167` | `POST` | A fill MUST keep the selection and the active cell where they were. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_filled_formula_reaches_each_selected_cell_as_typed` | none | verified |
+| `TRAME-UI-168` | `FRAME` | A fill MUST NOT reach a cell outside the selection. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_filled_formula_reaches_each_selected_cell_as_typed` -- the batch names the four selected cells and no other | none | verified |
 
 ### 1.6 Edit from the formula bar
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-169` | `POST` | A commit from the formula bar MUST write the bar's text, not the buffer the grid last held. | this spec section 4 | none | unheld -- the commit arm pushes `formula_text` into the editor before committing, and the path is browser-only; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-092` | `FRAME` | Typing in the formula bar MUST NOT move the focus out of it. | this spec section 4 | none | unheld -- `begin_edit_external` opens the session without touching focus, so the keystrokes keep landing in the bar, and nothing asserts it; lands with the `Trame cell editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-169` | `POST` | A commit from the formula bar MUST write the bar's text, not the buffer the grid last held. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_commit_from_the_bar_writes_the_bar` -- the grid buffer reads `ab`, the bar `xyz`, and the commit carries `xyz` | none | verified |
+| `TRAME-UI-092` | `FRAME` | Typing in the formula bar MUST NOT move the focus out of it. | this spec section 4 | `ambre_trame::ui::view::view_tests::only_a_text_typed_in_the_bar_opens_a_session` -- opening the session from the bar asks the pipe for no focus | none | verified |
 
 ### 1.7 Write into a protected or validated range
 
@@ -106,17 +106,17 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-058` | `POST` | A cell reference being typed in a formula MUST offer its completions. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-170` | `FRAME` | Offering a completion MUST NOT ask the Logic thread. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 
-
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the keystroke to a draft, the
   keystroke to CRDT confirmation, `SetCellText` to the viewport, the autocompletion. Every one of
   them reads **none exists**.
 * **Boundary.** none: the draft lives on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The committed text reaches the relay sealed (`ZK-001`).
-* **Verification.** 10 `verified`, 2 `partial`, 17 `untested`, 12 `unimplemented`. What holds is
-  the commit path into the document, and where it lands once a peer moves or deletes the lines
-  under it. Most rows on what an edit MUST NOT touch have nothing watching them. The session
-  lives on `TrameView`, which a native test now builds and drives, though no row cites one yet.
-  Nine unbuilt rows are the gate of section 3, whose events ship and whose handlers do nothing.
+* **Verification.** 29 `verified`, 12 `unimplemented`. What holds is the commit path into the
+  document, and where it lands once a peer moves or deletes the lines under it. The session holds
+  too: a native test drives `TrameView` key by key, through the commit, the cancel and the fill. The
+  formula bar sync runs on plain state, which the browser copies its signals into and out of, so the
+  same test drives the bar. Nine unbuilt rows are the gate of section 3, whose events ship and whose
+  handlers do nothing.
 
 ---
 
@@ -337,7 +337,3 @@ at. A double-click inside selects the word.
 * **The gate covers one path, and the document has four.** The design above tests a cell write.
   Paste, autofill, replace-all and a structural delete reach the same cells and pass no gate, and no
   rule states whether they must.
-* **The session has no test of its own yet.** Six rows above say `none`. `TrameView` is now built
-  natively, on a detached pipe and a clock the test sets, and `ui::view::view_tests` drives a key to
-  the Logic thread. Each row waits on a test of that shape, under the `Trame cell editing held`
-  Story (`ambre-roadmap.md`).

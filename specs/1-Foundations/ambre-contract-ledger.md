@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 83 partial and 357 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 79 partial and 330 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 651 | 269 | 584 | 605 |  | 2109 |
-| `partial` | 27 | 14 | 41 | 1 |  | 83 |
+| `verified` | 651 | 300 | 584 | 605 |  | 2140 |
+| `partial` | 27 | 10 | 41 | 1 |  | 79 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 27 | 133 | 188 | 1 |  | 349 |
+| `untested` | 27 | 106 | 188 | 1 |  | 322 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
@@ -79,15 +79,15 @@
 | `ambre-spec-undo.md` | 11 | 11 | 8 | 2 | 1 |  |
 | `ambre-spec-zero-knowledge.md` | 16 | 14 | 13 | 1 |  | 2 |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
-| `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 1 | 6 |  |
-| `ambre-spec-trame-cell-editing.md` | 41 | 29 | 10 | 2 | 17 | 12 |
+| `ambre-spec-trame-autofill.md` | 10 | 10 | 9 |  | 1 |  |
+| `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 1 | 12 | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 3 |  | 6 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
-| `ambre-spec-trame-clipboard.md` | 9 | 8 | 2 | 1 | 5 | 1 |
+| `ambre-spec-trame-clipboard.md` | 9 | 8 | 7 |  | 1 | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 4 |  | 6 |  |
 | `ambre-spec-trame-engine.md` | 17 | 17 | 14 | 1 | 2 |  |
-| `ambre-spec-trame-find-replace.md` | 6 | 6 | 5 |  | 1 |  |
+| `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |  |
 | `ambre-spec-trame-formula-engine.md` | 44 | 43 | 40 |  | 3 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 7 | 2 | 9 | 2 |

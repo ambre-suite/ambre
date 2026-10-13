@@ -443,3 +443,351 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
     assert_eq!((editor.row, editor.col), (3, 3));
     assert_eq!(editor.text(), "Xhi");
 }
+
+impl Rig {
+    /// Press `key` with the given modifiers.
+    fn chord(&mut self, key: &str, ctrl: bool, alt: bool, shift: bool) -> bool {
+        self.view.handle_input(&InputEvent::Key {
+            key: key.to_owned(),
+            ctrl,
+            alt,
+            shift,
+            meta: false,
+        })
+    }
+
+    /// Store `raw` in the grid's cache, shown as `shown`, as a viewport answer
+    /// would leave it.
+    fn store(&mut self, (row, col): (u32, u32), raw: &str, shown: &str) {
+        self.view.state.set_cell_text(row, col, raw.to_owned());
+        if let Some(cell) = self.view.state.cell_cache.get_mut(&(row, col)) {
+            cell.text = shown.to_owned();
+        }
+    }
+
+    /// Cut the Logic thread off, so every later send is refused.
+    fn lose_logic(&mut self) {
+        let (_tx, rx) = ambre_bus::conduit::local(1);
+        drop(std::mem::replace(&mut self.to_logic, rx));
+    }
+
+    fn active(&self) -> (u32, u32) {
+        (self.view.state.active_row(), self.view.state.active_col())
+    }
+}
+
+/// True when `sent` carries a command that writes a cell.
+fn writes(sent: &[TrameCommand]) -> bool {
+    sent.iter().any(|c| {
+        matches!(
+            c,
+            TrameCommand::SetCellText { .. }
+                | TrameCommand::CommitCellEdit { .. }
+                | TrameCommand::SetCellsBatch { .. }
+                | TrameCommand::PasteRange { .. }
+        )
+    })
+}
+
+/// The text of the one `CommitCellEdit` in `sent`.
+fn committed(sent: &[TrameCommand]) -> Option<&str> {
+    sent.iter().find_map(|c| match c {
+        TrameCommand::CommitCellEdit { text, .. } => Some(text.as_str()),
+        _ => None,
+    })
+}
+
+/// `TRAME-UI-064`: a cut clears its source only behind the paste. The copy
+/// clears nothing, and the paste goes out before the batch that clears.
+#[test]
+fn a_cut_clears_its_source_behind_the_paste() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.view.state.select_rect(0, 0, 1, 1);
+    assert_eq!(
+        rig.view.clipboard_write(true),
+        ambre_bus::CopyOutcome::Deferred
+    );
+    let copied = rig.sent();
+    assert!(
+        !writes(&copied),
+        "the cut wrote before any paste: {copied:?}"
+    );
+    rig.view.state.select_rect(5, 0, 5, 0);
+    rig.view.paste_clipboard(clip(0, "x"), false);
+    let sent = rig.sent();
+    assert!(
+        matches!(
+            sent.as_slice(),
+            [
+                TrameCommand::PasteRange { target_row: 5, .. },
+                TrameCommand::SetCellsBatch { cells },
+            ] if cells.len() == 4 && cells.iter().all(|(r, c, t)| *r <= 1 && *c <= 1 && t.is_empty())
+        ),
+        "sent {sent:?}"
+    );
+    rig.view.paste_clipboard(clip(0, "x"), false);
+    assert!(
+        matches!(rig.sent().as_slice(), [TrameCommand::PasteRange { .. }]),
+        "a second paste clears nothing"
+    );
+}
+
+/// `TRAME-UI-055`: the bar and the cell show one buffer. Without the focus the
+/// bar follows the cell, and with it the cell follows the bar.
+#[test]
+fn the_bar_and_the_cell_show_one_buffer() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("ab");
+    // The paint flush applies the typing, and the next frame's sync reads it.
+    rig.frame();
+    rig.frame();
+    assert_eq!(rig.view.formula.text, "ab");
+    rig.view.formula.focused = true;
+    rig.view.formula.text = "abc".to_owned();
+    rig.frame();
+    assert_eq!(
+        rig.view.editor.as_ref().map(|e| e.text()).as_deref(),
+        Some("abc")
+    );
+}
+
+/// `TRAME-UI-091`: the bar names the cell an edit will reach.
+#[test]
+fn the_bar_names_the_active_cell() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert_eq!(rig.view.formula.reference, "A1");
+    rig.key("ArrowRight");
+    rig.key("ArrowDown");
+    rig.key("ArrowDown");
+    rig.frame();
+    assert_eq!(rig.view.formula.reference, "B3");
+}
+
+/// `TRAME-UI-155` and `TRAME-UI-092`: the focus alone opens nothing. A text
+/// typed in the bar opens a session, and the focus stays in the bar.
+#[test]
+fn only_a_text_typed_in_the_bar_opens_a_session() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "5", "5");
+    rig.frame();
+    rig.sent();
+    rig.view.formula.focused = true;
+    rig.frame();
+    assert!(
+        rig.view.editor.is_none(),
+        "the focus alone opened a session"
+    );
+    assert!(rig.sent().is_empty());
+    let focus = rig.view.text_input.focus_requests();
+    rig.view.formula.text = "57".to_owned();
+    rig.frame();
+    assert_eq!(
+        rig.view.editor.as_ref().map(|e| e.text()).as_deref(),
+        Some("57")
+    );
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [TrameCommand::BeginCellEdit { row: 0, col: 0, .. }]
+    ));
+    assert_eq!(
+        rig.view.text_input.focus_requests(),
+        focus,
+        "the pipe took the focus"
+    );
+}
+
+/// `TRAME-UI-169`: a commit from the bar writes the bar's text, not the buffer
+/// the grid held, and the selection then moves down.
+#[test]
+fn a_commit_from_the_bar_writes_the_bar() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("ab");
+    rig.frame();
+    rig.sent();
+    rig.view.formula.focused = true;
+    rig.view.formula.text = "xyz".to_owned();
+    rig.view.formula.action = Some(FormulaAction::Commit(CommitDirection::Down));
+    rig.frame();
+    let sent = rig.sent();
+    assert_eq!(committed(&sent), Some("xyz"), "sent {sent:?}");
+    assert_eq!(rig.active(), (1, 0));
+    assert!(rig.view.editor.is_none());
+}
+
+/// `TRAME-UI-156`: a session opened on a formula starts from the formula, not
+/// from its result.
+#[test]
+fn a_session_on_a_formula_starts_from_the_formula() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "=1+2", "3");
+    rig.frame();
+    rig.key("F2");
+    assert_eq!(
+        rig.view.editor.as_ref().map(|e| e.text()).as_deref(),
+        Some("=1+2")
+    );
+    assert_eq!(rig.view.formula.text, "=1+2");
+}
+
+/// `TRAME-UI-157`: Alt+Enter puts a newline in the cell, and a bare Enter
+/// commits.
+#[test]
+fn alt_enter_is_the_newline() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("a");
+    rig.chord("Enter", false, true, false);
+    rig.type_text("b");
+    rig.frame();
+    assert!(rig.view.editor.is_some(), "Alt+Enter committed");
+    assert!(rig.key("Enter"));
+    rig.frame();
+    assert_eq!(committed(&rig.sent()), Some("a\nb"));
+}
+
+/// `TRAME-UI-158`, `TRAME-UI-159` and `TRAME-UI-056`: an open session writes
+/// nothing before its commit. A buffer key leaves the grid selection put, and
+/// a composition in progress reaches only the preview.
+#[test]
+fn an_open_session_writes_nothing_and_holds_the_grid() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("abc");
+    rig.view.handle_input(&InputEvent::CompositionUpdate {
+        text: "ka".to_owned(),
+    });
+    rig.frame();
+    for key in [
+        "ArrowLeft",
+        "ArrowRight",
+        "Home",
+        "End",
+        "Backspace",
+        "Delete",
+    ] {
+        rig.key(key);
+    }
+    rig.chord("ArrowLeft", false, false, true);
+    rig.chord("a", true, false, false);
+    rig.frame();
+    let sent = rig.sent();
+    assert!(!writes(&sent), "the open session wrote: {sent:?}");
+    assert!(
+        !sent
+            .iter()
+            .any(|c| matches!(c, TrameCommand::SetActiveCell { .. })),
+        "a buffer key moved the grid: {sent:?}"
+    );
+    assert_eq!(rig.active(), (0, 0));
+    assert_eq!(rig.view.state.selection.bounds(), (0, 0, 0, 0));
+    rig.view.handle_input(&InputEvent::CompositionEnd {
+        text: "か".to_owned(),
+    });
+    rig.frame();
+    assert!(!writes(&rig.sent()), "the composition end wrote");
+}
+
+/// `TRAME-UI-051`: a commit by key reads the buffer at the paint flush. At
+/// key time it sends nothing, and the commit carries every queued insertion.
+#[test]
+fn a_grid_commit_reads_the_buffer_after_the_flush() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("4");
+    rig.type_text("2");
+    rig.key("Enter");
+    let before = rig.sent();
+    assert_eq!(
+        committed(&before),
+        None,
+        "committed at key time: {before:?}"
+    );
+    rig.frame();
+    assert_eq!(committed(&rig.sent()), Some("42"));
+}
+
+/// `TRAME-UI-161` and `TRAME-UI-171`: Enter commits and moves down, Tab
+/// commits and moves right.
+#[test]
+fn enter_moves_down_and_tab_moves_right() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.type_text("1");
+    rig.key("Enter");
+    rig.frame();
+    assert_eq!(committed(&rig.sent()), Some("1"));
+    assert_eq!(rig.active(), (1, 0));
+    rig.type_text("2");
+    rig.key("Tab");
+    rig.frame();
+    assert_eq!(committed(&rig.sent()), Some("2"));
+    assert_eq!(rig.active(), (1, 1));
+}
+
+/// `TRAME-UI-163`: a commit the Logic thread never receives leaves the cell
+/// reading its stored value.
+#[test]
+fn a_refused_commit_leaves_the_stored_value() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "old", "old");
+    rig.frame();
+    rig.type_text("new");
+    rig.frame();
+    rig.lose_logic();
+    rig.key("Enter");
+    rig.frame();
+    assert_eq!(rig.view.cell_seed(0, 0), "old");
+}
+
+/// `TRAME-UI-165` and `TRAME-UI-015`: Escape closes the session with no write.
+/// The cell and the bar read the stored value, and only the release goes out.
+#[test]
+fn escape_closes_the_session_with_no_write() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "old", "old");
+    rig.frame();
+    rig.type_text("new");
+    rig.frame();
+    rig.sent();
+    assert!(rig.key("Escape"));
+    rig.frame();
+    let sent = rig.sent();
+    assert!(
+        matches!(sent.as_slice(), [TrameCommand::EndCellEdit { .. }]),
+        "sent {sent:?}"
+    );
+    assert!(rig.view.editor.is_none());
+    assert_eq!(rig.view.cell_seed(0, 0), "old");
+    assert_eq!(rig.view.formula.text, "old");
+}
+
+/// `TRAME-UI-166`, `TRAME-UI-167` and `TRAME-UI-168`: Ctrl+Enter writes the
+/// formula as typed into each selected cell and no other. The selection and
+/// the active cell stay put.
+#[test]
+fn a_filled_formula_reaches_each_selected_cell_as_typed() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.view.state.select_rect(0, 0, 1, 1);
+    rig.sent();
+    rig.type_text("=A1+1");
+    rig.chord("Enter", true, false, false);
+    rig.frame();
+    let sent = rig.sent();
+    let Some(cells) = sent.iter().find_map(|c| match c {
+        TrameCommand::SetCellsBatch { cells } => Some(cells),
+        _ => None,
+    }) else {
+        panic!("no batch in {sent:?}");
+    };
+    let mut at: Vec<(u32, u32)> = cells.iter().map(|(r, c, _)| (*r, *c)).collect();
+    at.sort_unstable();
+    assert_eq!(at, vec![(0, 0), (0, 1), (1, 0), (1, 1)]);
+    assert!(cells.iter().all(|(_, _, t)| t == "=A1+1"), "{cells:?}");
+    assert_eq!(rig.active(), (0, 0));
+    assert_eq!(rig.view.state.selection.bounds(), (0, 0, 1, 1));
+}

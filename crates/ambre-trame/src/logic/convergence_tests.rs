@@ -5,7 +5,7 @@
 //
 // `proptest` generates interleaved sequences of the document-mutating
 // `TrameCommand`s: `SetCellText`, insert-delete row-column, `SortRange`, merge,
-// `FillRange`. It routes each op to one of two peers, then exchanges the full
+// `FillRange`, a paste and the batch clear a cut sends. It routes each op to one of two peers, then exchanges the full
 // CRDT history both ways. The invariant: after the exchange the two peers
 // observe an *identical* materialized grid -- same text, same formula results
 // (recompute determinism), same merge geometry. This exercises the own-uid cell
@@ -24,8 +24,8 @@
 use proptest::prelude::*;
 
 use ambre_bus::{
-    BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, FillMode, FilterKind, FilterOp,
-    GridRange, HAlign, StylePatch, VAlign,
+    BorderEdit, BorderPreset, BorderStyle, Borders, CellFormat, CellStyle, ClipboardCell,
+    ClipboardPayload, FillMode, FilterKind, FilterOp, GridRange, HAlign, StylePatch, VAlign,
 };
 
 use super::TrameState;
@@ -92,6 +92,20 @@ enum Op {
         value: u32,
     },
     ClearFilter,
+    /// Paste a block of texts at a target cell (`TRAME-UI-124`). Blank texts
+    /// are omitted from the payload, as a copy omits blank cells.
+    Paste {
+        row: u32,
+        col: u32,
+        texts: Vec<String>,
+    },
+    /// Clear a rectangle in one batch: what a cut sends once its paste lands.
+    ClearBatch {
+        row: u32,
+        col: u32,
+        rows: u32,
+        cols: u32,
+    },
 }
 
 impl Op {
@@ -154,6 +168,39 @@ impl Op {
                 },
                 mode: FillMode::Auto,
             },
+            Op::Paste { row, col, texts } => TrameCommand::PasteRange {
+                target_row: row,
+                target_col: col,
+                payload: ClipboardPayload {
+                    src_row: 0,
+                    src_col: 0,
+                    rows: texts.len() as u32,
+                    cols: 1,
+                    cells: texts
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(_, raw)| !raw.is_empty())
+                        .map(|(dr, raw)| ClipboardCell {
+                            dr: dr as u32,
+                            dc: 0,
+                            raw,
+                            bold: false,
+                            italic: false,
+                            style: CellStyle::default(),
+                        })
+                        .collect(),
+                },
+            },
+            Op::ClearBatch {
+                row,
+                col,
+                rows,
+                cols,
+            } => TrameCommand::SetCellsBatch {
+                cells: (row..row + rows)
+                    .flat_map(|r| (col..col + cols).map(move |c| (r, c, String::new())))
+                    .collect(),
+            },
         }
     }
 }
@@ -208,6 +255,20 @@ fn op_strategy() -> impl Strategy<Value = Op> {
         )
             .prop_map(|(op, value)| Op::Filter { op, value }),
         1 => Just(Op::ClearFilter),
+        1 => (
+            0..ROWS,
+            0..COLS,
+            proptest::collection::vec(text_strategy(), 1..4),
+        )
+            .prop_map(|(row, col, texts)| Op::Paste { row, col, texts }),
+        1 => (0..ROWS, 0..COLS, 1..3u32, 1..3u32).prop_map(|(row, col, rows, cols)| {
+            Op::ClearBatch {
+                row,
+                col,
+                rows,
+                cols,
+            }
+        }),
     ]
 }
 
@@ -262,7 +323,8 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
 
     /// Two peers applying an interleaved op stream converge to an identical
-    /// grid after exchanging full history both ways.
+    /// grid after exchanging full history both ways. The op set holds a paste
+    /// and a batch clear over cells the other peer edits (`TRAME-UI-124`).
     #[test]
     fn two_peers_converge_under_interleaved_ops(program in program_strategy()) {
         // Shared base: A seeds it, B imports it, so both share the implicit-s0
