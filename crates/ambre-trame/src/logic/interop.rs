@@ -64,6 +64,7 @@ impl TrameState {
         let sheet_id = match target_sheet_id {
             Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => id,
             _ => {
+                self.hold_default_sheet();
                 let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
                 self.sheet_counter += 1;
                 let name = self.free_sheet_name("CSV Import");

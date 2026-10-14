@@ -4,7 +4,8 @@
 
 use super::*;
 use crate::logic::schema::{
-    MATERIALIZE_CAP, MIN_COL_WIDTH, cells_map_name, cellstyle_map_name, merges_map_name,
+    DEFAULT_SHEET, MATERIALIZE_CAP, MIN_COL_WIDTH, cells_map_name, cellstyle_map_name,
+    merges_map_name,
 };
 use crate::model::cell_key;
 use crate::{FillMode, GridRange, SelectionKind};
@@ -547,4 +548,86 @@ fn two_peers_adding_a_sheet_keep_both() {
     let order = a.sheet_order_ids();
     assert_eq!(order.len(), 3);
     assert!(order.contains(&added_a) && order.contains(&added_b));
+}
+
+/// The tab strip one peer reads: each sheet's id and name, and the active id.
+fn strip(state: &TrameState) -> (Vec<(String, String)>, String) {
+    match state.sheet_list_event() {
+        TrameEvent::SheetList { sheets, active } => (sheets, active),
+        other => panic!("not a sheet list: {other:?}"),
+    }
+}
+
+/// Two peers deleting the last two sheets at once both read one sheet, the
+/// default one, and the merge writes nothing (`TRAME-077`). That sheet is
+/// the last one, so a delete of it is refused (`TRAME-022`). The first edit
+/// on it stores it, so a sheet a peer adds beside it does not hide it.
+#[test]
+fn two_peers_deleting_the_last_two_sheets_keep_one() {
+    let mut base = TrameState::new();
+    base.handle_command(TrameCommand::CreateSheet {
+        name: "Two".to_owned(),
+    });
+    let ids = base.sheet_order_ids();
+    assert_eq!(ids.len(), 2);
+    let (mut a, mut b) = two_peers(&base);
+    a.flush_delta();
+    b.flush_delta();
+    let from_a = a
+        .handle_command(TrameCommand::DeleteSheet {
+            sheet_id: ids[1].clone(),
+        })
+        .update
+        .expect("the delete");
+    let from_b = b
+        .handle_command(TrameCommand::DeleteSheet {
+            sheet_id: ids[0].clone(),
+        })
+        .update
+        .expect("the delete");
+    let (ops_a, ops_b) = (own_ops(&a), own_ops(&b));
+    a.apply_remote(&from_b);
+    b.apply_remote(&from_a);
+    let one = (
+        vec![(DEFAULT_SHEET.to_owned(), "Sheet1".to_owned())],
+        DEFAULT_SHEET.to_owned(),
+    );
+    assert_eq!(strip(&a), one);
+    assert_eq!(strip(&b), one);
+    // The merge stored nothing on either peer.
+    assert_eq!((own_ops(&a), own_ops(&b)), (ops_a, ops_b));
+    assert!(a.flush_delta().is_none() && b.flush_delta().is_none());
+
+    // The last sheet stays: its delete is refused and writes nothing.
+    let out = a.handle_command(TrameCommand::DeleteSheet {
+        sheet_id: DEFAULT_SHEET.to_owned(),
+    });
+    assert!(out.update.is_none());
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { .. }))
+    );
+
+    // A writes on the sheet while B adds one: both keep both.
+    let from_a = a
+        .handle_command(TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "kept".to_owned(),
+        })
+        .update
+        .expect("the write");
+    let from_b = b
+        .handle_command(TrameCommand::CreateSheet {
+            name: "New".to_owned(),
+        })
+        .update
+        .expect("the create");
+    a.apply_remote(&from_b);
+    b.apply_remote(&from_a);
+    assert_eq!(a.sheet_order_ids(), b.sheet_order_ids());
+    assert_eq!(a.sheet_order_ids().len(), 2);
+    assert_eq!(a.sheet_order_ids()[0], DEFAULT_SHEET);
+    assert_eq!(read_cell(&mut b, 0, 0), "kept");
 }

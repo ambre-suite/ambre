@@ -259,11 +259,17 @@ pub struct TrameState {
     entry_end: Option<i32>,
 }
 
+/// The name the default sheet is stored and read under. It is a value, not a
+/// schema key.
+const DEFAULT_SHEET_NAME: &str = "Sheet1";
+
 /// The workbook scaffolding, which every peer writes on open, before any edit.
 fn write_scaffold(doc: &LoroDoc) {
     // Register the implicit default sheet's name (idempotent map insert, so
     // a peer that also "creates" s0 converges to the same entry).
-    let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
+    let _ = doc
+        .get_map(SHEETS_MAP)
+        .insert(DEFAULT_SHEET, DEFAULT_SHEET_NAME);
     // The schema version is workbook scaffolding too, and it is written in
     // the same commit so a workbook is never persisted without it
     // (`SCHEMA-004`).

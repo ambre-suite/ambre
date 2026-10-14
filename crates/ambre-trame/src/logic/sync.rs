@@ -38,6 +38,12 @@ impl TrameState {
             }
             self.entry_end = None;
         }
+        // A local edit on the default sheet the workbook only reads stores it
+        // (`TRAME-077`), in the same delta.
+        if self.hold_default_sheet() {
+            self.doc.commit();
+        }
+        let current = self.doc.oplog_vv();
         // Export the incremental ops. On failure we must NOT advance the export
         // cursor. Swallowing the error (the old `.ok()`) dropped the local delta
         // for good. Since remote apply is now live, a lost local delta means
@@ -140,12 +146,9 @@ impl TrameState {
     /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
     /// over the `sheets` map -- there are only a handful of sheets.
     pub fn sheet_name_to_id(&self, name: &str) -> Option<String> {
-        match self.doc.get_map(SHEETS_MAP).get_value() {
-            LoroValue::Map(sheets) => sheets.iter().find_map(|(id, value)| {
-                matches!(value, LoroValue::String(n) if n.as_str() == name).then(|| id.to_string())
-            }),
-            _ => None,
-        }
+        self.sheet_names()
+            .into_iter()
+            .find_map(|(id, n)| (n == name).then_some(id))
     }
 
     /// Shared import path for both a local snapshot restore and a remote delta.

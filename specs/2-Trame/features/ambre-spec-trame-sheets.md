@@ -22,13 +22,13 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none | unheld -- the local guard is a refusal, held by `TRAME-163`, and two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077`; lands with the `The last sheet survives concurrent deletes` Story (`ambre-roadmap.md` E6) | untested |
+| `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` -- one peer; `ambre_trame::logic::tests::group11::two_peers_deleting_the_last_two_sheets_keep_one` -- two peers, and the refusal of the sheet they are left with | none | verified |
 | `TRAME-072` | `INV` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`; `ambre_trame::logic::tests::group1::multi_sheet_isolation_and_name_lookup` | none | verified |
 | `TRAME-078` | `INV` | Two sheets MUST NOT carry the same name. | this spec section 6 | `ambre_trame::logic::tests::group3::created_sheet_never_repeats_a_name`; `ambre_trame::logic::tests::group3::rename_to_a_taken_name_is_refused`; `ambre_trame::logic::tests::group3::concurrent_duplicate_names_read_apart` | none | verified |
 | `TRAME-079` | `OBS` | The tab strip MUST show every sheet of the document, in the document's order. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs`; `::first_scroll_viewport_hydrates_sheet_list_once` -- the order the Logic thread publishes; `ambre_trame::tests::chrome_ui::sheet_tabs_render_active_and_emit_intents` -- the strip drawing one tab per entry in that order, what joins the two halves being the launcher mirroring the list into the strip's signals | none | verified |
 | `TRAME-071` | `CONC` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | `ambre_trame::logic::tests::group11::two_peers_adding_a_sheet_keep_both` | none | verified |
 | `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | `ambre_trame::logic::convergence_tests::concurrent_tab_moves_converge_on_one_order` | none | verified |
-| `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built | unbuilt -- lands with the `The last sheet survives concurrent deletes` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | `ambre_trame::logic::tests::group11::two_peers_deleting_the_last_two_sheets_keep_one` -- both read the default sheet, and the merge writes nothing | none | verified |
 
 ### 1.2 Add a sheet
 
@@ -72,11 +72,9 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 16 `verified`, 1 `untested`, 1 `unimplemented`. What holds is each gesture on
-  one peer, what an add leaves alone, and a peer's delete of the sheet a reader is on (`TRAME-075`).
-  What is loose is every frame around them. A distinct id between two peers is an argument, not a
-  mechanism (`TRAME-071`, `TRAME-077`). The local guard offered as covering it is a refusal of its
-  own (`TRAME-163`).
+* **Verification.** 18 `verified`. What holds is each gesture on one peer, and what it leaves
+  alone. Three concurrent cases hold too: two adds (`TRAME-071`), a delete under a reader
+  (`TRAME-075`), and two deletes of the last two sheets (`TRAME-077`).
 
 ---
 
@@ -87,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 | adds a sheet | adds a sheet | both, each under its own id | two new tabs, in a canonical order (`TRAME-071`) | none. The convergence op set carries no sheet command |
 | renames `Sheet2` to `Data` | writes `=Sheet2!A1` | the reference, stored by sheet id | both read the value, and both see the qualifier `Data!A1` (`TRAME-070`) | `ambre_trame::logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename` |
 | deletes `Sheet2` | is reading `Sheet2` | the workbook without it | B lands on the neighbouring tab (`TRAME-075`) | `ambre_trame::logic::tests::group9::a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another` |
-| deletes the last sheet but one | deletes the other | no sheet left | an empty workbook, on both screens (`TRAME-022`, `TRAME-077`) | none, and this is the case the rule exists for |
+| deletes the last sheet but one | deletes the other | no sheet left | one sheet, the default one, on both screens, and the merge writes nothing (`TRAME-022`, `TRAME-077`) | `ambre_trame::logic::tests::group11::two_peers_deleting_the_last_two_sheets_keep_one` |
 | drags a tab to the front | drags the same tab to the end | one order, or a rebuilt list | possibly two different strips (`TRAME-074`) | none |
 
 ---
@@ -161,6 +159,7 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
 | An explicit sheet's id carries the peer that minted it | a name-derived id | the name is an editable label and nothing keeps two sheets from sharing one; deriving the id from it would move the id on every rename, which the first decision here exists to prevent |
 | The order is a list, and the names are a map | one container holding both | the order is the thing two users move, and a list move is a first-class operation that converges. The name is the thing two users overwrite, and a map entry is the unit that elects |
 | Per-sheet containers are named by the id, not nested | one container per sheet holding every sub-container | a sheet's cells can be dropped in one pass, and a name collision between two sheets is impossible |
+| A workbook whose map holds no sheet reads the default one, and its first edit stores it | each peer re-inserting a sheet when a merge leaves none | a merge would write. A reader cannot write, so it would read an empty workbook. Two peers would each push the sheet on the order list and converge on a duplicate. The read costs nothing and is the same on every peer (`TRAME-077`) |
 | Deleting a sheet breaks its references | resolving the reference to empty, as a deleted row does | a formula pointing at deleted data has no right answer, and inventing one hides the deletion from the reader |
 | Delete is the one sheet operation a reference can feel | rewriting the name token in every dependent formula on rename, as Excel does | a rename changes a label the reader sees and a reorder changes the strip, so neither touches the dependency graph; only a delete removes a `sheet_id`. Excel's rename-rewrite carries the same hazard as its row-insert rewrite -- two concurrent rewrites of one formula converge on a third -- and binding to the id leaves `#REF!` meaning one thing (`TRAME-009`) |
 
@@ -168,9 +167,6 @@ refusal of the last sheet and the id of a new sheet are all the Logic thread's.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The last sheet holds locally and not between peers** (`TRAME-022`, `TRAME-077`). The rule for the
-  concurrent case is decided -- deterministic re-insertion of the lowest-sorting id, identical on
-  every peer -- and not implemented.
 * **The `+` button does not open the sheet it adds** (`TRAME-159`). `create_sheet` leaves the
   active sheet alone by design, and expects the surface to send `ActivateSheet` behind it. The
   launcher does not, so a user who clicks `+` gets a tab they have to click again. Nothing rules

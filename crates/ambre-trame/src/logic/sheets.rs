@@ -291,6 +291,10 @@ impl TrameState {
                 .collect(),
             _ => Vec::new(),
         };
+        // A workbook with no stored sheet reads the default one (`TRAME-022`).
+        if stored.is_empty() {
+            stored.push((DEFAULT_SHEET.to_owned(), DEFAULT_SHEET_NAME.to_owned()));
+        }
         stored.sort();
         let mut taken: HashSet<String> = HashSet::new();
         let mut names = HashMap::with_capacity(stored.len());
@@ -332,12 +336,40 @@ impl TrameState {
             .unwrap_or_else(|| wanted.to_owned())
     }
 
-    /// Every sheet id registered in the `sheets` CRDT map (unordered).
+    /// Every live sheet id, unordered. It is each id the `sheets` CRDT map
+    /// holds. A map with none reads the default sheet, so the workbook always
+    /// has one (`TRAME-022`).
     pub(super) fn all_sheet_ids(&self) -> Vec<String> {
+        let stored = self.stored_sheet_ids();
+        if stored.is_empty() {
+            return vec![DEFAULT_SHEET.to_owned()];
+        }
+        stored
+    }
+
+    /// Every sheet id the `sheets` CRDT map holds, unordered.
+    fn stored_sheet_ids(&self) -> Vec<String> {
         match self.doc.get_map(SHEETS_MAP).get_value() {
             LoroValue::Map(sheets) => sheets.keys().cloned().collect(),
             _ => Vec::new(),
         }
+    }
+
+    /// Store the default sheet when the map holds no sheet. Two peers that
+    /// delete the last two sheets at once leave an empty map, and each reads
+    /// the default sheet without a write (`TRAME-077`). The first local write
+    /// stores it, so a sheet added next to it does not hide it. Two peers
+    /// storing it at once write one key with one value. It returns whether it
+    /// wrote, and the caller commits.
+    pub(super) fn hold_default_sheet(&mut self) -> bool {
+        if !self.stored_sheet_ids().is_empty() {
+            return false;
+        }
+        let _ = self
+            .doc
+            .get_map(SHEETS_MAP)
+            .insert(DEFAULT_SHEET, DEFAULT_SHEET_NAME);
+        true
     }
 
     /// Canonical tab-strip order, deterministic on every peer. The implicit
@@ -435,6 +467,7 @@ impl TrameState {
     /// empty; its containers are created lazily on first write. Does not switch
     /// the active sheet (the UI sends [`TrameCommand::ActivateSheet`] for that).
     pub(super) fn create_sheet(&mut self, name: &str) -> TrameOutcome {
+        self.hold_default_sheet();
         let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
         self.sheet_counter += 1;
         let name = self.free_sheet_name(name);
