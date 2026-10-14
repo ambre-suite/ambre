@@ -23,32 +23,33 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-085` | `OBS` | A menu MUST list the entries its scope allows, and no others. | this spec section 3 | `ambre_trame::tests::chrome_ui::cell_menu_has_clipboard_and_merge`; `::column_menu_keeps_column_ops_drops_cell_and_row_ops`; `::row_menu_keeps_row_ops_drops_column_inserts`; `::corner_menu_has_sheet_sort_only` -- four scopes, four entry sets, one wasm test each, asserting presence and absence | none | verified |
 | `TRAME-UI-086` | `INV` | A menu entry MUST carry no geometry of its own. | this spec section 2 | type-level -- an entry holds a parameterless `CommandId`, so there is no field a coordinate could travel in (`ambre-chrome/src/context_menu.rs`) | none | verified |
-| `TRAME-UI-090` | `OBS` | A filter entry MUST NOT offer to filter a row. | this spec section 3 | none | unheld -- `ambre_trame::tests::chrome_ui::row_menu_keeps_row_ops_drops_column_inserts` reads the row scope and asserts the absence of three column entries, never the filter one, and `::filter_entry_toggles_with_filter_state` drives the cell scope, which this rule does not constrain; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-090` | `OBS` | A filter entry MUST NOT offer to filter a row. | this spec section 3 | `ambre_trame::ui::commands::tests::a_row_menu_never_offers_to_filter` | none | verified |
 
 ### 1.2 Right-click to open the menu
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-117` | `POST` | The menu MUST open scoped to what the pointer targeted: a cell, a column, a row or the corner. | this spec section 3 | none | unheld -- the scope is resolved in the pointer handler (`ui/view/input.rs`), which no test drives. It is the half `TRAME-UI-085` was carrying: the four entry sets are covered, the point that picks one is not; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-118` | `POST` | A right-click landing outside the current selection MUST move the selection onto what it targets before the menu opens, as a left click would. | this spec section 3 | none | unheld -- the handler re-selects on the press, and no test drives a right-click. Three of the five cases of the selection table in section 3 reached this pass ruled by nothing at all: the cell outside, the header body and the corner; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-088` | `FRAME` | A right-click inside the current selection MUST NOT change it. | this spec section 3 | none | unheld -- the handler re-selects only when the point falls outside the selection, and no test drives a right-click. It holds over the cell grid alone: a right-click on a header body selects that axis whether or not the selection already covered it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-117` | `POST` | The menu MUST open scoped to what the pointer targeted: a cell, a column, a row or the corner. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_right_click_scopes_the_menu_to_its_target` | none | verified |
+| `TRAME-UI-118` | `POST` | A right-click landing outside the current selection MUST move the selection onto what it targets before the menu opens, as a left click would. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_right_click_outside_the_selection_reselects` | none | verified |
+| `TRAME-UI-088` | `FRAME` | A right-click inside the current selection MUST NOT change it. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_right_click_inside_the_selection_keeps_it` | none | verified |
 
 ### 1.3 Choose an entry
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-087` | `POST` | A menu entry MUST dispatch through the same command path as the toolbar and the keyboard. | this spec section 2 | type-level -- the menu emits a `CommandId`, and the only route from there is the shared `on_command` dispatch that the toolbar and the keymap also take | none | verified |
-| `TRAME-UI-119` | `FRAME` | Choosing an entry MUST NOT change the selection the menu was opened on. | derived | none | unheld -- section 4 rests every range command reached by mouse on this frame condition, and nothing reads the selection back after a menu command; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-119` | `FRAME` | Choosing an entry MUST NOT change the selection the menu was opened on. | derived | `ambre_trame::ui::view::view_tests::a_menu_entry_leaves_the_selection_alone` -- each entry runs on a Logic state and its answers reach the view | none | verified |
 | `TRAME-UI-089` | `FAIL` | A command the document refuses MUST leave the document untouched and answer with the reason. | this spec section 3 | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` -- it asserts the rejection reply, that no document update is emitted, and that the merge span is unchanged | none | verified |
-| `TRAME-UI-120` | `FAIL` | A refusal MUST reach the user as a message, never as silence. | this spec section 3 | none | unheld -- the chrome raises the toast from the rejection event (`chrome/commands.rs`), and no test reaches that arm. It is the half `TRAME-UI-089` was carrying; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-120` | `FAIL` | A refusal MUST reach the user as a message, never as silence. | this spec section 3 | `ambre_trame::tests::chrome_ui::a_refusal_reaches_the_user_as_a_toast` | none | verified |
 
 * **Budget.** none: the menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation.
 * **Boundary.** none: the menu is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What an entry commits leaves as a `TrameCommand`.
-* **Verification.** 4 `verified`, 6 `untested`. What holds is the entry sets, read back in wasm,
-  and the merge refusal itself. What is loose is the pointer and the toast. Which scope a
-  right-click resolves to, what it does to the selection, and whether a refusal is ever seen.
+* **Verification.** 10 `verified`. The entry sets are read back in wasm, and the merge refusal
+  holds in the Logic thread. The pointer half is driven through the view on the host tier: the
+  scope a right-click resolves and what it does to the selection. The toast a refusal raises is
+  read back in wasm.
 
 ---
 
@@ -130,14 +131,6 @@ the right-click scope resolution; `ambre-chrome` -- the menu component itself.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The pointer half is untested** (`TRAME-UI-117`, `TRAME-UI-118`, `TRAME-UI-088`). The entry
-  builder is covered on the wasm tier, one test per scope. The handler that decides which scope a
-  right-click means, and what it does to the selection, is reached by nothing. It is a pure
-  function of a point and a selection rectangle. It belongs on the host tier and is the cheapest
-  gap here to close.
-* **A refusal may be silent** (`TRAME-UI-120`). The Logic thread's rejection reply is covered. The
-  toast the chrome raises from it is reached by nothing, so a user could meet a command that does
-  nothing and says nothing.
 * **The sort dialog has no rule.** The multi-column dialog carries ordered levels, a per-level
   direction and a header toggle. No row states what an empty level list or a duplicated column must
   do.

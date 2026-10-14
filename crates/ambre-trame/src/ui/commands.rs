@@ -472,4 +472,21 @@ mod tests {
         assert!(command_to_app(BOLD).is_none());
         assert!(command_to_app(CommandId("trame.unknown")).is_none());
     }
+
+    /// A row menu never offers to filter a row (`TRAME-UI-090`). With a filter
+    /// active it offers only to remove it.
+    #[test]
+    fn a_row_menu_never_offers_to_filter() {
+        for filter_active in [false, true] {
+            let rows = context_layout(CtxScope::Row, filter_active);
+            assert!(!rows.contains(&MenuRow::Command(FILTER_COLUMN)), "{rows:?}");
+            assert_eq!(
+                rows.contains(&MenuRow::Command(CLEAR_FILTER)),
+                filter_active
+            );
+        }
+        // The column menu, by contrast, offers it.
+        let cols = context_layout(CtxScope::Column, false);
+        assert!(cols.contains(&MenuRow::Command(FILTER_COLUMN)));
+    }
 }

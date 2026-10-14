@@ -201,6 +201,43 @@ mod tests {
         state
     }
 
+    /// `TRAME-UI-143`: the rect the renderer lays a cell in is the rect hit
+    /// testing walks, under zoom, resized axes, hidden rows and a scroll. Its
+    /// centre hit-tests back to the same cell.
+    #[test]
+    fn the_drawn_cell_is_the_hit_tested_cell() {
+        let mut state = fixture(&[]);
+        assert!(state.set_zoom(1.25));
+        state.col_widths.insert(4, 150.0);
+        state.col_widths.insert(6, 30.0);
+        state.row_heights.insert(13, 44.0);
+        state.hidden_rows = vec![12, 15];
+        assert!(state.scroll_by(10, 3));
+        let layout = screen_layout(&state);
+        let mut checked = 0;
+        for row in 10..22 {
+            for col in 3..9 {
+                let Some((x, y, w, h)) = state.cell_pixel_rect(row, col) else {
+                    assert!(layout.is_hidden(row), "({row}, {col}) is drawn and not hit");
+                    continue;
+                };
+                let drawn = layout.cell_rect(row, col);
+                for (a, b) in [
+                    (x, drawn.x0),
+                    (y, drawn.y0),
+                    (w, drawn.width()),
+                    (h, drawn.height()),
+                ] {
+                    assert!((a - b).abs() < 1e-9, "({row}, {col}): hit {a} drawn {b}");
+                }
+                let centre = drawn.center();
+                assert_eq!(state.cell_at(centre.x, centre.y), Some((row, col)));
+                checked += 1;
+            }
+        }
+        assert!(checked > 40, "{checked} cells compared");
+    }
+
     /// Shared harness: a recording surface, a fixed clock, a real (empty) font
     /// context and text cache. Text shaping may yield zero glyphs on a host with
     /// no fonts. Tests therefore never assert glyph *counts*, only structural
@@ -473,6 +510,39 @@ mod tests {
             1,
         );
         assert_eq!(surface.clip_depth(), 0);
+    }
+
+    /// A lone selected cell shows its border and no range fill
+    /// (`TRAME-UI-131`). The tint is the one a range takes.
+    #[test]
+    fn a_lone_selected_cell_shows_no_range_fill() {
+        let mut state = fixture(&[]);
+        state.select(2, 3);
+        assert!(!state.selection.is_multi());
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+        draw_overlay(
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            &clock,
+            &mut stats,
+        );
+        let tint = palette.selection.with_alpha(0.16);
+        assert_eq!(
+            surface.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == tint)),
+            0,
+        );
+        assert_eq!(
+            surface.count(|op| matches!(
+                op, DrawOp::StrokeRect { color, width, .. }
+                    if *color == palette.selection && *width == 2.0
+            )),
+            1,
+        );
     }
 
     #[test]

@@ -145,6 +145,23 @@ class CrateBoundaries(unittest.TestCase):
         text = "fn hit(id: loro::TreeID) {}\n\n#[cfg(test)]\nmod tests {\n    fn s() -> ProseState {}\n}\n"
         self.assertEqual(self.breach("crates/ambre-prose/src/view/hit.rs", text), [])
 
+    def test_a_module_declared_for_the_tests_stays_free(self):
+        import tempfile
+
+        engine = "fn s() -> TrameState { TrameState::new() }\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            view = '#[cfg(all(test, not(target_arch = "wasm32")))]\nmod view_tests;\nmod input;\n'
+            write(root, "crates/ambre-trame/src/ui/view/mod.rs", view)
+            write(root, "crates/ambre-trame/src/ui/view/view_tests.rs", engine)
+            write(root, "crates/ambre-trame/src/ui/view/input.rs", engine)
+            write(root, "crates/ambre-trame/src/ui/grid/mod.rs", "#[cfg(test)]\nmod tests;\n")
+            write(root, "crates/ambre-trame/src/ui/grid/tests/mod.rs", "mod viewport;\n")
+            write(root, "crates/ambre-trame/src/ui/grid/tests/viewport.rs", engine)
+            errors = [e for e in self.run_checks(root) if "holds the document" in e]
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("ui/view/input.rs", errors[0])
+
     def test_a_view_that_waits_is_refused(self):
         for line in ("fn next(w: &Waiter) { w.wait(); }\n", "fn run() { futures::executor::block_on(f); }\n"):
             errors = self.breach("crates/ambre-trame/src/ui/view.rs", line)

@@ -25,9 +25,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection` -- a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | none | verified |
 | `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | `ambre_trame::logic::tests::group4::disjoint_selection_styles_every_rectangle` -- a `SetActiveCell` reporting A1 and C3, then a `SetCellStyle`, bolds both blocks | none | verified |
 | `TRAME-UI-035` | `INV` | A selection MUST NOT be written to the document. | `ambre-spec-ui.md section 2` | structural -- `Selection` lives in `ui/grid/`, which `TRAME-UI-001` forbids any document access. The Logic thread keeps its own copy, and there the argument is an enumeration: the field is private and its ten readers each resolve a geometry | none | verified |
-| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none | claim -- the rule holds by absence today, Trame sending no ephemeral frame at all, and becomes a claim to prove when `TRAME-UI-019` lands; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | `ambre_trame::logic::tests::group4::a_selection_reaches_no_peer` | none | verified |
 | `TRAME-UI-034` | `OBS` | A lone selected cell MUST show the active border. | this spec section 4 | `ambre_trame::ui::renderer::tests::draw_overlay_draws_headers_and_active_border` -- one 2px stroke in the selection colour; `::multi_cell_selection_fills_and_outlines_each_range` -- the other side, that a multi-cell selection draws none | none | verified |
-| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none | unheld -- the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | `ambre_trame::ui::renderer::tests::a_lone_selected_cell_shows_no_range_fill` | none | verified |
 | `TRAME-UI-019` | `INV` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
 
 ### 1.2 Move or extend the selection
@@ -50,11 +50,11 @@ status values are normative in `ambre-spec-template.md`.
   ephemeral frame, which `ZK-005` seals with the `DocumentKey`. The relay is left `document_id`,
   `pub_key` and `counter` alone. The local selection stops at the Logic thread, which holds it in
   memory to resolve the parameterless intents (`TRAME-UI-032`).
-* **Verification.** 8 `verified`, 2 `untested`, 1 `unimplemented`. What holds is the
-  intent path, plus three rules declared elsewhere and cited here. A merged block selects whole, a
-  hidden row is stepped over, and hit-testing inverts the drawn geometry. A disjoint selection and a
-  whole-axis band both reach the Logic thread whole. What is loose is the `CellAnchor` of section 3
-  and the re-derive half of `TRAME-UI-019`.
+* **Verification.** 10 `verified`, 1 `unimplemented`. What holds is the intent path, plus three
+  rules declared elsewhere and cited here. A merged block selects whole, a hidden row is stepped
+  over, and hit-testing inverts the drawn geometry. A disjoint selection and a whole-axis band both
+  reach the Logic thread whole, and no selection leaves the peer. What is loose is the
+  `CellAnchor` of section 3 and the re-derive half of `TRAME-UI-019`.
 
 ---
 

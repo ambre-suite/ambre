@@ -644,8 +644,33 @@ def sources(prefixes: tuple[str, ...]) -> list[Path]:
     return found
 
 
+def declared_for_tests(path: Path) -> bool:
+    """Whether the module this file holds, or a module above it, is declared
+    under `#[cfg(test)]` or `#[cfg(all(test, ...))]`. Such a file is test code
+    from its first line."""
+    while True:
+        if path.name in ("lib.rs", "main.rs"):
+            return False
+        if path.name == "mod.rs":
+            name, parent = path.parent.name, path.parent.parent
+            outer = [parent / "mod.rs", parent.with_suffix(".rs"), parent / "lib.rs"]
+        else:
+            name, parent = path.stem, path.parent
+            outer = [parent / "mod.rs", parent.with_suffix(".rs"), parent / "lib.rs"]
+        declaring = next((f for f in outer if f.is_file()), None)
+        if declaring is None:
+            return False
+        decl = re.compile(r"#\[cfg\((?:test|all\(test\b[^\]]*)\)\]\s*(?:pub(?:\([a-z]+\))?\s+)?mod\s+" + re.escape(name) + r"\s*;")
+        if decl.search(declaring.read_text()):
+            return True
+        path = declaring
+
+
 def above_tests(path: Path) -> list[tuple[int, str]]:
-    """Each numbered line of the file above its test module, comments removed."""
+    """Each numbered line of the file above its test module, comments removed.
+    A file whose module is declared for the tests has no such line."""
+    if declared_for_tests(path):
+        return []
     lines: list[tuple[int, str]] = []
     for number, line in enumerate(path.read_text().splitlines(), 1):
         if TESTS_START.match(line):

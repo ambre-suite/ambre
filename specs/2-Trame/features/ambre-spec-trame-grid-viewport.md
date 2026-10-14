@@ -22,8 +22,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-007` | `INV` | Hit-testing MUST be the exact inverse of the geometry it walks, under zoom and under variable row and column sizes. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`; `::variable_metrics_round_trip_pixel_and_hit_test`; `::axis_pointer_resolution_follows_variable_metrics`; `::filter_button_hit_test_matches_drawn_rect`; `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` -- each holds one modifier, the variable-metric round trips running at 100% and the zoom round trip on default metrics | none | verified |
-| `TRAME-UI-143` | `INV` | The geometry the renderer draws MUST agree with the geometry hit-testing walks. | this spec section 2 | none | unheld -- `ui/grid/geometry.rs` and `render/layout.rs` walk the same sizes twice, and each of the two tests above closes the loop inside one of them. Nothing compares a drawn rect with a hit-tested one (section 5); lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-024` | `INV` | The cache MUST hold no cell outside the last requested window. | this spec section 2 | none | unheld -- `scroll_viewport_cmd` retains only the requested window, and no test drives a cell out of it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-143` | `INV` | The geometry the renderer draws MUST agree with the geometry hit-testing walks. | this spec section 2 | `ambre_trame::ui::renderer::tests::the_drawn_cell_is_the_hit_tested_cell` -- under a zoom, resized axes, hidden rows and a scroll | none | verified |
+| `TRAME-UI-024` | `INV` | The cache MUST hold no cell outside the last requested window. | this spec section 2 | `ambre_trame::ui::grid::tests::viewport::a_scroll_evicts_every_cell_outside_the_window` | none | verified |
 | `TRAME-UI-012` | `OBS` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | this spec section 3; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills` -- its fixture holds one unstyled cell, so a cell the user coloured is outside what it measures (`features/ambre-spec-trame-cell-styles.md`) | none | verified |
 | `TRAME-UI-013` | `OBS` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or the scroll position. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`; `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`; `::header_strip_starts_at_top_of_canvas` | none | verified |
 | `TRAME-UI-027` | `OBS` | A cell the user has just edited MUST read as unconfirmed until its computed value arrives. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::dirty_and_error_lifecycle`; `ambre_trame::ui::renderer::tests::dirty_cell_gets_a_translucent_veil` | none | verified |
@@ -34,27 +34,27 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-004` | `POST` | A scroll MUST request no more than the visible range plus a bounded padding. | this spec section 2 | none | unheld -- the window is built in `ui/grid/state.rs::scroll_viewport_cmd` and nothing compares the requested bounds with the visible range. The padding is not the constant it reads as: the row window is stretched by the count of every hidden row the cache knows, not by those inside the window; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-004` | `POST` | A scroll MUST request no more than the visible range plus a bounded padding. | this spec section 2 | `ambre_trame::ui::grid::tests::viewport::a_scroll_requests_the_screen_and_a_bounded_padding` | none | verified |
 | `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | `ambre_trame::ui::grid::tests::group2::scroll_requests_every_narrow_column_on_screen` | none | verified |
 | `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | `ambre_trame::ui::view::tests::the_viewport_queue_coalesces_to_one_request` -- every request source collapses to one drain; `::a_dropped_request_is_re_offered_not_doubled` -- a dropped request is re-offered, never doubled | none | verified |
-| `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | none | unheld -- `scroll_by` writes the origin and reads nothing else, but no test drives it: `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-175` | `POST` | A selection or a fill handle held past an edge of the cells MUST scroll the grid towards it, and the range MUST reach the nearest edge cell. | this spec section 3 | `ambre_trame::ui::grid::tests::kinetic::a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell` | partial -- the geometry is tested; the per-frame step of the view is not; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | `ambre_trame::ui::grid::tests::viewport::a_scroll_keeps_the_active_cell_and_the_selection` | none | verified |
+| `TRAME-UI-175` | `POST` | A selection or a fill handle held past an edge of the cells MUST scroll the grid towards it, and the range MUST reach the nearest edge cell. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_selection_held_below_the_cells_scrolls_and_follows`; `ambre_trame::ui::grid::tests::kinetic::a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell` | none | verified |
 
 ### 1.3 The wheel turns
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and feeds the accumulator, and no test drives the wheel path at all (section 5); lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | partial -- the model is tested (`KINETIC-009`); `handle_wheel` passing the line and page modes to it is not; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | partial |
-| `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | none | unheld -- `handle_wheel` returns before reading the delta, which is also what hands the gesture to the browser, and no test drives it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_wheel_delta_lands_once_and_keeps_its_remainder` | none | verified |
+| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_wheel_notch_starts_no_coast` | none | verified |
+| `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_ctrl_wheel_scrolls_nothing` | none | verified |
 
 ### 1.4 An answer arrives
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-005` | `POST` | An answer whose version is lower than the last accepted one MUST be dropped. | this spec section 2 | none | unheld -- the rule is in the code (`ui/grid/state.rs`, `if version < self.accepted_version`) and nothing exercises it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-148` | `POST` | A row or column an answer reports at the default size MUST read as the default, not as the size it held before. | this spec section 2; `ambre-spec-trame-schema.md section 4` ("absence is a value") | none | unheld -- `on_viewport_data` removes the entry instead of storing the default, and every metric test writes the maps directly: no test sends an answer that carries sizes; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-149` | `FRAME` | An answer MUST NOT move the scroll origin. | this spec section 2 | none | unheld -- `on_viewport_data` writes the caches and the hidden-row set and touches neither `top_row` nor `left_col`, but nothing asserts it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-005` | `POST` | An answer whose version is lower than the last accepted one MUST be dropped. | this spec section 2 | `ambre_trame::ui::grid::tests::group2::a_stale_viewport_answer_is_dropped_by_its_version` | none | verified |
+| `TRAME-UI-148` | `POST` | A row or column an answer reports at the default size MUST read as the default, not as the size it held before. | this spec section 2; `ambre-spec-trame-schema.md section 4` ("absence is a value") | `ambre_trame::ui::grid::tests::viewport::a_default_size_in_an_answer_clears_the_stored_one` | none | verified |
+| `TRAME-UI-149` | `FRAME` | An answer MUST NOT move the scroll origin. | this spec section 2 | `ambre_trame::ui::grid::tests::viewport::an_answer_does_not_move_the_scroll_origin` | none | verified |
 
 ### 1.5 Freeze a band of rows or columns
 
@@ -68,10 +68,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 7 `verified`, 2 `partial`, 9 `untested`, 2 `unimplemented`. What holds is what
-  is drawn or hit-tested, and the one-slot queue that caps a frame at one request (`TRAME-UI-025`).
-  What is loose is every state machine: the window, the version guard, the eviction, the wheel, the
-  metric adoption.
+* **Verification.** 18 `verified`, 2 `unimplemented`. What is drawn or hit-tested holds, and so
+  does the one-slot queue that caps a frame at one request (`TRAME-UI-025`). The state machines
+  hold on the host tier too. They are the window, the version guard, the eviction, the wheel and
+  the metric adoption, and the wheel is driven through the view.
 
 ---
 
@@ -196,20 +196,10 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
   `Ctrl` with the wheel is handed to the browser and no two-finger gesture reaches the grid, in
   Trame as in Toile. The rule is `UI-THREAD-013`, on the shared zoom engine, and it ships with
   "One zoom model" at V1.
-* **The wheel path of the view has no test.** The model under it is tested
-  (`1-Foundations/ambre-spec-kinetic-scroll.md`), and the view only feeds it. The crate's
-  rule is that an interaction lands with a geometry round trip and a recording of what it painted
-  (`ambre-spec-testing.md section 6`). It is pure state over an injected clock, so nothing
-  about it needs a browser.
-* **The padding grows with the filter, not with the window** (`TRAME-UI-004`). The row window is
-  extended by the count of every hidden row in the cache. The name and the comment say the hidden
-  rows in the window. The two agree only while the cache holds one window. The eviction makes that
-  true, and a late answer for a wider window undoes it.
 * **Two implementations of one geometry** (`TRAME-UI-143`). Hit-testing walks the sizes in
-  `ui/grid/geometry.rs` and drawing walks them again in `render/layout.rs`, one commented as
-  mirroring the other. Nothing holds them together: each test closes a round trip inside one
-  implementation, so the two could drift a pixel apart and stay green. One of them calling the
-  other would make the rule true by type.
+  `ui/grid/geometry.rs` and drawing walks them again in `render/layout.rs`. A test compares the two
+  under a zoom, resized axes, hidden rows and a scroll. One of them calling the other would make
+  the rule true by type.
 * **A differential answer** is unspecified: every answer carries the whole window, including the
   cells the UI already holds. The earlier design named a patch event, gated on a share of changed
   cells. Nothing states when a patch is correct against an out-of-order full answer.

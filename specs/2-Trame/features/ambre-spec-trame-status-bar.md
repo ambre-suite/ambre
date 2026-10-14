@@ -26,10 +26,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | `ambre_trame::logic::tests::group4::selection_stats_covers_the_whole_band` -- a whole-column band tallies an off-screen row; `::selection_stats_totals_a_disjoint_selection` -- two rectangles are tallied together | none | verified |
 | `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
 | `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the same column, where the word and the blank leave the sum, the average and the extremes untouched | none | verified |
-| `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::status_bar_renders_label_and_aggregates` -- it mounts the band over a selection holding three numbers | partial -- the branch that hides the four numeric aggregates is reached by no test; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | partial |
-| `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | none | unheld -- the refresh clears the band when the selection is not multi-cell, and no test drives a selection change; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-110` | `OBS` | A row the filter hides MUST NOT count in an aggregate. | this spec section 4 | none | unheld -- the walk skips the hidden set, and every stats test runs on an unfiltered sheet; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | none | unheld -- `fmt_num` is a free function with one branch on the fractional part, and no test calls it; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::a_selection_with_no_number_shows_no_numeric_aggregate`; `::status_bar_renders_label_and_aggregates` | none | verified |
+| `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_lone_cell_asks_for_no_aggregate`; `ambre_trame::ui::view::lifecycle::tests::a_single_cell_clears_and_sends_nothing` | none | verified |
+| `TRAME-UI-110` | `OBS` | A row the filter hides MUST count in an aggregate, as it counts in a formula over the same cells. | this spec section 4 | `ambre_trame::logic::tests::group5::status_bar_total_matches_sum_under_a_filter` | none | verified |
+| `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | `ambre_trame::tests::chrome_ui::an_aggregate_reads_whole_or_with_two_decimals` | none | verified |
 
 ### 1.2 Select a different block
 
@@ -43,9 +43,9 @@ status values are normative in `ambre-spec-template.md`.
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 7 `verified`, 1 `partial`, 3 `untested`. The walk, the tallies, the read-only
-  guarantee, the whole-selection coverage, the refresh on a selection change and the clear decision
-  each have a host test. The four gaps are the UI half, listed in section 5. The count and the
+* **Verification.** 11 `verified`. The walk, the tallies, the read-only guarantee, the
+  whole-selection coverage, the refresh on a selection change and the clear decision each have a
+  host test. The band and its number format are read back on the wasm tier. The count and the
   numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
@@ -77,7 +77,7 @@ pub struct SelStats {
 **Steps, when the Logic thread answers a request:**
 
 1. bring the formula cache up to date, so each cell is read at its computed value;
-2. walk every tracked selection rectangle, skipping the rows the filter hides (`TRAME-UI-110`);
+2. walk every tracked selection rectangle, the rows the filter hides included (`TRAME-UI-110`);
 3. tally every non-empty cell into `count`;
 4. tally each number into `count_num`, and fold it into the sum, the minimum and the maximum;
 5. divide the sum by the numeric count for the average, and answer zero for an empty one;
@@ -124,8 +124,8 @@ value (`TRAME-UI-108`).
 | :--- | :--- | :--- |
 | The Logic thread computes the aggregates | totalling the cached cells on the UI thread | it answers for the visible part alone: the selection can be far larger than the window, and the UI thread holds the window alone. Sending the cells up instead would move the whole selection across a queue to compute six numbers. |
 | The request carries no geometry | sending the rectangle with the request | it would be a second source for one rectangle. The Logic thread already tracks the selection for the sort, the style and the structural commands. |
-| An aggregate skips the rows the filter hides | totalling every row | it is what a formula does, and the band is not a formula: it reports what the user is looking at, and a user who filters a column is asking about the rows that remain. |
-| A formula does not skip them | making `SUM` follow the filter | it is what `SUBTOTAL` will do explicitly, and doing it in `SUM` makes a formula's result depend on a view, so two peers filtered differently read two totals (`TRAME-021`). The band is not a document value, so it is free to follow the view. |
+| An aggregate counts the rows the filter hides | skipping them | the band and a formula over the same cells would then read two totals, with nothing on screen to say why (`TRAME-FEAT-029`). |
+| A formula does not skip them | making `SUM` follow the filter | it is what `SUBTOTAL` will do explicitly, and doing it in `SUM` makes a formula's result depend on a view, so two peers filtered differently read two totals (`TRAME-021`). |
 | The band is DOM, not a drawn surface | a drawn band inside the canvas | it is what the earlier design carried, and it had the renderer shaping its glyphs on the GPU every frame for a read-out that changes on selection. The band is text and two menus. |
 | The numeric aggregates hide with no number | showing zeros | a sum of a text selection is zero, which reads as a fact rather than as an absence. |
 
@@ -133,9 +133,6 @@ value (`TRAME-UI-108`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The band has no host test.** Six rows say `none`. The band itself is a pure function of one
-  `SelStats` value, so the wasm tier can reach it. `fmt_num` is a free function the host tier can
-  call today; only the signal write stays on the browser.
 * **A merged block is counted by its cells.** A covered cell holds no value, so a block spanning
   four cells adds one to `count`, and nothing states whether that is the intent.
 * **No aggregate is selectable.** A user cannot choose which aggregates the band shows, and cannot

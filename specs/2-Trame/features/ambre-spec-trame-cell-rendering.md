@@ -23,12 +23,12 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` -- the `numeric` flag the pack hands `cell_alignment` | none | verified |
 | `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` -- the toolbar event against the pack | none | verified |
 | `TRAME-UI-095` | `OBS` | A cell that does not wrap MUST spill only over neighbours that are empty. | this spec section 3 | `ambre_trame::render::tests::spill_width_stops_at_first_non_empty_neighbour` -- over an occupied neighbour, an immediate one and the grid edge | none | verified |
-| `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none | unheld -- the three branches, left spills right, right spills left and centred both ways, are in `draw_cells_on`, and no test enters any of them; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none | unheld -- wrap excludes the cell from the spill branch and clips it to its own rect. The one test that draws a cell draws one that fits, so it reaches neither half; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | none | unheld -- the test this row once cited asserts that the clip stack unwinds, and its cell fits its box, so no clip is pushed and the assertion holds over an empty stack; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | none | unheld -- `cell_v_offset` clamps the offset at zero, and no test passes it text taller than the box, though it is a free function the render tier already reaches, like `spill_width`; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | none | unheld -- the font size is multiplied by the layout zoom in `draw_cells_on`, and every render fixture builds a layout at zoom one; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | none | unheld -- the fill takes the cell rect and is emitted before the spill clip is pushed, so only glyphs cross a column edge, and the one fill test counts the fills and reads neither rect; lands with the `The Trame grid on screen held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | `ambre_trame::render::tests::a_spill_runs_in_the_direction_of_the_alignment` | none | verified |
+| `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | `ambre_trame::render::tests::a_wrapped_cell_is_cut_at_its_own_box` | none | verified |
+| `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | `ambre_trame::render::tests::text_taller_than_its_row_is_cut_at_the_row` | none | verified |
+| `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | `ambre_trame::render::tests::a_vertical_alignment_never_lifts_text_above_the_top` | none | verified |
+| `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | `ambre_trame::render::tests::glyphs_scale_with_the_zoom` | none | verified |
+| `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | `ambre_trame::render::tests::a_fill_and_a_border_stop_at_the_cell_edge` | none | verified |
 | `TRAME-UI-020` | `INV` | A sparkline MUST be derived on the UI thread from the viewport data alone, with no round trip to the Logic thread. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-021` | `OBS` | A chart MUST be clipped to the cell range that hosts it. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-140` | `OBS` | A chart MUST NOT paint outside the grid. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -38,11 +38,10 @@ status values are normative in `ambre-spec-template.md`.
   measures it.
 * **Boundary.** none: the renderer paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 3 `verified`, 6 `untested`, 3 `unimplemented`. What holds is the one rule
-  extracted into a pure function of a layout and an emptiness predicate. What is loose is everything
-  else, inside `draw_cells_on`, where the render tests reach the drawing and read none of its
-  decisions back. The clip a too-wide text pushes is among them. The two alignment rows hold: the
-  pack decides once, on the **computed** value, and the renderer and the toolbar read that answer.
+* **Verification.** 9 `verified`, 3 `unimplemented`. The render tests draw one cell into a
+  recording surface and read its decisions back. They read the clip a spill or a wrap pushes, the
+  fill rect, the border segments and the glyph origin under a zoom. The two alignment rows hold: the pack
+  decides once, on the **computed** value, and the renderer and the toolbar read that answer.
 
 ---
 
@@ -167,6 +166,3 @@ heights. A zoomed grid is the same layout, not a different one.
 * **A merged block never spills.** `draw_merges_on` clips every master to its span rect. A label
   wider than its merge is cut where a label wider than its column would run on. Nothing here or in
   `features/ambre-spec-trame-cell-merges.md` says whether that is the intent.
-* **The style surface has no test.** Nine rows above say `none`, and all nine are reachable from the
-  render tests that already exist. Those tests build a font context, a recording surface and a grid
-  layout. They only ever draw one plain cell that fits its box at zoom one.

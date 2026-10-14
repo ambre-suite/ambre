@@ -834,3 +834,43 @@ fn shared_filter_condition_greater_than() {
     assert!(!is_filtered(&mut state, 1, 0), "20 > 15");
     assert!(!is_filtered(&mut state, 2, 0), "30 > 15");
 }
+
+/// A selection stays on the peer that made it (`TRAME-UI-130`). Moving it,
+/// widening it and adding a rectangle write no delta and send no presence frame.
+#[test]
+fn a_selection_reaches_no_peer() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["1", "2", "3"]);
+    let before = state.doc.len_ops();
+    let selections = [
+        (0, 0, 0, 0, vec![]),
+        (2, 3, 0, 0, vec![]),
+        (
+            2,
+            3,
+            1,
+            1,
+            vec![crate::GridRange {
+                row: 5,
+                col: 5,
+                row_end: 6,
+                col_end: 6,
+            }],
+        ),
+    ];
+    for (row, col, anchor_row, anchor_col, extra) in selections {
+        let out = state.handle_command(TrameCommand::SetActiveCell {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+            extra,
+            kind: crate::SelectionKind::Cells,
+        });
+        assert!(out.update.is_none(), "a selection writes no delta");
+        assert!(out.ephemeral.is_none(), "a selection sends no presence");
+    }
+    let stats = state.handle_command(TrameCommand::RequestSelectionStats);
+    assert!(stats.update.is_none() && stats.ephemeral.is_none());
+    assert_eq!(state.doc.len_ops(), before, "the document is unchanged");
+}

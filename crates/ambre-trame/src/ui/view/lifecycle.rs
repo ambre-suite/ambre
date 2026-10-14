@@ -58,6 +58,7 @@ impl TrameView {
             sel_stats,
             #[cfg(target_arch = "wasm32")]
             ctx_scope,
+            menu_scope: crate::ui::grid::CtxScope::default(),
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]

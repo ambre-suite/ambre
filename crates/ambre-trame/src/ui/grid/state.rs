@@ -379,10 +379,16 @@ impl TrameUiState {
         // destination within already-fetched data, eliminating that flash.
         let row_pad = self.viewport_rows.max(PADDING_ROWS);
         let row_start = self.top_row.saturating_sub(row_pad);
-        // Extend the fetched window by the number of currently-hidden rows in it.
-        // After the row axis collapses there are then still enough *visible* rows
-        // to fill the screen; a filtered window would otherwise run short.
-        let hidden_in_window = self.hidden_rows.len() as u32;
+        // Extend the fetched window by the hidden rows between the top edge and
+        // the bottom padding. After the row axis collapses there are then still
+        // enough *visible* rows to fill the screen. A hidden row outside that
+        // span takes no slot, so it stretches nothing (`TRAME-UI-004`).
+        let reach = self.top_row.saturating_add(self.viewport_rows + row_pad);
+        let hidden_in_window = self
+            .hidden_rows
+            .iter()
+            .filter(|&&row| row >= self.top_row && row < reach)
+            .count() as u32;
         // Every cell the user can see is requested, whatever the sizes on
         // screen (`TRAME-UI-144`). The span is walked from the real metrics,
         // never less than the uniform estimate.

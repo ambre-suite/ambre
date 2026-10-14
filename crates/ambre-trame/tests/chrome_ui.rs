@@ -583,3 +583,99 @@ fn a_lost_edit_reaches_the_user() {
     assert!(text.contains("deleted the cell you were editing"), "{text}");
     root.remove();
 }
+
+/// Mount the status band over `stats` and return its text.
+fn status_text(stats: Option<SelStats>) -> String {
+    let container = mount_in_container(move || {
+        let stats = RwSignal::new(stats);
+        let perf = RwSignal::new(PerfSnapshot::default());
+        let zoom = RwSignal::new(1.0_f64);
+        view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
+    });
+    let text = container
+        .query_selector(".statusbar-stats")
+        .unwrap()
+        .expect("the aggregates band is mounted")
+        .text_content()
+        .unwrap_or_default();
+    container.remove();
+    text
+}
+
+/// A selection with no number shows its count and no numeric aggregate
+/// (`TRAME-UI-107`).
+#[wasm_bindgen_test]
+fn a_selection_with_no_number_shows_no_numeric_aggregate() {
+    let text = status_text(Some(SelStats {
+        count: 4,
+        ..SelStats::default()
+    }));
+    assert!(text.contains("Count: 4"), "{text}");
+    for absent in ["Sum", "Avg", "Min", "Max"] {
+        assert!(!text.contains(absent), "{absent} in {text}");
+    }
+    let text = status_text(Some(SelStats {
+        sum: 5.0,
+        avg: 5.0,
+        count: 4,
+        count_num: 1,
+        min: 5.0,
+        max: 5.0,
+    }));
+    for present in ["Sum: 5", "Avg: 5", "Min: 5", "Max: 5", "Count: 4"] {
+        assert!(text.contains(present), "{present} not in {text}");
+    }
+    assert_eq!(status_text(None), "", "a cleared band shows nothing");
+}
+
+/// A whole aggregate reads with no decimals, any other with two
+/// (`TRAME-UI-135`).
+#[wasm_bindgen_test]
+fn an_aggregate_reads_whole_or_with_two_decimals() {
+    let text = status_text(Some(SelStats {
+        sum: 7.5,
+        avg: 2.5,
+        count: 3,
+        count_num: 3,
+        min: -2.0,
+        max: 1.0 / 3.0,
+    }));
+    for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 0.33"] {
+        assert!(text.contains(present), "{present} not in {text}");
+    }
+    assert!(!text.contains("-2.00"), "{text}");
+}
+
+/// A refusal from the Logic thread reaches the user as a toast
+/// (`TRAME-UI-120`): a refused merge and a refused command each say why.
+#[wasm_bindgen_test]
+fn a_refusal_reaches_the_user_as_a_toast() {
+    let owner = Owner::new();
+    owner.set();
+    let toasts = ambre_chrome::Toasts::new();
+    for event in [
+        TrameEvent::MergeRejected {
+            reason: "the range overlaps a merge".to_owned(),
+        },
+        TrameEvent::Error {
+            message: "no sheet to sort".to_owned(),
+        },
+    ] {
+        chrome::notify_event(
+            &toasts,
+            &UiEvent::Viewport {
+                document_id: DocumentId::new(),
+                event: AppEvent::Trame(event),
+            },
+        );
+    }
+    let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
+    let toasts = root.query_selector_all(".ambre-toast").unwrap();
+    let text: Vec<String> = (0..toasts.length())
+        .filter_map(|i| toasts.item(i)?.text_content())
+        .collect();
+    assert_eq!(text.len(), 2, "{text:?}");
+    assert!(text[0].contains("the range overlaps a merge"), "{text:?}");
+    assert!(text[1].contains("no sheet to sort"), "{text:?}");
+    root.remove();
+}

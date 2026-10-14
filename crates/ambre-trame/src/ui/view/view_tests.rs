@@ -1032,3 +1032,325 @@ fn a_merged_fill_previews_whole_blocks() {
         );
     }
 }
+
+impl Rig {
+    /// One wheel sample, as the host forwards it.
+    fn wheel(&mut self, dy: f64, delta_mode: u32, ctrl_key: bool) -> bool {
+        self.view.handle_input(&InputEvent::Wheel {
+            dx: 0.0,
+            dy,
+            delta_mode,
+            ctrl_key,
+        })
+    }
+
+    fn top(&self) -> u32 {
+        self.view.state.top_row
+    }
+}
+
+/// `TRAME-UI-147`: a line delta and a page delta land once and in full. A
+/// pixel delta keeps its sub-row remainder for the next sample.
+#[test]
+fn a_wheel_delta_lands_once_and_keeps_its_remainder() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert!(rig.wheel(3.0, 1, false));
+    assert_eq!(rig.top(), 3, "three lines are three rows");
+    let page = (rig.view.state.canvas_height / ROW_HEIGHT) as u32;
+    assert!(rig.wheel(1.0, 2, false));
+    assert_eq!(rig.top(), 3 + page, "a page is a screen of rows");
+    let at = rig.top();
+    assert!(rig.wheel(ROW_HEIGHT * 1.5, 0, false));
+    assert_eq!(rig.top(), at + 1, "a row and a half moves one row");
+    assert!(rig.wheel(ROW_HEIGHT * 0.5, 0, false));
+    assert_eq!(rig.top(), at + 2, "the half row was kept");
+}
+
+/// `TRAME-UI-026`: a notch moves the grid once, and the frames after it move
+/// nothing.
+#[test]
+fn a_wheel_notch_starts_no_coast() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.clock.set(1_000.0);
+    assert!(rig.wheel(3.0, 1, false));
+    let landed = rig.top();
+    for step in 1..=30 {
+        rig.clock.set(1_000.0 + f64::from(step) * 16.0);
+        rig.frame();
+    }
+    assert_eq!(rig.top(), landed, "the grid stays where the notch put it");
+}
+
+/// `TRAME-UI-146`: the wheel held with Ctrl is left to the browser and
+/// scrolls nothing.
+#[test]
+fn a_ctrl_wheel_scrolls_nothing() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    assert!(!rig.wheel(5.0, 1, true), "the browser keeps the gesture");
+    rig.frame();
+    assert_eq!(rig.top(), 0);
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, TrameCommand::ScrollViewport { .. })),
+        "no request for a scroll that did not happen"
+    );
+}
+
+/// `TRAME-UI-175`: a selection drag held below the cells scrolls the grid
+/// frame by frame, and the range follows to the last row on screen.
+#[test]
+fn a_selection_held_below_the_cells_scrolls_and_follows() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let (x, y, w, h) = rig.view.state.cell_pixel_rect(1, 1).expect("B2 is in view");
+    let (px, py) = (x + w / 2.0, y + h / 2.0);
+    rig.view.handle_input(&InputEvent::PointerDown {
+        x: px,
+        y: py,
+        button: 0,
+        shift: false,
+        ctrl: false,
+    });
+    let below = rig.view.state.canvas_height + 40.0;
+    rig.view
+        .handle_input(&InputEvent::PointerMove { x: px, y: below });
+    for step in 0..=20 {
+        rig.clock.set(f64::from(step) * 16.0);
+        rig.frame();
+    }
+    assert!(rig.top() > 0, "the grid scrolled towards the pointer");
+    let (row, _) = rig
+        .view
+        .state
+        .drag_cell_at(px, below)
+        .expect("an edge cell");
+    assert_eq!(rig.view.state.selection.anchor, (1, 1));
+    assert_eq!(
+        rig.view.state.selection.active,
+        (row, 1),
+        "the range reaches the edge cell"
+    );
+}
+
+impl Rig {
+    /// Press and release the secondary button at `(x, y)`.
+    fn right_click(&mut self, x: f64, y: f64) {
+        self.view.handle_input(&InputEvent::PointerDown {
+            x,
+            y,
+            button: 2,
+            shift: false,
+            ctrl: false,
+        });
+        self.view.handle_input(&InputEvent::PointerUp {
+            x,
+            y,
+            button: 2,
+            ctrl: false,
+        });
+    }
+
+    /// Press and release the primary button at `(x, y)` with Shift held.
+    fn shift_click(&mut self, x: f64, y: f64) {
+        self.view.handle_input(&InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: true,
+            ctrl: false,
+        });
+        self.view.handle_input(&InputEvent::PointerUp {
+            x,
+            y,
+            button: 0,
+            ctrl: false,
+        });
+    }
+
+    /// The centre of cell `(row, col)` on screen.
+    fn cell_mid(&self, row: u32, col: u32) -> (f64, f64) {
+        let s = &self.view.state;
+        (
+            s.col_x(col) + s.col_width_of(col) / 2.0,
+            s.row_y(row) + s.row_height_of(row) / 2.0,
+        )
+    }
+
+    /// The centre of column `col`'s header body.
+    fn col_header_mid(&self, col: u32) -> (f64, f64) {
+        (self.cell_mid(0, col).0, self.view.state.header_h() / 2.0)
+    }
+
+    /// The centre of row `row`'s header body.
+    fn row_header_mid(&self, row: u32) -> (f64, f64) {
+        (self.view.state.header_w() / 2.0, self.cell_mid(row, 0).1)
+    }
+
+    /// The centre of the corner above the row headers.
+    fn corner_mid(&self) -> (f64, f64) {
+        (
+            self.view.state.header_w() / 2.0,
+            self.view.state.header_h() / 2.0,
+        )
+    }
+
+    /// Select the range from cell `a` to cell `b` with a click and a
+    /// Shift-click, and return the selection it made.
+    fn select_range(&mut self, a: (u32, u32), b: (u32, u32)) -> Selection {
+        let (x, y) = self.cell_mid(a.0, a.1);
+        self.click(x, y);
+        let (x, y) = self.cell_mid(b.0, b.1);
+        self.shift_click(x, y);
+        assert!(self.view.state.selection.is_multi());
+        self.view.state.selection.clone()
+    }
+}
+
+/// The menu opens scoped to what the pointer targeted (`TRAME-UI-117`): a
+/// cell, a column, a row or the corner. A header boundary scopes it to its
+/// axis.
+#[test]
+fn a_right_click_scopes_the_menu_to_its_target() {
+    use crate::ui::grid::CtxScope;
+    let mut rig = Rig::new();
+    rig.frame();
+    let targets = [
+        (rig.cell_mid(3, 2), CtxScope::Cell),
+        (rig.col_header_mid(2), CtxScope::Column),
+        (rig.row_header_mid(3), CtxScope::Row),
+        (rig.corner_mid(), CtxScope::Corner),
+        (
+            (rig.col_edge(1), rig.view.state.header_h() / 2.0),
+            CtxScope::Column,
+        ),
+    ];
+    for ((x, y), scope) in targets {
+        rig.right_click(x, y);
+        assert_eq!(rig.view.menu_scope, scope, "at ({x}, {y})");
+    }
+}
+
+/// A right-click outside the selection moves it onto its target first, as a
+/// left click would (`TRAME-UI-118`). A cell collapses to that cell, a header
+/// body selects its axis, and the corner selects the sheet.
+#[test]
+fn a_right_click_outside_the_selection_reselects() {
+    use crate::ui::grid::SelKind;
+    let mut rig = Rig::new();
+    rig.frame();
+    let range = rig.select_range((0, 0), (1, 1));
+
+    let (x, y) = rig.cell_mid(4, 3);
+    rig.right_click(x, y);
+    assert_eq!(rig.view.state.selection, Selection::single(4, 3));
+
+    rig.view.state.selection = range.clone();
+    let (x, y) = rig.col_header_mid(3);
+    rig.right_click(x, y);
+    assert_eq!(
+        rig.view.state.selection,
+        Selection::axis(SelKind::Cols, 3, 3)
+    );
+
+    rig.view.state.selection = range.clone();
+    let (x, y) = rig.row_header_mid(4);
+    rig.right_click(x, y);
+    assert_eq!(
+        rig.view.state.selection,
+        Selection::axis(SelKind::Rows, 4, 4)
+    );
+
+    rig.view.state.selection = range;
+    let (x, y) = rig.corner_mid();
+    rig.right_click(x, y);
+    assert_eq!(
+        rig.view.state.selection,
+        Selection::axis(SelKind::Cols, 0, TOTAL_COLS - 1),
+        "every column, so the whole sheet"
+    );
+}
+
+/// A right-click inside the selection keeps it whole (`TRAME-UI-088`), so the
+/// menu acts on the range.
+#[test]
+fn a_right_click_inside_the_selection_keeps_it() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let range = rig.select_range((0, 0), (2, 2));
+    for (row, col) in [(1, 1), (2, 0), (0, 0)] {
+        let (x, y) = rig.cell_mid(row, col);
+        rig.right_click(x, y);
+        assert_eq!(rig.view.state.selection, range, "at ({row}, {col})");
+    }
+}
+
+/// Choosing a menu entry leaves the selection it opened on (`TRAME-UI-119`).
+/// Each entry reaches the Logic thread with no selection of its own, and no
+/// answer it brings back moves the view's.
+#[test]
+fn a_menu_entry_leaves_the_selection_alone() {
+    use crate::ui::commands as registry;
+    let mut rig = Rig::new();
+    rig.frame();
+    let mut logic = crate::TrameState::new();
+    for row in 0..4 {
+        for col in 0..3 {
+            logic.handle_command(TrameCommand::SetCellText {
+                row,
+                col,
+                text: format!("{}", 10 - row - col),
+            });
+        }
+    }
+    rig.sent();
+    let range = rig.select_range((1, 0), (2, 1));
+    for cmd in rig.sent() {
+        logic.handle_command(cmd);
+    }
+    for id in [
+        registry::SORT_RANGE_ASC,
+        registry::MERGE,
+        registry::UNMERGE,
+        registry::INSERT_ROW_ABOVE,
+        registry::INSERT_COL_LEFT,
+        registry::DELETE_ROWS,
+        registry::UNDO,
+    ] {
+        let Some(AppCommand::Trame(cmd)) = registry::command_to_app(id) else {
+            panic!("{id:?} reaches the Logic thread");
+        };
+        let out = logic.handle_command(cmd);
+        for event in out.display {
+            rig.answer(event);
+        }
+        assert_eq!(rig.view.state.selection, range, "after {id:?}");
+    }
+}
+
+/// A lone cell asks for no aggregate, and a range asks for one
+/// (`TRAME-UI-108`). With no request in flight the band is cleared.
+#[test]
+fn a_lone_cell_asks_for_no_aggregate() {
+    let asks = |sent: &[TrameCommand]| {
+        sent.iter()
+            .filter(|c| matches!(c, TrameCommand::RequestSelectionStats))
+            .count()
+    };
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    let (x, y) = rig.cell_mid(2, 2);
+    rig.click(x, y);
+    assert_eq!(asks(&rig.sent()), 0);
+    let (x, y) = rig.cell_mid(4, 3);
+    rig.shift_click(x, y);
+    assert_eq!(asks(&rig.sent()), 1);
+    let (x, y) = rig.cell_mid(0, 0);
+    rig.click(x, y);
+    assert_eq!(asks(&rig.sent()), 0);
+}

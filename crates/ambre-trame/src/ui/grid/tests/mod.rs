@@ -4,6 +4,7 @@ mod group1;
 mod group2;
 mod kinetic;
 mod session;
+mod viewport;
 
 use super::{CellData, CellEditor, HeaderHit, SelKind, Selection, TrameUiState};
 

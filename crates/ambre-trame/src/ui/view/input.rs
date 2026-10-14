@@ -677,16 +677,14 @@ impl TrameView {
 
     /// Publish the surface the latest right-click landed on so the launcher picks
     /// the cell vs header menu layout (`trame-context-menu`). Only re-writes
-    /// the signal on a change (cheap). No-op off-wasm (headless tests).
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn set_ctx_scope(&self, scope: crate::ui::grid::CtxScope) {
+    /// the signal on a change (cheap). Off-wasm only the field is written.
+    pub(crate) fn set_ctx_scope(&mut self, scope: crate::ui::grid::CtxScope) {
+        self.menu_scope = scope;
+        #[cfg(target_arch = "wasm32")]
         if self.ctx_scope.get_untracked() != scope {
             self.ctx_scope.set(scope);
         }
     }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn set_ctx_scope(&self, _scope: crate::ui::grid::CtxScope) {}
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the
     /// live vertical guide at the pointer x.

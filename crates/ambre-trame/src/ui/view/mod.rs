@@ -271,6 +271,9 @@ pub struct TrameView {
     /// DOM `contextmenu` listener opens the menu. Browser-only.
     #[cfg(target_arch = "wasm32")]
     ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
+    /// The scope the last right-click resolved, kept on every target so a
+    /// host test reads what the browser would publish (`TRAME-UI-117`).
+    menu_scope: crate::ui::grid::CtxScope,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,

@@ -389,3 +389,170 @@ fn col_label_matches_spreadsheet_convention() {
     assert_eq!(col_label(701), "ZZ");
     assert_eq!(col_label(702), "AAA");
 }
+
+/// Draw one cell at `(row, col)` with every neighbour empty, and return the ops.
+fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) -> Vec<DrawOp> {
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+    let drawn = draw_cells_on(
+        &mut s,
+        l,
+        palette,
+        &mut fc,
+        &mut tc,
+        true,
+        [(row, col, content)],
+        |_, _| true,
+    );
+    assert_eq!(drawn, 1, "the cell has text, so it is drawn");
+    assert_eq!(s.clip_depth(), 0);
+    s.ops().to_vec()
+}
+
+/// The one clip rect pushed by a draw. Panics if the text pushed none, so a
+/// missing font fails loudly instead of passing over an empty stack.
+fn the_clip(ops: &[DrawOp]) -> Rect {
+    let clips: Vec<_> = ops
+        .iter()
+        .filter_map(|op| match op {
+            DrawOp::PushClip { rect } => Some(*rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(clips.len(), 1, "one clip, so the text was shaped: {ops:?}");
+    clips[0]
+}
+
+const LONG: &str = "a line of text much wider than its own column";
+
+#[test]
+fn a_spill_runs_in_the_direction_of_the_alignment() {
+    // `TRAME-UI-096`: left text spills right, right text spills left, centred
+    // text spills both ways.
+    let l = layout();
+    let rect = l.cell_rect(0, 3);
+    let with = |h_align| {
+        let mut c = CellContent::plain(LONG, false, false);
+        c.h_align = h_align;
+        the_clip(&draw_one(&l, 0, 3, c))
+    };
+    let left = with(ambre_bus::HAlign::Left);
+    assert_eq!(left.x0, rect.x0);
+    assert!(left.x1 > rect.x1);
+    let right = with(ambre_bus::HAlign::Right);
+    assert!(right.x0 < rect.x0);
+    assert_eq!(right.x1, rect.x1);
+    let center = with(ambre_bus::HAlign::Center);
+    assert!(center.x0 < rect.x0 && center.x1 > rect.x1);
+    for clip in [left, right, center] {
+        assert_eq!(
+            (clip.y0, clip.y1),
+            (rect.y0, rect.y1),
+            "a spill is horizontal"
+        );
+    }
+}
+
+#[test]
+fn a_wrapped_cell_is_cut_at_its_own_box() {
+    // `TRAME-UI-097`: wrap takes the cell out of the spill and clips it.
+    let l = layout();
+    let mut c = CellContent::plain(LONG, false, false);
+    c.wrap = true;
+    let ops = draw_one(&l, 0, 3, c);
+    assert_eq!(the_clip(&ops), l.cell_rect(0, 3));
+}
+
+#[test]
+fn text_taller_than_its_row_is_cut_at_the_row() {
+    // `TRAME-UI-098`: newlines push the text below the row, and the clip is the
+    // cell's own rect, so nothing paints over the row below.
+    let l = layout();
+    let ops = draw_one(&l, 0, 0, CellContent::plain("a\nb\nc\nd", false, false));
+    assert_eq!(the_clip(&ops), l.cell_rect(0, 0));
+}
+
+#[test]
+fn a_vertical_alignment_never_lifts_text_above_the_top() {
+    // `TRAME-UI-099`: text taller than the box sits at the top for every align.
+    use super::content::cell_v_offset;
+    use ambre_bus::VAlign;
+    for v in [VAlign::Top, VAlign::Middle, VAlign::Bottom] {
+        assert_eq!(cell_v_offset(v, 20.0, 50.0), 0.0, "{v:?}");
+        assert!(cell_v_offset(v, 20.0, 10.0) >= 0.0, "{v:?}");
+    }
+    assert_eq!(cell_v_offset(VAlign::Bottom, 20.0, 10.0), 10.0);
+}
+
+#[test]
+fn glyphs_scale_with_the_zoom() {
+    // `TRAME-UI-100`: the baseline drop from the cell top is a font metric, so
+    // it is four times larger at a zoom of four.
+    let drop = |zoom: f64| {
+        let mut l = layout();
+        l.zoom = zoom;
+        let top = l.cell_rect(0, 0).y0;
+        let mut c = CellContent::plain("Ag", false, false);
+        c.v_align = ambre_bus::VAlign::Top;
+        let ops = draw_one(&l, 0, 0, c);
+        let y = ops
+            .iter()
+            .find_map(|op| match op {
+                DrawOp::Glyphs { transform, .. } => Some(transform.translation().y),
+                _ => None,
+            })
+            .expect("a glyph run, so a font was found");
+        y - top
+    };
+    let (one, four) = (drop(1.0), drop(4.0));
+    assert!(one > 0.0);
+    // Line metrics round to whole pixels, so the ratio is near four, not exact.
+    let ratio = four / one;
+    assert!((3.5..4.5).contains(&ratio), "zoom 1: {one}, zoom 4: {four}");
+}
+
+#[test]
+fn a_fill_and_a_border_stop_at_the_cell_edge() {
+    // `TRAME-UI-139`: the text spills, the fill does not. It takes the cell
+    // rect and is emitted before the clip opens.
+    let l = layout();
+    let rect = l.cell_rect(0, 3);
+    let mut c = CellContent::plain(LONG, false, false);
+    c.bg = Some(0x00ff_0000);
+    let ops = draw_one(&l, 0, 3, c);
+    assert!(the_clip(&ops).x1 > rect.x1, "the text spills");
+    let fill = ops
+        .iter()
+        .position(|op| matches!(op, DrawOp::FillRect { .. }));
+    let clip = ops
+        .iter()
+        .position(|op| matches!(op, DrawOp::PushClip { .. }));
+    assert!(fill < clip);
+    for op in &ops {
+        if let DrawOp::FillRect { rect: r, .. } = op {
+            assert_eq!(*r, rect);
+        }
+    }
+    let edge = Some(ambre_bus::CellBorder {
+        style: ambre_bus::BorderStyle::Thick,
+        color: None,
+    });
+    c.borders = ambre_bus::Borders {
+        top: edge,
+        right: edge,
+        bottom: edge,
+        left: edge,
+    };
+    let mut s = RecordingSurface::new();
+    draw_cell_borders_on(&mut s, [(rect, c)], Theme::Light.palette().cell_border);
+    let lines = s.count(|op| {
+        let DrawOp::StrokeLine { x0, y0, x1, y1, .. } = *op else {
+            return false;
+        };
+        let inside =
+            |x: f64, y: f64| (rect.x0..=rect.x1).contains(&x) && (rect.y0..=rect.y1).contains(&y);
+        assert!(inside(x0, y0) && inside(x1, y1), "{op:?}");
+        true
+    });
+    assert_eq!(lines, 4);
+}
