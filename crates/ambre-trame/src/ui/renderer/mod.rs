@@ -454,6 +454,56 @@ mod tests {
         assert_eq!(surface.clip_depth(), 0);
     }
 
+    /// A border a user asked for is drawn after every grid line and after the
+    /// merge repaint, so neither can paint over it (`TRAME-100`).
+    #[test]
+    fn a_border_is_drawn_after_the_grid_and_the_merges() {
+        let edge = Some(ambre_bus::CellBorder {
+            style: ambre_bus::BorderStyle::Solid,
+            color: None,
+        });
+        let mut state = fixture(&[(0, 0, "m"), (0, 1, ""), (1, 0, ""), (1, 1, ""), (3, 3, "x")]);
+        let master = state.cell_cache.get_mut(&(0, 0)).unwrap();
+        master.merge_span = Some((2, 2));
+        master.borders = ambre_bus::Borders {
+            top: edge,
+            right: edge,
+            bottom: edge,
+            left: edge,
+        };
+        state.cell_cache.get_mut(&(3, 3)).unwrap().borders.top = edge;
+        let palette = Theme::Light.palette();
+        let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+        draw_cells(
+            &mut surface,
+            &state,
+            palette,
+            &mut font_cx,
+            &mut cache,
+            true,
+            None,
+            &clock,
+            &mut stats,
+        );
+        let span_rect = screen_layout(&state).merge_rect(0, 0, 2, 2);
+        let ops = surface.ops();
+        let is_border = |op: &DrawOp| matches!(op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_border);
+        let first_border = ops.iter().position(is_border).expect("a border");
+        let last_grid = ops
+            .iter()
+            .rposition(|op| match op {
+                DrawOp::StrokeLine { color, .. } | DrawOp::StrokeRect { color, .. } => {
+                    *color == palette.grid_line
+                }
+                DrawOp::FillRect { rect, .. } => *rect == span_rect,
+                _ => false,
+            })
+            .expect("a grid line");
+        assert!(last_grid < first_border, "{last_grid} >= {first_border}");
+        // Four edges round the span, one on the plain cell.
+        assert_eq!(surface.count(is_border), 5);
+    }
+
     #[test]
     fn draw_cells_strip_skips_when_outside_grid() {
         // A strip entirely inside the header corner produces no cell drawing.

@@ -27,49 +27,49 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-004` | `POST` | A sort MUST reorder the rows themselves, so every cell of a row travels with it, inside the range and outside it. | this spec section 3; `features/ambre-spec-trame-rows-and-columns.md` | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows` -- it reads a second column back in the new order; `ambre_trame::logic::tests::group4::sort_sheet_sorts_used_range_by_active_column` -- a key column that is not the first | none | verified |
-| `TRAME-178` | `FRAME` | A sort MUST NOT rewrite a cell. | this spec section 3, section 5 | none | unheld -- every sort test reads the values back after the move, which a rewrite producing the same result would satisfy just as well. The rule is held by the shape of `realize_sort`, which emits `mov` alone, and by no assertion; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-178` | `FRAME` | A sort MUST NOT rewrite a cell. | this spec section 3, section 5 | `ambre_trame::logic::tests::group13::a_sort_rewrites_no_cell` -- the cells map is the same before and after, while the order changed | none | verified |
 | `TRAME-FEAT-010` | `POST` | A sort MUST order rows by their **evaluated** value. | this spec section 3 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`; `ambre_trame::logic::tests::group4::sort_range_sum_block_is_stable_under_internal_sort` -- their key column holds literals a parse turns into numbers | none | verified |
 | `TRAME-179` | `FRAME` | A sort MUST NOT move the header row, when one is declared. | this spec section 3 | `ambre_trame::logic::tests::group3::sort_range_descending_keeps_header`; `ambre_trame::logic::tests::group4::sort_range_multi_pins_header_row` -- both read the header back in place | none | verified |
 | `TRAME-FEAT-011` | `POST` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction` -- over a tie the second key breaks in the other direction | none | verified |
-| `TRAME-180` | `POST` | Two rows whose keys all compare equal MUST keep the order they had. | this spec section 3 | none | unheld -- `TRAME-FEAT-012` rests on this. An already-ordered range only stays put because the sort is stable, and no test seeds two rows that compare equal on every key; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-180` | `POST` | Two rows whose keys all compare equal MUST keep the order they had. | this spec section 3 | `ambre_trame::logic::tests::group13::equal_keys_keep_their_order` -- ascending and descending | none | verified |
 | `TRAME-FEAT-012` | `FRAME` | A sort that changes no row order MUST NOT emit a CRDT delta. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`; `::sort_range_noops` -- both assert the outcome carries no update | none | verified |
-| `TRAME-111` | `POST` | Two values of different types MUST order by the type rank, never interleaved. | this spec section 3 | none | unheld -- every sort test seeds one type per column, so the rank branch of `compare_cell_values` is reached by no assertion; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-112` | `POST` | A descending sort MUST reverse the whole comparison, so an empty cell orders first. | this spec section 5 | none | unheld -- `ambre_trame::logic::tests::group3::sort_range_descending_keeps_header` drives a descending sort over four filled cells, and no test sorts a column holding a blank; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-111` | `POST` | Two values of different types MUST order by the type rank, never interleaved. | this spec section 3 | `ambre_trame::logic::tests::group13::mixed_types_order_by_rank` | none | verified |
+| `TRAME-112` | `POST` | A descending sort MUST reverse the whole comparison, so an empty cell orders first. | this spec section 5 | `ambre_trame::logic::tests::group13::a_descending_sort_puts_the_blank_first` | none | verified |
 | `TRAME-181` | `POST` | A sort MUST order the range whatever values it holds. | this spec section 3 | `ambre_trame::logic::helpers::tests::comparator_is_a_total_order_with_nan`; `ambre_trame::formula::functions::tests::power_without_a_real_root_is_a_num_error` | none | verified |
-| `TRAME-114` | `POST` | A sort MUST order the rows a filter hides together with the visible ones. | this spec section 2, row 3; section 5 | none | unheld -- `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` covers the mark following its row (`TRAME-FEAT-002`), not the hidden row taking part in the ordering; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-114` | `POST` | A sort MUST order the rows a filter hides together with the visible ones. | this spec section 2, row 3; section 5 | `ambre_trame::logic::tests::group13::a_hidden_row_is_ordered_too` | none | verified |
 | `TRAME-182` | `FRAME` | A sort MUST NOT move a row outside the range it was given. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_sum_block_is_stable_under_internal_sort` -- its two formula rows sit below the sorted block and are read back at their own positions | none | verified |
 | `TRAME-183` | `FRAME` | A sort MUST leave the active cell and the selected rectangle at their positions. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_keeps_active_cell_and_selection_in_place` | none | verified |
 | `TRAME-FEAT-013` | `POST` | A sort invoked without an explicit range MUST resolve it from the tracked selection, in the Logic thread. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`; `::sort_selection_multi_resolves_against_tracked_selection`; `::sort_sheet_sorts_used_range_by_active_column` | none | verified |
 | `TRAME-115` | `FAIL` | A sort naming a sheet other than the active one MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_noops` -- it asserts the outcome carries neither an update nor a single display event | none | verified |
 | `TRAME-184` | `FAIL` | A sort left with no key inside the range MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_no_keys_is_noop` -- it runs over an empty key list and over a key naming a column outside the range | none | verified |
-| `TRAME-185` | `FAIL` | A sort over fewer than two sortable rows MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | none | unheld -- the guard is written, and no test drives a one-row range or a two-row range whose first row is the header; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-185` | `FAIL` | A sort over fewer than two sortable rows MUST change nothing, and MUST NOT be acknowledged. | this spec section 3 | `ambre_trame::logic::tests::group13::a_sort_of_fewer_than_two_rows_changes_nothing` | none | verified |
 
 ### 1.3 The sort dialog
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-101` | `OBS` | The dialog MUST offer exactly the columns the sort will order. | this spec section 4 | `ambre_trame::logic::tests::group4::sort_range_query_spans_the_used_width_of_a_row_band` | partial -- the test holds the range the Logic thread answers and the sort then orders; the launcher opening the dialog on that answer is DOM glue no host test reaches; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | partial |
-| `TRAME-UI-150` | `INV` | The dialog MUST always hold at least one level, and never more levels than the range has columns. | this spec section 4 | none | unheld -- both bounds are carried by a disabled button, and the test clicks "Add sort level" once over a three-column range, which reaches neither bound; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-101` | `OBS` | The dialog MUST offer exactly the columns the sort will order. | this spec section 4 | `ambre_trame::tests::chrome_ui::the_sort_reply_opens_the_dialog_over_its_columns`; `ambre_trame::logic::tests::group4::sort_range_query_spans_the_used_width_of_a_row_band` | none | verified |
+| `TRAME-UI-150` | `INV` | The dialog MUST always hold at least one level, and never more levels than the range has columns. | this spec section 4 | `ambre_trame::tests::chrome_ui::the_dialog_holds_one_level_to_one_per_column` | none | verified |
 
 ### 1.4 Apply the levels, or give up
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-151` | `PRE` | The selection MUST NOT move while the dialog is open. | this spec section 4 | none | unheld -- the columns the dialog offers are a snapshot taken when it opened, and the range the sort orders is the selection the Logic thread tracks when it applies. Nothing holds the two together (section 6); lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-151` | `PRE` | The selection MUST NOT move while the dialog is open. | this spec section 4 | `ambre_trame::tests::chrome_ui::the_open_sort_dialog_is_modal` -- the sheet takes no pointer; `ambre_app::host::tests::a_key_inside_an_open_dialog_stays_there` -- the grid takes no key | none | verified |
 | `TRAME-UI-152` | `POST` | Applying MUST emit one key per level the user kept, in the order they are listed, carrying the header toggle as it stands. | this spec section 4 | `ambre_trame::tests::chrome_ui::sort_dialog_adds_levels_and_emits_on_apply` -- it adds a level, toggles the header and reads both back off the emitted request | none | verified |
 | `TRAME-UI-102` | `POST` | A column repeated over two levels MUST order the rows once, at its first level. | this spec section 4 | `ambre_trame::tests::chrome_ui::sort_dialog_adds_levels_and_emits_on_apply` -- it asserts the two emitted keys name different columns | none | verified |
-| `TRAME-UI-153` | `FRAME` | Cancelling the dialog, clicking its backdrop or closing it MUST NOT order anything. | this spec section 4 | none | unheld -- the three paths run one `close`, which sets the open state to `None` and calls nothing else, and no test clicks any of them; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-153` | `FRAME` | Cancelling the dialog, clicking its backdrop or closing it MUST NOT order anything. | this spec section 4 | `ambre_trame::tests::chrome_ui::closing_the_sort_dialog_sorts_nothing` -- cancel, the close button and the backdrop | none | verified |
 
 * **Budget.** none: a sort is one permutation over the rows a sheet holds, and
   `ambre-spec-budgets.md` budgets no sort. The moves it emits land under the batch
   row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a sort emits moves into the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 14 `verified`, 1 `partial`, 9 `untested`. What holds is the permutation, in the
-  shape the user cares about: whole rows travel, the header stays, an already-ordered range writes
-  nothing. A row outside the range stays put, and a refusal carries no acknowledgement. What is
-  loose is most of what the comparator decides: the type rank and the blank. Its total order holds,
-  a NaN included.
+* **Verification.** 24 `verified`. What holds is the permutation, in the shape the user cares about:
+  whole rows travel, the header stays, an already-ordered range writes nothing. A row outside the
+  range stays put, and a refusal carries no acknowledgement. The comparator is held whole: the type
+  rank, the blank, the stability and a NaN. The dialog is held in a browser: its bounds, its close
+  paths, and its modality.
 
 ---
 
@@ -204,11 +204,6 @@ makes the viewport re-fetch, so the grid repaints in the new order with the same
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The type rank, the blank and the stability have no test** (`TRAME-111`, `TRAME-112`,
-  `TRAME-180`). All three are pure functions of two values, and `compare_cell_values` is reachable
-  from the host tier. This is the cheapest gap in the document to close. The stability is the one
-  that carries weight elsewhere: `TRAME-FEAT-012` only holds because an ordered range sorts to
-  itself.
 * **A refused sort says nothing** (`TRAME-115`, `TRAME-184`, `TRAME-185`). `SortComplete` raises a
   "Range sorted" toast, and the three refusals emit no event at all. A user who sorts a single-row
   selection, or a range on a sheet the UI has not activated, sees nothing change. No order change,
@@ -216,10 +211,8 @@ makes the viewport re-fetch, so the grid repaints in the new order with the same
 * **The dialog reads a snapshot, the sort reads the live selection** (`TRAME-UI-151`). The picker
   offers the columns of the rectangle captured when "Sort range..." opened. Applying sends
   `SortSelectionMulti`, whose range is whatever the Logic thread tracks at that moment. The two
-  agree today because the backdrop swallows the clicks that would move the selection. That is a
-  property of the stylesheet, not of the contract.
-* **A sort orders the rows a filter hides** (`TRAME-114`), which Excel and Sheets do not. The rule
-  is written down and the behaviour is deliberate, and no test states either.
+  agree because the modal leaves the sheet inert, and the shell's key listener leaves a key aimed
+  inside a dialog alone. A command that carried its range would hold the rule by construction.
 * **A sort of a range holding a merge is unspecified.** A covered cell holds no value, so it orders
   as empty, and nothing says what happens to the block.
 * **The dialog forgets its levels.** It resets to one ascending level on every open, so a user

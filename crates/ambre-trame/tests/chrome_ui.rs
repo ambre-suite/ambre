@@ -679,3 +679,195 @@ fn a_refusal_reaches_the_user_as_a_toast() {
     assert!(text[1].contains("no sheet to sort"), "{text:?}");
     root.remove();
 }
+
+/// Let the effects a click scheduled run before the DOM is read. Wait for the
+/// browser tasks they queue too, such as the `close` event of a dialog.
+async fn settle() {
+    for _ in 0..2 {
+        let wait = js_sys::Promise::new(&mut |resolve, _| {
+            let _ = web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0);
+        });
+        wasm_bindgen_futures::JsFuture::from(wait).await.unwrap();
+    }
+}
+
+/// A relay over fresh signals, as the shell builds it.
+fn relay() -> chrome::TrameRelay {
+    chrome::TrameRelay {
+        sort_dialog: RwSignal::new(None),
+        filter_popover: RwSignal::new(None),
+        filter_values: RwSignal::new(Vec::new()),
+        filter_active: RwSignal::new(false),
+        sheets: RwSignal::new(Vec::new()),
+        active_sheet: RwSignal::new(String::new()),
+        sel_stats: RwSignal::new(None),
+        find_result: RwSignal::new(None),
+    }
+}
+
+fn button(root: &web_sys::Element, selector: &str) -> web_sys::HtmlButtonElement {
+    root.query_selector(selector)
+        .unwrap()
+        .unwrap_or_else(|| panic!("{selector}"))
+        .dyn_into()
+        .unwrap()
+}
+
+/// A sort dialog over `state`, recording what it emits.
+fn sort_dialog(
+    state: RwSignal<Option<SortDialogState>>,
+) -> (web_sys::Element, RwSignal<Option<SortApply>>) {
+    let emitted = RwSignal::new(None::<SortApply>);
+    let on_apply = Callback::new(move |req: SortApply| emitted.set(Some(req)));
+    let root = mount_in_container(move || view! { <SortDialog state=state on_apply=on_apply /> });
+    (root, emitted)
+}
+
+/// `TRAME-FEAT-046`: the toast a filter raises says how many rows it hid.
+#[wasm_bindgen_test]
+fn the_filter_toast_says_how_many_rows_it_hid() {
+    let owner = Owner::new();
+    owner.set();
+    let toasts = ambre_chrome::Toasts::new();
+    chrome::notify_event(
+        &toasts,
+        &UiEvent::Viewport {
+            document_id: DocumentId::new(),
+            event: AppEvent::Trame(TrameEvent::FilterApplied {
+                hidden_row_count: 37,
+                col: 2,
+            }),
+        },
+    );
+    let root = mount_in_container(move || view! { <ambre_chrome::ToastHost toasts=toasts /> });
+    let toast = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .and_then(|t| t.text_content())
+        .expect("a toast");
+    assert!(toast.contains("37"), "{toast}");
+    root.remove();
+}
+
+/// `TRAME-UI-101`: the reply to a sort request opens the dialog, and it
+/// offers exactly the columns of that range, D to F.
+#[wasm_bindgen_test]
+fn the_sort_reply_opens_the_dialog_over_its_columns() {
+    let owner = Owner::new();
+    owner.set();
+    let relay = relay();
+    relay.absorb(&UiEvent::Viewport {
+        document_id: DocumentId::new(),
+        event: AppEvent::Trame(TrameEvent::SortRange {
+            r1: 2,
+            c1: 3,
+            r2: 9,
+            c2: 5,
+        }),
+    });
+    let (root, _) = sort_dialog(relay.sort_dialog);
+    let options = root.query_selector_all(".ambre-sort-col option").unwrap();
+    let labels: Vec<String> = (0..options.length())
+        .filter_map(|i| options.item(i)?.text_content())
+        .collect();
+    assert_eq!(labels, ["Column D", "Column E", "Column F"]);
+    root.remove();
+}
+
+/// `TRAME-UI-150`: the dialog holds one level at least and one per column at
+/// most. Both bounds are reached and both buttons refuse past them.
+#[wasm_bindgen_test]
+async fn the_dialog_holds_one_level_to_one_per_column() {
+    let state = RwSignal::new(Some(SortDialogState {
+        r1: 0,
+        c1: 0,
+        r2: 4,
+        c2: 2,
+    }));
+    let (root, _) = sort_dialog(state);
+    let levels = || {
+        root.query_selector_all(".ambre-sort-level")
+            .unwrap()
+            .length()
+    };
+    settle().await;
+    assert_eq!(levels(), 1);
+    assert!(button(&root, ".ambre-sort-remove").disabled(), "the floor");
+    for _ in 0..2 {
+        button(&root, ".ambre-sort-add").click();
+        settle().await;
+    }
+    assert_eq!(levels(), 3);
+    assert!(button(&root, ".ambre-sort-add").disabled(), "the ceiling");
+    assert!(!button(&root, ".ambre-sort-remove").disabled());
+    for _ in 0..2 {
+        button(&root, ".ambre-sort-remove").click();
+        settle().await;
+    }
+    assert_eq!(levels(), 1);
+    assert!(button(&root, ".ambre-sort-remove").disabled(), "the floor");
+    root.remove();
+    // One column: the ceiling is the floor.
+    let state = RwSignal::new(Some(SortDialogState {
+        r1: 0,
+        c1: 4,
+        r2: 9,
+        c2: 4,
+    }));
+    let (root, _) = sort_dialog(state);
+    settle().await;
+    assert!(button(&root, ".ambre-sort-add").disabled());
+    root.remove();
+}
+
+/// `TRAME-UI-151`: the open dialog is modal, so the sheet behind it takes no
+/// pointer. The keys are held by the shell's key listener.
+#[wasm_bindgen_test]
+async fn the_open_sort_dialog_is_modal() {
+    let state = RwSignal::new(Some(SortDialogState {
+        r1: 0,
+        c1: 0,
+        r2: 4,
+        c2: 1,
+    }));
+    let (root, _) = sort_dialog(state);
+    settle().await;
+    let dialog = root
+        .query_selector("dialog.ambre-sort-modal")
+        .unwrap()
+        .unwrap();
+    assert!(dialog.matches(":modal").unwrap());
+    root.remove();
+}
+
+/// `TRAME-UI-153`: cancel, the close button and the backdrop each close the
+/// dialog and none of them sorts.
+#[wasm_bindgen_test]
+async fn closing_the_sort_dialog_sorts_nothing() {
+    for selector in [
+        ".ambre-sort-cancel",
+        ".ambre-sort-close",
+        "dialog.ambre-sort-modal",
+    ] {
+        let state = RwSignal::new(Some(SortDialogState {
+            r1: 0,
+            c1: 0,
+            r2: 4,
+            c2: 2,
+        }));
+        let (root, emitted) = sort_dialog(state);
+        settle().await;
+        root.query_selector(selector)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{selector}"))
+            .dyn_into::<web_sys::HtmlElement>()
+            .unwrap()
+            .click();
+        settle().await;
+        assert_eq!(state.get_untracked(), None, "{selector}");
+        assert_eq!(emitted.get_untracked(), None, "{selector}");
+        root.remove();
+    }
+}

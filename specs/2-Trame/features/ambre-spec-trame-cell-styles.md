@@ -27,22 +27,22 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-187` | `IO` | A stored style a reload cannot read MUST NOT come back as the default style with no notice. | this spec section 6 | `ambre_trame::logic::schema::tests::a_register_that_cannot_be_decoded_reaches_the_user` | none | verified |
 | `TRAME-097` | `OBS` | The toolbar MUST report the style of the active cell. | this spec section 4 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection`; `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` -- the chrome half | none | verified |
 | `TRAME-188` | `OBS` | When the cursor sits inside a merged block, the toolbar MUST report the style the user sees, which is the block's. | this spec section 6 | `ambre_trame::logic::tests::group1::toolbar_reports_the_block_style_inside_a_merge` | none | verified |
-| `TRAME-100` | `OBS` | A border a user asked for MUST NOT be overpainted by a grid line. | this spec section 4 | none | unheld -- the border pass runs after the grid lines and after the merge repaint in the screen renderer, which is a call order nothing asserts; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-100` | `OBS` | A border a user asked for MUST NOT be overpainted by a grid line. | this spec section 4 | `ambre_trame::ui::renderer::tests::a_border_is_drawn_after_the_grid_and_the_merges` -- the first border stroke follows the last grid line and the merge repaint | none | verified |
 | `TRAME-101` | `OBS` | A border the user did not colour MUST follow the active theme. | this spec section 6 | `ambre_trame::ui::renderer::tests::uncoloured_border_follows_the_theme` | none | verified |
 
 ### 1.2 Format the selected cells
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-189` | `PRE` | A formatting gesture MUST carry at least one attribute the user changed. | this spec section 6 | none | unheld -- nothing reads the patch before running: an empty one still creates every row and column the selection reaches and lands an undo item that changes nothing; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-189` | `PRE` | A formatting gesture MUST carry at least one attribute the user changed. | this spec section 6 | `ambre_trame::logic::tests::group13::an_empty_style_patch_writes_nothing` -- no operation, no delta, and the undo after it takes back the edit before it | none | verified |
 | `TRAME-093` | `POST` | Styling a selection MUST be one undo item, never one per cell. | this spec section 3 | `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo` | none | verified |
 | `TRAME-094` | `POST` | Styling a selection MUST reach a peer as one delta that carries every cell. | this spec section 3 | `ambre_trame::logic::tests::group7::batched_formatting_broadcasts_complete_delta` | none | verified |
-| `TRAME-096` | `POST` | A cell returned to the default style MUST leave no style entry behind. | this spec section 6 | none | unheld -- `write_cell_style` deletes the key when the record equals the default, and no test reads the container back to see it gone; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-096` | `POST` | A cell returned to the default style MUST leave no style entry behind. | this spec section 6 | `ambre_trame::logic::tests::group13::a_cell_back_to_the_default_style_leaves_no_entry` | none | verified |
 | `TRAME-190` | `POST` | A border a user drew MUST reach the document and come back out to the grid. | this spec section 4 | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- both carry a border preset through the gesture and compare the four resulting edges after a document exchange and a viewport read | none | verified |
-| `TRAME-099` | `POST` | A border preset MUST reach only the edges that preset names. | this spec section 4 | none | unheld -- the two tests behind `TRAME-190` carry a preset over one cell, where every perimeter preset resolves to the same four edges and every interior one resolves to none, so the ten presets are indistinguishable there; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-098` | `FRAME` | A cell a merge covers MUST NOT take a style of its own. | this spec section 3 | none | unheld -- `set_cell_style` skips every cell in `covered`, and nothing drives a restyle across a merge; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-191` | `FRAME` | Styling a selection MUST NOT change the value of any cell in it. | this spec section 2 | none | unheld -- style and value are separate registers and the run writes only the style one, and no test formats a cell holding a value and reads that value back; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-192` | `FRAME` | Styling a selection MUST NOT move the cursor or change what is selected. | this spec section 4 | none | unheld -- every toolbar control writes the current selection and expects to keep it, and nothing asserts the selection after a run; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-099` | `POST` | A border preset MUST reach only the edges that preset names. | this spec section 4 | `ambre_trame::logic::tests::group13::a_border_preset_reaches_only_its_edges` -- the ten presets over a 3x3 selection, edge by edge | none | verified |
+| `TRAME-098` | `FRAME` | A cell a merge covers MUST NOT take a style of its own. | this spec section 3 | `ambre_trame::logic::tests::group13::a_covered_cell_takes_no_style` | none | verified |
+| `TRAME-191` | `FRAME` | Styling a selection MUST NOT change the value of any cell in it. | this spec section 2 | `ambre_trame::logic::tests::group13::styling_keeps_every_value` | none | verified |
+| `TRAME-192` | `FRAME` | Styling a selection MUST NOT move the cursor or change what is selected. | this spec section 4 | `ambre_trame::logic::tests::group13::styling_keeps_the_selection` | none | verified |
 | `TRAME-193` | `FAIL` | Given a cell the document cannot hold, a formatting gesture MUST tell the user, and MUST NOT draw a style it did not store. | this spec section 6 | `ambre_trame::logic::tests::group1::style_beyond_the_cap_is_refused_and_not_drawn` | none | verified |
 
 ### 1.3 Recolour a cell from a rule
@@ -59,11 +59,10 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** none of its own: a style is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 11 `verified`, 7 `untested`, 4 `unimplemented`. What holds is the
-  single-register model: where a style lives, how it undoes, how it broadcasts, how it reloads and
-  what the toolbar reads. A border preset reaches the four edges of a cell. What is loose is the
-  gesture around it: its frame conditions, and which edges a preset picks on an untested range
-  (`TRAME-099`).
+* **Verification.** 18 `verified`, 4 `unimplemented`. What holds is the single-register model:
+  where a style lives, how it undoes, how it broadcasts, how it reloads and what the toolbar reads.
+  The gesture around it is held too. Each preset reaches its own edges over a 3x3 range, a covered
+  cell takes no style, and a run keeps every value and the selection.
 
 ---
 
@@ -246,17 +245,9 @@ segments, because the shared surface carries no dash parameter.
 * **A user fill colour is not a palette colour, and `TRAME-UI-012` says every fill must be.** That
   row is `verified`, by a test whose fixture holds one unstyled cell. The rule needs the exception
   written into it: a colour the *user* chose is not a hardcoded product colour.
-* **A border is carried, but its geometry is not tested.** The two convergence tests run a preset
-  through the gesture and compare the four edges after an exchange (`TRAME-190`). The register,
-  the pack and the paint path therefore all carry it. Both style one cell, where the ten presets
-  collapse into two answers. The preset resolution is a pure function of a rectangle and a merge
-  map, the cheapest row in the document to close (`TRAME-099`). The paint order (`TRAME-100`)
-  needs the screen.
-* **An empty patch is not free.** Nothing checks that a formatting gesture changes anything, and the
-  run materializes every row and column its selection reaches before it looks at the patch. A patch
-  that changes nothing therefore grows the document and lands an undo item (`TRAME-189`). The same
-  order makes `TRAME-096` narrower than it reads: the style entry does go, the rows and columns the
-  cell needed stay.
+* **A cell back to the default keeps its lines.** The run materializes every row and column its
+  selection reaches before it writes the style. So `TRAME-096` is narrower than it reads: the style
+  entry goes, and the rows and columns the cell needed stay.
 * **A style has no clear-formatting command.** A user restores the default by reversing every
   control that was used. `write_cell_style` already drops a defaulted cell, so the store is ready
   for a command that does not exist.

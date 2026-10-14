@@ -77,6 +77,8 @@ proptest = { workspace = true }
 # (ambre-bus events, the leptos signals, ambre-chrome stores, the perf snapshot).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+# Awaits a browser task, such as the `close` event a dialog queues.
+wasm-bindgen-futures = { workspace = true }
 leptos       = { workspace = true }
 ambre-bus    = { path = "../ambre-bus" }
 ambre-chrome = { path = "../ambre-chrome" }

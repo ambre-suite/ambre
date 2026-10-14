@@ -450,6 +450,10 @@ impl DocSwitcher {
 /// host. Such elements own their own keyboard, so the grid's document-level
 /// keydown listener must not also process the event. The pipe itself is exempt:
 /// the grid intentionally reads navigation/edit keys from it via this listener.
+///
+/// Any element inside an open `<dialog>` counts too. A modal makes the page
+/// inert to the pointer, but a document listener still hears its keys. An
+/// arrow key on a dialog button would otherwise move the selection behind it.
 fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextAreaElement) -> bool {
     if target
         .dyn_ref::<web_sys::HtmlTextAreaElement>()
@@ -461,6 +465,7 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
         Some(el) => {
             matches!(el.tag_name().as_str(), "INPUT" | "TEXTAREA" | "SELECT")
                 || el.is_content_editable()
+                || el.closest("dialog[open]").ok().flatten().is_some()
         }
         None => false,
     }
@@ -505,6 +510,37 @@ mod tests {
         });
         let _ = wasm_bindgen_futures::JsFuture::from(wait).await;
         assert!(ticks.get() >= 3, "{} ticks in 300 ms", ticks.get());
+    }
+
+    /// A key aimed at a control inside an open dialog stays with the dialog.
+    /// So an arrow key on a sort dialog button cannot move the selection
+    /// behind it. The same button outside a dialog, and the pipe, still reach
+    /// the view.
+    #[wasm_bindgen_test]
+    fn a_key_inside_an_open_dialog_stays_there() {
+        use wasm_bindgen::JsCast;
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let body = document.body().expect("a body");
+        let make = |tag: &str| document.create_element(tag).expect("an element");
+        let pipe: web_sys::HtmlTextAreaElement = make("textarea").dyn_into().expect("a textarea");
+        let dialog: web_sys::HtmlDialogElement = make("dialog").dyn_into().expect("a dialog");
+        let inside = make("button");
+        let outside = make("button");
+        dialog.append_child(&inside).expect("append");
+        for node in [pipe.as_ref(), dialog.as_ref(), outside.as_ref()] {
+            body.append_child(node).expect("append");
+        }
+        assert!(!super::is_other_editable(&inside, &pipe), "closed");
+        dialog.show_modal().expect("a modal");
+        assert!(super::is_other_editable(&inside, &pipe), "open");
+        assert!(!super::is_other_editable(&outside, &pipe));
+        assert!(!super::is_other_editable(&pipe, &pipe));
+        dialog.close();
+        for node in [pipe.as_ref(), dialog.as_ref(), outside.as_ref()] {
+            body.remove_child(node).expect("remove");
+        }
     }
 
     #[wasm_bindgen_test]

@@ -67,6 +67,11 @@ impl TrameState {
     /// sets (and the `format_{sheet}` map); the rest into the cell's [`CellStyle`]
     /// (the `style_{sheet}` / colour / font containers).
     pub(super) fn set_cell_style(&mut self, patch: StylePatch) -> TrameOutcome {
+        // A gesture that changes no attribute writes nothing: no line, no undo
+        // item, no delta (`TRAME-189`).
+        if patch == StylePatch::default() {
+            return TrameOutcome::display_only(vec![]);
+        }
         // Bounding box for the border perimeter, and the deduplicated cell set for
         // the writes (`TRAME-UI-129`): every rectangle the user selected.
         let (r1, c1, r2, c2) = self.selection_bounds();

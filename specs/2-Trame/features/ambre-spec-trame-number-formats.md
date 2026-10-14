@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-102` | `INV` | A format MUST NOT change what a cell holds. | this spec section 2 | type-level -- `format_display` takes `&self` and returns a `String`, and its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | none | verified |
 | `TRAME-157` | `OBS` | A formatted cell MUST show the text its family renders for the value it holds. | this spec section 2 | `ambre_trame::logic::tests::group1::set_cell_style_round_trips_and_formats_numbers` -- it reads `314.2%` off the packed viewport for a cell holding `3.14159` under Percent with one decimal, one family of the nine and the only test that reaches `format_display` at all | none | verified |
-| `TRAME-103` | `OBS` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | none | unheld -- `format_display` falls back to the text when the parse fails, and no test formats a word; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-103` | `OBS` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | `ambre_trame::logic::tests::group13::a_word_ignores_its_number_format` | none | verified |
 | `TRAME-104` | `OBS` | A decimal count MUST be offered only for a family that renders decimal places. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families` -- exhaustive over the ten families, the predicate's one use being the `disabled` attribute of the two buttons, so it guards the control and never the write (section 5) | none | verified |
 | `TRAME-106` | `OBS` | A fraction MUST keep the sign of a value below one. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` -- the sign half. It calls the renderer directly, not through a packed cell | none | verified |
 | `TRAME-223` | `OBS` | A fraction MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` -- the carry half, on the same direct call | none | verified |
@@ -38,13 +38,13 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | `ambre_trame::logic::tests::group1::decimal_step_adds_one_place_to_the_count` | none | verified |
-| `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none | unheld -- the restyle writes the style containers alone and drives no engine pass, the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones; lands with the `Trame data tools and formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | `ambre_trame::logic::tests::group13::a_decimal_step_keeps_the_computed_value` -- the engine result and the cells map compared across the step | none | verified |
 
 * **Budget.** none of its own. A format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a format is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 9 `verified`, 2 `untested`, 1 `unimplemented`. What holds is the pair at the
+* **Verification.** 11 `verified`, 1 `unimplemented`. What holds is the pair at the
   root of the area. A type-level argument gives what a cell holds (`TRAME-102`), and one test that
   packs a formatted cell gives what it shows (`TRAME-157`). The decimal step, the calendar, the
   custom pattern and the reach past the grid each have their test. What is loose is the surface: no
@@ -147,10 +147,10 @@ format edit is a restyle -- one undo item, one delta, whole-cell last-writer-win
   is given into whatever family the cell carries. A document written by anything but the toolbar --
   an import, a later API -- can hold a count on a `Text` cell. The row above is a rule about the
   control, not about the document.
-* **One test packs a formatted cell** (`TRAME-157`). `format_display` is reached by a single test,
-  on Percent. The parse failure, the three pass-through families and the fraction path through the
-  pack loop are all unread. The fraction test calls the renderer directly, so nothing proves the
-  loop hands it the value the cell holds.
+* **Few tests pack a formatted cell** (`TRAME-157`). `format_display` is reached through the pack on
+  Percent, and on a word under five families (`TRAME-103`). The three pass-through families and the
+  fraction path through the pack loop are unread. The fraction test calls the renderer directly,
+  so nothing proves the loop hands it the value the cell holds.
 * **A number too wide for its column is not abbreviated.** A spreadsheet shows `#####` rather than a
   truncated number, because a truncated number is a wrong number. Trame spills or clips it like any
   other text (`features/ambre-spec-trame-cell-rendering.md section 3`), so a reader can misread a

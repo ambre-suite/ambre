@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 65 partial and 240 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 63 partial and 218 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 668 | 389 | 584 | 605 |  | 2246 |
-| `partial` | 21 | 2 | 41 | 1 |  | 65 |
+| `verified` | 668 | 413 | 584 | 605 |  | 2270 |
+| `partial` | 21 |  | 41 | 1 |  | 63 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 13 | 27 | 188 | 1 |  | 229 |
+| `untested` | 13 | 5 | 188 | 1 |  | 207 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -83,7 +83,7 @@
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  |  | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 9 |  |  | 3 |
-| `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
+| `ambre-spec-trame-cell-styles.md` | 22 | 18 | 18 |  |  | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 8 | 7 |  | 1 | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 10 |  |  |  |
 | `ambre-spec-trame-engine.md` | 17 | 17 | 16 |  | 1 |  |
@@ -94,14 +94,14 @@
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |  |
 | `ambre-spec-trame-import-export.md` | 40 | 27 | 26 |  | 1 | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |  |
-| `ambre-spec-trame-number-formats.md` | 12 | 11 | 9 |  | 2 | 1 |
+| `ambre-spec-trame-number-formats.md` | 12 | 11 | 11 |  |  | 1 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  |  | 3 |
 | `ambre-spec-trame-resize.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 10 |  |  | 1 |
-| `ambre-spec-trame-shared-filter.md` | 35 | 32 | 27 | 1 | 4 | 3 |
+| `ambre-spec-trame-shared-filter.md` | 35 | 32 | 32 |  |  | 3 |
 | `ambre-spec-trame-sheets.md` | 18 | 18 | 18 |  |  |  |
-| `ambre-spec-trame-sort.md` | 24 | 24 | 14 | 1 | 9 |  |
+| `ambre-spec-trame-sort.md` | 24 | 24 | 24 |  |  |  |
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 11 |  |  |  |
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  |  | 4 |
 | `ambre-spec-toile-schema.md` | 10 | 10 | 9 |  | 1 |  |
