@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: FORMULA ENGINE
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the language, the graph and the evaluator are built; whole-axis ranges are not.
+**Implementation:** implemented -- the language, the graph, the evaluator and whole-axis ranges.
 
 > A user types `=SUM(A1:A3)*2`. The cell shows a number. It keeps showing the right number after
 > someone else edits `A2`, sorts the rows or renames the sheet the formula reads from.
@@ -38,8 +38,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
 | `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | none | unheld -- the test above reads the error value back, which a run that allocated the million cells and then returned the error would return too. Nothing weighs the allocation; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
-| `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | none | unheld -- the guard is the evaluation stack in `formula/vm.rs`, and every cycle test drives the static graph instead, so no test closes a loop the graph cannot see; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | not built | unbuilt -- lands with the `Whole-column and whole-row ranges` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | `ambre_trame::logic::tests::group8::a_whole_column_range_over_itself_is_a_cycle` -- the loop runs through a range, so the graph holds no edge for it and the evaluation stack catches it. A name and a qualifier become a range or a cell before the graph sees them | none | verified |
+| `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | `ambre_trame::logic::tests::group8::a_whole_column_range_reads_the_used_rows` -- a row written past the old end and a row inserted above are summed; `ambre_trame::logic::tests::group8::a_whole_row_range_reads_the_used_columns`; `ambre_trame::logic::tests::group8::a_column_edit_carries_a_whole_column_range`; `ambre_trame::formula::identity::tests::whole_lines_store_their_lines_and_read_back_as_typed`; `ambre_trame::formula::shift::tests::whole_lines_shift_along_their_own_axis` | none | verified |
 | `TRAME-033` | `OBS` | A formula shown back to its author MUST carry only the parentheses its meaning needs. | this spec section 4 | `ambre_trame::formula::render::tests::precedence_minimal_parens`; `::pow_right_associative` | none | verified |
 | `TRAME-045` | `OBS` | Every evaluation failure MUST show a named error, never a blank and never a number. | this spec section 4 | `ambre_trame::formula::vm::tests::division_by_zero`; `ambre_trame::formula::engine::tests::division_by_zero_displayed`; `ambre_trame::formula::types::tests::cell_value_display` | none | verified |
 | `TRAME-032` | `IO` | A formula the engine writes back MUST read as the same formula. | this spec section 3 | `ambre_trame::formula::prop_tests::render_parse_render_is_a_fixpoint` -- a proptest over every node but `SheetRef` and `Name`; `ambre_trame::formula::parser::tests::error_literal_reparses`; `ambre_trame::formula::shift::tests::ref_error_text_is_reparseable` | none | verified |
@@ -91,10 +91,9 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 40 `verified`, 3 `untested`, 1 `unimplemented`. What holds is the graph and its
-  recompute, the best-covered engine of the workspace, and the stored form a structural edit
-  carries. What is loose is weight rather than behaviour: nothing measures what a range allocates.
-  Beside it is the dynamic half of cycle detection, which nothing drives.
+* **Verification.** 42 `verified`, 2 `untested`. What holds is the graph and its recompute, the
+  best-covered engine of the workspace, and the stored form a structural edit carries. What is loose
+  is weight rather than behaviour: nothing measures what a range allocates.
 
 ---
 
@@ -149,7 +148,7 @@ pub struct RangeId {
 
 pub enum RangeEndpoint {
     Specific(AxisId),   // stable through the axis id
-    EntireAxis,         // A:A or 1:1. Reserved: the parser never emits it (`TRAME-048`)
+    EntireAxis,         // the far axis of A:A or 1:1: its used part (`TRAME-048`)
 }
 ```
 
@@ -161,14 +160,18 @@ both. The sheet qualifier works the same way (`TRAME-034`).
 
 A position past the used range names no line and stays a position (`TRAME-006`). A workbook that
 stored positions converts each one to the uid at that position in the `2 -> 3`
-schema step (`TRAME-226`).
+schema step (`TRAME-226`). A range of whole lines writes `*` for the axis it takes whole: `A:C` is
+stored `{*|col}:{*|col}`, and `2:5` is `{row|*}:{row|*}` (`TRAME-048`).
 
 **A structural edit** rewrites only what it must, in the commit of the edit, so one undo reverts
 both (`identity::reanchor`). A reference to a cell follows its lines, so its text does not change
-(`TRAME-215`). A range is a rectangle of positions. A sort or a move re-anchors each corner to the
+(`TRAME-215`).
+
+A range is a rectangle of positions. A sort or a move re-anchors each corner to the
 line now at its position (`TRAME-227`). An insert keeps each corner's line, so lines inserted inside
 widen it (`TRAME-171`). A delete moves a lost corner inward, and a range with no line left reads
-`#REF!` (`TRAME-230`).
+`#REF!` (`TRAME-230`). A range of whole lines follows an edit on its own axis the same way. An
+edit on the other axis leaves it as it is.
 
 A paste or a fill shifts the positional source, never the stored text.
 
@@ -243,6 +246,7 @@ cell's displayed text (`features/ambre-spec-trame-engine.md`, `TRAME-UI-014`).
 |---|---|---|
 | number, text, boolean | `12.5`, `"ok"`, `TRUE` | a bareword starting with `TRUE` stays a name |
 | cell, range | `A1`, `A1:B10` | row numbers are 1-based; `A0` is not a reference |
+| whole columns, whole rows | `A:C`, `2:5` | the used part of the other axis (`TRAME-048`) |
 | another sheet | `Sheet2!A1`, `'My Sheet'!A1:B2` | stored by id, shown by name (`TRAME-034`) |
 | a defined name | `TOTAL` | `features/ambre-spec-trame-named-ranges.md` |
 | a function call | `SUM(A1:A3, 2)` | `features/ambre-spec-trame-function-library.md` |
@@ -308,15 +312,10 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   what a reseed already costs, which the edit pays too. No budget row covers either.
 * **A defined name stays positional.** A name stores `A1` text, re-read on each reseed, so an insert
   above its target moves it (`features/ambre-spec-trame-named-ranges.md`).
-* **Whole-column and whole-row ranges** (`TRAME-048`). `RangeEndpoint::EntireAxis` exists in the type
-  and every resolver handles it; the grammar never emits it, so `A:A` parses as a name and fails.
-  The interactive cousin, a whole-column selection, ships.
+* **A defined name cannot take whole lines.** A name's body is a cell or a range, so `=A:A` is
+  refused as a definition (`features/ambre-spec-trame-named-ranges.md`). No rule covers it.
 * **No absolute reference.** There is no `$A$1` syntax, so every reference shifts on a paste or a
   fill. A user who wants a fixed lookup table has no way to say so, and no rule covers it.
-* **The dynamic cycle guard is driven by nothing** (`TRAME-042`). It is one line in the evaluator.
-  The case it exists for is the one no test builds: a loop through a range, a name or another
-  sheet. A direct self-reference never reaches it: `update` refuses it as a cycle of one cell
-  (`TRAME-213`).
 * **The range caps are code constants, not budget rows** (`TRAME-209`, `TRAME-210`).
   `MAX_RANGE_CELLS` bounds the memory of one range, and `MAX_PASS_RANGE_CELLS` bounds the reads of
   one pass, sized to clear a running total over ten thousand rows. Neither figure is a row of

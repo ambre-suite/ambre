@@ -12,8 +12,8 @@ use nom::multi::{many0, many1, separated_list0};
 use nom::sequence::{delimited, preceded};
 
 use super::types::{
-    BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, NameTarget, RangeDep,
-    SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
+    AxisSpan, BinOpKind, CellRef, CellValue, Expr, FormulaCtx, FormulaError, LineAxis, NameTarget,
+    RangeDep, SheetQualifier, StoredAxis, StoredCell, UnaryOpKind, alpha_to_col,
 };
 use crate::model::Uid;
 
@@ -135,15 +135,17 @@ fn line_uid(input: &str) -> nom::IResult<&str, Uid> {
 
 /// A cell in stored form, `{row|col}` (`TRAME-228`). Each axis is a line
 /// identity, or the position it held when no line stood there: a 1-based row
-/// number, column letters.
+/// number, column letters. A `*` is the whole axis of a whole-line range.
 fn stored_cell(input: &str) -> nom::IResult<&str, StoredCell> {
     let row = alt((
         map(line_uid, StoredAxis::Line),
         map(row_number, StoredAxis::At),
+        value(StoredAxis::Whole, char('*')),
     ));
     let col = alt((
         map(line_uid, StoredAxis::Line),
         map_res(col_letters, |s: &str| alpha_to_col(s).map(StoredAxis::At)),
+        value(StoredAxis::Whole, char('*')),
     ));
     let (input, (_, row, _, col, _)) = (char('{'), row, char('|'), col, char('}')).parse(input)?;
     Ok((input, StoredCell { row, col }))
@@ -173,9 +175,26 @@ fn range(input: &str) -> nom::IResult<&str, Expr> {
     Ok((input, Expr::Range(dep)))
 }
 
-/// Try to parse a cell reference or a range.
+/// A range of whole columns, `A:C` (`TRAME-048`).
+fn whole_cols(input: &str) -> nom::IResult<&str, AxisSpan> {
+    let col = || map_res(col_letters, alpha_to_col);
+    let (input, (a, _, b)) = (col(), char(':'), col()).parse(input)?;
+    Ok((input, AxisSpan::new(LineAxis::Col, a, b)))
+}
+
+/// A range of whole rows, `2:5` (`TRAME-048`). Tried before a number, which
+/// would otherwise read its first row.
+fn whole_rows(input: &str) -> nom::IResult<&str, AxisSpan> {
+    let (input, (a, _, b)) = (row_number, char(':'), row_number).parse(input)?;
+    Ok((input, AxisSpan::new(LineAxis::Row, a, b)))
+}
+
+/// Try to parse a cell reference, a range or a range of whole lines.
 fn cell_or_range(input: &str) -> nom::IResult<&str, Expr> {
     if let Ok(result) = range(input) {
+        return Ok(result);
+    }
+    if let Ok(result) = map(alt((whole_cols, whole_rows)), Expr::AxisSpan).parse(input) {
         return Ok(result);
     }
     map(endpoint, |cell| match cell.as_position() {
@@ -295,6 +314,9 @@ fn function_call(input: &str) -> nom::IResult<&str, Expr> {
 /// parenthesized sub-expression).
 fn atom_inner(input: &str) -> nom::IResult<&str, Expr> {
     // Try each atomic parser in priority order.
+    if let Ok(result) = map(whole_rows, Expr::AxisSpan).parse(input) {
+        return Ok(result);
+    }
     if let Ok(result) = map(number, |n| Expr::Literal(CellValue::Number(n))).parse(input) {
         return Ok(result);
     }
@@ -586,6 +608,10 @@ pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Res
             r.sheet = default_sheet;
             Ok(Expr::Range(r))
         }
+        Expr::AxisSpan(mut s) => {
+            s.sheet = default_sheet;
+            Ok(Expr::AxisSpan(s))
+        }
         Expr::SheetRef { sheet, inner } => {
             // A display name that does not resolve is a hard parse error (user
             // typo). A canonical id that does not resolve means the sheet was
@@ -610,6 +636,10 @@ pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Res
                 Expr::Range(mut r) => {
                     r.sheet = sheet_idx;
                     Ok(Expr::Range(r))
+                }
+                Expr::AxisSpan(mut s) => {
+                    s.sheet = sheet_idx;
+                    Ok(Expr::AxisSpan(s))
                 }
                 other => resolve_refs(other, sheet_idx, ctx),
             }

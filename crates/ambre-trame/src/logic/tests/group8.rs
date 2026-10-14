@@ -204,3 +204,72 @@ fn a_positional_workbook_migrates_onto_its_cells() {
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A3:A4)+A3");
     assert_eq!(read_cell(&mut state, 0, 1), "23");
 }
+
+/// `TRAME-048`: a whole-column range reads the used part of its column. A
+/// value written below the last row, or in a row inserted above, is summed.
+#[test]
+fn a_whole_column_range_reads_the_used_rows() {
+    let mut state = column(&["1", "2", "3"]);
+    set(&mut state, 0, 1, "=SUM(A:A)");
+    assert_eq!(read_cell(&mut state, 0, 1), "6");
+    let stored = state.cell_raw(0, 1);
+    assert!(stored.contains("{*|"), "rows are stored whole: {stored}");
+    assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A:A)");
+    set(&mut state, 99, 0, "10");
+    assert_eq!(read_cell(&mut state, 0, 1), "16", "a row past the old end");
+    state.handle_command(TrameCommand::InsertRow { at: 0 });
+    set(&mut state, 0, 0, "100");
+    assert_eq!(read_raw(&mut state, 1, 1), "=SUM(A:A)");
+    assert_eq!(read_cell(&mut state, 1, 1), "116", "a row inserted above");
+}
+
+/// `TRAME-048`: a whole-row range reads the used part of its rows.
+#[test]
+fn a_whole_row_range_reads_the_used_columns() {
+    let mut state = TrameState::new();
+    set(&mut state, 1, 0, "1");
+    set(&mut state, 2, 3, "2");
+    set(&mut state, 0, 0, "=SUM(2:3)");
+    assert_eq!(read_cell(&mut state, 0, 0), "3");
+    set(&mut state, 1, 40, "4");
+    assert_eq!(
+        read_cell(&mut state, 0, 0),
+        "7",
+        "a column past the old end"
+    );
+    assert_eq!(read_raw(&mut state, 0, 0), "=SUM(2:3)");
+}
+
+/// `TRAME-048`: a column insert or delete moves a whole-column range as it
+/// moves a range. An insert inside widens it and a delete shrinks it. With no
+/// column left it reads `#REF!`.
+#[test]
+fn a_column_edit_carries_a_whole_column_range() {
+    let mut state = column(&["1", "2"]);
+    set(&mut state, 0, 1, "3");
+    set(&mut state, 5, 3, "=SUM(A:B)");
+    assert_eq!(read_cell(&mut state, 5, 3), "6");
+    state.handle_command(TrameCommand::InsertColumn { at: 1 });
+    assert_eq!(
+        read_raw(&mut state, 5, 4),
+        "=SUM(A:C)",
+        "an insert inside widens"
+    );
+    assert_eq!(read_cell(&mut state, 5, 4), "6");
+    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    assert_eq!(read_raw(&mut state, 5, 3), "=SUM(A:B)");
+    assert_eq!(read_cell(&mut state, 5, 3), "3");
+    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    state.handle_command(TrameCommand::DeleteColumn { at: 0 });
+    assert_eq!(read_cell(&mut state, 5, 1), "#REF!");
+}
+
+/// `TRAME-042`: a whole-column range over its own cell closes a loop the cell
+/// graph cannot see. The evaluator catches it and settles.
+#[test]
+fn a_whole_column_range_over_itself_is_a_cycle() {
+    let mut state = column(&["1", "2"]);
+    set(&mut state, 2, 0, "=SUM(A:A)");
+    assert_eq!(read_cell(&mut state, 2, 0), "#CIRCULAR!");
+    assert_eq!(read_cell(&mut state, 0, 0), "1");
+}

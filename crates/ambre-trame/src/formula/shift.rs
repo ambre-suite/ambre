@@ -13,7 +13,7 @@
 
 use super::parser::parse_formula;
 use super::render::render;
-use super::types::{CellRef, CellValue, Expr, FormulaError, RangeDep};
+use super::types::{AxisSpan, CellRef, CellValue, Expr, FormulaError, LineAxis, RangeDep};
 
 /// Re-index a stored formula's relative references by `(dr, dc)` rows/columns
 /// and return the new formula text *with* its leading `=`. A formula that fails
@@ -69,6 +69,23 @@ fn shift_range(mut r: RangeDep, dr: i64, dc: i64) -> Expr {
     }
 }
 
+/// Offset a range of whole lines along its own axis only: `A:A` pasted one row
+/// down still reads `A:A`. A line driven off the grid makes it `#REF!`.
+fn shift_span(mut s: AxisSpan, dr: i64, dc: i64) -> Expr {
+    let d = match s.axis {
+        LineAxis::Row => dr,
+        LineAxis::Col => dc,
+    };
+    match (shift_idx(s.start, d), shift_idx(s.end, d)) {
+        (Some(start), Some(end)) => {
+            s.start = start;
+            s.end = end;
+            Expr::AxisSpan(s)
+        }
+        _ => Expr::Literal(CellValue::Error(FormulaError::BrokenRef)),
+    }
+}
+
 /// Recursively offset every reference in `expr`. Cross-sheet references
 /// (`Sheet2!A1`) shift their inner cell/range too. A relative cross-sheet ref
 /// tracks the paste like any other: `=Sheet2!A1` pasted one row down reads
@@ -77,6 +94,7 @@ fn shift_expr(expr: Expr, dr: i64, dc: i64) -> Expr {
     match expr {
         Expr::CellRef(r) => shift_cell(r, dr, dc),
         Expr::Range(r) => shift_range(r, dr, dc),
+        Expr::AxisSpan(s) => shift_span(s, dr, dc),
         Expr::SheetRef { sheet, inner } => Expr::SheetRef {
             sheet,
             inner: Box::new(shift_expr(*inner, dr, dc)),
@@ -107,6 +125,13 @@ mod tests {
         // Pasted 2 rows down, 1 column right.
         assert_eq!(shift_formula("=A1", 2, 1), "=B3");
         assert_eq!(shift_formula("=SUM(A1:B2)", 2, 1), "=SUM(B3:C4)");
+    }
+
+    #[test]
+    fn whole_lines_shift_along_their_own_axis() {
+        assert_eq!(shift_formula("=SUM(A:B)", 2, 1), "=SUM(B:C)");
+        assert_eq!(shift_formula("=SUM(2:3)", 2, 1), "=SUM(4:5)");
+        assert_eq!(shift_formula("=SUM(A:A)", 0, -1), "=SUM(#REF!)");
     }
 
     #[test]

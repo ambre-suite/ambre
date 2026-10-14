@@ -20,17 +20,17 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2550 shipped, of which 77 partial and 299 loose. 836 unbuilt.**
+**3386 rows: 2551 shipped, of which 77 partial and 298 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 651 | 334 | 584 | 605 |  | 2174 |
+| `verified` | 651 | 336 | 584 | 605 |  | 2176 |
 | `partial` | 27 | 8 | 41 | 1 |  | 77 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 27 | 75 | 188 | 1 |  | 291 |
+| `untested` | 27 | 74 | 188 | 1 |  | 290 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` |  |  |  |  |  | 0 |
-| `unimplemented` | 204 | 56 | 28 | 109 | 439 | 836 |
+| `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -88,7 +88,7 @@
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 4 |  | 6 |  |
 | `ambre-spec-trame-engine.md` | 17 | 17 | 14 | 1 | 2 |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |  |
-| `ambre-spec-trame-formula-engine.md` | 44 | 43 | 40 |  | 3 | 1 |
+| `ambre-spec-trame-formula-engine.md` | 44 | 44 | 42 |  | 2 |  |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 7 | 2 | 9 | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |  |

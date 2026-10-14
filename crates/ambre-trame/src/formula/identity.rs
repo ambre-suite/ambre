@@ -18,16 +18,11 @@
 
 use crate::model::{SheetIndex, Uid};
 
+pub use super::types::LineAxis;
 use super::types::{
-    CellRef, CellValue, Expr, FormulaError, RangeDep, SheetQualifier, StoredAxis, StoredCell,
+    AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SheetQualifier, StoredAxis,
+    StoredCell,
 };
-
-/// Which axis a structural edit moved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LineAxis {
-    Row,
-    Col,
-}
 
 /// The structural edit a [`reanchor`] follows, in positions of the old layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,10 +40,11 @@ pub enum LineEdit {
 /// drops its qualifier, so the text renders as `#REF!` rather than `#s1!#REF!`.
 fn map_refs(expr: Expr, f: &impl Fn(Option<&SheetQualifier>, Expr) -> Expr) -> Expr {
     match expr {
-        node
-        @ (Expr::CellRef(_) | Expr::Range(_) | Expr::StoredCell(_) | Expr::StoredRange(..)) => {
-            f(None, node)
-        }
+        node @ (Expr::CellRef(_)
+        | Expr::Range(_)
+        | Expr::AxisSpan(_)
+        | Expr::StoredCell(_)
+        | Expr::StoredRange(..)) => f(None, node),
         Expr::SheetRef { sheet, inner } => match f(Some(&sheet), *inner) {
             lit @ Expr::Literal(_) => lit,
             inner => Expr::SheetRef {
@@ -81,14 +77,37 @@ fn corners(node: &Expr) -> Option<(StoredCell, StoredCell)> {
             StoredCell::at(CellRef::new(r.row_start, r.col_start)),
             StoredCell::at(CellRef::new(r.row_end, r.col_end)),
         )),
+        Expr::AxisSpan(s) => {
+            let corner = |pos| match s.axis {
+                LineAxis::Col => StoredCell {
+                    row: StoredAxis::Whole,
+                    col: StoredAxis::At(pos),
+                },
+                LineAxis::Row => StoredCell {
+                    row: StoredAxis::At(pos),
+                    col: StoredAxis::Whole,
+                },
+            };
+            Some((corner(s.start), corner(s.end)))
+        }
         Expr::StoredCell(c) => Some((*c, *c)),
         Expr::StoredRange(a, b) => Some((*a, *b)),
         _ => None,
     }
 }
 
-/// The node for a cell or a range in stored form, plain `A1` when no axis
-/// names a line.
+/// The range of whole lines two corners name, when neither names a line.
+fn span_of(start: StoredCell, end: StoredCell) -> Option<AxisSpan> {
+    use StoredAxis::{At, Whole};
+    match (start.row, start.col, end.row, end.col) {
+        (Whole, At(a), Whole, At(b)) => Some(AxisSpan::new(LineAxis::Col, a, b)),
+        (At(a), Whole, At(b), Whole) => Some(AxisSpan::new(LineAxis::Row, a, b)),
+        _ => None,
+    }
+}
+
+/// The node for a cell or a range in stored form, plain `A1` or `A:C` when no
+/// axis names a line.
 fn stored_node(start: StoredCell, end: StoredCell, single: bool) -> Expr {
     if single {
         return match start.as_position() {
@@ -103,7 +122,7 @@ fn stored_node(start: StoredCell, end: StoredCell, single: bool) -> Expr {
             a.col.min(b.col),
             a.col.max(b.col),
         )),
-        _ => Expr::StoredRange(start, end),
+        _ => span_of(start, end).map_or(Expr::StoredRange(start, end), Expr::AxisSpan),
     }
 }
 
@@ -150,11 +169,22 @@ impl Lines<'_> {
         self.uid(pos).map_or(StoredAxis::At(pos), StoredAxis::Line)
     }
 
-    /// The position of a stored axis, `None` for a line that is gone.
+    /// The position of a stored axis, `None` for a line that is gone. The
+    /// whole axis has no single position, so it is `None` too.
     fn position(&self, axis: StoredAxis) -> Option<u32> {
         match axis {
             StoredAxis::Line(uid) => self.pos(&uid),
             StoredAxis::At(pos) => Some(pos),
+            StoredAxis::Whole => None,
+        }
+    }
+
+    /// A stored axis in today's layout: a line becomes its position, and
+    /// `None` once it is gone. A position and the whole axis stay as they are.
+    fn place(&self, axis: StoredAxis) -> Option<StoredAxis> {
+        match axis {
+            StoredAxis::Line(uid) => self.pos(&uid).map(StoredAxis::At),
+            other => Some(other),
         }
     }
 }
@@ -216,20 +246,16 @@ pub fn unbind<'a>(
             index,
             axis: LineAxis::Col,
         };
-        let at = |c: StoredCell| Some(CellRef::new(rows.position(c.row)?, cols.position(c.col)?));
+        let at = |c: StoredCell| {
+            Some(StoredCell {
+                row: rows.place(c.row)?,
+                col: cols.place(c.col)?,
+            })
+        };
         let (Some(a), Some(b)) = (at(start), at(end)) else {
             return broken();
         };
-        if is_single(&node) {
-            Expr::CellRef(a)
-        } else {
-            Expr::Range(RangeDep::new(
-                a.row.min(b.row),
-                a.row.max(b.row),
-                a.col.min(b.col),
-                a.col.max(b.col),
-            ))
-        }
+        stored_node(a, b, is_single(&node))
     })
 }
 
@@ -282,7 +308,7 @@ pub fn reanchor(
         if is_single(&node) {
             let next = match get(&start, axis) {
                 // A line follows itself; one that is gone already reads `#REF!`.
-                StoredAxis::Line(_) => return node,
+                StoredAxis::Line(_) | StoredAxis::Whole => return node,
                 StoredAxis::At(pos) if pos < old.len() => old.bind(pos),
                 StoredAxis::At(pos) => match moved(pos, true) {
                     Some(to) => StoredAxis::At(to),
@@ -291,6 +317,10 @@ pub fn reanchor(
             };
             set(&mut start, axis, next);
             return stored_node(start, end, true);
+        }
+        // A range of whole lines on the edited axis keeps covering them all.
+        if get(&start, axis) == StoredAxis::Whole {
+            return node;
         }
         let (Some(a), Some(b)) = (
             old.position(get(&start, axis)),
@@ -357,6 +387,18 @@ mod tests {
         let text = stored("A1:A99", &index);
         assert!(text.contains(":{99|"), "{text}");
         assert_eq!(shown(&text, &index), "A1:A99");
+    }
+
+    #[test]
+    fn whole_lines_store_their_lines_and_read_back_as_typed() {
+        let index = index_with(5, 3);
+        let text = stored("SUM(A:B)+SUM(2:3)", &index);
+        assert!(text.starts_with("SUM({*|"), "{text}");
+        assert!(text.contains("|*}"), "{text}");
+        assert_eq!(render(&parse_formula(&text).unwrap()), text);
+        assert_eq!(shown(&text, &index), "SUM(A:B)+SUM(2:3)");
+        // Past the used range a whole line stays a position.
+        assert_eq!(stored("SUM(Z:Z)", &index), "SUM(Z:Z)");
     }
 
     #[test]

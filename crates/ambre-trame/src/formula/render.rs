@@ -14,8 +14,8 @@
 //! and Sheets reformat typed formulas the same way).
 
 use super::types::{
-    BinOpKind, CellRef, CellValue, Expr, RangeDep, SheetQualifier, StoredAxis, StoredCell,
-    UnaryOpKind, col_to_alpha,
+    AxisSpan, BinOpKind, CellRef, CellValue, Expr, LineAxis, RangeDep, SheetQualifier, StoredAxis,
+    StoredCell, UnaryOpKind, col_to_alpha,
 };
 use crate::model::Uid;
 
@@ -139,6 +139,7 @@ fn render_node(expr: &Expr) -> String {
         Expr::Literal(v) => render_literal(v),
         Expr::CellRef(r) => render_cell(r),
         Expr::Range(r) => render_range(r),
+        Expr::AxisSpan(s) => render_span(s),
         Expr::StoredCell(c) => render_stored(c),
         Expr::StoredRange(start, end) => {
             format!("{}:{}", render_stored(start), render_stored(end))
@@ -222,6 +223,14 @@ fn render_range(r: &RangeDep) -> String {
     )
 }
 
+/// A range of whole lines as typed: `A:C` or `2:5`.
+fn render_span(s: &AxisSpan) -> String {
+    match s.axis {
+        LineAxis::Col => format!("{}:{}", col_to_alpha(s.start), col_to_alpha(s.end)),
+        LineAxis::Row => format!("{}:{}", u64::from(s.start) + 1, u64::from(s.end) + 1),
+    }
+}
+
 /// A stored cell as `{row|col}`, each axis a line uid or a position. A cell with
 /// no line on either axis is a plain `A1`. So a reference past the used range is
 /// stored as the user typed it.
@@ -232,10 +241,12 @@ fn render_stored(c: &StoredCell) -> String {
     let row = match c.row {
         StoredAxis::Line(uid) => render_uid(uid),
         StoredAxis::At(row) => (u64::from(row) + 1).to_string(),
+        StoredAxis::Whole => "*".to_owned(),
     };
     let col = match c.col {
         StoredAxis::Line(uid) => render_uid(uid),
         StoredAxis::At(col) => col_to_alpha(col),
+        StoredAxis::Whole => "*".to_owned(),
     };
     format!("{{{row}|{col}}}")
 }
@@ -320,6 +331,15 @@ mod tests {
             roundtrip("IF(A1>0,\"yes\",\"no\")"),
             "IF(A1>0,\"yes\",\"no\")"
         );
+    }
+
+    #[test]
+    fn whole_lines_render_as_typed() {
+        assert_eq!(roundtrip("SUM(A:C)"), "SUM(A:C)");
+        assert_eq!(roundtrip("SUM(C:A)"), "SUM(A:C)");
+        assert_eq!(roundtrip("SUM(2:5)+1"), "SUM(2:5)+1");
+        assert_eq!(roundtrip("Sheet2!AA:AB"), "Sheet2!AA:AB");
+        assert_eq!(roundtrip("1:1*2"), "1:1*2");
     }
 
     #[test]

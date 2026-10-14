@@ -47,8 +47,7 @@ impl fmt::Display for CellRef {
 /// Describes a rectangular range of cells.
 ///
 /// Bounds are inclusive (`row_start..=row_end`, `col_start..=col_end`).
-/// MVP: positional only. Phase 1+ adds `RangeEndpoint::Specific(ListItemId)`
-/// and `EntireAxis` for whole-column/whole-row ranges (`trame-formula-engine`).
+/// A range of whole lines is an [`AxisSpan`] instead.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RangeDep {
     /// Local sheet index (see [`CellRef::sheet`]). Defaults to 0 via
@@ -113,6 +112,38 @@ impl RangeDep {
     /// Returns `true` when the range spans zero cells.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+/// Which axis of a sheet: its rows or its columns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LineAxis {
+    Row,
+    Col,
+}
+
+/// A range of whole lines: `A:C` takes three whole columns, `2:5` four whole
+/// rows (`TRAME-048`). Bounds are inclusive and ordered. On the other axis the
+/// range covers the used part of the sheet when it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AxisSpan {
+    /// Local sheet index (see [`CellRef::sheet`]).
+    pub sheet: u16,
+    /// The axis whose lines the range takes whole.
+    pub axis: LineAxis,
+    pub start: u32,
+    pub end: u32,
+}
+
+impl AxisSpan {
+    /// The lines between `a` and `b` on the default sheet, in either order.
+    pub fn new(axis: LineAxis, a: u32, b: u32) -> Self {
+        Self {
+            sheet: 0,
+            axis,
+            start: a.min(b),
+            end: a.max(b),
+        }
     }
 }
 
@@ -189,8 +220,8 @@ pub enum RangeEndpoint {
     /// A bounded endpoint, stable via the row/column [`AxisId`]. `#REF!` if a
     /// bound `Uid` is deleted.
     Specific(AxisId),
-    /// An unbounded endpoint: entire column (`A:A`) or entire row (`1:1`).
-    /// Reserved for a later milestone; the MVP parser never emits it.
+    /// An unbounded endpoint: entire column (`A:A`) or entire row (`1:1`). It
+    /// reads the used part of the axis (`TRAME-048`).
     EntireAxis,
 }
 
@@ -485,6 +516,9 @@ pub enum StoredAxis {
     Line(Uid),
     /// A zero-based position with no line behind it when the formula was stored.
     At(u32),
+    /// Every line of the axis, written `*`: the far axis of a whole-column or
+    /// whole-row range (`TRAME-048`).
+    Whole,
 }
 
 /// A cell reference in stored form: one [`StoredAxis`] per axis. Written
@@ -536,6 +570,8 @@ pub enum Expr {
     /// A range whose two corners are named by their lines. A corner may sit
     /// above or left of the other: the range is the rectangle between them.
     StoredRange(StoredCell, StoredCell),
+    /// A range of whole columns or whole rows, `A:C` or `2:5` (`TRAME-048`).
+    AxisSpan(AxisSpan),
     /// A sheet-qualified reference `Sheet2!A1` / `'My Sheet'!A1:B2` /
     /// `#s0_a1b2!A1`. `inner` is always a [`Expr::CellRef`] or [`Expr::Range`];
     /// the resolver stamps the resolved sheet index onto it.

@@ -17,7 +17,8 @@ use std::collections::HashMap;
 use crate::model::SheetIndex;
 
 use super::types::{
-    AxisId, CellBytecode, CellId, CellRef, Expr, Op, RangeDep, RangeEndpoint, RangeId,
+    AxisId, AxisSpan, CellBytecode, CellId, CellRef, Expr, LineAxis, Op, RangeDep, RangeEndpoint,
+    RangeId,
 };
 
 /// Per-sheet indices, keyed by the engine's local sheet index (`u16`), used to
@@ -69,6 +70,28 @@ fn resolve_range(r: &RangeDep, _indices: &SheetIndices) -> RangeId {
     }
 }
 
+/// Compile a range of whole lines (`TRAME-048`). Its own axis stays positional,
+/// as a range does. The other axis is [`RangeEndpoint::EntireAxis`], which
+/// reads the used part of the sheet when the range is evaluated.
+fn resolve_span(s: &AxisSpan) -> RangeId {
+    let at = |p: u32| RangeEndpoint::Specific(AxisId::Virtual(p));
+    let (lines, whole) = (
+        (at(s.start), at(s.end)),
+        (RangeEndpoint::EntireAxis, RangeEndpoint::EntireAxis),
+    );
+    let (rows, cols) = match s.axis {
+        LineAxis::Col => (whole, lines),
+        LineAxis::Row => (lines, whole),
+    };
+    RangeId {
+        sheet: s.sheet,
+        row_start: rows.0,
+        row_end: rows.1,
+        col_start: cols.0,
+        col_end: cols.1,
+    }
+}
+
 /// Bind a positional axis coordinate: the materialized `Uid` if present (a
 /// reference inside the used range, follows the data), else a virtual position.
 fn bind(uid: Option<crate::model::Uid>, pos: u32) -> AxisId {
@@ -112,6 +135,11 @@ fn compile_into(
         }
         Expr::Range(r) => {
             let id = resolve_range(r, indices);
+            range_deps.push(id.clone());
+            ops.push(Op::EvalRange(id));
+        }
+        Expr::AxisSpan(s) => {
+            let id = resolve_span(s);
             range_deps.push(id.clone());
             ops.push(Op::EvalRange(id));
         }
