@@ -213,7 +213,11 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Stable engine sheet indexes | -- | switching a tab no longer resets the engine |
 | `[x]` References stored by identity | MVP | a formula stores the rows and columns it names, so an insert widens a range, a delete breaks a reference into `#REF!`, and a reseed or a concurrent edit keeps each one on its cells. Done when `TRAME-008`, `TRAME-171` and `TRAME-226` to `TRAME-229` read `verified` |
 | `[ ]` A recompute bounded by what changed | -- | the cycle check and the topological walk cover the cells that changed, not the whole graph |
-| `[ ]` Engine completion | V1 | whole-column ranges, reference-preserving functions, the advanced function set, convergent deletion of the last sheet |
+| `[ ]` The last sheet survives concurrent deletes | MVP | two peers deleting the last two sheets at once still leave a workbook with one sheet, on every screen. Done when `TRAME-077` and `TRAME-022` read `verified` |
+| `[ ]` Whole-column and whole-row ranges | V1 | `A:A` and `1:1` in a formula, over the used part of the axis. Done when `TRAME-048` reads `verified` |
+| `[ ]` Functions that answer a reference | V1 | a function given a range answers a reference into it, and a lookup names its result column instead of counting it. Done when `TRAME-057` and `TRAME-058` read `verified` |
+| `[ ]` User-defined functions | V1 | a user names a formula of their own and calls it. Done when `TRAME-059` reads `verified` |
+| `[ ]` Dynamic arrays and spill | V1 | a formula answering many values fills the cells beside it, refuses a blocked cell and clears what it no longer covers. Done when `TRAME-060`, `TRAME-206` and `TRAME-207` read `verified` |
 | `[ ]` Data tools | V1 | personal filter views, conditional formatting, data validation, and a total that skips filtered rows |
 | `[ ]` Grid surface | V1 | frozen rows and columns, function autocompletion, live peer cursors, an auto-fit that measures the whole column instead of the viewport cache |
 | `[ ]` xlsx interop | V1 | Excel import and export: values, formulas, styles, merges, column widths |

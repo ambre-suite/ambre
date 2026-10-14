@@ -22,13 +22,13 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none | unheld -- the local guard is a refusal, held by `TRAME-163`, and two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077`; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none | unheld -- the local guard is a refusal, held by `TRAME-163`, and two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077`; lands with the `The last sheet survives concurrent deletes` Story (`ambre-roadmap.md` E6) | untested |
 | `TRAME-072` | `INV` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`; `ambre_trame::logic::tests::group1::multi_sheet_isolation_and_name_lookup` | none | verified |
 | `TRAME-078` | `INV` | Two sheets MUST NOT carry the same name. | this spec section 6 | `ambre_trame::logic::tests::group3::created_sheet_never_repeats_a_name`; `ambre_trame::logic::tests::group3::rename_to_a_taken_name_is_refused`; `ambre_trame::logic::tests::group3::concurrent_duplicate_names_read_apart` | none | verified |
 | `TRAME-079` | `OBS` | The tab strip MUST show every sheet of the document, in the document's order. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs`; `::first_scroll_viewport_hydrates_sheet_list_once` -- the order the Logic thread publishes; `ambre_trame::tests::chrome_ui::sheet_tabs_render_active_and_emit_intents` -- the strip drawing one tab per entry in that order, what joins the two halves being the launcher mirroring the list into the strip's signals | none | verified |
 | `TRAME-071` | `CONC` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | `ambre_trame::logic::tests::group11::two_peers_adding_a_sheet_keep_both` | none | verified |
 | `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | `ambre_trame::logic::convergence_tests::concurrent_tab_moves_converge_on_one_order` | none | verified |
-| `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built | unbuilt -- lands with the `The last sheet survives concurrent deletes` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Add a sheet
 

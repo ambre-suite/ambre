@@ -43,9 +43,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-055` | `POST` | An approximate lookup MUST answer the largest key at or below the target. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx`; `::index_and_match` | none | verified |
 | `TRAME-201` | `POST` | A lookup that omits its match flag MUST be read as approximate. | this spec section 3 | none | unheld -- both lookup tests pass the flag, so the default is the one branch nothing drives, and it is the dangerous one: `=VLOOKUP(4;A1:B3;2)` answers the row of key 3 rather than `#N/A`; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-202` | `POST` | An exact lookup MUST match a text key whatever its case. | this spec section 3 | none | unheld -- `values_equal_ci` lower-cases both sides, no test writes a key in another case, and no section of this document says a lookup is case-blind; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-057` | `POST` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-058` | `POST` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-059` | `POST` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-057` | `POST` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-058` | `POST` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-059` | `POST` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built | unbuilt -- lands with the `User-defined functions` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-061` | `POST` | A total MUST be able to skip the rows a filter hides. | this spec section 5 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-203` | `FRAME` | A function MUST NOT read or write the document. | this spec section 2 | type-level -- `call_builtin(name, &[CellValue], FnCtx)` receives no document, no cell cache and no index, so a body has nothing to reach for | none | verified |
 | `TRAME-204` | `FRAME` | A call MUST NOT consume a value that is not one of its arguments. | this spec section 2 | `ambre_trame::formula::prop_tests::compile_emits_balanced_bytecode` -- its generator emits `FnCall` nodes with 0 to 3 arguments and its stack simulation rejects any `CallFn` reading below its own operands | none | verified |
@@ -56,9 +56,9 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-060` | `POST` | A formula answering many values MUST fill the cells beside it. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-206` | `FAIL` | A spill that meets a cell it cannot have MUST refuse, and MUST say which cell. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-207` | `FRAME` | A spill that shrinks MUST NOT leave a value in a cell it no longer covers. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-060` | `POST` | A formula answering many values MUST fill the cells beside it. | this spec section 5 | not built | unbuilt -- lands with the `Dynamic arrays and spill` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-206` | `FAIL` | A spill that meets a cell it cannot have MUST refuse, and MUST say which cell. | this spec section 5 | not built | unbuilt -- lands with the `Dynamic arrays and spill` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-207` | `FRAME` | A spill that shrinks MUST NOT leave a value in a cell it no longer covers. | this spec section 5 | not built | unbuilt -- lands with the `Dynamic arrays and spill` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** none of its own: a call is one node of the graph the engine recomputes. It lands
   under the 10k-cell DAG recompute of `ambre-spec-budgets.md section 1`, which
