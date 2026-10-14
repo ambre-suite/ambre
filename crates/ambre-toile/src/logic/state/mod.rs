@@ -146,6 +146,9 @@ pub struct ToileState {
     peer: u64,
     /// Last viewport the UI reported; drives culling.
     viewport: Viewport,
+    /// How many viewport requests this state applied. Stamped on every frame
+    /// it derives, so the view can drop a stale one (`BUS-017`).
+    viewport_version: u64,
     /// Version vector already exported to Sync; deltas are `export(Updates{from})`.
     exported_vv: VersionVector,
     /// Local-only undo/redo: undoes only this peer's operations, one
@@ -371,6 +374,7 @@ impl ToileState {
             counter: 0,
             peer,
             viewport: Viewport::default(),
+            viewport_version: 0,
             exported_vv: VersionVector::default(),
             undo,
             my_user_id: None,
@@ -677,6 +681,7 @@ impl ToileState {
             }
             ToileCommand::SetViewport(vp) => {
                 self.viewport = vp;
+                self.viewport_version += 1;
                 ToileOutcome::display_only(vec![self.viewport_event()])
             }
             ToileCommand::Presence { payload, now_ms } => self.broadcast_presence(&payload, now_ms),

@@ -387,3 +387,37 @@ fn scroll_requests_every_narrow_column_on_screen() {
         "{row_end} < {last_row_on_screen}"
     );
 }
+
+/// `BUS-017`: an answer older than the one the grid holds is dropped, so the
+/// cell keeps the text of the newer answer.
+#[test]
+fn a_stale_viewport_answer_is_dropped_by_its_version() {
+    let mut state = TrameUiState::new(800.0, 600.0);
+    let answer = |version, text: &str| TrameEvent::ViewportData {
+        version,
+        row_start: 0,
+        col_start: 0,
+        col_widths: vec![],
+        row_heights: vec![],
+        cells: vec![DisplayCell {
+            row: 0,
+            col: 0,
+            text: text.to_owned(),
+            ..Default::default()
+        }],
+    };
+    state.on_viewport_data(answer(5, "new"));
+    state.on_viewport_data(answer(3, "old"));
+    let text = |state: &TrameUiState| state.cell_cache.get(&(0, 0)).map(|c| c.text.clone());
+    assert_eq!(
+        text(&state).as_deref(),
+        Some("new"),
+        "the older answer is dropped"
+    );
+    state.on_viewport_data(answer(5, "same"));
+    assert_eq!(
+        text(&state).as_deref(),
+        Some("same"),
+        "the same version lands"
+    );
+}

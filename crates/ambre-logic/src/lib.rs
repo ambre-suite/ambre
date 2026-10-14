@@ -917,7 +917,13 @@ pub fn run(
 ) {
     tracing::info!("Ambre Logic thread starting");
     let Some(waiter) = bell.bind() else {
-        tracing::error!("Ambre Logic thread: the doorbell is bound to another thread");
+        // The thread cannot wait for work, so it ends here. The UI thread
+        // hears why before the channels close (`ARCH-009`).
+        let message = "the Logic doorbell is bound to another thread";
+        tracing::error!("Ambre Logic thread: {message}");
+        let _ = to_ui.try_send(UiEvent::FatalError {
+            message: message.to_owned(),
+        });
         return;
     };
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
@@ -951,6 +957,28 @@ pub fn run(
 #[cfg(test)]
 fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
     ambre_bus::conduit::to_main(4096, &Doorbell::new())
+}
+
+/// `ARCH-009`: a Logic thread that cannot bind its doorbell says so to the
+/// UI thread before it returns.
+#[cfg(test)]
+#[test]
+fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
+    let bell = Doorbell::new();
+    let taken = bell.clone();
+    let bound = std::thread::spawn(move || taken.bind().is_some()).join();
+    assert!(matches!(bound, Ok(true)), "another thread holds the bell");
+    let (_from_ui_tx, from_ui) = ambre_bus::conduit::local(4);
+    let (to_ui, ui) = test_link();
+    let (to_sync, _sync) = test_link();
+    let (_from_sync_tx, from_sync) = ambre_bus::conduit::local(4);
+    let (to_persist, _persist) = test_link();
+    run(bell, from_ui, to_ui, to_sync, from_sync, to_persist);
+    let told: Vec<_> = ui.try_iter().collect();
+    assert!(
+        matches!(told.as_slice(), [UiEvent::FatalError { .. }]),
+        "one fatal event, then the end: {told:?}"
+    );
 }
 
 #[cfg(test)]

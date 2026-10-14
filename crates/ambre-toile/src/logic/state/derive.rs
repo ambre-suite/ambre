@@ -97,6 +97,7 @@ impl ToileState {
             }
         }
         DisplayViewport {
+            version: self.viewport_version,
             viewport: vp,
             reactions: self.reaction_tallies(&visible),
             pins: self.comment_pins(&visible, &vp),

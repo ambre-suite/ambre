@@ -44,14 +44,18 @@ def scratch(tmp: str) -> Path:
         f"{cb.LAUNCHER}/lib.rs",
         "// Fed by `TrameEvent::SheetList` (`ARCH-018`).\n"
         "fn relay(ev: &UiEvent) { trame_relay.absorb(ev); }\n"
-        "fn keys() { register(trame_chrome::COMMANDS); }\n",
+        "fn keys() { register(trame_chrome::COMMANDS); }\n"
+        "fn boot() { spawn(move || ambre_logic::run(bell)); }\n"
+        "fn pre() { start.drain(&logic_to_sync_rx, post); }\n",
     )
+    write(root, cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, &mut pre_frame, render); }\n")
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
     write(root, f"{cb.RENDERER}/mod.rs", "fn quad(c: Color) -> [f32; 4] { c.components }\n")
     write(
         root,
         "crates/ambre-sync/Cargo.toml",
-        '[dependencies]\ngloo-net = { workspace = true }\n\n[lints]\nworkspace = true\n',
+        '[lib]\ncrate-type = ["cdylib", "rlib"]\n\n[dependencies]\ngloo-net = { workspace = true }\n'
+        'ambre-bus = { path = "../ambre-bus" }\n\n[lints]\nworkspace = true\n',
     )
     write(
         root,
@@ -75,6 +79,16 @@ def scratch(tmp: str) -> Path:
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
+    write(
+        root,
+        cb.PAGE,
+        '<link data-trunk rel="rust" data-wasm-opt="0" />\n'
+        '<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"\n      data-loader-shim="true" />\n',
+    )
+    write(root, cb.WORKER_SPAWNER, "fn spawn() { web_sys::Worker::new(URL); }\n")
+    write(root, cb.LOGIC_MANIFEST, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n\n[dev-dependencies]\nwgpu = "1"\n')
+    write(root, "crates/ambre-bus/Cargo.toml", '[dependencies]\nambre-core = { path = "../ambre-core" }\n')
+    write(root, f"{cb.PROTOCOL}/lib.rs", "pub struct Update {\n    pub seq: u64,\n}\n")
     return root
 
 
@@ -103,6 +117,10 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_instances(errors)
+            cb.check_thread_reach(errors)
+            cb.check_worker_messages(errors)
+            cb.check_engine_and_relay(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -536,6 +554,68 @@ class CrateBoundaries(unittest.TestCase):
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
+
+    def test_a_third_artefact_on_the_page_is_refused(self):
+        page = '<link data-trunk rel="rust" />\n<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker" />\n'
+        for text in (page + '<link data-trunk rel="rust" href="../macro/Cargo.toml" />\n', '<link data-trunk rel="rust" />\n'):
+            errors = self.breach(cb.PAGE, text)
+            self.assertTrue(any("wasm artefacts" in e for e in errors), (text, errors))
+
+    def test_a_crate_depending_on_the_worker_is_refused(self):
+        errors = self.breach("crates/ambre-app/Cargo.toml", '[dependencies]\nambre-sync = { path = "../ambre-sync" }\n')
+        self.assertTrue(any("merges it into a second instance" in e for e in errors), errors)
+
+    def test_a_shared_worker_or_a_second_spawn_is_refused(self):
+        for line, words in (
+            ("fn s() { web_sys::SharedWorker::new(URL); }\n", "two tabs would share"),
+            ("fn s() { nav.service_worker().register(URL); }\n", "two tabs would share"),
+            ("fn s() { web_sys::Worker::new(URL); }\n", "spawned outside the launcher"),
+        ):
+            errors = self.breach("crates/ambre-app/src/shell/extra.rs", line)
+            self.assertTrue(any(words in e for e in errors), (line, errors))
+
+    def test_an_unsandboxed_frame_is_refused_and_a_test_frame_stays_free(self):
+        frame = 'fn f() { doc.create_element("iframe"); }\n'
+        errors = self.breach("crates/ambre-app/src/host/extra.rs", frame)
+        self.assertTrue(any("never sandboxes it" in e for e in errors), errors)
+        free = 'use wasm_bindgen_test::wasm_bindgen_test;\n' + frame
+        self.assertEqual(self.breach("crates/ambre-app/src/shell/narrow.rs", free), [])
+        sandboxed = frame + 'fn g() { f.set_attribute("sandbox", S); }\n'
+        self.assertEqual(self.breach("crates/ambre-app/src/host/extra.rs", sandboxed), [])
+
+    def test_the_logic_runtime_declaring_the_toolkit_is_refused(self):
+        errors = self.breach(cb.LOGIC_MANIFEST, '[dependencies]\nleptos = { workspace = true }\n')
+        self.assertTrue(any("declares `leptos`" in e for e in errors), errors)
+
+    def test_the_worker_reaching_the_canvas_through_a_crate_is_refused(self):
+        text = '[dependencies]\nambre-core = { path = "../ambre-core" }\nambre-canvas = { path = "../ambre-canvas" }\n'
+        errors = self.breach("crates/ambre-bus/Cargo.toml", text)
+        self.assertTrue(any("reaches `ambre-canvas`" in e for e in errors), errors)
+
+    def test_a_redeclared_wire_type_is_refused(self):
+        errors = self.breach("crates/ambre-server/src/ws.rs", "pub struct Update {\n    seq: u64,\n}\n")
+        self.assertTrue(any("redeclares the wire type `Update`" in e for e in errors), errors)
+
+    def test_a_worker_id_or_an_app_message_is_refused(self):
+        for line in ("fn f() { let id = RequestId::next(); }\n", "fn f(c: TrameCommand) {}\n"):
+            errors = self.breach(f"{cb.WORKER}/extra.rs", line)
+            self.assertTrue(any("allocates an id or names an app message" in e for e in errors), (line, errors))
+
+    def test_a_worker_test_allocating_an_id_stays_free(self):
+        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { RequestId::next(); }\n}\n"
+        self.assertEqual(self.breach(f"{cb.WORKER}/extra.rs", text), [])
+
+    def test_a_second_engine_start_is_refused(self):
+        errors = self.breach(f"{cb.LAUNCHER}/again.rs", "fn again() { ambre_logic::run(bell); }\n")
+        self.assertTrue(any("starts the Logic runtime 2 times" in e for e in errors), errors)
+
+    def test_a_frame_that_draws_without_the_relay_is_refused(self):
+        errors = self.breach(cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, || {}, render); }\n")
+        self.assertTrue(any("does not run `pre_frame`" in e for e in errors), errors)
+
+    def test_a_relay_that_drains_no_sync_queue_is_refused(self):
+        errors = self.breach(cb.APP_LIB, "fn boot() { ambre_logic::run(bell); }\n")
+        self.assertTrue(any("does not drain the Logic to Sync queue" in e for e in errors), errors)
 
     def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
         import tempfile

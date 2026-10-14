@@ -41,6 +41,36 @@ impl Route {
     }
 }
 
+/// What the per-frame route poll does on a route change. Each field acts on
+/// the live engine: a document closes, a document opens, the canvas shows a
+/// document or freezes. No field builds a second engine, so no route change
+/// ends the first (`ARCH-010`, `ARCH-016`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    /// The document the Logic thread closes.
+    pub close: Option<DocumentId>,
+    /// The document the Logic thread opens.
+    pub open: Option<(DocType, DocumentId)>,
+    /// The document the canvas shows, or `None` to freeze it at home.
+    pub show: Option<DocumentId>,
+}
+
+/// The step from the previous route to the current one, or `None` when the
+/// route did not change. A move inside one document opens nothing.
+pub fn step(prev: Option<&Route>, cur: &Route) -> Option<Step> {
+    if prev == Some(cur) {
+        return None;
+    }
+    let prev_doc = prev.and_then(Route::doc);
+    let cur_doc = cur.doc();
+    let moved = prev_doc.map(|(_, id)| id) != cur_doc.map(|(_, id)| id);
+    Some(Step {
+        close: prev_doc.filter(|_| moved).map(|(_, id)| id),
+        open: cur_doc.filter(|_| moved),
+        show: cur_doc.map(|(_, id)| id),
+    })
+}
+
 /// URL slug for a document type (lowercased name). Inverse of [`slug_to_type`].
 fn type_slug(doc_type: DocType) -> &'static str {
     match doc_type {
@@ -240,6 +270,49 @@ mod tests {
     #[wasm_bindgen_test]
     fn landing_route_has_no_doc() {
         assert_eq!(Route::Landing.doc(), None);
+    }
+
+    #[wasm_bindgen_test]
+    fn a_route_walk_reuses_the_one_engine() {
+        // `ARCH-010`, `ARCH-016`: every route change is a close, an open and a
+        // show on the live engine. A second engine has no step to come from.
+        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let doc = |document_id| Route::Doc {
+            doc_type: DocType::Trame,
+            document_id,
+        };
+        let walk = [
+            Route::Landing,
+            doc(a),
+            doc(b),
+            doc(b),
+            Route::Landing,
+            doc(a),
+        ];
+        let mut prev: Option<&Route> = None;
+        let mut steps = Vec::new();
+        for cur in &walk {
+            steps.push(step(prev, cur));
+            prev = Some(cur);
+        }
+        let s = |close, open: Option<DocumentId>, show| {
+            Some(Step {
+                close,
+                open: open.map(|id| (DocType::Trame, id)),
+                show,
+            })
+        };
+        assert_eq!(
+            steps,
+            vec![
+                s(None, None, None),
+                s(None, Some(a), Some(a)),
+                s(Some(a), Some(b), Some(b)),
+                None,
+                s(Some(b), None, None),
+                s(None, Some(a), Some(a)),
+            ]
+        );
     }
 
     #[wasm_bindgen_test]

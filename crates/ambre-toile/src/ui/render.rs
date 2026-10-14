@@ -1200,6 +1200,7 @@ mod tests {
     #[test]
     fn content_walk_balances_transform_and_paints_each_node() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1250,6 +1251,7 @@ mod tests {
     #[test]
     fn content_walk_applies_animation_override() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1352,6 +1354,7 @@ mod tests {
     fn sticky_paints_a_colored_card() {
         let fill = 0xFFFE_F08A; // sticky yellow
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1459,6 +1462,7 @@ mod tests {
     #[test]
     fn text_element_paints_no_card() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1533,6 +1537,7 @@ mod tests {
     fn image_paints_pixels_when_resolved_else_placeholder() {
         let bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1591,6 +1596,7 @@ mod tests {
     #[test]
     fn overlay_draws_box_and_handles_for_single_selection() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1629,6 +1635,7 @@ mod tests {
     fn overlay_draws_no_corner_square_for_a_selected_group() {
         let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1668,6 +1675,7 @@ mod tests {
     #[test]
     fn overlay_paints_no_editing_surface_while_presenting() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1703,6 +1711,7 @@ mod tests {
         // The element is committed at (0,0)-(50,50) but a live resize override
         // stretches it to (0,0)-(90,70); the selection box must track the preview.
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1756,6 +1765,7 @@ mod tests {
         path.move_to((0.0, 0.0));
         path.line_to((100.0, 0.0));
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1819,6 +1829,7 @@ mod tests {
             ));
         }
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1851,6 +1862,7 @@ mod tests {
     #[test]
     fn a_vanished_arrow_paints_nothing() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1877,6 +1889,7 @@ mod tests {
     #[test]
     fn overlay_outlines_visible_find_hits() {
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1933,6 +1946,7 @@ mod tests {
     fn overlay_rotates_box_and_handles_for_a_rotated_element() {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1998,6 +2012,7 @@ mod tests {
     fn rotated_sticky_body_rotates_its_glyphs() {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

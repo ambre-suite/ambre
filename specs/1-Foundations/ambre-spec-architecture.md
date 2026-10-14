@@ -24,14 +24,14 @@ prefix is `ARCH`.
 | `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | crate-graph -- a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | none | verified |
 | `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | README pillar "Zero-Knowledge"; `ambre-spec-zero-knowledge.md`, `ZK-002` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash, so every other crate fails the CI job; `ambre_logic::dispatch::tests::a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui` -- the one Logic gesture that needs a seal hands it to the Sync worker | none | verified |
 | `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | target-build -- the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | none | verified |
-| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. A macro sandbox is a frame outside both, and it holds none of their memory. | this spec section 2; `1-Foundations/ambre-spec-macros.md section 3` | none | unheld -- the page loads two artefacts, and nothing refuses a third or a merge of the two; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none | unheld -- `ambre-logic` declares neither, and no capability ban refuses the line that would add one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. A macro sandbox is a frame outside both, and it holds none of their memory. | this spec section 2; `1-Foundations/ambre-spec-macros.md section 3` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a page that loads other than two Rust artefacts, an `ambre-sync` that builds no `cdylib`, a crate that depends on `ambre-sync`, a worker spawned outside `platform.rs` and a created frame with no `sandbox` | none | verified |
+| `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-logic/Cargo.toml` that declares `ambre-canvas`, `wgpu`, `leptos` or another render or toolkit crate; cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
 | `ARCH-005` | `INV` | Every network call of the two instances MUST leave from the Sync worker. A macro sandbox calls on its own, held by the browser to the domains its user approved. | this spec section 2; `ZK-001`; `1-Foundations/ambre-spec-macros.md section 3` (`MACRO-010`) | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a transport crate declared, or a network call written, outside the worker and the relay. The launcher's two reads of `UI-THREAD-004` are its stated exception | none | verified |
-| `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none | unheld -- both crates depend on `ambre-protocol` and neither redeclares a type, and nothing refuses a local copy; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync queue once per frame, before it draws. | this spec section 2 | none | unheld -- the relay runs in the per-frame hook, ahead of the gate that can freeze the render, and no test drives a frame; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip` -- the parsing the per-frame route poll rests on | partial -- nothing counts the constructions, so a second engine on the same session reads as the first; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
-| `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the one route change that is allowed to end it | partial -- nothing holds the lifetime across an ordinary route change; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
-| `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a type of `ambre-protocol` redeclared in `ambre-sync` or `ambre-server` | none | verified |
+| `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync queue once per frame, before it draws. | this spec section 2 | `ambre_canvas::frame::tests::each_tick_relays_once_before_it_draws`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a frame loop that does not run `pre_frame` as the relay of `drive_frame`, and a `pre_frame` that does not drain `logic_to_sync_rx` | none | verified |
+| `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a launcher that starts the Logic runtime other than once | none | verified |
+| `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::a_route_walk_reuses_the_one_engine` -- each route change is a close, an open and a show; `::cross_kind_open_needs_reload` -- the one change allowed to end it | none | verified |
+| `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line that names a `SharedWorker` or a service worker, and a worker spawned outside `platform.rs` | none | verified |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a queue disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a queue, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a line of `ambre-app` naming a variant of an application's command or event, or one of its command ids | none | verified |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound queues, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
@@ -51,8 +51,8 @@ that and a page that looks alive and answers nothing.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none | unheld -- each view latches an inert state when it receives one, and nothing drives the path; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none | unheld -- the panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it, and no test drives either; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | `ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event`; `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view` | none | verified |
+| `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view`; `::a_vanished_logic_thread_latches_the_page` -- the page's fatal latch is set; `ambre_canvas::frame::tests::a_fatal_process_paints_its_screen_once_then_idles` -- the terminal screen | none | verified |
 | `ARCH-029` | `FAIL` | A reader fed by the relay or by a user's file MUST refuse a malformed input as a typed error, never a panic. | this spec section 2; `SRV-100` | cargo-fuzz -- the four targets under `fuzz/fuzz_targets/`, run by the CI `fuzz` job | partial -- the sealed path and the Trame and Toile readers have no target; lands with the `Fuzzing the remaining readers` Story (`ambre-roadmap.md` E9) | partial |
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -82,11 +82,10 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 19 `verified`, 3 `partial`, 10 `untested`. The build refuses a cycle, a
-  misplaced cryptographic dependency, a missing atomics flag and a lock on a client queue. It
-  refuses application logic in the launcher too. Host tests hold the Logic loop's pass, its
-  unfinished work, the wake, the full queue and the disconnection of each queue. The rest is held by
-  the code alone.
+* **Verification.** 28 `verified`, 1 `partial`, 3 `untested`. The build refuses a cycle, a misplaced
+  cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
+  application logic in the launcher too. Host tests hold the Logic loop's pass, its unfinished work,
+  the wake, the full queue and the disconnection of each queue. The rest is held by the code alone.
 
 ---
 
@@ -274,18 +273,17 @@ The stack has no control of its own. What a user meets is what it guarantees the
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing refuses a third instance, or a merge of the two.** `ARCH-001` describes the shape the
-  build happens to have.
-* **The failure path has never been driven.** The panic hook, the page hook and the terminal screen
-  are each wired, and no test crosses them. The one path a user meets on the worst day is the one
-  path nothing exercises.
+* **The panic hook is driven by no test.** A fatal event and a dropped channel reach the page latch
+  in a host test. The hook that turns a panic into a fatal message runs only in a browser, and no
+  test panics a thread there.
 * **The relay cadence is unmeasured.** `ARCH-007` states one drain per frame ahead of the draw, and
   the budget rows for both hops read that no measurement exists.
-* **Two tabs are never tested together.** `ARCH-011` rests on the convergence belt of each
+* **Two tabs are never tested together.** `ARCH-013` rests on the convergence belt of each
   application, which drives two peers in one process and not two tabs.
-* **The route poll runs every frame and is owned by nothing.** It drives the document open and
-  close, and the render gate. It exists because the interface framework requires a subtree that the
-  engine handles cannot enter.
+* **The route poll runs every frame inside the launcher.** Its decision is `route::step`, which a
+  test walks. The effects it applies, the document open and close and the render gate, run only in
+  a browser. It exists because the interface framework requires a subtree that the engine handles
+  cannot enter.
 * **Three files at the workspace root cite a document the corpus does not have.** The build
   configuration, the workspace manifest and the toolchain file each name a migration note that was
   deleted. No resolver opens a file outside the corpus, the crates and the rules.

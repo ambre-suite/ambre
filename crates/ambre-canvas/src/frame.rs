@@ -259,6 +259,26 @@ mod tests {
         assert_eq!(framed.get(), 2, "a release takes effect on the next tick");
     }
 
+    /// Each tick drains the Logic to Sync queue once, before the draw
+    /// (`ARCH-007`). The relay is the host's drain, so its order is the
+    /// drain's order.
+    #[test]
+    fn each_tick_relays_once_before_it_draws() {
+        let control = RafControl::new();
+        let order = std::cell::RefCell::new(Vec::new());
+        for _ in 0..3 {
+            drive_frame(
+                &control,
+                || order.borrow_mut().push("relay"),
+                || order.borrow_mut().push("draw"),
+            );
+        }
+        assert_eq!(
+            order.into_inner(),
+            ["relay", "draw", "relay", "draw", "relay", "draw"]
+        );
+    }
+
     /// An open modal suspends the loop and its close resumes it (`CHROME-089`).
     ///
     /// Closing it at home leaves the loop suspended, since the launcher still

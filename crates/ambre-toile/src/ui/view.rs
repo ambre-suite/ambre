@@ -378,6 +378,9 @@ pub struct ToileView {
     data_dirty: bool,
     /// Coalesced viewport request: at most one `SetViewport` per frame.
     pending_viewport: Option<Viewport>,
+    /// The version of the last frame the view accepted. An older one is a
+    /// stale answer, and the view drops it (`BUS-017`).
+    accepted_version: u64,
     initial_viewport_sent: bool,
     fatal: bool,
 
@@ -656,6 +659,7 @@ impl ToileView {
             from_logic,
             cam: ViewportTransform::new(canvas_width, canvas_height),
             display: DisplayViewport {
+                version: 0,
                 reactions: Default::default(),
                 pins: Vec::new(),
                 viewport: Viewport::default(),
@@ -701,6 +705,7 @@ impl ToileView {
             viewport_changed: false,
             data_dirty: false,
             pending_viewport: None,
+            accepted_version: 0,
             initial_viewport_sent: false,
             fatal: false,
             pending_clipboard: None,
@@ -914,6 +919,10 @@ impl ToileView {
                 self.needs_full = true;
             }
             ToileEvent::ViewportData(dv) => {
+                if dv.version < self.accepted_version {
+                    return;
+                }
+                self.accepted_version = dv.version;
                 self.display = dv;
                 self.data_dirty = true;
                 self.request_missing_media();
@@ -4092,6 +4101,7 @@ impl ToileView {
         self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
+            version: 0,
             reactions: Default::default(),
             pins: Vec::new(),
             viewport: Viewport::default(),
@@ -4122,6 +4132,7 @@ impl ToileView {
         self.gesture_commit_pending = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
+        self.accepted_version = 0;
         self.needs_full = true;
         // Keep the transparent text pipe focused so the keyboard works on the
         // freshly-routed board without a click.

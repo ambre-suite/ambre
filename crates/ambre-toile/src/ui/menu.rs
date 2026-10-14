@@ -574,6 +574,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayElement>) -> DisplayViewport {
         DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),

@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 74 partial and 301 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 71 partial and 287 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 651 | 336 | 584 | 605 |  | 2176 |
-| `partial` | 24 | 8 | 41 | 1 |  | 74 |
+| `verified` | 668 | 336 | 584 | 605 |  | 2193 |
+| `partial` | 21 | 8 | 41 | 1 |  | 71 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 27 | 74 | 188 | 1 |  | 290 |
+| `untested` | 13 | 74 | 188 | 1 |  | 276 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -40,7 +40,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 13 |  |  | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  |  | 1 |
-| `ambre-spec-architecture.md` | 32 | 32 | 19 | 3 | 10 |  |
+| `ambre-spec-architecture.md` | 32 | 32 | 28 | 1 | 3 |  |
 | `ambre-spec-broadcast.md` | 24 | 18 | 18 |  |  | 6 |
 | `ambre-spec-chrome.md` | 23 | 20 | 20 |  |  | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 16 |  | 1 | 1 |
@@ -59,7 +59,7 @@
 | `ambre-spec-launcher.md` | 24 | 20 | 19 |  | 1 | 4 |
 | `ambre-spec-media.md` | 13 | 13 | 11 |  | 2 |  |
 | `ambre-spec-membership.md` | 30 | 30 | 30 |  |  |  |
-| `ambre-spec-message-bus.md` | 28 | 26 | 13 | 4 | 9 | 2 |
+| `ambre-spec-message-bus.md` | 28 | 26 | 19 | 3 | 4 | 2 |
 | `ambre-spec-object-store.md` | 18 | 12 | 12 |  |  | 6 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |  |
 | `ambre-spec-organizations.md` | 11 | 9 | 9 |  |  | 2 |
@@ -72,7 +72,7 @@
 | `ambre-spec-sequencer.md` | 46 | 37 | 37 |  |  | 9 |
 | `ambre-spec-server.md` | 52 | 34 | 32 | 1 | 1 | 18 |
 | `ambre-spec-session.md` | 17 | 17 | 16 | 1 |  |  |
-| `ambre-spec-sync.md` | 29 | 29 | 27 |  | 2 |  |
+| `ambre-spec-sync.md` | 29 | 29 | 29 |  |  |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 11 |  |  | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-ui.md` | 17 | 11 | 9 |  | 2 | 6 |

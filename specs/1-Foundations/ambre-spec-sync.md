@@ -27,8 +27,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-002` | `INV` | The document key and the private signing key MUST NOT appear in any outbound message; only the public half travels. | `ZK-002`; this spec section 2 | crate-graph -- `deny.toml` refuses the exchange, the cipher and `ambre-crypto` itself outside this worker, so no other crate holds a type either key could travel in | none | verified |
 | `SYNC-095` | `INV` | A key MUST be wiped from memory when it goes out of scope. | `ZK-002`; this spec section 2 | type-level -- both key types derive `ZeroizeOnDrop`, so the wipe is the destructor and cannot be forgotten at a call site. It is what makes a sign-out mean anything on a machine the attacker may later read | none | verified |
 | `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate-graph -- `deny.toml` grants `loro` to the four application crates alone, so this worker fails the `deny` job on the line that would add it | none | verified |
-| `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | none | unheld -- the manifest declares neither the canvas nor `wgpu`, and no `deny.toml` entry refuses them here, unlike the CRDT and cryptography bans beside it. The rule is read off a manifest rather than enforced by a job; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | none | unheld -- the crate builds a standalone artifact and is loaded as a dedicated worker, which the build shape makes true, and nothing in continuous integration boots the pair to observe it; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path dependency that brings `ambre-canvas`, `ambre-draw` or `wgpu` into the closure of `ambre-sync`; cargo-deny -- `deny.toml` grants `wgpu` to `ambre-canvas` and `ambre-app`, and the CI `deny` job fails any other crate that takes it | none | verified |
+| `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses an `ambre-sync` that builds no `cdylib`, a crate that depends on it, and a page that does not load it as a worker | none | verified |
 | `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
 | `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::a_logged_token_pair_carries_no_token` -- the socket address holds no token, and the token pair prints with the token redacted, and the raw form is reachable only through `expose` | none | verified |
 | `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
@@ -85,10 +85,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 27 `verified`, 2 `untested`. The crate graph holds the keys and the CRDT apart.
-  Unit tests hold the token redaction and wipe, the refused channel send and the name bound to its
-  document. A gate refuses browser storage in the worker. Each gap left is a browser property the
-  wasm tier cannot boot, `ambre-spec-testing.md section 9`.
+* **Verification.** 29 `verified`. The crate graph holds the keys and the CRDT apart. Unit tests
+  hold the token redaction and wipe, the refused channel send and the name bound to its document. A
+  gate refuses browser storage in the worker. Each gap left is a browser property the wasm tier
+  cannot boot, `ambre-spec-testing.md section 9`.
 ---
 
 ## 2. MODEL

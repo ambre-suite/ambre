@@ -75,6 +75,27 @@ carry identifiers, lengths and sequence numbers. So no log macro or span of
 bytes, unless it reads only the length. A payload under a neutral name is
 left to the reviewer.
 
+**Two instances, one client per tab** (`ARCH-001`, `ARCH-011`, `SYNC-056`). The
+page loads two artefacts: the launcher, and the Sync worker as a worker of its
+own. No crate but the worker depends on it, so the two never merge. The
+launcher spawns one worker, and every frame it creates is sandboxed. No line
+names a shared worker or a service worker, which would serve two tabs.
+
+**Each thread declares what it may reach** (`ARCH-003`, `SYNC-096`). The Logic
+runtime declares no render runtime and no interface toolkit. The Sync worker
+reaches neither, nor the graphics stack, through any crate of ours.
+
+**The wire types and the worker's messages** (`ARCH-006`, `BUS-004`,
+`BUS-021`). The worker and the relay redeclare no type of `ambre-protocol`.
+The worker allocates no request id, since its counter is not the Main
+instance's. And it names no application message, so a payload crosses it as
+bytes.
+
+**One engine, one relay per frame** (`ARCH-007`, `ARCH-010`). The launcher
+starts the Logic runtime from one line. The frame loop hands the route-free
+relay to `drive_frame` as its first step, and that relay drains the Logic to
+Sync queue.
+
 **One kinetic model** (`KINETIC-001`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
@@ -290,6 +311,39 @@ PAYLOAD_NAME = re.compile(
 PAYLOAD_SAFE = re.compile(r"_(?:len|size|count|key|id|hash)$", re.IGNORECASE)
 STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
 INTERPOLATION = re.compile(r"\{(\w+)")
+
+# The page, its two artefacts, and what would serve two tabs or merge them.
+PAGE = "crates/ambre-app/index.html"
+RUST_LINK = re.compile(r'<link\s+data-trunk\s+rel="rust"[^>]*>', re.DOTALL)
+WORKER_LINK = re.compile(r'href="\.\./ambre-sync/Cargo\.toml"[^>]*data-type="worker"')
+SYNC_MANIFEST = "crates/ambre-sync/Cargo.toml"
+SYNC_DEP = re.compile(r"^ambre-sync\s*=", re.MULTILINE)
+WORKER_SPAWN = re.compile(r"\bWorker::new\w*\s*\(")
+WORKER_SPAWNER = "crates/ambre-app/src/platform.rs"
+SHARED_WORKER = re.compile(r"\bSharedWorker\b|\bServiceWorker\w*|\bserviceWorker\b|\bservice_worker\b")
+FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
+
+# What the Logic runtime and the Sync worker may not reach.
+LOGIC_MANIFEST = "crates/ambre-logic/Cargo.toml"
+RENDER_OR_TOOLKIT = ("ambre-canvas", "ambre-chrome", "ambre-app", "wgpu", "vello", "leptos")
+SYNC_UNREACHABLE = RENDER_OR_TOOLKIT + (
+    "ambre-draw", "ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure", "ambre-logic",
+)
+PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re.MULTILINE)
+
+# The wire types, and what the worker may not name.
+PROTOCOL = "crates/ambre-protocol/src"
+TYPE_DECL = re.compile(r"^\s*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+([A-Z]\w*)", re.MULTILINE)
+REQUEST_ALLOC = re.compile(r"\bRequestId::next\b")
+ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
+APP_SRC = "crates/ambre-app/src"
+APP_LIB = "crates/ambre-app/src/lib.rs"
+FRAME_HOST = "crates/ambre-app/src/host/run.rs"
+FRAME_RELAY = re.compile(r"drive_frame\(\s*&\w+,\s*&mut pre_frame\b")
+SYNC_DRAIN = re.compile(r"\.drain\(&logic_to_sync_rx\b")
+APP_MESSAGE = re.compile(
+    r"\bambre_bus::app\b|\b(?:Trame|Toile|Prose|Murmure|App)(?:Command|Event)\b|\bLogicCommand\b|\bUiEvent\b"
+)
 
 # The shared kinetic model, and the words a second copy of it would need.
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
@@ -846,6 +900,134 @@ def check_payload_logs(errors: list[str]) -> int:
     return len(files)
 
 
+def manifest_dependencies(manifest: str) -> set[str]:
+    """The names the manifest's dependency tables declare, dev and build tables left out."""
+    names: set[str] = set()
+    table = ""
+    for line in manifest.splitlines():
+        header = re.match(r"^\s*\[([^\]]+)\]", line)
+        if header:
+            table = header.group(1)
+            continue
+        if table.endswith("dependencies") and "dev-" not in table and "build-" not in table:
+            entry = re.match(r"^\s*([\w-]+)\s*=", line)
+            if entry:
+                names.add(entry.group(1))
+    return names
+
+
+def path_closure(crate: str) -> set[str]:
+    """Every crate of ours the crate reaches through its normal path dependencies."""
+    seen: set[str] = set()
+    todo = [crate]
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        manifest = read(f"{CRATES}/{name}/Cargo.toml")
+        declared = manifest_dependencies(manifest)
+        todo.extend(target for dep, target in PATH_DEP.findall(manifest) if dep in declared)
+    return seen
+
+
+def check_instances(errors: list[str]) -> int:
+    """`ARCH-001`, `ARCH-011`, `SYNC-056`: two artefacts, one worker, nothing shared."""
+    page = read(PAGE)
+    if not page:
+        errors.append(f"{PAGE}: gone from the tree, so the artefacts the page loads are unread")
+        return 0
+    links = RUST_LINK.findall(page)
+    workers = [link for link in links if WORKER_LINK.search(link)]
+    launchers = [link for link in links if "href=" not in link]
+    if len(links) != 2 or len(workers) != 1 or len(launchers) != 1:
+        errors.append(f"{PAGE}: the page loads {len(links)} wasm artefacts, not the launcher and the Sync worker")
+    if SHARED_WORKER.search(page):
+        errors.append(f"{PAGE}: the page names a worker that two tabs would share")
+    if "cdylib" not in read(SYNC_MANIFEST):
+        errors.append(f"{SYNC_MANIFEST}: the Sync worker no longer builds an artefact of its own")
+    manifests = sorted((ROOT / CRATES).glob("*/Cargo.toml"))
+    for path in manifests:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel != SYNC_MANIFEST and SYNC_DEP.search(path.read_text()):
+            errors.append(f"{rel}: depends on the Sync worker, which merges it into a second instance")
+    files = rust_files()
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith("crates/ambre-server/"):
+            continue
+        lines = above_tests(path)
+        for number, line in lines:
+            found = WORKER_SPAWN.search(line)
+            if found and rel != WORKER_SPAWNER:
+                errors.append(f"{rel}:{number}: a worker spawned outside the launcher: `{found.group(0)}`")
+            found = SHARED_WORKER.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a worker that two tabs would share: `{found.group(0)}`")
+        text = path.read_text()
+        test_only = "wasm_bindgen_test" in text
+        if not test_only and any(FRAME_CREATE.search(line) for _, line in lines):
+            if not any('"sandbox"' in line for _, line in lines):
+                errors.append(f"{rel}: creates a frame and never sandboxes it")
+    return len(manifests) + len(files) + 1
+
+
+def check_thread_reach(errors: list[str]) -> int:
+    """`ARCH-003`, `SYNC-096`: the Logic runtime and the worker reach no rendering."""
+    logic = read(LOGIC_MANIFEST)
+    if not logic or not read(SYNC_MANIFEST):
+        errors.append(f"{LOGIC_MANIFEST} or {SYNC_MANIFEST}: gone from the tree, so the thread reach is unread")
+        return 0
+    for name in sorted(manifest_dependencies(logic) & set(RENDER_OR_TOOLKIT)):
+        errors.append(f"{LOGIC_MANIFEST}: the Logic runtime declares `{name}`")
+    closure = path_closure("ambre-sync")
+    for crate in sorted(closure):
+        manifest = f"{CRATES}/{crate}/Cargo.toml"
+        reached = (manifest_dependencies(read(manifest)) | {crate}) & set(SYNC_UNREACHABLE)
+        for name in sorted(reached):
+            errors.append(f"{manifest}: the Sync worker reaches `{name}` through `{crate}`")
+    return len(closure) + 1
+
+
+def check_worker_messages(errors: list[str]) -> int:
+    """`ARCH-006`, `BUS-004`, `BUS-021`: one wire type, no worker id, no app message."""
+    wire = {name for path in sources((PROTOCOL,)) for name in TYPE_DECL.findall(path.read_text())}
+    if not wire:
+        errors.append(f"{PROTOCOL}: declares no type, so the wire boundary holds nothing")
+        return 0
+    files = sources((WORKER, "crates/ambre-server/src"))
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = TYPE_DECL.match(line)
+            if found and found.group(1) in wire:
+                errors.append(f"{rel}:{number}: redeclares the wire type `{found.group(1)}`")
+            if not rel.startswith(WORKER):
+                continue
+            found = REQUEST_ALLOC.search(line) or APP_MESSAGE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the worker allocates an id or names an app message: `{found.group(0)}`")
+    return len(files)
+
+
+def check_engine_and_relay(errors: list[str]) -> int:
+    """`ARCH-007`, `ARCH-010`: one Logic start, and a relay that drains before the draw."""
+    files = sources((APP_SRC,))
+    starts = [
+        f"{path.relative_to(ROOT).as_posix()}:{number}"
+        for path in files
+        for number, line in enumerate(path.read_text().splitlines(), 1)
+        if ENGINE_SPAWN.search(code(line))
+    ]
+    if len(starts) != 1:
+        errors.append(f"{APP_SRC}: starts the Logic runtime {len(starts)} times, not once: {starts}")
+    if not FRAME_RELAY.search(read(FRAME_HOST)):
+        errors.append(f"{FRAME_HOST}: the frame loop does not run `pre_frame` as its relay")
+    if not SYNC_DRAIN.search(read(APP_LIB)):
+        errors.append(f"{APP_LIB}: the relay does not drain the Logic to Sync queue")
+    return len(files)
+
+
 def check_kinetic_copy(errors: list[str]) -> int:
     """`KINETIC-001`: no Rust line outside the shared model names a decay or a velocity."""
     if not KINETIC_TERM.search(read(KINETIC_MODEL)):
@@ -890,6 +1072,10 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    instances = check_instances(errors)
+    reach = check_thread_reach(errors)
+    worker_messages = check_worker_messages(errors)
+    engine = check_engine_and_relay(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -911,7 +1097,11 @@ def main() -> int:
         f"{keys} manifests and files read for a key hash or an invitation, "
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
-        f"{kinetic} Rust files read for a second kinetic model"
+        f"{kinetic} Rust files read for a second kinetic model, "
+        f"{instances} files read for a third instance or a shared worker, "
+        f"{reach} manifests read for a thread reaching the rendering, "
+        f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
+        f"{engine} launcher files read for a second engine or a relay out of the frame"
     )
     for line in errors:
         print(f"  {line}")
@@ -936,7 +1126,11 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, and one file holds the kinetic model.",
+            "relay logs no payload, one file holds the kinetic model, the page "
+            "loads two instances and shares no worker, neither the Logic runtime "
+            "nor the worker reaches the rendering, and the worker redeclares no "
+            "wire type, allocates no request id and names no app message. The launcher "
+            "starts one engine, and every frame relays before it draws.",
             file=sys.stderr,
         )
         return 1

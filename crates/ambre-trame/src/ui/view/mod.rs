@@ -483,6 +483,30 @@ mod view_tests;
 mod tests {
     use super::*;
 
+    /// `BUS-012`: two scroll requests inside one frame leave the queue as one,
+    /// the newer, and the slot is empty after the flush.
+    #[test]
+    fn two_scrolls_in_one_frame_flush_as_one_request() {
+        let scroll = |version| TrameCommand::ScrollViewport {
+            version,
+            row_start: 0,
+            row_end: 10,
+            col_start: 0,
+            col_end: 5,
+        };
+        let mut queue = ViewportQueue::default();
+        queue.coalesce(scroll(1));
+        queue.coalesce(scroll(2));
+        assert!(
+            matches!(
+                queue.take(),
+                Some(TrameCommand::ScrollViewport { version: 2, .. })
+            ),
+            "the newer request wins"
+        );
+        assert!(queue.take().is_none(), "one send per frame");
+    }
+
     /// `CHROME-023`: the grid announces the active cell by its reference and
     /// its value, and says an empty cell is empty rather than nothing.
     #[test]

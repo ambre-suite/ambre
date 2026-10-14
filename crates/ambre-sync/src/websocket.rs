@@ -376,7 +376,7 @@ impl SyncState {
                     tracing::warn!(
                         "Sync: refresh failed, re-running dev login for silent recovery"
                     );
-                    self.handle_dev_login(RequestId::next(), username);
+                    self.handle_dev_login(RequestId::UNSOLICITED, username);
                 } else {
                     // Real session with no usable refresh: surface so the UI can
                     // prompt re-auth. Fall back to backoff to avoid a tight loop.

@@ -60,6 +60,7 @@ impl Rig {
     /// A fresh frame from the Logic thread holding these nodes and no other.
     fn show(&mut self, nodes: Vec<DisplayNode>) {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
@@ -476,6 +477,7 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.frame();
     rig.sent();
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
+        version: 0,
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -923,4 +925,97 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
     assert!(rig.sent().is_empty(), "the handoff sent a command");
     assert_eq!(rig.view.selection, selection);
     assert_eq!(rig.paint().ops(), before.ops(), "the board changed");
+}
+
+/// A frame from the Logic thread at `version`, holding these nodes alone.
+fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
+    ToileEvent::ViewportData(DisplayViewport {
+        version,
+        pins: Vec::new(),
+        reactions: Default::default(),
+        viewport: Viewport::default(),
+        nodes,
+    })
+}
+
+/// The ids of the elements the view paints from.
+fn shown(rig: &Rig) -> Vec<ElementId> {
+    rig.view
+        .display
+        .nodes
+        .iter()
+        .filter_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.id.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `BUS-017`: an answer older than the one the view holds is dropped, and an
+/// answer at the same version still lands.
+#[test]
+fn a_stale_viewport_answer_is_dropped_by_its_version() {
+    let mut rig = Rig::new();
+    rig.answer(frame_at(5, vec![DisplayNode::Element(sticky("new", A))]));
+    rig.answer(frame_at(3, vec![DisplayNode::Element(sticky("old", A))]));
+    assert_eq!(shown(&rig), vec![eid("new")], "the older answer is dropped");
+    rig.answer(frame_at(5, vec![DisplayNode::Element(sticky("same", A))]));
+    assert_eq!(shown(&rig), vec![eid("same")], "the same version lands");
+}
+
+/// `BUS-012`: two camera moves inside one frame leave the view as one
+/// `SetViewport`, for the camera the second move left.
+#[test]
+fn two_camera_moves_in_one_frame_send_one_viewport_request() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    for dy in [40.0, 60.0] {
+        rig.input(InputEvent::Wheel {
+            dx: 0.0,
+            dy,
+            delta_mode: 0,
+            ctrl_key: false,
+        });
+    }
+    let last = rig.view.cam.to_bus_viewport();
+    rig.view.update();
+    let requests: Vec<_> = rig
+        .sent()
+        .into_iter()
+        .filter_map(|c| match c {
+            ToileCommand::SetViewport(vp) => Some(vp),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(requests, vec![last], "one request, for the last camera");
+}
+
+/// `ARCH-008`, `ARCH-009`: a fatal event from the Logic thread reaches the
+/// page's fatal latch, and the view sends nothing after it.
+#[test]
+fn a_fatal_event_latches_the_page_and_silences_the_view() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let sent = rig.from_logic.try_send(UiEvent::FatalError {
+        message: "doorbell lost".to_owned(),
+    });
+    assert!(sent.is_ok(), "the inbound channel has room");
+    rig.view.update();
+    assert!(rig.view.fatal, "the view is inert");
+    assert!(ambre_canvas::fatal_message().is_some(), "the page is told");
+    rig.key("z", true, false);
+    assert!(rig.sent().is_empty(), "an inert view sends nothing");
+}
+
+/// `ARCH-008`: a Logic thread that dropped its end without a word is as
+/// fatal to the view as one that said so.
+#[test]
+fn a_vanished_logic_thread_latches_the_page() {
+    let Rig {
+        mut view,
+        from_logic,
+        ..
+    } = Rig::with_stickies(&[("a", A)]);
+    drop(from_logic);
+    view.update();
+    assert!(view.fatal, "the view is inert");
+    assert!(ambre_canvas::fatal_message().is_some(), "the page is told");
 }

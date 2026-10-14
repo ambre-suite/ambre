@@ -1057,19 +1057,18 @@ pub fn main() {
     let pre_frame = move || {
         let cur_route = route::current();
         let cur_doc = cur_route.doc();
-        if prev_route.as_ref() != Some(&cur_route) {
-            let prev_doc = prev_route.as_ref().and_then(route::Route::doc);
-            if prev_doc.map(|(_, id)| id) != cur_doc.map(|(_, id)| id) {
-                if let Some((_, document_id)) = prev_doc {
-                    let _ = route_tx.try_send(LogicCommand::CloseDocument { document_id });
-                }
-                if let Some((doc_type, document_id)) = cur_doc {
-                    let _ = route_tx.try_send(LogicCommand::OpenDocument {
-                        document_id,
-                        doc_type,
-                    });
-                }
-                current_doc.set(cur_doc.map(|(_, id)| id));
+        if let Some(step) = route::step(prev_route.as_ref(), &cur_route) {
+            if let Some(document_id) = step.close {
+                let _ = route_tx.try_send(LogicCommand::CloseDocument { document_id });
+            }
+            if let Some((doc_type, document_id)) = step.open {
+                let _ = route_tx.try_send(LogicCommand::OpenDocument {
+                    document_id,
+                    doc_type,
+                });
+            }
+            if step.close.is_some() || step.open.is_some() {
+                current_doc.set(step.show);
                 // Arm the loading overlay when entering a document; clear it on
                 // the landing route. The relay clears `hydrating` on the matching
                 // `DocumentReady` (see the per-frame pump below).
@@ -1080,8 +1079,8 @@ pub fn main() {
                     }
                 });
             }
-            match cur_doc {
-                Some((_, document_id)) => {
+            match step.show {
+                Some(document_id) => {
                     if let Some(sw) = route_switcher.borrow().as_ref() {
                         sw.set_document(document_id);
                     }

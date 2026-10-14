@@ -233,6 +233,301 @@ fn logic_event_roundtrips_through_postcard() {
     });
 }
 
+/// The variant's name. The match has no wildcard arm. So a variant added to
+/// the envelope does not compile until it is named here. Then
+/// `every_envelope_variant_roundtrips_through_postcard` asks for a sample.
+fn sync_variant(cmd: &SyncCommand) -> &'static str {
+    match cmd {
+        SyncCommand::Rest { .. } => "Rest",
+        SyncCommand::OpenDocument { .. } => "OpenDocument",
+        SyncCommand::CloseDocument { .. } => "CloseDocument",
+        SyncCommand::ReleaseDocument { .. } => "ReleaseDocument",
+        SyncCommand::SendUpdate { .. } => "SendUpdate",
+        SyncCommand::SendUnsent { .. } => "SendUnsent",
+        SyncCommand::SendSnapshot { .. } => "SendSnapshot",
+        SyncCommand::SnapshotVerdict { .. } => "SnapshotVerdict",
+        SyncCommand::SendEphemeral { .. } => "SendEphemeral",
+        SyncCommand::Reconnect { .. } => "Reconnect",
+        SyncCommand::OpenChannel { .. } => "OpenChannel",
+        SyncCommand::CloseChannel { .. } => "CloseChannel",
+        SyncCommand::SendChannelUpdate { .. } => "SendChannelUpdate",
+        SyncCommand::SendChannelEphemeral { .. } => "SendChannelEphemeral",
+        SyncCommand::HoldInbound => "HoldInbound",
+        SyncCommand::ReleaseInbound => "ReleaseInbound",
+        SyncCommand::Shutdown => "Shutdown",
+    }
+}
+
+/// The variant's name, with no wildcard arm, as for `sync_variant`.
+fn event_variant(evt: &LogicEvent) -> &'static str {
+    match evt {
+        LogicEvent::Rest { .. } => "Rest",
+        LogicEvent::SessionIdentity { .. } => "SessionIdentity",
+        LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
+        LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
+        LogicEvent::RemoteSnapshot { .. } => "RemoteSnapshot",
+        LogicEvent::PendingSnapshot { .. } => "PendingSnapshot",
+        LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
+        LogicEvent::PeerLeft { .. } => "PeerLeft",
+        LogicEvent::DocumentReady { .. } => "DocumentReady",
+        LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
+        LogicEvent::Activity { .. } => "Activity",
+        LogicEvent::Released { .. } => "Released",
+        LogicEvent::SyncWarning { .. } => "SyncWarning",
+        LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
+        LogicEvent::MemberRevoked { .. } => "MemberRevoked",
+        LogicEvent::DocumentShared { .. } => "DocumentShared",
+        LogicEvent::ChannelRemoteUpdate { .. } => "ChannelRemoteUpdate",
+        LogicEvent::ChannelRemoteEphemeral { .. } => "ChannelRemoteEphemeral",
+        LogicEvent::ChannelConnectionStatus { .. } => "ChannelConnectionStatus",
+        LogicEvent::ChannelSnapshotNeeded { .. } => "ChannelSnapshotNeeded",
+        LogicEvent::MeetingParticipantJoined { .. } => "MeetingParticipantJoined",
+        LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
+        LogicEvent::AuthError { .. } => "AuthError",
+        LogicEvent::ApiError { .. } => "ApiError",
+        LogicEvent::SetupRequired => "SetupRequired",
+        LogicEvent::UpdateRequired => "UpdateRequired",
+    }
+}
+
+/// The number of arms of `sync_variant` and of `event_variant`.
+const SYNC_VARIANTS: usize = 17;
+const EVENT_VARIANTS: usize = 26;
+
+/// `BUS-003`: every variant of both envelopes survives the hop, field for
+/// field. Each arm of the two name functions needs a sample here, and the
+/// samples cover each name exactly once.
+#[test]
+fn every_envelope_variant_roundtrips_through_postcard() {
+    use ambre_bus::{MeetingId, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict};
+    use ambre_core::SessionNonce;
+    use std::collections::BTreeSet;
+
+    let doc = DocumentId::new();
+    let chan = ChannelId::new();
+    let user = UserId::new();
+    let snapshot = SnapshotId::genesis(doc);
+    let delta = SignedDelta {
+        seq: 3,
+        payload: vec![1, 2, 255],
+        nonce: SessionNonce([4; 16]),
+        peer: 9,
+        user: Some(user),
+    };
+    let commands = [
+        SyncCommand::Rest {
+            id: RequestId(5),
+            cmd: RestCommand::CreateDocument {
+                doc_type: DocType::Toile,
+                name: "Plan".to_owned(),
+            },
+        },
+        SyncCommand::OpenDocument {
+            document_id: doc,
+            doc_type: DocType::Prose,
+        },
+        SyncCommand::CloseDocument { document_id: doc },
+        SyncCommand::ReleaseDocument {
+            document_id: doc,
+            applied_seq: 12,
+        },
+        SyncCommand::SendUpdate {
+            document_id: doc,
+            payload: vec![0, 7],
+        },
+        SyncCommand::SendUnsent {
+            document_id: doc,
+            payload: vec![8],
+            nonce: SessionNonce([6; 16]),
+        },
+        SyncCommand::SendSnapshot {
+            document_id: doc,
+            payload: vec![1; 4],
+            covered_seq: 40,
+        },
+        SyncCommand::SnapshotVerdict {
+            document_id: doc,
+            snapshot_id: snapshot,
+            purpose: SnapshotPurpose::Confirm,
+            verdict: SnapshotVerdict::Match {
+                extras: vec![(41, vec![2, 3])],
+            },
+        },
+        SyncCommand::SendEphemeral {
+            document_id: doc,
+            payload: vec![5],
+        },
+        SyncCommand::Reconnect { document_id: doc },
+        SyncCommand::OpenChannel { channel_id: chan },
+        SyncCommand::CloseChannel { channel_id: chan },
+        SyncCommand::SendChannelUpdate {
+            channel_id: chan,
+            payload: vec![6, 6],
+        },
+        SyncCommand::SendChannelEphemeral {
+            channel_id: chan,
+            payload: vec![7],
+        },
+        SyncCommand::HoldInbound,
+        SyncCommand::ReleaseInbound,
+        SyncCommand::Shutdown,
+    ];
+    let events = [
+        LogicEvent::Rest {
+            id: RequestId(6),
+            evt: RestEvent::DocumentCreated {
+                document_id: doc,
+                doc_type: DocType::Toile,
+            },
+        },
+        LogicEvent::SessionIdentity {
+            document_id: doc,
+            peer: 9,
+            entry: vec![3; 8],
+            nonce: SessionNonce([1; 16]),
+        },
+        LogicEvent::RemoteUpdate {
+            document_id: doc,
+            delta: delta.clone(),
+        },
+        LogicEvent::RemoteUpdateBatch {
+            document_id: doc,
+            deltas: vec![delta.clone(), delta],
+        },
+        LogicEvent::RemoteSnapshot {
+            document_id: doc,
+            payload: vec![9; 3],
+            covered_seq: 30,
+        },
+        LogicEvent::PendingSnapshot {
+            document_id: doc,
+            snapshot_id: snapshot,
+            covered_seq: 31,
+            payload: vec![4],
+            purpose: SnapshotPurpose::Open,
+        },
+        LogicEvent::RemoteEphemeral {
+            document_id: doc,
+            from_user_id: user,
+            payload: vec![2],
+        },
+        LogicEvent::PeerLeft {
+            document_id: doc,
+            user_id: user,
+        },
+        LogicEvent::DocumentReady {
+            document_id: doc,
+            role: Role::Viewer,
+        },
+        LogicEvent::ConnectionStatus {
+            document_id: doc,
+            connected: false,
+        },
+        LogicEvent::Activity {
+            document_id: doc,
+            counters: ambre_core::activity::ActivityCounters {
+                content: 1,
+                mentions: 2,
+                ..Default::default()
+            },
+        },
+        LogicEvent::Released { document_id: doc },
+        LogicEvent::SyncWarning {
+            document_id: doc,
+            code: ambre_bus::sync_warning::SyncWarningCode::DecryptFailed,
+            message: "dropped".to_owned(),
+        },
+        LogicEvent::SnapshotNeeded { document_id: doc },
+        LogicEvent::MemberRevoked {
+            document_id: doc,
+            revoked_user_id: user,
+        },
+        LogicEvent::DocumentShared {
+            document_id: doc,
+            doc_type: DocType::Trame,
+        },
+        LogicEvent::ChannelRemoteUpdate {
+            channel_id: chan,
+            payload: vec![1],
+        },
+        LogicEvent::ChannelRemoteEphemeral {
+            channel_id: chan,
+            payload: vec![2],
+        },
+        LogicEvent::ChannelConnectionStatus {
+            channel_id: chan,
+            connected: true,
+        },
+        LogicEvent::ChannelSnapshotNeeded { channel_id: chan },
+        LogicEvent::MeetingParticipantJoined {
+            meeting_id: MeetingId::new(),
+            user_id: user,
+        },
+        LogicEvent::MeetingParticipantLeft {
+            meeting_id: MeetingId::new(),
+            user_id: user,
+        },
+        LogicEvent::AuthError {
+            message: "expired".to_owned(),
+        },
+        LogicEvent::ApiError {
+            id: Some(RequestId(8)),
+            request: "share".to_owned(),
+            code: 409,
+            message: "conflict".to_owned(),
+        },
+        LogicEvent::SetupRequired,
+        LogicEvent::UpdateRequired,
+    ];
+    for cmd in &commands {
+        roundtrip_sync(cmd);
+    }
+    for evt in &events {
+        roundtrip_event(evt);
+    }
+    let named: BTreeSet<_> = commands.iter().map(sync_variant).collect();
+    assert_eq!(
+        (commands.len(), named.len()),
+        (SYNC_VARIANTS, SYNC_VARIANTS)
+    );
+    let named: BTreeSet<_> = events.iter().map(event_variant).collect();
+    assert_eq!(
+        (events.len(), named.len()),
+        (EVENT_VARIANTS, EVENT_VARIANTS)
+    );
+}
+
+/// Whether `T` can be encoded. The inherent constant applies when `T`
+/// implements `Serialize`, and the trait's default applies otherwise.
+struct Encodable<T>(std::marker::PhantomData<T>);
+
+trait NotEncodable {
+    const ENCODES: bool = false;
+}
+
+impl<T> NotEncodable for Encodable<T> {}
+
+impl<T: serde::Serialize> Encodable<T> {
+    const ENCODES: bool = true;
+}
+
+/// `BUS-001`: nothing on the UI to Logic path can be encoded. The four
+/// messages that cross it implement no `Serialize`, so no encoder has a
+/// value to take. The probe reads true for an envelope of the worker hop.
+#[test]
+fn the_ui_to_logic_path_carries_nothing_an_encoder_takes() {
+    use ambre_bus::{AppEvent, LogicCommand, UiEvent};
+
+    // Each probe is a constant, so a derive added tomorrow fails the build.
+    const {
+        assert!(!Encodable::<LogicCommand>::ENCODES);
+        assert!(!Encodable::<AppCommand>::ENCODES);
+        assert!(!Encodable::<UiEvent>::ENCODES);
+        assert!(!Encodable::<AppEvent>::ENCODES);
+        assert!(Encodable::<SyncCommand>::ENCODES);
+    }
+}
+
 #[test]
 fn request_id_echo_is_preserved_across_the_hop() {
     // The id allocated by the UI must be byte-identical after a Sync round-trip

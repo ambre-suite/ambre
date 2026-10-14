@@ -1742,6 +1742,10 @@ pub enum ToileEvent {
 /// set only -- presence rides its own event path (`toile-engine`).
 #[derive(Clone, Debug)]
 pub struct DisplayViewport {
+    /// How many viewport requests the Logic thread had applied when it built
+    /// this frame. The view drops a frame older than the one it last accepted
+    /// (`BUS-017`).
+    pub version: u64,
     pub viewport: Viewport,
     /// Back-to-front sequence mirroring the `layers` walk
     /// (`toile-z-order`): elements and connectors interleaved by

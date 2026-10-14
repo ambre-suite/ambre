@@ -186,6 +186,7 @@ mod tests {
         reactions: BTreeMap<ElementId, ReactionTally>,
     ) -> DisplayViewport {
         DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             reactions,
             viewport: Viewport::default(),

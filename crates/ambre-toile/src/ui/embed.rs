@@ -690,6 +690,7 @@ mod tests {
 
     pub(super) fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
+            version: 0,
             pins: Vec::new(),
             viewport: Viewport::default(),
             nodes,

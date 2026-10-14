@@ -148,18 +148,24 @@ impl<'de> Deserialize<'de> for SecretString {
 
 /// Correlation token tying a [`RestCommand`] to the [`RestEvent`] that answers it.
 ///
-/// Allocated by the **originator** (the UI Thread) via [`RequestId::next`] and echoed
-/// unchanged by the Logic and Sync threads. Lets a UI with several P3 operations in flight
+/// Allocated in the Main instance via [`RequestId::next`] and echoed unchanged by
+/// the Sync worker. Lets a UI with several P3 operations in flight
 /// route each response to its call-site, and apply per-request timeout / retry. The
 /// previous fire-and-forget, stringly-correlated model could do neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
 
 impl RequestId {
+    /// The id of an answer that no request asked for, such as the Sync
+    /// worker's silent re-login. The counter starts at 1, so no request
+    /// carries it (`BUS-004`).
+    pub const UNSOLICITED: Self = RequestId(0);
+
     /// Allocate the next process-wide-unique id.
     ///
-    /// Backed by a single `AtomicU64` shared across the UI / Logic / Sync
-    /// threads (legal: the shared-memory threading model enables wasm atomics).
+    /// Backed by one `AtomicU64` that the UI and Logic threads share over the
+    /// Main instance's heap. The Sync worker has its own memory and so its own
+    /// counter, and it never calls this (`BUS-004`).
     pub fn next() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         RequestId(NEXT.fetch_add(1, Ordering::Relaxed))

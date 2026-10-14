@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 32 | 10 |
+| `architecture` | How the client is split, and why. | implemented | 32 | 3 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 20 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -31,7 +31,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 |  |
-| `sync` | The one part of the client that talks to the network. | implemented | 29 | 2 |
+| `sync` | The one part of the client that talks to the network. | implemented | 29 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 | 1 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
@@ -43,7 +43,7 @@
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 |  |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 | 1 |
-| `message-bus` | The contract the three threads talk over. | partial | 28 | 9 |
+| `message-bus` | The contract the three threads talk over. | partial | 28 | 4 |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 38 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 24 loose.**
