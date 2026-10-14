@@ -150,3 +150,58 @@ fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
         ),
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::WebFrames;
+    use ambre_bus::app::toile::ElementId;
+    use ambre_draw::{Affine, Rect, Size};
+    use ambre_toile::ui::embed::VisibleWebEmbed;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// `TOILE-088`: the frame behind a web embed runs in an opaque origin,
+    /// with no permission and no referrer. Without `allow-same-origin` the page
+    /// reaches neither the board, nor its storage, nor the keys it holds.
+    #[wasm_bindgen_test]
+    fn a_web_embed_runs_sandboxed_in_an_opaque_origin() {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let layer: web_sys::HtmlElement = document
+            .create_element("div")
+            .expect("a div")
+            .dyn_into()
+            .expect("an element");
+        let embed = VisibleWebEmbed {
+            element: ElementId("page".to_owned()),
+            url: "about:blank".to_owned(),
+            screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),
+            layout_size: Size::new(200.0, 100.0),
+            to_screen: Affine::IDENTITY,
+            focused: false,
+        };
+        let mut frames = WebFrames::default();
+        frames.sync(&layer, std::slice::from_ref(&embed));
+        assert_eq!(layer.child_element_count(), 1, "one frame per embed");
+        let frame = layer.first_element_child().expect("the frame");
+        let sandbox = frame.get_attribute("sandbox").expect("a sandbox");
+        let tokens: Vec<&str> = sandbox.split_whitespace().collect();
+        assert!(tokens.contains(&"allow-scripts"), "{sandbox}");
+        assert!(
+            !tokens.contains(&"allow-same-origin"),
+            "the page shares the board's origin"
+        );
+        assert!(
+            !tokens.contains(&"allow-top-navigation"),
+            "the page can navigate the board"
+        );
+        assert_eq!(frame.get_attribute("allow").as_deref(), Some(""));
+        assert_eq!(
+            frame.get_attribute("referrerpolicy").as_deref(),
+            Some("no-referrer")
+        );
+        frames.clear(&layer);
+        assert_eq!(layer.child_element_count(), 0);
+    }
+}

@@ -894,4 +894,56 @@ mod tests {
         assert_eq!(fed(DocType::Trame), ids(trame_chrome::COMMANDS));
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
+
+    /// `TOILE-065`: a followed web address opens in a fresh tab that can neither
+    /// reach back into this window nor learn where it came from. The page's own
+    /// `open` is swapped for a recorder, so the test opens no tab.
+    #[wasm_bindgen_test]
+    fn a_web_address_opens_in_a_fresh_tab_with_no_opener_and_no_referrer() {
+        let window = web_sys::window().expect("a window");
+        let key = wasm_bindgen::JsValue::from_str("open");
+        let original = js_sys::Reflect::get(&window, &key).expect("window.open");
+        let recorder = js_sys::Function::new_with_args(
+            "url, target, features",
+            "globalThis.__ambreOpened = [url, target, features]; return null;",
+        );
+        js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
+        let navigated = std::cell::Cell::new(false);
+        follow_shell_nav(
+            toile_chrome::ShellNav::Url("https://example.com/a".to_owned()),
+            &|_: &str, _| navigated.set(true),
+            DocType::Toile,
+        );
+        js_sys::Reflect::set(&window, &key, &original).expect("open restored");
+        let opened = js_sys::Reflect::get(&window, &"__ambreOpened".into()).expect("a record");
+        let opened: Vec<String> = js_sys::Array::from(&opened)
+            .iter()
+            .filter_map(|v| v.as_string())
+            .collect();
+        assert_eq!(
+            opened,
+            ["https://example.com/a", "_blank", "noopener,noreferrer"]
+        );
+        assert!(!navigated.get(), "an address moved this tab");
+    }
+
+    /// `TOILE-114`: a followed link to another Ambre document is opened by the
+    /// shell's own router, at the document's path, and opens no tab.
+    #[wasm_bindgen_test]
+    fn a_document_link_is_opened_by_the_shells_router() {
+        let document_id = DocumentId::new();
+        let to = std::cell::RefCell::new(Vec::new());
+        follow_shell_nav(
+            toile_chrome::ShellNav::Document {
+                document_id,
+                doc_type: DocType::Toile,
+            },
+            &|path: &str, _| to.borrow_mut().push(path.to_owned()),
+            DocType::Toile,
+        );
+        assert_eq!(
+            *to.borrow(),
+            [crate::route::doc_path(DocType::Toile, document_id)]
+        );
+    }
 }

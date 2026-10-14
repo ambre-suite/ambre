@@ -67,6 +67,8 @@ console_error_panic_hook = { workspace = true }
 # tier skips it. See ambre-spec-testing.md.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+# The recording surface, so the child paint pass is checked without a GPU.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 
 [lints]
 workspace = true

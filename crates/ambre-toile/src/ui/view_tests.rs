@@ -1889,3 +1889,134 @@ fn a_double_click_on_an_ungrouped_element_keeps_the_scope() {
     rig.double_click(50.0, 50.0);
     assert_eq!(rig.view.group_scope, Some(eid("g")));
 }
+
+/// A board showing one sticky at `A` that links to the frame "f".
+fn linked_to_a_frame() -> Rig {
+    let mut rig = Rig::new();
+    let mut linked = sticky("a", A);
+    linked.link = Some(LinkTarget::Frame(eid("f")));
+    rig.show(vec![DisplayNode::Element(linked)]);
+    rig.sent();
+    rig
+}
+
+fn ctrl_click(rig: &mut Rig, x: f64, y: f64) {
+    let (x, y) = rig.screen(x, y);
+    rig.input(InputEvent::PointerDown {
+        x,
+        y,
+        button: 0,
+        shift: false,
+        ctrl: true,
+    });
+    rig.input(InputEvent::PointerUp {
+        x,
+        y,
+        button: 0,
+        ctrl: true,
+    });
+}
+
+/// Whether `sent` is the one fit request a jump to the frame "f" makes.
+fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
+    matches!(
+        sent,
+        [ToileCommand::RequestSelectionStats { ids, kind: StatsRequestKind::Fit }]
+            if ids == &[eid("f")]
+    )
+}
+
+/// The reply a fit request gets: the frame's box, or none for an id the
+/// board no longer holds.
+fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
+    ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
+        count: u32::from(bounds.is_some()),
+        bounds,
+        kind: StatsRequestKind::Fit,
+    })
+}
+
+/// `TOILE-112`: a plain click on a linked element selects it and follows
+/// nothing. A modified click follows, and so does a plain click once editing
+/// is off for a presentation.
+#[test]
+fn a_plain_click_selects_a_linked_element_and_a_modified_click_follows() {
+    let mut rig = linked_to_a_frame();
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("a")]);
+    assert!(
+        !rig.sent().iter().any(
+            |c| matches!(c, ToileCommand::RequestSelectionStats { ids, .. } if ids == &[eid("f")])
+        ),
+        "a plain click follows nothing"
+    );
+
+    let mut rig = linked_to_a_frame();
+    ctrl_click(&mut rig, 50.0, 50.0);
+    assert!(asks_for_the_frame(&rig.sent()), "a modified click follows");
+    assert!(rig.view.selection.is_empty(), "and selects nothing");
+
+    let mut rig = linked_to_a_frame();
+    rig.view.present = true;
+    rig.click(50.0, 50.0);
+    assert!(
+        asks_for_the_frame(&rig.sent()),
+        "presenting, a click follows"
+    );
+}
+
+/// `TOILE-113`: the board answers the frame's box, off screen too, and the
+/// camera fits to it.
+#[test]
+fn a_jump_fits_the_camera_to_the_frames_box() {
+    let mut rig = linked_to_a_frame();
+    ctrl_click(&mut rig, 50.0, 50.0);
+    rig.sent();
+    let far = Rect::new(5000.0, 5000.0, 5400.0, 5300.0);
+    rig.answer(fit_reply(Some(far)));
+    let seen = rig.view.cam.visible_world();
+    assert!(
+        seen.contains(far.origin()) && seen.contains(Point::new(far.x1, far.y1)),
+        "{seen:?} frames {far:?}"
+    );
+    assert!(
+        seen.width() < 2.0 * far.width(),
+        "fitted, not merely panned"
+    );
+}
+
+/// `TOILE-064`: a jump to a frame the board no longer holds gets no box. The
+/// camera stays, nothing is sent, and the user is told nothing.
+#[test]
+fn a_jump_to_a_frame_nobody_holds_does_nothing_and_says_nothing() {
+    let mut rig = linked_to_a_frame();
+    let before = rig.view.cam;
+    ctrl_click(&mut rig, 50.0, 50.0);
+    assert!(asks_for_the_frame(&rig.sent()));
+    rig.answer(fit_reply(None));
+    rig.frame();
+    assert_eq!(rig.view.cam, before, "the camera stays");
+    assert!(rig.notices.take().is_empty(), "no error is reported");
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::SetViewport(_))),
+        "and no frame is asked for"
+    );
+}
+
+/// `TOILE-115`: a `Ctrl+Z` after a jump sends one undo for the last edit.
+/// The camera stays where the link put it: the jump is not in the history.
+#[test]
+fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
+    let mut rig = linked_to_a_frame();
+    ctrl_click(&mut rig, 50.0, 50.0);
+    rig.sent();
+    rig.answer(fit_reply(Some(Rect::new(5000.0, 5000.0, 5400.0, 5300.0))));
+    rig.frame();
+    rig.sent();
+    let jumped = rig.view.cam;
+    assert!(rig.key("z", true, false));
+    assert!(matches!(rig.sent().as_slice(), [ToileCommand::Undo]));
+    assert_eq!(rig.view.cam, jumped, "the camera stays on the frame");
+}

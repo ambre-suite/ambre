@@ -463,8 +463,9 @@ impl ToileState {
         let mut created = 0;
         for blob in blobs {
             let key = blob.hash.as_str();
-            if key.is_empty() || media.get(key).is_some() {
-                // No real hash yet, or the entry already exists (dedup,).
+            if !blob.hash.is_resolved() || media.get(key).is_some() {
+                // No address from Sync yet, or the entry already exists
+                // (dedup). A placeholder token never becomes a key.
                 continue;
             }
             let Ok(entry) = media.insert_container(key, LoroMap::new()) else {
@@ -672,6 +673,26 @@ mod tests {
         assert_eq!(st.media_count(), 0);
     }
 
+    /// `TOILE-IO-059`: the token an import names a blob by until Sync answers
+    /// is refused as a key, the very token the decoder mints included.
+    #[test]
+    fn a_placeholder_token_never_becomes_a_key() {
+        let mut st = ToileState::new();
+        let decoded = crate::logic::interop::import_raster(
+            &solid_png(4, 4),
+            &crate::logic::interop::Limits::default(),
+        )
+        .expect("a picture");
+        let minted = decoded.media[0].clone();
+        assert!(!minted.hash.is_resolved(), "{:?}", minted.hash);
+        assert_eq!(
+            st.seed_media(&[minted, blob("pending:7", 1, 1, "image/png")]),
+            0
+        );
+        assert_eq!(st.media_count(), 0);
+        assert_eq!(st.seed_media(&[blob("realhash", 1, 1, "image/png")]), 1);
+    }
+
     // -- command path (fast / async / failure) --------------------------------
 
     use ambre_bus::RestEvent;
@@ -794,6 +815,31 @@ mod tests {
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), 0);
+    }
+
+    /// `TOILE-IO-036`: the undo of a picture import takes back the entry it
+    /// seeded with its element, and a redo brings both back.
+    #[test]
+    fn undoing_an_image_import_takes_its_media_entry_back() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::ImportImage {
+            bytes: solid_png(8, 8),
+            mime: "image/png".to_owned(),
+            at: Point::ZERO,
+        });
+        st.handle_service_event(
+            first_upload_id(&out),
+            RestEvent::MediaUploaded {
+                document_id: DocumentId::new(),
+                content_hash: "realhash".to_owned(),
+            },
+        );
+        assert_eq!((st.element_count(), st.media_count()), (1, 1));
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!((st.element_count(), st.media_count()), (0, 0));
+        st.handle_command(ToileCommand::Redo);
+        assert_eq!((st.element_count(), st.media_count()), (1, 1));
+        assert!(st.media_meta("realhash").is_some());
     }
 
     #[test]

@@ -3918,42 +3918,7 @@ impl ToileView {
             return;
         };
         self.placed_embed.set(None);
-        // No drop point: a menu entry started this, so it lands in the middle of
-        // what the viewer is looking at, like a picker import.
-        let screen = placed.at.unwrap_or(Point::new(
-            self.cam.size.width / 2.0,
-            self.cam.size.height / 2.0,
-        ));
-        let size = super::embed::DEFAULT_EMBED_SIZE;
-        // The point the user aimed at is the embed's centre, not its corner. A
-        // menu placement centres on the camera, and a drop lands under the
-        // pointer.
-        let centre = self.cam.screen_to_world() * screen;
-        let at = Point::new(centre.x - size.width / 2.0, centre.y - size.height / 2.0);
-        let (kind, content) = match placed.target {
-            super::embed::EmbedTarget::Web(url) => (
-                ElementKind::Embed,
-                ambre_bus::app::toile::InitContent::Embed(url),
-            ),
-            super::embed::EmbedTarget::Document {
-                document_id,
-                doc_type,
-            } => (
-                ElementKind::DocEmbed,
-                ambre_bus::app::toile::InitContent::DocEmbed {
-                    document_id,
-                    doc_type,
-                },
-            ),
-        };
-        self.send_edit(ToileCommand::CreateElement {
-            kind,
-            at,
-            size,
-            content,
-            fill: None,
-            correlate: 0,
-        });
+        self.send_edit(super::embed::placement(placed, &self.cam));
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_placed_embed(&mut self) {}

@@ -2063,6 +2063,50 @@ fn a_link_is_set_and_cleared() {
     assert_eq!(link_of(&st, &id), None, "clearing removes the register");
 }
 
+/// `TOILE-066`: setting a link and clearing it are one undo item each. One
+/// undo restores the link, a second takes it away, and the element stays.
+#[test]
+fn each_link_write_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let target = LinkTarget::Url("https://example.org/".into());
+    st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: Some(target.clone()),
+    });
+    st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: None,
+    });
+
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(
+        link_of(&st, &id),
+        Some(target),
+        "one undo restores the link"
+    );
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(link_of(&st, &id), None, "a second undo takes it away");
+    assert_eq!(st.element_count(), 1, "the element is not undone");
+    st.handle_command(ToileCommand::Redo);
+    assert!(link_of(&st, &id).is_some(), "a redo sets it again");
+}
+
+/// `TOILE-115`: the one board command a jump sends commits nothing, so the
+/// undo after it reverts the edit made before it.
+#[test]
+fn a_jump_is_not_an_undo_item() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let out = st.handle_command(ToileCommand::RequestSelectionStats {
+        ids: vec![frame],
+        kind: StatsRequestKind::Fit,
+    });
+    assert!(out.update.is_none(), "the jump writes nothing");
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 0, "the undo takes back the frame");
+}
+
 /// `TOILE-111`: setting a link writes the link register alone -- the style, the
 /// geometry and the lock are what they were.
 #[test]
@@ -4401,6 +4445,63 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
         matches!(geom, Some(DisplayGeom::Frame(_))),
         "expected a Frame placeholder, got {geom:?}"
     );
+}
+
+/// `TOILE-085` and `TOILE-226`: a pasted embed is a second reference to the
+/// same document. The copy and the paste ask the service plane for nothing,
+/// so no second document comes into being.
+#[test]
+fn a_copied_embed_is_a_second_reference_to_the_same_document() {
+    let mut st = ToileState::new();
+    let child = ambre_core::DocumentId::new();
+    let out = st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::DocEmbed,
+        at: Point::ZERO,
+        size: Size::new(400.0, 300.0),
+        fill: None,
+        content: InitContent::DocEmbed {
+            document_id: child,
+            doc_type: ambre_core::DocType::Prose,
+        },
+        correlate: 0,
+    });
+    let source = created_ids(&out).pop().expect("the embed");
+
+    let copy = st.handle_command(ToileCommand::CopyElements {
+        ids: vec![source.clone()],
+    });
+    assert!(copy.update.is_none() && copy.requests.is_empty());
+    let paste = st.handle_command(ToileCommand::PasteElements {
+        payload: clip_of(&copy),
+        // Inside the default camera, so the derived frame carries both.
+        at: Point::new(420.0, 0.0),
+    });
+    assert!(paste.requests.is_empty(), "the paste asks for no document");
+    let pasted = created_ids(&paste);
+    assert_eq!(pasted.len(), 1);
+    assert_ne!(pasted[0], source, "a new element");
+
+    let references: Vec<_> = st
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .filter_map(|n| match n {
+            DisplayNode::Element(e) => match e.geom {
+                DisplayGeom::DocEmbed {
+                    document_id,
+                    doc_type,
+                    ..
+                } => Some((e.id, document_id, doc_type)),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(references.len(), 2, "two embeds: {references:?}");
+    for (_, document_id, doc_type) in &references {
+        assert_eq!(*document_id, child, "both name the one document");
+        assert_eq!(*doc_type, ambre_core::DocType::Prose);
+    }
 }
 
 #[test]

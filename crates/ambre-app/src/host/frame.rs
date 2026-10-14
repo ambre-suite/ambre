@@ -38,10 +38,13 @@ pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 /// (`TOILE-UI-328`). That would land a click at whatever the raw screen point
 /// happens to address inside the child.
 fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
-    let map = |x: f64, y: f64| {
-        view.embed_to_child_space(Point::new(x, y))
-            .map(|p| (p.x, p.y))
-    };
+    remap_with(ev, |p| view.embed_to_child_space(p))
+}
+
+/// [`remap_for_child`] with the board's mapping supplied, so the rewrite is
+/// tested without a live view.
+fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Option<InputEvent> {
+    let map = |x: f64, y: f64| to_child(Point::new(x, y)).map(|p| (p.x, p.y));
     Some(match ev {
         InputEvent::PointerDown {
             x,
@@ -79,6 +82,73 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
         // Non-positional events carry no coordinates to rewrite.
         other => other.clone(),
     })
+}
+
+/// Reconcile the child views against the visible `doc_embed`s, then pump each
+/// one. A child is made when its embed enters the set, resized when its box
+/// changes, and dropped when it leaves. Children are keyed by the board
+/// element, so two embeds of one document are two children (`TOILE-UI-097`).
+/// `pump` answers whether the child changed on its own. Returns whether the
+/// board must recomposite: a new child, a resize, or a pumped change.
+fn reconcile_children<C>(
+    children: &mut HashMap<ElementId, C>,
+    sizes: &mut HashMap<ElementId, (u32, u32)>,
+    embeds: &[VisibleEmbed],
+    mut make: impl FnMut(&VisibleEmbed) -> C,
+    mut resize: impl FnMut(&mut C, u32, u32),
+    mut pump: impl FnMut(&mut C) -> bool,
+) -> bool {
+    let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
+    children.retain(|id, _| live.contains(id));
+    sizes.retain(|id, _| live.contains(id));
+
+    let mut dirty = false;
+    for e in embeds {
+        let w = e.child_size.width.round().max(0.0) as u32;
+        let h = e.child_size.height.round().max(0.0) as u32;
+        if w == 0 || h == 0 {
+            continue;
+        }
+        if sizes.get(&e.element) == Some(&(w, h)) && children.contains_key(&e.element) {
+            continue;
+        }
+        let child = children.entry(e.element.clone()).or_insert_with(|| make(e));
+        resize(child, w, h);
+        sizes.insert(e.element.clone(), (w, h));
+        dirty = true;
+    }
+    // Every child is pumped, so none skips a frame of its own events.
+    for child in children.values_mut() {
+        dirty |= pump(child);
+    }
+    dirty
+}
+
+/// Paint each visible child into its embed: clip to the embed's box, push the
+/// child-to-screen transform, paint, pop both. The content pass and the
+/// overlay pass both call it. So a child's two halves land in one place
+/// (`TOILE-UI-320`), and a rotated embed paints its child rotated
+/// (`TOILE-UI-096`). A box under one pixel paints nothing.
+fn paint_children<S: DrawSurface + ?Sized, C>(
+    surface: &mut S,
+    embeds: &[VisibleEmbed],
+    children: &mut HashMap<ElementId, C>,
+    mut paint: impl FnMut(&mut C, &mut S),
+) {
+    for e in embeds {
+        let Some(child) = children.get_mut(&e.element) else {
+            continue;
+        };
+        let r = e.screen_rect;
+        if r.width() < 1.0 || r.height() < 1.0 {
+            continue;
+        }
+        surface.push_clip(r);
+        surface.push_transform(e.to_screen);
+        paint(child, surface);
+        surface.pop_transform();
+        surface.pop_clip();
+    }
 }
 
 /// Drives one [`AppView`] across the GPU and the requestAnimationFrame loop.
@@ -234,43 +304,23 @@ impl FrameHost {
             return false;
         };
         let embeds = self.view.visible_embeds();
-        let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
-        self.children.retain(|id, _| live.contains(id));
-        self.child_sizes.retain(|id, _| live.contains(id));
-
-        let mut dirty = false;
-        for e in &embeds {
-            let w = e.child_size.width.round().max(0.0) as u32;
-            let h = e.child_size.height.round().max(0.0) as u32;
-            if w == 0 || h == 0 {
-                continue;
-            }
-            if !self.children.contains_key(&e.element) {
-                let mut child = make_child(e.document_id, e.doc_type, e.child_size);
-                child.resize(w, h);
-                self.children.insert(e.element.clone(), child);
-                self.child_sizes.insert(e.element.clone(), (w, h));
-                dirty = true;
-            } else if self.child_sizes.get(&e.element) != Some(&(w, h)) {
-                if let Some(child) = self.children.get_mut(&e.element) {
-                    child.resize(w, h);
-                }
-                self.child_sizes.insert(e.element.clone(), (w, h));
-                dirty = true;
-            }
-        }
-
-        // Pump every live child: drain its Logic->UI events, run its per-frame
-        // planning. A non-`Reuse` content plan means it changed on its own (a
-        // remote edit), so the board must recomposite even if otherwise idle.
-        for child in self.children.values_mut() {
-            child.update();
-            let plan = child.plan_repaint(now_ms, false);
-            if !matches!(plan.content, ContentRepaint::Reuse) {
-                dirty = true;
-            }
-        }
-        dirty
+        reconcile_children(
+            &mut self.children,
+            &mut self.child_sizes,
+            &embeds,
+            |e| make_child(e.document_id, e.doc_type, e.child_size),
+            |child, w, h| child.resize(w, h),
+            // Drain the child's Logic->UI events and run its per-frame
+            // planning. A non-`Reuse` content plan means it changed on its own
+            // (a remote edit).
+            |child| {
+                child.update();
+                !matches!(
+                    child.plan_repaint(now_ms, false).content,
+                    ContentRepaint::Reuse
+                )
+            },
+        )
     }
 
     /// Reconcile the sandboxed `<iframe>`s behind the board's web embeds against
@@ -514,25 +564,14 @@ impl FrameHost {
                     // That is one child pixel per screen pixel at the current
                     // zoom. The clip stays the AABB: `push_clip` is rect-only
                     // ("Clip limitation").
-                    for e in self.view.visible_embeds() {
-                        let Some(child) = self.children.get_mut(&e.element) else {
-                            continue;
-                        };
-                        let r = e.screen_rect;
-                        if r.width() < 1.0 || r.height() < 1.0 {
-                            continue;
-                        }
-                        surface.push_clip(r);
-                        surface.push_transform(e.to_screen);
-                        child.paint_content(
-                            &mut surface,
-                            &mut gpu.font_cx,
-                            &mut gpu.text_cache,
-                            None,
-                        );
-                        surface.pop_transform();
-                        surface.pop_clip();
-                    }
+                    paint_children(
+                        &mut surface,
+                        &self.view.visible_embeds(),
+                        &mut self.children,
+                        |child, s| {
+                            child.paint_content(s, &mut gpu.font_cx, &mut gpu.text_cache, None);
+                        },
+                    );
                 }
                 if overlay_redraw {
                     surface.begin_layer(Layer::Overlay);
@@ -549,25 +588,14 @@ impl FrameHost {
                     // A user typing into it could not see where they were
                     // typing. Same clip and same transform as the content pass,
                     // so the two halves of one child land in one place.
-                    for e in self.view.visible_embeds() {
-                        let Some(child) = self.children.get_mut(&e.element) else {
-                            continue;
-                        };
-                        let r = e.screen_rect;
-                        if r.width() < 1.0 || r.height() < 1.0 {
-                            continue;
-                        }
-                        surface.push_clip(r);
-                        surface.push_transform(e.to_screen);
-                        child.paint_overlay(
-                            &mut surface,
-                            &mut gpu.font_cx,
-                            &mut gpu.text_cache,
-                            &stats,
-                        );
-                        surface.pop_transform();
-                        surface.pop_clip();
-                    }
+                    paint_children(
+                        &mut surface,
+                        &self.view.visible_embeds(),
+                        &mut self.children,
+                        |child, s| {
+                            child.paint_overlay(s, &mut gpu.font_cx, &mut gpu.text_cache, &stats);
+                        },
+                    );
                 }
             }
             gpu.text_cache.evict_if_oversized(5_000);
@@ -669,5 +697,201 @@ impl FrameHost {
         );
         gpu.queue.submit(std::iter::once(encoder.finish()));
         surface_tex.present();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{paint_children, reconcile_children, remap_with};
+    use ambre_bus::app::toile::ElementId;
+    use ambre_bus::{DocType, DocumentId};
+    use ambre_canvas::InputEvent;
+    use ambre_draw::testing::{DrawOp, RecordingSurface};
+    use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
+    use ambre_toile::ui::embed::VisibleEmbed;
+    use std::collections::HashMap;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    fn embed(element: &str, document_id: DocumentId, to_screen: Affine) -> VisibleEmbed {
+        VisibleEmbed {
+            element: ElementId(element.to_owned()),
+            document_id,
+            doc_type: DocType::Trame,
+            screen_rect: Rect::new(10.0, 20.0, 110.0, 80.0),
+            child_size: Size::new(100.0, 60.0),
+            to_screen,
+            focused: false,
+        }
+    }
+
+    fn pointers() -> Vec<InputEvent> {
+        vec![
+            InputEvent::PointerDown {
+                x: 5.0,
+                y: 6.0,
+                button: 0,
+                shift: false,
+                ctrl: false,
+            },
+            InputEvent::PointerMove { x: 5.0, y: 6.0 },
+            InputEvent::PointerUp {
+                x: 5.0,
+                y: 6.0,
+                button: 0,
+                ctrl: false,
+            },
+            InputEvent::DoubleClick { x: 5.0, y: 6.0 },
+        ]
+    }
+
+    /// `TOILE-UI-328`: a pointer event the board cannot map into the child is
+    /// dropped. It is never handed over with the board's own coordinate.
+    #[wasm_bindgen_test]
+    fn an_unmappable_pointer_event_is_dropped() {
+        for ev in pointers() {
+            assert!(
+                remap_with(&ev, |_| None).is_none(),
+                "an unmapped pointer reached the child"
+            );
+        }
+        // And a mappable one arrives in the child's space.
+        let moved = remap_with(&InputEvent::PointerMove { x: 5.0, y: 6.0 }, |p| {
+            Some(Point::new(p.x - 5.0, p.y - 6.0))
+        });
+        assert!(matches!(moved, Some(InputEvent::PointerMove { x, y }) if x == 0.0 && y == 0.0));
+    }
+
+    /// A key, a character, a composition step and a wheel reach
+    /// the child as they came. They carry no position, so even a board that
+    /// cannot map a point hands them over unchanged.
+    #[wasm_bindgen_test]
+    fn a_key_a_character_a_composition_and_a_wheel_reach_the_child_verbatim() {
+        let key = InputEvent::Key {
+            key: "a".to_owned(),
+            ctrl: true,
+            alt: false,
+            shift: true,
+            meta: false,
+        };
+        assert!(matches!(
+            remap_with(&key, |_| None),
+            Some(InputEvent::Key { key, ctrl: true, alt: false, shift: true, meta: false })
+                if key == "a"
+        ));
+        let text = InputEvent::Text {
+            text: "é".to_owned(),
+        };
+        assert!(
+            matches!(remap_with(&text, |_| None), Some(InputEvent::Text { text }) if text == "é")
+        );
+        let step = InputEvent::CompositionUpdate {
+            text: "かな".to_owned(),
+        };
+        assert!(matches!(
+            remap_with(&step, |_| None),
+            Some(InputEvent::CompositionUpdate { text }) if text == "かな"
+        ));
+        let end = InputEvent::CompositionEnd {
+            text: "仮名".to_owned(),
+        };
+        assert!(matches!(
+            remap_with(&end, |_| None),
+            Some(InputEvent::CompositionEnd { text }) if text == "仮名"
+        ));
+        let wheel = InputEvent::Wheel {
+            dx: 1.5,
+            dy: -3.0,
+            delta_mode: 1,
+            ctrl_key: true,
+        };
+        assert!(matches!(
+            remap_with(&wheel, |_| None),
+            Some(InputEvent::Wheel { dx, dy, delta_mode: 1, ctrl_key: true }) if dx == 1.5 && dy == -3.0
+        ));
+    }
+
+    /// `TOILE-UI-097`: two embeds of one document are two children, each made
+    /// for its own element, and a third reconcile keeps them both.
+    #[wasm_bindgen_test]
+    fn two_embeds_of_one_document_are_two_children() {
+        let doc = DocumentId::new();
+        let embeds = [
+            embed("a", doc, Affine::IDENTITY),
+            embed("b", doc, Affine::IDENTITY),
+        ];
+        let mut children: HashMap<ElementId, String> = HashMap::new();
+        let mut sizes = HashMap::new();
+        let mut made = Vec::new();
+        reconcile_children(
+            &mut children,
+            &mut sizes,
+            &embeds,
+            |e| {
+                made.push(e.element.0.clone());
+                e.element.0.clone()
+            },
+            |_, _, _| {},
+            |_| false,
+        );
+        assert_eq!(children.len(), 2, "two embeds of one document share a view");
+        assert_eq!(made, ["a", "b"]);
+        assert_eq!(children[&ElementId("b".to_owned())], "b");
+    }
+
+    /// A child that changed on its own makes the board
+    /// recomposite, and a quiet frame does not.
+    #[wasm_bindgen_test]
+    fn a_child_that_changed_on_its_own_repaints_the_board() {
+        let embeds = [embed("a", DocumentId::new(), Affine::IDENTITY)];
+        let mut children: HashMap<ElementId, u32> = HashMap::new();
+        let mut sizes = HashMap::new();
+        let mut pass = |changed: bool| {
+            reconcile_children(
+                &mut children,
+                &mut sizes,
+                &embeds,
+                |_| 0,
+                |_, _, _| {},
+                |_| changed,
+            )
+        };
+        assert!(pass(false), "a fresh child does not repaint the board");
+        assert!(!pass(false), "a quiet frame repaints the board");
+        assert!(
+            pass(true),
+            "a child's own change does not repaint the board"
+        );
+    }
+
+    /// `TOILE-UI-096`, `TOILE-UI-320`: a child paints inside its embed's clip,
+    /// through the embed's own transform, and both are popped after it. The
+    /// content and the overlay pass both go through this one walk, so a
+    /// rotated embed paints both halves of its child rotated.
+    #[wasm_bindgen_test]
+    fn a_child_paints_inside_its_embeds_clip_and_transform() {
+        let turned = Affine::translate((40.0, 30.0)) * Affine::rotate(0.5);
+        let embeds = [embed("a", DocumentId::new(), turned)];
+        let mut children: HashMap<ElementId, ()> = HashMap::from([(ElementId("a".to_owned()), ())]);
+        let mut surface = RecordingSurface::new();
+        let red = Color::from_rgba8(255, 0, 0, 255);
+        paint_children(&mut surface, &embeds, &mut children, |_, s| {
+            s.fill_rect(Rect::new(0.0, 0.0, 4.0, 4.0), red);
+        });
+        assert_eq!(
+            surface.ops(),
+            [
+                DrawOp::PushClip {
+                    rect: embeds[0].screen_rect
+                },
+                DrawOp::PushTransform { transform: turned },
+                DrawOp::FillRect {
+                    rect: Rect::new(0.0, 0.0, 4.0, 4.0),
+                    color: red
+                },
+                DrawOp::PopTransform,
+                DrawOp::PopClip,
+            ]
+        );
+        assert_eq!((surface.clip_depth(), surface.transform_depth()), (0, 0));
     }
 }

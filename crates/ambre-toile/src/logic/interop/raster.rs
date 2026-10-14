@@ -25,7 +25,7 @@ const THUMB_MAX_EDGE: u32 = 256;
 /// import. Not a hash -- interop does not hash. Phase 1 replaces it with the
 /// blake2b `content_hash` the Sync thread returns.
 pub(super) fn pending_hash(index: usize) -> ContentHash {
-    ContentHash(format!("pending:{index}"))
+    ContentHash(format!("{}{index}", super::media::PLACEHOLDER_PREFIX))
 }
 
 /// Import a single raster file: decode, bound, thumbnail, and place one

@@ -25,11 +25,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-049` | `INV` | An entry MUST carry the dimensions, the type and a thumbnail. | this spec section 3; `ambre-spec-toile-schema.md section 3` | structural -- `ambre_toile::logic::state::import::seed_media` writes those four fields | none | verified |
 | `TOILE-IO-101` | `INV` | An entry MUST NOT carry the picture. | this spec section 3; `ambre-spec-toile-schema.md section 3` | structural -- the plaintext is not one of the four fields `ambre_toile::logic::state::import::seed_media` writes | none | verified |
 | `TOILE-IO-013` | `INV` | This board MUST NOT implement cryptography: it hands plaintext to the Sync thread and no pixel reaches the server except as ciphertext. | this spec section 3; `ZK-001`, `ZK-004` | crate-graph -- `ambre-toile` declares no AEAD, no key derivation and no key exchange crate; cargo-deny -- `deny.toml` refuses to let it, each capability crate listing its allowed wrappers | none | verified |
-| `TOILE-IO-037` | `INV` | A decoded picture MUST NOT outlive the session: no plaintext pixel MUST reach local storage. | this spec section 3; `ZK-004` | none | unheld -- the cache is a map in Logic-thread memory and the crate opens no storage handle, so the rule holds by absence, and nothing would go red the day a writer appeared; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-037` | `INV` | A decoded picture MUST NOT outlive the session: no decoded pixel MUST reach local storage. | this spec section 3; `ZK-004` | `ambre_toile::logic::state::export::media_request_tests::a_decoded_picture_never_enters_the_persisted_document`; ci-gate -- `scripts/crate_boundaries.py` refuses a storage call outside the three persistence paths (`UI-THREAD-004`), so `ambre-toile` opens no storage handle | none | verified |
 | `TOILE-IO-050` | `OBS` | A picture whose pixels are resident MUST paint them scaled to its box and rotated with it. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- one image draw at the element box | none | verified |
 | `TOILE-IO-051` | `OBS` | A picture whose pixels are not resident MUST paint a placeholder box, never a hole. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- the fallback fill for the unresolved address in the same walk | none | verified |
 | `TOILE-IO-034` | `OBS` | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | `ambre_toile::logic::state::export::media_request_tests::a_media_request_answers_with_decoded_pixels` -- the Logic half; `ambre_toile::ui::render::tests::only_the_unresolved_pictures_are_asked_for` -- the UI half. The pixels are the thumbnail's, which is every pixel this side holds (`TOILE-IO-035`, `TOILE-IO-100`) | none | verified |
-| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none | unheld -- the thumbnail is what reaches the screen now (`TOILE-IO-034`), and the clause this row adds is held by nothing: no download is ever in flight for a paint to happen *during*, so what a test would separate does not yet exist, section 6; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none | unheld -- the thumbnail is what reaches the screen now (`TOILE-IO-034`), and the clause this row adds is held by nothing: no download is ever in flight for a paint to happen *during*, so what a test would separate does not yet exist, section 6; lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6) | untested |
 
 ### 1.2 Bring a picture in
 
@@ -49,8 +49,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-008` | `POST` | A picture import MUST wait for its upload: nothing MUST be applied until every blob has the address Sync returned. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` -- one request issued, no delta and no element while it is outstanding | none | verified |
 | `TOILE-IO-057` | `POST` | The last address to return MUST land the whole batch in one commit, elements and entries together. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` -- the element, the entry and the single delta once the confirmation arrives | none | verified |
 | `TOILE-IO-058` | `POST` | A seeded entry MUST record the picture's dimensions and its type, so a box can be laid out before the pixels arrive. | this spec section 3 | `ambre_toile::logic::state::import::tests::seed_media_writes_load_info`; `ambre_toile::logic::state::import::tests::import_seeds_the_media_map` -- the same read through a whole import | none | verified |
-| `TOILE-IO-036` | `POST` | Undoing an import MUST take back the media entries that import seeded. | this spec section 3 | none | unheld -- the seed runs inside the import's single commit, so the rule holds by construction, and `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` does undo an import but counts the elements that left rather than the entries; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-IO-059` | `FRAME` | A seed MUST NOT put a placeholder token in the document: only an address Sync returned MAY become a key. | this spec section 3 | none | unheld -- the guard refuses an empty key, which `ambre_toile::logic::state::import::tests::seed_media_skips_unresolved_hash` drives, and not the `pending:` token itself. What keeps the token out is the rewrite that always runs first, section 6; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-036` | `POST` | Undoing an import MUST take back the media entries that import seeded. | this spec section 3 | `ambre_toile::logic::state::import::tests::undoing_an_image_import_takes_its_media_entry_back` | none | verified |
+| `TOILE-IO-059` | `FRAME` | A seed MUST NOT put a placeholder token in the document: only an address Sync returned MAY become a key. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_placeholder_token_never_becomes_a_key`; `ambre_toile::logic::state::import::tests::seed_media_skips_unresolved_hash` -- the empty key | none | verified |
 | `TOILE-IO-060` | `FAIL` | A failed upload MUST abort the whole pending import and leave the board untouched. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` -- the notice, the empty board and the drained registry | none | verified |
 | `TOILE-IO-061` | `FAIL` | A confirmation matching no pending import MUST be dropped, and MUST change nothing. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_stale_service_response_is_dropped` | none | verified |
 
@@ -73,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 25 `verified`, 4 `untested`. What holds is the upload half: the address dedups, the
-  cache keeps a load in flight. A failed upload takes the import with it, and a hostile picture is refused
-  off its header. What is loose is the download half: the cache and the thumbnail exist, and nothing joins
-  either to a screen. Loose too is the placeholder.
+* **Verification.** 28 `verified`, 1 `untested`. The upload half holds: the address dedups, and a failed
+  upload takes the import with it. An undo takes the entry back, and no placeholder becomes a key. A
+  decoded picture stays out of the document. Only the thumbnail shown during a download is loose
+  (`TOILE-IO-035`), because nothing downloads yet.
 
 ---
 
@@ -90,7 +90,7 @@ example to the test that holds it.
 | imports a picture | watches | one address and one entry (`TOILE-IO-006`) | Alice sees her picture; Bob sees a box until his own fetch lands (`TOILE-IO-034`) | `logic::state::import::tests::import_seeds_the_media_map` |
 | imports the same picture twice | watches | one entry, two elements (`TOILE-IO-006`) | two pictures, one blob | `logic::state::import::tests::seed_media_dedups_repeated_hashes` |
 | imports a picture whose upload fails | watches | nothing (`TOILE-IO-008`) | an error on Alice's screen and no change on Bob's | `logic::state::import::tests::a_failed_upload_aborts_the_pending_import` |
-| imports a picture, then undoes | watches | neither the element nor its entry (`TOILE-IO-036`) | the picture leaves in one step, on both boards | `logic::state::import::tests::image_import_defers_until_media_uploads`, which undoes and counts the elements, never the entries |
+| imports a picture, then undoes | watches | neither the element nor its entry (`TOILE-IO-036`) | the picture leaves in one step, on both boards | `logic::state::import::tests::undoing_an_image_import_takes_its_media_entry_back` |
 
 ---
 
@@ -230,9 +230,9 @@ picture the document cannot resolve would be re-requested on every frame that fa
   capacity is never chosen, and its eviction never runs outside tests.
 * **A local blob is never re-used across documents.** Content addressing would let two boards share
   one fetch, and the cache would have to leave the engine to do it.
-* **Undo is not tested against the media map** (`TOILE-IO-036`). The seed runs inside the import's
-  single commit, so the rule follows from the commit. A test does undo an import -- it counts the
-  elements that left and never the entries, which is the assertion the rule needs.
+* **The thumbnail persists in plaintext on the device** (`TOILE-IO-037`). It rides in the document,
+  and local storage keeps the document unencrypted at rest, like its text. The rule bans only the
+  decoded pixels, which the cache holds in memory. Encrypting the local store is not ruled.
 
 * **The plaintext is held whole beside the decoded form.** The blob carries the file's own bytes
   while the decode holds the expanded picture, so a picture at the bound costs both. No rule caps

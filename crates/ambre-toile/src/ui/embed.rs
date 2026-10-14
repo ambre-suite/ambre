@@ -23,7 +23,10 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId};
+use ambre_bus::app::toile::{
+    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, InitContent,
+    ToileCommand,
+};
 use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_draw::{Affine, Point, Rect, Size};
 
@@ -204,6 +207,40 @@ pub enum EmbedTarget {
 pub struct PlacedEmbed {
     pub target: EmbedTarget,
     pub at: Option<Point>,
+}
+
+/// The one write that puts `placed` on the board seen through `cam`
+/// (`TOILE-086`, `TOILE-087`). The point the user aimed at is the embed's
+/// centre, not its corner. With no drop point, a menu entry started it. It
+/// then lands in the middle of what the viewer sees, like a picker import.
+pub fn placement(placed: PlacedEmbed, cam: &ViewportTransform) -> ToileCommand {
+    let screen = placed
+        .at
+        .unwrap_or(Point::new(cam.size.width / 2.0, cam.size.height / 2.0));
+    let size = DEFAULT_EMBED_SIZE;
+    let centre = cam.screen_to_world() * screen;
+    let at = Point::new(centre.x - size.width / 2.0, centre.y - size.height / 2.0);
+    let (kind, content) = match placed.target {
+        EmbedTarget::Web(url) => (ElementKind::Embed, InitContent::Embed(url)),
+        EmbedTarget::Document {
+            document_id,
+            doc_type,
+        } => (
+            ElementKind::DocEmbed,
+            InitContent::DocEmbed {
+                document_id,
+                doc_type,
+            },
+        ),
+    };
+    ToileCommand::CreateElement {
+        kind,
+        at,
+        size,
+        content,
+        fill: None,
+        correlate: 0,
+    }
 }
 
 /// Why an address cannot go on the board. One variant per message the user
@@ -1542,5 +1579,66 @@ mod routing_tests {
             Point::new(50.0, 25.0),
             quad()
         ));
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::{DEFAULT_EMBED_SIZE, EmbedTarget, PlacedEmbed, placement};
+    use crate::ui::viewport::ViewportTransform;
+    use ambre_bus::app::toile::{ElementKind, InitContent, ToileCommand};
+    use ambre_bus::{DocType, DocumentId};
+    use ambre_draw::{Point, Size};
+
+    fn created(cmd: ToileCommand) -> (ElementKind, Point, Size, InitContent) {
+        match cmd {
+            ToileCommand::CreateElement {
+                kind,
+                at,
+                size,
+                content,
+                ..
+            } => (kind, at, size, content),
+            other => panic!("expected one element written, got {other:?}"),
+        }
+    }
+
+    /// `TOILE-086`: a picked document lands as a reference to it, centred on
+    /// what the viewer is looking at. The board stores the id, never the
+    /// content.
+    #[test]
+    fn a_picked_document_lands_as_a_reference_in_the_middle_of_the_view() {
+        let cam = ViewportTransform::new(800.0, 600.0);
+        let document_id = DocumentId::new();
+        let target = EmbedTarget::Document {
+            document_id,
+            doc_type: DocType::Trame,
+        };
+        let (kind, at, size, content) = created(placement(PlacedEmbed { target, at: None }, &cam));
+        assert_eq!(kind, ElementKind::DocEmbed);
+        assert_eq!(size, DEFAULT_EMBED_SIZE);
+        let centre = cam.screen_to_world() * Point::new(400.0, 300.0);
+        assert_eq!(at, centre - (size.to_vec2() / 2.0));
+        assert!(matches!(
+            content,
+            InitContent::DocEmbed { document_id: d, doc_type: DocType::Trame } if d == document_id
+        ));
+    }
+
+    /// `TOILE-087`: an address lands as a web embed, centred under the point
+    /// it was dropped on.
+    #[test]
+    fn a_web_address_lands_centred_under_its_drop_point() {
+        let cam = ViewportTransform::new(800.0, 600.0);
+        let url = "https://example.com".to_owned();
+        let placed = PlacedEmbed {
+            target: EmbedTarget::Web(url.clone()),
+            at: Some(Point::new(100.0, 50.0)),
+        };
+        let (kind, at, size, content) = created(placement(placed, &cam));
+        assert_eq!(kind, ElementKind::Embed);
+        let centre = cam.screen_to_world() * Point::new(100.0, 50.0);
+        assert_eq!(at, centre - (size.to_vec2() / 2.0));
+        assert!(matches!(content, InitContent::Embed(u) if u == url));
     }
 }

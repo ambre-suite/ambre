@@ -19,9 +19,19 @@ use std::collections::HashMap;
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct ContentHash(pub String);
 
+/// The prefix of the token an import names a blob by until Sync returns its
+/// address. It is never an address, so it never becomes a key.
+pub(crate) const PLACEHOLDER_PREFIX: &str = "pending:";
+
 impl ContentHash {
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Whether this is an address Sync returned. An empty key and a
+    /// placeholder token are not (`TOILE-IO-059`).
+    pub fn is_resolved(&self) -> bool {
+        !self.0.is_empty() && !self.0.starts_with(PLACEHOLDER_PREFIX)
     }
 }
 

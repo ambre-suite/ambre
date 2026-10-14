@@ -169,6 +169,14 @@ fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
     all_took_it
 }
 
+/// The nested document `ev` belongs to, when it is one the fan-out holds a route
+/// for. Such an event goes to the child's queues and never to the board's own
+/// stream or chrome (`TOILE-UI-098`). A route left with no view still counts.
+fn child_of(routes: &ChildRoutes, ev: &UiEvent) -> Option<DocumentId> {
+    ev.routed_document_id()
+        .filter(|id| routes.borrow().contains_key(id))
+}
+
 /// Queue `ev` for `id`, oldest first, and say so when the bound forces a drop.
 fn defer_for_child(backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
     let mut backlog = backlog.borrow_mut();
@@ -1220,9 +1228,7 @@ pub fn main() {
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
             // events (and untagged service events) fall through unchanged.
-            if let Some(id) = ev.routed_document_id()
-                && child_routes_relay.borrow().contains_key(&id)
-            {
+            if let Some(id) = child_of(&child_routes_relay, &ev) {
                 send_to_child(&child_routes_relay, &child_backlog_relay, id, ev);
                 continue;
             }
@@ -1770,3 +1776,138 @@ mod shell;
 
 use platform::*;
 use shell::mount_shell;
+
+#[cfg(test)]
+mod fan_out_tests {
+    use super::{
+        CHILD_BACKLOG_LIMIT, ChildBacklog, ChildRoutes, child_of, flush_child_backlog,
+        send_to_child,
+    };
+    use ambre_bus::conduit;
+    use ambre_bus::{DocumentId, UiEvent};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// An event a child's stream carries. Its `connected` flag tells two
+    /// events apart, so the order they arrive in can be read back.
+    fn status(document_id: DocumentId, connected: bool) -> UiEvent {
+        UiEvent::ConnectionStatus {
+            document_id,
+            connected,
+        }
+    }
+
+    fn fan_out() -> (ChildRoutes, ChildBacklog) {
+        (
+            Rc::new(RefCell::new(HashMap::new())),
+            Rc::new(RefCell::new(HashMap::new())),
+        )
+    }
+
+    fn connected(ev: UiEvent) -> bool {
+        match ev {
+            UiEvent::ConnectionStatus { connected, .. } => connected,
+            _ => panic!("a foreign event reached the child"),
+        }
+    }
+
+    /// Counts the error events emitted while it is the default subscriber.
+    struct Errors(Arc<AtomicUsize>);
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Errors {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            if *event.metadata().level() == tracing::Level::ERROR {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// `TOILE-UI-340`: what a full queue refuses waits, and is re-offered in
+    /// order and ahead of the fresh stream. A later event never overtakes it.
+    #[wasm_bindgen_test]
+    fn a_refused_event_waits_and_arrives_in_order() {
+        let (routes, backlog) = fan_out();
+        let doc = DocumentId::new();
+        let (tx, rx) = conduit::local::<UiEvent>(1);
+        routes.borrow_mut().entry(doc).or_default().push(tx);
+
+        send_to_child(&routes, &backlog, doc, status(doc, true));
+        send_to_child(&routes, &backlog, doc, status(doc, false));
+        send_to_child(&routes, &backlog, doc, status(doc, true));
+        assert_eq!(
+            backlog.borrow()[&doc].len(),
+            2,
+            "a refused event was dropped"
+        );
+
+        let mut seen = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            seen.push(connected(ev));
+            flush_child_backlog(&routes, &backlog);
+        }
+        assert_eq!(seen, [true, false, true]);
+        assert!(backlog.borrow().is_empty(), "a drained backlog lingers");
+    }
+
+    /// `TOILE-UI-340`: a backlog past its bound drops its oldest event, and
+    /// says so. Nothing is dropped in silence.
+    #[wasm_bindgen_test]
+    fn an_overflowing_backlog_says_what_it_dropped() {
+        let (routes, backlog) = fan_out();
+        let doc = DocumentId::new();
+        let (tx, _rx) = conduit::local::<UiEvent>(1);
+        routes.borrow_mut().entry(doc).or_default().push(tx);
+        let errors = Arc::new(AtomicUsize::new(0));
+        let subscriber = tracing_subscriber::layer::SubscriberExt::with(
+            tracing_subscriber::registry(),
+            Errors(Arc::clone(&errors)),
+        );
+        tracing::subscriber::with_default(subscriber, || {
+            // One taken by the queue, the bound waiting, and two past it.
+            for _ in 0..CHILD_BACKLOG_LIMIT + 3 {
+                send_to_child(&routes, &backlog, doc, status(doc, true));
+            }
+        });
+        assert_eq!(backlog.borrow()[&doc].len(), CHILD_BACKLOG_LIMIT);
+        assert_eq!(
+            errors.load(Ordering::Relaxed),
+            2,
+            "an event was dropped in silence"
+        );
+    }
+
+    /// `TOILE-UI-098`: a nested document's event stays with its children, even
+    /// once its last view is gone. The route outlives the view, so the event is
+    /// absorbed instead of falling through to the board's own stream.
+    #[wasm_bindgen_test]
+    fn a_childs_event_never_reaches_the_board() {
+        let (routes, backlog) = fan_out();
+        let child = DocumentId::new();
+        let board = DocumentId::new();
+        let (tx, rx) = conduit::local::<UiEvent>(4);
+        routes.borrow_mut().entry(child).or_default().push(tx);
+        assert_eq!(child_of(&routes, &status(child, true)), Some(child));
+        assert_eq!(child_of(&routes, &status(board, true)), None);
+
+        // The embed leaves the frame: its view, and with it the receiver, drop.
+        drop(rx);
+        send_to_child(&routes, &backlog, child, status(child, true));
+        assert!(
+            routes.borrow()[&child].is_empty(),
+            "the dead view kept its slot"
+        );
+        assert_eq!(
+            child_of(&routes, &status(child, false)),
+            Some(child),
+            "an event of a document with no view fell through to the board"
+        );
+    }
+}

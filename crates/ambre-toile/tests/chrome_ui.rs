@@ -914,3 +914,130 @@ fn a_refused_export_says_why() {
     assert!(text.contains("the fonts are still loading"), "{text}");
     root.remove();
 }
+
+/// Mount Toile's choosers over `docs`, with `here` open, and hand back the
+/// dialogs' state and where a placed embed is published.
+fn mount_choosers(
+    docs: Vec<ambre_toile::chrome::DocChoice>,
+    here: ambre_bus::DocumentId,
+) -> (
+    web_sys::Element,
+    ambre_toile::chrome::ToileDialogs,
+    RwSignal<Option<ambre_toile::chrome::PlacedEmbed>>,
+) {
+    use ambre_toile::chrome::{DeckSignals, ToileChoosers, ToileDialogs};
+    let dialogs = ToileDialogs::new();
+    let placed = RwSignal::new(None);
+    let deck = DeckSignals {
+        panel: RwSignal::new(false),
+        view: RwSignal::new(DeckView::default()),
+        intent: RwSignal::new(None),
+    };
+    let set_link = RwSignal::new(None);
+    let root = mount_in_container(move || {
+        view! {
+            <ToileChoosers
+                dialogs=dialogs
+                docs=Signal::derive(move || docs.clone())
+                here=Signal::derive(move || Some(here))
+                deck=deck
+                placed=placed
+                set_link=set_link
+            />
+        }
+    });
+    (root, dialogs, placed)
+}
+
+/// Click the button labelled `label` inside the element `selector` names.
+fn click_in(root: &web_sys::Element, selector: &str, label: &str) -> bool {
+    let buttons = root
+        .query_selector(selector)
+        .unwrap()
+        .expect("the dialog")
+        .query_selector_all("button")
+        .unwrap();
+    for i in 0..buttons.length() {
+        let b: web_sys::HtmlElement = buttons.item(i).unwrap().dyn_into().unwrap();
+        if b.text_content().as_deref() == Some(label) {
+            b.click();
+            return true;
+        }
+    }
+    false
+}
+
+/// `TOILE-087`: the web dialog places the address it normalised, and keeps a
+/// refused one in the dialog, beside the field, with nothing placed.
+#[wasm_bindgen_test]
+fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
+    use ambre_toile::chrome::{AddressError, EmbedTarget};
+    let (root, dialogs, placed) = mount_choosers(Vec::new(), ambre_bus::DocumentId::new());
+    dialogs.embed_web_open.set(true);
+
+    dialogs.embed_web_text.set("javascript:alert(1)".to_owned());
+    assert!(click_in(&root, ".ambre-embed-web", "Embed"));
+    assert_eq!(placed.get_untracked(), None, "a refused address was placed");
+    assert_eq!(
+        dialogs.embed_web_error.get_untracked(),
+        Some(AddressError::NotHttps.message())
+    );
+    assert!(
+        dialogs.embed_web_open.get_untracked(),
+        "the refusal closed the dialog"
+    );
+
+    dialogs.embed_web_text.set("example.com".to_owned());
+    assert!(click_in(&root, ".ambre-embed-web", "Embed"));
+    let placed = placed.get_untracked().expect("the address was placed");
+    assert_eq!(
+        placed.target,
+        EmbedTarget::Web("https://example.com".to_owned())
+    );
+    assert!(!dialogs.embed_web_open.get_untracked());
+    root.remove();
+}
+
+/// `TOILE-086`: the document picker offers every document but the open one,
+/// and a pick places a reference to the document it names.
+#[wasm_bindgen_test]
+fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
+    use ambre_bus::{DocType, DocumentId};
+    use ambre_toile::chrome::{DocChoice, EmbedTarget};
+    let here = DocumentId::new();
+    let other = DocumentId::new();
+    let docs = vec![
+        DocChoice {
+            document_id: here,
+            doc_type: DocType::Toile,
+            name: Some("This board".to_owned()),
+        },
+        DocChoice {
+            document_id: other,
+            doc_type: DocType::Trame,
+            name: Some("Budget".to_owned()),
+        },
+    ];
+    let (root, dialogs, placed) = mount_choosers(docs, here);
+    dialogs.embed_doc_open.set(true);
+
+    let picker = root
+        .query_selector(".ambre-embed-doc")
+        .unwrap()
+        .expect("the picker");
+    let offered = picker
+        .query_selector_all(".ambre-embed-docs button")
+        .unwrap();
+    assert_eq!(offered.length(), 1, "the open board was offered to itself");
+    assert!(click_in(&root, ".ambre-embed-doc", "Budget"));
+    let placed = placed.get_untracked().expect("the pick was placed");
+    assert_eq!(
+        placed.target,
+        EmbedTarget::Document {
+            document_id: other,
+            doc_type: DocType::Trame
+        }
+    );
+    assert!(!dialogs.embed_doc_open.get_untracked());
+    root.remove();
+}

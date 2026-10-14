@@ -29,20 +29,20 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-066` | `POST` | Setting or clearing a link MUST be one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it asserts one delta per write, and the handler makes one `doc.commit()`, which is what one undo item is (`features/ambre-spec-toile-undo.md`) | partial -- no test walks the undo stack over a link; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-066` | `POST` | Setting or clearing a link MUST be one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it asserts one delta per write, and the handler makes one `doc.commit()`, which is what one undo item is (`features/ambre-spec-toile-undo.md`); `ambre_toile::logic::convergence_tests::each_link_write_is_one_undo_item` | none | verified |
 | `TOILE-111` | `FRAME` | Setting or clearing a link MUST write the link register alone: the element's style, geometry and lock MUST NOT change. | this spec section 3 | `ambre_toile::logic::convergence_tests::setting_a_link_touches_nothing_else` -- it reads the painted element before and after and compares its bounds, its fill, its stroke and its lock | none | verified |
 
 ### 1.3 Follow a link
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-112` | `PRE` | Following MUST be asked for by a gesture of its own -- a modified click, the link glyph, or a plain click where editing is off -- so a plain click with the select tool selects instead. | this spec section 4 | `ambre_toile::ui::link::tests::a_plain_click_never_follows_while_editing` -- it holds the rule as a function of the two inputs | partial -- what routes the click is the view, which is not host-constructible, so nothing runs the two together; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-113` | `POST` | Following a link to a frame MUST fit the camera to that frame's box. | this spec section 3 | `ambre_toile::ui::link::tests::each_target_means_one_navigation` -- it holds that a frame target resolves to a jump and to nothing else | partial -- the fit itself rides the camera path the zoom-to-selection entry uses, which no test drives; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-065` | `POST` | A web address MUST be opened by the shell, in a sandboxed tab. | this spec section 4; `ambre-spec-zero-knowledge.md` | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- it holds that the board hands the address out rather than acting on it | partial -- the tab's own terms (a fresh target, `noopener,noreferrer`) are one `window.open` call in the shell, which the host tier cannot run; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-114` | `POST` | A link to another Ambre document MUST be opened by the shell, never by the board. | this spec section 4 | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- a document target leaves the board as a value; `::each_target_means_one_navigation` -- it resolves to that one arm | partial -- the shell's own open path is the launcher's, which no test drives; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-112` | `PRE` | Following MUST be asked for by a gesture of its own -- a modified click, the link glyph, or a plain click where editing is off -- so a plain click with the select tool selects instead. | this spec section 4 | `ambre_toile::ui::link::tests::a_plain_click_never_follows_while_editing` -- it holds the rule as a function of the two inputs; `ambre_toile::ui::view::view_tests::a_plain_click_selects_a_linked_element_and_a_modified_click_follows` -- the view routes the click by it | none | verified |
+| `TOILE-113` | `POST` | Following a link to a frame MUST fit the camera to that frame's box. | this spec section 3 | `ambre_toile::ui::link::tests::each_target_means_one_navigation` -- it holds that a frame target resolves to a jump and to nothing else; `ambre_toile::ui::view::view_tests::a_jump_fits_the_camera_to_the_frames_box` | none | verified |
+| `TOILE-065` | `POST` | A web address MUST be opened by the shell, in a sandboxed tab. | this spec section 4; `ambre-spec-zero-knowledge.md` | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- it holds that the board hands the address out rather than acting on it; `ambre_app::shell::app_root::tests::a_web_address_opens_in_a_fresh_tab_with_no_opener_and_no_referrer` | none | verified |
+| `TOILE-114` | `POST` | A link to another Ambre document MUST be opened by the shell, never by the board. | this spec section 4 | `ambre_toile::ui::link::tests::only_the_outbound_halves_reach_the_shell` -- a document target leaves the board as a value; `::each_target_means_one_navigation` -- it resolves to that one arm; `ambre_app::shell::app_root::tests::a_document_link_is_opened_by_the_shells_router` | none | verified |
 | `TOILE-063` | `FRAME` | Following a link MUST NOT write to the document. | this spec section 3 | structural -- the types are the proof: following resolves to a `LinkAction`, whose three arms are a camera request, an address and a document reference. The one board command it can produce is `RequestSelectionStats`, which the engine answers without a commit | none | verified |
-| `TOILE-115` | `FRAME` | Following a link MUST NOT enter the undo history: a `Ctrl+Z` after a jump MUST revert the last edit, not the jump. | this spec section 3 | structural -- on the row above (`TOILE-063`): the undo manager records commits, a follow makes none, and nothing records where the camera came from | partial -- no test types `Ctrl+Z` after a jump; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-064` | `FAIL` | Following a link to a frame the board no longer holds MUST do nothing, and MUST NOT report an error. | this spec section 3 | structural -- a jump asks the board for the frame's bounds, and an id nobody holds answers `None` bounds, on which the fit does nothing and no error is raised | partial -- nothing drives the pair, and section 6 says what the silence costs; lands with the `Toile embeds, links and media held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-115` | `FRAME` | Following a link MUST NOT enter the undo history: a `Ctrl+Z` after a jump MUST revert the last edit, not the jump. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_jump_is_not_an_undo_item` -- the Logic half; `ambre_toile::ui::view::view_tests::an_undo_after_a_jump_reverts_the_edit_and_not_the_jump` -- the view half | none | verified |
+| `TOILE-064` | `FAIL` | Following a link to a frame the board no longer holds MUST do nothing, and MUST NOT report an error. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_jump_to_a_frame_nobody_holds_does_nothing_and_says_nothing` | none | verified |
 
 * **Budget.** none of its own once built: setting a link is one register write, under the
   transform-command row of `ambre-spec-budgets.md section 1`. A jump to a frame is a camera change,
@@ -50,11 +50,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the one board feature that names an outbound path: the view hands a web address to
   the shell, which opens it in a sandboxed tab. The board never fetches it, and the address is
   document data, sealed like the rest (`TOILE-065`).
-* **Verification.** 5 `verified`, 7 `partial`. What holds is the half that lands in the
-  document: the register is its own, it survives a deletion, and setting it moves nothing else.
-  All three are read off the painted element rather than the handler. The value the view hands out rather than
-  acts on makes the fetch ban an audit (`TOILE-110`). What is loose is every rule whose subject is
-  the surface.
+* **Verification.** 12 `verified`. Host tests read the register off the painted element and drive
+  the view through each follow. Browser tests hold the shell's two outbound opens. The fetch ban is
+  an audit, because the view hands a value out rather than acting on it (`TOILE-110`).
 
 ---
 
@@ -111,9 +109,6 @@ navigation, not a visual attribute, and the lock flag sits outside the style for
 The view asks the board for the frame rather than reading it off the screen. The design read it from
 the painted element, and that fails the case links exist to serve. A link to a frame is how a user
 reaches one that sits **off screen**, and the culled frame holds no off-screen element.
-
-The board answers the bounds of an id it holds. The dead-target refusal then falls out of the same
-path, rather than needing a check of its own.
 
 Step 2 sends `RequestSelectionStats`, which the engine answers without a commit; the other two send
 nothing at all. So no step writes (`TOILE-063`) and none reaches the undo history (`TOILE-115`).

@@ -415,4 +415,28 @@ mod media_request_tests {
         assert!(out.update.is_none(), "a read-only command exports no delta");
         assert!(!ToileCommand::RequestMedia { hashes: Vec::new() }.is_mutating());
     }
+
+    /// `TOILE-IO-037`: a decoded picture never enters what local persistence
+    /// stores. The pixels go to the view, and the snapshot after the answer is
+    /// the snapshot before it, byte for byte, with no delta owed.
+    #[test]
+    fn a_decoded_picture_never_enters_the_persisted_document() {
+        let mut st = board_with_media("img", 4, 2);
+        let before = st.export_snapshot();
+        let out = st.handle_command(ToileCommand::RequestMedia {
+            hashes: vec!["img".to_owned()],
+        });
+        assert!(
+            out.display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::MediaDecoded { .. })),
+            "the picture was decoded"
+        );
+        assert!(out.update.is_none(), "the answer owes persistence a delta");
+        assert_eq!(
+            st.export_snapshot(),
+            before,
+            "the decoded pixels reached the persisted document"
+        );
+    }
 }
