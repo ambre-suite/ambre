@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-036` | `IO` | A size a user set MUST still be there after a reload. | this spec section 3 | `ambre_trame::logic::tests::group7::resize_survives_snapshot_roundtrip` -- a width exported and reimported, the height sharing the same write path | none | verified |
-| `TRAME-UI-037` | `INV` | A size MUST stay with its own column: inserting, deleting or moving a column MUST NOT transfer it to another. | this spec section 3 | none | unheld -- the entry is keyed by the column's stable id rather than by its position, which is what would make the rule true, and no test moves a sized column; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-037` | `INV` | A size MUST stay with its own column: inserting, deleting or moving a column MUST NOT transfer it to another. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` -- a width through an insert, a move and a delete | none | verified |
 | `TRAME-UI-038` | `CONC` | When two users size one column at the same moment, every peer MUST end on one size. | this spec section 2, row 1 | `ambre_trame::logic::tests::group7::concurrent_resize_of_same_col_converges_lww` | none | verified |
 
 ### 1.2 Drag a boundary
@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-039` | `POST` | A row MUST NOT be sized below its minimum height, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::resize_row_round_trips_and_clamps_to_minimum` -- it reads back the clamped height, and the drag guide is clamped on the same minimum before the release | none | verified |
-| `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | none | unheld -- `resize_col` clamps on `MIN_COL_WIDTH` in `logic/metrics.rs` and no test reads a width back below it: it is the half `TRAME-UI-039` was carrying, and the two clamps are separate lines of code; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group11::a_column_is_never_narrower_than_its_minimum` | none | verified |
 | `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | none | unheld -- the release divides the on-screen extent back out by the zoom, and no test drives a resize at any zoom but one; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | none | unheld -- the local size map is written once the outbox takes the command, and nothing asserts the grid reflowed without the answer; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- the early return in `send_resize_col` and `send_resize_row` before the local map is written, which a native test reaches by resizing over an outbox that refuses. The outcome it branches on is `BUS-011`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 1 `partial`, 6 `untested`. What holds is the document plane: the
+* **Verification.** 5 `verified`, 1 `partial`, 4 `untested`. What holds is the document plane: the
   write, the reload and the concurrent race each have a test. What is loose is the UI thread, where
   the pointer meets the zoom and the cache, and the column clamp nothing reads back. A resize goes
   out lossless, so a refused send leaves the local size map untouched, held by a manual read

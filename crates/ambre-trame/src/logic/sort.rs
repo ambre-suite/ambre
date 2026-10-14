@@ -227,6 +227,8 @@ impl TrameState {
         // The hidden set is keyed by row uid, so it follows the rows across the
         // permutation -- remap positions, do not recompute.
         self.rebuild_filter();
+        // So are the sizes: each follows its own line (`TRAME-170`).
+        self.reseed_metrics();
         if rewritten {
             self.reseed_engine();
         } else {

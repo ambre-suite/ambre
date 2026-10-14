@@ -333,6 +333,9 @@ impl TrameState {
         // The hidden set is keyed by stable row uid, so a structural shift just
         // remaps it to the new positions (no recompute).
         self.rebuild_filter();
+        // So are the sizes: each follows its own line (`TRAME-170`,
+        // `TRAME-UI-037`).
+        self.reseed_metrics();
         let update = self.flush_delta();
         display.push(TrameEvent::DataReset);
         TrameOutcome {

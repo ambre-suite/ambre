@@ -21,12 +21,12 @@
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 | 5 |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 | 2 |
-| `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 | 6 |
-| `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 20 | 3 |
+| `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 | 4 |
+| `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 20 |  |
 | `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 24 | 9 |
 | `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 11 | 3 |
 | `trame-cell-editing` | A user types into a cell. | partial | 41 |  |
-| `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 | 12 |
+| `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 | 1 |
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 12 | 6 |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 22 | 7 |
 | `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 | 1 |
@@ -38,7 +38,7 @@
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 11 | 2 |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 | 4 |
-| `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 6 |
+| `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 1 |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 10 implemented, 15 partial, 0 design-only. 467 contract rows, 106 loose.**
+**25 features: 10 implemented, 15 partial, 0 design-only. 467 contract rows, 85 loose.**

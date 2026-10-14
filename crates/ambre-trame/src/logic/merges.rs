@@ -249,6 +249,11 @@ impl TrameState {
                 let left = index.col_pos(&mc)? as u32;
                 let bottom = index.row_pos(&er)? as u32;
                 let right = index.col_pos(&ec)? as u32;
+                // A peer may write an entry of one cell. It is no merge
+                // (`TRAME-128`), so it masks nothing and draws no block.
+                if top == bottom && left == right {
+                    return None;
+                }
                 Some((
                     master_key.to_string(),
                     (top.min(bottom), left.min(right)),
