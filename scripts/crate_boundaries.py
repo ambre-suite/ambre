@@ -68,6 +68,17 @@ tests names a colour constant or builds one from components.
 
 **No font is embedded in a binary** (`CANVAS-018`). The faces are fetched from
 the page origin. So no Rust line includes the bytes of a font file.
+
+**The relay logs no payload** (`SRV-001`, `ZK-006`). A log line or a span may
+carry identifiers, lengths and sequence numbers. So no log macro or span of
+`ambre-server` names a value called for a payload, a blob, a body or its
+bytes, unless it reads only the length. A payload under a neutral name is
+left to the reviewer.
+
+**One kinetic model** (`KINETIC-001`). Pan, flick, wheel momentum and edge
+scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
+a friction or a velocity of its own. So no Rust line outside that file names
+one above its tests.
 """
 
 from __future__ import annotations
@@ -267,6 +278,23 @@ WIDTH_MEDIA = re.compile(r"@media[^{]*\((?:min|max)-width:[^)]*\)[^{]*\{")
 HIDING = re.compile(r"\bdisplay:\s*none\b|\bvisibility:\s*hidden\b")
 # A width threshold spelled anywhere else: a width query, or a media read.
 THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_media\b|\bmatchMedia\b")
+# The relay's log lines, and the words that name a payload in them.
+RELAY = "crates/ambre-server/src"
+LOG_MACRO = re.compile(
+    r"\b(?:tracing::|log::)?(?:(?:info|warn|error|debug|trace)(?:_span)?|println|eprintln|print|eprint)!\s*\("
+    r"|#\[(?:tracing::)?instrument\b"
+)
+PAYLOAD_NAME = re.compile(
+    r"\b\w*(?:payload|blob|plaintext|ciphertext|cipher|sealed|bytes|body)\w*\b", re.IGNORECASE
+)
+PAYLOAD_SAFE = re.compile(r"_(?:len|size|count|key|id|hash)$", re.IGNORECASE)
+STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
+INTERPOLATION = re.compile(r"\{(\w+)")
+
+# The shared kinetic model, and the words a second copy of it would need.
+KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
+KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
+
 # A content view reading the window rather than the box it is given.
 CONTENT_VIEWS = (
     "crates/ambre-trame/src/ui",
@@ -772,6 +800,69 @@ def check_accessibility(errors: list[str]) -> int:
     return len(files) + 1
 
 
+def log_invocations(lines: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Each log macro or span of the lines, joined until its brackets close."""
+    found: list[tuple[int, str]] = []
+    index = 0
+    while index < len(lines):
+        number, line = lines[index]
+        start = LOG_MACRO.search(line)
+        if not start:
+            index += 1
+            continue
+        text = line[start.start():]
+        depth = text.count("(") + text.count("[") - text.count(")") - text.count("]")
+        while depth > 0 and index + 1 < len(lines):
+            index += 1
+            more = lines[index][1]
+            text += " " + more
+            depth += more.count("(") + more.count("[") - more.count(")") - more.count("]")
+        found.append((number, text))
+        index += 1
+    return found
+
+
+def payload_names(invocation: str) -> list[str]:
+    """The names of the invocation that call a payload and read more than its length."""
+    names = INTERPOLATION.findall(" ".join(STRING_LITERAL.findall(invocation)))
+    rest = STRING_LITERAL.sub(" ", invocation)
+    names += [m.group(0) for m in PAYLOAD_NAME.finditer(rest) if not rest[m.end():].startswith(".len()")]
+    return [n for n in names if PAYLOAD_NAME.fullmatch(n) and not PAYLOAD_SAFE.search(n)]
+
+
+def check_payload_logs(errors: list[str]) -> int:
+    """`SRV-001`, `ZK-006`: no log line or span of the relay names a payload."""
+    files = sources((RELAY,))
+    if not files:
+        errors.append(f"{RELAY}: gone from the tree, so the relay's log lines are unread")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, invocation in log_invocations(above_tests(path)):
+            if invocation.startswith("#[") and "skip_all" in invocation:
+                continue
+            for name in payload_names(invocation):
+                errors.append(f"{rel}:{number}: a log line or span names a payload: `{name}`")
+    return len(files)
+
+
+def check_kinetic_copy(errors: list[str]) -> int:
+    """`KINETIC-001`: no Rust line outside the shared model names a decay or a velocity."""
+    if not KINETIC_TERM.search(read(KINETIC_MODEL)):
+        errors.append(f"{KINETIC_MODEL}: names no decay, so the kinetic boundary holds nothing")
+        return 0
+    files = rust_files()
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == KINETIC_MODEL:
+            continue
+        for number, line in above_tests(path):
+            found = KINETIC_TERM.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a kinetic model outside `kinetic.rs`: `{found.group(0)}`")
+    return len(files)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -797,6 +888,8 @@ def main() -> int:
     controls = check_modals_and_drags(errors)
     keys = check_key_verification(errors)
     access = check_accessibility(errors)
+    relay_logs = check_payload_logs(errors)
+    kinetic = check_kinetic_copy(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -816,7 +909,9 @@ def main() -> int:
         f"{widths} files read for a width spelled twice, "
         f"{controls} files read for a modal, a drag or a named creation, "
         f"{keys} manifests and files read for a key hash or an invitation, "
-        f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe"
+        f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
+        f"{relay_logs} relay files read for a payload in a log line, "
+        f"{kinetic} Rust files read for a second kinetic model"
     )
     for line in errors:
         print(f"  {line}")
@@ -840,7 +935,8 @@ def main() -> int:
             "a drag control debounces, a document is created unnamed, the worker "
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
-            "modal, a menu answers the keyboard, and the pipe stays reachable.",
+            "modal, a menu answers the keyboard, the pipe stays reachable, the "
+            "relay logs no payload, and one file holds the kinetic model.",
             file=sys.stderr,
         )
         return 1

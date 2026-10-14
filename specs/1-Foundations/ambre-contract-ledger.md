@@ -20,15 +20,15 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 77 partial and 298 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 74 partial and 301 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 651 | 336 | 584 | 605 |  | 2176 |
-| `partial` | 27 | 8 | 41 | 1 |  | 77 |
+| `partial` | 24 | 8 | 41 | 1 |  | 74 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 27 | 74 | 188 | 1 |  | 290 |
-| `human-review` | 8 |  |  |  |  | 8 |
+| `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
 
@@ -55,7 +55,7 @@
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |  |
 | `ambre-spec-key-rotation.md` | 28 | 27 | 27 |  |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |  |
-| `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 | 1 | 1 |  |
+| `ambre-spec-kinetic-scroll.md` | 11 | 11 | 9 |  | 2 |  |
 | `ambre-spec-launcher.md` | 24 | 20 | 19 |  | 1 | 4 |
 | `ambre-spec-media.md` | 13 | 13 | 11 |  | 2 |  |
 | `ambre-spec-membership.md` | 30 | 30 | 30 |  |  |  |
@@ -70,14 +70,14 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 22 | 22 |  |  | 2 |
 | `ambre-spec-sequencer.md` | 46 | 37 | 37 |  |  | 9 |
-| `ambre-spec-server.md` | 52 | 34 | 32 | 2 |  | 18 |
+| `ambre-spec-server.md` | 52 | 34 | 32 | 1 | 1 | 18 |
 | `ambre-spec-session.md` | 17 | 17 | 16 | 1 |  |  |
 | `ambre-spec-sync.md` | 29 | 29 | 27 |  | 2 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 11 |  |  | 2 |
 | `ambre-spec-text-input.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-ui.md` | 17 | 11 | 9 |  | 2 | 6 |
 | `ambre-spec-undo.md` | 11 | 11 | 8 | 2 | 1 |  |
-| `ambre-spec-zero-knowledge.md` | 16 | 14 | 13 | 1 |  | 2 |
+| `ambre-spec-zero-knowledge.md` | 16 | 14 | 13 |  | 1 | 2 |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  |  | 12 |

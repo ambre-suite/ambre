@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | human-review -- the reviewer refuses a speed estimate, a decay or an edge speed an application computes for itself | partial -- `intent` -- no gate tells a speed estimate from any other arithmetic. A scan refusing a decay, a friction or a velocity sampler outside `ambre-kinetic` holds the copied model, and a model written afresh stays a reading; lands with the `The rules held by an absence get a gate` Story (`ambre-roadmap.md` E9) | partial |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses a decay, a friction, a damping, an inertia, a half-life or a velocity named outside `crates/ambre-draw/src/kinetic.rs`; human-review -- the reviewer refuses a speed estimate or an edge speed an application computes under other names | partial -- `intent` -- no gate tells a speed estimate under a neutral name from any other arithmetic | human-review |
 
 ### 1.2 Pan and flick
 
@@ -61,7 +61,7 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 9 `verified`, 1 `partial`, 1 `untested`. The model's rows are unit tests of
+* **Verification.** 9 `verified`, 1 `untested`, 1 `human-review`. The model's rows are unit tests of
   `crates/ambre-draw`, which knows no application. The glide is also held once per application, each
   driven natively with a clock the test sets. Prose's own rows hold what its column does with the
   distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its grid

@@ -73,6 +73,8 @@ def scratch(tmp: str) -> Path:
         "        display: inline;\n    }\n}\n",
     )
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
+    write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
+    write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
     return root
 
 
@@ -99,6 +101,8 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_modals_and_drags(errors)
             cb.check_key_verification(errors)
             cb.check_accessibility(errors)
+            cb.check_payload_logs(errors)
+            cb.check_kinetic_copy(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -506,6 +510,32 @@ class CrateBoundaries(unittest.TestCase):
             write(root, f"{cb.WORKER}/auth.rs", text)
             errors = self.run_checks(root)
         self.assertEqual(errors, [])
+
+    def test_a_relay_log_naming_a_payload_is_refused(self):
+        for text in (
+            'fn put() {\n    tracing::info!("stored {payload:?}");\n}\n',
+            "fn put() {\n    tracing::debug!(\n        doc = %id,\n        body = ?request_body,\n    );\n}\n",
+            "#[instrument(fields(blob))]\nfn put(blob: Vec<u8>) {}\n",
+        ):
+            errors = self.breach(f"{cb.RELAY}/blob.rs", text)
+            self.assertTrue(any("names a payload" in e for e in errors), (text, errors))
+
+    def test_a_payload_length_a_message_word_and_a_test_stay_free(self):
+        text = (
+            'fn put(payload: Vec<u8>) {\n    tracing::warn!(payload_len, "payload too large");\n'
+            "    tracing::info!(n = payload.len());\n}\n"
+            '#[cfg(test)]\nmod tests {\n    fn t() { println!("{payload:?}"); }\n}\n'
+        )
+        self.assertEqual(self.breach(f"{cb.RELAY}/blob.rs", text), [])
+
+    def test_a_decay_outside_the_kinetic_model_is_refused(self):
+        for line in ("const FRICTION: f64 = 0.95;\n", "fn step(velocity_x: f64) {}\n"):
+            errors = self.breach("crates/ambre-toile/src/ui/pan.rs", line)
+            self.assertTrue(any("kinetic model outside" in e for e in errors), (line, errors))
+
+    def test_the_kinetic_model_named_from_a_view_stays_free(self):
+        text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
+        self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
 
     def test_a_missing_client_manifest_is_an_error_not_a_pass(self):
         import tempfile
