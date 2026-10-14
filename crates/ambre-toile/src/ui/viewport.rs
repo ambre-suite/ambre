@@ -388,4 +388,39 @@ mod tests {
         assert!((screen_after.x - screen_before.x - 30.0).abs() < 1e-6);
         assert!((screen_after.y - screen_before.y + 20.0).abs() < 1e-6);
     }
+
+    /// `TOILE-UI-285`: a zoom past a stop leaves the zoom at the stop, and the
+    /// world point under the anchor stays under it, at both stops.
+    #[test]
+    fn a_zoom_at_a_stop_holds_its_anchor() {
+        for (zoom, factor) in [(MAX_ZOOM, 4.0), (MIN_ZOOM, 0.25)] {
+            let mut vt = ViewportTransform::new(1000.0, 800.0);
+            vt.zoom = zoom;
+            vt.center = Point::new(120.0, -40.0);
+            let anchor = Point::new(810.0, 95.0);
+            let under = vt.screen_to_world() * anchor;
+            vt.zoom_about(anchor, factor);
+            assert_eq!(vt.zoom, zoom, "the stop refuses the change");
+            assert!(approx(vt.world_to_screen() * under, anchor), "zoom {zoom}");
+        }
+    }
+
+    /// `TOILE-UI-291`: a fit over an extent that is not finite leaves the
+    /// camera as it was, as a zero-area fit does.
+    #[test]
+    fn a_fit_over_an_extent_that_is_not_finite_is_refused() {
+        let mut vt = ViewportTransform::new(1000.0, 800.0);
+        vt.center = Point::new(3.0, 4.0);
+        let before = vt;
+        for world in [
+            Rect::new(0.0, 0.0, f64::INFINITY, 10.0),
+            Rect::new(f64::NEG_INFINITY, 0.0, 10.0, 10.0),
+            Rect::new(0.0, 0.0, 10.0, f64::NAN),
+            Rect::new(f64::NAN, f64::NAN, f64::NAN, f64::NAN),
+        ] {
+            assert_eq!(vt.fit_target(world, FIT_PAD), None, "{world:?}");
+            vt.fit_bounds(world, FIT_PAD);
+            assert_eq!(vt, before, "{world:?}");
+        }
+    }
 }

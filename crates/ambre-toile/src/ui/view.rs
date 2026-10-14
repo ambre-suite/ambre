@@ -374,6 +374,9 @@ pub struct ToileView {
 
     // Dirty-flag bookkeeping (`toile-board-rendering`).
     needs_full: bool,
+    /// A change drawn on the overlay alone, such as the selection: the frame
+    /// redraws the overlay and reuses the content (`TOILE-UI-271`).
+    overlay_dirty: bool,
     viewport_changed: bool,
     data_dirty: bool,
     /// Coalesced viewport request: at most one `SetViewport` per frame.
@@ -660,6 +663,7 @@ impl ToileView {
             cam: ViewportTransform::new(canvas_width, canvas_height),
             display: DisplayViewport {
                 version: 0,
+                grid_unit: super::grid::BASE_GRID,
                 reactions: Default::default(),
                 pins: Vec::new(),
                 viewport: Viewport::default(),
@@ -702,6 +706,7 @@ impl ToileView {
             theme_ctl,
             theme,
             needs_full: true,
+            overlay_dirty: false,
             viewport_changed: false,
             data_dirty: false,
             pending_viewport: None,
@@ -1280,7 +1285,8 @@ impl ToileView {
             ToolOutcome::None => {}
             ToolOutcome::SelectionChanged(ids) => {
                 self.selection = ids;
-                self.needs_full = true;
+                // The selection is drawn on the overlay alone (`TOILE-UI-271`).
+                self.overlay_dirty = true;
             }
             ToolOutcome::Command(mut cmd) => {
                 // A Sticky / Text placement opens the inline editor on the new
@@ -1339,17 +1345,22 @@ impl ToileView {
     /// at its preview bounds and rotation, and keeps its committed opacity and
     /// fill. Empty when no gesture is in flight, after a release or a cancel,
     /// which clears the preview.
+    ///
+    /// The content pass paints the overrides, so a rebuild that held or left
+    /// one repaints the content (`TOILE-UI-271`).
     fn rebuild_gesture_overrides(&mut self) {
         let live = self.machine.gesture_overrides(&self.display);
         // No live gesture: clear -- unless a commit is pending, where the
         // overrides are the optimistic post-release preview held until the new
         // frame lands.
         if live.is_empty() {
-            if !self.gesture_commit_pending {
+            if !self.gesture_commit_pending && !self.gesture_overrides.is_empty() {
                 self.gesture_overrides.clear();
+                self.needs_full = true;
             }
             return;
         }
+        self.needs_full = true;
         // A fresh gesture supersedes any optimistic post-commit hold.
         self.gesture_commit_pending = false;
         self.gesture_overrides.clear();
@@ -1766,7 +1777,7 @@ impl ToileView {
             })
             .flatten();
         self.publish_cursor(screen);
-        self.needs_full = true;
+        self.overlay_dirty = true;
         true
     }
 
@@ -1858,7 +1869,7 @@ impl ToileView {
         // arrow rather than offering entries that would do nothing to it
         // (`toile-connectors` section 6).
         self.arrow = None;
-        self.needs_full = true;
+        self.overlay_dirty = true;
         self.publish_ctx_scope();
     }
 
@@ -2506,7 +2517,7 @@ impl ToileView {
         self.arrow = None;
         // The whole board, not the culled viewport (`TOILE-UI-033`).
         self.selection = self.board_ids.clone();
-        self.needs_full = true;
+        self.overlay_dirty = true;
     }
 
     fn handle_pointer_move(&mut self, x: f64, y: f64) -> bool {
@@ -2529,7 +2540,7 @@ impl ToileView {
             let out = self.machine.pointer_move(world);
             self.apply_outcome(out);
             self.publish_cursor(screen);
-            self.needs_full = true;
+            self.overlay_dirty = true;
             return true;
         }
         // At rest: refresh the directional resize cursor from the hovered edge /
@@ -2564,7 +2575,7 @@ impl ToileView {
             let out = self.machine.pointer_up(world, &self.display);
             self.apply_outcome(out);
             self.publish_cursor(screen);
-            self.needs_full = true;
+            self.overlay_dirty = true;
             consumed = true;
         }
         // Click-to-edit (Miro-style, `toile-text-editing`): a press on an
@@ -3637,6 +3648,7 @@ impl ToileView {
         self.broadcast_presence(now_ms);
 
         let any_dirty = self.needs_full
+            || self.overlay_dirty
             || self.viewport_changed
             || self.data_dirty
             || self.machine.is_active()
@@ -3659,6 +3671,7 @@ impl ToileView {
         };
 
         self.needs_full = false;
+        self.overlay_dirty = false;
         self.viewport_changed = false;
         self.data_dirty = false;
         self.edit_dirty = false;
@@ -4108,6 +4121,7 @@ impl ToileView {
         self.document_id = document_id;
         self.display = DisplayViewport {
             version: 0,
+            grid_unit: super::grid::BASE_GRID,
             reactions: Default::default(),
             pins: Vec::new(),
             viewport: Viewport::default(),

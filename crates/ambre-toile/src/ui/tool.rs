@@ -426,6 +426,9 @@ impl SelectTool {
                 let bounds = element_bounds(display, id).unwrap_or_default();
                 vec![(id.clone(), bounds, base_rot + (last_angle - start_angle))]
             }
+            // A press that has not moved yet paints where it committed, so it
+            // overrides nothing and costs no content repaint (`TOILE-UI-271`).
+            Some(Drag::Move { start, last, .. }) if last == start => Vec::new(),
             Some(Drag::Move { ids, start, last }) => {
                 let delta = *last - *start;
                 ids.iter()
@@ -1422,6 +1425,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: 0,
+            grid_unit: 20.0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

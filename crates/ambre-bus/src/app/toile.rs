@@ -1747,6 +1747,11 @@ pub struct DisplayViewport {
     /// (`BUS-017`).
     pub version: u64,
     pub viewport: Viewport,
+    /// The board's grid unit in world units, as its `board` register holds it.
+    /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The
+    /// value rides each frame as written: the view replaces a unit that is
+    /// not finite and positive.
+    pub grid_unit: f64,
     /// Back-to-front sequence mirroring the `layers` walk
     /// (`toile-z-order`): elements and connectors interleaved by
     /// z-order, painted in one pass.

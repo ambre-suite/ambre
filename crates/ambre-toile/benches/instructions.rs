@@ -216,6 +216,7 @@ fn walk(
 fn board_paint() {
     let viewport = DisplayViewport {
         version: 0,
+        grid_unit: 20.0,
         reactions: Default::default(),
         pins: Vec::new(),
         viewport: Default::default(),

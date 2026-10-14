@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 53 partial and 160 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 44 partial and 131 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 668 | 413 | 652 | 605 |  | 2338 |
-| `partial` | 21 |  | 31 | 1 |  | 53 |
+| `verified` | 668 | 413 | 690 | 605 |  | 2376 |
+| `partial` | 21 |  | 22 | 1 |  | 44 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 13 | 5 | 130 | 1 |  | 149 |
+| `untested` | 13 | 5 | 101 | 1 |  | 120 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -106,7 +106,7 @@
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  |  | 4 |
 | `ambre-spec-toile-schema.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 25 | 25 |  |  | 2 |
-| `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 3 | 14 |  |
+| `ambre-spec-toile-board-rendering.md` | 30 | 30 | 30 |  |  |  |
 | `ambre-spec-toile-clipboard.md` | 18 | 17 | 17 |  |  | 1 |
 | `ambre-spec-toile-comments.md` | 31 | 31 | 26 |  | 5 |  |
 | `ambre-spec-toile-connectors.md` | 46 | 45 | 44 | 1 |  | 1 |
@@ -126,13 +126,13 @@
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 40 | 2 | 3 |  |
 | `ambre-spec-toile-reactions.md` | 35 | 29 | 21 | 1 | 7 | 6 |
 | `ambre-spec-toile-selection.md` | 33 | 33 | 29 |  | 4 |  |
-| `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 |  | 5 |  |
+| `ambre-spec-toile-status-bar.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 22 |  | 8 |  |
 | `ambre-spec-toile-text-editing.md` | 42 | 41 | 41 |  |  | 1 |
 | `ambre-spec-toile-tools.md` | 30 | 30 | 23 | 1 | 6 |  |
 | `ambre-spec-toile-undo.md` | 4 | 4 | 4 |  |  |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 12 |  |  | 1 |
-| `ambre-spec-toile-viewport.md` | 35 | 33 | 17 | 6 | 10 | 2 |
+| `ambre-spec-toile-viewport.md` | 35 | 33 | 33 |  |  | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 8 |  | 8 |  |
 | `ambre-spec-prose-schema.md` | 26 | 26 | 26 |  |  |  |
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  |  | 2 |

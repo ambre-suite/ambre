@@ -65,8 +65,12 @@ pub enum DrawOp {
         height: u32,
         dest: Rect,
     },
+    /// A stroked path: its colour, the box of its control points in the
+    /// coordinates it was handed, and the stroke width in those coordinates.
     StrokePath {
         color: Option<Color>,
+        bounds: Rect,
+        width: f64,
     },
     PushClip {
         rect: Rect,
@@ -190,9 +194,11 @@ impl DrawSurface for RecordingSurface {
         });
     }
 
-    fn stroke_path(&mut self, _path: &BezPath, brush: &Brush, _stroke: &Stroke) {
+    fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {
         self.ops.push(DrawOp::StrokePath {
             color: brush_color(brush),
+            bounds: kurbo::Shape::bounding_box(path),
+            width: stroke.width,
         });
     }
 

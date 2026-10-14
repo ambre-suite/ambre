@@ -290,6 +290,7 @@ mod tests {
     fn viewport(pins: Vec<CommentPin>) -> DisplayViewport {
         DisplayViewport {
             version: 0,
+            grid_unit: 20.0,
             viewport: Viewport::default(),
             nodes: Vec::new(),
             reactions: Default::default(),

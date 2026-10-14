@@ -99,6 +99,9 @@ impl ToileState {
         DisplayViewport {
             version: self.viewport_version,
             viewport: vp,
+            // One map lookup per frame: the register is board scaffolding,
+            // and a peer can rewrite it at any time (`TOILE-UI-279`).
+            grid_unit: f64_of(&self.doc.get_map(super::BOARD), "grid_size"),
             reactions: self.reaction_tallies(&visible),
             pins: self.comment_pins(&visible, &vp),
             nodes,
@@ -371,6 +374,19 @@ mod tests {
 
         // The live viewport is unchanged: no mutate-then-restore.
         assert_eq!(st.derive_viewport().viewport, here.viewport);
+    }
+
+    /// `TOILE-UI-279`: each frame carries the grid unit the board's register
+    /// holds, the one the scaffold wrote and then the one a peer wrote over it.
+    #[test]
+    fn a_frame_carries_the_boards_grid_unit() {
+        let st = ToileState::new();
+        assert_eq!(st.derive_viewport().grid_unit, 32.0, "the scaffold's unit");
+        let _ = st
+            .doc
+            .get_map(super::super::BOARD)
+            .insert("grid_size", 50.0);
+        assert_eq!(st.derive_viewport().grid_unit, 50.0, "a rewritten unit");
     }
 
     /// `TOILE-058` / `TOILE-121`: an element the document holds but the order

@@ -13,9 +13,21 @@ use ambre_draw::{DrawSurface, Point};
 
 use super::viewport::ViewportTransform;
 
-/// The default board grid unit in world units. A power-of-two multiple of this
-/// is the smallest step the adaptive grid shows.
+/// The grid unit in world units of a board whose register holds no usable one.
+/// A power-of-two multiple of the unit is the smallest step the adaptive grid
+/// shows.
 pub const BASE_GRID: f64 = 20.0;
+
+/// The unit a board paints its grid on: its `board` register when that holds
+/// a finite, positive length, else [`BASE_GRID`] (`TOILE-UI-279`). A peer can
+/// write any number there, and a zero or a NaN would stall the step search.
+pub fn board_unit(register: f64) -> f64 {
+    if register.is_finite() && register > 0.0 {
+        register
+    } else {
+        BASE_GRID
+    }
+}
 
 /// Comfortable on-screen spacing band (logical pixels): the adaptive step keeps
 /// the line spacing at or above `MIN_SPACING_PX`, doubling the world step until
@@ -47,9 +59,6 @@ pub fn snap_world(p: Point, step: f64) -> Point {
     Point::new((p.x / step).round() * step, (p.y / step).round() * step)
 }
 
-/// Paint the board background and the adaptive grid lines for `cam`. Lines are
-/// emitted in screen space (the surface transform stack is left untouched here so
-/// the hairline width does not scale with zoom).
 /// Fill the board background only, without grid lines. Used by presentation
 /// focus mode (`toile-presentation`), which hides the grid so the audience sees
 /// a clean slide.
@@ -64,11 +73,19 @@ pub fn paint_background<S: DrawSurface>(
     );
 }
 
-pub fn paint_grid<S: DrawSurface>(surface: &mut S, cam: &ViewportTransform, palette: &Palette) {
+/// Paint the board background and the adaptive grid lines for `cam`, on the
+/// board's `unit`. Lines are emitted in screen space. The surface transform
+/// stack is left untouched here, so the hairline width does not scale with zoom.
+pub fn paint_grid<S: DrawSurface>(
+    surface: &mut S,
+    cam: &ViewportTransform,
+    palette: &Palette,
+    unit: f64,
+) {
     // Board background fills the whole canvas.
     paint_background(surface, cam, palette);
 
-    let step = grid_step(cam.zoom, BASE_GRID);
+    let step = grid_step(cam.zoom, board_unit(unit));
     let s2w = cam.screen_to_world();
     let w2s = cam.world_to_screen();
     // Visible world rect: the transform is translate+scale (axis-aligned), so the
@@ -98,6 +115,7 @@ pub fn paint_grid<S: DrawSurface>(surface: &mut S, cam: &ViewportTransform, pale
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     #[test]
     fn spacing_never_illegible_across_zoom_sweep() {
@@ -131,6 +149,92 @@ mod tests {
                 (log2 - log2.round()).abs() < 1e-9,
                 "step ratio {ratio} not a power of two at zoom {z}"
             );
+        }
+    }
+
+    fn palette() -> Palette {
+        ambre_canvas::theme::LIGHT
+    }
+
+    fn grid_ops(cam: &ViewportTransform, unit: f64) -> Vec<DrawOp> {
+        let mut surface = RecordingSurface::new();
+        paint_grid(&mut surface, cam, &palette(), unit);
+        surface.ops().to_vec()
+    }
+
+    /// The screen x of each vertical grid line.
+    fn columns(ops: &[DrawOp]) -> Vec<f64> {
+        ops.iter()
+            .filter_map(|o| match o {
+                DrawOp::StrokeLine { x0, x1, .. } if x0 == x1 => Some(*x0),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `TOILE-UI-279`: the painted lines sit on the board's own unit, a board
+    /// on 32 apart from one on 20. A unit no step search can use falls back.
+    #[test]
+    fn a_board_paints_its_grid_on_its_own_unit() {
+        let cam = ViewportTransform::new(1000.0, 800.0);
+        // At 1x a unit of 20 doubles to stay legible; 32 and 50 already are.
+        for (unit, step) in [(20.0, 40.0), (32.0, 32.0), (50.0, 50.0)] {
+            assert_eq!(grid_step(cam.zoom, unit), step);
+            let xs = columns(&grid_ops(&cam, unit));
+            assert!(xs.len() > 2, "unit {unit}: {xs:?}");
+            for pair in xs.windows(2) {
+                assert!((pair[1] - pair[0] - step).abs() < 1e-9, "unit {unit}");
+            }
+            // World x 0 sits under the screen centre, and it is a line.
+            assert!(xs.iter().any(|x| (x - 500.0).abs() < 1e-9));
+        }
+        for unusable in [0.0, -8.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(board_unit(unusable), BASE_GRID, "{unusable}");
+            assert_eq!(
+                columns(&grid_ops(&cam, unusable)),
+                columns(&grid_ops(&cam, BASE_GRID))
+            );
+        }
+    }
+
+    /// `TOILE-UI-280`: a grid line is one pixel wide at every zoom, and the
+    /// paint pushes no transform that could scale it.
+    #[test]
+    fn a_grid_line_is_one_pixel_at_every_zoom() {
+        for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
+            let mut cam = ViewportTransform::new(1000.0, 800.0);
+            cam.zoom = zoom;
+            let ops = grid_ops(&cam, BASE_GRID);
+            let mut lines = 0;
+            for op in &ops {
+                match op {
+                    DrawOp::StrokeLine { width, .. } => {
+                        assert_eq!(*width, 1.0, "zoom {zoom}");
+                        lines += 1;
+                    }
+                    DrawOp::PushTransform { .. } => panic!("zoom {zoom}: a scaled line"),
+                    _ => {}
+                }
+            }
+            assert!(lines > 0, "zoom {zoom} paints lines");
+        }
+    }
+
+    /// `TOILE-UI-045`: the background is the first thing painted, and it fills
+    /// the whole canvas, with or without the grid.
+    #[test]
+    fn the_background_fills_the_canvas_first() {
+        let cam = ViewportTransform::new(640.0, 480.0);
+        let mut bare = RecordingSurface::new();
+        paint_background(&mut bare, &cam, &palette());
+        for ops in [grid_ops(&cam, BASE_GRID), bare.ops().to_vec()] {
+            match ops.first() {
+                Some(DrawOp::FillRect { rect, color }) => {
+                    assert_eq!(*rect, ambre_draw::Rect::new(0.0, 0.0, 640.0, 480.0));
+                    assert_eq!(*color, palette().content_bg);
+                }
+                other => panic!("the background comes first: {other:?}"),
+            }
         }
     }
 

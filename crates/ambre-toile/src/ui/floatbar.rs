@@ -266,6 +266,7 @@ mod tests {
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: 0,
+            grid_unit: 20.0,
             pins: Vec::new(),
             reactions: Default::default(),
             nodes,

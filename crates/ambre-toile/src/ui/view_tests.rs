@@ -62,6 +62,7 @@ impl Rig {
     fn show(&mut self, nodes: Vec<DisplayNode>) {
         self.answer(ToileEvent::ViewportData(DisplayViewport {
             version: 0,
+            grid_unit: 20.0,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
@@ -479,6 +480,7 @@ fn a_board_change_refetches_the_selection_data_and_a_camera_move_does_not() {
     rig.sent();
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
         version: 0,
+        grid_unit: 20.0,
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -932,6 +934,7 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
 fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
     ToileEvent::ViewportData(DisplayViewport {
         version,
+        grid_unit: 20.0,
         pins: Vec::new(),
         reactions: Default::default(),
         viewport: Viewport::default(),
@@ -1556,4 +1559,288 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
     assert!((centre - far.center()).hypot() < 1e-6, "on the match");
     assert_eq!(rig.view.cam.zoom, zoom, "the zoom is kept");
     assert_eq!(rig.view.selection, [eid("a")], "a match is not selected");
+}
+
+fn wheel(rig: &mut Rig, (dx, dy): (f64, f64), delta_mode: u32, ctrl_key: bool) {
+    rig.input(InputEvent::Wheel {
+        dx,
+        dy,
+        delta_mode,
+        ctrl_key,
+    });
+}
+
+fn viewport_requests(sent: Vec<ToileCommand>) -> Vec<Viewport> {
+    sent.into_iter()
+        .filter_map(|c| match c {
+            ToileCommand::SetViewport(vp) => Some(vp),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `TOILE-UI-282`, `TOILE-UI-283`: a wheel pan moves the centre alone. The
+/// zoom and the selection stay, and the view asks for the place it landed.
+#[test]
+fn a_pan_keeps_the_zoom_and_the_selection_and_asks_where_it_landed() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.view.update();
+    rig.sent();
+    let (zoom, centre) = (rig.view.cam.zoom, rig.view.cam.center);
+    wheel(&mut rig, (30.0, 40.0), 0, false);
+    assert_ne!(rig.view.cam.center, centre, "the board moved");
+    assert_eq!(rig.view.cam.zoom, zoom);
+    assert_eq!(rig.view.selection, [eid("a")]);
+    rig.view.update();
+    assert_eq!(
+        viewport_requests(rig.sent()),
+        vec![rig.view.cam.to_bus_viewport()]
+    );
+}
+
+/// `TOILE-UI-289`: in the trackpad mode the wheel pans both axes, and the
+/// content moves against the delta, as a page scrolls.
+#[test]
+fn the_trackpad_mode_pans_both_axes_against_the_delta() {
+    let mut rig = Rig::new();
+    rig.view.pointer_mode = PointerMode::Trackpad;
+    let before = rig.screen(0.0, 0.0);
+    wheel(&mut rig, (12.0, 18.0), 0, false);
+    let after = rig.screen(0.0, 0.0);
+    assert_eq!(rig.view.cam.zoom, 1.0);
+    assert!(
+        after.0 < before.0 && after.1 < before.1,
+        "{before:?} {after:?}"
+    );
+}
+
+/// `TOILE-UI-288`: a mouse notch latches the mouse, and a fine glide with no
+/// side delta is too weak to change it. A two-axis glide latches the
+/// trackpad, and the fine glide then pans.
+#[test]
+fn an_ambiguous_wheel_keeps_the_latched_guess() {
+    let mut rig = Rig::new();
+    wheel(&mut rig, (0.0, 120.0), 0, false);
+    assert!(rig.view.detected_mouse, "a notch is a mouse");
+    let zoom = rig.view.cam.zoom;
+    wheel(&mut rig, (0.0, 2.0), 0, false);
+    assert!(rig.view.detected_mouse);
+    assert_ne!(rig.view.cam.zoom, zoom, "the mouse guess still zooms");
+    wheel(&mut rig, (3.0, 2.0), 0, false);
+    assert!(!rig.view.detected_mouse, "a side delta is a trackpad");
+    let zoom = rig.view.cam.zoom;
+    wheel(&mut rig, (0.0, 2.0), 0, false);
+    assert!(!rig.view.detected_mouse);
+    assert_eq!(rig.view.cam.zoom, zoom, "the trackpad guess still pans");
+}
+
+/// `TOILE-UI-028`: `Ctrl` with the wheel zooms in every pointer mode, and a
+/// pinch is that same event.
+#[test]
+fn ctrl_and_the_pinch_zoom_in_every_mode() {
+    for mode in [PointerMode::Auto, PointerMode::Mouse, PointerMode::Trackpad] {
+        let mut rig = Rig::new();
+        rig.view.pointer_mode = mode;
+        // A trackpad glide first, so the auto guess is not the mouse.
+        wheel(&mut rig, (3.0, 2.0), 0, false);
+        let zoom = rig.view.cam.zoom;
+        wheel(&mut rig, (0.0, -30.0), 0, true);
+        assert!(rig.view.cam.zoom > zoom, "a pinch out zooms in");
+    }
+}
+
+/// `TOILE-UI-029`: a mode the user picked ignores the device signature. A
+/// line wheel pans in the trackpad mode, and a glide zooms in the mouse
+/// mode. Neither moves the auto latch.
+#[test]
+fn a_picked_mode_ignores_a_contrary_wheel() {
+    let mut rig = Rig::new();
+    rig.view.pointer_mode = PointerMode::Trackpad;
+    wheel(&mut rig, (0.0, 3.0), 1, false);
+    assert_eq!(rig.view.cam.zoom, 1.0, "a line wheel pans");
+    assert!(!rig.view.detected_mouse, "the latch is untouched");
+
+    let mut rig = Rig::new();
+    rig.view.pointer_mode = PointerMode::Mouse;
+    rig.view.detected_mouse = false;
+    wheel(&mut rig, (4.0, 6.0), 0, false);
+    assert_ne!(rig.view.cam.zoom, 1.0, "a glide zooms");
+    assert!(!rig.view.detected_mouse, "the latch is untouched");
+}
+
+/// `TOILE-UI-378`, `TOILE-UI-379`: the view's hit test feeds the finger
+/// rule. The empty board pans with the select tool; an element, a handle
+/// or a drawing tool keeps the finger as the mouse.
+#[test]
+fn a_finger_pans_only_the_empty_board() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let empty = rig.screen(900.0, 600.0);
+    assert!(rig.view.touch_down(empty.0, empty.1, 0.0));
+    assert_eq!(rig.view.finger_pans, Some(true));
+    let centre = rig.view.cam.center;
+    rig.view.touch_move(empty.0 - 60.0, empty.1, 16.0);
+    rig.view.touch_move(empty.0 - 120.0, empty.1, 32.0);
+    assert!(rig.view.cam.center.x > centre.x, "the finger pans");
+    rig.view.touch_cancel();
+
+    let on_a = rig.screen(50.0, 50.0);
+    rig.view.touch_down(on_a.0, on_a.1, 100.0);
+    assert_eq!(rig.view.finger_pans, Some(false), "an element is grabbed");
+    rig.view.touch_up(on_a.0, on_a.1, 110.0);
+    assert_eq!(rig.view.selection, [eid("a")]);
+
+    let (x0, y0) = rig.screen(A.x0, A.y0);
+    let (x1, y1) = rig.screen(A.x1, A.y1);
+    let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
+    rig.view.touch_down(knob.x, knob.y, 200.0);
+    assert_eq!(rig.view.finger_pans, Some(false), "a handle is grabbed");
+    rig.view.touch_cancel();
+
+    rig.view.set_tool(Tool::Pen);
+    rig.view.touch_down(empty.0, empty.1, 300.0);
+    assert_eq!(rig.view.finger_pans, Some(false), "a drawing tool draws");
+}
+
+/// `TOILE-UI-380`: a drag held in the right-hand band pans the board right
+/// once a frame. The screen step is the same at 1x and at 2x, and the view
+/// asks for the place it reached.
+#[test]
+fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
+    let screen_step = |zoom: f64| {
+        let mut rig = Rig::with_stickies(&[("a", A)]);
+        rig.view.cam.zoom = zoom;
+        rig.press(rig.screen(50.0, 50.0));
+        rig.input(InputEvent::PointerMove {
+            x: 1195.0,
+            y: 400.0,
+        });
+        rig.view.plan_repaint(1000.0, false);
+        let x = rig.view.cam.center.x;
+        rig.view.plan_repaint(1016.0, false);
+        let moved = rig.view.cam.center.x - x;
+        rig.view.update();
+        assert!(!viewport_requests(rig.sent()).is_empty(), "zoom {zoom}");
+        moved * zoom
+    };
+    let (one, two) = (screen_step(1.0), screen_step(2.0));
+    assert!(one > 0.0, "the board pans towards the edge");
+    assert!((one - two).abs() < 1e-6, "{one} at 1x, {two} at 2x");
+}
+
+/// `TOILE-UI-296`, `TOILE-UI-297`, `TOILE-UI-298`: a resize keeps the centre
+/// and the zoom, and asks for the new canvas. A canvas with no extent is
+/// the smallest one, and the camera still inverts.
+#[test]
+fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.cam.center = kurbo::Point::new(40.0, -25.0);
+    rig.view.cam.zoom = 1.5;
+    rig.view.update();
+    rig.sent();
+    rig.view.resize(1600, 900);
+    assert_eq!(rig.view.cam.center, kurbo::Point::new(40.0, -25.0));
+    assert_eq!(rig.view.cam.zoom, 1.5);
+    rig.view.update();
+    let asked = viewport_requests(rig.sent());
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].size, kurbo::Size::new(1600.0, 900.0));
+
+    rig.view.resize(0, 0);
+    assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
+    let back = rig.view.cam.screen_to_world() * kurbo::Point::new(0.5, 0.5);
+    assert!(back.x.is_finite() && back.y.is_finite());
+    // The host hands whole pixels; the camera floors a negative extent too.
+    rig.view.cam.set_size(-4.0, -9.0);
+    assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
+}
+
+fn stats_requests(sent: &[ToileCommand]) -> Vec<Vec<ElementId>> {
+    sent.iter()
+        .filter_map(|c| match c {
+            ToileCommand::RequestSelectionStats {
+                ids,
+                kind: StatsRequestKind::Band,
+            } => Some(ids.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `TOILE-UI-055`, `TOILE-UI-109`, `TOILE-UI-110`: a new selection asks for
+/// its aggregates once. A frame with the same selection asks for nothing,
+/// and an emptied selection clears the band and asks for nothing.
+#[test]
+fn the_band_asks_once_per_selection_change() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.click(50.0, 50.0);
+    rig.frame();
+    assert_eq!(stats_requests(&rig.sent()), vec![vec![eid("a")]]);
+    rig.frame();
+    assert!(rig.sent().is_empty(), "the same selection asks for nothing");
+    rig.marquee((-20.0, -20.0), (600.0, 300.0));
+    rig.frame();
+    assert_eq!(stats_requests(&rig.sent()), vec![vec![eid("a"), eid("b")]]);
+    rig.click(900.0, 600.0);
+    rig.frame();
+    assert!(
+        stats_requests(&rig.sent()).is_empty(),
+        "an empty one asks nothing"
+    );
+    assert!(
+        rig.view.selection_data.is_empty(),
+        "and the band data is cleared"
+    );
+}
+
+fn plan(rig: &mut Rig) -> (bool, bool) {
+    let p = rig.view.plan_repaint(0.0, false);
+    (
+        matches!(p.content, ContentRepaint::Full),
+        matches!(p.overlay, OverlayRepaint::Redraw),
+    )
+}
+
+/// `TOILE-UI-021`, `TOILE-UI-271`: a quiet frame plans no draw. New board
+/// data repaints the content, and a selection change the overlay alone.
+#[test]
+fn a_frame_repaints_only_what_changed() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    plan(&mut rig);
+    assert_eq!(plan(&mut rig), (false, false), "nothing changed");
+    rig.show(vec![DisplayNode::Element(sticky("a", B))]);
+    assert_eq!(plan(&mut rig), (true, true), "the content changed");
+    assert_eq!(plan(&mut rig), (false, false));
+    rig.click(400.0, 50.0);
+    assert_eq!(plan(&mut rig), (false, true), "the overlay alone");
+    rig.marquee((-20.0, 200.0), (100.0, 300.0));
+    assert_eq!(plan(&mut rig), (false, true), "a marquee is overlay");
+    // A move paints the element at its override, in the content pass.
+    rig.press(rig.screen(400.0, 50.0));
+    let (x, y) = rig.screen(430.0, 80.0);
+    rig.input(InputEvent::PointerMove { x, y });
+    assert_eq!(plan(&mut rig), (true, true), "a move is content");
+}
+
+/// `TOILE-UI-272`: an open editor and a gesture in flight keep the overlay
+/// repainting each frame, with no other change.
+#[test]
+fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    assert!(rig.view.editor.is_some());
+    for _ in 0..3 {
+        assert!(plan(&mut rig).1, "the editor keeps the overlay live");
+    }
+    rig.key("Escape", false, false);
+    rig.paint();
+    plan(&mut rig);
+
+    rig.press(rig.screen(50.0, 50.0));
+    let (x, y) = rig.screen(80.0, 70.0);
+    rig.input(InputEvent::PointerMove { x, y });
+    for _ in 0..3 {
+        assert!(plan(&mut rig).1, "the gesture keeps the overlay live");
+    }
 }

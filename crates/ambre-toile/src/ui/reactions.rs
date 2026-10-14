@@ -187,6 +187,7 @@ mod tests {
     ) -> DisplayViewport {
         DisplayViewport {
             version: 0,
+            grid_unit: 20.0,
             pins: Vec::new(),
             reactions,
             viewport: Viewport::default(),

@@ -780,6 +780,92 @@ fn selection_stats_empty_ids_on_empty_board_is_none() {
     }
 }
 
+/// The tally of one stats request, as `(count, bounds)`.
+fn stats_of(st: &mut ToileState, ids: Vec<ElementId>) -> (u32, Option<Rect>) {
+    let out = st.handle_command(ToileCommand::RequestSelectionStats {
+        ids,
+        kind: StatsRequestKind::Band,
+    });
+    match &out.display[..] {
+        [ToileEvent::SelectionStats(s)] => (s.count, s.bounds),
+        other => panic!("expected one SelectionStats, got {other:?}"),
+    }
+}
+
+/// `TOILE-117`: a selection whose every id the board has dropped tallies
+/// zero down the per-id branch, and a zero tally carries no rectangle.
+#[test]
+fn a_selection_the_board_dropped_tallies_zero_with_no_rect() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(50.0, 0.0), Size::new(10.0, 10.0));
+    let keep = create_rect(&mut st, Point::new(500.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![a.clone(), b.clone()],
+    });
+    assert_eq!(stats_of(&mut st, vec![a, b]), (0, None));
+    // The board is not empty, so the tally did not read it whole.
+    assert_eq!(stats_of(&mut st, vec![keep]).0, 1);
+}
+
+/// `TOILE-118`: an id the board no longer holds does not stop the walk.
+/// The tally counts the live ids around it and spans them alone.
+#[test]
+fn a_stale_id_does_not_stop_the_tally() {
+    let mut st = ToileState::new();
+    let gone = create_rect(&mut st, Point::new(-900.0, -900.0), Size::new(10.0, 10.0));
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 40.0), Size::new(20.0, 20.0));
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![gone.clone()],
+    });
+    let never = ElementId("never-was".into());
+    let ids = vec![gone.clone(), a, never, b, gone];
+    assert_eq!(
+        stats_of(&mut st, ids),
+        (2, Some(Rect::new(0.0, 0.0, 120.0, 60.0)))
+    );
+}
+
+/// `TOILE-UI-043`, the Logic side: the painted sequence is the board's one
+/// order, elements and connectors interleaved, and a frame's children follow
+/// their frame.
+#[test]
+fn the_painted_sequence_is_the_board_order() {
+    let mut st = ToileState::new();
+    let c = create_connector(&mut st);
+    let a = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_rect(&mut st, Point::new(300.0, 10.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone()],
+        remove: vec![],
+    });
+    let painted: Vec<NodeId> = st
+        .debug_viewport()
+        .nodes
+        .iter()
+        .map(|n| match n {
+            DisplayNode::Element(e) => NodeId::Element(e.id.clone()),
+            DisplayNode::Connector(k) => NodeId::Connector(k.id.clone()),
+        })
+        .collect();
+    assert_eq!(painted, st.layer_order(), "the walk is the order");
+    let at = |n: NodeId| painted.iter().position(|p| *p == n).expect("painted");
+    let (conn, frame) = (at(NodeId::Connector(c)), at(NodeId::Element(f)));
+    assert!(
+        conn > 0 && conn < painted.len() - 1,
+        "the arrow is interleaved"
+    );
+    assert_eq!(
+        at(NodeId::Element(a)),
+        frame + 1,
+        "the child follows its frame"
+    );
+    assert!(at(NodeId::Element(b)) > frame);
+}
+
 /// The reply names the request it answers. The Logic thread echoes the kind
 /// token back, so a surface spends only its own answer (`TOILE-UI-108`).
 #[test]

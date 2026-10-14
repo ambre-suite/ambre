@@ -85,11 +85,41 @@ pub struct DecodedImage {
 /// image element is present (or its media has not been decoded yet).
 pub type ImageStore = HashMap<String, DecodedImage>;
 
-/// Fixed ink (ARGB) for a sticky-note body: a near-black that stays readable on
-/// any pastel card colour. The body is legible regardless of the card fill
-/// (`toile-styles`). Independent of the theme (the card is not). Shared with
-/// the inline editor so an in-edit sticky uses the same ink (`edit.rs`).
+/// The dark ink (ARGB) of a sticky-note body: a near-black, readable on a light
+/// card. Independent of the theme (the card is not).
 pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
+
+/// The light ink (ARGB) of a sticky-note body, for a dark card.
+pub(crate) const STICKY_INK_ON_DARK: u32 = 0xFFFF_FFFF;
+
+/// The relative luminance of an ARGB colour, alpha ignored (WCAG 2).
+fn luminance(argb: u32) -> f64 {
+    let channel = |shift: u32| {
+        let c = f64::from((argb >> shift) & 0xff) / 255.0;
+        if c <= 0.039_28 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+}
+
+/// The WCAG 2 contrast ratio of two ARGB colours, from 1 to 21.
+pub(crate) fn contrast(a: u32, b: u32) -> f64 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+}
+
+/// The ink of a sticky body on `card`: of the two inks, the one that contrasts
+/// more with the card (`TOILE-UI-262`). The worst card, a mid grey, still
+/// reads at four to one. A note with no fill paints the dark ink.
+fn sticky_ink(card: Option<u32>) -> u32 {
+    match card {
+        Some(c) if contrast(c, STICKY_INK_ON_DARK) > contrast(c, STICKY_INK) => STICKY_INK_ON_DARK,
+        _ => STICKY_INK,
+    }
+}
 
 /// Sticky drop-shadow colour (ARGB): a soft translucent black offset to the
 /// bottom-right so the note reads as a physical card (feedback).
@@ -123,8 +153,8 @@ pub(crate) fn sticky_or_style_font_size(
 }
 
 /// Resolve a sticky / text body's ink (ARGB), or `None` to fall back to the theme
-/// text colour. An explicit `text_color` always wins. Otherwise a sticky uses its
-/// fixed ink (its `fill` is the card background, not the text). A free text element
+/// text colour. An explicit `text_color` always wins. Otherwise a sticky uses the
+/// ink chosen for its card (its `fill` is the card background, not the text). A free text element
 /// falls back to its `fill` (legacy: a text element's fill was its glyph colour)
 /// then, if unset, the theme colour. Pure and host-tested; shared with the inline
 /// editor via the same precedence in `edit.rs`.
@@ -135,7 +165,7 @@ pub(crate) fn resolved_text_ink(
 ) -> Option<u32> {
     match (text_color, is_sticky) {
         (Some(tc), _) => Some(tc),
-        (None, true) => Some(STICKY_INK),
+        (None, true) => Some(sticky_ink(fill)),
         (None, false) => fill,
     }
 }
@@ -290,7 +320,7 @@ pub fn paint_content<S: DrawSurface>(
     if present {
         grid::paint_background(surface, cam, palette);
     } else {
-        grid::paint_grid(surface, cam, palette);
+        grid::paint_grid(surface, cam, palette, vp.grid_unit);
     }
 
     // 2. Shapes / paths / strokes / connectors, in world space under the camera.
@@ -1201,6 +1231,7 @@ mod tests {
     fn content_walk_balances_transform_and_paints_each_node() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1252,6 +1283,7 @@ mod tests {
     fn content_walk_applies_animation_override() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1358,6 +1390,7 @@ mod tests {
         path.line_to((300.0, 40.0));
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1416,6 +1449,7 @@ mod tests {
         let fill = 0xFFFE_F08A; // sticky yellow
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1524,6 +1558,7 @@ mod tests {
     fn text_element_paints_no_card() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1599,6 +1634,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1658,6 +1694,7 @@ mod tests {
     fn overlay_draws_box_and_handles_for_single_selection() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1697,6 +1734,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1737,6 +1775,7 @@ mod tests {
     fn overlay_paints_no_editing_surface_while_presenting() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1773,6 +1812,7 @@ mod tests {
         // stretches it to (0,0)-(90,70); the selection box must track the preview.
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1827,6 +1867,7 @@ mod tests {
         path.line_to((100.0, 0.0));
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1891,6 +1932,7 @@ mod tests {
         }
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1924,6 +1966,7 @@ mod tests {
     fn a_vanished_arrow_paints_nothing() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1951,6 +1994,7 @@ mod tests {
     fn overlay_outlines_visible_find_hits() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1983,12 +2027,13 @@ mod tests {
         assert_eq!(strokes, 2);
     }
 
-    /// `TOILE-UI-112`: the current match wears the selection accent at a
-    /// heavier width, and every other match a softer tint.
+    /// `TOILE-UI-112`, `TOILE-UI-357`: the current match wears the selection
+    /// accent at a heavier width, and every other match a softer tint.
     #[test]
     fn the_current_match_is_outlined_apart_from_the_rest() {
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -2058,6 +2103,7 @@ mod tests {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -2124,6 +2170,7 @@ mod tests {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
             version: 0,
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -2147,6 +2194,596 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A context holding the shipped Noto Sans face alone, read from the tree.
+    /// Every host then shapes the same runs, so a test on the glyphs cannot
+    /// pass on a surface that drew no text.
+    fn shipped_fonts() -> FontContext {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ambre-app/fonts/NotoSans-Regular.ttf"
+        );
+        let face = std::fs::read(path).expect("the shipped face is in the tree");
+        ambre_canvas::fonts::font_context_from_bytes([face])
+    }
+
+    fn board(nodes: Vec<DisplayNode>) -> DisplayViewport {
+        DisplayViewport {
+            version: 0,
+            grid_unit: grid::BASE_GRID,
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes,
+        }
+    }
+
+    /// What one content pass needs beyond the board and the camera.
+    #[derive(Default)]
+    struct Pass {
+        editing: Option<crate::ui::edit::EditTarget>,
+        images: ImageStore,
+        anim: HashMap<ElementId, AnimatedElement>,
+        present: bool,
+    }
+
+    /// One content pass with the shipped face.
+    fn paint_pass(vp: &DisplayViewport, cam: &ViewportTransform, pass: &Pass) -> RecordingSurface {
+        let mut surface = RecordingSurface::new();
+        let mut font_cx = shipped_fonts();
+        let mut tc = TextCache::new(1.0);
+        paint_content(
+            &mut surface,
+            vp,
+            cam,
+            &LIGHT_PALETTE,
+            &mut font_cx,
+            &mut tc,
+            pass.editing.as_ref(),
+            &pass.images,
+            &pass.anim,
+            pass.present,
+        );
+        surface
+    }
+
+    /// Each glyph run painted, as its colour and its origin transform, with
+    /// the depth of the transform stack it was painted under.
+    fn runs(surface: &RecordingSurface) -> Vec<(Option<Color>, Affine, usize)> {
+        let mut depth = 0usize;
+        let mut out = Vec::new();
+        for op in surface.ops() {
+            match op {
+                DrawOp::PushTransform { .. } => depth += 1,
+                DrawOp::PopTransform => depth -= 1,
+                DrawOp::Glyphs {
+                    color, transform, ..
+                } => out.push((*color, *transform, depth)),
+                _ => {}
+            }
+        }
+        out
+    }
+
+    fn filled(id: &str, fill: u32, bounds: Rect) -> DisplayNode {
+        let DisplayNode::Element(mut e) = elem(id, DisplayGeom::Rect, bounds) else {
+            panic!("elem builds an element")
+        };
+        e.style.fill = Some(fill);
+        e.style.stroke = None;
+        DisplayNode::Element(e)
+    }
+
+    fn arrow(id: &str, stroke: u32, from: (f64, f64), to: (f64, f64)) -> DisplayNode {
+        let mut path = BezPath::new();
+        path.move_to(from);
+        path.line_to(to);
+        DisplayNode::Connector(DisplayConnector {
+            id: ConnectorId(id.into()),
+            path,
+            style: ElementStyle {
+                stroke: Some(stroke),
+                ..ElementStyle::default()
+            },
+            arrows: ambre_bus::app::toile::EndCaps {
+                start: false,
+                end: true,
+            },
+            label: String::new(),
+        })
+    }
+
+    fn note(id: &str, body: &str, fill: u32, bounds: Rect) -> DisplayNode {
+        let DisplayNode::Element(mut e) = styled_elem(
+            id,
+            ElementKind::Sticky,
+            DisplayGeom::Sticky(body.into()),
+            Some(fill),
+        ) else {
+            panic!("styled_elem builds an element")
+        };
+        e.bounds = bounds;
+        DisplayNode::Element(e)
+    }
+
+    /// `TOILE-UI-043`: the walk paints the nodes in the order it is handed,
+    /// an arrow between the elements around it. Reversed, the paint reverses.
+    #[test]
+    fn the_walk_paints_in_the_order_it_is_handed() {
+        let (red, blue, green) = (0xFFFF_0000, 0xFF00_00FF, 0xFF00_FF00);
+        let a = filled("a", red, Rect::new(0.0, 0.0, 50.0, 50.0));
+        let b = filled("b", green, Rect::new(20.0, 20.0, 70.0, 70.0));
+        let c = arrow("c", blue, (-40.0, 30.0), (120.0, 30.0));
+        let order = |nodes: Vec<DisplayNode>| {
+            let surface = paint_pass(&board(nodes), &cam(), &Pass::default());
+            let at = |want: u32| {
+                surface
+                    .ops()
+                    .iter()
+                    .position(|op| match op {
+                        DrawOp::FillPath { color: Some(k) } => *k == argb(want, 1.0),
+                        DrawOp::StrokePath { color: Some(k), .. } => *k == argb(want, 1.0),
+                        _ => false,
+                    })
+                    .expect("every node paints")
+            };
+            [at(red), at(blue), at(green)]
+        };
+        let [r, k, g] = order(vec![a.clone(), c.clone(), b.clone()]);
+        assert!(r < k && k < g, "the arrow paints between: {r} {k} {g}");
+        let [r, k, g] = order(vec![b, c, a]);
+        assert!(g < k && k < r, "the order is the one handed: {r} {k} {g}");
+    }
+
+    /// `TOILE-UI-262`: a note's body is drawn in the ink chosen for its card,
+    /// never in the card colour, and it reads on every card. The runs are
+    /// shaped with the shipped face, so the loop cannot run empty.
+    #[test]
+    fn a_note_body_is_drawn_in_an_ink_that_reads_on_its_card() {
+        let bounds = Rect::new(0.0, 0.0, 200.0, 160.0);
+        let cards = [
+            0xFFFE_F08A,
+            0xFFFF_FFFF,
+            0xFF00_0000,
+            STICKY_INK,
+            0xFF1E_3A8A,
+            0xFF77_7777,
+            0xFFE5_3935,
+        ];
+        for card in cards {
+            let vp = board(vec![note("s", "Plan the week", card, bounds)]);
+            let painted = runs(&paint_pass(&vp, &cam(), &Pass::default()));
+            assert!(!painted.is_empty(), "card {card:08x}: no run was shaped");
+            let ink = resolved_text_ink(true, None, Some(card)).expect("a note has an ink");
+            assert_ne!(ink, card, "card {card:08x}");
+            assert!(contrast(ink, card) >= 4.0, "card {card:08x}");
+            for (color, _, _) in painted {
+                assert_eq!(color, Some(argb(ink, 1.0)), "card {card:08x}");
+            }
+        }
+    }
+
+    /// `TOILE-UI-264`: a group paints nothing between its own push and pop;
+    /// an embed and a nested document each paint the box that holds their place.
+    #[test]
+    fn a_group_paints_nothing_and_an_embed_holds_its_place() {
+        let bounds = Rect::new(0.0, 0.0, 80.0, 60.0);
+        let inner = |geom: DisplayGeom| {
+            let surface = paint_pass(
+                &board(vec![elem("x", geom, bounds)]),
+                &cam(),
+                &Pass::default(),
+            );
+            let ops = surface.ops();
+            // The camera push, then the element's own push.
+            let open = ops
+                .iter()
+                .enumerate()
+                .filter(|(_, o)| matches!(o, DrawOp::PushTransform { .. }))
+                .nth(1)
+                .map(|(i, _)| i)
+                .expect("the element pushes its transform");
+            let close = open
+                + ops[open..]
+                    .iter()
+                    .position(|o| matches!(o, DrawOp::PopTransform))
+                    .expect("and pops it");
+            ops[open + 1..close].to_vec()
+        };
+        assert!(
+            inner(DisplayGeom::Group).is_empty(),
+            "a group paints nothing"
+        );
+        let doc = DisplayGeom::DocEmbed {
+            document_id: ambre_bus::DocumentId::new(),
+            doc_type: ambre_bus::DocType::Trame,
+            focused: false,
+        };
+        for geom in [DisplayGeom::Embed("https://example.org".into()), doc] {
+            let ops = inner(geom.clone());
+            assert!(
+                matches!(ops[..], [DrawOp::FillPath { .. }, ..]),
+                "{geom:?} paints a box: {ops:?}"
+            );
+        }
+    }
+
+    /// `TOILE-UI-044`: a body is shaped at the zoom-scaled size and painted in
+    /// screen space, outside the camera transform. At 2x the first baseline
+    /// sits twice as far below the padded top of the card.
+    #[test]
+    fn a_body_is_laid_out_in_screen_space_at_a_zoom_scaled_size() {
+        let bounds = Rect::new(-100.0, -80.0, 100.0, 80.0);
+        let vp = board(vec![note("s", "Plan", 0xFFFE_F08A, bounds)]);
+        let drop = |zoom: f64| {
+            let mut cam = cam();
+            cam.zoom = zoom;
+            let painted = runs(&paint_pass(&vp, &cam, &Pass::default()));
+            let (_, first, depth) = *painted.first().expect("the body is shaped");
+            assert_eq!(depth, 0, "zoom {zoom}: a run under the camera transform");
+            let top = world_rect_to_screen(bounds, &cam).y0;
+            first.translation().y - top - crate::ui::edit::InlineEditor::pad(zoom)
+        };
+        // The ascent is rounded to whole pixels at each size, so allow two.
+        let (one, two) = (drop(1.0), drop(2.0));
+        assert!(one > 0.0);
+        assert!((two - 2.0 * one).abs() <= 2.0, "{one} at 1x, {two} at 2x");
+    }
+
+    /// `TOILE-UI-265`: a rotated note rotates its body and its rules with it.
+    /// Each run and each rule carries the element's angle.
+    #[test]
+    fn a_rotated_note_carries_its_body_and_rules_round() {
+        use std::f64::consts::FRAC_PI_6;
+        let DisplayNode::Element(mut e) = rotated_elem(
+            "s",
+            DisplayGeom::Sticky("Plan the week".into()),
+            Rect::new(0.0, 0.0, 200.0, 160.0),
+            FRAC_PI_6,
+        ) else {
+            panic!("rotated_elem builds an element")
+        };
+        e.style.font.underline = true;
+        e.style.font.strikethrough = true;
+        let surface = paint_pass(
+            &board(vec![DisplayNode::Element(e)]),
+            &cam(),
+            &Pass::default(),
+        );
+        let painted = runs(&surface);
+        assert!(!painted.is_empty(), "the body is shaped");
+        let ink = painted[0].0;
+        for (_, tf, _) in painted {
+            let c = tf.as_coeffs();
+            assert!(
+                (c[1].atan2(c[0]) - FRAC_PI_6).abs() < 1e-9,
+                "a run turned {c:?}"
+            );
+        }
+        let rules: Vec<f64> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                // The rules are drawn in the body's ink; other lines are chrome.
+                DrawOp::StrokeLine {
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    color,
+                    ..
+                } if Some(*color) == ink => Some((y1 - y0).atan2(x1 - x0)),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            rules.len() >= 2,
+            "an underline and a strikethrough: {rules:?}"
+        );
+        for angle in rules {
+            assert!((angle - FRAC_PI_6).abs() < 1e-9, "a rule at {angle}");
+        }
+    }
+
+    /// `TOILE-UI-277` and `TOILE-UI-358`: the overridden element paints at the
+    /// override's bounds and rotation; the other one paints where it committed.
+    #[test]
+    fn an_override_moves_its_own_element_and_no_other() {
+        let (at_a, at_b) = (
+            Rect::new(0.0, 0.0, 40.0, 20.0),
+            Rect::new(100.0, 0.0, 140.0, 20.0),
+        );
+        let tween = AnimatedElement {
+            id: ElementId("a".into()),
+            bounds: Rect::new(20.0, 30.0, 80.0, 60.0),
+            rotation: 0.5,
+            opacity: 1.0,
+            fill: None,
+        };
+        let mut pass = Pass::default();
+        pass.images.insert(
+            "h".into(),
+            DecodedImage {
+                pixels: vec![255u8; 2 * 2 * 4],
+                width: 2,
+                height: 2,
+            },
+        );
+        pass.anim.insert(tween.id.clone(), tween.clone());
+        let vp = board(vec![
+            elem("a", DisplayGeom::Image("h".into()), at_a),
+            elem("b", DisplayGeom::Image("h".into()), at_b),
+        ]);
+        let surface = paint_pass(&vp, &cam(), &pass);
+        let dests: Vec<Rect> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::DrawImage { dest, .. } => Some(*dest),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(dests, vec![tween.bounds, at_b]);
+        let pushes: Vec<Affine> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::PushTransform { transform } => Some(*transform),
+                _ => None,
+            })
+            .collect();
+        // The camera, then each element's own transform.
+        assert_eq!(pushes[1..], [anim_transform(&tween), Affine::IDENTITY]);
+    }
+
+    /// `TOILE-UI-266`: the note under the inline editor paints its card and
+    /// no body. Its neighbour keeps its own, and nothing else changes.
+    #[test]
+    fn the_note_under_the_editor_paints_no_body() {
+        let vp = board(vec![
+            note("a", "First", 0xFFFE_F08A, Rect::new(0.0, 0.0, 160.0, 120.0)),
+            note(
+                "b",
+                "Second note",
+                0xFFFE_F08A,
+                Rect::new(200.0, 0.0, 360.0, 120.0),
+            ),
+        ]);
+        let all = paint_pass(&vp, &cam(), &Pass::default());
+        let editing = paint_pass(
+            &vp,
+            &cam(),
+            &Pass {
+                editing: Some(crate::ui::edit::EditTarget::Element(ElementId("a".into()))),
+                ..Pass::default()
+            },
+        );
+        let b_left = world_rect_to_screen(Rect::new(200.0, 0.0, 360.0, 120.0), &cam()).x0;
+        let (before, after) = (runs(&all), runs(&editing));
+        assert!(
+            before.iter().any(|r| r.1.translation().x < b_left),
+            "a has a body"
+        );
+        assert!(!after.is_empty(), "b keeps its body");
+        assert!(
+            after.iter().all(|r| r.1.translation().x >= b_left),
+            "a body under the editor was painted"
+        );
+        let rest = |s: &RecordingSurface| -> Vec<DrawOp> {
+            s.ops()
+                .iter()
+                .filter(|o| !matches!(o, DrawOp::Glyphs { .. }))
+                .cloned()
+                .collect()
+        };
+        assert_eq!(rest(&all), rest(&editing), "the cards are untouched");
+    }
+
+    /// `TOILE-UI-045` and `TOILE-UI-267`: the content pass opens on the board
+    /// background over the whole canvas. The grid lines follow on the board,
+    /// and presentation focus paints none.
+    #[test]
+    fn the_background_comes_first_and_focus_drops_the_grid() {
+        let vp = board(vec![filled(
+            "a",
+            0xFFFF_0000,
+            Rect::new(0.0, 0.0, 50.0, 50.0),
+        )]);
+        let canvas = Rect::new(0.0, 0.0, 1000.0, 800.0);
+        let lines = |s: &RecordingSurface| {
+            s.count(|o| matches!(o, DrawOp::StrokeLine { color, .. } if *color == LIGHT_PALETTE.grid_line))
+        };
+        for present in [false, true] {
+            let surface = paint_pass(
+                &vp,
+                &cam(),
+                &Pass {
+                    present,
+                    ..Pass::default()
+                },
+            );
+            assert_eq!(
+                surface.ops().first(),
+                Some(&DrawOp::FillRect {
+                    rect: canvas,
+                    color: LIGHT_PALETTE.content_bg
+                }),
+                "present {present}"
+            );
+            if present {
+                assert_eq!(lines(&surface), 0, "focus paints no grid line");
+            } else {
+                assert!(lines(&surface) > 0, "the board paints its grid");
+            }
+        }
+    }
+
+    /// `TOILE-UI-268`: several selected elements show their union box and the
+    /// rotate knob, and no corner square.
+    #[test]
+    fn several_selected_elements_show_their_union_box_alone() {
+        let vp = board(vec![
+            elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
+            elem("b", DisplayGeom::Rect, Rect::new(100.0, 80.0, 150.0, 120.0)),
+        ]);
+        let mut surface = RecordingSurface::new();
+        let selection = [ElementId("a".into()), ElementId("b".into())];
+        paint_overlay(
+            &mut surface,
+            &selection,
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            None,
+            false,
+        );
+        let union = world_rect_to_screen(Rect::new(0.0, 0.0, 150.0, 120.0), &cam());
+        let boxes: Vec<Rect> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::StrokeRect { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(boxes, vec![union], "one box, the union");
+        let squares: Vec<Point> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::FillRect { rect, .. } => Some(rect.center()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(squares, vec![rotate_handle_point(union)], "the knob alone");
+    }
+
+    /// `TOILE-UI-269`: a match the culled set does not hold is out of view,
+    /// and it gets no outline. The match in view gets its own.
+    #[test]
+    fn a_match_out_of_view_gets_no_outline() {
+        let vp = board(vec![elem(
+            "a",
+            DisplayGeom::Rect,
+            Rect::new(0.0, 0.0, 50.0, 50.0),
+        )]);
+        let mut surface = RecordingSurface::new();
+        let hits = [ElementId("far".into()), ElementId("a".into())];
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &hits,
+            Some(&hits[0]),
+            &HashMap::new(),
+            None,
+            false,
+        );
+        let outlines: Vec<Rect> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::StrokeRect { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .collect();
+        let a = world_rect_to_screen(Rect::new(0.0, 0.0, 50.0, 50.0), &cam());
+        assert_eq!(outlines.len(), 1, "{outlines:?}");
+        assert!(outlines[0].contains(a.center()), "the outline is a's");
+    }
+
+    /// `TOILE-UI-270`: each preview paints over an empty overlay, on the
+    /// geometry it will commit. The marquee is a screen rectangle; the rest
+    /// are world paths under the camera, at a screen-constant width.
+    #[test]
+    fn every_preview_tracks_the_geometry_it_will_commit() {
+        let mut cam = cam();
+        cam.zoom = 2.0;
+        let r = Rect::new(10.0, 20.0, 110.0, 70.0);
+        let mut pen = BezPath::new();
+        pen.move_to((0.0, 0.0));
+        pen.curve_to((10.0, 40.0), (60.0, 40.0), (70.0, 0.0));
+        let pts = vec![
+            Point::new(5.0, 5.0),
+            Point::new(45.0, 25.0),
+            Point::new(85.0, 5.0),
+        ];
+        let paint = |p: &Preview| {
+            let mut surface = RecordingSurface::new();
+            paint_overlay(
+                &mut surface,
+                &[],
+                &board(Vec::new()),
+                &cam,
+                &LIGHT_PALETTE,
+                Some(p),
+                &[],
+                None,
+                &HashMap::new(),
+                None,
+                false,
+            );
+            surface.ops().to_vec()
+        };
+        let world = cam.world_to_screen();
+        let stroked = |ops: &[DrawOp], bounds: Rect, px: f64| match ops {
+            [
+                DrawOp::PushTransform { transform },
+                DrawOp::StrokePath {
+                    color,
+                    bounds: b,
+                    width,
+                },
+                DrawOp::PopTransform,
+            ] => {
+                assert_eq!(*transform, world, "under the camera");
+                assert_eq!(*color, Some(LIGHT_PALETTE.selection));
+                assert_eq!(*b, bounds);
+                assert_eq!(width * cam.zoom, px, "a screen-constant width");
+            }
+            other => panic!("one stroked path: {other:?}"),
+        };
+        let ops = paint(&Preview::Marquee(r));
+        assert_eq!(
+            ops,
+            vec![DrawOp::StrokeRect {
+                rect: world_rect_to_screen(r, &cam),
+                color: LIGHT_PALETTE.selection,
+                width: 1.0
+            }]
+        );
+        for kind in [
+            ShapeKind::Rect,
+            ShapeKind::Ellipse,
+            ShapeKind::Triangle,
+            ShapeKind::Line,
+        ] {
+            stroked(&paint(&Preview::Shape { kind, rect: r }), r, 1.5);
+        }
+        let (from, to) = (Point::new(-30.0, 10.0), Point::new(90.0, 60.0));
+        stroked(
+            &paint(&Preview::Connector { from, to }),
+            Rect::from_points(from, to),
+            1.5,
+        );
+        stroked(
+            &paint(&Preview::Pen(pen.clone())),
+            kurbo::Shape::bounding_box(&pen),
+            1.5,
+        );
+        stroked(
+            &paint(&Preview::Stroke(pts)),
+            Rect::new(5.0, 5.0, 85.0, 25.0),
+            2.0,
+        );
     }
 
     // A minimal palette for host tests (the generated LIGHT lives behind the
