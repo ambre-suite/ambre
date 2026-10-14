@@ -70,12 +70,25 @@ impl ToileState {
         if members.len() < 2 {
             return None;
         }
-        // Detach each member from its current group, then prune any group emptied
-        // by the detach, so the incremental caches stay equal to a full rebuild.
-        // Done before computing `insert_at` since pruning shifts `layers`.
+        // A member leaves every container it sat in, a frame included, since
+        // it belongs to one at most (`TOILE-149`). When every member sat in one
+        // frame, the new group takes their place in it.
+        let frame_of = |m: &ElementId| {
+            self.parents_of(m)
+                .iter()
+                .find(|p| self.is_frame(p))
+                .cloned()
+        };
+        let shared_frame = members
+            .first()
+            .and_then(frame_of)
+            .filter(|f| members.iter().all(|m| frame_of(m).as_ref() == Some(f)));
+        // Detach each member, then prune any group emptied by the detach, so the
+        // incremental caches stay equal to a full rebuild. Done before computing
+        // `insert_at` since pruning shifts `layers`.
         for m in &members {
-            if let Some(g) = self.enclosing_group(m) {
-                self.remove_child(&g, m);
+            for p in self.parents_of(m).to_vec() {
+                self.remove_child(&p, m);
             }
         }
         self.prune_empty_groups();
@@ -111,6 +124,14 @@ impl ToileState {
             .doc
             .get_movable_list(LAYERS)
             .insert(insert_at, NodeId::Element(id.clone()).encode().as_str());
+        if let Some(f) = shared_frame {
+            if let Some(list) = self.children_list(&f)
+                && list.push(id.as_str()).is_ok()
+            {
+                self.link_parent(&id, &f);
+            }
+            self.enforce_frame_zorder(&f);
+        }
         Some(id)
     }
 
@@ -216,8 +237,12 @@ impl ToileState {
         let Some(fm) = self.element_map(frame) else {
             return self.err_no_element(frame);
         };
+        // Refused aloud, as a rename of a non-frame is, so a surface can tell
+        // the refusal from a gesture that changed nothing (`TOILE-050`).
         if str_of(&fm, "type") != "frame" {
-            return ToileOutcome::display_only(Vec::new());
+            return ToileOutcome::display_only(vec![ToileEvent::Error(
+                ToileError::ContentKindMismatch,
+            )]);
         }
         let Some(list) = self.children_list(frame) else {
             return self.err_no_element(frame);

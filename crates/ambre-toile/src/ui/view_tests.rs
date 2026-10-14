@@ -1844,3 +1844,48 @@ fn an_editor_or_a_gesture_keeps_the_overlay_repainting() {
         assert!(plan(&mut rig).1, "the gesture keeps the overlay live");
     }
 }
+
+/// A group node over `bounds`, itself a member of `parent` when one is given.
+fn group_node(id: &str, bounds: Rect, parent: Option<&str>) -> DisplayNode {
+    DisplayNode::Element(DisplayElement {
+        geom: ambre_bus::app::toile::DisplayGeom::Group,
+        group: parent.map(eid),
+        ..shape(id, bounds)
+    })
+}
+
+/// `TOILE-UI-032`: a double-click enters one nesting level of the group
+/// under it, never more. The first one enters the outer group and selects
+/// the inner one; the second enters the inner group and selects the leaf.
+#[test]
+fn a_double_click_enters_one_nesting_level() {
+    let mut rig = Rig::new();
+    let leaf = DisplayElement {
+        group: Some(eid("inner")),
+        ..shape("a", A)
+    };
+    rig.show(vec![
+        group_node("outer", A, None),
+        group_node("inner", A, Some("outer")),
+        DisplayNode::Element(leaf),
+    ]);
+    rig.double_click(50.0, 50.0);
+    assert_eq!(rig.view.group_scope, Some(eid("outer")));
+    assert_eq!(rig.view.selection, [eid("inner")]);
+    rig.double_click(50.0, 50.0);
+    assert_eq!(rig.view.group_scope, Some(eid("inner")));
+    assert_eq!(rig.view.selection, [eid("a")]);
+}
+
+/// `TOILE-UI-240`: a double-click on an element in no group leaves the scope
+/// as it was, entered or not.
+#[test]
+fn a_double_click_on_an_ungrouped_element_keeps_the_scope() {
+    let mut rig = Rig::new();
+    rig.show(vec![DisplayNode::Element(shape("a", A))]);
+    rig.double_click(50.0, 50.0);
+    assert_eq!(rig.view.group_scope, None);
+    rig.view.group_scope = Some(eid("g"));
+    rig.double_click(50.0, 50.0);
+    assert_eq!(rig.view.group_scope, Some(eid("g")));
+}

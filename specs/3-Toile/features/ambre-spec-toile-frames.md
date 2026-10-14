@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
-| `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the placeholder band takes a press | partial -- the glyphs themselves are asserted by nothing: a host shapes none without a font, which is the vacuous assertion `features/ambre-spec-toile-board-rendering.md section 5` records for the bodies beside them; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the placeholder band takes a press; `ambre_toile::ui::render::tests::a_frame_title_is_drawn_above_the_frame_in_its_ink` -- the glyphs shaped with the shipped face, drawn above the frame's top edge in screen space, a title in the title ink and the placeholder in the secondary ink | none | verified |
 | `TOILE-255` | `OBS` | A presentation MUST NOT paint a frame's title: a slide shows the board's content, not its structure. | this spec section 4; `TOILE-UI-083` | type-level -- the title pass has one call site, inside the content pass's `if !present`, so a slide cannot reach it | none | verified |
 
 ### 1.2 Add a selection to a frame
@@ -33,11 +33,11 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-099` | `POST` | Adding elements to a frame MUST make each one a member. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- the membership is read back after an add of two | none | verified |
 | `TOILE-237` | `POST` | Removing elements from a frame MUST take each one out. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- its remove step: one of the two members leaves and the membership is read back without it | none | verified |
-| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none | unheld -- it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | `ambre_toile::logic::structure_tests::a_member_removed_and_added_in_one_gesture_ends_last` -- the first of two members removed and added in one command, read back last | none | verified |
 | `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_clamped_membership_change_is_one_undo_item` -- it creates the child before the frame so the clamp fires, presses undo once, and reads both the membership and the paint order back | none | verified |
-| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none | unheld -- each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before any commit when neither list moved, and no test sends a gesture with no effect; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none | unheld -- the handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | `ambre_toile::logic::structure_tests::an_ineligible_id_does_not_stop_the_rest` -- the frame itself, an unknown id and a current member in one gesture with an eligible element, which joins with no error | none | verified |
+| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | `ambre_toile::logic::structure_tests::a_membership_change_with_no_effect_writes_nothing` -- a current member added and a stranger removed: no change and no event | none | verified |
+| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | `ambre_toile::logic::structure_tests::a_membership_change_on_a_non_frame_is_refused` -- a shape named as the frame: the kind-mismatch error, no change, no member | none | verified |
 
 ### 1.3 Name a frame
 
@@ -69,11 +69,11 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 18 `verified`, 1 `partial`, 4 `untested`. What holds is membership
-  as data, the title beside it, and what a press or a double-click on it does. An element joins one
-  frame, detaches from its group and paints after it in one undo item, and the notes and the name
-  converge. What is loose is what the membership gesture refuses or skips, and the title's glyphs.
-  The failure is a title editor that closes on a pan.
+* **Verification.** 23 `verified`, 0 `partial`, 0 `untested`. What holds is membership as data, the
+  title beside it, and what a press or a double-click on it does. An element joins one frame,
+  detaches from its group and paints after it in one undo item, and the notes and the name converge.
+  The membership gesture is driven through what it refuses and skips, and the title's glyphs are
+  read back.
 
 ---
 
@@ -107,7 +107,8 @@ resizing, rotating, reordering and deleting a frame use the ordinary element com
 
 **Steps, when membership changes:**
 
-1. resolve the frame and refuse anything that is not one (`TOILE-050`);
+1. resolve the frame and refuse anything that is not one (`TOILE-050`). A missing frame answers
+   the unknown-element error, and an element of another kind answers the kind-mismatch error;
 2. remove the listed ids from the membership list first, so a remove and an add of one id re-appends
    it at the end (`TOILE-099`, `TOILE-100`);
 3. for each added id, skip the frame itself, an id the board does not hold, and a current member,
@@ -195,10 +196,6 @@ implied by position.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A refusal and a no-op are the same event** (`TOILE-050`, `TOILE-102`). A gesture aimed at an
-  element that is not a frame and a gesture that changes nothing both return with no event at all.
-  A frame the board does not hold returns an unknown-element error. A surface that wanted to
-  tell the user why nothing happened has nothing to read.
 * **Nothing puts an element into a frame by dragging it.** The only trigger is a context-menu entry
   that requires the selection to already sit inside the frame's box, and nothing takes an element out
   again. A frame is therefore a region a user can draw and can barely fill.

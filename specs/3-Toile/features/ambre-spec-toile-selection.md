@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-386` | `INV` | A selected arrow MUST stay selected wherever the camera moves, and leave the selection only when the board loses it. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_selected_arrow_outlives_the_frame_and_leaves_with_the_board` | none | verified |
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
 | `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge, a group excepted (`TOILE-UI-391`). | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
-| `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | `ambre_toile::ui::render::tests::a_multi_selection_wears_an_upright_union_box_and_no_resize_handle` -- two elements, one turned: one upright box over both, the rotate stem and knob, and no corner handle | none | verified |
 | `TOILE-UI-391` | `OBS` | A selected group MUST wear no corner square: its box is derived and cannot be stretched. | this spec section 3; `TOILE-155` | `ambre_toile::ui::render::tests::overlay_draws_no_corner_square_for_a_selected_group` -- the group's box and its rotate knob paint, and no corner square does | none | verified |
 | `TOILE-UI-392` | `INV` | A press on the edge of a selected group's box MUST NOT start a resize. | this spec section 3; `TOILE-155` | `ambre_toile::ui::tool::tests::a_press_on_a_selected_groups_edge_starts_no_resize` -- a press on a corner and on a side starts no transform and the hover offers no resize cursor, while the rotate knob still turns the group | none | verified |
 | `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | `ambre_toile::ui::tool::tests::selection_bounds_skips_a_locked_element` -- a locked-only selection has no box, and a mixed selection's box covers the unlocked element alone | none | verified |
@@ -58,15 +58,15 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-235` | `POST` | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | none | verified |
 | `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | `ambre_toile::ui::tool::tests::marquee_resolves_a_member_to_its_group` -- a marquee over a member resolves to the top-most group, the target a click returns | none | verified |
 | `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_judges_a_rotated_element_by_its_rotated_box` -- a marquee over the unrotated tip of a rotated long rect misses, and one over the rotated shape takes it | none | verified |
-| `TOILE-UI-238` | `FRAME` | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | none | unheld -- `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` covers one element inside and one outside, and neither is locked nor a group; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-238` | `FRAME` | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | `ambre_toile::ui::hit::tests::a_marquee_skips_a_locked_element_and_a_group_node` -- a locked element, a group node and a free element under one marquee: the free one alone taken | none | verified |
 
 ### 1.4 Enter and leave a group scope
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | none | unheld -- nothing drives the double-click handler, which lives on the view; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_double_click_enters_one_nesting_level` -- a leaf two groups deep, double-clicked twice through the view: the outer scope with the inner group selected, then the inner scope with the leaf | none | verified |
 | `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | `ambre_toile::ui::view::view_tests::escape_leaves_the_scope_and_clears_the_selection_in_one_press` -- one key event through the view empties both | none | verified |
-| `TOILE-UI-240` | `FRAME` | A double-click on an element in no group MUST NOT change the scope. | this spec section 3 | none | unheld -- nothing drives the double-click handler; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-240` | `FRAME` | A double-click on an element in no group MUST NOT change the scope. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_double_click_on_an_ungrouped_element_keeps_the_scope` -- an element in no group double-clicked with no scope, then with one entered: the scope as it was each time | none | verified |
 
 ### 1.5 Select the whole board
 
@@ -83,10 +83,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 29 `verified`, 4 `untested`. What holds is the geometry and select-all with the
+* **Verification.** 33 `verified`, 0 `untested`. What holds is the geometry and select-all with the
   pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A click,
-  a marquee and `Escape` are driven through the view, and a hairline answers one screen reach at
-  every zoom. What is loose is the double-click into a scope.
+  a marquee, a double-click into a scope and `Escape` are driven through the view. A hairline answers
+  one screen reach at every zoom, and a multi-selection is painted.
 
 ---
 
@@ -194,8 +194,8 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 * **Nothing adds to a selection.** There is no modifier that extends it: a click replaces, and a
   marquee replaces. A user cannot select two elements far apart without a marquee that covers what
   lies between them.
-* **The group scope has no visible state, and entering it has no test.** It is a field on the view,
-  and nothing on screen says which level a click will reach.
+* **The group scope has no visible state.** It is a field on the view, and nothing on screen says
+  which level a click will reach.
 * **A scope on a deleted group lingers.** A peer that deletes or ungroups the entered group leaves the
   scope naming an id the board lost. It is harmless: no hit lies inside it, so every click resolves to
   the top-most group, and `Escape` clears it.

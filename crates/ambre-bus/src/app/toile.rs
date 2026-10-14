@@ -1522,6 +1522,8 @@ pub enum ToileError {
     NotCreatable { kind: &'static str },
     #[error("InitContent does not match the requested element kind")]
     ContentKindMismatch,
+    #[error("an element needs a finite size that is not empty")]
+    UnusableSize,
     #[error("a group needs at least two distinct members")]
     GroupNeedsTwo,
     #[error("element {0} is not a group")]

@@ -66,6 +66,15 @@ impl ToileState {
         if !content_matches(kind, &content) {
             return Err(ToileError::ContentKindMismatch);
         }
+        // A birth box must be finite and not negative, with one side at least.
+        // A flat pen stroke has no height and is still drawn (`TOILE-188`).
+        let usable = |v: f64| v.is_finite() && v >= 0.0;
+        if !usable(size.width) || !usable(size.height) || size.width + size.height == 0.0 {
+            return Err(ToileError::UnusableSize);
+        }
+        if !at.x.is_finite() || !at.y.is_finite() {
+            return Err(ToileError::UnusableSize);
+        }
 
         let id = self.mint_element_id();
         let elems = self.doc.get_map(ELEMENTS);
@@ -438,8 +447,16 @@ impl ToileState {
                 return self.err_no_element(id);
             }
         }
+        // A locked element refuses the delete as it refuses every other write
+        // (`TOILE-033`). A group with a locked member is kept whole, since its
+        // cascade would remove that member.
+        let ids: Vec<ElementId> = ids
+            .iter()
+            .filter(|id| !self.holds_a_lock(id))
+            .cloned()
+            .collect();
         let deck_before = self.slide_order();
-        if !self.delete_from_doc(ids) {
+        if ids.is_empty() || !self.delete_from_doc(&ids) {
             return ToileOutcome::display_only(Vec::new());
         }
         self.doc.commit();
@@ -449,6 +466,15 @@ impl ToileState {
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         self.emit_with_update(events)
+    }
+
+    /// Whether `id` or any element of its subtree is locked.
+    fn holds_a_lock(&self, id: &ElementId) -> bool {
+        let mut subtree = HashSet::new();
+        self.collect_subtree(id, &mut subtree);
+        subtree
+            .iter()
+            .any(|e| self.element_map(e).is_some_and(|em| bool_of(&em, "locked")))
     }
 
     /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the
@@ -515,6 +541,12 @@ impl ToileState {
         let Some(from_idx) = self.layers.iter().position(|n| n == &node) else {
             return ToileOutcome::display_only(Vec::new());
         };
+        // A locked element keeps its place in the order (`TOILE-033`).
+        if let NodeId::Element(id) = &node
+            && self.holds_a_lock(id)
+        {
+            return ToileOutcome::display_only(Vec::new());
+        }
         let last = self.layers.len().saturating_sub(1);
         let to_idx = match to {
             ZTarget::Front => last,

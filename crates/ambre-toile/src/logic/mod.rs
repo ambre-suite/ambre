@@ -42,3 +42,8 @@ pub use state::ToileState;
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod convergence_tests;
+
+/// The shape of a board driven through the command surface. Host-only.
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod structure_tests;

@@ -5276,6 +5276,12 @@ enum PeerOp {
     AlignAll {
         op: u8,
     },
+    // The advisory lock (`TOILE-033`): every later op on a locked element
+    // must write nothing, on both peers alike.
+    LockNth {
+        nth: usize,
+        locked: bool,
+    },
 }
 
 fn op_strategy() -> impl Strategy<Value = PeerOp> {
@@ -5314,6 +5320,7 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
             emoji,
             weight
         }),
+        (0usize..6, any::<bool>()).prop_map(|(nth, locked)| PeerOp::LockNth { nth, locked }),
     ]
 }
 
@@ -5496,6 +5503,13 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             }
             None => return None,
         },
+        PeerOp::LockNth { nth: n, locked } => match nth(*n) {
+            Some(id) => st.handle_command(ToileCommand::LockElements {
+                ids: vec![id],
+                locked: *locked,
+            }),
+            None => return None,
+        },
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint {
@@ -5575,6 +5589,12 @@ proptest! {
 
         // Identical z-order.
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layer order diverged");
+        // No write, local or merged, lists a node twice (`TOILE-060`).
+        for st in [&a, &b] {
+            let raw = st.debug_raw_layers();
+            let distinct: std::collections::HashSet<&String> = raw.iter().collect();
+            prop_assert_eq!(distinct.len(), raw.len(), "a node is listed twice: {:?}", raw);
+        }
 
         // Identical frame membership, read from each peer's parent cache.
         prop_assert_eq!(

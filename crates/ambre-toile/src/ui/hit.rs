@@ -416,6 +416,26 @@ mod tests {
         assert_eq!(hits, vec![ElementId("a".to_owned())]);
     }
 
+    /// `TOILE-UI-238`: a marquee takes neither a locked element nor a group
+    /// node, even when it covers both whole. The free element beside them is
+    /// still taken.
+    #[test]
+    fn a_marquee_skips_a_locked_element_and_a_group_node() {
+        let node = |id: &str, geom: DisplayGeom, locked: bool| {
+            let mut e = elem(geom, Rect::new(10.0, 10.0, 40.0, 40.0), Affine::IDENTITY);
+            e.id = ElementId(id.to_owned());
+            e.locked = locked;
+            DisplayNode::Element(e)
+        };
+        let nodes = [
+            node("locked", DisplayGeom::Rect, true),
+            node("group", DisplayGeom::Group, false),
+            node("free", DisplayGeom::Rect, false),
+        ];
+        let hits = marquee_hits(&nodes, Rect::new(0.0, 0.0, 100.0, 100.0));
+        assert_eq!(hits, vec![ElementId("free".to_owned())]);
+    }
+
     /// `TOILE-UI-237`: a rotated element is judged by the shape the user sees,
     /// not by the unrotated bounds. A long rect rotated 90 degrees is tall and
     /// thin, so a marquee over the unrotated tip must miss it.

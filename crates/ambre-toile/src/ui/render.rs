@@ -1768,6 +1768,131 @@ mod tests {
         assert_eq!(box_strokes, 1, "the group still wears its box");
     }
 
+    /// `TOILE-UI-230`: a multi-selection wears one upright union box and no
+    /// resize handle, even when a member is turned. The box is the crisp
+    /// upright rect, not four rotated edges, and the knob is the one square.
+    #[test]
+    fn a_multi_selection_wears_an_upright_union_box_and_no_resize_handle() {
+        let DisplayNode::Element(mut turned) =
+            elem("b", DisplayGeom::Rect, Rect::new(100.0, 0.0, 150.0, 50.0))
+        else {
+            panic!("elem builds an element")
+        };
+        turned.transform = Affine::rotate_about(0.5, Point::new(125.0, 25.0));
+        let vp = board(vec![
+            elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
+            DisplayNode::Element(turned),
+        ]);
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[ElementId("a".into()), ElementId("b".into())],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            None,
+            false,
+        );
+        let count = |f: fn(&DrawOp) -> bool| surface.ops().iter().filter(|o| f(o)).count();
+        assert_eq!(count(|o| matches!(o, DrawOp::StrokeRect { .. })), 1);
+        assert_eq!(
+            count(|o| matches!(o, DrawOp::StrokeLine { .. })),
+            1,
+            "the stem"
+        );
+        assert_eq!(
+            count(|o| matches!(o, DrawOp::FillRect { .. })),
+            1,
+            "the knob"
+        );
+        let union = surface
+            .ops()
+            .iter()
+            .find_map(|o| match o {
+                DrawOp::StrokeRect { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .expect("the box");
+        let a = world_rect_to_screen(Rect::new(0.0, 0.0, 50.0, 50.0), &cam());
+        assert!(union.x0 <= a.x0 && union.y0 <= a.y0, "the box misses a");
+        assert!(union.width() > a.width() * 2.0, "the box misses b");
+    }
+
+    /// `TOILE-UI-120`: a group paints nothing of its own. The node the engine
+    /// derives for it, painted alone, draws no fill, no border and no title.
+    #[test]
+    fn a_derived_group_paints_nothing_of_its_own() {
+        use crate::logic::{InitContent, ToileCommand, ToileEvent, ToileState};
+        let mut st = ToileState::new();
+        let mut ids = Vec::new();
+        for x in [0.0, 100.0] {
+            let out = st.handle_command(ToileCommand::CreateElement {
+                kind: ElementKind::Shape(ShapeKind::Rect),
+                at: Point::new(x, 0.0),
+                size: kurbo::Size::new(50.0, 50.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: 0,
+            });
+            ids.extend(out.display.iter().filter_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
+                _ => None,
+            }));
+        }
+        st.handle_command(ToileCommand::GroupElements { ids });
+        let group = st
+            .debug_viewport()
+            .nodes
+            .into_iter()
+            .find(|n| matches!(n, DisplayNode::Element(e) if matches!(e.geom, DisplayGeom::Group)))
+            .expect("the group is derived as a node");
+        // The background and the grid are drawn either way; the group adds
+        // nothing to them. A transform pushed and popped around nothing
+        // draws nothing, so the stack ops are left out of the comparison.
+        let drawn = |nodes: Vec<DisplayNode>| -> Vec<DrawOp> {
+            paint_pass(&board(nodes), &cam(), &Pass::default())
+                .ops()
+                .iter()
+                .filter(|o| !matches!(o, DrawOp::PushTransform { .. } | DrawOp::PopTransform))
+                .cloned()
+                .collect()
+        };
+        assert_eq!(
+            drawn(vec![group]),
+            drawn(Vec::new()),
+            "a group painted something"
+        );
+    }
+
+    /// `TOILE-253`, the glyphs: a named frame's title is shaped and drawn in
+    /// the title ink, above the frame's top edge. A frame nobody named draws
+    /// its placeholder in the secondary ink instead, so it is never blank.
+    #[test]
+    fn a_frame_title_is_drawn_above_the_frame_in_its_ink() {
+        let bounds = Rect::new(0.0, 0.0, 300.0, 200.0);
+        let top = world_rect_to_screen(bounds, &cam()).y0;
+        for (title, ink) in [
+            ("Agenda", LIGHT_PALETTE.cell_text),
+            ("  ", LIGHT_PALETTE.header_text),
+        ] {
+            let vp = board(vec![elem("f", DisplayGeom::Frame(title.into()), bounds)]);
+            let painted = runs(&paint_pass(&vp, &cam(), &Pass::default()));
+            assert!(!painted.is_empty(), "{title:?}: no title was shaped");
+            for (color, tf, depth) in painted {
+                assert_eq!(color, Some(ink), "{title:?}");
+                assert_eq!(depth, 0, "{title:?}: a title under the camera transform");
+                assert!(
+                    tf.translation().y <= top,
+                    "{title:?}: the title covers the frame"
+                );
+            }
+        }
+    }
+
     /// `TOILE-UI-083`: presentation mode paints no editing surface. The same
     /// selection that draws a box and five handles above draws neither while
     /// the mode holds.

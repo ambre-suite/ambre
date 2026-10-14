@@ -277,7 +277,67 @@ mod prop {
         ElementId(format!("k{key}"))
     }
 
+    /// A camera small enough to cull part of the populated area.
+    fn culling_camera() -> impl Strategy<Value = Viewport> {
+        (
+            -500.0f64..500.0,
+            -500.0f64..500.0,
+            0.5f64..4.0,
+            20.0f64..400.0,
+            20.0f64..400.0,
+        )
+            .prop_map(|(x, y, zoom, w, h)| Viewport {
+                center: Point::new(x, y),
+                zoom,
+                size: Size::new(w, h),
+            })
+    }
+
     proptest! {
+        /// `TOILE-206`: at a camera that culls, the incremental index answers
+        /// the visible set a rebuild answers. A brute-force filter of the
+        /// model answers the same set.
+        #[test]
+        fn a_culling_camera_sees_what_a_rebuild_sees(
+            ops in proptest::collection::vec(op_strategy(), 0..64),
+            cams in proptest::collection::vec(culling_camera(), 1..6),
+        ) {
+            let mut incremental = SpatialIndex::default();
+            let mut model: BTreeMap<u8, ElementBounds> = BTreeMap::new();
+            for op in ops {
+                match op {
+                    Op::Upsert { key, x, y, w, h } => {
+                        let b = ElementBounds::from_rect(eid(key), Rect::new(x, y, x + w, y + h));
+                        model.insert(key, b.clone());
+                        incremental.update(b);
+                    }
+                    Op::Remove { key } => {
+                        model.remove(&key);
+                        incremental.remove(&eid(key));
+                    }
+                }
+            }
+            let rebuilt = SpatialIndex::build(model.values().cloned());
+            for vp in &cams {
+                let world = vp.to_world_rect();
+                let mut expected: Vec<ElementId> = model
+                    .values()
+                    .filter(|b| {
+                        b.min[0] <= world.x1 && b.max[0] >= world.x0
+                            && b.min[1] <= world.y1 && b.max[1] >= world.y0
+                    })
+                    .map(|b| b.id.clone())
+                    .collect();
+                let mut va: Vec<_> = incremental.query_visible(vp).collect();
+                let mut vb: Vec<_> = rebuilt.query_visible(vp).collect();
+                expected.sort();
+                va.sort();
+                vb.sort();
+                prop_assert_eq!(&va, &vb);
+                prop_assert_eq!(&va, &expected);
+            }
+        }
+
         #[test]
         fn incremental_matches_rebuild(ops in proptest::collection::vec(op_strategy(), 0..64)) {
             let mut incremental = SpatialIndex::default();

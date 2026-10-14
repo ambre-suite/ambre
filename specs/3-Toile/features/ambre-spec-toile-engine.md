@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-001` | `INV` | The board CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | type-level -- `ToileState.doc` is private and **no public signature in `ambre-toile` names `LoroDoc`**, and both exits return `Vec<u8>` | none | verified |
 | `TOILE-004` | `INV` | The spatial index MUST be a derived cache: the incrementally maintained index MUST hold the same elements as a from-scratch rebuild. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an upsert and remove stream and compares the population and the paint set against a rebuild; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws an operation stream and compares the same (neither compares them at a camera that culls, which is `TOILE-206`) | none | verified |
-| `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | none | unheld -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` probes one viewport covering the whole populated area, and both `ToileState` proptests derive under `wide_viewport`, whose comment says it culls nothing. The equivalence is held over the population, never over a cull; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | `ambre_toile::logic::index::prop::a_culling_camera_sees_what_a_rebuild_sees` -- a generated camera that culls, after generated inserts, moves and removals: the incremental index, a rebuild and a brute-force filter of the model answer the same set | none | verified |
 | `TOILE-005` | `INV` | The visible set MUST be resolved from the spatial index. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | none | verified |
 | `TOILE-240` | `INV` | The visible set MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen` -- what the viewport meets and what it does not | none | verified |
 | `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled` | none | verified |
@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-209` | `PRE` | A command MUST cull against the last camera the UI reported, or against the default one while no camera has arrived. | this spec section 3 | none | unheld -- the field is seeded with `Viewport::default()` and no caller checks whether the UI has reported yet. Nothing refuses a command on an unreported camera, and nothing reads what it answers; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-209` | `PRE` | A command MUST cull against the last camera the UI reported, or against the default one while no camera has arrived. | this spec section 3 | `ambre_toile::logic::structure_tests::a_command_culls_against_the_last_reported_camera` -- a far element culled by the default camera, then the near one culled once a camera over the far one is reported | none | verified |
 | `TOILE-002` | `POST` | Derivation MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `ToileOutcome` by value and the crate has no async path; `ambre_toile::logic::state::derive::tests::derive_viewport_at_uses_the_given_camera` | none | verified |
 | `TOILE-210` | `POST` | The outcome MUST carry every display event the command produced. | this spec section 3 | `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` -- it reads the derivation through a test accessor, while thirty-odd tests of the same file read `out.display` directly, over creation, deletion, grouping, find, stats and presence | none | verified |
 | `TOILE-211` | `FAIL` | A command naming an element that is gone MUST answer with an error and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the two refusal helpers return `ToileOutcome::display_only`, which carries no delta and never reaches the cursor, and the construction is the proof | none | verified |
@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_move_walks_no_board`; `ambre_toile::logic::convergence_tests::a_remote_refresh_matches_a_full_rebuild` | none | verified |
 | `TOILE-265` | `POST` | Opening a board MUST add no operation its peers lack, so each change a silent reader receives imports at the cost of the change. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::convergence_tests::a_reader_that_sent_nothing_holds_no_history_of_its_own`; `ambre_toile::logic::state::docfile::tests::a_round_trip_keeps_the_history_whole` | none | verified |
-| `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | `ambre_toile::logic::structure_tests::a_remote_batch_repaints_once` -- five deltas in one batch answer one frame where the same five one by one answer five, and both peers end with equal caches | none | verified |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
 
@@ -104,10 +104,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 36 `verified`, 3 `untested`. What holds is the pair no other application holds:
-  the index equivalence and the convergence of every derived cache. Both under one property test,
-  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and
-  `TOILE-023`, a measurement; ten verified rows are structural.
+* **Verification.** 39 `verified`, 0 `untested`. What holds is the pair no other application holds:
+  the index equivalence, at a camera that culls too, and the convergence of every derived cache. Ten
+  verified rows are structural.
 
 ---
 
@@ -128,10 +127,9 @@ Convergence rests on a rule the format owns: an element is named by a minted id,
 (`ambre-spec-toile-schema.md section 2`, `TOILE-003`). Two peers holding the same operations hold the
 same board.
 
-**What this table cannot see.** Both proptests derive under a camera wide enough to cull nothing, and both end
-by exchanging whole snapshots. Three things survive every row above: a cull that answers wrongly
-(`TOILE-206`), and a connector shipped to a screen it never meets (`TOILE-207`). Also an export cursor that
-skips or repeats a range (`TOILE-090`, `TOILE-217`).
+**What this table cannot see.** Both proptests derive under a camera that culls nothing, and end by
+exchanging whole snapshots. A connector shipped to a screen it never meets survives them (`TOILE-207`), and
+so does an export cursor that skips a range (`TOILE-090`, `TOILE-217`).
 
 ---
 
@@ -213,9 +211,9 @@ never hides a visible element, which is what `TOILE-005` asks of it, and the exa
 answer. The stored coordinates are the truth; the box is derived, which is `TOILE-004`.
 
 **The two paths that maintain it must agree**, and unlike Trame that equivalence is held. One property test
-drives an operation stream through the incremental path and compares the result to a rebuild. It is held over
-the population and over one probe that covers the whole populated area. So what is compared is which elements
-exist, never which ones a camera keeps (`TOILE-206`). A removal descends to its leaf alone (`TOILE-091`).
+drives an operation stream through the incremental path and compares the result to a rebuild. A second one
+compares them at a generated camera that culls (`TOILE-206`). A removal descends to its leaf alone
+(`TOILE-091`).
 
 ### C. What one command costs
 
@@ -284,8 +282,7 @@ except that the session seeds the canonical user id (`TOILE-223`).
 **An import that fails is reported.** A remote delta the document refuses answers with a distinct
 `RemoteImportFailed` error, so the board tells the user it is behind (`TOILE-214`). In a batch a failed
 delta is skipped and the batch reports the failure alongside the survivors it merged (`TOILE-215`). The
-batch path still has no other test in this crate, so the one repaint it exists for is a claim about its
-construction (`TOILE-213`).
+batch repaints once (`TOILE-213`).
 
 **A second constructor pins the identity.** A fresh board draws a random peer, and every minted id carries
 that peer, so the same command sequence produces two different boards. `ToileState::with_peer` pins the peer

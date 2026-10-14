@@ -23,20 +23,20 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-186` | `INV` | Every cache the board derives -- the paint order, the bounds and the spatial index -- MUST equal what a rebuild from the document alone produces. | this spec section 3 | proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws a random operation sequence and compares the three caches against a rebuild | none | verified |
-| `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`) | partial -- the resize, the rotate, the restyle and the body overwrite each carry the same early return and no test, the delete and the reorder never read the flag, and the operation strategy the property tests draw from has no lock case, section 6; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`); `ambre_toile::logic::structure_tests::a_locked_element_refuses_every_command_but_the_lock` -- the resize, the rotate, the restyle, the body overwrite, the delete and the reorder, each writing nothing, a group holding the locked element kept whole by a delete, then the unlock that lets the delete through; `ambre_toile::logic::convergence_tests::two_peers_converge` -- the lock drawn among the operations two peers interleave | none | verified |
 | `TOILE-187` | `CONC` | Two peers that applied different operations to one board MUST hold the same elements, the same box per element and the same paint order. | this spec section 2 | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws two operation sequences and compares the elements, the boxes and the paint order | none | verified |
 
 ### 1.2 Place an element on the board
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-188` | `PRE` | The caller MUST hand over a birth rectangle of usable size. | this spec section 3 | none | unheld -- the handler checks the kind and the seed and never measures the rectangle, so a zero-size or negative create is accepted and mints an element nothing can pick, section 6; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-188` | `PRE` | The caller MUST hand over a birth rectangle of usable size. | this spec section 3 | `ambre_toile::logic::structure_tests::a_birth_box_of_no_usable_size_is_refused` -- an empty, a negative and a non-finite box and a non-finite corner, each refused with no write, and a flat box with one side still accepted | none | verified |
 | `TOILE-031` | `POST` | A newly created element MUST enter the paint order, the bounds cache and the spatial index in the same commit that mints it. | this spec section 3 | `ambre_toile::logic::convergence_tests::create_registers_bounds_and_layer` -- the population, the box and the paint order; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` is the only one that reaches the index | none | verified |
-| `TOILE-035` | `POST` | A create MUST seed the style a kind is born with. | this spec section 3 | none | unheld -- `ambre_bus::app::toile::ElementStyle::for_kind` runs at every birth and nothing reads what it returns for a kind, so a change to the seeded default would fail no test, section 6; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-035` | `POST` | A create MUST seed the style a kind is born with. | this spec section 3 | `ambre_toile::logic::structure_tests::each_kind_is_born_with_its_own_style` -- each kind's created element read back against the style its kind seeds | none | verified |
 | `TOILE-189` | `POST` | A colour picked at placement MUST override the fill alone, leaving the rest of the seeded style as the kind sets it. | this spec section 3 | structural -- the handler builds the per-kind style, then assigns the picked colour to its fill field and to nothing else | none | verified |
 | `TOILE-190` | `FRAME` | A create MUST NOT touch an element already on the board, nor reorder what it lands over. | this spec section 3 | structural -- the handler inserts one element map, one bounds entry and one index entry, and appends to the paint order | none | verified |
 | `TOILE-022` | `FAIL` | A derived kind (`group`, `drawing`) MUST NOT be creatable through the create command, and the refusal MUST answer an error. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_and_drawing_are_not_creatable` | none | verified |
-| `TOILE-191` | `FAIL` | A seed that does not match the kind MUST be refused, and MUST leave the board unchanged. | this spec section 3 | none | unheld -- `ambre_toile::logic::state::codec::content_matches` gates every create and no test drives a mismatched seed through it, though the body-overwrite half of the same guard has one (`TOILE-197`); lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-191` | `FAIL` | A seed that does not match the kind MUST be refused, and MUST leave the board unchanged. | this spec section 3 | `ambre_toile::logic::structure_tests::a_seed_of_another_kind_is_refused` -- a mismatched seed answers its error, and the document's state is the one it had | none | verified |
 
 ### 1.3 Move, resize or rotate an element
 
@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-192` | `POST` | A resize MUST record the dragged rectangle normalized, so a negative drag is still a rectangle. | this spec section 3 | `ambre_toile::logic::convergence_tests::resize_updates_bounds` | none | verified |
 | `TOILE-193` | `POST` | A rotate MUST grow the recorded box to the corners the angle sweeps. | this spec section 3 | `ambre_toile::logic::convergence_tests::rotate_expands_the_aabb` -- it reads the four bounds against the sweep | none | verified |
 | `TOILE-012` | `FRAME` | A move MUST NOT touch a locked element. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` | none | verified |
-| `TOILE-036` | `FAIL` | A resize, a rotate or a body overwrite naming an element the board does not hold MUST answer an error and MUST leave the document unchanged. | this spec section 3 | none | unheld -- the three handlers share one error helper, `ambre_toile::logic::state::err_no_element`, and no test drives a missing id into them. The connector half has one (`TOILE-007`); lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-036` | `FAIL` | A resize, a rotate or a body overwrite naming an element the board does not hold MUST answer an error and MUST leave the document unchanged. | this spec section 3 | `ambre_toile::logic::structure_tests::a_write_to_a_missing_element_is_refused` -- a resize, a rotate and a body overwrite on a missing id, each answering the error with the document unchanged | none | verified |
 | `TOILE-194` | `FAIL` | A move or a restyle naming an element the board does not hold MUST answer an error too. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_move_naming_a_missing_element_answers_an_error`; `::a_restyle_naming_a_missing_element_answers_an_error` -- each names a ghost id and reads a `NoSuchElement` error back | none | verified |
 
 ### 1.4 Overwrite the body of a note
@@ -92,10 +92,10 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 28 `verified`, 1 `partial`, 0 `failing`, 4 `untested`. What holds best is align
-  and distribute: nine tests over the pure geometry, five over the handler. A place in the 2-peer
-  property strategy lets `TOILE-037` claim convergence rather than assert it. A missing id now
-  answers an error across move, restyle and delete. What is loose is the lock, across five commands.
+* **Verification.** 33 `verified`, 0 `partial`, 0 `failing`, 0 `untested`. Align and distribute holds
+  through nine tests over the pure geometry and five over the handler. A place in the 2-peer property
+  strategy lets `TOILE-037` claim convergence rather than assert it. The lock is driven through every
+  command it binds. A birth is held on its box, its seed and its style.
 
 ---
 
@@ -139,8 +139,10 @@ kind is that document's field table.
 
 **Steps, when an element is created:**
 
-1. refuse a derived kind (`TOILE-022`), and refuse a seed that does not match the kind
-   (`TOILE-191`);
+1. refuse a derived kind (`TOILE-022`), refuse a seed that does not match the kind
+   (`TOILE-191`), and refuse a birth box of no usable size (`TOILE-188`). A usable size is finite and
+   not negative, with at least one side, so a level pen stroke is still taken. The corner must be
+   finite too;
 2. mint an id (`ambre-spec-toile-schema.md section 2`) and open the element map under it;
 3. write the geometry block, the lock flag and the per-kind style (`TOILE-035`), with the picked
    fill applied over its fill field alone (`TOILE-189`);
@@ -190,8 +192,9 @@ geometry is tested on the UI thread (`features/ambre-spec-toile-selection.md`).
 
 **What a lock looks like.** A locked element shows no handles and cannot be picked, so it stops
 absorbing clicks over a background someone drew on
-(`features/ambre-spec-toile-selection.md`). The flag binds only the commands that read it, and the
-delete is not one of them (`TOILE-033`).
+(`features/ambre-spec-toile-selection.md`). The flag binds every command but the lock itself
+(`TOILE-033`). A delete skips a locked element, and keeps whole any group that holds one. A reorder of
+either writes nothing.
 
 **Align and distribute** (`TOILE-037`) is one command, `AlignElements { ids, op }`, over eight
 operations. Six put every selected box on an edge or a centre line of the selection's **union box**.
@@ -230,18 +233,14 @@ selection toolbar carries style, not geometry.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A lock stops a move and not a delete** (`TOILE-033`). The geometry and style handlers all
-  read the lock flag and return early. The delete handler and the reorder handler do not read it at
-  all. Select-all takes locked elements too, because it walks what is displayed rather than what is
-  pickable (`TOILE-UI-033`), so `Ctrl+A` then `Delete` removes a locked background.
+* **Select-all takes locked elements** (`TOILE-UI-033`). It walks what is displayed rather than
+  what is pickable. The delete that follows spares them, but the selection still names elements no
+  command will change.
 * **A refusal says nothing to anyone** (`TOILE-033`). Every handler that honours the lock returns an
   empty change list, not an error. No notice, no cursor, no log, and the same silence for the user
   who attempted the write as for the peers who did not.
-* **The property tests never lock** (`TOILE-033`). The operation strategy the two of them draw from
-  carries no lock case and no body overwrite. Neither convergence nor cache equivalence has ever
-  been exercised against a locked element.
-* **Nothing measures the birth rectangle** (`TOILE-188`). A create writes the size it is given, so a
-  zero or negative one mints an element that occupies no pixel and answers no pick.
+* **The property tests never overwrite a body.** The operation strategy the two of them draw from
+  now locks and unlocks, but carries no body overwrite.
 * **Align and distribute has no chord and no button** (`TOILE-037`). It is reachable from the Object
   menu and the context menu only. The floating selection toolbar carries style, and neither the
   style inspector nor the keyboard offers it.
@@ -249,9 +248,6 @@ selection toolbar carries style, not geometry.
   which has a selection of its own now (`features/ambre-spec-toile-connectors.md`) -- is not
   something the operation can take. An arrow has no box to align, only two ends, and what a
   distribution would mean for one is not designed.
-* **Nothing asserts the per-kind default** (`TOILE-035`). A note is born yellow and square and
-  everything else white. The only tests near it drive the picked colour and the paint, so a change
-  to the seeded default would fail nothing.
 * **A resize does not scale what is inside.** A resized frame keeps its children where they were.
   A resized group is not refused either, though its box is derived. The write lands in the group's
   own map and the bounds are re-read from it. The pass that follows overwrites the box with the

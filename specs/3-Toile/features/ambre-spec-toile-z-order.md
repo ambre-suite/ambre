@@ -20,25 +20,25 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-060` | `INV` | A node MUST appear at most once in the order. | this spec section 3 | none | unheld -- a create pushes once, so a duplicate can only arrive from a concurrent change, nothing on the write path rejects one, and no test drives it; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-060` | `INV` | A node MUST appear at most once in the order. | this spec section 3 | `ambre_toile::logic::convergence_tests::two_peers_converge` -- after each generated interleaving of two peers' operations, reorders, groups and locks included, the raw order of each peer read back with no node twice | none | verified |
 | `TOILE-123` | `CONC` | Two peers that have exchanged their changes MUST hold the same order. | this spec section 3 | `ambre_toile::logic::convergence_tests::two_peers_converge` -- it reads both orders back after random concurrent op sequences; `::caches_match_a_full_rebuild` -- it reads the incremental order against a rebuild of the same document. The second is what `TOILE-059` cited: it compares two walks, so a hole painted by both would pass it | none | verified |
 | `TOILE-057` | `OBS` | One order MUST decide the painting of elements and connectors alike, so a connector can be placed behind an element. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads a three-entry order back over two elements and one connector, the one place the two kinds are asserted to share the list, and the walk reads that list and no other. `::reorder_to_back_moves_node`, cited here before, carries no connector. The shared entry encoding is `ambre-spec-toile-schema.md section 2` | none | verified |
-| `TOILE-119` | `OBS` | The order MUST paint back to front: the last entry MUST paint over the first. | this spec section 3 | none | unheld -- it is the sense the four menu entries are named for, and no test reads a derived viewport back to see which of two overlapping nodes lands last. `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` reads the materialized list, never a paint sequence; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-119` | `OBS` | The order MUST paint back to front: the last entry MUST paint over the first. | this spec section 3 | `ambre_toile::logic::structure_tests::the_last_entry_paints_last` -- two overlapping nodes read back from the derived frame in order, then reversed once the first is brought to the front | none | verified |
 | `TOILE-059` | `OBS` | An order entry naming a connector the board can no longer route MUST be skipped, never painted as a hole. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_an_endpoint_makes_the_connector_dangle` -- it reads the connector out of the paint set after one endpoint is deleted; `ambre_toile::logic::connector::tests::missing_endpoint_yields_none` -- the routing step under it | none | verified |
-| `TOILE-120` | `OBS` | An order entry naming an element the document no longer holds MUST be skipped. | this spec section 3 | none | unheld -- it is the half `TOILE-059` was carrying. The two are different mechanisms: a connector is routed on every walk, while an element is culled against a bounds cache the deletion already emptied, so they fail apart. A local delete strips the entry, so the case arrives only from a concurrent change, and no test drives one; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-120` | `OBS` | An order entry naming an element the document no longer holds MUST be skipped. | this spec section 3 | `ambre_toile::logic::structure_tests::an_entry_for_a_lost_element_is_skipped` -- an entry forged for an id the document never held, between two live nodes: the frame paints the two alone | none | verified |
 | `TOILE-058` | `OBS` | An element the document holds and the order omits MUST still be painted, last. | this spec section 3 | `ambre_toile::logic::state::derive::tests::an_omitted_element_paints_last_in_id_order` -- it drops four elements' layer entries and reads the derived viewport back: each still paints, after the listed element | none | verified |
 | `TOILE-121` | `OBS` | The elements the order omits MUST be painted in an order every peer computes alike, by id. | this spec section 3 | `ambre_toile::logic::state::derive::tests::an_omitted_element_paints_last_in_id_order` -- it reads the omitted tail back and asserts it is in id order, not the element map's iteration order | none | verified |
-| `TOILE-122` | `OBS` | A node the order lists twice MUST be painted once, at its first place. | this spec section 3 | none | unheld -- the materialization keeps the first occurrence, which is what makes a duplicate invisible rather than doubled, and it is the half `TOILE-060` was carrying: one rule is what the document may hold, the other is what the screen does with it. No test drives a duplicate through either; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-122` | `OBS` | A node the order lists twice MUST be painted once, at its first place. | this spec section 3 | `ambre_toile::logic::structure_tests::a_node_listed_twice_paints_once_at_its_first_place` -- a duplicate entry forged at the end of the list: the node paints once, under the node after its first place | none | verified |
 
 ### 1.2 Reorder a node
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-124` | `POST` | A node sent to the back MUST become the first entry of the order. | this spec section 3 | `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the whole order back after sending the top node of two to the back | none | verified |
-| `TOILE-125` | `POST` | The four other targets MUST resolve against the list: front is the last place, forward and backward one step from where the node sits, and an index past the end clamps to the last place. | this spec section 3 | none | unheld -- only the back target is driven, and no surface sends an index at all (section 4), so the clamp is reachable from the command alone; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-126` | `FRAME` | A reorder MUST NOT change the relative order of the nodes it does not name. | this spec section 3 | none | unheld -- the handler moves one entry and the neighbours close behind it, and the one test that drives a reorder holds two nodes, where a move and a swap give the same list; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-127` | `FRAME` | A reorder whose target is the place the node already holds MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before the commit when the resolved index is the current one, and no test sends a reorder with no effect; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-128` | `FAIL` | A reorder naming a node the order does not hold MUST do nothing, and MUST NOT report an error. | this spec section 3 | none | unheld -- the handler returns with no event at all, which is what it returns for the no-op above, so a surface cannot tell the refusal from the change that was already made, section 6; lands with the `Toile board structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-125` | `POST` | The four other targets MUST resolve against the list: front is the last place, forward and backward one step from where the node sits, and an index past the end clamps to the last place. | this spec section 3 | `ambre_toile::logic::structure_tests::each_target_resolves_and_the_others_keep_their_order` -- front, forward, backward, an index past the end and an index inside the list, each read back on four nodes | none | verified |
+| `TOILE-126` | `FRAME` | A reorder MUST NOT change the relative order of the nodes it does not name. | this spec section 3 | `ambre_toile::logic::structure_tests::each_target_resolves_and_the_others_keep_their_order` -- the whole list of four read back after each move, where a swap would give another list | none | verified |
+| `TOILE-127` | `FRAME` | A reorder whose target is the place the node already holds MUST write nothing and broadcast nothing. | this spec section 3 | `ambre_toile::logic::structure_tests::a_reorder_to_its_own_place_writes_nothing` -- each of the five targets aimed at the place the node holds: no change and no event | none | verified |
+| `TOILE-128` | `FAIL` | A reorder naming a node the order does not hold MUST do nothing, and MUST NOT report an error. | this spec section 3 | `ambre_toile::logic::structure_tests::a_reorder_of_an_unknown_node_does_nothing_quietly` -- an id the order does not hold: no change, no event, the order as it was | none | verified |
 
 ### 1.3 Remove a node
 
@@ -52,11 +52,10 @@ status values are normative in `ambre-spec-template.md`.
   (`TOILE-061`).
 * **Boundary.** none of its own: the order is a list in the Logic thread's document and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 8 `verified`, 8 `untested`. What holds is the order as data: the list, the
+* **Verification.** 16 `verified`, 0 `untested`. What holds is the order as data: the list, the
   agreed walk, and the fallback painting an omitted element last, by id. The cost of a removal holds
-  too. What
-  is loose is everything the reorder does: the four targets nobody drives, the neighbours it may not
-  disturb. The write it owes nobody and the refusal that reads as a no-op are loose too.
+  too. Each reorder target is driven on four nodes, with the neighbours read back. The no-op, the
+  unknown node, a lost entry and a duplicate are each driven by hand.
 
 ---
 
@@ -148,16 +147,13 @@ sends.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing stops a duplicate reaching the document** (`TOILE-060`, `TOILE-122`). The materialization
-  hides one, so a duplicate is invisible until something counts the list, and the paint walk would
-  otherwise paint the node twice.
+* **Nothing on the write path rejects a duplicate** (`TOILE-060`, `TOILE-122`). The two-peer
+  property finds none arising, and the materialization would hide one. A duplicate a future write
+  brings in stays invisible until something counts the list.
 * **A refusal and a no-op are the same event** (`TOILE-128`, `TOILE-127`). A reorder of a node the
   order does not hold and a reorder that changes nothing both return with no event. A surface has
   nothing to tell one from the other, and a menu entry that silently did nothing looks like one that
   worked.
-* **Nothing reads the paint order back** (`TOILE-119`). Every test of the order reads the
-  materialized list. No test reads a derived viewport to check that the last entry paints over
-  the first. Four menu entries are named for a sense the contract now states and nothing verifies.
 * **There is no layer panel.** A user reorders by four menu entries and cannot see the order, so a
   stack of five overlapping shapes is arranged by trial.
 * **A multi-selection reorder is one command per element.** The four entries fan out over the
