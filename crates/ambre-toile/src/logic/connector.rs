@@ -11,7 +11,7 @@ use kurbo::{BezPath, Point, Rect};
 use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, PathType};
 
 /// A resolved connector, materialized from its CRDT `LoroMap` for routing.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Connector {
     pub id: ConnectorId,
     pub from: ElementId,

@@ -14,7 +14,7 @@ use ambre_bus::UserId;
 use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
-    CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
+    BoolOp, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
     ReactionKind, StatsRequestKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
@@ -5627,4 +5627,352 @@ fn a_batch_with_one_failed_delta_reports_the_failure() {
             .any(|e| matches!(e, ToileEvent::Error(ToileError::RemoteImportFailed)))
     );
     assert_eq!(st.element_count(), 1, "the surviving delta still merges");
+}
+
+// -----------------------------------------------------------------------------
+// Connectors and paths held (`toile-connectors`, `toile-vector-paths`,
+// `toile-auto-layout`, `toile-freehand`)
+// -----------------------------------------------------------------------------
+
+/// The paint position of one node, or a panic when it is not in the order.
+fn order_of(st: &ToileState, node: &NodeId) -> usize {
+    st.layer_order()
+        .iter()
+        .position(|n| n == node)
+        .expect("the node is in the paint order")
+}
+
+/// `TOILE-007`: a peer deleting an endpoint while another joins it leaves
+/// the arrow dangling on both boards, its record whole on each.
+#[test]
+fn an_arrow_whose_end_a_peer_deleted_keeps_its_record() {
+    let mut a = ToileState::with_peer(1);
+    let from = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let to = create_rect(&mut a, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let mut b = ToileState::with_peer(2);
+    b.apply_remote(&a.export_snapshot());
+    let conn = connect(&mut a, from.clone(), to.clone());
+    let joined = a.connector_of(&conn).expect("the arrow is stored");
+    let gone = b.handle_command(ToileCommand::DeleteElements {
+        ids: vec![to.clone()],
+    });
+    a.apply_remote(&gone.update.expect("a delete writes"));
+    b.apply_remote(&a.export_snapshot());
+    for peer in [&a, &b] {
+        assert_eq!(peer.connector_ids(), vec![conn.clone()], "not destroyed");
+        assert_eq!(peer.connector_of(&conn).as_ref(), Some(&joined));
+        assert_eq!(connector_node_count(peer), 0, "dangling, so not painted");
+    }
+}
+
+/// `TOILE-043`: an arrow sits in the one paint order, so a reorder can put
+/// it behind the elements it joins.
+#[test]
+fn an_arrow_goes_behind_an_element() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let conn = connect(&mut st, a.clone(), b.clone());
+    st.handle_command(ToileCommand::Reorder {
+        node: NodeId::Connector(conn.clone()),
+        to: ZTarget::Back,
+    });
+    assert_eq!(
+        st.layer_order(),
+        &[
+            NodeId::Connector(conn),
+            NodeId::Element(a),
+            NodeId::Element(b)
+        ]
+    );
+}
+
+/// `TOILE-168`: a create naming an element the board does not hold is
+/// refused, and writes nothing.
+#[test]
+fn a_create_to_a_missing_element_is_refused() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let order = st.layer_order().to_vec();
+    let ghost = ElementId("ffff_0000".to_owned());
+    for (from, to) in [(a.clone(), ghost.clone()), (ghost.clone(), a.clone())] {
+        let out = st.handle_command(ToileCommand::CreateConnector {
+            from,
+            from_anch: Anchor::Right,
+            to,
+            to_anch: Anchor::Left,
+            path_type: PathType::Straight,
+            arrows: EndCaps {
+                start: false,
+                end: true,
+            },
+        });
+        assert!(out.update.is_none(), "a refused create writes nothing");
+        assert!(matches!(
+            out.display.as_slice(),
+            [ToileEvent::Error(ToileError::NoSuchElement(id))] if id == &ghost.0
+        ));
+    }
+    assert!(st.connector_ids().is_empty());
+    assert_eq!(st.layer_order(), order.as_slice());
+}
+
+/// `TOILE-169`: a create puts the arrow at the top of the paint order.
+#[test]
+fn a_new_arrow_lands_on_top() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    create_rect(&mut st, Point::new(200.0, 0.0), Size::new(10.0, 10.0));
+    let conn = connect(&mut st, a, b);
+    assert_eq!(st.layer_order().last(), Some(&NodeId::Connector(conn)));
+    assert_eq!(st.layer_order().len(), 4);
+}
+
+/// `TOILE-171`, `TOILE-238`, `TOILE-173`: a re-aim moves the named end and
+/// nothing else. The other end, the path kind, the caps and the paint
+/// position read back as they were.
+#[test]
+fn a_re_aim_moves_only_the_named_end() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let c = create_rect(&mut st, Point::new(0.0, 100.0), Size::new(10.0, 10.0));
+    let conn = connect(&mut st, a, b);
+    let node = NodeId::Connector(conn.clone());
+    let before = st.connector_of(&conn).expect("stored");
+    let at = order_of(&st, &node);
+    st.handle_command(ToileCommand::RetargetConnector {
+        id: conn.clone(),
+        endpoint: End::To,
+        to: c.clone(),
+        anch: Anchor::Top,
+    });
+    let after = st.connector_of(&conn).expect("stored");
+    assert_eq!((after.to.clone(), after.to_anch), (c, Anchor::Top));
+    assert_eq!(
+        (after.from.clone(), after.from_anch),
+        (before.from.clone(), before.from_anch),
+        "the other end stays"
+    );
+    assert_eq!(after.path_type, before.path_type);
+    assert_eq!(after.arrows, before.arrows);
+    assert_eq!(order_of(&st, &node), at, "the paint position stays");
+}
+
+/// `TOILE-174`: re-aiming an arrow nobody minted answers an error and
+/// leaves the document as it was.
+#[test]
+fn re_aiming_an_unknown_arrow_changes_nothing() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let before = st.crdt().oplog_vv();
+    let out = st.handle_command(ToileCommand::RetargetConnector {
+        id: ConnectorId("ffff_0000".to_owned()),
+        endpoint: End::From,
+        to: a,
+        anch: Anchor::Left,
+    });
+    assert!(out.update.is_none());
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NoSuchConnector(id))] if id == "ffff_0000"
+    ));
+    assert_eq!(st.crdt().oplog_vv(), before, "nothing was written");
+}
+
+/// `TOILE-UI-348`: a caption write changes the caption alone. The ends, the
+/// path kind, the caps and the paint position read back as they were.
+#[test]
+fn a_caption_changes_nothing_else_on_the_arrow() {
+    let mut st = ToileState::new();
+    let conn = create_connector(&mut st);
+    let node = NodeId::Connector(conn.clone());
+    let before = st.connector_of(&conn).expect("stored");
+    let at = order_of(&st, &node);
+    st.handle_command(ToileCommand::SetConnectorLabel {
+        id: conn.clone(),
+        base: String::new(),
+        text: "yes".to_owned(),
+    });
+    assert_eq!(caption(&st, &conn), "yes");
+    assert_eq!(st.connector_of(&conn), Some(before));
+    assert_eq!(order_of(&st, &node), at);
+}
+
+/// The stored value of one element, as the document holds it.
+fn stored(st: &ToileState, id: &ElementId) -> loro::LoroValue {
+    st.crdt()
+        .get_map(crate::logic::state::ELEMENTS)
+        .get_deep_value()
+        .into_map()
+        .ok()
+        .and_then(|m| m.get(id.as_str()).cloned())
+        .expect("the element is stored")
+}
+
+/// `TOILE-FEAT-030`: setting a rule writes the rule and no solved box. The
+/// children's stored boxes, and every other field of the frame, read back
+/// as they were, after a derivation too.
+#[test]
+fn a_layout_rule_writes_no_solved_box() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_rect(&mut st, Point::new(50.0, 70.0), Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(120.0, 20.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: f.clone(),
+        add: vec![a.clone(), b.clone()],
+        remove: vec![],
+    });
+    let (sa, sb) = (stored(&st, &a), stored(&st, &b));
+    let frame_before = stored(&st, &f).into_map().expect("a map");
+    st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: Some(a_layout(Direction::Horizontal, 8.0)),
+    });
+    st.debug_viewport();
+    assert_eq!(stored(&st, &a), sa);
+    assert_eq!(stored(&st, &b), sb);
+    let mut frame_after = stored(&st, &f).into_map().expect("a map").as_ref().clone();
+    assert!(
+        frame_after.remove("autolayout").is_some(),
+        "the rule is stored"
+    );
+    assert_eq!(
+        &frame_after,
+        frame_before.as_ref(),
+        "nothing else on the frame"
+    );
+}
+
+/// `TOILE-FEAT-052`: a rule identical to the stored one writes nothing and
+/// sends nothing.
+#[test]
+fn an_unchanged_layout_rule_writes_nothing() {
+    let mut st = ToileState::new();
+    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f.clone(),
+        layout: Some(a_layout(Direction::Vertical, 6.0)),
+    });
+    let before = st.crdt().oplog_vv();
+    let out = st.handle_command(ToileCommand::SetAutoLayout {
+        frame: f,
+        layout: Some(a_layout(Direction::Vertical, 6.0)),
+    });
+    assert!(out.update.is_none(), "nothing reaches the other users");
+    assert_eq!(st.crdt().oplog_vv(), before, "nothing was written");
+}
+
+fn filled_rect(st: &mut ToileState, x: f64, fill: u32) -> ElementId {
+    created_id(&st.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::new(x, 0.0),
+        size: Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: Some(fill),
+        correlate: 0,
+    }))
+}
+
+/// `TOILE-FEAT-034`: the result carries the first source's style, whatever
+/// order the board holds them in.
+#[test]
+fn a_combined_path_wears_the_first_sources_style() {
+    let mut st = ToileState::new();
+    let red = filled_rect(&mut st, 0.0, 0xFFFF_0000);
+    let blue = filled_rect(&mut st, 5.0, 0xFF00_00FF);
+    let out = st.handle_command(ToileCommand::BooleanOp {
+        op: BoolOp::Union,
+        ids: vec![blue.clone(), red],
+        keep_sources: false,
+    });
+    let result = created_id(&out);
+    assert_eq!(st.style_of(&result).fill, Some(0xFF00_00FF));
+}
+
+/// `TOILE-FEAT-035`: a locked element and a non-shape among the ids are
+/// ignored, not consumed. The two shapes are.
+#[test]
+fn a_combine_consumes_only_its_sources() {
+    let mut st = ToileState::new();
+    let one = filled_rect(&mut st, 0.0, 0xFFFF_0000);
+    let two = filled_rect(&mut st, 5.0, 0xFFFF_0000);
+    let locked = filled_rect(&mut st, 3.0, 0xFFFF_0000);
+    st.handle_command(ToileCommand::LockElements {
+        ids: vec![locked.clone()],
+        locked: true,
+    });
+    let note = create_sticky(&mut st, Point::new(2.0, 2.0), "note");
+    st.handle_command(ToileCommand::BooleanOp {
+        op: BoolOp::Union,
+        ids: vec![locked.clone(), note.clone(), one.clone(), two.clone()],
+        keep_sources: false,
+    });
+    assert!(st.bounds_of(&locked).is_some(), "the locked shape stays");
+    assert!(st.bounds_of(&note).is_some(), "the note stays");
+    assert!(st.bounds_of(&one).is_none() && st.bounds_of(&two).is_none());
+    assert_eq!(st.element_count(), 3);
+}
+
+/// `TOILE-FEAT-037`: an empty result is refused, and nothing is written.
+#[test]
+fn an_empty_combine_is_refused() {
+    let mut st = ToileState::new();
+    let a = filled_rect(&mut st, 0.0, 0xFFFF_0000);
+    let b = filled_rect(&mut st, 100.0, 0xFFFF_0000);
+    let before = st.crdt().oplog_vv();
+    let out = st.handle_command(ToileCommand::BooleanOp {
+        op: BoolOp::Intersect,
+        ids: vec![a, b],
+        keep_sources: false,
+    });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::BooleanEmpty)]
+    ));
+    assert!(out.update.is_none());
+    assert_eq!(st.crdt().oplog_vv(), before);
+    assert_eq!(st.element_count(), 2);
+}
+
+fn sample(x: f32, y: f32) -> StrokePoint {
+    StrokePoint {
+        x,
+        y,
+        pressure: 1.0,
+    }
+}
+
+/// `TOILE-041`: a stroke's box runs from its lowest to its highest sample on
+/// both axes.
+#[test]
+fn a_stroke_box_spans_its_samples() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::CommitStroke {
+        points: vec![
+            sample(10.0, 40.0),
+            sample(-20.0, 5.0),
+            sample(35.0, -15.0),
+            sample(0.0, 60.0),
+        ],
+        style: ElementStyle::default(),
+    });
+    let id = created_id(&out);
+    assert_eq!(st.bounds_of(&id), Some(Rect::new(-20.0, -15.0, 35.0, 60.0)));
+}
+
+/// `TOILE-107`: a one-sample stroke still has a box with area, so the cull
+/// and the pick can find it.
+#[test]
+fn a_dot_has_a_box_with_area() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::CommitStroke {
+        points: vec![sample(7.0, 9.0)],
+        style: ElementStyle::default(),
+    });
+    let b = st.bounds_of(&created_id(&out)).expect("bounds");
+    assert!(b.area() > 0.0, "the dot has no area: {b:?}");
+    assert!(b.contains(Point::new(7.0, 9.0)));
 }

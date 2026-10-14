@@ -29,20 +29,20 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-057` | `POST` | Finishing a path MUST emit exactly one create. | this spec section 3 | `ambre_toile::ui::tool::tests::pen_clicks_then_double_click_emits_path` -- it reads the one outcome the double-click returns. The two tests this row also cited drive a Shape and a Sticky, never the pen | none | verified |
-| `TOILE-UI-058` | `POST` | A node dragged out MUST make a curved segment. | this spec section 3 | none | unheld -- `pen_bezpath` emits a cubic when either end of a span carries a handle, and the one pen test asserts the kind of the created element rather than the shape of its path; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-102` | `POST` | A node clicked without a drag MUST make a straight segment. | this spec section 3 | none | unheld -- it is the half `TOILE-UI-058` was carrying. The one pen test places three handle-free nodes and reads none of the three spans back, so a builder that curved every span would pass it; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-103` | `FRAME` | Placing a node MUST NOT write to the document. | this spec section 3 | none | unheld -- the pen holds its nodes in view state and only `finish_pen` returns a command, but the pen test drops what each `pointer_up` returned, so a create emitted per node would fail nothing; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-104` | `FAIL` | A finish left with fewer than two distinct nodes MUST emit nothing. | this spec section 3 | none | unheld -- `finish_pen` drops trailing nodes closer than `PEN_DEDUP` (the finishing double-click lands one) and returns no command below two, and no test double-clicks on a single node; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-105` | `FAIL` | A path abandoned by `Escape` or a tool change MUST emit nothing. | this spec section 3 | none | unheld -- nothing drives the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky, and the pen is the one tool whose gesture spans many clicks, so it is the one the rule is about; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-058` | `POST` | A node dragged out MUST make a curved segment. | this spec section 3 | `ambre_toile::ui::tool::tests::a_dragged_pen_node_makes_a_curved_segment` | none | verified |
+| `TOILE-UI-102` | `POST` | A node clicked without a drag MUST make a straight segment. | this spec section 3 | `ambre_toile::ui::tool::tests::clicked_pen_nodes_make_straight_segments` | none | verified |
+| `TOILE-UI-103` | `FRAME` | Placing a node MUST NOT write to the document. | this spec section 3 | `ambre_toile::ui::tool::tests::placing_a_pen_node_writes_nothing` -- what every press, drag and release answered | none | verified |
+| `TOILE-UI-104` | `FAIL` | A finish left with fewer than two distinct nodes MUST emit nothing. | this spec section 3 | `ambre_toile::ui::tool::tests::a_pen_finish_on_one_node_emits_nothing` | none | verified |
+| `TOILE-UI-105` | `FAIL` | A path abandoned by `Escape` or a tool change MUST emit nothing. | this spec section 3 | `ambre_toile::ui::tool::tests::an_abandoned_pen_path_emits_nothing` -- `Escape` and a tool change | none | verified |
 
 ### 1.3 Combine paths
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` -- the single result and the broadcast delta; `::boolean_is_one_undo_item` -- the one commit; `::keep_sources_leaves_inputs` -- the kept sources | partial -- nothing reads the style back, so a result carrying the second source's fill, or none at all, would pass the three; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | none | unheld -- the handler skips both with a `continue`, so they never enter `sources` and never reach the delete, but no test passes an ineligible id and reads it back; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element`; `::boolean_is_one_undo_item`; `::keep_sources_leaves_inputs`; `ambre_toile::logic::convergence_tests::a_combined_path_wears_the_first_sources_style` | none | verified |
+| `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_combine_consumes_only_its_sources` -- a locked shape and a note among the ids | none | verified |
 | `TOILE-FEAT-036` | `FAIL` | Fewer than two eligible outlines MUST be refused rather than write a degenerate element. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::fewer_than_two_eligible_is_rejected` -- the handler; `ambre_toile::logic::boolean::tests::fewer_than_two_paths_is_empty` -- the solver | none | verified |
-| `TOILE-FEAT-037` | `FAIL` | An empty result MUST be refused rather than write an element with no outline. | this spec section 3 | none | unheld -- the handler returns `BooleanEmpty` and writes nothing, and `ambre_toile::logic::boolean::tests::intersect_of_disjoint_is_empty` holds that the solver produces the empty result and stops there, so the refusal itself is undriven; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-037` | `FAIL` | An empty result MUST be refused rather than write an element with no outline. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_empty_combine_is_refused` | none | verified |
 
 * **Budget.** the in-flight preview under 0.5 ms, one row of
   `ambre-spec-budgets.md section 2` -- it is a view-state update per click, not per frame. The
@@ -51,10 +51,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the pen is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The finished path enters the document as one create and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 4 `verified`, 1 `partial`, 7 `untested`, 1 `unimplemented`. What holds is the
-  combinator geometry, the most thoroughly tested pure function in the application -- and nothing
-  can call it. What is loose is the pen itself: both refusals its handler makes, both frame
-  conditions, and the style the result carries that nothing reads back.
+* **Verification.** 12 `verified`, 1 `unimplemented`. What holds is the pen and the combinators. The
+  tests read the span each pen gesture places and both refusals. They also read the frame conditions
+  that keep a path in flight off the board, and the style the result wears. What is owed is a
+  gesture that invokes a combinator.
 
 ---
 
@@ -161,12 +161,6 @@ claim is withdrawn here rather than turned into an unbuilt row (section 5, secti
 * **A path cannot be reshaped.** The design named a node-editing mode: select a path, drag its nodes
   and handles. No command changes a path's outline after its create, the combinators aside. The
   claim is withdrawn above rather than recorded as owed.
-* **The pen has no live shape test** (`TOILE-UI-058`, `TOILE-UI-102`). The one test asserts that a
-  create with a path arrives. It reads back none of the three spans it placed. A builder that
-  curved every span and a builder that straightened every span both pass it.
-* **Nothing drives either refusal of the pen or of the handler** (`TOILE-UI-104`, `TOILE-FEAT-037`).
-  A double-click on a single node and a combination that cancels to nothing are the two ways each
-  gesture declines, and no test reaches either.
 * **A path is stored in world coordinates.** The outline is written absolute and read back absolute,
   and the element also carries a rotation. What a rotated path means is decided by the paint
   transform rather than by the stored data.

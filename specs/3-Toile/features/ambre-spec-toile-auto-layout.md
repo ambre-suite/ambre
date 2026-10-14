@@ -28,19 +28,19 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 | `TOILE-FEAT-038` | `INV` | A child MUST keep its size across the direction. | this spec section 3 | `ambre_toile::logic::autolayout::tests::horizontal_start_fixed_with_gap`; `::vertical_start_fixed_with_gap` -- what the row above does not read: a ten-tall and a forty-tall child come back at their own heights | none | verified |
 | `TOILE-FEAT-102` | `INV` | A child MUST sit at the near edge of the direction it does not lay out along. | this spec section 3 | `ambre_toile::logic::autolayout::tests::horizontal_start_fixed_with_gap`; `::vertical_start_fixed_with_gap` -- both children come back against the near edge. Nothing centres a row of unequal children, section 6 | none | verified |
 | `TOILE-FEAT-039` | `INV` | The children MUST go inside the frame's padding: the run MUST start at the padded corner. | this spec section 3 | `ambre_toile::logic::autolayout::tests::padding_offsets_origin` -- one child in a frame padded differently on each of its four sides, read back at the near two | none | verified |
-| `TOILE-FEAT-040` | `INV` | The room the children have MUST be the padded room, so a far-packed run MUST stop at the inner edge and a wrapping run MUST break there. | this spec section 3 | none | unheld -- the one padded test packs a single child at the near edge with 140 units to spare, so a solve that subtracted the near padding and ignored the far one would pass it. No other test pads anything; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-040` | `INV` | The room the children have MUST be the padded room, so a far-packed run MUST stop at the inner edge and a wrapping run MUST break there. | this spec section 3 | `ambre_toile::logic::autolayout::tests::the_far_padding_bounds_the_room` -- a run packed far and a wrap, both against the right padding | none | verified |
 | `TOILE-FEAT-041` | `INV` | The alignment MUST spend the room the children leave: packed near, centred, packed far, or spread with the two ends pinned. | this spec section 3 | `ambre_toile::logic::autolayout::tests::align_center`; `::align_end`; `::align_space_between` -- each reads every box back; `::horizontal_start_fixed_with_gap`; `::vertical_start_fixed_with_gap` -- the packed-near case, the two tests of `TOILE-FEAT-005` | none | verified |
 | `TOILE-FEAT-042` | `INV` | Under the spreading alignment, a run of fewer than two children MUST pack at the near edge. | this spec section 3 | `ambre_toile::logic::autolayout::tests::space_between_single_child_falls_back_to_start` -- a spread with no interior gap has nothing to divide the room by, and this row is what happens instead of dividing | none | verified |
 | `TOILE-FEAT-043` | `INV` | Under the filling mode, the children MUST share the leftover room equally. | this spec section 3 | `ambre_toile::logic::autolayout::tests::sizing_fill_shares_leftover` -- it reads two widths of forty-five back from two children ten wide | none | verified |
 | `TOILE-FEAT-103` | `INV` | Under the filling mode, a child MUST stretch across the direction to the padded box. | this spec section 3 | `ambre_toile::logic::autolayout::tests::sizing_fill_shares_leftover` -- it reads a height of fifty back from a child five tall | none | verified |
 | `TOILE-FEAT-044` | `INV` | Under the hugging and the fixed modes, each child MUST keep its own size along the direction. | this spec section 3 | `ambre_toile::logic::autolayout::tests::sizing_hug_equals_fixed` -- the two modes agree; `::horizontal_start_fixed_with_gap` -- the size is the child's own, where agreement alone would hold two modes that were both wrong | none | verified |
-| `TOILE-FEAT-045` | `INV` | A child MUST NOT be shrunk to fit: children too big for the frame MUST overflow it at their own size. | this spec section 3 | none | unheld -- the filling mode has a floor of its own on its share of the leftover, and no test fills a frame too small for its children. The floor the other modes share is held two rows down (`TOILE-FEAT-048`); lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-045` | `INV` | A child MUST NOT be shrunk to fit: children too big for the frame MUST overflow it at their own size. | this spec section 3 | `ambre_toile::logic::autolayout::tests::a_filled_frame_shrinks_no_child` -- on both axes | none | verified |
 | `TOILE-FEAT-046` | `INV` | Under the wrapping direction, a child that would not fit the row MUST start a new one. | this spec section 3 | `ambre_toile::logic::autolayout::tests::wrap_breaks_rows` -- its third child wraps | none | verified |
 | `TOILE-FEAT-104` | `INV` | Under the wrapping direction, rows MUST stack one gap apart, each as tall as its tallest child. | this spec section 3 | `ambre_toile::logic::autolayout::tests::wrap_breaks_rows` -- the wrapped child comes back one gap below a row as tall as its tallest member | none | verified |
 | `TOILE-FEAT-047` | `INV` | Under the wrapping direction, the alignment MUST apply to each row on its own. | this spec section 3 | `ambre_toile::logic::autolayout::tests::wrap_align_per_row` -- its two rows hold two children and one and are each packed far against the same edge | none | verified |
 | `TOILE-FEAT-048` | `INV` | Spacing MUST never go negative: a run that overflows MUST extend past the frame rather than fold back on itself. | this spec section 3 | `ambre_toile::logic::autolayout::tests::overflow_does_not_produce_negative_spacing` -- the spreading alignment, where one floor guards all four: the room the alignment spends is measured once | none | verified |
 | `TOILE-FEAT-049` | `INV` | A frame holding no children MUST place nothing, whatever its rule. | this spec section 3 | `ambre_toile::logic::autolayout::tests::empty_children_is_empty` -- it was cited under the combination row as though it held one of the combinations | none | verified |
-| `TOILE-FEAT-030` | `INV` | A solved position MUST NOT reach the document. | this spec section 3 | none | unheld -- no container holds a solved box and no code writes one, so the rule holds by absence, and nothing would go red the day a writer appeared; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-030` | `INV` | A solved position MUST NOT reach the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_layout_rule_writes_no_solved_box` -- the children and the frame read back, after a derivation too | none | verified |
 | `TOILE-FEAT-009` | `CONC` | Concurrent edits of one frame's layout MUST converge, last writer winning on the whole rule. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_auto_layout_edits_converge` -- two peers set rival rules and agree afterwards. The second test this row cited drives one peer alone, so it holds the write instead (`TOILE-FEAT-050`) | none | verified |
 | `TOILE-FEAT-029` | `OBS` | A frame carrying a layout rule MUST place its children by that rule. | this spec section 3 | not built | unbuilt -- lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6). The solver has no caller outside its own tests, so the rule moves nothing on screen, section 6 | unimplemented |
 
@@ -52,7 +52,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 | `TOILE-FEAT-099` | `POST` | After a clear the frame MUST carry no rule. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its clear step: the frame is read back holding none | none | verified |
 | `TOILE-FEAT-051` | `POST` | A set MUST be one undo item: one `Ctrl+Z` MUST bring back the rule the frame carried before it. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its undo step undoes a change and reads the prior rule back, on the one commit the handler makes for every set. The undo of an add and the undo of a clear are not driven | none | verified |
 | `TOILE-FEAT-031` | `POST` | A user MUST be able to give a frame a layout rule, change it and clear it. | this spec section 4 | not built | unbuilt -- lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6). The command has no menu entry, no inspector row and no chord anywhere in the workspace, section 6 | unimplemented |
-| `TOILE-FEAT-052` | `FRAME` | A rule identical to the one already stored MUST NOT be written, and MUST NOT reach the other users. | this spec section 3 | none | unheld -- the handler compares the encoded rule and returns before its commit, and every set in the tests differs from the rule before it. The clear half of the same guard is held by the row below; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-052` | `FRAME` | A rule identical to the one already stored MUST NOT be written, and MUST NOT reach the other users. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_unchanged_layout_rule_writes_nothing` | none | verified |
 | `TOILE-FEAT-053` | `FRAME` | Clearing a rule a frame does not carry MUST write nothing, and MUST reach nobody. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its last step clears an already-cleared frame and asserts that no delta leaves | none | verified |
 | `TOILE-FEAT-032` | `FAIL` | Only a frame MUST carry a layout rule: any other element MUST refuse one, and MUST say so. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_rejects_non_frame` -- the kind-mismatch notice and the absent delta | none | verified |
 | `TOILE-FEAT-054` | `FAIL` | A rule aimed at an element the board does not hold MUST be refused. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_rejects_non_frame` -- its second half reads the absent delta alone. That refusal sends a notice of its own and no test reads it, which is beyond what the rule claims | none | verified |
@@ -62,12 +62,11 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
   (`TOILE-FEAT-029`).
 * **Boundary.** none of its own: a layout rule is written to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 21 `verified`, 4 `untested`, 2 `unimplemented`. What holds is the solver:
-  sixteen tests, thirteen of them one per combination the solver pins, each falsifiable on its own.
-  What is loose is what those thirteen never reach: the far padding no test subtracts, and the frame
-  too small no test fills. The unchanged set that must write nothing and the size a child keeps
-  across the direction are loose too. The two failures are a write held for a convergence
-  (`TOILE-FEAT-009`) and two refusals held to two standards (`TOILE-FEAT-032`).
+* **Verification.** 25 `verified`, 2 `unimplemented`. Tests hold each combination the solver pins,
+  the far padding, and a filled frame too small for its children. That last test found a defect: a
+  fill shrank a child below its own size, and the cross size now has a floor. Tests also read back
+  the unchanged rule and the solved box that is never stored. What is owed is a caller for the
+  solver and a gesture that sets a rule.
 
 ---
 
@@ -177,22 +176,11 @@ A frame with a rule is painted like a frame without one, because the solve never
   no surface was built; it does not explain why the corpus described one.
 * **The corpus said the solved boxes were written back.** The earlier design stated both that the
   boxes are derived and never persisted, and that dropping an element commits the resolved geometry.
-  Neither exists in code. The first is the rule this document keeps (`TOILE-FEAT-030`); the second is
+  The first is the rule this document keeps, and a test holds it (`TOILE-FEAT-030`). The second is
   withdrawn.
-* **The far padding is subtracted by nothing** (`TOILE-FEAT-040`). One test pads a frame, and it
-  packs a single child at the near corner with room to spare. The right and the bottom insets are
-  never read back. They are what a far-packed run stops at and what a wrapping run breaks at, and a
-  solve that dropped them passes all thirteen tests.
-* **Nothing overflows a filled frame** (`TOILE-FEAT-045`). The share of the leftover has a floor of
-  its own, and every filling test has room to give. A frame too small for its children would shrink
-  them below their own size without that floor, and the overflow test drives the other one.
-* **An unchanged rule is a guard nothing drives** (`TOILE-FEAT-052`). Re-writing a byte-identical
-  rule returns before the commit, so it is not an undo item and no delta leaves. The clearing half
-  of the same guard is driven and this half is not. It is the shape of the membership change that
-  changes nothing (`features/ambre-spec-toile-frames.md`, `TOILE-102`).
 * **Two refusals, two standards** (`TOILE-FEAT-032`, `TOILE-FEAT-054`). A rule aimed at a group
   reports a kind mismatch and the test reads the notice. A rule aimed at an element the board does
-  not hold reports an unknown element, and the test reads the absent delta alone.
+  not hold sends a notice too, and no test reads it. The rule claims the refusal alone.
 * **A frame that hugs its content cannot grow.** The solver takes the frame box as an input, so
   `Hug` and `Fixed` place children the same way. The rule the name promises -- a frame that shrinks
   to what it holds -- needs the frame box to become an output. No code makes it one.

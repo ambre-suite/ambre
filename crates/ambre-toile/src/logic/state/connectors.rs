@@ -42,6 +42,13 @@ impl ToileState {
         path_type: PathType,
         arrows: EndCaps,
     ) -> ToileOutcome {
+        // Both ends must name an element the board holds, or the arrow would
+        // dangle from birth (`TOILE-168`).
+        for end in [&from, &to] {
+            if self.element_map(end).is_none() {
+                return self.err_no_element(end);
+            }
+        }
         match self.create_connector_inner(from, from_anch, to, to_anch, path_type, arrows) {
             Some(_) => {
                 self.doc.commit();
@@ -161,6 +168,12 @@ impl ToileState {
         self.doc.commit();
         self.rematerialize_layers();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// The stored record of one arrow, read straight from the document.
+    #[cfg(test)]
+    pub(crate) fn connector_of(&self, id: &ConnectorId) -> Option<Connector> {
+        read_connector(id.clone(), &self.connector_map(id)?)
     }
 
     pub(super) fn connector_map(&self, id: &ConnectorId) -> Option<LoroMap> {

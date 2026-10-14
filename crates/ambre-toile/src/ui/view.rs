@@ -1741,15 +1741,21 @@ impl ToileView {
         // A first click only selects, and arms nothing, because the element did
         // not carry the selection before. A second click enters edit on
         // release, unless a drag turns it into a move.
+        //
         // Settle the arrow selection against what the click landed on. An
-        // element always wins -- it is what the user sees on top -- so an arrow
-        // is selected only where nothing else is (`toile-connectors`).
+        // element always wins, because the user sees it on top. An arrow is
+        // selected only where the press found nothing else. A prior element
+        // selection does not stop it, and the arrow empties it
+        // (`TOILE-UI-350`, `TOILE-UI-354`).
         if button == 0 && self.machine.tool() == Tool::Select {
-            self.arrow = if self.selection.is_empty() {
+            self.arrow = if self.machine.pressed_empty_board() {
                 label::connector_at(&self.display.nodes, world, self.pick())
             } else {
                 None
             };
+            if self.arrow.is_some() {
+                self.selection.clear();
+            }
         }
         self.click_edit_candidate = (button == 0 && self.machine.tool() == Tool::Select)
             .then(|| match self.selection.as_slice() {

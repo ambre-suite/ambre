@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-008` | `INV` | Stroke smoothing MUST NOT be persisted: the document stores the raw sampled points only. | this spec section 3 | structural -- the commit serializes the sample vector and writes no outline field, and the smoothing pass runs only at derivation, so a smoothed vector has no field to land in. Nothing executable would catch one written in the samples' place: `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` reads the box back and never the samples | none | verified |
 | `TOILE-038` | `INV` | A stroke MUST NOT be mutated after it is committed, so two strokes MUST NOT conflict. | this spec section 3 | structural -- no command names a stroke's sample vector, so a stroke is an insert and nothing else; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent stroke commits | none | verified |
-| `TOILE-039` | `INV` | The smoothed outline MUST pass through every sample. | this spec section 3 | none | unheld -- `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` reads back the first and the last output point only, so a pass that cut the corner at every interior sample would satisfy it; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-039` | `INV` | The smoothed outline MUST pass through every sample. | this spec section 3 | `ambre_toile::logic::stroke::tests::the_outline_passes_through_every_sample` -- each span ends on its sample | none | verified |
 | `TOILE-103` | `INV` | The smoothed outline MUST be denser than the samples. | this spec section 3 | `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` -- it reads the output length, and this is the half the row above was carrying | none | verified |
 | `TOILE-104` | `INV` | A stroke of no sample MUST smooth to nothing. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its first half smooths an empty slice and requires an empty result, so a smoother that seeded a point fails it | none | verified |
 | `TOILE-259` | `INV` | A stroke of one sample MUST smooth to exactly that point. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its second half smooths one sample and compares the output against that point, so neither a dropped nor a moved point passes | none | verified |
@@ -32,11 +32,11 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-040` | `POST` | Releasing the pointer MUST send one commit carrying every sample of the gesture. | this spec section 4 | `ambre_toile::ui::tool::tests::draw_stream_emits_commit_stroke` -- it walks a press, two moves and a release and reads the one command back, with a sample per event | none | verified |
-| `TOILE-105` | `FRAME` | An in-flight stroke MUST NOT enter the document before release. | this spec section 4 | none | unheld -- sampling appends to view state and the move returns no command, so a create per sample is unreachable by construction, but the pen test drops what each move returned and nothing executable holds it; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-106` | `POST` | While a user draws, each new sample MUST reach the other users as presence. | this spec section 4; `TOILE-016` | `ambre_toile::ui::tool::tests::a_stroke_being_drawn_is_offered_to_the_presence_sampler` -- the samples the sampler reads each frame, growing with the gesture and gone with it; `ambre_toile::logic::convergence_tests::a_stroke_in_flight_reaches_the_other_users` -- the sample riding the ephemeral frame and landing in a watcher's presence, with nothing written to either board; `ambre_toile::ui::presence::tests::live_stroke_draws_a_polyline` -- the trail it becomes on the watcher's screen | partial -- the per-frame sampler that joins the two is view code no host test constructs; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | partial |
-| `TOILE-041` | `POST` | A stroke's box MUST span its samples. | this spec section 3 | none | unheld -- `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` asserts a box exists for a two-sample stroke and never compares it to the samples, so a box of the wrong extent would pass; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-107` | `POST` | A stroke's box MUST have area, so a single dot stays cullable and pickable. | this spec section 3 | none | unheld -- it is the half `TOILE-041` was carrying. The widening is a one-unit floor on each side, and nothing drives a one-sample stroke through the engine, which is where the floor applies; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-108` | `FAIL` | A stroke abandoned by `Escape` or a tool change MUST commit nothing. | this spec section 4 | none | unheld -- nothing drives the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky, and a stroke is the gesture that carries the most work to lose; lands with the `Toile connectors and paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-105` | `FRAME` | An in-flight stroke MUST NOT enter the document before release. | this spec section 4 | `ambre_toile::ui::tool::tests::a_stroke_in_flight_writes_nothing` | none | verified |
+| `TOILE-106` | `POST` | While a user draws, each new sample MUST reach the other users as presence. | this spec section 4; `TOILE-016` | `ambre_toile::ui::view::view_tests::each_frame_offers_the_stroke_being_drawn_to_the_others` -- the sampler; `ambre_toile::ui::tool::tests::a_stroke_being_drawn_is_offered_to_the_presence_sampler` -- the samples the machine offers; `ambre_toile::logic::convergence_tests::a_stroke_in_flight_reaches_the_other_users` -- the frame and the watcher; `ambre_toile::ui::presence::tests::live_stroke_draws_a_polyline` -- the trail | none | verified |
+| `TOILE-041` | `POST` | A stroke's box MUST span its samples. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_stroke_box_spans_its_samples` | none | verified |
+| `TOILE-107` | `POST` | A stroke's box MUST have area, so a single dot stays cullable and pickable. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_dot_has_a_box_with_area` | none | verified |
+| `TOILE-108` | `FAIL` | A stroke abandoned by `Escape` or a tool change MUST commit nothing. | this spec section 4 | `ambre_toile::ui::tool::tests::an_abandoned_stroke_commits_nothing` -- `Escape` and a tool change | none | verified |
 
 * **Budget.** the stroke commit under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. Smoothing runs
@@ -45,10 +45,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
   seals (`ZK-001`). What streams during the gesture is an ephemeral frame, sealed the same way
   (`ZK-005`).
-* **Verification.** 6 `verified`, 1 `partial`, 5 `untested`. What holds is the committed stroke: the samples
-  it carries, the element it becomes, and both degenerate smoothing inputs, which now have a row
-  each. The density of a curved stroke rests on the construction. What is loose is the span, the
-  minimum area, the abandoned gesture, and the middle of an in-flight one (`TOILE-106`).
+* **Verification.** 12 `verified`. What holds is the committed stroke and the stroke in flight. The
+  tests read the samples, the box a stroke spans, the minimum area of a dot, and the abandoned
+  gesture that commits nothing. The view test reads the live stroke each frame offers to the other peers
+  (`TOILE-106`).
 
 ---
 
@@ -143,9 +143,6 @@ gesture, never its whole history: what a peer needs is where the pen is now (`TO
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The sampler that joins the two halves is not host-testable.** The machine offers the samples
-  and the engine carries them, each under a test. What reads one and sends the other is the view's
-  per-frame hook, which no host test constructs (`TOILE-106`).
 * **Pressure is recorded and never read.** Every sample is written at full pressure by the tool,
   which never reads a pointer pressure value. No paint path varies the width by it. The field is
   four bytes per sample carrying nothing, and a pressure-sensitive pen would change nothing on

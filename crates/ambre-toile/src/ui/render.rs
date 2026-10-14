@@ -1347,6 +1347,67 @@ mod tests {
         surface
     }
 
+    /// `TOILE-UI-346`: a caption sits on a plate in the board colour, and the
+    /// plate is painted after the element bodies. A caption that crosses a
+    /// sticky is therefore drawn over the card and stays readable.
+    #[test]
+    fn a_caption_plate_is_painted_over_the_element_bodies() {
+        let fill = 0xFFFE_F08A;
+        let mut path = ambre_draw::BezPath::new();
+        path.move_to((-200.0, 40.0));
+        path.line_to((300.0, 40.0));
+        let vp = DisplayViewport {
+            version: 0,
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![
+                DisplayNode::Connector(DisplayConnector {
+                    id: ConnectorId("c".into()),
+                    path,
+                    style: ElementStyle::default(),
+                    arrows: ambre_bus::app::toile::EndCaps {
+                        start: false,
+                        end: true,
+                    },
+                    label: "yes".to_owned(),
+                }),
+                styled_elem(
+                    "s",
+                    ElementKind::Sticky,
+                    DisplayGeom::Sticky("hi".into()),
+                    Some(fill),
+                ),
+            ],
+        };
+        let surface = paint(&vp);
+        let ops = surface.ops();
+        let card = ops
+            .iter()
+            .position(
+                |op| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == argb(fill, 1.0)),
+            )
+            .expect("the sticky paints its card");
+        let plates: Vec<usize> = ops
+            .iter()
+            .enumerate()
+            .filter(|(_, op)| {
+                matches!(op, DrawOp::FillPath { color: Some(c) } if *c == LIGHT_PALETTE.content_bg)
+            })
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(plates.len(), 1, "one plate for the one caption");
+        assert!(plates[0] > card, "the plate is painted over the card");
+        // Font-availability agnostic: any caption glyphs come after the plate.
+        for (i, op) in ops.iter().enumerate() {
+            if let DrawOp::Glyphs { color: Some(c), .. } = op
+                && *c == LIGHT_PALETTE.cell_text
+            {
+                assert!(i > plates[0], "the words sit on the plate");
+            }
+        }
+    }
+
     // A sticky note paints a coloured card in the geometry pass: exactly the bug
     // behind "clicking Sticky does nothing". An empty sticky used to derive as
     // Text and paint no background, so it was invisible (toile-styles).

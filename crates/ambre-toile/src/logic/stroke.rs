@@ -91,4 +91,27 @@ mod tests {
         // Denser than the raw samples.
         assert!(out.len() > pts.len());
     }
+    /// `TOILE-039`: the outline passes through every sample, the interior
+    /// ones included. Each span ends exactly on its sample.
+    #[test]
+    fn the_outline_passes_through_every_sample() {
+        let pts = [
+            sp(0.0, 0.0),
+            sp(10.0, 30.0),
+            sp(25.0, -5.0),
+            sp(40.0, 20.0),
+            sp(45.0, 0.0),
+        ];
+        let mut out = Vec::new();
+        smooth_stroke(&pts, &mut out);
+        assert_eq!(out.len(), 1 + (pts.len() - 1) * SEGMENTS_PER_SPAN);
+        for (i, s) in pts.iter().enumerate() {
+            let at = out[i * SEGMENTS_PER_SPAN];
+            let want = Point::new(s.x as f64, s.y as f64);
+            assert!(
+                at.distance(want) < 1e-9,
+                "sample {i}: {at:?} is not {want:?}"
+            );
+        }
+    }
 }

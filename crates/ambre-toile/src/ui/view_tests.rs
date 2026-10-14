@@ -4,6 +4,7 @@
 //! detached, and a frame paints into a recording surface.
 
 use super::*;
+use ambre_bus::app::toile::Anchor;
 use ambre_bus::conduit::Receiver;
 use kurbo::Rect;
 
@@ -1018,4 +1019,232 @@ fn a_vanished_logic_thread_latches_the_page() {
     view.update();
     assert!(view.fatal, "the view is inert");
     assert!(ambre_canvas::fatal_message().is_some(), "the page is told");
+}
+
+// -----------------------------------------------------------------------------
+// Arrows driven through the view (`toile-connectors`)
+// -----------------------------------------------------------------------------
+
+fn cid(s: &str) -> ConnectorId {
+    ConnectorId(s.to_owned())
+}
+
+/// A board holding the arrow `c`, from (0, 300) to (400, 300), and these
+/// stickies, with the commands of the boot drained.
+fn with_arrow(stickies: &[(&str, Rect)]) -> Rig {
+    let mut rig = Rig::new();
+    let mut nodes = vec![DisplayNode::Connector(arrow("c"))];
+    nodes.extend(
+        stickies
+            .iter()
+            .map(|(id, bounds)| DisplayNode::Element(sticky(id, *bounds))),
+    );
+    rig.show(nodes);
+    rig.sent();
+    rig
+}
+
+/// A press at one world point, a move and a release at another.
+fn drag(rig: &mut Rig, from: (f64, f64), to: (f64, f64)) {
+    let from = rig.screen(from.0, from.1);
+    let to = rig.screen(to.0, to.1);
+    rig.press(from);
+    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    rig.release(to);
+}
+
+fn creates_a_connector(sent: &[ToileCommand]) -> bool {
+    sent.iter()
+        .any(|c| matches!(c, ToileCommand::CreateConnector { .. }))
+}
+
+/// `TOILE-UI-214`: a connector drag released over the element it started on
+/// sends nothing.
+#[test]
+fn an_arrow_to_its_own_source_sends_nothing() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.set_tool(Tool::Connector);
+    drag(&mut rig, (190.0, 60.0), (60.0, 60.0));
+    assert!(!creates_a_connector(&rig.sent()));
+}
+
+/// `TOILE-UI-215`: a connector drag sends the one create on release, and
+/// moves, resizes or selects nothing on the way.
+#[test]
+fn a_connector_drag_writes_only_its_create() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.set_tool(Tool::Connector);
+    let from = rig.screen(190.0, 60.0);
+    let to = rig.screen(320.0, 60.0);
+    rig.press(from);
+    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    assert!(rig.sent().is_empty(), "the preview is local");
+    rig.release(to);
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::CreateConnector { from, to, .. }] if from == &eid("a") && to == &eid("b")
+    ));
+    assert!(rig.view.selection.is_empty(), "the source is not selected");
+    assert_eq!(shown_bounds(&rig, "a"), Some(A), "the source did not move");
+}
+
+fn shown_bounds(rig: &Rig, id: &str) -> Option<Rect> {
+    rig.view.display.nodes.iter().find_map(|n| match n {
+        DisplayNode::Element(e) if e.id == eid(id) => Some(e.bounds),
+        _ => None,
+    })
+}
+
+/// `TOILE-UI-344`: a double-click on an arrow opens the caption editor on
+/// that arrow, seeded with its caption.
+#[test]
+fn a_double_click_on_an_arrow_opens_its_caption_editor() {
+    let mut rig = with_arrow(&[]);
+    rig.double_click(200.0, 300.0);
+    let ed = rig.view.editor.as_ref().expect("the editor opened");
+    assert_eq!(ed.target().connector(), Some(&cid("c")));
+    assert_eq!(ed.opened_text(), "yes");
+}
+
+/// `TOILE-UI-345`: leaving the caption editor sends the caption once.
+#[test]
+fn leaving_the_caption_editor_sends_the_caption() {
+    let mut rig = with_arrow(&[]);
+    rig.double_click(200.0, 300.0);
+    rig.type_text("!");
+    rig.key("Escape", false, false);
+    rig.paint();
+    assert!(rig.view.editor.is_none());
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::SetConnectorLabel { id, base, text }]
+            if id == &cid("c") && base == "yes" && text == "yes!"
+    ));
+}
+
+/// `TOILE-UI-363`: leaving the caption editor with the caption as it opened
+/// sends nothing.
+#[test]
+fn an_untouched_caption_editor_sends_nothing() {
+    let mut rig = with_arrow(&[]);
+    rig.double_click(200.0, 300.0);
+    rig.key("Escape", false, false);
+    rig.paint();
+    assert!(rig.view.editor.is_none());
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::SetConnectorLabel { .. })),
+        "an unchanged caption is not written"
+    );
+}
+
+/// `TOILE-UI-350`: a click on an arrow with nothing else under it selects
+/// the arrow.
+#[test]
+fn a_click_on_a_bare_arrow_selects_it() {
+    let mut rig = with_arrow(&[]);
+    rig.click(200.0, 300.0);
+    assert_eq!(rig.view.arrow, Some(cid("c")));
+}
+
+/// `TOILE-UI-359`: a click on an element lying over an arrow takes the
+/// element, and the arrow under it stays unselected.
+#[test]
+fn a_click_on_an_element_over_an_arrow_takes_the_element() {
+    let mut rig = with_arrow(&[("s", Rect::new(150.0, 250.0, 250.0, 350.0))]);
+    rig.click(200.0, 300.0);
+    assert_eq!(rig.view.selection, [eid("s")]);
+    assert_eq!(rig.view.arrow, None);
+}
+
+/// `TOILE-UI-352`: dragging the far handle of the selected arrow onto a
+/// shape re-aims that end at the shape, on the side the pointer aimed at.
+#[test]
+fn an_endpoint_dragged_onto_a_shape_re_aims_that_end() {
+    let mut rig = with_arrow(&[("b", Rect::new(500.0, 250.0, 700.0, 350.0))]);
+    rig.click(200.0, 300.0);
+    rig.sent();
+    drag(&mut rig, (400.0, 300.0), (510.0, 300.0));
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::RetargetConnector { id, endpoint: End::To, to, anch: Anchor::Left }]
+            if id == &cid("c") && to == &eid("b")
+    ));
+}
+
+/// `TOILE-UI-372`: an endpoint handle released over empty board sends
+/// nothing, and the arrow stays selected.
+#[test]
+fn an_endpoint_released_over_empty_board_leaves_the_arrow() {
+    let mut rig = with_arrow(&[]);
+    rig.click(200.0, 300.0);
+    rig.sent();
+    drag(&mut rig, (400.0, 300.0), (900.0, 600.0));
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::RetargetConnector { .. })),
+        "a release over nothing re-aims nothing"
+    );
+    assert_eq!(rig.view.arrow, Some(cid("c")));
+}
+
+/// `TOILE-UI-354`: selecting an arrow empties the element selection, an
+/// element click drops the arrow, and a marquee over both takes the
+/// element alone.
+#[test]
+fn an_arrow_and_an_element_are_never_selected_together() {
+    let mut rig = with_arrow(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("a")]);
+    rig.click(300.0, 300.0);
+    assert_eq!(rig.view.arrow, Some(cid("c")));
+    assert!(rig.view.selection.is_empty(), "the arrow empties it");
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.arrow, None, "the element click drops the arrow");
+    rig.marquee((-20.0, -20.0), (600.0, 400.0));
+    assert_eq!(rig.view.selection, [eid("a")], "a marquee takes no arrow");
+    assert_eq!(rig.view.arrow, None);
+}
+
+/// The live stroke each presence sample sent since the last call carried.
+fn live_strokes(sent: &[ToileCommand]) -> Vec<Option<usize>> {
+    sent.iter()
+        .filter_map(|c| match c {
+            ToileCommand::Presence { payload, .. } => {
+                Some(payload.live_stroke.as_ref().map(Vec::len))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// `TOILE-106`: while a user draws, each frame's presence sample carries the
+/// stroke as it grows, and the sample after the release carries none.
+#[test]
+fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
+    let mut rig = Rig::new();
+    rig.sent();
+    rig.view.set_tool(Tool::Draw);
+    let start = rig.screen(0.0, 0.0);
+    rig.press(start);
+    let mut t = 100.0;
+    let mut seen = Vec::new();
+    for i in 1..4 {
+        let (x, y) = rig.screen(i as f64 * 10.0, 0.0);
+        rig.input(InputEvent::PointerMove { x, y });
+        rig.view.plan_repaint(t, false);
+        t += 16.0;
+        seen.extend(live_strokes(&rig.sent()));
+    }
+    assert_eq!(
+        seen,
+        [Some(2), Some(3), Some(4)],
+        "one growing sample a frame"
+    );
+    let end = rig.screen(40.0, 0.0);
+    rig.release(end);
+    rig.view.plan_repaint(t, false);
+    assert_eq!(live_strokes(&rig.sent()), [None], "the trail ends");
 }

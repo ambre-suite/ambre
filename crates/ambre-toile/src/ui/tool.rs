@@ -161,6 +161,12 @@ impl SelectTool {
         self.drag.is_some()
     }
 
+    /// True when the last press landed on empty board and started a marquee.
+    /// No element, handle or frame title took it.
+    pub fn pressed_empty_board(&self) -> bool {
+        matches!(self.drag, Some(Drag::Marquee { .. }))
+    }
+
     /// Begin a gesture at a pointer press. `screen` is logical-pixel canvas
     /// coordinates; `world` is `screen` mapped through `cam.screen_to_world()`.
     pub fn pointer_down(
@@ -597,6 +603,12 @@ impl ToolMachine {
             || self.draft.is_some()
             || !self.pen.is_empty()
             || self.laser.is_some()
+    }
+
+    /// True when the Select tool's last press landed on empty board, so an
+    /// arrow under it may take the click (`TOILE-UI-350`).
+    pub fn pressed_empty_board(&self) -> bool {
+        self.tool == Tool::Select && self.select.pressed_empty_board()
     }
 
     /// The highlighter's live point, or `None` when it is not held down
@@ -2197,6 +2209,172 @@ mod tests {
         m.set_tool(Tool::Select);
         assert!(!m.is_active());
         assert!(m.preview().is_none());
+    }
+
+    /// One pen node: a press at `at`, an optional drag to `handle`, a release.
+    /// Answers what the press, the drag and the release returned.
+    fn pen_node(m: &mut ToolMachine, at: Point, handle: Option<Point>) -> Vec<ToolOutcome> {
+        let disp = empty_display();
+        let cam = cam();
+        let mut outs = vec![m.pointer_down(at, to_screen(&cam, at), &[], &disp, &cam, None)];
+        if let Some(h) = handle {
+            outs.push(m.pointer_move(h));
+        }
+        outs.push(m.pointer_up(handle.unwrap_or(at), &disp));
+        outs
+    }
+
+    /// The path a pen finish creates, or a panic naming what came back.
+    fn pen_path(out: ToolOutcome) -> BezPath {
+        match out {
+            ToolOutcome::Command(ToileCommand::CreateElement {
+                content: InitContent::Path(path),
+                ..
+            }) => path,
+            other => panic!("expected a path create, got {other:?}"),
+        }
+    }
+
+    /// `TOILE-UI-058`: a node dragged out makes the span after it a curve.
+    #[test]
+    fn a_dragged_pen_node_makes_a_curved_segment() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Pen);
+        pen_node(&mut m, Point::new(0.0, 0.0), Some(Point::new(20.0, -30.0)));
+        pen_node(&mut m, Point::new(100.0, 0.0), None);
+        let path = pen_path(m.double_click(Point::new(100.0, 0.0)));
+        let segs: Vec<_> = path.segments().collect();
+        assert_eq!(segs.len(), 1);
+        assert!(
+            matches!(segs[0], kurbo::PathSeg::Cubic(_)),
+            "a dragged node curves its span: {segs:?}"
+        );
+    }
+
+    /// `TOILE-UI-102`: nodes clicked without a drag make straight spans only.
+    #[test]
+    fn clicked_pen_nodes_make_straight_segments() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Pen);
+        for p in [(0.0, 0.0), (50.0, 0.0), (50.0, 50.0)] {
+            pen_node(&mut m, Point::new(p.0, p.1), None);
+        }
+        let path = pen_path(m.double_click(Point::new(50.0, 50.0)));
+        let segs: Vec<_> = path.segments().collect();
+        assert_eq!(segs.len(), 2);
+        assert!(
+            segs.iter().all(|s| matches!(s, kurbo::PathSeg::Line(_))),
+            "a clicked node keeps its spans straight: {segs:?}"
+        );
+    }
+
+    /// `TOILE-UI-103`: placing a node, clicked or dragged, writes nothing.
+    /// Only the finish answers a command.
+    #[test]
+    fn placing_a_pen_node_writes_nothing() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Pen);
+        let mut outs = pen_node(&mut m, Point::new(0.0, 0.0), None);
+        outs.extend(pen_node(
+            &mut m,
+            Point::new(80.0, 0.0),
+            Some(Point::new(90.0, 40.0)),
+        ));
+        outs.extend(pen_node(&mut m, Point::new(80.0, 80.0), None));
+        assert!(
+            outs.iter().all(|o| matches!(o, ToolOutcome::None)),
+            "a node placement sent something: {outs:?}"
+        );
+    }
+
+    /// `TOILE-UI-104`: a finish on one node emits nothing. The finishing
+    /// double-click lands a second press on that node, and the duplicate is
+    /// dropped before the count.
+    #[test]
+    fn a_pen_finish_on_one_node_emits_nothing() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Pen);
+        let at = Point::new(10.0, 10.0);
+        pen_node(&mut m, at, None);
+        pen_node(&mut m, at + Vec2::new(1.0, 0.0), None);
+        assert!(matches!(m.double_click(at), ToolOutcome::None));
+        assert!(!m.is_active(), "the pen is idle again");
+    }
+
+    /// `TOILE-UI-105`: a path abandoned by `Escape` or by a tool change emits
+    /// nothing, and the next finish has no node left to build on.
+    #[test]
+    fn an_abandoned_pen_path_emits_nothing() {
+        let leave: [fn(&mut ToolMachine); 2] = [
+            |m| {
+                m.escape();
+            },
+            |m| m.set_tool(Tool::Select),
+        ];
+        for abandon in leave {
+            let mut m = ToolMachine::new();
+            m.set_tool(Tool::Pen);
+            pen_node(&mut m, Point::new(0.0, 0.0), None);
+            pen_node(&mut m, Point::new(60.0, 0.0), None);
+            abandon(&mut m);
+            assert!(!m.is_active(), "the path is gone");
+            m.set_tool(Tool::Pen);
+            assert!(matches!(
+                m.double_click(Point::new(60.0, 0.0)),
+                ToolOutcome::None
+            ));
+        }
+    }
+
+    /// `TOILE-105`: a stroke in flight writes nothing. The press and every
+    /// move answer no command, and only the release commits.
+    #[test]
+    fn a_stroke_in_flight_writes_nothing() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Draw);
+        let disp = empty_display();
+        let cam = cam();
+        let p0 = Point::new(0.0, 0.0);
+        let mut outs = vec![m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam, None)];
+        for i in 1..20 {
+            outs.push(m.pointer_move(Point::new(i as f64 * 3.0, (i % 4) as f64)));
+        }
+        assert!(
+            outs.iter().all(|o| matches!(o, ToolOutcome::None)),
+            "a sample was sent before the release: {outs:?}"
+        );
+        assert!(matches!(
+            m.pointer_up(Point::new(60.0, 0.0), &disp),
+            ToolOutcome::Command(ToileCommand::CommitStroke { .. })
+        ));
+    }
+
+    /// `TOILE-108`: a stroke abandoned by `Escape` or by a tool change commits
+    /// nothing, even when the pointer is released afterwards.
+    #[test]
+    fn an_abandoned_stroke_commits_nothing() {
+        let leave: [fn(&mut ToolMachine); 2] = [
+            |m| {
+                m.escape();
+            },
+            |m| m.set_tool(Tool::Select),
+        ];
+        for abandon in leave {
+            let mut m = ToolMachine::new();
+            m.set_tool(Tool::Draw);
+            let disp = empty_display();
+            let cam = cam();
+            let p0 = Point::new(0.0, 0.0);
+            m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam, None);
+            m.pointer_move(Point::new(10.0, 5.0));
+            m.pointer_move(Point::new(20.0, 0.0));
+            abandon(&mut m);
+            assert!(m.live_stroke().is_none(), "the samples are gone");
+            assert!(!matches!(
+                m.pointer_up(Point::new(30.0, 5.0), &disp),
+                ToolOutcome::Command(ToileCommand::CommitStroke { .. })
+            ));
+        }
     }
 
     #[test]

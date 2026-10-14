@@ -137,7 +137,13 @@ fn solve_axis(content: Rect, layout: &AutoLayout, children: &[Size], axis: Axis)
         .iter()
         .zip(main_sizes)
         .map(|(size, main)| {
-            let cross = if fill { content_cross } else { cross_of(*size) };
+            // Fill stretches a child across, but never shrinks it below its
+            // own cross size (`TOILE-FEAT-045`).
+            let cross = if fill {
+                content_cross.max(cross_of(*size))
+            } else {
+                cross_of(*size)
+            };
             let rect = match axis {
                 Axis::X => Rect::new(
                     content.x0 + cursor,
@@ -417,6 +423,37 @@ mod tests {
         assert_eq!(
             out,
             vec![rect(0.0, 0.0, 30.0, 10.0), rect(30.0, 0.0, 30.0, 10.0)]
+        );
+    }
+    /// `TOILE-FEAT-040`: the far padding bounds the room too. A run packed far
+    /// stops at the inner right edge, and a wrap breaks where the padded row
+    /// ends rather than at the frame.
+    #[test]
+    fn the_far_padding_bounds_the_room() {
+        let frame = rect(0.0, 0.0, 200.0, 100.0);
+        let mut l = layout(Direction::Horizontal, 0.0, Align::End, Sizing::Fixed);
+        l.padding = [10.0, 20.0, 10.0, 30.0];
+        let out = solve_layout(frame, &l, &[size(40.0, 10.0), size(40.0, 10.0)]);
+        assert_eq!(out[1].x1, 180.0, "the run stops at the inner edge");
+        assert_eq!(out[0].x0, 100.0);
+        l.direction = Direction::Wrap;
+        l.align = Align::Start;
+        // The padded row is 150 wide: two 80-wide children do not share it.
+        let out = solve_layout(frame, &l, &[size(80.0, 10.0), size(80.0, 10.0)]);
+        assert_eq!(out[0], rect(30.0, 10.0, 80.0, 10.0));
+        assert_eq!(out[1], rect(30.0, 20.0, 80.0, 10.0), "the second wraps");
+    }
+
+    /// `TOILE-FEAT-045`: a filled frame too small for its children shrinks
+    /// none of them. Each keeps its own size on both axes and overflows.
+    #[test]
+    fn a_filled_frame_shrinks_no_child() {
+        let frame = rect(0.0, 0.0, 50.0, 40.0);
+        let l = layout(Direction::Horizontal, 5.0, Align::Start, Sizing::Fill);
+        let out = solve_layout(frame, &l, &[size(40.0, 60.0), size(40.0, 60.0)]);
+        assert_eq!(
+            out,
+            vec![rect(0.0, 0.0, 40.0, 60.0), rect(45.0, 0.0, 40.0, 60.0)]
         );
     }
 }
