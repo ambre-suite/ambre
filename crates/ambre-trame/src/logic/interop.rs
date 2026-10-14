@@ -61,17 +61,13 @@ impl TrameState {
 
         // Resolve the target sheet: an existing id is reused, anything else
         // (including `None`) creates a fresh "CSV Import" sheet.
-        let sheet_id = match target_sheet_id {
-            Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => id,
+        let (sheet_id, created) = match target_sheet_id {
+            Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => (id, false),
             _ => {
                 self.hold_default_sheet();
                 let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
                 self.sheet_counter += 1;
-                let name = self.free_sheet_name("CSV Import");
-                let _ = self.doc.get_map(SHEETS_MAP).insert(&id, name.as_str());
-                let _ = self.doc.get_movable_list(SHEET_ORDER).push(id.as_str());
-                self.doc.commit();
-                id
+                (id, true)
             }
         };
         // Make the target the active sheet so the write path targets its
@@ -92,6 +88,21 @@ impl TrameState {
                 }
             }
         }
+        // The new sheet is listed only now, after the excluded commits, so the
+        // commit that lists it is a local one inside the undo group. Listed
+        // before them, it formed an undo item of its own (`TRAME-IO-025`).
+        if created {
+            let name = self.free_sheet_name("CSV Import");
+            let _ = self
+                .doc
+                .get_map(SHEETS_MAP)
+                .insert(&sheet_id, name.as_str());
+            let _ = self
+                .doc
+                .get_movable_list(SHEET_ORDER)
+                .push(sheet_id.as_str());
+            self.reseed_active_sheet();
+        }
         for (r, record) in records.into_iter().enumerate() {
             for (c, value) in record.into_iter().enumerate() {
                 if !value.is_empty() {
@@ -99,6 +110,9 @@ impl TrameState {
                 }
             }
         }
+        // A file whose fields are all empty writes no cell: the listing still
+        // lands, in the group.
+        self.doc.commit();
 
         let mut outcome = self.finish_cell_writes();
         outcome.display.push(self.sheet_list_event());
@@ -234,11 +248,27 @@ impl TrameState {
     }
 }
 
-/// Auto-detect the CSV field separator: comma vs semicolon, by frequency in the
-/// first kilobyte (`trame-import-export`). Defaults to comma on a tie.
+/// Auto-detect the CSV field separator among the comma, the semicolon and the
+/// tab, by frequency in the first kilobyte (`trame-import-export`). A separator
+/// inside a quoted field does not count. A tie goes to the earlier of the
+/// three. Any other separator, the caller names (`TRAME-IO-035`).
 fn detect_csv_delimiter(data: &[u8]) -> u8 {
     let sample = data.get(..1024).unwrap_or(data);
-    let commas = sample.iter().filter(|&&b| b == b',').count();
-    let semicolons = sample.iter().filter(|&&b| b == b';').count();
-    if semicolons > commas { b';' } else { b',' }
+    let mut counts = [(b',', 0usize), (b';', 0), (b'\t', 0)];
+    let mut quoted = false;
+    for &byte in sample {
+        if byte == b'"' {
+            // An escaped quote toggles twice, so it leaves the field quoted.
+            quoted = !quoted;
+        } else if !quoted && let Some(slot) = counts.iter_mut().find(|(sep, _)| *sep == byte) {
+            slot.1 += 1;
+        }
+    }
+    let mut best = counts[0];
+    for candidate in &counts[1..] {
+        if candidate.1 > best.1 {
+            best = *candidate;
+        }
+    }
+    best.0
 }

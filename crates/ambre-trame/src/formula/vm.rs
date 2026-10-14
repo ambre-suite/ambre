@@ -34,6 +34,24 @@ const MAX_RANGE_CELLS: usize = 1_000_000;
 /// fifty million reads), the heaviest shape a real sheet takes.
 pub(crate) const MAX_PASS_RANGE_CELLS: usize = 64_000_000;
 
+/// Leave to materialize one range: the count of member cells it may hold.
+/// Only [`grant_range`] makes one, and the range buffer is sized by it alone.
+/// So no range over the caps is ever allocated (`TRAME-209`).
+#[derive(Debug, PartialEq, Eq)]
+struct RangeGrant(usize);
+
+/// Grant a `rows` x `cols` range against the per-range cap and what the pass
+/// has `left`. A grant debits `left`. A refusal leaves it whole and allocates
+/// nothing (`TRAME-209`, `TRAME-210`).
+fn grant_range(rows: usize, cols: usize, left: &mut usize) -> Option<RangeGrant> {
+    let cells = rows.saturating_mul(cols);
+    if cells > MAX_RANGE_CELLS || cells > *left {
+        return None;
+    }
+    *left -= cells;
+    Some(RangeGrant(cells))
+}
+
 /// Holds the mutable evaluation state shared across all cell evaluations in a
 /// single recomputation pass (`compute_all_dirty`).
 pub struct EvalContext<'a> {
@@ -70,10 +88,13 @@ enum AxisPos {
 }
 
 impl<'a> EvalContext<'a> {
+    /// A pass is given its clock here, so no context exists without one
+    /// (`TRAME-198`).
     pub fn new(
         bc: &'a BytecodeCache,
         formula_cache: &'a HashMap<CellId, CellValue>,
         indices: &'a SheetIndices,
+        now_serial: f64,
     ) -> Self {
         Self {
             eval_stack: HashSet::new(),
@@ -81,7 +102,7 @@ impl<'a> EvalContext<'a> {
             bc,
             formula_cache,
             indices,
-            now_serial: 0.0,
+            now_serial,
             current_pos: (0, 0),
             range_cells_left: MAX_PASS_RANGE_CELLS,
         }
@@ -101,12 +122,6 @@ impl<'a> EvalContext<'a> {
             axis(cell.row, &|u| idx.row_pos(u)),
             axis(cell.col, &|u| idx.col_pos(u)),
         )
-    }
-
-    /// Set the evaluation clock (see [`EvalContext::now_serial`]).
-    pub fn with_now(mut self, now_serial: f64) -> Self {
-        self.now_serial = now_serial;
-        self
     }
 
     /// Evaluate a single cell (already in canonical bound form), detecting
@@ -332,13 +347,11 @@ impl<'a> EvalContext<'a> {
         // ~70M values on each recompute. Cap the cell count and surface `#REF!`
         // rather than let a single formula OOM the WASM Logic worker. The
         // ceiling is generous relative to any real spreadsheet's used area.
-        let cells = rows.saturating_mul(cols);
-        if cells > MAX_RANGE_CELLS || cells > self.range_cells_left {
-            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
-        }
         // The whole pass shares one budget (`TRAME-210`).
-        self.range_cells_left -= cells;
-        let mut values = Vec::with_capacity(rows * cols);
+        let Some(RangeGrant(cells)) = grant_range(rows, cols, &mut self.range_cells_left) else {
+            return RangeValue::new(1, 1, vec![CellValue::Error(FormulaError::BrokenRef)]);
+        };
+        let mut values = Vec::with_capacity(cells);
         for rp in rs..=re {
             for cp in cs..=ce {
                 let ids = (rp < row_len && cp < col_len).then(|| (idx.row_id(rp), idx.col_id(cp)));
@@ -466,7 +479,7 @@ mod tests {
         let bc = compile(&parse_formula(src).unwrap(), &indices);
         let mut bcc = BytecodeCache::new();
         bcc.insert(cell(0, fcol), bc);
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);
         ctx.eval_cell(cell(0, fcol)).to_display()
     }
 
@@ -499,7 +512,7 @@ mod tests {
         indices.insert(0, idx);
 
         let cache = HashMap::new();
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);
         assert!(matches!(
             ctx.eval_cell(cell(0, 1)),
             CellValue::Error(FormulaError::BrokenRef)
@@ -535,7 +548,7 @@ mod tests {
         let bcc = BytecodeCache::new();
         let cache = HashMap::new();
         let indices = indices_with(10, 10);
-        let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+        let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);
         assert!(matches!(
             ctx.execute(&bc),
             CellValue::Error(FormulaError::BrokenRef)
@@ -643,11 +656,35 @@ mod tests {
         let mut bc_cache_mut = BytecodeCache::new();
         bc_cache_mut.insert(cell(0, 0), bc);
         let bc_ref = bc_cache_mut.get(&cell(0, 0)).unwrap();
-        let mut ctx = EvalContext::new(&bc_cache_mut, &cache, &indices);
+        let mut ctx = EvalContext::new(&bc_cache_mut, &cache, &indices, 0.0);
         // SAFETY-free: execute borrows bc_ref immutably; ctx borrows the same
         // cache immutably. Clone the bytecode to avoid the double borrow.
         let owned = bc_ref.clone();
         ctx.execute(&owned)
+    }
+
+    /// A range over the cap gets no grant, so no buffer is sized for it, and
+    /// the pass keeps its whole budget (`TRAME-209`).
+    #[test]
+    fn a_range_over_the_cap_is_granted_nothing() {
+        let mut left = MAX_PASS_RANGE_CELLS;
+        assert_eq!(grant_range(100_000, 702, &mut left), None);
+        assert_eq!(grant_range(usize::MAX, 2, &mut left), None);
+        assert_eq!(grant_range(MAX_RANGE_CELLS + 1, 1, &mut left), None);
+        assert_eq!(left, MAX_PASS_RANGE_CELLS, "a refusal debits nothing");
+        assert_eq!(
+            grant_range(1_000, 1_000, &mut left),
+            Some(RangeGrant(MAX_RANGE_CELLS))
+        );
+        assert_eq!(left, MAX_PASS_RANGE_CELLS - MAX_RANGE_CELLS);
+        // Through the evaluator: the over-cap range leaves the budget whole.
+        let ast = parse_formula("SUM(A1:ZZ100000)").unwrap();
+        let indices = indices_with(10, 10);
+        let bc = compile(&ast, &indices);
+        let (cache, bc_cache) = (HashMap::new(), BytecodeCache::new());
+        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices, 0.0);
+        assert_eq!(ctx.execute(&bc).to_display(), "#REF!");
+        assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
     }
 
     /// The ranges of one pass share one budget (`TRAME-210`). Each range below
@@ -659,7 +696,7 @@ mod tests {
         let bc = compile(&ast, &indices);
         let cache = HashMap::new();
         let bc_cache = BytecodeCache::new();
-        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices);
+        let mut ctx = EvalContext::new(&bc_cache, &cache, &indices, 0.0);
         assert_eq!(ctx.range_cells_left, MAX_PASS_RANGE_CELLS);
         // Room for two reads of the hundred cells, not three.
         ctx.range_cells_left = 250;

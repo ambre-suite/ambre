@@ -20,8 +20,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-IO-001` | `INV` | Every conversion MUST run on the user's own machine, in the Logic thread. | this spec section 3; `ZK-001`, `ZK-004` | none | unheld -- `csv` is declared by `ambre-trame` alone today, and nothing holds it there. `deny.toml` bans the crypto crates and `loro`, and carries no entry for an interop crate, so a second crate taking the dependency tomorrow fails no job; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-IO-033` | `INV` | No plaintext file MUST reach the server: what leaves the device is the sealed document, never the bytes the user opened. | this spec section 3; `ZK-001`, `ZK-004` | none | unheld -- the seal is `ambre-sync`'s and the relay's capability wall is `deny.toml`'s. Neither reads this path, and no test drives an import through a sync round trip; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-001` | `INV` | Every conversion MUST run on the user's own machine, in the Logic thread. | this spec section 3; `ZK-001`, `ZK-004` | cargo-deny -- `deny.toml` lets `ambre-trame` alone declare `csv`; ci-gate -- `scripts/crate_boundaries.py` refuses `csv::` in UI-thread code, fixture `test_a_view_converting_a_file_is_refused` | none | verified |
+| `TRAME-IO-033` | `INV` | No plaintext file MUST reach the server: what leaves the device is the sealed document, never the bytes the user opened. | this spec section 3; `ZK-001`, `ZK-004` | `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- the Sync worker then seals that delta (`ZK-001`) | none | verified |
 | `TRAME-IO-002` | `INV` | Import and export MUST compile to `wasm32-unknown-unknown`: the conversion is client-side, with no server round trip. | this spec section 3 | target-build -- the CI `test-wasm` job runs `wasm-pack test` on `ambre-trame`, which compiles the crate and its `csv` dependency for `wasm32-unknown-unknown`, so an interop crate that does not build there fails that job | none | verified |
 | `TRAME-IO-034` | `INV` | A reader MUST keep the export: it writes nothing, so the role gate MUST NOT withhold it. | this spec section 3; `ambre-spec-architecture.md section 4` | `ambre_bus::host::read_only_and_local_commands_are_not_mutating` -- it pins `ExportActiveSheetCsv` as non-mutating, and does not name `ExportCsv { .. }`, which carries the same claim in `is_mutating` and no test | none | verified |
 | `TRAME-IO-030` | `INV` | A bridge to a third-party spreadsheet MUST seal the content on the user's machine before it enters the document; no plaintext MUST reach Ambre's storage. | this spec section 5; section 6; `ZK-001` | not built | unbuilt -- lands with the `Post-V1 interop` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -34,13 +34,13 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-IO-035` | `PRE` | The caller MUST name the separator for anything but a comma or a semicolon. | this spec section 3 | none | unheld -- detection counts commas and semicolons in the first kilobyte and answers one of the two, so a tab-separated file imports as a single column of joined text, silently. The count also reads separators inside quoted fields; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-035` | `PRE` | The caller MUST name the separator for anything but a comma, a semicolon or a tab. | this spec section 3 | `ambre_trame::logic::tests::group12::a_separator_outside_the_three_is_named_by_the_caller` | none | verified |
 | `TRAME-IO-006` | `POST` | The separator MUST be auto-detected when the command names none. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_delimiter_autodetect`; `::csv_import_creates_sheet_and_cells` | none | verified |
 | `TRAME-IO-036` | `POST` | A header row MUST be dropped when the command declares one. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_skips_header` | none | verified |
 | `TRAME-IO-037` | `POST` | An import MUST make the sheet it wrote the active one, so the user lands on what arrived. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_creates_sheet_and_cells` -- it asserts the active sheet is the imported one before reading its cells | none | verified |
-| `TRAME-IO-025` | `POST` | An import MUST land as one undo item, whatever the number of cells it writes. | this spec section 3 | none | unheld -- the importer opens one undo group around the sheet creation and every write, and no test undoes an import; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-IO-028` | `FRAME` | A file holding no record MUST leave the document untouched: no sheet, no cell, no undo item. | this spec section 3 | none | unheld -- the importer returns before it opens the undo group, and the empty-input case asserts no panic rather than no sheet; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | none | unheld -- the importer skips an empty field on both passes, so an import into a sheet that already holds values merges with them rather than replacing the range, and no test imports twice into one sheet; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-025` | `POST` | An import MUST land as one undo item, whatever the number of cells it writes. | this spec section 3 | `ambre_trame::logic::tests::group12::an_import_is_one_undo_item` | none | verified |
+| `TRAME-IO-028` | `FRAME` | A file holding no record MUST leave the document untouched: no sheet, no cell, no undo item. | this spec section 3 | `ambre_trame::logic::tests::group12::a_file_with_no_record_leaves_the_document_alone` | none | verified |
+| `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
 | `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | none | unheld -- the warning `open_csv_picker` raises when the queue refuses the file. A driven browser picks a file while the Logic thread is saturated and reads the warning off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-IO-005` | `POST` | A CSV export MUST write evaluated values, never formula sources. | this spec section 3 | `ambre_trame::logic::tests::group7::csv_export_evaluates_formulas` | none | verified |
 | `TRAME-IO-027` | `POST` | An export MUST bound its range by the cells the sheet holds, never by the materialized row and column lists. | this spec section 3; section 5 | `ambre_trame::logic::tests::group6::csv_export_trims_empty_trailing_columns`; `::csv_import_then_export_drops_trailing_empties` | none | verified |
-| `TRAME-IO-026` | `FRAME` | A CSV export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none | unheld -- both exporters read alone, and a shared reference proves nothing here, since a Loro container mutates through one. No test asserts the empty outcome; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-026` | `FRAME` | A CSV export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_trame::logic::tests::group12::a_csv_export_writes_nothing` | none | verified |
 | `TRAME-IO-041` | `FAIL` | An export with nothing to write MUST say so, and MUST NOT answer with silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::export_with_nothing_to_write_says_so` | none | verified |
 
 ### 1.4 Save the document as a file
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-IO-042` | `POST` | A saved file MUST name Trame and the document it holds, so opening it dispatches without guessing. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::the_header_names_trame_and_the_document` | none | verified |
-| `TRAME-IO-043` | `FRAME` | A save MUST NOT change the document it writes. | this spec section 3 | none | unheld -- the exporter takes a shared reference, which proves nothing against a Loro container, and no test asserts the document is unchanged after a save; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-043` | `FRAME` | A save MUST NOT change the document it writes. | this spec section 3 | `ambre_trame::logic::tests::group12::a_save_leaves_the_document_alone` | none | verified |
 | `TRAME-IO-044` | `FAIL` | A save whose snapshot fails MUST NOT hand the user a file: a valid header over an empty payload MUST NOT be written. | this spec section 3; section 6 | type-level -- `export_ambre_plaintext` answers `Option<Vec<u8>>` and writes the header inside the branch a read snapshot reaches, so no payload-less file can be constructed. The registry turns the empty answer into the export-failure event | none | verified |
 
 ### 1.5 Open a document file
@@ -97,11 +97,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 18 `verified`, 9 `untested`, 13 `unimplemented`. What holds is the round trip of
-  the two gestures: the header's identity, the sheet an import activates and the formula a reload
-  re-evaluates. The role gate keeps an export in a reader's hands. What is loose is the frame
-  conditions. Every refusal now answers: a skipped record, a full queue, an export with nothing to
-  write, a snapshot that could not be read.
+* **Verification.** 26 `verified`, 1 `untested`, 13 `unimplemented`. What holds is the round trip
+  of the two gestures and their frame conditions. An import is one undo item, an empty file writes
+  nothing, and an export or a save changes nothing. Every refusal answers. A gate and `deny.toml`
+  keep every conversion in the Logic thread of `ambre-trame`.
 
 ---
 
@@ -142,12 +141,14 @@ event above holds no report, which `TRAME-IO-012` needs and the shared vocabular
 
 **Steps, on a CSV import:**
 
-1. detect the delimiter from the bytes when the command names none;
+1. detect the delimiter when the command names none. It is the most frequent of the comma, the
+   semicolon and the tab outside quoted fields, in the first kilobyte (`TRAME-IO-035`);
 2. read every record, keeping ragged rows, then drop the first when a header is declared;
 3. return with nothing written when no record survives (`TRAME-IO-028`);
 4. open one undo group (`TRAME-IO-025`);
 5. reuse the named sheet, or mint one and make it active;
-6. materialize every target cell, then write the non-empty fields as literals;
+6. materialize every target cell, list a minted sheet only then, inside the group, and write the
+   non-empty fields as literals;
 7. recompute, and report the sheet, its rows and its columns.
 
 Step 6 is in two passes on purpose: a materialization commit carries a different origin.
@@ -281,10 +282,6 @@ parameterized command has no caller (section 6).
 * **The import surface reaches none of its parameters.** A user cannot choose a delimiter, declare a
   header row, or import into an existing sheet, though the command accepts all three. `TRAME-IO-006`
   and `TRAME-IO-036` are verified at the command and unreachable at the button.
-* **The capability wall has no interop entry.** `deny.toml` bans the crypto crates and `loro` by
-  name, and says nothing about `csv`, `calamine` or `rust_xlsxwriter`. `TRAME-IO-001` is a reading
-  of today's graph, not a rule a job enforces. An entry naming the interop crates with
-  `ambre-trame` as their only wrapper would make it one.
 * **An import into a populated sheet merges, and nothing decides that it should.** An empty field
   writes nothing, so importing a file with a hole over existing values leaves the old value showing
   through. `TRAME-IO-038` states what the code does. Whether a user importing a range expects it

@@ -95,15 +95,77 @@ pub(crate) fn check_argc(
     Ok(())
 }
 
+/// Terms at or above this magnitude could overflow a partial sum, so the exact
+/// path stops there. Far above any value a sheet holds (about 1e301).
+const EXACT_SUM_LIMIT: f64 = 1.0e301;
+
+/// The sum of `nums`, rounded once from the exact total, so no order of the
+/// terms gives another answer (`TRAME-199`).
+///
+/// Shewchuk's partials, finished as CPython's `math.fsum` does. A term that
+/// is not finite, or at or above [`EXACT_SUM_LIMIT`], takes the plain fold.
+pub(crate) fn exact_sum(nums: impl IntoIterator<Item = f64>) -> f64 {
+    let nums: Vec<f64> = nums.into_iter().collect();
+    if nums
+        .iter()
+        .any(|n| !n.is_finite() || n.abs() >= EXACT_SUM_LIMIT)
+    {
+        return nums.iter().sum();
+    }
+    // Non-overlapping partials, in increasing magnitude, whose exact sum is
+    // the exact sum of the terms read so far.
+    let mut partials: Vec<f64> = Vec::new();
+    let mut next: Vec<f64> = Vec::new();
+    for mut x in nums {
+        next.clear();
+        for &partial in &partials {
+            let mut y = partial;
+            if x.abs() < y.abs() {
+                std::mem::swap(&mut x, &mut y);
+            }
+            let hi = x + y;
+            let lo = y - (hi - x);
+            if lo != 0.0 {
+                next.push(lo);
+            }
+            x = hi;
+        }
+        next.push(x);
+        std::mem::swap(&mut partials, &mut next);
+    }
+    // Add the partials from the largest down, and stop at the first rounding.
+    let Some(mut hi) = partials.pop() else {
+        return 0.0;
+    };
+    let mut lo = 0.0;
+    while let Some(y) = partials.pop() {
+        let x = hi;
+        hi = x + y;
+        lo = y - (hi - x);
+        if lo != 0.0 {
+            break;
+        }
+    }
+    // Round half to even across the partials the loop left. When `lo` and
+    // the next partial share a sign, the true total sits past the halfway.
+    if let Some(&next) = partials.last()
+        && ((lo < 0.0 && next < 0.0) || (lo > 0.0 && next > 0.0))
+    {
+        let y = lo * 2.0;
+        let x = hi + y;
+        if y == x - hi {
+            hi = x;
+        }
+    }
+    hi
+}
+
 pub(crate) fn sum(args: &[CellValue]) -> CellValue {
     let nums = match flatten_total(args) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
-    if nums.is_empty() {
-        return CellValue::Number(0.0);
-    }
-    CellValue::Number(nums.iter().sum())
+    CellValue::Number(exact_sum(nums))
 }
 
 pub(crate) fn average(args: &[CellValue]) -> CellValue {
@@ -114,7 +176,8 @@ pub(crate) fn average(args: &[CellValue]) -> CellValue {
     if nums.is_empty() {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    CellValue::Number(nums.iter().sum::<f64>() / nums.len() as f64)
+    let count = nums.len() as f64;
+    CellValue::Number(exact_sum(nums) / count)
 }
 
 pub(crate) fn min(args: &[CellValue]) -> CellValue {

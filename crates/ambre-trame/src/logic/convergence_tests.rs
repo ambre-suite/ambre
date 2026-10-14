@@ -3,10 +3,13 @@
 // CRDT convergence property tests (Epic `ET`). Mandatory for every collaborative
 // CRDT state: `ambre-spec-testing.md`.
 //
-// `proptest` generates interleaved sequences of the document-mutating
-// `TrameCommand`s: `SetCellText`, insert-delete row-column, `SortRange`, merge,
-// `FillRange`, a paste and the batch clear a cut sends. It routes each op to one of two peers, then exchanges the full
-// CRDT history both ways. The invariant: after the exchange the two peers
+// `proptest` generates interleaved sequences of the `TrameCommand`s that
+// mutate the document. They are `SetCellText`, row and column inserts and
+// deletes, `SortRange`, merge and `FillRange`. A paste, the batch clear of a
+// cut, and a name defined or removed join them.
+//
+// Each op goes to one of two peers, then the full CRDT history is exchanged
+// both ways. The invariant: after the exchange the two peers
 // observe an *identical* materialized grid -- same text, same formula results
 // (recompute determinism), same merge geometry. This exercises the own-uid cell
 // model (`trame-rows-and-columns`, `trame-formula-engine`). References must
@@ -106,6 +109,12 @@ enum Op {
         rows: u32,
         cols: u32,
     },
+    /// Define the one name the generator knows, `TOTAL`, over a reference.
+    /// Two peers defining it at once race for one definition (`TRAME-068`).
+    DefineName {
+        reference: &'static str,
+    },
+    DeleteName,
 }
 
 impl Op {
@@ -201,6 +210,13 @@ impl Op {
                     .flat_map(|r| (col..col + cols).map(move |c| (r, c, String::new())))
                     .collect(),
             },
+            Op::DefineName { reference } => TrameCommand::DefineName {
+                name: "TOTAL".to_owned(),
+                reference: reference.to_owned(),
+            },
+            Op::DeleteName => TrameCommand::DeleteName {
+                name: "TOTAL".to_owned(),
+            },
         }
     }
 }
@@ -217,6 +233,7 @@ fn text_strategy() -> impl Strategy<Value = String> {
         Just("=A1+B1".to_owned()),
         Just("=SUM(A1:A3)".to_owned()),
         Just("=B2*2".to_owned()),
+        Just("=SUM(TOTAL)".to_owned()),
         Just(String::new()),
     ]
 }
@@ -269,6 +286,9 @@ fn op_strategy() -> impl Strategy<Value = Op> {
                 cols,
             }
         }),
+        1 => prop_oneof![Just("A1:A3"), Just("B1:B4"), Just("C2")]
+            .prop_map(|reference| Op::DefineName { reference }),
+        1 => Just(Op::DeleteName),
     ]
 }
 
@@ -365,6 +385,10 @@ proptest! {
             &grid_b,
             "peers diverged after full history exchange"
         );
+        // One definition of each name on both peers (`TRAME-068`); the grid
+        // above reads it through `=SUM(TOTAL)`.
+        let names = |s: &TrameState| s.doc.get_map(super::schema::NAMED_RANGES_MAP).get_deep_value();
+        prop_assert_eq!(names(&a), names(&b), "the named ranges diverged");
 
         // Recompute determinism: a fresh peer rebuilt from the converged
         // snapshot renders the same grid (no derived-state path dependence).

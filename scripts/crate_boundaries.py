@@ -254,6 +254,9 @@ PIPE_HIDDEN = re.compile(r"\baria-hidden\b|\binert\b|\"tabindex\",\s*\"-")
 ENGINE = re.compile(
     r"\bLoro[A-Z]\w*|\bloro::(?!TreeID\b)\w+|\bExportMode\b|\b(?:Trame|Toile|Prose|Murmure)State\b"
 )
+# What converting a file looks like: the CSV reader or writer. A conversion
+# runs in the Logic thread alone (`TRAME-IO-001`).
+CONVERSION = re.compile(r"\bcsv::\w+")
 # What waiting looks like: the conduit's parking handle or its parking send,
 # a parked thread, a futex, a condition, or an executor run to completion.
 BLOCKING = re.compile(
@@ -682,8 +685,9 @@ def above_tests(path: Path) -> list[tuple[int, str]]:
 def check_ui_thread(errors: list[str]) -> int:
     """`UI-THREAD-001`, `-002`, `-020`, `-050`, `-051`: what the UI thread may name.
 
-    No CRDT and no engine state, no blocking wait, and no canvas or drawing
-    context outside the surface.
+    No CRDT and no engine state, no file conversion, no blocking wait, and no
+    canvas or drawing context outside the surface (`TRAME-UI-001`,
+    `TRAME-IO-001`).
     """
     files = sources(UI_THREAD)
     if not files:
@@ -695,6 +699,9 @@ def check_ui_thread(errors: list[str]) -> int:
             found = ENGINE.search(line)
             if found:
                 errors.append(f"{rel}:{number}: the UI thread holds the document: `{found.group(0)}`")
+            found = CONVERSION.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: the UI thread converts a file: `{found.group(0)}`")
             found = BLOCKING.search(line)
             if found:
                 errors.append(f"{rel}:{number}: the UI thread waits: `{found.group(0)}`")

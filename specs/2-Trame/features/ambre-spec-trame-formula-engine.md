@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-046` | `INV` | An empty cell MUST compare as the zero of whatever it is compared with. | this spec section 4 | `ambre_trame::formula::vm::tests::an_empty_operand_compares_at_its_peer_zero`; `::booleans_order_false_before_true` | none | verified |
 | `TRAME-047` | `INV` | Two numbers MUST compare on a relative tolerance, never an absolute one. | this spec section 5 | `ambre_trame::formula::vm::tests::equality_is_relative_not_absolute` | none | verified |
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
-| `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | none | unheld -- the test above reads the error value back, which a run that allocated the million cells and then returned the error would return too. Nothing weighs the allocation; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | type-level -- the range buffer is sized by a `RangeGrant`, which only `grant_range` makes, after both caps; `ambre_trame::formula::vm::tests::a_range_over_the_cap_is_granted_nothing` | none | verified |
 | `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
 | `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | `ambre_trame::logic::tests::group8::a_whole_column_range_over_itself_is_a_cycle` -- the loop runs through a range, so the graph holds no edge for it and the evaluation stack catches it. A name and a qualifier become a range or a cell before the graph sees them | none | verified |
 | `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | `ambre_trame::logic::tests::group8::a_whole_column_range_reads_the_used_rows` -- a row written past the old end and a row inserted above are summed; `ambre_trame::logic::tests::group8::a_whole_row_range_reads_the_used_columns`; `ambre_trame::logic::tests::group8::a_column_edit_carries_a_whole_column_range`; `ambre_trame::formula::identity::tests::whole_lines_store_their_lines_and_read_back_as_typed`; `ambre_trame::formula::shift::tests::whole_lines_shift_along_their_own_axis` | none | verified |
@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-217` | `POST` | A paste or a fill MUST shift every cell and range reference by the offset the formula moved. | this spec section 4 | `ambre_trame::formula::shift::tests::shifts_cell_and_range_down_right`; `::keeps_operators_and_functions` | none | verified |
 | `TRAME-043` | `POST` | A reference a paste or a fill pushes off the grid MUST read `#REF!`. | this spec section 4 | `ambre_trame::formula::shift::tests::off_grid_reference_becomes_ref_error`; `::ref_error_text_is_reparseable` | none | verified |
 | `TRAME-218` | `FRAME` | A paste or a fill MUST NOT rewrite an operator, a literal or a function name. | this spec section 4 | `ambre_trame::formula::shift::tests::keeps_operators_and_functions`; `::no_shift_is_verbatim` | none | verified |
-| `TRAME-219` | `FRAME` | A paste or a fill MUST NOT shift a defined name. | this spec section 4 | none | unheld -- `shift_expr` returns a `Name` node untouched, which is the whole of the rule and is stated nowhere else, and no test pastes a formula that carries one; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-219` | `FRAME` | A paste or a fill MUST NOT shift a defined name. | this spec section 4 | `ambre_trame::logic::tests::group12::a_paste_and_a_fill_leave_a_name_in_place` | none | verified |
 | `TRAME-220` | `FAIL` | A formula the parser refuses MUST be pasted verbatim, never mangled. | this spec section 4 | `ambre_trame::formula::shift::tests::unparseable_left_verbatim` | none | verified |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 1`: the 10k-cell DAG recompute, the
@@ -91,9 +91,9 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 42 `verified`, 2 `untested`. What holds is the graph and its recompute, the
-  best-covered engine of the workspace, and the stored form a structural edit carries. What is loose
-  is weight rather than behaviour: nothing measures what a range allocates.
+* **Verification.** 44 `verified`. What holds is the graph and its recompute, the best-covered
+  engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
+  a grant that only the caps make, so a range over them allocates nothing.
 
 ---
 
@@ -319,7 +319,7 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
 * **The range caps are code constants, not budget rows** (`TRAME-209`, `TRAME-210`).
   `MAX_RANGE_CELLS` bounds the memory of one range, and `MAX_PASS_RANGE_CELLS` bounds the reads of
   one pass, sized to clear a running total over ten thousand rows. Neither figure is a row of
-  `1-Foundations/ambre-spec-budgets.md`, and nothing weighs the allocation `TRAME-209` forbids.
+  `1-Foundations/ambre-spec-budgets.md`.
 * **A tab switch recompiles the workbook.** `rebuild_sheet_maps` pins the active sheet at index 0
   and every `CellId` carries that index. `activate_sheet` therefore resets the engine and re-parses
   every cell of every sheet. The numbers stay right (`TRAME-021` holds), but the engine's state is
@@ -328,10 +328,6 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   binds range endpoints to `AxisId::Virtual` only; the range tests in `dag.rs` build
   `AxisId::Bound` endpoints, where a deleted line makes the endpoint unresolvable. Only
   `engine::tests::range_dependency_propagates_through_a_chain` walks the real path.
-* **The index the engine rests on has no equivalence property.** `TRAME-023`, in
-  `features/ambre-spec-trame-engine.md`, states that the incrementally maintained sheet index must
-  equal a rebuild. Every reference resolves through that index, so a divergence in it is a wrong
-  number in a cell, not a slow redraw.
 * **The graph pays for an interior mutability it no longer needs.** The memo of the evaluation
   pass is held behind a `RefCell` that results staged before write-back make redundant. It
   produces no wrong number; it is a cost nothing weighs. The walk and the cycle check are the

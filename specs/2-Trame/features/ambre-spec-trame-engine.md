@@ -24,10 +24,10 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-001` | `INV` | The workbook CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; architecture section 2.B | cargo-deny -- `deny.toml` bans `loro` outside the four engine crates (`SYNC-011`), so no crate on the other side of the seam can even name the type. `ambre_trame::logic::docfile::export_ambre_plaintext` is a public signature naming `LoroDoc`, but it takes the document and returns bytes, and no accessor hands one out | none | verified |
 | `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over the interleavings; `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | none | verified |
-| `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`; `::apply_move_row_permutes_order_and_reindexes` -- per-operation unit tests | partial -- the equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::incremental_equals_rebuild::the_incremental_index_equals_a_rebuild` -- proptest: pushes, inserts, deletes and moves on both axes, compared with a rebuild after each step | none | verified |
 | `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any queue: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no queue in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
-| `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | none | claim -- no occurrence of `LoroDoc` or `loro::` sits under `ambre-trame/src/ui/` today, but nothing runs that search: `deny.toml` bans the crate, not the directory, and `ambre-trame` is one of the four the ban allows. It is a measurement, like `TRAME-024`; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | ci-gate -- `scripts/crate_boundaries.py` refuses a CRDT type, an export mode or an engine state in `ambre-trame/src/ui`, `render` and `chrome`, and its fixture covers the Trame view | none | verified |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
 | `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- every lossless call site reading its outcome and logging a refusal, the two that dropped it outright included: the source clear of a cut and the undo group boundary on cell exit. A native test of the view sends through an outbox that refuses; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | none | verified |
@@ -56,11 +56,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 14 `verified`, 1 `partial`, 2 `untested`. What holds is what a compiler holds: a
-  handler with no queue in reach, an apply that returns display events and cannot broadcast. A
-  dispatch is checked against 26 event variants. What is loose shows only in a running thread: the
-  refused send that must reach the log (`TRAME-UI-142`). Section 6 names four divergences from the
-  code.
+* **Verification.** 16 `verified`, 1 `untested`. What holds is what a compiler holds: a handler
+  with no queue in reach, an apply that returns display events and cannot broadcast. The sheet
+  index equals a rebuild after every step of a random stream. What is loose shows only in a running
+  thread: the refused send that must reach the log (`TRAME-UI-142`).
 
 ---
 
@@ -310,9 +309,6 @@ Each viewport answer carries a version, and the UI drops one older than the last
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The index equivalence has no test** (`TRAME-023`). Two paths maintain it -- the incremental
-  update and the rebuild -- and only the first is driven, one operation at a time. Toile holds the
-  same rule with a property test over an operation stream, and that property is what belongs here.
 * **A remote change costs the whole document.** Every remote batch reseeds the engine rather than
   taking the diff-driven path P3 prescribes. The same reseed runs on an undo, a sheet rename, a
   name definition and a tab switch. One peer keystroke therefore costs O(total cells) on the

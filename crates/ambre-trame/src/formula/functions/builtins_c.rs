@@ -402,9 +402,13 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let approximate = args.get(3).map(is_truthy).unwrap_or(true);
+    if approximate && !keys_ascending((0..table.cols).filter_map(|col| table.get(0, col))) {
+        return CellValue::Error(FormulaError::NaError);
+    }
     let mut best: Option<usize> = None;
     for col in 0..table.cols {
         let key = match table.get(0, col) {
+            Some(CellValue::Empty) if approximate => continue,
             Some(k) => k,
             None => continue,
         };

@@ -709,3 +709,121 @@ fn power_without_a_real_root_is_a_num_error() {
         "-512"
     );
 }
+
+/// One decimal total, in two orders: a plain fold answers 0.6000000000000001
+/// one way and 0.6 the other (`TRAME-199`).
+#[test]
+fn two_orders_of_one_decimal_total_agree() {
+    let forward = sum(&[num(0.1), num(0.2), num(0.3)]);
+    let backward = sum(&[num(0.3), num(0.2), num(0.1)]);
+    assert!(
+        matches!((&forward, &backward), (CellValue::Number(a), CellValue::Number(b)) if a.to_bits() == b.to_bits())
+    );
+    assert_eq!(forward.to_display(), "0.6");
+    // A small term between two large ones survives the cancellation.
+    assert_eq!(sum(&[num(1e16), num(1.0), num(-1e16)]).to_display(), "1");
+    assert_eq!(
+        average(&[num(1e16), num(1.0), num(-1e16), num(3.0)]).to_display(),
+        "1"
+    );
+}
+
+/// Text that reads as a number counts in a total, from a range as from a
+/// scalar; text that does not is left out (`TRAME-200`).
+#[test]
+fn text_that_reads_as_a_number_counts_in_a_total() {
+    let r = range(3, 1, vec![num(1.0), txt("2"), txt("x")]);
+    assert_eq!(sum(std::slice::from_ref(&r)).to_display(), "3");
+    assert_eq!(sum(&[txt("2.5"), num(1.0)]).to_display(), "3.5");
+    assert_eq!(average(&[r]).to_display(), "1.5");
+}
+
+/// A lookup reads its keys approximately by default. VLOOKUP and HLOOKUP with
+/// no match flag find the row of key 3 for 4 (`TRAME-201`).
+#[test]
+fn a_lookup_with_no_flag_is_approximate() {
+    let table = range(
+        3,
+        2,
+        vec![
+            num(1.0),
+            txt("one"),
+            num(3.0),
+            txt("three"),
+            num(5.0),
+            txt("five"),
+        ],
+    );
+    assert_eq!(vlookup(&[num(4.0), table, num(2.0)]).to_display(), "three");
+    let row = range(
+        2,
+        3,
+        vec![
+            num(1.0),
+            num(3.0),
+            num(5.0),
+            txt("one"),
+            txt("three"),
+            txt("five"),
+        ],
+    );
+    assert_eq!(hlookup(&[num(4.0), row, num(2.0)]).to_display(), "three");
+}
+
+/// An exact lookup folds the case of a text key, over the whole of Unicode
+/// and not ASCII alone (`TRAME-202`).
+#[test]
+fn an_exact_lookup_ignores_case() {
+    let table = range(2, 2, vec![txt("paris"), num(1.0), txt("été"), num(2.0)]);
+    let exact = CellValue::Boolean(false);
+    assert_eq!(
+        vlookup(&[txt("PARIS"), table.clone(), num(2.0), exact.clone()]).to_display(),
+        "1"
+    );
+    assert_eq!(
+        vlookup(&[txt("ÉTÉ"), table, num(2.0), exact]).to_display(),
+        "2"
+    );
+    let col = range(2, 1, vec![txt("Paris"), txt("Été")]);
+    assert_eq!(match_fn(&[txt("été"), col, num(0.0)]).to_display(), "2");
+}
+
+/// An approximate lookup over keys that fall answers `#N/A`, not the row it
+/// stopped on. Blanks after the keys do not count as a fall (`TRAME-197`).
+#[test]
+fn an_approximate_lookup_over_falling_keys_answers_na() {
+    let na = |v: CellValue| matches!(v, CellValue::Error(FormulaError::NaError));
+    let falling = range(
+        3,
+        2,
+        vec![num(1.0), txt("a"), num(5.0), txt("b"), num(3.0), txt("c")],
+    );
+    assert!(na(vlookup(&[num(4.0), falling, num(2.0)])));
+    let falling_row = range(
+        2,
+        3,
+        vec![num(1.0), num(5.0), num(3.0), txt("a"), txt("b"), txt("c")],
+    );
+    assert!(na(hlookup(&[num(4.0), falling_row, num(2.0)])));
+    let falling_col = range(3, 1, vec![num(1.0), num(5.0), num(3.0)]);
+    assert!(na(match_fn(&[num(4.0), falling_col.clone(), num(1.0)])));
+    // The same keys read the other way fall for a descending MATCH.
+    let rising_col = range(3, 1, vec![num(1.0), num(3.0), num(5.0)]);
+    assert!(na(match_fn(&[num(4.0), rising_col, num(-1.0)])));
+    // Blanks at the end of a whole-column table are not keys.
+    let padded = range(
+        4,
+        2,
+        vec![
+            num(1.0),
+            txt("a"),
+            num(3.0),
+            txt("b"),
+            CellValue::Empty,
+            CellValue::Empty,
+            CellValue::Empty,
+            CellValue::Empty,
+        ],
+    );
+    assert_eq!(vlookup(&[num(10.0), padded, num(2.0)]).to_display(), "b");
+}

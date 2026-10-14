@@ -138,8 +138,14 @@ class CrateBoundaries(unittest.TestCase):
             "fn draw(s: &ProseState) {}\n",
             "fn load(b: &[u8]) { let m = ExportMode::Snapshot; }\n",
         ):
-            errors = self.breach("crates/ambre-toile/src/ui/view.rs", line)
-            self.assertTrue(any("holds the document" in e for e in errors), (line, errors))
+            for rel in ("crates/ambre-toile/src/ui/view.rs", "crates/ambre-trame/src/ui/grid.rs"):
+                errors = self.breach(rel, line)
+                self.assertTrue(any("holds the document" in e for e in errors), (rel, line, errors))
+
+    def test_a_view_converting_a_file_is_refused(self):
+        line = "fn read(b: &[u8]) { let r = csv::ReaderBuilder::new(); }\n"
+        errors = self.breach("crates/ambre-trame/src/ui/menu.rs", line)
+        self.assertTrue(any("converts a file" in e for e in errors), errors)
 
     def test_a_tree_address_and_a_test_engine_stay_free(self):
         text = "fn hit(id: loro::TreeID) {}\n\n#[cfg(test)]\nmod tests {\n    fn s() -> ProseState {}\n}\n"

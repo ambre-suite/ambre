@@ -121,6 +121,13 @@ wrappers = ["ambre-sync", "ambre-logic"]
 name = "loro"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 
+# The CSV reader and writer. A conversion runs on the user's machine, in the
+# Logic thread of the application that owns the format (`TRAME-IO-001`). The
+# relay and the Sync worker compile no file reader.
+[[bans.deny]]
+name = "csv"
+wrappers = ["ambre-trame"]
+
 # A channel crate that locks. flume's queue sits behind a `std::sync::Mutex`,
 # and on the page's main thread a contended one ends in `Atomics.wait`, which
 # the browser refuses (`ARCH-020`). Every client channel is

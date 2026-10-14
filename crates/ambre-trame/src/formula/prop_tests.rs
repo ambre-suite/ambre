@@ -230,7 +230,7 @@ fn eval_ast(ast: &Expr) -> CellValue {
     bcc.insert(c, bc);
     let owned = bcc.get(&c).expect("just inserted").clone();
     let cache: HashMap<CellId, CellValue> = HashMap::new();
-    let mut ctx = EvalContext::new(&bcc, &cache, &indices);
+    let mut ctx = EvalContext::new(&bcc, &cache, &indices, 0.0);
     ctx.execute(&owned)
 }
 
@@ -360,6 +360,27 @@ proptest! {
         let backward = as_num(&call_builtin("SUM", &nums(&reversed), fnctx()));
         prop_assert_eq!(forward, backward);
         prop_assert_eq!(forward, xs.iter().sum::<i64>() as f64);
+    }
+
+    /// A total of decimals of mixed magnitudes is the same in every order:
+    /// `f64` addition is not associative, so a plain fold fails this
+    /// (`TRAME-199`).
+    #[test]
+    fn a_total_of_decimals_is_the_same_in_any_order(
+        (xs, shuffled) in proptest::collection::vec(
+            (-1_000_000_000i64..1_000_000_000, 0i32..18).prop_map(|(m, e)| m as f64 * 10f64.powi(e - 9)),
+            0..32,
+        )
+        .prop_flat_map(|xs| (Just(xs.clone()), Just(xs).prop_shuffle())),
+    ) {
+        let total = |v: &[f64]| {
+            let args: Vec<CellValue> = v.iter().map(|&n| CellValue::Number(n)).collect();
+            as_num(&call_builtin("SUM", &args, fnctx()))
+        };
+        let mut reversed = xs.clone();
+        reversed.reverse();
+        prop_assert_eq!(total(&xs).to_bits(), total(&shuffled).to_bits());
+        prop_assert_eq!(total(&xs).to_bits(), total(&reversed).to_bits());
     }
 
     /// Padding the arguments with zeros does not change SUM.

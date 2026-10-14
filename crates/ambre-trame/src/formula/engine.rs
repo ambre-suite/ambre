@@ -109,8 +109,7 @@ impl FormulaEngine {
 
         {
             let cache_ref = self.formula_cache.borrow();
-            let mut ctx = EvalContext::new(&self.bytecode, &cache_ref, indices)
-                .with_now(super::functions::now_serial());
+            let mut ctx = EvalContext::new(&self.bytecode, &cache_ref, indices, now_serial());
 
             let mut topo = Topo::new(&self.deps.cell_dag);
             while let Some(node) = topo.next(&self.deps.cell_dag) {
@@ -160,6 +159,28 @@ impl FormulaEngine {
     /// Number of cached formula cells.
     pub fn formula_count(&self) -> usize {
         self.bytecode.len()
+    }
+}
+
+/// Current wall-clock time as an Excel serial number. The integer part is the
+/// day; the fractional part is the time of day.
+///
+/// Private to the engine: a recomputation reads it once and hands it to every
+/// call, so no function can read the clock for itself (`TRAME-194`).
+fn now_serial() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        // js_sys::Date::now() returns milliseconds since the Unix epoch.
+        js_sys::Date::now() / 86_400_000.0 + 25_569.0
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        secs / 86_400.0 + 25_569.0
     }
 }
 

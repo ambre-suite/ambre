@@ -1273,6 +1273,50 @@ mod tests {
         ));
     }
 
+    /// An import hands the Sync worker a CRDT delta, never the bytes of the
+    /// file the user opened. The worker seals that delta before it leaves.
+    #[test]
+    fn an_import_hands_sync_a_delta_and_never_the_file() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Editor);
+        let file = b"Quarterly report,Owner\nNorth region,Alice Marchand\n".to_vec();
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::ImportCsv {
+                data: file.clone(),
+                delimiter: None,
+                has_header: false,
+                target_sheet_id: None,
+                start_row: 0,
+                start_col: 0,
+            }),
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        assert!(
+            sent.iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "the import reached no peer",
+        );
+        // Every byte buffer prints as a list of numbers: the file's run must
+        // appear in none of them.
+        let run = format!("{file:?}");
+        let run = run.trim_start_matches('[').trim_end_matches(']');
+        let forwarded = SyncCommand::SendUpdate {
+            document_id: doc_id,
+            payload: file.clone(),
+        };
+        assert!(
+            format!("{forwarded:?}").contains(run),
+            "the search sees a forwarded file"
+        );
+        for cmd in &sent {
+            assert!(
+                !format!("{cmd:?}").contains(run),
+                "the file left as it was opened"
+            );
+        }
+    }
+
     #[test]
     fn document_ready_supersedes_the_optimistic_owner_role() {
         let (mut state, ui_rx, sync_rx) = harness();

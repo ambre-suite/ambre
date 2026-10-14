@@ -254,10 +254,14 @@ pub(crate) fn vlookup(args: &[CellValue]) -> CellValue {
         Some(v) => is_truthy(v),
         None => true,
     };
+    if approximate && !keys_ascending((0..table.rows).filter_map(|row| table.get(row, 0))) {
+        return CellValue::Error(FormulaError::NaError);
+    }
 
     let mut best: Option<usize> = None;
     for row in 0..table.rows {
         let key = match table.get(row, 0) {
+            Some(CellValue::Empty) if approximate => continue,
             Some(k) => k,
             None => continue,
         };
@@ -341,8 +345,19 @@ pub(crate) fn match_fn(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
 
+    let sorted = if match_type >= 1 {
+        keys_ascending(cells.iter().copied())
+    } else {
+        keys_ascending(cells.iter().rev().copied())
+    };
+    if !sorted {
+        return CellValue::Error(FormulaError::NaError);
+    }
     let mut best: Option<usize> = None;
     for (i, c) in cells.iter().enumerate() {
+        if matches!(c, CellValue::Empty) {
+            continue;
+        }
         let ord = match compare_cells(c, arg(args, 0)) {
             Some(o) => o,
             None => continue,
@@ -382,11 +397,28 @@ pub(crate) fn range_cells(value: &CellValue) -> Box<dyn Iterator<Item = &CellVal
 }
 
 /// Case-insensitive equality used by lookups (numbers compared numerically).
+/// The case folds over the whole of Unicode, not ASCII alone (`TRAME-202`).
 pub(crate) fn values_equal_ci(a: &CellValue, b: &CellValue) -> bool {
     match (a.as_number(), b.as_number()) {
         (Ok(x), Ok(y)) => nearly_equal(x, y),
-        _ => a.to_display().eq_ignore_ascii_case(&b.to_display()),
+        _ => a.to_display().to_lowercase() == b.to_display().to_lowercase(),
     }
+}
+
+/// Whether the keys an approximate lookup reads never fall, blanks left out.
+/// A lookup over keys that fall answers `#N/A`, not a neighbour row
+/// (`TRAME-197`).
+pub(crate) fn keys_ascending<'a>(keys: impl Iterator<Item = &'a CellValue>) -> bool {
+    let mut prev: Option<&CellValue> = None;
+    for key in keys.filter(|k| !matches!(k, CellValue::Empty)) {
+        if let Some(p) = prev
+            && compare_cells(p, key).is_some_and(|o| o.is_gt())
+        {
+            return false;
+        }
+        prev = Some(key);
+    }
+    true
 }
 
 /// Ordering between two cells: numeric when both coerce to numbers, otherwise a
@@ -522,7 +554,7 @@ pub(crate) fn sign(args: &[CellValue]) -> CellValue {
 /// SUMSQ(...) -- sum of the squares of all numeric arguments.
 pub(crate) fn sumsq(args: &[CellValue]) -> CellValue {
     match flatten_total(args) {
-        Ok(nums) => CellValue::Number(nums.iter().map(|n| n * n).sum()),
+        Ok(nums) => CellValue::Number(exact_sum(nums.iter().map(|n| n * n))),
         Err(err) => err,
     }
 }
@@ -593,9 +625,10 @@ pub(crate) fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<usi
 
 /// Sum the numeric values of `src` at the given indices.
 pub(crate) fn sum_at(src: &[CellValue], idx: &[usize]) -> f64 {
-    idx.iter()
-        .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok()))
-        .sum()
+    exact_sum(
+        idx.iter()
+            .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok())),
+    )
 }
 
 /// AVERAGEIF(range, criterion, [average_range]).
@@ -639,7 +672,8 @@ pub(crate) fn average_at(src: &[CellValue], idx: &[usize]) -> CellValue {
     if nums.is_empty() {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    CellValue::Number(nums.iter().sum::<f64>() / nums.len() as f64)
+    let count = nums.len() as f64;
+    CellValue::Number(exact_sum(nums) / count)
 }
 
 /// SUMIFS(sum_range, criteria_range1, criteria1, ...).

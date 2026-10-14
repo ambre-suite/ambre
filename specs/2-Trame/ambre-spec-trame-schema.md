@@ -39,7 +39,7 @@ what two peers reach, not what one holds. Grammar and status values are normativ
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-003` | `INV` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`; `::apply_move_row_permutes_order_and_reindexes`; `::cell_key_is_fixed_length_and_stable` -- the index; `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` -- the one that walks a real move on the `LoroMovableList` and reads the cells back under their unchanged keys, which is the hazard section 6 rejects the slot id for | none | verified |
-| `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` -- it reads the raw text back after a snapshot round trip | partial -- a computed value **overwriting** the raw text goes red. A computed value stored **beside** it, the `t` of the declared, unbuilt `{v, t, s}` sub-map of section 5, leaves every test green and costs every peer the bandwidth; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group12::a_computed_value_stays_out_of_the_document` -- the cells map holds each raw text alone, and no result appears anywhere in the document | none | verified |
 | `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over 256 interleavings, comparing the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` -- the worked example | none | verified |
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- it goes red on a split register, because a partial patch racing a whole rewrite is what a second style container tears on; `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` -- the key | none | verified |
 | `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | none | verified |
@@ -49,10 +49,9 @@ what two peers reach, not what one holds. Grammar and status values are normativ
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 5 `verified`, 1 `partial`. What holds is the shape a merge reads back. The
-  identity a cell keeps, and the single register a style lives in. The key set a build writes, which
-  a CI gate now holds append-only. What is loose is `TRAME-010`, narrower than it reads: only a
-  computed value stored **beside** the raw text escapes (`ambre-spec-testing.md section 7`).
+* **Verification.** 6 `verified`. What holds is the shape a merge reads back. The identity a cell
+  keeps, and the single register a style lives in. The key set a build writes, which a CI gate holds
+  append-only. A computed value is looked for in the whole document, beside the raw text too.
 
 ---
 

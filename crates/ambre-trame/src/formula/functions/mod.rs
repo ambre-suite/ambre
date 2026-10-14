@@ -257,25 +257,6 @@ impl Criterion {
     }
 }
 
-/// Current wall-clock time as an Excel serial number. The integer part is the
-/// day; the fractional part is the time of day.
-pub fn now_serial() -> f64 {
-    #[cfg(target_arch = "wasm32")]
-    {
-        // js_sys::Date::now() returns milliseconds since the Unix epoch.
-        js_sys::Date::now() / 86_400_000.0 + 25_569.0
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
-        secs / 86_400.0 + 25_569.0
-    }
-}
-
 /// Trait extension to turn f64::NAN into a default on folds.
 trait NanDefault {
     fn let_ok_or(self, default: CellValue) -> CellValue;

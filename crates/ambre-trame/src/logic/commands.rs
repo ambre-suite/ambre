@@ -380,6 +380,9 @@ impl TrameState {
     ///
     /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, undo: bool) -> TrameOutcome {
+        // An undo can take back the sheet the user is on, an import's above
+        // all. The reader then lands where a deletion leaves them (`TRAME-075`).
+        let order = self.sheet_order_ids();
         let changed = if undo {
             self.undo_manager.undo()
         } else {
@@ -393,7 +396,9 @@ impl TrameState {
 
         // The inverse ops are already committed by undo()/redo(); reseed the
         // derived caches and broadcast the delta exactly as `after_structural`.
+        self.leave_a_deleted_sheet(&order);
         let mut outcome = self.after_structural();
+        outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
         outcome.display.push(self.undo_state_event());
         outcome

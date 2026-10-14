@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-067` | `INV` | A name reaching another sheet MUST survive that sheet being renamed. | this spec section 5 | `ambre_trame::logic::tests::group1::name_on_another_sheet_survives_its_rename` | none | verified |
 | `TRAME-063` | `IO` | A name MUST survive closing and reopening the document. | this spec section 3 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes` -- it runs over a snapshot export and import | none | verified |
 | `TRAME-065` | `OBS` | A formula reading a name that no longer exists MUST show an error. | this spec section 5 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes`; `ambre_trame::formula::parser::tests::undefined_name_is_error` | none | verified |
-| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | none | unheld -- the container elects the whole name by last write, and no property drives a definition: the convergence op set carries no name command; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- proptest: concurrent defines and removals of one name, the named-range map compared on both peers | none | verified |
 
 ### 1.2 Give a range a name
 
@@ -40,16 +40,15 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name; lands with the `The Trame engine, formulas and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | `ambre_trame::logic::tests::group12::removing_an_unknown_name_changes_nothing` | none | verified |
 
 * **Budget.** none: a name resolves through one map lookup while a formula compiles, and
   `ambre-spec-budgets.md` budgets no name resolution.
 * **Boundary.** none of its own: a name is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 8 `verified`, 2 `untested`. What holds is the definition. It is refused when
-  it could not resolve. It is stored by sheet id, so every reader resolves one target whatever tab
-  it looks at (`TRAME-021`). The two untested rows guard the two commands: a concurrent definition,
-  and a removal of a name that was never there.
+* **Verification.** 10 `verified`. What holds is the definition. It is refused when it could not
+  resolve. It is stored by sheet id, so every reader resolves one target whatever tab it looks at
+  (`TRAME-021`). The convergence property drives concurrent definitions and removals of one name.
 
 ---
 

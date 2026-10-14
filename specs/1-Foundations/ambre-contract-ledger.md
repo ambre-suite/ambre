@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 68 partial and 261 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 65 partial and 240 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 668 | 365 | 584 | 605 |  | 2222 |
-| `partial` | 21 | 5 | 41 | 1 |  | 68 |
+| `verified` | 668 | 389 | 584 | 605 |  | 2246 |
+| `partial` | 21 | 2 | 41 | 1 |  | 65 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 13 | 48 | 188 | 1 |  | 250 |
+| `untested` | 13 | 27 | 188 | 1 |  | 229 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -78,7 +78,7 @@
 | `ambre-spec-ui.md` | 17 | 11 | 9 |  | 2 | 6 |
 | `ambre-spec-undo.md` | 11 | 11 | 8 | 2 | 1 |  |
 | `ambre-spec-zero-knowledge.md` | 16 | 14 | 13 |  | 1 | 2 |
-| `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
+| `ambre-spec-trame-schema.md` | 6 | 6 | 6 |  |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  |  | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  |  | 1 |
@@ -86,14 +86,14 @@
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 8 | 7 |  | 1 | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 10 |  |  |  |
-| `ambre-spec-trame-engine.md` | 17 | 17 | 14 | 1 | 2 |  |
+| `ambre-spec-trame-engine.md` | 17 | 17 | 16 |  | 1 |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |  |
-| `ambre-spec-trame-formula-engine.md` | 44 | 44 | 42 |  | 2 |  |
-| `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
+| `ambre-spec-trame-formula-engine.md` | 44 | 44 | 44 |  |  |  |
+| `ambre-spec-trame-function-library.md` | 28 | 21 | 21 |  |  | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 18 |  |  | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |  |
-| `ambre-spec-trame-import-export.md` | 40 | 27 | 18 |  | 9 | 13 |
-| `ambre-spec-trame-named-ranges.md` | 10 | 10 | 8 |  | 2 |  |
+| `ambre-spec-trame-import-export.md` | 40 | 27 | 26 |  | 1 | 13 |
+| `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |  |
 | `ambre-spec-trame-number-formats.md` | 12 | 11 | 9 |  | 2 | 1 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  |  | 3 |
 | `ambre-spec-trame-resize.md` | 10 | 10 | 9 |  | 1 |  |

@@ -66,7 +66,7 @@ pub fn parse_cell_key(key: &str) -> Option<(Uid, Uid)> {
 }
 
 /// Bidirectional position <-> uid cache for one sheet's rows and columns.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SheetIndex {
     row_by_pos: Vec<Uid>,
     col_by_pos: Vec<Uid>,
@@ -400,5 +400,86 @@ mod tests {
             "round-trips, full u32 counter"
         );
         assert!(parse_cell_key("garbage").is_none());
+    }
+
+    /// The incremental index equals a rebuild from the lists after any run of
+    /// structural operations (`TRAME-023`). Host-only: `proptest` does not
+    /// build on wasm32.
+    #[cfg(not(target_arch = "wasm32"))]
+    mod incremental_equals_rebuild {
+        use super::*;
+        use proptest::prelude::*;
+
+        #[derive(Debug, Clone)]
+        enum Op {
+            PushRow,
+            PushCol,
+            InsertRow(usize),
+            InsertCol(usize),
+            DeleteRow(usize),
+            DeleteCol(usize),
+            MoveRow(usize, usize),
+        }
+
+        fn op() -> impl Strategy<Value = Op> {
+            prop_oneof![
+                Just(Op::PushRow),
+                Just(Op::PushCol),
+                any::<usize>().prop_map(Op::InsertRow),
+                any::<usize>().prop_map(Op::InsertCol),
+                any::<usize>().prop_map(Op::DeleteRow),
+                any::<usize>().prop_map(Op::DeleteCol),
+                (any::<usize>(), any::<usize>()).prop_map(|(f, t)| Op::MoveRow(f, t)),
+            ]
+        }
+
+        proptest! {
+            #[test]
+            fn the_incremental_index_equals_a_rebuild(ops in prop::collection::vec(op(), 0..60)) {
+                let (doc, mut idx) = index_with(3, 2);
+                let rows = doc.get_movable_list("rows");
+                let cols = doc.get_movable_list("cols");
+                for (n, op) in ops.into_iter().enumerate() {
+                    let id = Uid { peer: 9, counter: n as u32 };
+                    let key = id.to_key_part();
+                    let (nr, nc) = (idx.row_len(), idx.col_len());
+                    match op {
+                        Op::PushRow => {
+                            rows.push(key.as_str()).unwrap();
+                            idx.push_row(id);
+                        }
+                        Op::PushCol => {
+                            cols.push(key.as_str()).unwrap();
+                            idx.push_col(id);
+                        }
+                        Op::InsertRow(p) => {
+                            let p = p % (nr + 1);
+                            rows.insert(p, key.as_str()).unwrap();
+                            idx.apply_insert_row(p, id);
+                        }
+                        Op::InsertCol(p) => {
+                            let p = p % (nc + 1);
+                            cols.insert(p, key.as_str()).unwrap();
+                            idx.apply_insert_col(p, id);
+                        }
+                        Op::DeleteRow(p) if nr > 0 => {
+                            rows.delete(p % nr, 1).unwrap();
+                            idx.apply_delete_row(p % nr);
+                        }
+                        Op::DeleteCol(p) if nc > 0 => {
+                            cols.delete(p % nc, 1).unwrap();
+                            idx.apply_delete_col(p % nc);
+                        }
+                        Op::MoveRow(f, t) if nr > 0 => {
+                            rows.mov(f % nr, t % nr).unwrap();
+                            idx.apply_move_row(f % nr, t % nr);
+                        }
+                        Op::DeleteRow(_) | Op::DeleteCol(_) | Op::MoveRow(..) => {}
+                    }
+                    doc.commit();
+                    prop_assert_eq!(&idx, &SheetIndex::build(&rows, &cols));
+                }
+            }
+        }
     }
 }
