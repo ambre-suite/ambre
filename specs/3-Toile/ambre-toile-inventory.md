@@ -20,7 +20,7 @@
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | implemented | 33 | 4 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 44 | 8 |
 | `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 39 | 3 |
-| `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 6 |
+| `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 |  |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 23 | 4 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 |  |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 26 | 12 |
@@ -36,13 +36,13 @@
 | `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 4 |  |
 | `toile-z-order` | What overlaps what. | implemented | 16 | 8 |
 | `toile-auto-layout` | A frame lays its children out by a rule instead of by their coordinates. | partial | 27 |  |
-| `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 | 4 |
+| `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 46 |  |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 53 | 4 |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 | 7 |
-| `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 42 | 20 |
+| `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 42 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 10 |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 831 contract rows, 159 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 831 contract rows, 129 loose.**

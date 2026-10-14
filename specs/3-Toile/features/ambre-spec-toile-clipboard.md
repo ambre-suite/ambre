@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 |---|---|---|---|---|---|---|
 | `TOILE-068` | `POST` | A copy MUST read the whole selection, not the part on screen. | this spec section 3 | structural -- the copy runs on the Logic thread over the element maps, and that thread holds no viewport, so nothing exists to cull against. The neighbouring test this row cited walks the aggregates instead (`features/ambre-spec-toile-status-bar.md`) | none | verified |
 | `TOILE-131` | `POST` | A copied group MUST carry its members, however deep the grouping goes. | this spec section 3 | `ambre_toile::logic::convergence_tests::duplicate_a_group_is_one_undo_item` -- on the element count: one copied id lands three elements, so the subtree walk is driven. It is the half `TOILE-071` was carrying, and the half a count can hold | none | verified |
-| `TOILE-132` | `POST` | A copied frame MUST NOT carry its members: a frame is a region, and only a binding travels with what it binds. | this spec section 3 | none | unheld -- unwritten until now. The walk descends into a group alone, so a frame copied by itself lands empty while a frame copied with its members keeps them. Nothing states which is intended and no test copies a frame, section 6; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-132` | `POST` | A copied frame MUST NOT carry its members: a frame is a region, and only a binding travels with what it binds. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_copied_frame_carries_no_member_it_was_not_copied_with` -- a frame copied alone lands empty, and one copied with its member binds the copy | none | verified |
 | `TOILE-133` | `POST` | A payload MUST carry the box of what was copied, so a paste knows where the selection sat. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- it reads the source box off the payload and compares it with the copied element. Unwritten until now: section 3 carried the placement step, and no row said the payload holds the box that step needs | none | verified |
 | `TOILE-134` | `POST` | An arrow MUST be copied only when both of the elements it joins are copied. | this spec section 3 | `ambre_toile::logic::convergence_tests::paste_keeps_fully_copied_connector_drops_half_copied` -- it reads an empty arrow list off a one-endpoint copy and a single arrow off a two-endpoint one. It is the half `TOILE-013` was carrying, and it is a property of the copy rather than of the paste | none | verified |
 | `TOILE-067` | `FRAME` | A copy MUST NOT change the document, and MUST NOT reach the other users. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- the absent delta and the unchanged element count; type-level -- the command is classified as non-mutating in `ambre-bus`, so the permission gate never treats it as a write | none | verified |
@@ -42,13 +42,13 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 | `TOILE-013` | `POST` | A paste or a duplicate MUST re-mint every identity, so pasting onto the board that was copied is safe. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- it pastes onto the source board and reads back an id that differs from the one copied, beside a count that grew. The arrow half is `TOILE-134`, and the round trip it also cited holds `TOILE-130` | none | verified |
 | `TOILE-135` | `POST` | A paste MUST put the copied box at the point it is asked for. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- it reads the pasted box back at the requested point, two hundred units off the source. Unwritten until now: the offset lived in section 3 as a step, and a paste that ignored the point would still land a fresh element | none | verified |
 | `TOILE-070` | `POST` | A paste and a duplicate MUST each be one undo item, however many elements they land. | this spec section 3; `TOILE-014` | `ambre_toile::logic::convergence_tests::duplicate_a_group_is_one_undo_item` -- the single undo takes a duplicated group of three back out | none | verified |
-| `TOILE-071` | `POST` | A pasted group MUST be bound to its own copies, and to nothing outside the set that was copied. | this spec section 3 | none | unheld -- the membership is rebuilt from the payload slots, so a remap that pointed the copy at the source members would leave every count right, and nothing reads a pasted group's members back; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-136` | `POST` | A pasted arrow MUST join the copies, never the elements that were copied. | this spec section 3 | none | unheld -- unwritten until now. Both arrow tests count arrows and neither reads an end, so a paste that rebound the copy onto the source elements would pass twice, section 6; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-071` | `POST` | A pasted group MUST be bound to its own copies, and to nothing outside the set that was copied. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_pasted_group_binds_its_own_copies` -- it reads the pasted group's members back, and the source group's | none | verified |
+| `TOILE-136` | `POST` | A pasted arrow MUST join the copies, never the elements that were copied. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_pasted_arrow_joins_the_copies` -- it reads both ends of the pasted arrow | none | verified |
 | `TOILE-137` | `POST` | A pasted frame MUST carry its speaker notes. | this spec section 3; `TOILE-051` | `ambre_toile::logic::convergence_tests::a_pasted_frame_carries_its_notes_and_takes_an_element` -- the notes read back off the copy, and two peers' first edits of them converging, which a scalar field would not | none | verified |
 | `TOILE-138` | `POST` | A pasted frame MUST be able to take an element, as any frame can. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_pasted_frame_carries_its_notes_and_takes_an_element` -- the same frame, copied alone, taking an element afterwards | none | verified |
 | `TOILE-139` | `FRAME` | A paste MUST NOT touch what is already on the board. | this spec section 3 | structural -- every write of a paste goes under an identity minted from the peer and a counter that only grows, so no path reaches an element the board already holds | none | verified |
 | `TOILE-260` | `POST` | A plain paste MUST land the plain text as one text element at the pointer, whatever payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the `Paste as plain text in Toile` Story (`ambre-roadmap.md` E6). A paste with no payload returns before it writes anything, so text from outside lands nowhere | unimplemented |
-| `TOILE-140` | `FRAME` | A paste of an empty payload MUST write nothing and reach nobody. | this spec section 3 | none | unheld -- the handler returns before it mints anything, and no test pastes an empty payload; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-140` | `FRAME` | A paste of an empty payload MUST write nothing and reach nobody. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_empty_paste_writes_nothing` -- no delta, no create, and the same history | none | verified |
 
 * **Budget.** the paste under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. A paste reseeds every derived cache from the document rather
@@ -56,11 +56,9 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 * **Boundary.** the payload leaves the client. It is written to the operating system clipboard under
   a private type, outside the sealed path (`ZK-001`), by the user's own copy gesture. The plain-text
   half is left empty, so nothing readable by another application leaves.
-* **Verification.** 13 `verified`, 4 `untested`, 1 `unimplemented`.
-  What holds is the round trip: the absent delta, the
-  fresh id, the source box on the payload. The pasted box lands where it was asked for, a paste
-  brings the members, and a pasted frame is a frame. What is loose is the arrow rule the copy owes,
-  and what a pasted set is bound to.
+* **Verification.** 17 `verified`, 1 `unimplemented`. What holds is the round trip, the pasted box,
+  and what a pasted set is bound to. Tests read back a pasted group's members, a pasted arrow's ends,
+  and a frame copied with and without its member.
 
 ---
 
@@ -181,13 +179,10 @@ operating system therefore costs nothing inside the tab (`ambre-spec-clipboard.m
 * **A frame is the one kind whose containers the copy knows about.** The capture reads scalars and
   names the notes explicitly. A container added to another kind would travel as whatever its deep
   value flattens to, or not at all, and nothing would say so.
-* **Nothing asserts what a pasted set is bound to** (`TOILE-071`, `TOILE-136`). The two arrow tests
-  count arrows and the group test counts undo items. A paste that rebound the copy onto the source
-  elements -- an arrow, a membership, or both -- would leave every count right. Every screen would
-  be wrong. Reading one end and one member back is what the two rows are waiting for.
 * **A copied frame leaves its members behind** (`TOILE-132`). The subtree walk descends into a group
   and not into a frame, so copying a frame alone lands an empty region. It follows the frame rule
-  that a deletion keeps its members (`features/ambre-spec-toile-frames.md`), and nothing states it.
+  that a deletion keeps its members (`features/ambre-spec-toile-frames.md`). A user who copies a
+  frame to copy its content must select the content too.
 * **A copy loses what is filed under an identity.** Reactions and comments are stored beside the
   board under the element's own id, and a paste mints a new one. The copy arrives with neither
   (`features/ambre-spec-toile-reactions.md`, `features/ambre-spec-toile-comments.md`). Whether a

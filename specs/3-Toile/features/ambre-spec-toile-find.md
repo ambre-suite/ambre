@@ -20,7 +20,7 @@ match is, and in what order.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-111` | `OBS` | Every match the camera already shows MUST be outlined, one outline per match. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_outlines_visible_find_hits` -- it paints two hits and counts two stroked boxes on an empty selection. The document cited nothing for the highlight at all | none | verified |
-| `TOILE-UI-112` | `OBS` | The current match MUST be outlined differently from the rest, so a user stepping a long list can see where they are. | this spec section 4 | none | unheld -- the painter gives the focus the selection accent at a heavier width and the others a softer tint, and the test above counts the boxes without reading a colour or a width, so a painter that drew all hits alike would pass; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-112` | `OBS` | The current match MUST be outlined differently from the rest, so a user stepping a long list can see where they are. | this spec section 4 | `ambre_toile::ui::render::tests::the_current_match_is_outlined_apart_from_the_rest` -- the colour and the width of each outline | none | verified |
 | `TOILE-UI-113` | `OBS` | The panel MUST name the current match by its rank among the hits, not by its identity. | this spec section 4 | `ambre_toile::ui::find::tests::active_index_locates_focus_or_none` -- the second of three hits reads as rank two, which is the rank against identity the rule is about. The `k/n` caption itself is composed in the chrome panel, which is Leptos under the wasm target and out of the host tier | none | verified |
 | `TOILE-UI-114` | `OBS` | A current match the hit list no longer holds MUST read as no rank, never as the first match. | this spec section 4 | `ambre_toile::ui::find::tests::active_index_locates_focus_or_none` -- an id absent from the list and an empty list, two assertions apart from the one above. The caption falls back to a zero, which the panel renders as `0/n` | none | verified |
 
@@ -32,13 +32,13 @@ nothing, that it wraps and that an empty query clears. This table owns what a To
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-079` | `POST` | Hits MUST be returned in paint order, so stepping follows the stacking rather than the storage. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- its one assertion is an ordered vector of two ids, so it falsifies the order as well as the folding below, which is why both rows cite it | none | verified |
-| `TOILE-080` | `POST` | An element the paint order omits MUST still be found, after the ordered hits and in an order every peer computes alike. | this spec section 3 | none | unheld -- the fallback appends the unlisted elements the bounds map holds, sorted by identity, and no test drives an element missing from the order. The paint walk carries no such fallback (`TOILE-058`); lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-080` | `POST` | An element the paint order omits MUST still be found, after the ordered hits and in an order every peer computes alike. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_reaches_an_element_the_order_omits` -- three omitted notes come after the listed one, in identity order | none | verified |
 | `TOILE-142` | `POST` | An element carrying no searchable body MUST NOT match, whatever its geometry or style holds. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query` -- a rectangle answers no hits for its own kind name | none | verified |
 | `TOILE-082` | `POST` | A frame MUST be findable by its title. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_named_frame_is_found_by_its_title` -- an unnamed frame matching nothing, then the same frame found by the title it was given (`TOILE-247`) | none | verified |
 | `TOILE-143` | `POST` | A query MUST match without regard to case unless the user asks otherwise. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- its hit vector names an element whose body differs from the query in case alone | none | verified |
-| `TOILE-144` | `POST` | With the case option set, a body MUST match only where the case agrees. | this spec section 3 | none | unheld -- `ambre_toile::logic::convergence_tests::find_honors_match_case_and_whole_word` counts two hits out of three bodies rather than naming them, and the wrong two (the folded body and the exact one, dropping the longer word) also count two; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-144` | `POST` | With the case option set, a body MUST match only where the case agrees. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_honors_match_case_and_whole_word` -- it names the two hits, so the folded body cannot stand in for one | none | verified |
 | `TOILE-145` | `POST` | With the whole-word option set, a match MUST be bounded by a non-alphanumeric character on each side. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_honors_match_case_and_whole_word` -- its second half names the one surviving element rather than counting, so the body the query only prefixes is dropped | none | verified |
-| `TOILE-UI-118` | `FRAME` | A search MUST NOT change the selection: a match is outlined, never selected. | this spec section 4 | none | unheld -- the branch that takes the answer writes the hit set, the current match and the pending recentre, and reaches no selection state, but that is a property of one branch as it stands today, not of a type, so a line added there would breach the rule and fail nothing; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-118` | `FRAME` | A search MUST NOT change the selection: a match is outlined, never selected. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_find_step_recentres_without_a_zoom_or_a_selection` -- the selection reads the same after the answer and the recentre | none | verified |
 
 ### 1.3 Step to the next match
 
@@ -46,20 +46,19 @@ Where the step lands is `ambre-spec-find.md`. What the camera does about it is T
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-115` | `POST` | Stepping MUST bring the camera onto the match it lands on. | this spec section 4 | none | unheld -- the answer carries ids and no geometry, so the view asks for the focus box with the aggregates command and moves the camera when the reply lands, and no test drives either leg; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-115` | `POST` | Stepping MUST bring the camera onto the match it lands on. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_find_step_recentres_without_a_zoom_or_a_selection` -- the step asks for the focus box, and the reply centres the camera on it | none | verified |
 | `TOILE-UI-117` | `POST` | The camera MUST recentre on the answer to its own request. | this spec section 4 | `ambre_toile::logic::convergence_tests::selection_stats_echoes_the_request_kind` -- the find focus tags its request, and the view recentres only on the reply that echoes that tag | none | verified |
-| `TOILE-UI-116` | `FRAME` | Recentring MUST NOT change the zoom: a match found far out MUST NOT change how much of the board is visible. | this spec section 4 | none | unheld -- the find path writes the camera centre alone where a fit writes the centre and the scale, and nothing reads the zoom back across a step; lands with the `Toile text editing held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-116` | `FRAME` | Recentring MUST NOT change the zoom: a match found far out MUST NOT change how much of the board is visible. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_find_step_recentres_without_a_zoom_or_a_selection` -- the zoom reads the same across a recentre onto a far match | none | verified |
 
 * **Budget.** none of its own: `ambre-spec-budgets.md` budgets no search on a board. The walk is
   linear in the element count and runs on every keystroke, and nobody has measured it on a board of
   fifty thousand elements.
 * **Boundary.** none: the query never leaves the client and the results never enter the document. The
   panel is chrome on the UI thread, where `UI-THREAD-004` bans a network, crypto or persistence path.
-* **Verification.** 9 `verified`, 6 `untested`. The shared rules are `ambre-spec-find.md`; what is
-  counted here is what a Toile match is. What holds is the walk over element bodies and frame
-  titles, on eight tests, and the token naming the recentre request (`TOILE-UI-117`). What is loose
-  is its two edges and the whole camera half, where nothing drives the recentre and no test reads
-  the zoom back.
+* **Verification.** 15 `verified`. The shared rules are `ambre-spec-find.md`; what is counted here
+  is what a Toile match is. Tests hold the walk over bodies and titles, the order fallback, and the
+  case option by name. A view test steps to a far match and reads the centre, the zoom and the
+  selection back. A render test reads the current outline's colour and width.
 
 ---
 
@@ -150,9 +149,6 @@ clear -- are `ambre-spec-find.md section 5`. Toile's own:
 The shared gaps -- the live shared session, the undebounced walk -- are in
 `ambre-spec-find.md section 6`. Toile's own:
 
-* **The fallback has no test** (`TOILE-080`). An element missing from the paint order is found here
-  and is invisible on the board (`TOILE-058`). The two halves of the same design disagree, and only
-  one of them is exercised.
 * **A match inside a group is not revealed.** The recentre moves the camera and enters no group scope,
   so a hit inside a group is outlined and not selectable
   (`features/ambre-spec-toile-selection.md`).
@@ -160,9 +156,6 @@ The shared gaps -- the live shared session, the undebounced walk -- are in
   resume point the direction is not read. `Shift+Enter` before a first answer walks forward from the
   top rather than to the last match. That last match is where a user asking for the previous one
   expects to be.
-* **The current match's outline is not held** (`TOILE-UI-112`). The overlay test counts the boxes and
-  reads neither colour nor width. The one thing that tells a stepping user where they are is the one
-  thing nothing checks.
 * **A step never changes the zoom** (`TOILE-UI-116`). The camera is recentred and not fitted. A
   match found while zoomed far in arrives at the same magnification, filling the screen with one
   note. Whether a find owes a fit is unruled.

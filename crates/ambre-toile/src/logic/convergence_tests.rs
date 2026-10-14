@@ -194,6 +194,18 @@ fn set_text_overwrites_sticky_body() {
     assert_eq!(body_of(&st, &id).as_deref(), Some("bonjour monde"));
 }
 
+/// `TOILE-UI-064`: the whole-body write an editor sends at its close is one
+/// undo item, however far the body moved. One undo restores the body it
+/// opened on.
+#[test]
+fn a_body_write_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let id = create_sticky(&mut st, Point::ZERO, "hi");
+    set_body(&mut st, &id, "hi", "oh, hi there!");
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(body_of(&st, &id).as_deref(), Some("hi"));
+}
+
 #[test]
 fn set_text_rejects_a_non_text_element() {
     let mut st = ToileState::new();
@@ -1190,7 +1202,7 @@ fn find_honors_match_case_and_whole_word() {
     let mut st = ToileState::new();
     let exact = create_sticky(&mut st, Point::ZERO, "Cat");
     let _lower = create_sticky(&mut st, Point::new(200.0, 0.0), "cat");
-    let _substr = create_sticky(&mut st, Point::new(400.0, 0.0), "Cathedral");
+    let substr = create_sticky(&mut st, Point::new(400.0, 0.0), "Cathedral");
 
     let case = crate::logic::command::FindOptions {
         match_case: true,
@@ -1198,7 +1210,7 @@ fn find_honors_match_case_and_whole_word() {
     };
     let r = find(&mut st, "Cat", case, None);
     // Case-sensitive: "Cat" and "Cathedral" (substring) match, "cat" does not.
-    assert_eq!(r.hits.len(), 2);
+    assert_eq!(r.hits, vec![exact.clone(), substr]);
 
     let whole = crate::logic::command::FindOptions {
         match_case: true,
@@ -1207,6 +1219,25 @@ fn find_honors_match_case_and_whole_word() {
     let r = find(&mut st, "Cat", whole, None);
     // Whole-word + case: only the standalone "Cat" survives.
     assert_eq!(r.hits, vec![exact]);
+}
+
+/// `TOILE-080`: an element the paint order omits is still found. It comes
+/// after the ordered hits, and the omitted ones come in identity order.
+#[test]
+fn find_reaches_an_element_the_order_omits() {
+    let mut st = ToileState::new();
+    let listed = create_sticky(&mut st, Point::ZERO, "plan");
+    let mut omitted: Vec<ElementId> = (1..=3)
+        .map(|i| create_sticky(&mut st, Point::new(f64::from(i) * 100.0, 0.0), "plan"))
+        .collect();
+    for id in &omitted {
+        st.debug_remove_layer_entry(&NodeId::Element(id.clone()));
+    }
+    let r = find(&mut st, "plan", Default::default(), None);
+    omitted.sort();
+    let mut want = vec![listed];
+    want.extend(omitted);
+    assert_eq!(r.hits, want);
 }
 
 #[test]
@@ -2608,6 +2639,123 @@ fn paste_keeps_fully_copied_connector_drops_half_copied() {
         2,
         "the copied connector is reproduced"
     );
+}
+
+/// The elements a copy and a paste of `ids` create, in paint order.
+fn copy_paste(st: &mut ToileState, ids: Vec<ElementId>) -> Vec<ElementId> {
+    let payload = clip_of(&st.handle_command(ToileCommand::CopyElements { ids }));
+    created_ids(&st.handle_command(ToileCommand::PasteElements {
+        payload,
+        at: Point::new(1000.0, 1000.0),
+    }))
+}
+
+/// `TOILE-132`: a frame copied alone lands empty, and its members stay with
+/// the source. A frame copied with a member binds the member's copy.
+#[test]
+fn a_copied_frame_carries_no_member_it_was_not_copied_with() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let inside = create_rect(&mut st, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    st.handle_command(ToileCommand::SetFrameChildren {
+        frame: frame.clone(),
+        add: vec![inside.clone()],
+        remove: Vec::new(),
+    });
+    let alone = copy_paste(&mut st, vec![frame.clone()]);
+    assert_eq!(alone.len(), 1, "no member travels with the frame");
+    assert!(st.membership_of(&alone[0]).is_empty());
+    assert_eq!(st.membership_of(&frame), std::slice::from_ref(&inside));
+
+    let both = copy_paste(&mut st, vec![frame, inside]);
+    let [new_frame, new_inside] = &both[..] else {
+        panic!("the frame and its member: {both:?}");
+    };
+    assert_eq!(
+        st.membership_of(new_frame),
+        std::slice::from_ref(new_inside)
+    );
+}
+
+/// `TOILE-071`: a pasted group binds its own copies, and the source group
+/// keeps its own members.
+#[test]
+fn a_pasted_group_binds_its_own_copies() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let g = created_id(&st.handle_command(ToileCommand::GroupElements {
+        ids: vec![a.clone(), b.clone()],
+    }));
+    let pasted = copy_paste(&mut st, vec![g.clone()]);
+    assert_eq!(pasted.len(), 3);
+    let groups: Vec<&ElementId> = pasted
+        .iter()
+        .filter(|id| !st.membership_of(id).is_empty())
+        .collect();
+    let [group] = groups[..] else {
+        panic!("one pasted group: {groups:?}");
+    };
+    let mut members = st.membership_of(group);
+    members.sort();
+    let mut copies: Vec<ElementId> = pasted.iter().filter(|id| *id != group).cloned().collect();
+    copies.sort();
+    assert_eq!(members, copies, "bound to the copies");
+    assert_eq!(st.membership_of(&g), [a, b], "the source keeps its members");
+}
+
+/// `TOILE-136`: a pasted arrow joins the copies of its two ends, never the
+/// elements that were copied.
+#[test]
+fn a_pasted_arrow_joins_the_copies() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::CreateConnector {
+        from: a.clone(),
+        from_anch: Anchor::Right,
+        to: b.clone(),
+        to_anch: Anchor::Left,
+        path_type: PathType::Straight,
+        arrows: EndCaps {
+            start: false,
+            end: true,
+        },
+    });
+    let before = st.connector_ids();
+    let pasted = copy_paste(&mut st, vec![a, b]);
+    let fresh: Vec<ConnectorId> = st
+        .connector_ids()
+        .into_iter()
+        .filter(|c| !before.contains(c))
+        .collect();
+    let [arrow] = &fresh[..] else {
+        panic!("one pasted arrow: {fresh:?}");
+    };
+    let joined = st.connector_of(arrow).expect("the arrow is stored");
+    assert_eq!(
+        [joined.from, joined.to],
+        [pasted[0].clone(), pasted[1].clone()]
+    );
+}
+
+/// `TOILE-140`: a paste of an empty payload writes nothing and reaches
+/// nobody.
+#[test]
+fn an_empty_paste_writes_nothing() {
+    let mut st = ToileState::new();
+    create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let payload = clip_of(&st.handle_command(ToileCommand::CopyElements { ids: Vec::new() }));
+    assert!(payload.elements.is_empty());
+    let history = st.history();
+    let out = st.handle_command(ToileCommand::PasteElements {
+        payload,
+        at: Point::new(50.0, 50.0),
+    });
+    assert!(out.update.is_none(), "no delta leaves");
+    assert!(created_ids(&out).is_empty());
+    assert_eq!(st.history(), history, "and nothing is written");
+    assert_eq!(st.element_count(), 1);
 }
 
 #[test]

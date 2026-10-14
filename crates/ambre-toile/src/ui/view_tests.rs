@@ -1248,3 +1248,312 @@ fn each_frame_offers_the_stroke_being_drawn_to_the_others() {
     rig.view.plan_repaint(t, false);
     assert_eq!(live_strokes(&rig.sent()), [None], "the trail ends");
 }
+
+// -- The inline editor (`toile-text-editing`) --------------------------------
+
+/// The commands that change the document. Reads, presence and the viewport
+/// the view asks for are left out.
+fn writes(sent: Vec<ToileCommand>) -> Vec<ToileCommand> {
+    sent.into_iter()
+        .filter(|c| {
+            !matches!(
+                c,
+                ToileCommand::RequestSelectionStats { .. }
+                    | ToileCommand::RequestSelectionData { .. }
+                    | ToileCommand::RequestBoardIds
+                    | ToileCommand::RequestMedia { .. }
+                    | ToileCommand::SetViewport { .. }
+                    | ToileCommand::Presence { .. }
+                    | ToileCommand::ReadComments { .. }
+                    | ToileCommand::ReadDeck
+            )
+        })
+        .collect()
+}
+
+/// The element the open editor writes to.
+fn editing(rig: &Rig) -> Option<ElementId> {
+    rig.view
+        .editor
+        .as_ref()
+        .and_then(|ed| ed.target().element().cloned())
+}
+
+/// A rectangle shape: an element that carries no body.
+fn shape(id: &str, bounds: Rect) -> DisplayElement {
+    DisplayElement {
+        kind: ElementKind::Shape(ambre_bus::app::toile::ShapeKind::Rect),
+        geom: ambre_bus::app::toile::DisplayGeom::Rect,
+        ..sticky(id, bounds)
+    }
+}
+
+/// `TOILE-UI-059`, `TOILE-UI-193`: a note placed with the tool opens its
+/// editor once the board answers with it, and the tool is back on select.
+/// Another create's reply claims nothing.
+#[test]
+fn a_placed_note_opens_its_editor_and_the_tool_returns_to_select() {
+    let mut rig = Rig::new();
+    rig.sent();
+    rig.view.set_tool(Tool::Sticky(0xffff_eb3b));
+    rig.click(600.0, 400.0);
+    let token = rig.sent().iter().find_map(|c| match c {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Sticky,
+            correlate,
+            ..
+        } => Some(*correlate),
+        _ => None,
+    });
+    assert_eq!(rig.view.machine.tool(), Tool::Select, "one note a click");
+    let token = token.expect("the click places a note");
+    rig.answer(ToileEvent::ElementCreated {
+        id: eid("n"),
+        correlate: token,
+    });
+    assert_eq!(editing(&rig), None, "no geometry yet");
+    rig.show(vec![DisplayNode::Element(sticky("n", A))]);
+    assert_eq!(editing(&rig), Some(eid("n")));
+}
+
+/// `TOILE-UI-198`, `TOILE-UI-196`, `TOILE-UI-201`: a second click on the
+/// sole selection opens its editor. The open writes nothing and moves no
+/// camera, and the body it opens on is the committed one.
+#[test]
+fn a_second_click_on_the_sole_selection_opens_its_editor() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    assert_eq!(editing(&rig), None, "the first click only selects");
+    let cam = (rig.view.cam.zoom, rig.view.cam.world_to_screen());
+    rig.sent();
+    rig.click(50.0, 50.0);
+    assert_eq!(editing(&rig), Some(eid("a")));
+    rig.frame();
+    rig.paint();
+    assert!(writes(rig.sent()).is_empty(), "entering is not editing");
+    assert_eq!((rig.view.cam.zoom, rig.view.cam.world_to_screen()), cam);
+    let opened = rig.view.editor.as_ref().map(|e| e.opened_text().to_owned());
+    assert_eq!(opened.as_deref(), Some("hi"));
+    assert_eq!(shown_bounds(&rig, "a"), Some(A));
+}
+
+/// `TOILE-UI-199`: a press on the selected note that travels before its
+/// release is a move, and opens nothing.
+#[test]
+fn a_drag_over_the_selected_note_opens_no_editor() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    drag(&mut rig, (50.0, 50.0), (90.0, 80.0));
+    assert_eq!(editing(&rig), None);
+}
+
+/// `TOILE-UI-200`: a double-click inside a wider selection opens the editor
+/// and narrows the selection to the element under edit.
+#[test]
+fn an_open_editor_is_the_whole_selection() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.marquee((-20.0, -20.0), (600.0, 300.0));
+    assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
+    rig.double_click(50.0, 50.0);
+    assert_eq!(editing(&rig), Some(eid("a")));
+    assert_eq!(rig.view.selection, [eid("a")]);
+}
+
+/// `TOILE-UI-184`: a shape carries no body. A second click, a double-click
+/// and a typed key each leave it without an editor.
+#[test]
+fn an_element_without_a_body_opens_no_editor() {
+    let mut rig = Rig::new();
+    rig.show(vec![DisplayNode::Element(shape("s", A))]);
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("s")]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.key("x", false, false);
+    assert!(rig.view.editor.is_none());
+}
+
+/// `TOILE-UI-060`, `TOILE-UI-202`, `TOILE-UI-203`: a printable key over one
+/// selected note opens its editor and is not consumed. The character then
+/// replaces the body rather than extending it.
+#[test]
+fn a_typed_character_opens_the_editor_and_replaces_the_body() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.sent();
+    assert!(!rig.key("x", false, false), "the key reaches the text pipe");
+    assert_eq!(editing(&rig), Some(eid("a")));
+    rig.type_text("x");
+    rig.key("Escape", false, false);
+    rig.paint();
+    assert!(matches!(
+        writes(rig.sent()).as_slice(),
+        [ToileCommand::SetText { id, base, text }]
+            if id == &eid("a") && base == "hi" && text == "x"
+    ));
+}
+
+/// `TOILE-UI-204`: the space bar over a selected note arms the pan.
+#[test]
+fn the_space_bar_opens_no_editor() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    assert!(rig.key(" ", false, false), "space is the board's");
+    assert!(rig.view.editor.is_none());
+}
+
+/// `TOILE-UI-205`: with no selection, two notes, or a shape selected, a
+/// typed key opens nothing.
+#[test]
+fn a_key_over_anything_but_one_note_opens_no_editor() {
+    let mut rig = Rig::new();
+    rig.show(vec![
+        DisplayNode::Element(sticky("a", A)),
+        DisplayNode::Element(sticky("b", B)),
+        DisplayNode::Element(shape("s", Rect::new(0.0, 200.0, 100.0, 260.0))),
+    ]);
+    rig.key("x", false, false);
+    assert!(rig.view.editor.is_none(), "nothing selected");
+    rig.marquee((-20.0, -20.0), (600.0, 150.0));
+    assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
+    rig.key("x", false, false);
+    assert!(rig.view.editor.is_none(), "two notes");
+    rig.click(50.0, 230.0);
+    assert_eq!(rig.view.selection, [eid("s")]);
+    rig.key("x", false, false);
+    assert!(rig.view.editor.is_none(), "a shape");
+}
+
+/// `TOILE-UI-206`, `TOILE-UI-064`, `TOILE-UI-208`: an edit of many keystrokes
+/// leaves as one body write and nothing else. The element stays selected,
+/// and the camera and the tool are as they were.
+#[test]
+fn a_close_writes_the_body_once_and_keeps_the_element_selected() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    let cam = (rig.view.cam.zoom, rig.view.cam.world_to_screen());
+    rig.sent();
+    for ch in ["a", "b", "c"] {
+        rig.type_text(ch);
+        rig.paint();
+    }
+    rig.key("Escape", false, false);
+    rig.paint();
+    rig.frame();
+    assert!(rig.view.editor.is_none());
+    assert!(matches!(
+        writes(rig.sent()).as_slice(),
+        [ToileCommand::SetText { text, .. }] if text == "hiabc"
+    ));
+    assert_eq!(rig.view.selection, [eid("a")]);
+    assert_eq!((rig.view.cam.zoom, rig.view.cam.world_to_screen()), cam);
+    assert_eq!(rig.view.machine.tool(), Tool::Select);
+    assert_eq!(shown_bounds(&rig, "a"), Some(A));
+}
+
+/// Where each glyph run a paint drew lands on screen, in order. The pushed
+/// transforms around a run are folded into its own, rounded to a millipixel.
+fn glyph_runs(surface: &ambre_draw::testing::RecordingSurface) -> Vec<[i64; 6]> {
+    use ambre_draw::testing::DrawOp;
+    let mut stack = vec![kurbo::Affine::IDENTITY];
+    let mut runs = Vec::new();
+    for op in surface.ops() {
+        let top = stack.last().copied().unwrap_or_default();
+        match op {
+            DrawOp::PushTransform { transform } => stack.push(top * *transform),
+            DrawOp::PopTransform => {
+                stack.pop();
+            }
+            DrawOp::Glyphs { transform, .. } => {
+                runs.push(
+                    (top * *transform)
+                        .as_coeffs()
+                        .map(|c| (c * 1000.0).round() as i64),
+                );
+            }
+            _ => {}
+        }
+    }
+    runs
+}
+
+/// `TOILE-UI-189`, `TOILE-UI-191`: the editor paints its body where the
+/// committed body was, and the committed body is not painted under it.
+#[test]
+fn the_body_under_edit_replaces_the_committed_one_in_place() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let committed = glyph_runs(&rig.paint());
+    assert!(!committed.is_empty());
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    let edited = glyph_runs(&rig.paint());
+    assert_eq!(edited, committed, "one body, at the same origin");
+}
+
+/// `TOILE-UI-192`: the caret shows for one half of the cycle and hides for
+/// the other.
+#[test]
+fn the_caret_blinks() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    let ops_at = |rig: &mut Rig, t: f64| {
+        rig.view.plan_repaint(t, false);
+        rig.paint().ops().len()
+    };
+    let on = ops_at(&mut rig, 0.0);
+    let off = ops_at(&mut rig, 600.0);
+    assert_eq!(on, off + 1, "the caret is one op");
+    assert_eq!(ops_at(&mut rig, 1100.0), on, "and back within the second");
+}
+
+/// `TOILE-UI-190`: a rotated note keeps its rotation under the editor. Each
+/// run lands where the committed run did, rotation included.
+#[test]
+fn a_rotated_note_keeps_its_rotation_while_edited() {
+    let mut note = sticky("a", A);
+    let c = A.center().to_vec2();
+    note.transform = kurbo::Affine::translate(c)
+        * kurbo::Affine::rotate(std::f64::consts::FRAC_PI_6)
+        * kurbo::Affine::translate(-c);
+    let mut rig = Rig::new();
+    rig.show(vec![DisplayNode::Element(note)]);
+    let committed = glyph_runs(&rig.paint());
+    assert!(committed.iter().all(|r| r[1] != 0), "the body is rotated");
+    rig.click(100.0, 60.0);
+    rig.double_click(100.0, 60.0);
+    assert_eq!(editing(&rig), Some(eid("a")));
+    assert_eq!(glyph_runs(&rig.paint()), committed);
+}
+
+/// `TOILE-UI-115`, `TOILE-UI-116`, `TOILE-UI-118`: a step asks for the
+/// focus box and recentres on it when the answer lands. The zoom and the
+/// selection are as they were before the search.
+#[test]
+fn a_find_step_recentres_without_a_zoom_or_a_selection() {
+    use ambre_bus::app::toile::{FindResults, SelectionStats};
+    let far = Rect::new(5000.0, 4000.0, 5100.0, 4080.0);
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    let zoom = rig.view.cam.zoom;
+    rig.sent();
+    rig.answer(ToileEvent::FindResults(FindResults {
+        hits: vec![eid("a"), eid("far")],
+        focus: Some(eid("far")),
+    }));
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::RequestSelectionStats { ids, kind: StatsRequestKind::FindFocus }]
+            if ids == &[eid("far")]
+    ));
+    rig.answer(ToileEvent::SelectionStats(SelectionStats {
+        count: 1,
+        bounds: Some(far),
+        kind: StatsRequestKind::FindFocus,
+    }));
+    let centre = rig.view.cam.visible_world().center();
+    assert!((centre - far.center()).hypot() < 1e-6, "on the match");
+    assert_eq!(rig.view.cam.zoom, zoom, "the zoom is kept");
+    assert_eq!(rig.view.selection, [eid("a")], "a match is not selected");
+}

@@ -1983,6 +1983,56 @@ mod tests {
         assert_eq!(strokes, 2);
     }
 
+    /// `TOILE-UI-112`: the current match wears the selection accent at a
+    /// heavier width, and every other match a softer tint.
+    #[test]
+    fn the_current_match_is_outlined_apart_from_the_rest() {
+        let vp = DisplayViewport {
+            version: 0,
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![
+                elem("a", DisplayGeom::Rect, Rect::new(0.0, 0.0, 50.0, 50.0)),
+                elem("b", DisplayGeom::Rect, Rect::new(60.0, 0.0, 110.0, 50.0)),
+                elem("c", DisplayGeom::Rect, Rect::new(120.0, 0.0, 170.0, 50.0)),
+            ],
+        };
+        let mut surface = RecordingSurface::new();
+        let hits = ["a", "b", "c"].map(|s| ElementId(s.into()));
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &hits,
+            Some(&ElementId("b".into())),
+            &HashMap::new(),
+            None,
+            false,
+        );
+        let outlines: Vec<(Color, f64)> = surface
+            .ops()
+            .iter()
+            .filter_map(|o| match o {
+                DrawOp::StrokeRect { color, width, .. } => Some((*color, *width)),
+                _ => None,
+            })
+            .collect();
+        let [a, b, c] = outlines[..] else {
+            panic!("one outline per match: {outlines:?}");
+        };
+        assert_eq!(a, c, "the other matches look alike");
+        assert_eq!(
+            b.0, LIGHT_PALETTE.selection,
+            "the current one in the accent"
+        );
+        assert_ne!(a.0, b.0);
+        assert!(b.1 > a.1, "and heavier");
+    }
+
     // Build a node rotated `theta` radians about its AABB center, mirroring the
     // Logic derive so the overlay / text passes see a realistic transform.
     fn rotated_elem(id: &str, geom: DisplayGeom, bounds: Rect, theta: f64) -> DisplayNode {
