@@ -220,7 +220,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             break;
         }
         let rh = layout.row_h(row);
-        let label = (row + 1).to_string();
+        let label = row_label(row);
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
             &label,

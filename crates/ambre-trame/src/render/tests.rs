@@ -345,6 +345,43 @@ fn row_headers_skip_tint_when_inactive() {
 }
 
 #[test]
+fn row_headers_draw_active_tint() {
+    let l = layout();
+    let palette = Theme::Light.palette();
+    let (mut s, mut fc, mut tc) = harness();
+
+    draw_row_headers_on(
+        &mut s,
+        &l,
+        palette,
+        Some(2),
+        None,
+        false,
+        &mut fc,
+        &mut tc,
+        true,
+    );
+
+    // One tint, over the band of row 2 alone.
+    let top = l.row_top(2);
+    assert_eq!(
+        s.count(|op| matches!(
+            op, DrawOp::FillRect { color, rect, .. }
+                if *color == palette.header_active && rect.y0 == top && rect.y1 == top + 20.0
+        )),
+        1,
+    );
+    assert_eq!(s.clip_depth(), 0);
+}
+
+#[test]
+fn row_label_is_the_one_based_number() {
+    assert_eq!(row_label(0), "1");
+    assert_eq!(row_label(9), "10");
+    assert_eq!(row_label(u32::MAX), "4294967296");
+}
+
+#[test]
 fn col_label_matches_spreadsheet_convention() {
     assert_eq!(col_label(0), "A");
     assert_eq!(col_label(25), "Z");

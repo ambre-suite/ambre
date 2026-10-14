@@ -106,3 +106,8 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
 pub fn col_label(col: u32) -> String {
     crate::columns::col_to_alpha(col)
 }
+
+/// Row label for a 0-based row index: its one-based number (0 -> "1").
+pub fn row_label(row: u32) -> String {
+    (u64::from(row) + 1).to_string()
+}

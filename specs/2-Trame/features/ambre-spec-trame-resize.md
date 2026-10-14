@@ -28,28 +28,28 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-039` | `POST` | A row MUST NOT be sized below its minimum height, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::resize_row_round_trips_and_clamps_to_minimum` -- it reads back the clamped height, and the drag guide is clamped on the same minimum before the release | none | verified |
 | `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group11::a_column_is_never_narrower_than_its_minimum` | none | verified |
-| `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | none | unheld -- the release divides the on-screen extent back out by the zoom, and no test drives a resize at any zoom but one; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | none | unheld -- the local size map is written once the outbox takes the command, and nothing asserts the grid reflowed without the answer; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_resize_stores_an_unzoomed_width_and_reflows_at_once` -- one gesture at zoom 1 and at zoom 2 | none | verified |
+| `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_resize_stores_an_unzoomed_width_and_reflows_at_once` -- the grid reflows with no answer from the Logic thread | none | verified |
 | `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- the early return in `send_resize_col` and `send_resize_row` before the local map is written, which a native test reaches by resizing over an outbox that refuses. The outcome it branches on is `BUS-011`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Fit a boundary to its content
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | unheld -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6); lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | `ambre_trame::logic::tests::group7::column_content_reaches_every_row`; `ambre_trame::ui::view::interact::tests::a_column_fit_sizes_from_content_or_defaults_when_empty` | partial -- the tests hold the whole-column answer and its measure; the view requesting it on the double-click and measuring the reply is wasm glue no host test reaches; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | partial |
+| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_double_click_fits_the_column_to_its_whole_content` | none | verified |
+| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | `ambre_trame::logic::tests::group7::column_content_reaches_every_row`; `ambre_trame::ui::view::interact::tests::a_column_fit_sizes_from_content_or_defaults_when_empty`; `ambre_trame::ui::view::view_tests::a_double_click_fits_the_column_to_its_whole_content` -- the view sends no size before the whole column answers | none | verified |
 
 * **Budget.** none: a resize writes one entry in the size register and repaints, and
   `ambre-spec-budgets.md` budgets no resize. The repaint sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 5 `verified`, 1 `partial`, 4 `untested`. What holds is the document plane: the
-  write, the reload and the concurrent race each have a test. What is loose is the UI thread, where
-  the pointer meets the zoom and the cache, and the column clamp nothing reads back. A resize goes
-  out lossless, so a refused send leaves the local size map untouched, held by a manual read
-  (`TRAME-UI-127`). A column auto-fit asks the Logic thread for the whole column and measures that
-  answer, never the viewport cache (`TRAME-UI-128`).
+* **Verification.** 9 `verified`, 1 `untested`. What holds is the document plane: the write, the
+  reload and the concurrent race each have a test. What is loose is the UI thread, where the pointer
+  meets the zoom and the cache, and the column clamp nothing reads back. A resize goes out lossless,
+  so a refused send leaves the local size map untouched, held by a manual read (`TRAME-UI-127`). A
+  column auto-fit asks the Logic thread for the whole column and measures that answer, never the
+  viewport cache (`TRAME-UI-128`).
 
 ---
 

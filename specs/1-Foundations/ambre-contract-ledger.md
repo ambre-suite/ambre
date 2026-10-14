@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2549 shipped, of which 78 partial and 309 loose. 837 unbuilt.**
+**3386 rows: 2549 shipped, of which 77 partial and 300 loose. 837 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 651 | 322 | 584 | 605 |  | 2162 |
-| `partial` | 27 | 9 | 41 | 1 |  | 78 |
+| `verified` | 651 | 332 | 584 | 605 |  | 2172 |
+| `partial` | 27 | 8 | 41 | 1 |  | 77 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 27 | 85 | 188 | 1 |  | 301 |
+| `untested` | 27 | 76 | 188 | 1 |  | 292 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 57 | 28 | 109 | 439 | 837 |
@@ -81,7 +81,7 @@
 | `ambre-spec-trame-schema.md` | 6 | 6 | 5 | 1 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  |  | 12 |
-| `ambre-spec-trame-cell-merges.md` | 38 | 37 | 36 |  | 1 | 1 |
+| `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  |  | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 3 |  | 6 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 11 |  | 7 | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 8 | 7 |  | 1 | 1 |
@@ -91,12 +91,12 @@
 | `ambre-spec-trame-formula-engine.md` | 44 | 43 | 40 |  | 3 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 12 | 1 | 8 | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 7 | 2 | 9 | 2 |
-| `ambre-spec-trame-headers.md` | 9 | 9 | 4 |  | 5 |  |
+| `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |  |
 | `ambre-spec-trame-import-export.md` | 40 | 27 | 18 |  | 9 | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 8 |  | 2 |  |
 | `ambre-spec-trame-number-formats.md` | 12 | 11 | 9 |  | 2 | 1 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  |  | 3 |
-| `ambre-spec-trame-resize.md` | 10 | 10 | 5 | 1 | 4 |  |
+| `ambre-spec-trame-resize.md` | 10 | 10 | 9 |  | 1 |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 8 |  | 2 | 1 |
 | `ambre-spec-trame-shared-filter.md` | 35 | 32 | 27 | 1 | 4 | 3 |

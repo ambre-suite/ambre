@@ -791,3 +791,244 @@ fn a_filled_formula_reaches_each_selected_cell_as_typed() {
     assert_eq!(rig.active(), (0, 0));
     assert_eq!(rig.view.state.selection.bounds(), (0, 0, 1, 1));
 }
+
+impl Rig {
+    /// Press and release the primary button at `(x, y)`.
+    fn click(&mut self, x: f64, y: f64) {
+        self.view.handle_input(&InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        });
+        self.view.handle_input(&InputEvent::PointerUp {
+            x,
+            y,
+            button: 0,
+            ctrl: false,
+        });
+    }
+
+    /// The right edge of column `c` on screen.
+    fn col_edge(&self, c: u32) -> f64 {
+        self.view.state.col_x(c) + self.view.state.col_width_of(c)
+    }
+}
+
+/// The "+" on a column boundary inserts at that boundary: the column lands
+/// at the index right of it (`TRAME-UI-048`). The same pixels arm a resize in
+/// their lower half, so the insert must carry no size (`TRAME-UI-123`).
+#[test]
+fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    let widths = rig.view.state.col_widths.clone();
+    let heights = rig.view.state.row_heights.clone();
+    // The boundary between B and C, in the upper half of the strip.
+    let x = rig.col_edge(1);
+    assert_eq!(
+        rig.view.state.header_hit(x, 2.0),
+        Some(crate::ui::grid::HeaderHit::ColInsert(2))
+    );
+    rig.click(x, 2.0);
+    rig.frame();
+    let sent = rig.sent();
+    assert!(
+        matches!(
+            sent.as_slice(),
+            [
+                TrameCommand::SetActiveCell { col: 2, .. },
+                TrameCommand::InsertColLeft,
+                ..
+            ]
+        ),
+        "sent {sent:?}"
+    );
+    // The row strip: the boundary under row 3, in the left half.
+    let y = rig.view.state.row_y(3) + rig.view.state.row_height_of(3);
+    assert_eq!(
+        rig.view.state.header_hit(2.0, y),
+        Some(crate::ui::grid::HeaderHit::RowInsert(4))
+    );
+    rig.click(2.0, y);
+    rig.frame();
+    let sent_rows = rig.sent();
+    assert!(
+        matches!(
+            sent_rows.as_slice(),
+            [
+                TrameCommand::SetActiveCell { row: 4, .. },
+                TrameCommand::InsertRowAbove,
+                ..
+            ]
+        ),
+        "sent {sent_rows:?}"
+    );
+    for cmd in sent.iter().chain(&sent_rows) {
+        assert!(
+            !matches!(
+                cmd,
+                TrameCommand::ResizeCol { .. } | TrameCommand::ResizeRow { .. }
+            ),
+            "an insert sent {cmd:?}"
+        );
+    }
+    assert_eq!(rig.view.state.col_widths, widths);
+    assert_eq!(rig.view.state.row_heights, heights);
+}
+
+/// A boundary dragged at any zoom stores the width in unzoomed pixels: the
+/// same on-screen gesture scaled by the zoom stores the same size
+/// (`TRAME-UI-040`). The grid takes the width before any answer
+/// (`TRAME-UI-041`).
+#[test]
+fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
+    for zoom in [1.0, 2.0] {
+        let mut rig = Rig::new();
+        assert!(rig.view.set_zoom(zoom) || zoom == 1.0);
+        rig.frame();
+        rig.sent();
+        let edge = rig.col_edge(1);
+        let y = rig.view.state.header_h() * 0.8;
+        assert_eq!(
+            rig.view.state.header_hit(edge, y),
+            Some(crate::ui::grid::HeaderHit::ColBorder(1))
+        );
+        let c_before = rig.view.state.col_x(2);
+        rig.view.handle_input(&InputEvent::PointerDown {
+            x: edge,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        });
+        // 200 base pixels, drawn at this zoom.
+        let target = rig.view.state.col_x(1) + 200.0 * zoom;
+        rig.view
+            .handle_input(&InputEvent::PointerMove { x: target, y });
+        rig.view.handle_input(&InputEvent::PointerUp {
+            x: target,
+            y,
+            button: 0,
+            ctrl: false,
+        });
+        let sent = rig.sent();
+        let widths: Vec<f32> = sent
+            .iter()
+            .filter_map(|cmd| match cmd {
+                TrameCommand::ResizeCol {
+                    col: 1, width_px, ..
+                } => Some(*width_px),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(widths, [200.0], "zoom {zoom}: sent {sent:?}");
+        // No answer came back, and the grid already reflowed.
+        assert_eq!(rig.view.state.col_widths.get(&1), Some(&200.0));
+        assert_eq!(
+            rig.view.state.col_x(2),
+            rig.view.state.col_x(1) + 200.0 * zoom
+        );
+        assert_ne!(rig.view.state.col_x(2), c_before);
+    }
+}
+
+/// A double-click on a boundary asks for the whole column and sizes nothing
+/// until it has it (`TRAME-UI-128`). The answer is measured, and the width
+/// sent is the content's (`TRAME-UI-042`).
+#[test]
+fn a_double_click_fits_the_column_to_its_whole_content() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    let edge = rig.col_edge(0);
+    let y = rig.view.state.header_h() * 0.8;
+    assert!(
+        rig.view
+            .handle_input(&InputEvent::DoubleClick { x: edge, y })
+    );
+    rig.frame();
+    let asked = rig.sent();
+    assert!(
+        matches!(
+            asked.as_slice(),
+            [TrameCommand::RequestColumnContent { col: 0 }]
+        ),
+        "sent {asked:?}"
+    );
+    let cells = vec![
+        crate::DisplayCell {
+            text: "short".to_owned(),
+            ..Default::default()
+        },
+        crate::DisplayCell {
+            text: "a value far wider than the default column".to_owned(),
+            ..Default::default()
+        },
+    ];
+    let expected = super::interact::fit_column_width(
+        &cells,
+        &mut FontContext::new(),
+        &mut TextCache::new(1.0),
+    );
+    rig.answer(TrameEvent::ColumnContent { col: 0, cells });
+    let sent = rig.sent();
+    assert!(
+        matches!(
+            sent.as_slice(),
+            [TrameCommand::ResizeCol { col: 0, width_px, .. }] if *width_px == expected
+        ),
+        "sent {sent:?}"
+    );
+    assert!(expected > crate::ui::grid::COL_WIDTH as f32);
+}
+
+/// A drag from a merged source previews whole blocks: a 2-row merge grows two
+/// rows at a time, whatever row the pointer stops on (`TRAME-UI-116`).
+#[test]
+fn a_merged_fill_previews_whole_blocks() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let merged = |row, span| crate::DisplayCell {
+        row,
+        col: 0,
+        is_merged: true,
+        merge_span: span,
+        ..Default::default()
+    };
+    // A1:A2 is one merge of one column and two rows.
+    rig.answer(TrameEvent::ViewportData {
+        version: 0,
+        row_start: 0,
+        col_start: 0,
+        col_widths: vec![],
+        row_heights: vec![],
+        cells: vec![merged(0, Some((1, 2))), merged(1, None)],
+    });
+    rig.sent();
+    let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
+    rig.view.handle_input(&InputEvent::PointerDown {
+        x: hx + w / 2.0,
+        y: hy + h / 2.0,
+        button: 0,
+        shift: false,
+        ctrl: false,
+    });
+    let mid = |rig: &Rig, row: u32| {
+        let (x, y, w, h) = rig.view.state.cell_pixel_rect(row, 0).expect("in view");
+        (x + w / 2.0, y + h / 2.0)
+    };
+    // Row 2 is one row past the source, row 4 is three: each snaps up to the
+    // block that holds it.
+    for (row, last) in [(2, 3), (3, 3), (4, 5)] {
+        let (x, y) = mid(&rig, row);
+        rig.view.handle_input(&InputEvent::PointerMove { x, y });
+        assert_eq!(
+            rig.view.state.fill_preview,
+            Some((0, 0, last, 0)),
+            "pointer on row {row}"
+        );
+    }
+}

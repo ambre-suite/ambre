@@ -60,7 +60,7 @@ pub use grid::draw_grid_lines_on;
 pub use headers::{draw_col_headers_on, draw_row_headers_on};
 pub use layout::GridLayout;
 pub use merges::draw_merges_on;
-pub use text::{col_label, draw_layout_runs, draw_layout_runs_decorated, draw_text};
+pub use text::{col_label, draw_layout_runs, draw_layout_runs_decorated, draw_text, row_label};
 
 // -----------------------------------------------------------------------------
 // Formula bar action types (shared between the UI thread and the Leptos chrome)

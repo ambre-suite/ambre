@@ -77,7 +77,7 @@ The user drags the fill handle from a source tiled by equal merged blocks.
 | `TRAME-147` | `POST` | A fill MUST clear every covered cell of each destination tile. | this spec section 4 | `ambre_trame::logic::tests::group11::a_merged_fill_clears_its_tiles_and_keeps_its_source` -- a value under a tile is emptied, and none is masked | none | verified |
 | `TRAME-149` | `POST` | Each tile master MUST take the style of the source block master. | this spec section 4 | `ambre_trame::logic::tests::group11::a_merged_fill_carries_the_style_and_shifts_the_formula` | none | verified |
 | `TRAME-150` | `POST` | A formula copied into a tile MUST reindex by the tile offset. | this spec section 4 | `ambre_trame::logic::tests::group11::a_merged_fill_carries_the_style_and_shifts_the_formula` | none | verified |
-| `TRAME-UI-116` | `POST` | The drag preview MUST extend by whole blocks along the drag axis. | this spec section 4 | none | unheld -- `fill_source_block` and `fill_dest` carry the snapping and no test calls either; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-116` | `POST` | The drag preview MUST extend by whole blocks along the drag axis. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_merged_fill_previews_whole_blocks` -- a pointer one row and three rows past a two-row merge | none | verified |
 | `TRAME-142` | `FRAME` | A fill MUST NOT change the source blocks. | derived | `ambre_trame::logic::tests::group11::a_merged_fill_clears_its_tiles_and_keeps_its_source` -- the source block reads as before | none | verified |
 | `TRAME-143` | `FAIL` | A source mixing block sizes MUST fall back to the cell-by-cell fill. | this spec section 4 | `ambre_trame::logic::tests::group11::a_source_of_unequal_blocks_fills_cell_by_cell` | none | verified |
 
@@ -99,13 +99,12 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 36 `verified`, 1 `untested`, 1 `unimplemented`. The split into operations
-  exposed eleven of the thirteen loose rows. Three are frame conditions no test isolates
-  (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`), and three are guards no test refuses (`TRAME-137`,
-  `TRAME-143`, `TRAME-148`). Four are rules the fill states and asserts nothing about (`TRAME-146`,
-  `TRAME-147`, `TRAME-149`, `TRAME-150`), and one is the drag preview (`TRAME-UI-116`). The twelfth,
-  `TRAME-031`, was the one gap the document already named; the thirteenth, `TRAME-128`, is what the
-  `Gap` column exposed.
+* **Verification.** 37 `verified`, 1 `unimplemented`. The split into operations exposed eleven of
+  the thirteen loose rows. Three are frame conditions no test isolates (`TRAME-131`, `TRAME-142`,
+  `TRAME-UI-115`), and three are guards no test refuses (`TRAME-137`, `TRAME-143`, `TRAME-148`).
+  Four are rules the fill states and asserts nothing about (`TRAME-146`, `TRAME-147`, `TRAME-149`,
+  `TRAME-150`), and one is the drag preview (`TRAME-UI-116`). The twelfth, `TRAME-031`, was the one
+  gap the document already named; the thirteenth, `TRAME-128`, is what the `Gap` column exposed.
 
 ---
 

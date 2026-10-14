@@ -22,31 +22,30 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-043` | `OBS` | A column MUST be labelled by the spreadsheet convention: A to Z, then AA. | this spec section 3 | `ambre_trame::render::tests::col_label_matches_spreadsheet_convention` -- it runs over the two carries and the three-letter case | none | verified |
-| `TRAME-UI-121` | `OBS` | A row MUST be labelled by its one-based number. | this spec section 3 | none | unheld -- the label is formatted inline in `render/headers.rs` and no recording reads a row header's text, so the strip could number from zero and nothing would fail. The column half had a rule and a test, and this half had neither; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-121` | `OBS` | A row MUST be labelled by its one-based number. | this spec section 3 | `ambre_trame::render::tests::row_label_is_the_one_based_number` -- the strip draws this label | none | verified |
 | `TRAME-UI-044` | `INV` | A point in a strip MUST resolve to exactly one gesture. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::header_hit_resolves_zones`; `::header_boundary_splits_insert_and_resize`; `::axis_pointer_resolution_follows_variable_metrics` | none | verified |
 | `TRAME-UI-045` | `OBS` | The header of the active column MUST be marked. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_bg_separator_and_active_tint` -- it asserts the active tint on the column strip | none | verified |
-| `TRAME-UI-122` | `OBS` | The header of the active row MUST be marked. | this spec section 3 | none | unheld -- the four calls into the row strip all pass no active row, so `::row_headers_skip_tint_when_inactive` proves the absence and nothing proves the presence: a row strip that never tinted would pass every test. It is the half `TRAME-UI-045` was carrying; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-122` | `OBS` | The header of the active row MUST be marked. | this spec section 3 | `ambre_trame::render::tests::row_headers_draw_active_tint` -- one tint, over the active row alone | none | verified |
 | `TRAME-UI-046` | `OBS` | A header under the pointer MUST be marked as reachable, unless it already carries the active mark. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_hover_tint`; `::row_headers_draw_hover_tint`; `::row_headers_draw_corner_hover_tint` -- the mark on both strips and the corner; `::col_headers_skip_hover_tint_on_active_column` -- the exception on the column strip alone | none | verified |
-| `TRAME-UI-047` | `OBS` | A whole-axis selection MUST be visible in the strip, since no rectangle bounds it on screen. | this spec section 3 | none | unheld -- the band tint is drawn in `ui/renderer/overlay.rs` and no recording asserts it, though the band itself is covered (`TRAME-UI-033`); lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-047` | `OBS` | A whole-axis selection MUST be visible in the strip, since no rectangle bounds it on screen. | this spec section 3 | `ambre_trame::ui::renderer::tests::a_whole_axis_selection_tints_its_strip` -- a column band and a row band | none | verified |
 
 ### 1.2 Insert from a boundary
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none | unheld -- the affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-123` | `FRAME` | An insert fired from a boundary MUST NOT change the size of either axis that boundary separates. | this spec section 4; derived | none | unheld -- the insert and the resize are armed from the same four pixels, split by the half of the band the point falls in, and `::header_boundary_splits_insert_and_resize` covers the split alone: no test fires an insert and reads the widths back; lands with the `Trame sheet structure held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | `ambre_trame::ui::view::view_tests::the_inline_insert_lands_on_its_boundary_and_sizes_nothing` -- a click on each strip, read at the command it sends | none | verified |
+| `TRAME-UI-123` | `FRAME` | An insert fired from a boundary MUST NOT change the size of either axis that boundary separates. | this spec section 4; derived | `ambre_trame::ui::view::view_tests::the_inline_insert_lands_on_its_boundary_and_sizes_nothing` -- no resize is sent and no local size changes | none | verified |
 
 * **Budget.** none of its own: the strips paint from the same viewport slice the grid does, inside
   the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the strips are view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 4 `verified`, 5 `untested`. What holds is the column strip: its label
-  convention, and the tint that marks the active column. What is loose is the row strip, whose
-  number has no rule of its own and whose tint is only ever asserted absent. The insert gesture is
-  loose, untested end to end, sharing its pixels with the resize. The strips reach a band selection
-  (`features/ambre-spec-trame-selection.md`), a size
-  (`features/ambre-spec-trame-resize.md`), a reorder
-  (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
+* **Verification.** 9 `verified`. What holds is the column strip: its label convention, and the tint
+  that marks the active column. What is loose is the row strip, whose number has no rule of its own
+  and whose tint is only ever asserted absent. The insert gesture is loose, untested end to end,
+  sharing its pixels with the resize. The strips reach a band selection
+  (`features/ambre-spec-trame-selection.md`), a size (`features/ambre-spec-trame-resize.md`), a
+  reorder (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
   (`features/ambre-spec-trame-shared-filter.md`), ruled where they live.
 
 ---

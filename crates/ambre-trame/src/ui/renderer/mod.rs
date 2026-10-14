@@ -592,6 +592,52 @@ mod tests {
         );
     }
 
+    /// A whole-axis selection tints its band in the strip (`TRAME-UI-047`):
+    /// columns tint the column strip, rows the row strip.
+    #[test]
+    fn a_whole_axis_selection_tints_its_strip() {
+        use super::super::grid::{SelKind, Selection};
+        let palette = Theme::Light.palette();
+        for kind in [SelKind::Cols, SelKind::Rows] {
+            let mut state = fixture(&[]);
+            state.selection = Selection::axis(kind, 1, 2);
+            let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
+            draw_overlay(
+                &mut surface,
+                &state,
+                palette,
+                &mut font_cx,
+                &mut cache,
+                true,
+                &clock,
+                &mut stats,
+            );
+            let (x0, x1, y0, y1) = match kind {
+                SelKind::Cols => (
+                    state.col_x(1),
+                    state.col_x(2) + state.col_width_of(2),
+                    0.0,
+                    state.header_h(),
+                ),
+                _ => (
+                    0.0,
+                    state.header_w(),
+                    state.row_y(1),
+                    state.row_y(2) + state.row_height_of(2),
+                ),
+            };
+            assert_eq!(
+                surface.count(|op| matches!(
+                    op, DrawOp::FillRect { color, rect }
+                        if *color == palette.header_active
+                            && *rect == Rect::new(x0, y0, x1, y1)
+                )),
+                1,
+                "{kind:?}",
+            );
+        }
+    }
+
     #[test]
     fn dirty_cell_gets_a_translucent_veil() {
         // An optimistic edit marks (0,0) dirty -> a content_bg veil at reduced
