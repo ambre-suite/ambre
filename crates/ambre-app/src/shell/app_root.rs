@@ -222,7 +222,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
-    install_canvas_context_menu(ctx_menu);
+    install_canvas_context_menu(
+        ctx_menu,
+        Signal::derive(move || boot_is_toile && present_toile.get()),
+    );
     // A file dropped on a board reaches the importer at the point it landed on
     // (`toile-import-export`). Same reason the listener lives here: the canvas
     // belongs to the AppShell, not to the view that paints into it.
@@ -702,8 +705,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // Toile tool palette / primary toolbar (toile-tools): a floating
         // vertical bar, mounted only for a Toile board. It writes the shared active-
         // tool signal the canvas view applies; the keyboard chords write the same one.
+        // Every editing surface below leaves the DOM while the board presents.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::ToolPalette active=toile_active_tool />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::ToolPalette active=toile_active_tool />
+            </toile_chrome::EditingSurfaces>
         })}
         // Toile top menu bar + zoom control (toile-menus): the low- frequency menus
         // (File/Edit/View/Object/Present) and the zoom cluster. Every entry routes
@@ -711,7 +717,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // uses. The zoom readout mirrors the `zoom` signal the canvas view
         // publishes each frame.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::TopMenuBar zoom=zoom on_command=on_command toggles=toile_toggles />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::TopMenuBar zoom=zoom on_command=on_command toggles=toile_toggles />
+            </toile_chrome::EditingSurfaces>
         })}
         // Toile style / property inspector (toile-styles): a side panel shown only for
         // a non-empty selection. It reads the common style the canvas view publishes.
@@ -719,12 +727,14 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // path for z-order / lock. It writes debounced whole-style edits into
         // `toile_restyle`, which the view turns into `RestyleElements`.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::StyleInspector
-                model=toile_style_model
-                scope=toile_ctx_scope
-                on_command=on_command
-                restyle=toile_restyle
-            />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::StyleInspector
+                    model=toile_style_model
+                    scope=toile_ctx_scope
+                    on_command=on_command
+                    restyle=toile_restyle
+                />
+            </toile_chrome::EditingSurfaces>
         })}
         // Toile content-anchored floating selection toolbar (toile-styles): follows
         // the selection as the board pans/zooms (the canvas view republishes its
@@ -735,14 +745,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // edits the view turns into a live-based `RestyleElements` over the
         // selection.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::SelectionToolbar
-                bar=toile_float_bar
-                model=toile_style_model
-                on_command=on_command
-                on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
-                    toile_quick_style.set(Some(s))
-                })
-            />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::SelectionToolbar
+                    bar=toile_float_bar
+                    model=toile_style_model
+                    on_command=on_command
+                    on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
+                        toile_quick_style.set(Some(s))
+                    })
+                />
+            </toile_chrome::EditingSurfaces>
         })}
 
         // Toile comments (`toile-comments`): the board-wide thread list with the
@@ -751,20 +763,22 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // (`TOILE-UI-023`). They render what the canvas view read back from the
         // board, and hand every action to it as one intent.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::CommentsPanel
-                state=toile_comments.panel
-                list=toile_comments.list
-                open=toile_comments.open
-                on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
-                    toile_comments.intent.set(Some(i))
-                })
-            />
-            <toile_chrome::CommentComposer
-                draft=toile_comments.draft
-                on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
-                    toile_comments.intent.set(Some(i))
-                })
-            />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::CommentsPanel
+                    state=toile_comments.panel
+                    list=toile_comments.list
+                    open=toile_comments.open
+                    on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
+                        toile_comments.intent.set(Some(i))
+                    })
+                />
+                <toile_chrome::CommentComposer
+                    draft=toile_comments.draft
+                    on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
+                        toile_comments.intent.set(Some(i))
+                    })
+                />
+            </toile_chrome::EditingSurfaces>
         })}
 
         // Prose annotations: the comment panel and the suggestion popover,
@@ -782,13 +796,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // It holds no order of its own. It renders the frames the canvas view
         // read back from the board, and hands each edit to it as one intent.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::DeckPanel
-                state=toile_deck.panel
-                view=toile_deck.view
-                on_intent=Callback::new(move |i: toile_chrome::DeckIntent| {
-                    toile_deck.intent.set(Some(i))
-                })
-            />
+            <toile_chrome::EditingSurfaces present=present_toile>
+                <toile_chrome::DeckPanel
+                    state=toile_deck.panel
+                    view=toile_deck.view
+                    on_intent=Callback::new(move |i: toile_chrome::DeckIntent| {
+                        toile_deck.intent.set(Some(i))
+                    })
+                />
+            </toile_chrome::EditingSurfaces>
         })}
 
         // Multi-column sort dialog (`trame-sort`), from "Sort range...".

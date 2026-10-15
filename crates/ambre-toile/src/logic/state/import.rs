@@ -780,6 +780,78 @@ mod tests {
         assert_eq!(st.element_count(), 0);
     }
 
+    /// Covers `TOILE-IO-071`: an import onto a populated board leaves each
+    /// element it found there as it was.
+    ///
+    /// The file carries a group, so the apply pass regroups and restyles. The
+    /// stored map of the earlier element is compared whole, before and after.
+    #[test]
+    fn an_import_leaves_the_board_it_lands_on_alone() {
+        let mut st = ToileState::new();
+        let held = st
+            .handle_command(ToileCommand::CreateElement {
+                kind: crate::logic::model::ElementKind::Shape(crate::logic::model::ShapeKind::Rect),
+                at: Point::new(5.0, 5.0),
+                size: kurbo::Size::new(40.0, 40.0),
+                content: crate::logic::command::InitContent::None,
+                fill: None,
+                correlate: 0,
+            })
+            .display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            })
+            .expect("a minted id");
+        let before = st.element_map(&held).expect("held").get_deep_value();
+
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
+        st.handle_command(ToileCommand::ImportSvg {
+            bytes: svg.to_vec(),
+            at: Point::ZERO,
+        });
+        assert!(st.element_count() > 1, "the file landed");
+        assert_eq!(
+            st.element_map(&held).expect("held").get_deep_value(),
+            before
+        );
+    }
+
+    /// Covers `TOILE-IO-094`: each format no converter reads is refused by
+    /// its own name, and the board is left as it was.
+    #[test]
+    fn figma_and_miro_are_refused_by_name() {
+        let mut st = ToileState::new();
+        for (cmd, name) in [
+            (
+                ToileCommand::ImportFigma {
+                    bytes: b"{}".to_vec(),
+                    at: Point::ZERO,
+                },
+                "Figma",
+            ),
+            (
+                ToileCommand::ImportMiro {
+                    bytes: b"{}".to_vec(),
+                    at: Point::ZERO,
+                },
+                "Miro",
+            ),
+        ] {
+            let out = st.handle_command(cmd);
+            assert!(out.update.is_none(), "{name} wrote to the board");
+            assert!(
+                out.display
+                    .iter()
+                    .any(|e| matches!(e, ToileEvent::ImportFailed(why) if why.starts_with(name))),
+                "{name}: {:?}",
+                out.display
+            );
+        }
+        assert_eq!(st.element_count(), 0);
+    }
+
     #[test]
     fn image_import_defers_until_media_uploads() {
         let mut st = ToileState::new();
@@ -815,6 +887,55 @@ mod tests {
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), 0);
+    }
+
+    /// Covers `TOILE-IO-031`: a picture on the board reaches the page as its
+    /// pixels.
+    ///
+    /// The page reads the store the export fills from the board. With that
+    /// store it draws one 8x8 image; with an empty one it draws none.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_picture_reaches_the_page_as_pixels() {
+        use ambre_draw::testing::{DrawOp, RecordingSurface};
+
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::ImportImage {
+            bytes: solid_png(8, 8),
+            mime: "image/png".to_owned(),
+            at: Point::ZERO,
+        });
+        st.handle_service_event(
+            first_upload_id(&out),
+            RestEvent::MediaUploaded {
+                document_id: DocumentId::new(),
+                content_hash: "realhash".to_owned(),
+            },
+        );
+        let pages = st.pdf_pages(crate::logic::interop::PageSize::default());
+        let paint = |images: &crate::ui::render::ImageStore| {
+            let mut s = RecordingSurface::new();
+            crate::logic::interop::paint_page(
+                &mut s,
+                &pages[0],
+                ambre_canvas::Theme::Light.palette(),
+                &mut ambre_draw::FontContext::default(),
+                &mut ambre_canvas::TextCache::new(1.0),
+                images,
+            );
+            s.count(|op| {
+                matches!(
+                    op,
+                    DrawOp::DrawImage {
+                        width: 8,
+                        height: 8,
+                        ..
+                    }
+                )
+            })
+        };
+        assert_eq!(paint(&st.decoded_media()), 1, "the picture's pixels");
+        assert_eq!(paint(&crate::ui::render::ImageStore::new()), 0);
     }
 
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it

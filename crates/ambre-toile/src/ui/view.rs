@@ -1132,7 +1132,9 @@ impl ToileView {
             // full-opacity content.
             ToileEvent::PresentModeChanged(present) => {
                 self.present = present;
-                if !present {
+                if present {
+                    self.leave_editing();
+                } else {
                     self.transition = None;
                     self.anim_overrides.clear();
                 }
@@ -1664,6 +1666,70 @@ impl ToileView {
         self.handle_pointer_move(at.x, at.y);
     }
 
+    /// Follow the link under a primary press, if any (`toile-links`). The badge
+    /// always follows. The element follows only when it asks to: a modifier, or
+    /// presentation mode, where editing is off.
+    fn follow_link_under(&mut self, screen: Point, ctrl: bool) -> bool {
+        let world = self.cam.screen_to_world() * screen;
+        let target = self.badge_at(screen).or_else(|| {
+            link::wants_follow(ctrl, self.present)
+                .then(|| link::link_at(&self.display, world, self.pick()).map(|(_, l)| l))
+                .flatten()
+        });
+        let Some(link) = target else {
+            return false;
+        };
+        self.follow_link(LinkAction::of(&link));
+        true
+    }
+
+    /// Drop what editing left on screen as a presentation begins
+    /// (`TOILE-UI-083`). An open editor commits on the next paint, an embed
+    /// gives focus back, and a gesture in flight ends with no write.
+    fn leave_editing(&mut self) {
+        self.request_close_editor();
+        self.blur_embed();
+        self.machine.cancel();
+        self.preview = None;
+        self.gesture_overrides.clear();
+        self.panning = None;
+        self.selection.clear();
+        self.arrow = None;
+        self.arrow_drag = None;
+    }
+
+    /// The input a presentation still takes (`TOILE-UI-083`). The wheel moves
+    /// the camera, a primary press follows a link, and a release or a move
+    /// ends what began before. Every other input reaches no board handler.
+    fn present_input(&mut self, ev: &InputEvent) -> bool {
+        match ev {
+            InputEvent::Wheel {
+                dx,
+                dy,
+                delta_mode,
+                ctrl_key,
+            } => self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key),
+            InputEvent::PointerDown {
+                x, y, button, ctrl, ..
+            } => {
+                let screen = Point::new(*x, *y);
+                self.last_pointer = screen;
+                if *button == 0 {
+                    self.follow_link_under(screen, *ctrl);
+                }
+                true
+            }
+            InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
+            InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
+            InputEvent::KeyUp { key } => self.handle_key_up(key),
+            InputEvent::DoubleClick { .. } => true,
+            InputEvent::Key { .. }
+            | InputEvent::Text { .. }
+            | InputEvent::CompositionUpdate { .. }
+            | InputEvent::CompositionEnd { .. } => false,
+        }
+    }
+
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, ctrl: bool) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
@@ -1688,17 +1754,8 @@ impl ToileView {
         // asks to: a modifier, or presentation mode, where editing is off.
         // A plain click with the select tool falls through and selects, which is
         // what keeps a linked element editable (`TOILE-112`).
-        if button == 0 {
-            let world = self.cam.screen_to_world() * screen;
-            let target = self.badge_at(screen).or_else(|| {
-                link::wants_follow(ctrl, self.present)
-                    .then(|| link::link_at(&self.display, world, self.pick()).map(|(_, l)| l))
-                    .flatten()
-            });
-            if let Some(link) = target {
-                self.follow_link(LinkAction::of(&link));
-                return true;
-            }
+        if button == 0 && self.follow_link_under(screen, ctrl) {
+            return true;
         }
         // Space-drag or Hand tool or middle button: begin a pan.
         if self.space_down || self.machine.tool() == Tool::Hand || button == 1 {
@@ -2271,12 +2328,23 @@ impl ToileView {
     /// Re-read the deck after it changed, while the panel is open.
     #[cfg(target_arch = "wasm32")]
     fn reread_deck(&mut self) {
-        if self.deck.panel.get_untracked() {
-            self.send_edit(ToileCommand::ReadDeck);
-        }
+        let panel = self.deck.panel.get_untracked();
+        self.reread_deck_shown(panel);
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn reread_deck(&mut self) {}
+
+    /// The re-read itself, over whether the panel is open
+    /// (`TOILE-FEAT-098`). A closed panel reads nothing.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the panel signal that feeds it is wasm-only")
+    )]
+    fn reread_deck_shown(&mut self, panel: bool) {
+        if panel {
+            self.send_edit(ToileCommand::ReadDeck);
+        }
+    }
 
     /// Publish the frames the panel renders.
     #[cfg(target_arch = "wasm32")]
@@ -3857,6 +3925,11 @@ impl ToileView {
         // through to the browser would scroll the page under a frozen board.
         if self.is_busy() {
             return true;
+        }
+        // A presentation shows the slide and nothing to edit (`TOILE-UI-083`).
+        // It answers before the editor and the embed, which it closed on entry.
+        if self.present {
+            return self.present_input(ev);
         }
         // While an inline editor is open it gets first refusal on input
         // (`toile-tools`). `Some(consumed)` settles the event; `None` falls

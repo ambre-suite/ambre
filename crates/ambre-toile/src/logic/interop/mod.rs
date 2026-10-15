@@ -36,6 +36,8 @@ mod tests;
 
 pub use limits::Limits;
 pub use media::{ContentHash, MediaCache, MediaState, RequestOutcome};
+#[cfg(all(test, feature = "pdf"))]
+pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
 pub use pdf_export::{PageSize, PdfExportError, PdfPage, export_pdf};
 pub use raster::import_raster;

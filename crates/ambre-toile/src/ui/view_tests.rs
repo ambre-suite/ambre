@@ -2671,3 +2671,62 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
     rig.view.reread_comments_shown(false, None, &t);
     assert!(reads(&mut rig).is_empty(), "a closed panel reads nothing");
 }
+
+/// `TOILE-FEAT-098`: a deck that moved is read again while the panel is open,
+/// and a closed panel reads nothing.
+#[test]
+fn a_changed_deck_is_read_again_while_the_panel_is_open() {
+    let mut rig = Rig::new();
+    rig.sent();
+    rig.view.reread_deck_shown(true);
+    assert!(matches!(rig.sent().as_slice(), [ToileCommand::ReadDeck]));
+    rig.view.reread_deck_shown(false);
+    assert!(rig.sent().is_empty(), "a closed panel reads nothing");
+}
+
+/// `TOILE-UI-083`: a presentation takes no edit. A delete key, an undo chord,
+/// a selecting click and an opening double click each send nothing.
+#[test]
+fn a_presentation_takes_no_edit() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("a")]);
+    rig.answer(ToileEvent::PresentModeChanged(true));
+    assert!(rig.view.selection.is_empty(), "the selection is dropped");
+
+    rig.click(350.0, 50.0);
+    assert!(rig.view.selection.is_empty(), "a click selects nothing");
+    rig.view.selection = vec![eid("a")];
+    rig.key("Delete", false, false);
+    rig.key("z", true, false);
+    rig.key("d", true, false);
+    rig.double_click(50.0, 50.0);
+    assert!(rig.view.editor.is_none(), "no editor opens");
+    assert!(rig.sent().is_empty(), "a presentation sent an edit");
+    assert_eq!(rig.view.selection, [eid("a")], "the delete was refused");
+
+    rig.answer(ToileEvent::PresentModeChanged(false));
+    rig.key("Delete", false, false);
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::DeleteElements { .. }]
+    ));
+}
+
+/// `TOILE-UI-083`: an editor open as a presentation begins closes and keeps
+/// what was typed in it.
+#[test]
+fn a_presentation_closes_the_open_editor() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.type_text("!");
+    rig.answer(ToileEvent::PresentModeChanged(true));
+    rig.type_text("?");
+    rig.paint();
+    assert!(rig.view.editor.is_none(), "the editor closed");
+    assert!(matches!(
+        rig.sent().as_slice(),
+        [ToileCommand::SetText { text, .. }] if text == "hi!"
+    ));
+}

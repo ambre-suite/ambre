@@ -135,7 +135,7 @@ pub fn export_pdf(
 ///
 /// It names no surface type, so the page a test records is the page krilla
 /// writes.
-fn paint_page<S: DrawSurface>(
+pub(crate) fn paint_page<S: DrawSurface>(
     s: &mut S,
     pdf_page: &PdfPage,
     palette: &Palette,

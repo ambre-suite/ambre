@@ -672,11 +672,16 @@ impl ToileState {
                     "the file is written by the Logic thread, not by the board".to_owned(),
                 )])
             }
-            ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
-                // Figma / Miro converters land in a later interop slice, and
-                // until then nothing here touches the board (atomicity).
+            // No converter reads either format yet. The refusal names the one
+            // asked for and touches nothing (`TOILE-IO-094`).
+            ToileCommand::ImportFigma { .. } => {
                 ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
-                    "Figma / Miro import is not yet available".to_owned(),
+                    "Figma import is not yet available".to_owned(),
+                )])
+            }
+            ToileCommand::ImportMiro { .. } => {
+                ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
+                    "Miro import is not yet available".to_owned(),
                 )])
             }
             ToileCommand::SetViewport(vp) => {
@@ -868,6 +873,11 @@ impl ToileState {
     /// then this method reseeds the derived caches and broadcasts the delta like
     /// any structural edit. A no-op (empty stack) only reports availability.
     fn apply_history(&mut self, undo: bool) -> ToileOutcome {
+        // Read before the step: the deck and the notes come off the document,
+        // which the step has already moved once it returns.
+        let deck_before = self.slide_order();
+        let notes_before = self.active_notes();
+        let dangling_before = self.dangling_connectors();
         let changed = if undo {
             self.undo.undo()
         } else {
@@ -879,9 +889,6 @@ impl ToileState {
         if !changed {
             return ToileOutcome::display_only(Vec::new());
         }
-        let deck_before = self.slide_order();
-        let notes_before = self.active_notes();
-        let dangling_before = self.dangling_connectors();
         self.rebuild_caches();
         // `undo_state_event` last, so the central refresh in `handle_command`
         // sees it and skips the duplicate (`UNDO-006`).

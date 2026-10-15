@@ -405,13 +405,21 @@ pub(crate) fn apply_theme_attr(theme: ambre_canvas::Theme) {
 /// Attach a `contextmenu` listener to the canvas: right-click opens the DOM
 /// context menu at the click point (and suppresses the browser menu). Runs in
 /// a post-mount effect so the AppShell's `<canvas>` is already in the DOM.
-pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>) {
+/// While `silent` holds, a right-click opens nothing: a presenting board shows
+/// no editing surface.
+pub(crate) fn install_canvas_context_menu(
+    ctx_menu: RwSignal<Option<(f64, f64)>>,
+    silent: Signal<bool>,
+) {
     Effect::new(move |_| {
         let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
             return;
         };
         let cb = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |e: web_sys::MouseEvent| {
             e.prevent_default();
+            if silent.get_untracked() {
+                return;
+            }
             ctx_menu.set(Some((e.client_x() as f64, e.client_y() as f64)));
         });
         let _ = canvas.add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());

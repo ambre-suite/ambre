@@ -92,8 +92,13 @@ pub(super) fn decode_media(
 
     // Downscale to a placeholder thumbnail (preserves aspect ratio). PNG-encoded
     // so it round-trips losslessly and the UI can paint it before the full-res
-    // blob arrives.
-    let thumb_img = decoded.thumbnail(THUMB_MAX_EDGE, THUMB_MAX_EDGE);
+    // blob arrives. `thumbnail` also scales up, so a picture already within
+    // the edge is kept as it is rather than inflated in the document.
+    let thumb_img = if width.max(height) > THUMB_MAX_EDGE {
+        decoded.thumbnail(THUMB_MAX_EDGE, THUMB_MAX_EDGE)
+    } else {
+        decoded
+    };
     let mut thumb = Vec::new();
     thumb_img
         .write_to(&mut Cursor::new(&mut thumb), ImageFormat::Png)
@@ -217,6 +222,15 @@ mod tests {
         // The thumbnail decodes back to something within the max edge.
         let thumb = image::load_from_memory(&blob.thumb).unwrap();
         assert!(thumb.width() <= THUMB_MAX_EDGE && thumb.height() <= THUMB_MAX_EDGE);
+    }
+
+    /// A picture smaller than the thumbnail edge keeps its own size: the
+    /// placeholder never holds more pixels than the picture.
+    #[test]
+    fn a_small_picture_is_not_inflated() {
+        let blob = decode_media(&solid_png(8, 4), &Limits::default(), pending_hash(0)).unwrap();
+        let thumb = image::load_from_memory(&blob.thumb).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (8, 4));
     }
 
     #[test]

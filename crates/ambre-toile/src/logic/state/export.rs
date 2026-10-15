@@ -67,7 +67,18 @@ impl ToileState {
     /// An empty board still exports: a valid, empty SVG is an answer, and
     /// refusing one would leave the user wondering whether the gesture arrived.
     pub(super) fn export_svg_document(&self) -> ToileOutcome {
-        let export = export_svg(&self.export_elements());
+        let mut export = export_svg(&self.export_elements());
+        // A connector never reaches the serializer, so the board walk names
+        // each one itself rather than lose it in silence (`TOILE-IO-025`).
+        let connectors = self
+            .layer_order()
+            .iter()
+            .filter(|node| matches!(node, NodeId::Connector(_)))
+            .count();
+        export.skipped.extend(
+            std::iter::repeat_n("connector: no SVG shape expresses it", connectors)
+                .map(str::to_owned),
+        );
         ToileOutcome::display_only(vec![ToileEvent::ExportComplete {
             filename: SVG_FILENAME.to_owned(),
             data: export.document.into_bytes(),
@@ -78,9 +89,9 @@ impl ToileState {
     }
 
     /// Every element of the board, in paint order, as the serializer's shape.
-    /// `TOILE-IO-025` records two gaps.
     ///
-    /// * Connectors are not elements, so they do not appear here.
+    /// * Connectors are not elements, so they do not appear here. The caller
+    ///   reports them (`TOILE-IO-025`).
     /// * A group carries no geometry of its own, and the serializer skips it.
     ///   Its members therefore export flat.
     fn export_elements(&self) -> Vec<ExportElement> {
@@ -176,7 +187,7 @@ impl ToileState {
     /// entry's inline thumbnail, decoded to pixels. An entry whose bytes do not
     /// decode is left out, so its element paints the placeholder box rather than
     /// failing the export.
-    fn decoded_media(&self) -> crate::ui::render::ImageStore {
+    pub(super) fn decoded_media(&self) -> crate::ui::render::ImageStore {
         let mut out = crate::ui::render::ImageStore::new();
         let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
             return out;
@@ -257,6 +268,55 @@ mod tests {
             svg.contains("<rect x=\"10\" y=\"20\" width=\"30\" height=\"40\""),
             "the rect leaves at its own place: {svg}"
         );
+    }
+
+    /// Covers `TOILE-IO-025`: each connector on the board is named in the
+    /// report, and the two shapes it joins still leave.
+    #[test]
+    fn a_connector_is_named_in_the_report() {
+        use crate::logic::model::{Anchor, EndCaps, PathType};
+
+        let mut st = ToileState::new();
+        let ids: Vec<_> = [0.0, 100.0]
+            .into_iter()
+            .map(|x| {
+                st.handle_command(ToileCommand::CreateElement {
+                    kind: ElementKind::Shape(ShapeKind::Rect),
+                    at: Point::new(x, 0.0),
+                    size: Size::new(30.0, 30.0),
+                    content: InitContent::None,
+                    fill: None,
+                    correlate: 0,
+                })
+                .display
+                .into_iter()
+                .find_map(|e| match e {
+                    ToileEvent::ElementCreated { id, .. } => Some(id),
+                    _ => None,
+                })
+                .expect("a minted id")
+            })
+            .collect();
+        st.handle_command(ToileCommand::CreateConnector {
+            from: ids[0].clone(),
+            from_anch: Anchor::Right,
+            to: ids[1].clone(),
+            to_anch: Anchor::Left,
+            path_type: PathType::Straight,
+            arrows: EndCaps {
+                start: false,
+                end: true,
+            },
+        });
+
+        let out = st.handle_command(ToileCommand::ExportSvg);
+        let Some(ToileEvent::ExportComplete { data, skipped, .. }) = out.display.first() else {
+            panic!("the export answers with the file: {:?}", out.display);
+        };
+        assert_eq!(skipped.len(), 1, "{skipped:?}");
+        assert!(skipped[0].contains("connector"), "{skipped:?}");
+        let svg = String::from_utf8(data.clone()).expect("the document is text");
+        assert_eq!(svg.matches("<rect").count(), 2, "{svg}");
     }
 
     /// Reading the board twice yields the same bytes, and leaves the board as it

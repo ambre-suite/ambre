@@ -3519,6 +3519,63 @@ fn present_mode_toggle_is_local() {
     assert!(!st.playback().0, "ExitPresent leaves present mode");
 }
 
+/// `TOILE-FEAT-094`: leaving the presentation stops this viewer's broadcast.
+/// The role is dropped, the panel hears it, and the peers get a frame that
+/// names no slide.
+#[test]
+fn leaving_the_presentation_stops_the_broadcast() {
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    st.handle_command(ToileCommand::EnterPresent { focus: true });
+    st.handle_command(ToileCommand::SetPresentBroadcast(true));
+    assert!(st.is_broadcasting());
+
+    let out = st.handle_command(ToileCommand::ExitPresent);
+    assert!(!st.is_broadcasting(), "the role outlived the presentation");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::PresentBroadcastChanged(false)))
+    );
+    let frame = out.ephemeral.expect("the peers hear it");
+    let mut rx = ToileState::new();
+    let presenter = UserId::new();
+    rx.apply_ephemeral(presenter, &frame);
+    assert_eq!(
+        rx.peer_presence(&presenter).and_then(|p| p.present_slide),
+        None
+    );
+}
+
+/// `TOILE-FEAT-098`: each of the four paths that move the deck says so. A
+/// local write, a history step, a remote delta and a deleted frame each emit
+/// `DeckChanged`, which is what the open panel re-reads on.
+#[test]
+fn every_path_that_moves_the_deck_says_so() {
+    let said = |events: &[ToileEvent]| events.iter().any(|e| matches!(e, ToileEvent::DeckChanged));
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let mut peer = ToileState::new();
+    peer.apply_remote(&st.export_snapshot());
+
+    let write = st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone()],
+    });
+    assert!(said(&write.display), "a local write");
+    let delta = write.update.expect("a deck write is a delta");
+    assert!(said(&peer.apply_remote(&delta)), "a remote delta");
+
+    assert!(
+        said(&st.handle_command(ToileCommand::Undo).display),
+        "a history step"
+    );
+    st.handle_command(ToileCommand::Redo);
+    let deleted = st.handle_command(ToileCommand::DeleteElements { ids: vec![b] });
+    assert!(said(&deleted.display), "a deleted frame");
+    assert_eq!(st.slide_order(), [a]);
+}
+
 #[test]
 fn playback_is_not_synced() {
     // Two peers sharing a deck: A drives its own playback; B never sees it, since

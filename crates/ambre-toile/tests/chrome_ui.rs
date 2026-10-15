@@ -30,9 +30,9 @@ use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView, ElementId,
-    ToileEvent,
+    PresencePayload, PresenceUpdate, ToileCommand, ToileEvent,
 };
-use ambre_bus::{AppEvent, UiEvent};
+use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
@@ -40,8 +40,9 @@ use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
-    FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar, StatusBar,
-    StyleEdit, StyleModel, Toggles, ToolPalette, TopMenuBar, UNDO,
+    EditingSurfaces, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar,
+    StatusBar, StyleEdit, StyleModel, Toggles, ToileIntent, ToileRelay, ToolPalette, TopMenuBar,
+    UNDO,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -1160,4 +1161,114 @@ async fn a_dropped_comment_opens_its_composer_where_it_clicked() {
         "the field has the focus"
     );
     root.remove();
+}
+
+/// `TOILE-UI-083`: the editing chrome leaves the DOM while the board presents,
+/// and comes back when the presentation ends.
+#[wasm_bindgen_test]
+async fn the_editing_chrome_leaves_while_the_board_presents() {
+    let present = RwSignal::new(false);
+    let active = RwSignal::new(Tool::Select);
+    let root = mount_in_container(move || {
+        view! {
+            <EditingSurfaces present=present>
+                <ToolPalette active=active />
+            </EditingSurfaces>
+        }
+    });
+    let shown = |root: &web_sys::Element| root.child_element_count() > 0;
+    assert!(shown(&root), "the palette is mounted");
+    present.set(true);
+    leptos::task::tick().await;
+    assert!(!shown(&root), "a presentation unmounts the palette");
+    present.set(false);
+    leptos::task::tick().await;
+    assert!(shown(&root), "the palette comes back");
+    root.remove();
+}
+
+/// A relay over fresh signals, as the launcher builds one.
+fn relay() -> ToileRelay {
+    ToileRelay {
+        find_result: RwSignal::new(None),
+        sel_stats: RwSignal::new(None),
+        present: RwSignal::new(false),
+        presenter_index: RwSignal::new(0),
+        presenter_count: RwSignal::new(0),
+        presenter_notes: RwSignal::new(String::new()),
+        presenter_frame: RwSignal::new(None),
+        broadcasting: RwSignal::new(false),
+        following: RwSignal::new(None),
+        presenter_peer: RwSignal::new(None),
+    }
+}
+
+/// `ev` as the launcher hands it to the relay.
+fn board_event(ev: ToileEvent) -> UiEvent {
+    UiEvent::Viewport {
+        document_id: DocumentId::new(),
+        event: AppEvent::Toile(ev),
+    }
+}
+
+/// One peer of the live set, broadcasting `slide` or not.
+fn peer(user_id: UserId, slide: Option<usize>) -> PresenceUpdate {
+    PresenceUpdate {
+        user_id,
+        presence: PresencePayload {
+            present_slide: slide,
+            ..Default::default()
+        },
+    }
+}
+
+/// `TOILE-UI-315`: the presenter signal names a peer only while that peer
+/// broadcasts a slide. A peer that stops, or leaves the live set, names nobody.
+#[wasm_bindgen_test]
+fn the_presenter_is_named_only_while_it_broadcasts() {
+    let relay = relay();
+    let (alice, bob) = (UserId::new(), UserId::new());
+    relay.absorb(&board_event(ToileEvent::PeerPresence(vec![
+        peer(bob, None),
+        peer(alice, Some(2)),
+    ])));
+    assert_eq!(relay.presenter_peer.get_untracked(), Some(alice));
+    relay.absorb(&board_event(ToileEvent::PeerPresence(vec![
+        peer(bob, None),
+        peer(alice, None),
+    ])));
+    assert_eq!(relay.presenter_peer.get_untracked(), None, "alice stopped");
+    relay.absorb(&board_event(ToileEvent::PeerPresence(vec![peer(
+        alice,
+        Some(0),
+    )])));
+    relay.absorb(&board_event(ToileEvent::PeerPresence(Vec::new())));
+    assert_eq!(relay.presenter_peer.get_untracked(), None, "alice left");
+}
+
+/// `TOILE-FEAT-091`: a note edit with no frame on screen becomes no command.
+/// Once a slide names its frame, the same edit lands on that frame.
+#[wasm_bindgen_test]
+fn a_note_edit_with_no_frame_on_screen_is_refused() {
+    let relay = relay();
+    let edit = || {
+        ToileIntent::Present(PresenterIntent::EditNotes {
+            base: String::new(),
+            delta: TextDelta {
+                at: 0,
+                delete: 0,
+                insert: "hi".to_owned(),
+            },
+        })
+    };
+    assert!(
+        relay.command(edit()).is_none(),
+        "an edit with no frame left"
+    );
+    let frame = ElementId("f".to_owned());
+    relay.presenter_frame.set(Some(frame.clone()));
+    assert!(matches!(
+        relay.command(edit()),
+        Some(AppCommand::Toile(ToileCommand::EditNotes { frame: f, .. })) if f == frame
+    ));
 }

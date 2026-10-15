@@ -692,4 +692,143 @@ mod pdf_tests {
         let st = ToileState::new();
         assert!(st.pdf_pages(PageSize::default()).is_empty());
     }
+
+    /// Create a rect shape at `(x, y)` sized `w x h` and return its minted id.
+    fn shape_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> ElementId {
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(crate::logic::model::ShapeKind::Rect),
+            at: Point::new(x, y),
+            size: Size::new(w, h),
+            content: InitContent::None,
+            fill: None,
+            correlate: 0,
+        });
+        out.display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            })
+            .expect("shape creation yields an id")
+    }
+
+    /// `r` mapped through `a`, the camera's scale and translate, as the page
+    /// maps its clip.
+    fn mapped(a: kurbo::Affine, r: kurbo::Rect) -> kurbo::Rect {
+        kurbo::Rect::from_points(a * Point::new(r.x0, r.y0), a * Point::new(r.x1, r.y1))
+    }
+
+    /// Record one page onto a surface that keeps every op.
+    fn record(page: &crate::logic::interop::PdfPage) -> ambre_draw::testing::RecordingSurface {
+        let mut s = ambre_draw::testing::RecordingSurface::new();
+        crate::logic::interop::paint_page(
+            &mut s,
+            page,
+            ambre_canvas::Theme::Light.palette(),
+            &mut ambre_draw::FontContext::default(),
+            &mut ambre_canvas::TextCache::new(1.0),
+            &crate::ui::render::ImageStore::new(),
+        );
+        s
+    }
+
+    /// Covers `TOILE-IO-030`: a shape just under the frame is in view of the
+    /// page camera, and the page clip leaves it out.
+    ///
+    /// A wide frame on a 16:9 page leaves room above and below it, so the
+    /// neighbour is drawn by the walk. The clip is the frame's own rect.
+    #[test]
+    fn the_page_clip_leaves_the_neighbour_out() {
+        use ambre_bus::app::toile::DisplayNode;
+        use ambre_draw::testing::DrawOp;
+
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 50.0);
+        let near = shape_at(&mut st, 0.0, 60.0, 200.0, 20.0);
+        st.handle_command(ToileCommand::SetSlideOrder {
+            order: vec![a.clone()],
+        });
+
+        let pages = st.pdf_pages(PageSize::default());
+        let page = &pages[0];
+        assert!(
+            page.viewport
+                .nodes
+                .iter()
+                .any(|n| matches!(n, DisplayNode::Element(e) if e.id == near)),
+            "the neighbour is in view of the page camera"
+        );
+        let to_page = page.camera.world_to_screen();
+        let frame = mapped(to_page, st.bounds_of(&a).expect("frame bounds"));
+        let neighbour = mapped(to_page, st.bounds_of(&near).expect("shape bounds"));
+
+        let ops = record(page);
+        let Some(DrawOp::PushClip { rect }) = ops.ops().first() else {
+            panic!("the page opens with its clip: {:?}", ops.ops());
+        };
+        assert_eq!(*rect, frame, "the clip is the frame rect");
+        assert!(
+            rect.intersect(neighbour).area() <= 0.0,
+            "the clip keeps part of the neighbour: {rect:?} {neighbour:?}"
+        );
+    }
+
+    /// Covers `TOILE-IO-040`: the pages follow the deck, in either order.
+    ///
+    /// Two frames are read back in both orders, so a builder that sorted by
+    /// id or by creation fails one of the two.
+    #[test]
+    fn the_pages_follow_the_playback_order() {
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
+        let b = frame_at(&mut st, 500.0, 0.0, 200.0, 100.0);
+        let ra = st.bounds_of(&a);
+        let rb = st.bounds_of(&b);
+
+        for order in [vec![b.clone(), a.clone()], vec![a.clone(), b.clone()]] {
+            st.handle_command(ToileCommand::SetSlideOrder {
+                order: order.clone(),
+            });
+            let clips: Vec<_> = st
+                .pdf_pages(PageSize::default())
+                .iter()
+                .map(|p| p.clip)
+                .collect();
+            let want: Vec<_> = order
+                .iter()
+                .map(|f| if *f == a { ra } else { rb })
+                .collect();
+            assert_eq!(clips, want, "deck {order:?}");
+        }
+    }
+
+    /// Covers `TOILE-IO-047`: a page draws no grid line, where the same
+    /// viewport walked for editing does.
+    #[test]
+    fn a_page_carries_no_grid() {
+        use ambre_draw::testing::{DrawOp, RecordingSurface};
+
+        let mut st = ToileState::new();
+        let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
+        st.handle_command(ToileCommand::SetSlideOrder { order: vec![a] });
+        let pages = st.pdf_pages(PageSize::default());
+
+        let page = record(&pages[0]);
+        let mut board = RecordingSurface::new();
+        crate::ui::render::paint_content(
+            &mut board,
+            &pages[0].viewport,
+            &pages[0].camera,
+            ambre_canvas::Theme::Light.palette(),
+            &mut ambre_draw::FontContext::default(),
+            &mut ambre_canvas::TextCache::new(1.0),
+            None,
+            &crate::ui::render::ImageStore::new(),
+            &std::collections::HashMap::new(),
+            false,
+        );
+        let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
+        assert!(lines(&board) > 0, "the editing walk draws the grid");
+        assert_eq!(lines(&page), 0, "the page drew a grid line");
+    }
 }

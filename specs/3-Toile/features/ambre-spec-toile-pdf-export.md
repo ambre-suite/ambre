@@ -19,8 +19,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-038` | `IO` | The bytes an export hands back MUST be a PDF document. | this spec section 3 | `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` -- it asserts the `%PDF` header. Its second assertion, a length over 400 bytes, holds no row: a page with no content clears it too, section 6 | none | verified |
-| `TOILE-IO-030` | `IO` | A page MUST carry its own slide alone: content outside the frame MUST NOT reach it. | this spec section 3 | none | unheld -- the clip is what would hold it: two rows assert that a page carries a clip or does not (`TOILE-IO-042`, `TOILE-IO-044`), and nothing asserts that the clip removes a neighbouring element, section 6; lands with the `Toile presentation and file formats held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-IO-031` | `IO` | A picture MUST reach the page as its pixels, never as a placeholder box. | this spec section 3 | none | unheld -- the export now fills the store from each media entry's inline thumbnail, and no test puts a picture on a board and reads the page back, section 6; lands with the `Toile presentation and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-030` | `IO` | A page MUST carry its own slide alone: content outside the frame MUST NOT reach it. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::the_page_clip_leaves_the_neighbour_out` -- a shape in view of the page camera lies wholly outside the clip, which is the frame rect mapped to the page | none | verified |
+| `TOILE-IO-031` | `IO` | A picture MUST reach the page as its pixels, never as a placeholder box. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_picture_reaches_the_page_as_pixels` -- an imported picture is drawn as an image of its own size from the store the export fills, and as none from an empty store | none | verified |
 | `TOILE-IO-100` | `IO` | A picture MUST reach the page at the resolution it was stored at. | this spec section 3 | not built | unbuilt -- lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6). The store the export fills holds thumbnails alone, capped at a 256 px edge, and the full blob is ciphertext on the relay that no path on this thread fetches and opens | unimplemented |
 
 ### 1.2 Export the deck as a PDF
@@ -31,7 +31,7 @@ characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pa
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-039` | `POST` | An export MUST produce one page per slide the deck still resolves. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::one_page_per_slide` -- it asserts two pages for a deck of two slides | none | verified |
-| `TOILE-IO-040` | `POST` | The pages MUST follow the deck's playback order. | this spec section 3 | none | unheld -- the test above builds its deck in creation order and reads no page back, so a walk sorting by id would pass it unchanged, section 6; lands with the `Toile presentation and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-040` | `POST` | The pages MUST follow the deck's playback order. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::the_pages_follow_the_playback_order` -- the page clips are read back for one deck in both orders, so a sort by id or by creation fails one | none | verified |
 | `TOILE-IO-041` | `POST` | A slide whose frame is gone MUST produce no page. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::dangling_frame_is_skipped` -- it asserts one page for a deck of one live entry and one dangling one | none | verified |
 | `TOILE-IO-042` | `POST` | Every slide page MUST be clipped. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::one_page_per_slide` -- its second assertion: every page of the deck carries a clip. Which rect it carries is read by no test, and what the clip removes is `TOILE-IO-030` | none | verified |
 | `TOILE-IO-043` | `POST` | A board whose deck is empty MUST export as a single page. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::empty_deck_falls_back_to_one_page` -- it asserts one page for a board that carries a frame and no deck | none | verified |
@@ -39,7 +39,7 @@ characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pa
 | `TOILE-IO-045` | `POST` | A board with no content at all MUST produce no page. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::empty_board_yields_no_pages` -- it asserts the empty page list on a fresh board | none | verified |
 | `TOILE-IO-029` | `POST` | A user MUST be able to export the deck as a PDF. | this spec section 4 | `ambre_logic::dispatch::tests::a_deck_export_answers_with_the_file` -- it sends the menu's own command to a live board and reads the named file out of the answer; `ambre_toile::ui::menu_bar::tests::file_menu_exports_resolve_to_board_commands` -- the entry that sends it; `ambre_toile::logic::state::export::tests::the_deck_exports_as_a_pdf_document` -- the Logic handler | none | verified |
 | `TOILE-IO-046` | `FRAME` | An export MUST NOT move the viewer's own camera. | this spec section 3 | structural -- the page builder takes the board by shared reference and mints a fresh transform per page, and the viewport it would move is a plain field, not a container that mutates through such a reference | none | verified |
-| `TOILE-IO-047` | `FRAME` | A page MUST NOT carry the board grid. | this spec section 3 | none | unheld -- the walk is driven in present mode, which is what drops the grid, and no test reads a page's content back; lands with the `Toile presentation and file formats held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-047` | `FRAME` | A page MUST NOT carry the board grid. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::a_page_carries_no_grid` -- the page draws no grid line, where the same viewport walked for editing draws some | none | verified |
 | `TOILE-IO-099` | `FRAME` | An export MUST NOT stall the edits on the board it reads. | this spec section 4 | not built | unbuilt -- lands with the `An export does not freeze the board` Story (`ambre-roadmap.md` E6). The handler runs to completion inside the Logic thread's command loop, so the stall lasts exactly as long as the export does | unimplemented |
 | `TOILE-IO-048` | `FAIL` | An export with no page MUST refuse and say so, rather than hand back an empty file. | this spec section 3 | `ambre_toile::logic::interop::pdf_export::tests::empty_pages_is_an_error` -- it asserts the `Empty` refusal on an empty page list; `ambre_toile::tests::chrome_ui::a_refused_export_says_why` -- the toast the refusal raises | none | verified |
 
@@ -48,11 +48,11 @@ characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pa
   document stops accepting edits (`TOILE-IO-099`) -- section 6.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 10 `verified`, 4 `untested`, 2 `unimplemented`. What is counted here is the pagination,
-  the clip and what a page shows; the shared rules and their coverage are `ambre-spec-pdf-export.md`. What
-  holds is the walk that produces a file at all. What is loose is what a page shows -- the clip, the pixels,
-  the grid -- and the deck order, which no test reads back. Each of the four wants a reader on the finished
-  file, and every test here stops at the `%PDF` header.
+* **Verification.** 14 `verified`, 2 `unimplemented`. What is counted here is the pagination, the clip and
+  what a page shows; the shared rules and their coverage are `ambre-spec-pdf-export.md`. What holds is the
+  walk that produces a file, and what a page shows: the clip, the pixels, the grid and the deck order. Each
+  of these four is read off the page recorded on a test surface, which is the walk krilla writes. What is
+  loose is the export's cost: it freezes the board while it runs and no benchmark times it.
 
 ---
 
@@ -63,7 +63,7 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| reorders the deck | exports it | one order, converged | Bob's file follows Alice's order (`TOILE-IO-040`) | none: no test reads a page order back |
+| reorders the deck | exports it | one order, converged | Bob's file follows Alice's order (`TOILE-IO-040`) | `logic::state::presentation::pdf_tests::the_pages_follow_the_playback_order` |
 | deletes a frame that is a slide | exports the deck | the dead entry, still in the deck | a file with one page fewer (`TOILE-IO-041`), and a blank slide in playback | `logic::state::presentation::pdf_tests::dangling_frame_is_skipped` |
 | exports a board with no deck | watches | nothing | one unclipped page framing the whole board (`TOILE-IO-043`, `TOILE-IO-044`) | `logic::state::presentation::pdf_tests::empty_deck_falls_back_to_one_page` |
 ---
@@ -161,7 +161,7 @@ pure-vector file -- are `ambre-spec-pdf-export.md section 5`. Toile's own:
 
 The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
 
-* **A page is no sharper than the board is on screen** (`TOILE-IO-031`, `TOILE-IO-100`). The store the export
+* **A page is no sharper than the board is on screen** (`TOILE-IO-100`). The store the export
   reads is filled from each media entry's inline thumbnail, capped at a 256 px edge. That is every pixel this
   thread holds: the full-resolution blob is ciphertext on the relay, and no path on this side fetches and
   opens it. A picture therefore reaches the page, and reaches it at thumbnail resolution -- enough to read on
@@ -182,10 +182,6 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
   prescribes for Prose's interop wants the same treatment here. It is not a Cargo feature that delivers it:
   the build produces one wasm artifact per instance. Deferring the writer needs a second artifact fetched on
   the first export, which no build step produces.
-* **The clip is asserted present, never effective** (`TOILE-IO-030`). Two assertions check that a slide page
-  carries a clip (`TOILE-IO-042`) and that the fallback page does not (`TOILE-IO-044`). Neither reads which
-  rect the clip is. None puts an element outside the frame and checks that the page does not carry it, which
-  is the whole reason the clip exists.
 * **A page count is claimed in a comment and asserted nowhere** (`TOILE-IO-039`). The multi-page test says "a
   page count of N produces N pages", then asserts the `%PDF` header alone. A writer that emitted one page for
   three would pass it. The count that does hold comes from the page builder, one layer earlier, where two
@@ -195,16 +191,9 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
   longer than 400 bytes and its comment reads that as proof the rect reached the surface. A PDF
   carrying one empty page clears that length on its structure alone, so the assertion separates
   nothing and holds no row.
-* **The deck order is written and never read back** (`TOILE-IO-040`). The pagination test creates its two
-  frames in deck order and asserts a count, not a sequence. It reads no page's clip, and the two frames are
-  otherwise indistinguishable. A builder that sorted the deck by id would pass it, and the deck order is the
-  one thing an audience notices.
 * **An empty board has no file** (`TOILE-IO-045`, `TOILE-IO-048`). The builder returns no page for a board
   with no content, and the assembler refuses an empty page list. So a user with an empty board gets a refusal
   rather than a blank document. Each half is asserted on its own; nothing calls them in sequence, because
   nothing calls either.
-* **A picture is a grey box on the page** (`TOILE-IO-031`). The walk paints a placeholder for any hash whose
-  pixels it cannot find. The store it consults is built empty and never filled, on screen and on the page
-  alike (`features/ambre-spec-toile-media.md section 6`).
 * **Speaker notes reach no page.** The corpus offered them as page annotations. Nothing writes an
   annotation, and the notes exist on the deck already.
