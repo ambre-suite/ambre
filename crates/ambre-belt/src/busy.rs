@@ -11,19 +11,9 @@ use crate::page::{Page, Paused};
 pub const FLOOD: usize = 1200;
 
 /// Pauses the page's Logic worker (`Page::pause_worker`).
-///
-/// A worker idle since its boot does not always stop: most runs drained a
-/// flood sent after the pause. One command first, so the worker is awake
-/// when the pause reaches it. With it, every run stopped.
 pub async fn pause_logic(page: &Page) -> Paused {
-    clear_cell(page, 1).await;
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let workers = page.workers().await;
-    let (logic, _) = workers
-        .iter()
-        .find(|(_, title)| title == "logic")
-        .unwrap_or_else(|| panic!("no Logic worker among {workers:?}"));
-    page.pause_worker(logic).await
+    let logic = page.worker("logic").await;
+    page.pause_worker(&logic).await
 }
 
 /// Presses `Delete` on the active cell `n` times. Each press clears the

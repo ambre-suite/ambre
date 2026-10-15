@@ -83,6 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-154` | `POST` | Undo and redo MUST reach the board. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` -- each id mapping to its board command | none | verified |
 | `TOILE-UI-155` | `POST` | The presentation entry MUST ask to enter presentation mode with focus. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` -- the command and the focus flag | none | verified |
 | `TOILE-UI-156` | `FRAME` | A bar entry that reaches the board MUST NOT read the selection. | this spec section 4 | type-level -- the bar resolver takes a command id alone, so undo, redo and present cannot depend on what is selected | none | verified |
+| `TOILE-UI-395` | `POST` | A command chosen from the palette MUST apply before the next input the board takes. | this spec section 2 | `ambre_belt::toile::tests::a_palette_command_runs_before_the_click_that_follows_it` -- a click sent as the palette closes lands on the rectangle only once the zoom applies | none | verified |
 
 ### 1.5 Zoom from the View menu
 
@@ -99,10 +100,11 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 53 `verified`, 0 `failing`, 0 `untested`. What holds is the entry set, the omission of
-  what does not apply, and a scope read from the whole selection (`TOILE-UI-134`). The right-click is
-  driven on the host view, and so is each zoom entry. A shown chord is pressed against its entry on a
-  twin board. An unknown id is refused, and an entry that changes nothing says why.
+* **Verification.** 54 `verified`, 0 `failing`, 0 `untested`. What holds is the entry set, the omission of
+  what does not apply, and a scope read from the whole selection (`TOILE-UI-134`). The right-click and
+  each zoom entry are driven on the host view, and a shown chord is pressed against its entry on a
+  twin board. An unknown id is refused, and an entry that changes nothing says why. The browser tier
+  holds a palette command against the click that follows it.
 
 ---
 

@@ -1763,6 +1763,7 @@ impl ToileView {
         // pointerdown fires first, so the scope signal is fresh when the entry
         // `Memo` recomputes.
         if button == 2 {
+            self.select_all_pending = false;
             self.handle_right_click(screen);
             return true;
         }
@@ -1810,6 +1811,9 @@ impl ToileView {
             self.needs_full = true;
             return true;
         }
+        // A press that the tool takes changes the selection. A select-all
+        // answer that comes after it must not overwrite it (`TOILE-UI-396`).
+        self.select_all_pending = false;
         let prev_selection = self.selection.clone();
         let out = self.machine.pointer_down(
             world,
@@ -2979,6 +2983,9 @@ impl ToileView {
                 if !self.selection.is_empty() {
                     self.selection.clear();
                 }
+                // A select-all still in flight would select again once its
+                // answer comes (`TOILE-UI-396`).
+                self.select_all_pending = false;
                 // An arrow deselects on the same Escape, and an in-flight re-aim
                 // is abandoned without a write (`toile-connectors`).
                 self.arrow = None;
@@ -3966,6 +3973,12 @@ impl ToileView {
         if self.is_busy() {
             return true;
         }
+        // The chrome arms a tool and runs a palette command at once, and the
+        // board reads both at its next frame. An input that comes first must
+        // still see them, so the board reads them now (`TOILE-UI-394`,
+        // `TOILE-UI-395`).
+        self.apply_active_tool();
+        self.drain_menu_cmd();
         // A presentation shows the slide and nothing to edit (`TOILE-UI-083`).
         // It answers before the editor and the embed, which it closed on entry.
         if self.present {

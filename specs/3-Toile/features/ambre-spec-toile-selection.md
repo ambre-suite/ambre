@@ -75,6 +75,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | `ambre_toile::logic::convergence_tests::board_ids_returns_every_element` -- Logic answers every element id, off-screen included, and select-all selects that list; `::board_ids_covers_an_element_the_order_omits` -- the answer reads the element map, so an element the `layers` order omits is still in it; `ambre_toile::ui::view::view_tests::each_select_all_asks_for_the_board_as_it_is_now` -- each select-all asks Logic again, so an element a peer adds since is in the next one | none | verified |
 | `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | `ambre_toile::logic::convergence_tests::board_ids_excludes_locked_and_group_nodes` -- the board's id list carries the unlocked members and neither a locked element nor a group node | none | verified |
 | `TOILE-UI-242` | `FRAME` | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | structural -- the walk writes the id list and the redraw flag, and no other field | none | verified |
+| `TOILE-UI-396` | `POST` | A select-all answer MUST NOT overwrite a selection change the user makes after asking for it. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_selection_change_before_the_select_all_answer_wins` -- an `Escape`, then a click on the empty board, each before the answer: the selection stays empty | none | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of
   `ambre-spec-budgets.md section 2`. It is a walk over the culled set, which the spatial index
@@ -83,7 +84,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 33 `verified`, 0 `untested`. What holds is the geometry and select-all with the
+* **Verification.** 34 `verified`, 0 `untested`. What holds is the geometry and select-all with the
   pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A click,
   a marquee, a double-click into a scope and `Escape` are driven through the view. A hairline answers
   one screen reach at every zoom, and a multi-selection is painted.

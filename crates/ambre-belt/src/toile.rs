@@ -4,7 +4,7 @@
 mod tests {
     use serde_json::json;
 
-    use crate::page::{Page, STEP, drag, drag_still, key};
+    use crate::page::{Page, STEP, drag, drag_still, key, palette_row_js};
 
     /// Draws a rectangle with the shape tool from `a` to `b`, in canvas pixels.
     /// Then selects it with the select tool and waits until the board
@@ -41,6 +41,89 @@ mod tests {
     async fn deselect(page: &Page) {
         page.browser.perform(json!([key("\u{E00C}")])).await;
         page.wait_announced("Nothing selected").await;
+    }
+
+    /// `TOILE-UI-394`: the tool key and the drag are dispatched in one task, so
+    /// no frame runs between them. The drag still draws the rectangle. Driven
+    /// input cannot show this: the driver lets a frame pass between two ticks.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_tool_key_arms_the_press_that_follows_it() {
+        let page = Page::new_document("toile").await;
+        page.focus_canvas().await;
+        page.browser
+            .script_async(
+                "const done = arguments[0]; const c = document.querySelector('canvas'); \
+                 const b = c.getBoundingClientRect(); \
+                 const at = (x, y) => ({ clientX: b.left + x, clientY: b.top + y, bubbles: true, \
+                   pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }); \
+                 document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true })); \
+                 document.activeElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'r', code: 'KeyR', bubbles: true })); \
+                 c.dispatchEvent(new PointerEvent('pointerdown', at(300, 200))); \
+                 c.dispatchEvent(new PointerEvent('pointermove', at(360, 250))); \
+                 c.dispatchEvent(new PointerEvent('pointermove', at(420, 300))); \
+                 c.dispatchEvent(new PointerEvent('pointerup', { ...at(420, 300), buttons: 0 })); \
+                 done(true);",
+                json!([]),
+            )
+            .await;
+        page.browser.perform(json!([key("v")])).await;
+        click(&page, (360.0, 250.0)).await;
+        page.wait_announced("Rectangle").await;
+    }
+
+    /// `TOILE-UI-395`: `Zoom in` picked in the palette, then a click, with no
+    /// frame between them. The click lands where the zoom carried the
+    /// rectangle, so it selects it. A click read before the zoom misses it.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_palette_command_runs_before_the_click_that_follows_it() {
+        let page = Page::new_document("toile").await;
+        let size = page
+            .browser
+            .script(
+                "const r = document.querySelector('canvas').getBoundingClientRect(); \
+                 return [r.width / 2, r.height / 2];",
+                json!([]),
+            )
+            .await;
+        let (cx, cy) = (
+            size[0].as_f64().unwrap_or(0.0),
+            size[1].as_f64().unwrap_or(0.0),
+        );
+        // A rectangle 300 pixels wide around the zoom's centre. A zoom of 1.2
+        // carries its point at +140 to +168, past its edge at +150.
+        draw_rect(&page, (cx - 150.0, cy - 60.0), (cx + 150.0, cy + 60.0)).await;
+        deselect(&page).await;
+        page.palette_row("Zoom in").await;
+        // The modal holds the frame loop until its `close` event, so the
+        // click sent from that event runs before any frame.
+        page.browser
+            .script_async(
+                &format!(
+                    "const [x, y, done] = arguments; \
+                     const c = document.querySelector('canvas'); \
+                     const b = c.getBoundingClientRect(); \
+                     const at = (buttons) => ({{ clientX: b.left + x, clientY: b.top + y, bubbles: true, \
+                       pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons }}); \
+                     document.querySelector('.ambre-palette-modal').addEventListener('close', () => {{ \
+                       c.dispatchEvent(new PointerEvent('pointerdown', at(1))); \
+                       c.dispatchEvent(new PointerEvent('pointerup', at(0))); \
+                       done(true); \
+                     }}, {{ once: true }}); \
+                     {}.click();",
+                    palette_row_js("Zoom in")
+                ),
+                json!([cx + 168.0, cy]),
+            )
+            .await;
+        page.wait_announced("Rectangle").await;
     }
 
     /// `TOILE-UI-256`: a drag with `Space` held pans, and once `Space` is up a
@@ -236,12 +319,8 @@ mod tests {
         open_board_of(&second, &first).await;
         select_all_until(&second, "2 elements selected").await;
         deselect(&second).await;
-        let workers = second.workers().await;
-        let (sync, _) = workers
-            .iter()
-            .find(|(_, title)| title.contains("ambre-sync"))
-            .unwrap_or_else(|| panic!("no Sync worker among {workers:?}"));
-        let paused = second.pause_worker(sync).await;
+        let sync = second.worker("ambre-sync").await;
+        let paused = second.pause_worker(&sync).await;
 
         let (ox, oy) = second.canvas_origin().await;
         second.focus_canvas().await;

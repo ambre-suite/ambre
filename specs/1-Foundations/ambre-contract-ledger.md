@@ -20,11 +20,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3391 rows: 2557 shipped, of which 14 partial and 14 loose. 834 unbuilt.**
+**3394 rows: 2560 shipped, of which 14 partial and 14 loose. 834 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 691 | 418 | 813 | 607 |  | 2529 |
+| `verified` | 691 | 418 | 816 | 607 |  | 2532 |
 | `partial` | 13 |  |  | 1 |  | 14 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 1 |  | 1 |  |  | 2 |
@@ -120,16 +120,16 @@
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 41 |  |  | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 12 |  |  |  |
 | `ambre-spec-toile-media.md` | 29 | 29 | 28 |  | 1 |  |
-| `ambre-spec-toile-menus.md` | 53 | 53 | 53 |  |  |  |
+| `ambre-spec-toile-menus.md` | 54 | 54 | 54 |  |  |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 14 |  |  | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 28 |  |  |  |
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 45 |  |  |  |
 | `ambre-spec-toile-reactions.md` | 35 | 29 | 29 |  |  | 6 |
-| `ambre-spec-toile-selection.md` | 33 | 33 | 33 |  |  |  |
+| `ambre-spec-toile-selection.md` | 34 | 34 | 34 |  |  |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 30 |  |  |  |
 | `ambre-spec-toile-text-editing.md` | 42 | 41 | 41 |  |  | 1 |
-| `ambre-spec-toile-tools.md` | 31 | 31 | 31 |  |  |  |
+| `ambre-spec-toile-tools.md` | 32 | 32 | 32 |  |  |  |
 | `ambre-spec-toile-undo.md` | 4 | 4 | 4 |  |  |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 12 |  |  | 1 |
 | `ambre-spec-toile-viewport.md` | 35 | 33 | 33 |  |  | 2 |
@@ -280,17 +280,17 @@
 | `ambre-spec-toile-import-export.md` | TOILE-IO-001..004,010..012,014..028,068..098 |
 | `ambre-spec-toile-links.md` | TOILE-062..066,109..115 |
 | `ambre-spec-toile-media.md` | TOILE-IO-006..009,013,034..037,049..067,101 |
-| `ambre-spec-toile-menus.md` | TOILE-UI-018,047..052,121..160,355,364..366,375,384 |
+| `ambre-spec-toile-menus.md` | TOILE-UI-018,047..052,121..160,355,364..366,375,384,395 |
 | `ambre-spec-toile-pdf-export.md` | TOILE-IO-029..031,038..048,099..100 |
 | `ambre-spec-toile-presence.md` | TOILE-016,177..185,241; TOILE-UI-014,073..078,216..222,367,376..377 |
 | `ambre-spec-toile-presentation.md` | TOILE-FEAT-001..004,008,026..028,075..095,098; TOILE-UI-083..089,315..319,342..343,368 |
 | `ambre-spec-toile-reactions.md` | TOILE-FEAT-007,010,019..025,055..067,100..101,106; TOILE-UI-079..081,299..305 |
 | `ambre-spec-toile-schema.md` | TOILE-003,018,027,029..030,227..231 |
-| `ambre-spec-toile-selection.md` | TOILE-UI-005..007,031..035,223..242,349,385..386,391..392 |
+| `ambre-spec-toile-selection.md` | TOILE-UI-005..007,031..035,223..242,349,385..386,391..392,396 |
 | `ambre-spec-toile-status-bar.md` | TOILE-020,116..118; TOILE-UI-053..056,106..110 |
 | `ambre-spec-toile-styles.md` | TOILE-163; TOILE-UI-019,066..071,161..182 |
 | `ambre-spec-toile-text-editing.md` | TOILE-UI-059..065,183..210,361,381..383,387..389 |
-| `ambre-spec-toile-tools.md` | TOILE-UI-008..009,036..042,243..261,369..370,393 |
+| `ambre-spec-toile-tools.md` | TOILE-UI-008..009,036..042,243..261,369..370,393..394 |
 | `ambre-spec-toile-undo.md` | TOILE-014,094,097..098 |
 | `ambre-spec-toile-vector-paths.md` | TOILE-FEAT-006,018,033..037; TOILE-UI-057..058,102..105 |
 | `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380 |

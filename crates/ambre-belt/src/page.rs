@@ -245,6 +245,15 @@ impl Page {
     /// Runs the command whose palette row reads `label`: the palette chord, the
     /// label typed into the query, then the row clicked.
     pub async fn command(&self, label: &str) {
+        self.palette_row(label).await;
+        self.browser
+            .script(&format!("{}.click();", palette_row_js(label)), json!([]))
+            .await;
+    }
+
+    /// Opens the palette with its chord, types `label` into the query, and
+    /// waits for the row that reads `label`. The row is left unclicked.
+    pub async fn palette_row(&self, label: &str) {
         self.focus_canvas().await;
         self.browser
             .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
@@ -254,20 +263,17 @@ impl Page {
                 { "type": "keyUp", "value": "\u{E009}" },
             ]}]))
             .await;
-        let label = Value::String(label.to_owned());
+        let query = Value::String(label.to_owned());
         self.browser
             .wait_for(
-                &format!("the palette row {label}"),
+                &format!("the palette row {query}"),
                 &format!(
                     "const q = document.querySelector('.ambre-palette-query'); \
                      if (!q) return false; \
-                     q.value = {label}; \
+                     q.value = {query}; \
                      q.dispatchEvent(new Event('input', {{ bubbles: true }})); \
-                     const row = [...document.querySelectorAll('.ambre-palette-row')] \
-                       .find(r => r.querySelector('.ambre-palette-label').textContent === {label}); \
-                     if (!row) return false; \
-                     row.click(); \
-                     return true;"
+                     return !!{};",
+                    palette_row_js(label)
                 ),
                 STEP,
             )
@@ -360,7 +366,7 @@ pub struct Paused(Value);
 
 impl Page {
     /// The browser's workers, every tab's: their target ids and titles.
-    pub async fn workers(&self) -> Vec<(String, String)> {
+    async fn workers(&self) -> Vec<(String, String)> {
         let targets = self.browser.cdp("Target.getTargets", json!({})).await;
         targets["targetInfos"]
             .as_array()
@@ -374,6 +380,27 @@ impl Page {
                 ))
             })
             .collect()
+    }
+
+    /// The target id of this page's one worker whose title holds `title`.
+    ///
+    /// A worker of the page before the last navigation lives on for a few
+    /// seconds, under the same title. So this waits until one such worker
+    /// is left, and a pause never goes to a worker that is about to end.
+    pub async fn worker(&self, title: &str) -> String {
+        let deadline = tokio::time::Instant::now() + STEP;
+        loop {
+            let workers = self.workers().await;
+            let mut found = workers.iter().filter(|(_, t)| t.contains(title));
+            if let (Some((id, _)), None) = (found.next(), found.next()) {
+                return id.clone();
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "no single {title} worker among {workers:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     /// Pauses the worker `target` at its next statement. It runs that
@@ -427,6 +454,15 @@ pub fn drag(from: (f64, f64), to: (f64, f64), steps: u32) -> Value {
 /// way leaves no glide (`KINETIC-004`), so the view stops where it was let go.
 pub fn drag_still(from: (f64, f64), to: (f64, f64), steps: u32) -> Value {
     drag_with(from, to, steps, Some(250))
+}
+
+/// A script expression for the palette row that reads `label`, or undefined.
+pub fn palette_row_js(label: &str) -> String {
+    let label = Value::String(label.to_owned());
+    format!(
+        "[...document.querySelectorAll('.ambre-palette-row')] \
+           .find(r => r.querySelector('.ambre-palette-label').textContent === {label})"
+    )
 }
 
 fn drag_with(from: (f64, f64), to: (f64, f64), steps: u32, hold_ms: Option<u32>) -> Value {

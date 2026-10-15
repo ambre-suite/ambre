@@ -719,6 +719,22 @@ fn each_select_all_asks_for_the_board_as_it_is_now() {
     }
 }
 
+/// `TOILE-UI-396`: an `Escape` or a press that comes before the select-all
+/// answer wins. The answer that follows selects nothing.
+#[test]
+fn a_selection_change_before_the_select_all_answer_wins() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    assert!(rig.key("a", true, false));
+    assert!(rig.key("Escape", false, false));
+    rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
+    assert!(rig.view.selection.is_empty(), "the answer undid the Escape");
+
+    assert!(rig.key("a", true, false));
+    rig.click(A.x1 + 400.0, A.y1 + 400.0);
+    rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
+    assert!(rig.view.selection.is_empty(), "the answer undid the click");
+}
+
 /// `CHROME-102`: a press on the board gives the keyboard focus to the pipe,
 /// on an element and on empty board alike.
 #[test]

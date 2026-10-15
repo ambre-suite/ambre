@@ -37,6 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-248` | `FRAME` | Arming a tool MUST NOT touch the document or the selection. | this spec section 2 | type-level -- the switch returns nothing and holds no document handle, so the only state it can reach is the draft it drops | none | verified |
 | `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host; `ambre_app::platform::tests::a_key_typed_into_a_field_reads_as_typing` -- a real `keydown` in the browser reaches the reader through its target | none | verified |
 | `TOILE-UI-393` | `POST` | Given the board's keyboard pipe holds the focus and no editor is open, a bare tool key MUST arm its tool. | this spec section 3; `ambre-spec-text-input.md`, `CHROME-102` | `ambre_toile::ui::view::view_tests::the_pipe_is_typed_text_only_while_an_editor_is_open` -- the board marks its pipe as typed text only while an editor is open, and `CHROME-103` gives a key on that pipe to the keymap | none | verified |
+| `TOILE-UI-394` | `POST` | A tool armed by a key MUST apply to the next press on the board, however soon that press comes. | this spec section 3 | `ambre_belt::toile::tests::a_tool_key_arms_the_press_that_follows_it` -- the key and a drag dispatched in one task, so no frame runs between them, and the drag draws a rectangle | none | verified |
 
 ### 1.3 Drag on the board
 
@@ -90,9 +91,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 31 `verified`. What holds is the machine: the modes, the transitions and the
+* **Verification.** 32 `verified`. What holds is the machine: the modes, the transitions and the
   command each gesture ends in. A `Space` drag pans on the host view, and a placed note or text
-  reverts the tool. The browser tier holds the release of `Space` (`TOILE-UI-256`).
+  reverts the tool. The browser tier holds the release of `Space` and a press right after a tool key.
 ---
 
 ## 2. MODEL
