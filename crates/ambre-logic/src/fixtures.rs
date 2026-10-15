@@ -863,6 +863,15 @@ pub enum Drift {
     /// More frozen artifacts for one document type than retention keeps
     /// (`FIXTURE-021`). The remedy is `just fixtures`, which runs the pass.
     FrozenOverflow { doc_type: DocType, kept: usize },
+
+    /// A superseded container version with no frozen artifact for a document
+    /// type the registry generates (`DOCFILE-008`). A bump that skipped its
+    /// freeze reads this way, and so does the drop of the last artifact a
+    /// version kept.
+    Unfrozen {
+        doc_type: DocType,
+        ambre_version: u8,
+    },
 }
 
 impl std::fmt::Display for Drift {
@@ -878,6 +887,14 @@ impl std::fmt::Display for Drift {
             Self::FrozenOverflow { doc_type, kept } => write!(
                 f,
                 "frozen/: {kept} artifacts for {doc_type:?}, retention keeps {FROZEN_KEEP_PER_TYPE}"
+            ),
+            Self::Unfrozen {
+                doc_type,
+                ambre_version,
+            } => write!(
+                f,
+                "frozen/: no {doc_type:?} artifact at superseded container version \
+                 {ambre_version}; no writer can produce one now, so restore it from history"
             ),
         }
     }
@@ -969,7 +986,59 @@ pub fn check_corpus(
     }
 
     check_frozen(registry, root, &mut report)?;
+    report
+        .drifts
+        .extend(unfrozen_versions(registry, root, AMBRE_VERSION)?);
     Ok(report)
+}
+
+/// Every superseded container version below `current` that owes a frozen
+/// artifact for a document type of `registry`, and holds none (`DOCFILE-008`).
+///
+/// Container versions count from 1, so each one below `current` is superseded.
+/// A version is owed only while retention could still keep its artifact. Once
+/// a document type holds [`FROZEN_KEEP_PER_TYPE`] newer ones, the cap of
+/// `FIXTURE-021` has dropped it by design.
+///
+/// # Errors
+///
+/// [`FixtureError::Io`] when the frozen tree cannot be listed.
+pub fn unfrozen_versions(
+    registry: &[&dyn FixtureGen],
+    root: &Path,
+    current: u8,
+) -> Result<Vec<Drift>, FixtureError> {
+    let frozen = root.join(FROZEN_DIR);
+    // An unreadable sidecar is reported by `check_frozen`; it attributes
+    // nothing here.
+    let typed: Vec<(DocType, u8)> = frozen_entries(root)?
+        .into_iter()
+        .filter_map(|entry| {
+            let manifest = read_manifest(&frozen, &entry.stem).ok()?;
+            Some((manifest.doc_type, entry.ambre_version))
+        })
+        .collect();
+    let mut doc_types: Vec<DocType> = Vec::new();
+    for generator in registry {
+        if !doc_types.contains(&generator.doc_type()) {
+            doc_types.push(generator.doc_type());
+        }
+    }
+    let mut owed = Vec::new();
+    for doc_type in doc_types {
+        let of_type = || typed.iter().filter(move |(t, _)| *t == doc_type);
+        for ambre_version in 1..current {
+            let newer = of_type().filter(|(_, v)| *v > ambre_version).count();
+            let held = of_type().any(|(_, v)| *v == ambre_version);
+            if newer < FROZEN_KEEP_PER_TYPE && !held {
+                owed.push(Drift::Unfrozen {
+                    doc_type,
+                    ambre_version,
+                });
+            }
+        }
+    }
+    Ok(owed)
 }
 
 /// The frozen half of [`check_corpus`], in strengthening order: the digest, the

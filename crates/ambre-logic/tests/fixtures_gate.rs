@@ -28,7 +28,7 @@ use ambre_bus::TrameCommand;
 use ambre_core::{DocType, FixtureGen, seeded_document_id};
 use ambre_logic::fixtures::{
     self, Drift, FROZEN_KEEP_PER_TYPE, REGISTRY, check_corpus, freeze, generate_into,
-    retain_frozen, write_fixture,
+    retain_frozen, unfrozen_versions, write_fixture,
 };
 use ambre_trame::TrameState;
 
@@ -433,6 +433,68 @@ fn retention_reads_the_version_suffix_as_numbers_not_as_text() {
             "{stem} must be kept"
         );
     }
+}
+
+/// Copy `ALPHA`'s live artifact into `frozen/` under `stem`, as a freeze at
+/// that version pair would. By hand, because nothing here can bump a version.
+fn plant_frozen(root: &TempRoot, stem: &str) {
+    let frozen_dir = root.path().join(fixtures::FROZEN_DIR);
+    let target = fixtures::artifact_path(&frozen_dir, stem);
+    std::fs::create_dir_all(target.parent().expect("a parent")).expect("creates the tree");
+    std::fs::copy(
+        fixtures::artifact_path(&root.current(), ALPHA.name()),
+        &target,
+    )
+    .expect("copies the artifact");
+    std::fs::copy(
+        fixtures::manifest_path(&root.current(), ALPHA.name()),
+        fixtures::manifest_path(&frozen_dir, stem),
+    )
+    .expect("copies the sidecar");
+}
+
+/// `DOCFILE-008`. A container bump that skipped its freeze fails the gate, by
+/// version and by document type. The freeze clears it, and a document type the
+/// registry does not generate owes nothing.
+#[test]
+fn a_superseded_container_version_with_no_frozen_artifact_fails_the_gate() {
+    let root = TempRoot::new("unfrozen");
+    seed_corpus(&root, &[&ALPHA]);
+
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), 2).expect("the check runs");
+    assert_eq!(
+        owed,
+        vec![Drift::Unfrozen {
+            doc_type: DocType::Trame,
+            ambre_version: 1,
+        }]
+    );
+
+    freeze(root.path(), ALPHA.name()).expect("the artifact freezes");
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), 2).expect("the check runs");
+    assert!(owed.is_empty(), "the freeze pays the version: {owed:?}");
+}
+
+/// `DOCFILE-008`. A version owes an artifact only while retention could keep
+/// it. Three newer artifacts of one document type release the older versions,
+/// and a version between them that holds none is still owed.
+#[test]
+fn a_version_retention_has_moved_past_owes_nothing() {
+    let root = TempRoot::new("unfrozen-window");
+    seed_corpus(&root, &[&ALPHA]);
+    for stem in ["@v2-s1", "@v4-s1", "@v4-s2"] {
+        plant_frozen(&root, &format!("{}{stem}", ALPHA.name()));
+    }
+
+    let owed = unfrozen_versions(&[&ALPHA], root.path(), 5).expect("the check runs");
+    assert_eq!(
+        owed,
+        vec![Drift::Unfrozen {
+            doc_type: DocType::Trame,
+            ambre_version: 3,
+        }],
+        "version 1 sits behind three newer artifacts, and version 3 holds none"
+    );
 }
 
 // -----------------------------------------------------------------------------

@@ -19,7 +19,7 @@
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 20 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
-| `docfile` | The file a user saves a document into, and opens back. | implemented | 17 |  |
+| `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 1 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 |  |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 16 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 17 loose.**
