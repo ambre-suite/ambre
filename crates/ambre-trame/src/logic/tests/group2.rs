@@ -127,13 +127,16 @@ fn mutating_command_reports_undo_state() {
 }
 
 /// Undo with an empty stack is a no-op: no `DataReset`, no broadcast, and no
-/// availability either, since the one the chrome holds is still true.
+/// availability either, since the one the chrome holds is still true. The
+/// document reads the version it had (`UNDO-003`).
 #[test]
 fn undo_with_empty_stack_is_a_noop() {
     let mut state = TrameState::new();
+    let version = state.doc.oplog_vv();
     let evts = state.handle_command(TrameCommand::Undo);
     assert!(evts.update.is_none());
     assert!(evts.display.is_empty(), "{:?}", evts.display);
+    assert_eq!(state.doc.oplog_vv(), version, "the empty undo wrote");
 }
 
 /// `UNDO-009`: a command that changes nothing refreshes no affordance. Each

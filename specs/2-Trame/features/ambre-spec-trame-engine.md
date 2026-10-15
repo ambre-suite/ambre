@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any queue: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no queue in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
 | `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | ci-gate -- `scripts/crate_boundaries.py` refuses a CRDT type, an export mode or an engine state in `ambre-trame/src/ui`, `render` and `chrome`, and its fixture covers the Trame view | none | verified |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
-| `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- every lossless call site reading its outcome and logging a refusal, the two that dropped it outright included: the source clear of a cut and the undo group boundary on cell exit. A native test of the view sends through an outbox that refuses; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::view_tests::a_refused_send_is_never_silent` -- each lossless path logs an error over a closed queue; `ambre_trame::ui::view::view_tests::a_refused_source_clear_keeps_the_cut_range` | none | verified |
 | `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | none | verified |
 | `TRAME-UI-014` | `INV` | There MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | type-level -- the struct declares no such field, and the renderer has no other input | none | verified |
 | `TRAME-UI-141` | `OBS` | A cell in error MUST be marked visually from its displayed text. | this spec section 3 | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`; `::dirty_cell_gets_a_translucent_veil` | none | verified |
@@ -56,10 +56,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 16 `verified`, 1 `untested`. What holds is what a compiler holds: a handler
-  with no queue in reach, an apply that returns display events and cannot broadcast. The sheet
-  index equals a rebuild after every step of a random stream. What is loose shows only in a running
-  thread: the refused send that must reach the log (`TRAME-UI-142`).
+* **Verification.** 17 `verified`. What holds is what a compiler holds: a handler with no queue in
+  reach, an apply that returns display events and cannot broadcast. The sheet index equals a
+  rebuild after every step of a random stream. A native view reads each refused send in the log.
 
 ---
 

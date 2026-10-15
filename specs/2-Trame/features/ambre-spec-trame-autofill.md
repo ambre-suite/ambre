@@ -27,16 +27,16 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-071` | `FRAME` | A fill MUST NOT write outside the rectangle the drag covered. | this spec section 3 | `ambre_trame::logic::tests::group10::a_fill_writes_only_inside_the_drag` -- a malformed range writes nothing, and a fill leaves its neighbours blank | none | verified |
 | `TRAME-UI-072` | `FRAME` | A drag that ends where it started MUST write nothing. | this spec section 4 | `ambre_trame::logic::tests::group10::a_drag_back_to_its_start_writes_nothing` | none | verified |
 | `TRAME-UI-074` | `FRAME` | A fill MUST NOT touch a sheet other than the active one. | this spec section 3 | `ambre_trame::logic::tests::group10::a_fill_on_another_sheet_touches_nothing` | none | verified |
-| `TRAME-UI-133` | `FRAME` | A fill whose command did not reach the Logic thread MUST NOT grow the selection over cells it did not write. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- the early return on the release path, which a native test reaches by releasing the handle over an outbox that refuses; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-133` | `FRAME` | A fill whose command did not reach the Logic thread MUST NOT grow the selection over cells it did not write. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::view_tests::a_refused_fill_leaves_the_selection` | none | verified |
 
 * **Budget.** the 50-cell batch of `ambre-spec-budgets.md section 1`, in < 1 ms: a fill is
   the operation that row was written for. No bench measures it.
 * **Boundary.** none of its own: the fill writes cells to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 9 `verified`, 1 `untested`. What is proven is what the fill produces on the
-  numeric, the text and the merged paths. It refuses a malformed range, a drag back to its start
-  and another sheet. A fill is one undo item. A merged fill writes up to the edge of the drag,
-  and a tail shorter than a block is cut at that edge.
+* **Verification.** 10 `verified`. What is proven is what the fill produces on the numeric, the text
+  and the merged paths. It refuses a malformed range, a drag back to its start and another sheet. A
+  fill is one undo item, and a fill the queue refused leaves the selection where it was. A merged
+  fill writes up to the edge of the drag, and a tail shorter than a block is cut at that edge.
 
 ---
 

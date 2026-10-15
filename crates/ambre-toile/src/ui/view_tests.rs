@@ -21,7 +21,12 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
-        let (tx, to_logic) = ambre_bus::conduit::local(256);
+        Self::with_queue(256)
+    }
+
+    /// A board whose queue to the Logic thread holds `capacity` commands.
+    fn with_queue(capacity: usize) -> Self {
+        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
         let (from_logic, rx) = ambre_bus::conduit::local(256);
         let notices = NoticePublisher::new();
         let view = ToileView::new(
@@ -2729,4 +2734,99 @@ fn a_presentation_closes_the_open_editor() {
         rig.sent().as_slice(),
         [ToileCommand::SetText { text, .. }] if text == "hi!"
     ));
+}
+
+impl Rig {
+    /// The board commands on the queue, without flushing the outbox.
+    fn drain(&mut self) -> Vec<ToileCommand> {
+        self.to_logic
+            .try_iter()
+            .filter_map(|msg| match msg {
+                LogicCommand::App {
+                    command: AppCommand::Toile(cmd),
+                    ..
+                } => Some(cmd),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+/// `BUS-024`: a viewport request the full queue dropped stays in its slot,
+/// and the next frame offers it again.
+#[test]
+fn a_dropped_viewport_request_is_offered_again() {
+    let mut rig = Rig::with_queue(1);
+    rig.view.update();
+    let first = rig.drain();
+    assert!(
+        !first
+            .iter()
+            .any(|c| matches!(c, ToileCommand::SetViewport(_))),
+        "the full queue took the viewport: {first:?}"
+    );
+    assert!(rig.view.pending_viewport.is_some());
+    rig.view.update();
+    let again = rig.drain();
+    assert!(
+        matches!(again.as_slice(), [ToileCommand::SetViewport(_)]),
+        "sent {again:?}"
+    );
+    assert!(rig.view.pending_viewport.is_none());
+}
+
+/// `BUS-024`: a media request the full queue dropped is not marked in
+/// flight, and the next frame offers it again.
+#[test]
+fn a_dropped_media_request_is_offered_again() {
+    let mut rig = Rig::with_queue(2);
+    rig.view.update();
+    let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
+    picture.kind = ElementKind::Image;
+    picture.geom = ambre_bus::app::toile::DisplayGeom::Image("h".to_owned());
+    rig.show(vec![DisplayNode::Element(picture)]);
+    let asks = |sent: &[ToileCommand]| {
+        sent.iter()
+            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes == &["h"]))
+            .count()
+    };
+    assert_eq!(asks(&rig.drain()), 0, "the full queue took the request");
+    assert!(rig.view.media_requested.is_empty());
+    rig.view.update();
+    assert_eq!(asks(&rig.drain()), 1);
+    assert!(rig.view.media_requested.contains("h"));
+    rig.view.update();
+    assert_eq!(asks(&rig.drain()), 0, "a request in flight is asked once");
+}
+
+/// `BUS-022`: the board takes no input while its outbox holds an edit, and
+/// takes it again once the queue drains.
+#[test]
+fn a_busy_board_takes_no_input() {
+    let mut rig = Rig::with_queue(1);
+    rig.show(vec![DisplayNode::Element(sticky(
+        "a",
+        Rect::new(0.0, 0.0, 100.0, 100.0),
+    ))]);
+    assert!(rig.view.send_edit(ToileCommand::RequestBoardIds));
+    assert!(rig.view.is_busy());
+    let at = rig.screen(50.0, 50.0);
+    assert!(
+        rig.input(InputEvent::PointerDown {
+            x: at.0,
+            y: at.1,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        }),
+        "the refusal consumes the event"
+    );
+    rig.release(at);
+    assert!(rig.view.selection.is_empty(), "the busy board selected");
+    rig.drain();
+    rig.view.outbox.flush();
+    rig.drain();
+    assert!(!rig.view.is_busy());
+    rig.click(50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("a")]);
 }

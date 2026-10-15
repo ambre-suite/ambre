@@ -585,6 +585,9 @@ pub struct ToileView {
     /// That is what stops the view asking again for a picture that is not there
     /// (`toile-media`).
     media_requested: HashSet<String>,
+    /// A media request the queue dropped. The next frame offers it again
+    /// (`BUS-024`): a viewport reply may never come to ask for it.
+    media_retry: bool,
 
     /// Which `doc_embed` holds input focus, and the click-vs-drag arbitration
     /// that decides it (`toile-embeds`, "Input focus"). View-local,
@@ -760,6 +763,7 @@ impl ToileView {
             gesture_commit_pending: false,
             images: render::ImageStore::new(),
             media_requested: HashSet::new(),
+            media_retry: false,
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
@@ -785,13 +789,15 @@ impl ToileView {
         }
         // Mark the requests in flight only once they left: a dropped request
         // that stayed marked is a picture nothing ever asks for again
-        // (`BUS-024`).
+        // (`BUS-024`). A dropped one goes out again on the next frame.
         if self.send_lossy(ToileCommand::RequestMedia {
             hashes: wanted.clone(),
         }) {
             for h in wanted {
                 self.media_requested.insert(h);
             }
+        } else {
+            self.media_retry = true;
         }
     }
 
@@ -3664,6 +3670,9 @@ impl ToileView {
             && !self.send_lossy(ToileCommand::SetViewport(vp))
         {
             self.pending_viewport = Some(vp);
+        }
+        if std::mem::take(&mut self.media_retry) {
+            self.request_missing_media();
         }
 
         // Pick up a theme switch from the chrome toggle.

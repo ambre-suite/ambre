@@ -352,6 +352,27 @@ APP_MESSAGE = re.compile(
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
+# The two failure paths that reach the page with no queue: the panic hook of the
+# shared instance, and the error event of the Sync worker.
+PANIC_HOOK = "std::panic::set_hook("
+WORKER_ERROR = "worker.set_onerror("
+FATAL_LATCH = "ambre_canvas::signal_fatal("
+
+# What runs on a failing thread's way out. The client build aborts on a panic,
+# so no destructor runs then; a destructor in a thread that writes a document
+# would still run on any other exit.
+CARGO_CONFIG = ".cargo/config.toml"
+BUILD_STD = re.compile(r"build-std\s*=\s*\[([^\]]*)\]")
+EXIT_WRITERS = ("crates/ambre-logic/src", "crates/*/src/logic", "crates/ambre-sync/src")
+DESTRUCTOR = re.compile(r"\bimpl\b[^{]*\bDrop\s+for\b")
+
+# The engines' command handlers, found by layout so an engine added later is read
+# too, and the names a handler that sends on a queue would need.
+ENGINE_LOGIC = "crates/*/src/logic"
+QUEUE_SEND = re.compile(
+    r"\b(?:Sender|WorkerSender|Outbox)\b|\bconduit::|\.try_send\(|\bsend_to_(?:sync|ui|persist)\b"
+)
+
 # A content view reading the window rather than the box it is given.
 CONTENT_VIEWS = (
     "crates/ambre-trame/src/ui",
@@ -1060,6 +1081,58 @@ def check_engine_and_relay(errors: list[str]) -> int:
     return len(files)
 
 
+def check_failure_latches(errors: list[str]) -> int:
+    """`ARCH-014`: each thread failure latches the page without a queue. A panic
+    latches from the hook, and a failed Sync worker from its error event."""
+    source = read(APP_LIB)
+    hook = source.find(PANIC_HOOK)
+    # The hook's body, up to the call that closes it.
+    body = source[hook : source.find("}));", hook)] if hook >= 0 else ""
+    if FATAL_LATCH not in body:
+        errors.append(f"{APP_LIB}: the panic hook does not latch the fatal screen")
+    source = read(WORKER_SPAWNER)
+    handler = source.find(WORKER_ERROR)
+    # The closure the handler installs, declared just above it.
+    closure = source[source.rfind("Closure::", 0, handler) : handler] if handler >= 0 else ""
+    if FATAL_LATCH not in closure:
+        errors.append(f"{WORKER_SPAWNER}: the Sync worker's error event does not latch the fatal screen")
+    return 2
+
+
+def check_exit_writes(errors: list[str]) -> int:
+    """`ARCH-015`: a failing thread writes nothing on its way out. The client
+    build aborts on a panic, and no thread that writes a document has a
+    destructor to run."""
+    found = BUILD_STD.search(read(CARGO_CONFIG))
+    if not found or '"panic_abort"' not in found.group(1) or "panic_unwind" in found.group(1):
+        errors.append(f"{CARGO_CONFIG}: the client build does not abort on a panic")
+    dirs = sorted(d for pattern in EXIT_WRITERS for d in ROOT.glob(pattern))
+    files = sorted({path for directory in dirs for path in directory.rglob("*.rs")})
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            if DESTRUCTOR.search(line):
+                errors.append(f"{rel}:{number}: a thread that writes a document runs a destructor on its way out")
+    return len(files) + 1
+
+
+def check_handlers(errors: list[str]) -> int:
+    """`BUS-010`: an engine's command handler names no queue. It returns an
+    outcome, and the dispatcher fans it out."""
+    dirs = sorted(ROOT.glob(ENGINE_LOGIC))
+    if not dirs:
+        errors.append(f"{ENGINE_LOGIC}: no engine found, so no handler is read")
+        return 0
+    files = [path for directory in dirs for path in sorted(directory.rglob("*.rs"))]
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            found = QUEUE_SEND.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a command handler sends on a queue: `{found.group(0)}`")
+    return len(files)
+
+
 def check_kinetic_copy(errors: list[str]) -> int:
     """`KINETIC-001`: no Rust line outside the shared model names a decay or a velocity."""
     if not KINETIC_TERM.search(read(KINETIC_MODEL)):
@@ -1108,6 +1181,9 @@ def main() -> int:
     reach = check_thread_reach(errors)
     worker_messages = check_worker_messages(errors)
     engine = check_engine_and_relay(errors)
+    handlers = check_handlers(errors)
+    latches = check_failure_latches(errors)
+    exits = check_exit_writes(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -1133,7 +1209,10 @@ def main() -> int:
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
-        f"{engine} launcher files read for a second engine or a relay out of the frame"
+        f"{engine} launcher files read for a second engine or a relay out of the frame, "
+        f"{handlers} engine files read for a handler that sends on a queue, "
+        f"{latches} launcher files read for a failure that waits on a queue, "
+        f"{exits} build and thread files read for a write on the way out"
     )
     for line in errors:
         print(f"  {line}")
@@ -1162,7 +1241,10 @@ def main() -> int:
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "
-            "starts one engine, and every frame relays before it draws.",
+            "starts one engine, and every frame relays before it draws. A command "
+            "handler returns an outcome and names no queue. A panic and a failed "
+            "worker each latch the fatal screen without a queue, and a failing thread "
+            "writes nothing on its way out.",
             file=sys.stderr,
         )
         return 1

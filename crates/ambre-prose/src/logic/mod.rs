@@ -1742,6 +1742,54 @@ mod tests {
         }
     }
 
+    /// `UNDO-003`, `UNDO-008`: an undo with nothing to revert writes nothing
+    /// and emits no delta. This holds on a fresh page and on a page undone to
+    /// its start.
+    #[test]
+    fn an_undo_with_nothing_to_revert_writes_nothing() {
+        let mut state = ProseState::with_peer(13).expect("a document is built");
+        let block = state.root_blocks()[0];
+        let undo_on_nothing = |state: &mut ProseState| {
+            let before = state.document().oplog_vv();
+            assert!(state.handle_command(ProseCommand::Undo).update.is_none());
+            assert_eq!(state.document().oplog_vv(), before, "the undo wrote");
+        };
+        undo_on_nothing(&mut state);
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "text".to_owned(),
+        });
+        assert!(state.handle_command(ProseCommand::Undo).update.is_some());
+        undo_on_nothing(&mut state);
+    }
+
+    /// `UNDO-007`: an undo reverts this peer's own text and leaves the text a
+    /// remote peer wrote in place.
+    #[test]
+    fn an_undo_leaves_a_remote_edit_alone() {
+        let mut alice = ProseState::with_peer(13).expect("a document is built");
+        let mut bob = ProseState::with_peer(14).expect("a document is built");
+        bob.import_snapshot(&alice.export_snapshot())
+            .expect("the seed imports");
+        let block = alice.root_blocks()[0];
+        let write = |state: &mut ProseState, text: &str| {
+            state
+                .handle_command(ProseCommand::InsertText {
+                    block_id: block,
+                    pos: 0,
+                    text: text.to_owned(),
+                })
+                .update
+                .expect("a delta")
+        };
+        write(&mut alice, "mine ");
+        let theirs = write(&mut bob, "theirs ");
+        alice.apply_remote(&theirs);
+        assert!(alice.handle_command(ProseCommand::Undo).update.is_some());
+        assert_eq!(alice.text_of(&block).as_deref(), Some("theirs "));
+    }
+
     #[test]
     fn a_document_a_newer_client_wrote_leaves_this_one_untouched() {
         let mut state = ProseState::new().expect("a document is built");

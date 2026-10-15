@@ -960,7 +960,8 @@ fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
 }
 
 /// `ARCH-009`: a Logic thread that cannot bind its doorbell says so to the
-/// UI thread before it returns.
+/// UI thread before it returns. `ARCH-015`: on that way out it sends nothing
+/// to the relay and writes nothing to local persistence.
 #[cfg(test)]
 #[test]
 fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
@@ -970,14 +971,22 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
     assert!(matches!(bound, Ok(true)), "another thread holds the bell");
     let (_from_ui_tx, from_ui) = ambre_bus::conduit::local(4);
     let (to_ui, ui) = test_link();
-    let (to_sync, _sync) = test_link();
+    let (to_sync, sync) = test_link();
     let (_from_sync_tx, from_sync) = ambre_bus::conduit::local(4);
-    let (to_persist, _persist) = test_link();
+    let (to_persist, persist) = test_link();
     run(bell, from_ui, to_ui, to_sync, from_sync, to_persist);
     let told: Vec<_> = ui.try_iter().collect();
     assert!(
         matches!(told.as_slice(), [UiEvent::FatalError { .. }]),
         "one fatal event, then the end: {told:?}"
+    );
+    assert!(
+        sync.try_recv().is_err(),
+        "the failing thread sent to the relay"
+    );
+    assert!(
+        persist.try_recv().is_err(),
+        "the failing thread wrote the document"
     );
 }
 
@@ -1576,6 +1585,34 @@ mod authorship_tests {
             })
             .collect();
         assert_eq!(kept.first(), kept.get(1));
+    }
+
+    /// `ARCH-013`: two tabs of one user are two sessions under two PeerIDs.
+    /// They edit one cell at once, each takes the other's delta as the relay
+    /// hands it on, and both end on the same document.
+    #[test]
+    fn two_tabs_of_one_user_converge_as_two_users_do() {
+        let user = Some(UserId::new());
+        let mut tabs = [rig(), rig()];
+        assert_ne!(tabs[0].peer, tabs[1].peer, "two tabs share a PeerID");
+        let sent = [edit(&mut tabs[0], "left"), edit(&mut tabs[1], "right")];
+        for (tab, other) in [(0, 1), (1, 0)] {
+            let document_id = tabs[tab].document_id;
+            let mut delta = signed(sent[other].clone(), tabs[other].peer);
+            delta.user = user;
+            tabs[tab]
+                .state
+                .handle_logic_event(LogicEvent::RemoteUpdate { document_id, delta });
+        }
+        let read = |rig: &Rig| {
+            let doc = LoroDoc::new();
+            doc.import(&rig.state.docs[&rig.document_id].state.export_snapshot())
+                .expect("the document's own snapshot");
+            (doc.oplog_vv(), doc.get_deep_value())
+        };
+        let [left, right] = tabs.each_ref().map(read);
+        assert_eq!(left, right, "the two tabs diverged");
+        assert!(left.0.get(&tabs[0].peer).is_some() && left.0.get(&tabs[1].peer).is_some());
     }
 
     /// `AUTHOR-008`, `AUTHOR-009`, `AUTHOR-011`: a session that never edits

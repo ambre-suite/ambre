@@ -39,7 +39,12 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
-        let (tx, to_logic) = ambre_bus::conduit::local(256);
+        Self::with_queue(256)
+    }
+
+    /// A view whose queue to the Logic thread holds `capacity` commands.
+    fn with_queue(capacity: usize) -> Self {
+        let (tx, to_logic) = ambre_bus::conduit::local(capacity);
         let (from_logic, rx) = ambre_bus::conduit::local(256);
         let clock = TestClock::default();
         let theme = ThemeControl::default();
@@ -1353,4 +1358,230 @@ fn a_lone_cell_asks_for_no_aggregate() {
     let (x, y) = rig.cell_mid(0, 0);
     rig.click(x, y);
     assert_eq!(asks(&rig.sent()), 0);
+}
+
+/// Counts the ERROR events while it is the default subscriber.
+struct ErrorCount(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl tracing::Subscriber for ErrorCount {
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        if *event.metadata().level() == tracing::Level::ERROR {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+/// The ERROR events `act` emits.
+fn errors_in(act: impl FnOnce()) -> usize {
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    tracing::subscriber::with_default(ErrorCount(count.clone()), act);
+    count.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+impl Rig {
+    /// Drag the boundary right of column 1 to `width` pixels.
+    fn drag_col_1_to(&mut self, width: f64) {
+        let edge = self.col_edge(1);
+        let y = self.view.state.header_h() * 0.8;
+        self.view.handle_input(&InputEvent::PointerDown {
+            x: edge,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        });
+        let target = self.view.state.col_x(1) + width;
+        self.view
+            .handle_input(&InputEvent::PointerMove { x: target, y });
+        self.view.handle_input(&InputEvent::PointerUp {
+            x: target,
+            y,
+            button: 0,
+            ctrl: false,
+        });
+    }
+}
+
+/// `TRAME-UI-127` and `BUS-018`: a resize the Logic thread never receives
+/// leaves the column at its width.
+#[test]
+fn a_refused_resize_leaves_the_width() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let before = rig.view.state.col_x(2);
+    rig.lose_logic();
+    rig.drag_col_1_to(200.0);
+    assert_eq!(rig.view.state.col_widths.get(&1), None);
+    assert_eq!(rig.view.state.col_x(2), before);
+}
+
+/// `TRAME-UI-125` and `BUS-018`: a cut whose paste never left keeps its
+/// source, and stays pending for the next paste.
+#[test]
+fn a_refused_paste_leaves_the_cut_source() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "a", "a");
+    rig.frame();
+    rig.view.state.select_rect(0, 0, 0, 0);
+    rig.view.clipboard_write(true);
+    rig.sent();
+    rig.view.state.select_rect(5, 0, 5, 0);
+    rig.lose_logic();
+    rig.view.paste_clipboard(clip(0, "a"), false);
+    assert_eq!(rig.view.cell_seed(0, 0), "a");
+    assert_eq!(rig.view.state.clipboard_anchor, Some((0, 0, 0, 0)));
+    assert_eq!(rig.view.state.active_row(), 5);
+}
+
+/// `TRAME-UI-125` and `TRAME-UI-142`: a source clear the Logic thread never
+/// receives keeps the cut range, and the loss is logged.
+#[test]
+fn a_refused_source_clear_keeps_the_cut_range() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "a", "a");
+    rig.frame();
+    rig.view.cut_pending = true;
+    rig.view.state.clipboard_anchor = Some((0, 0, 0, 0));
+    rig.lose_logic();
+    let logged = errors_in(|| rig.view.finish_paste());
+    assert!(logged > 0, "the refused clear left no trace");
+    assert_eq!(rig.view.cell_seed(0, 0), "a");
+}
+
+/// `TRAME-UI-133`: a fill the Logic thread never receives leaves the
+/// selection on its source.
+#[test]
+fn a_refused_fill_leaves_the_selection() {
+    let mut rig = Rig::new();
+    rig.frame();
+    rig.sent();
+    let (hx, hy, w, h) = rig.view.state.fill_handle_rect().expect("a handle");
+    rig.view.handle_input(&InputEvent::PointerDown {
+        x: hx + w / 2.0,
+        y: hy + h / 2.0,
+        button: 0,
+        shift: false,
+        ctrl: false,
+    });
+    let (x, y) = rig.cell_mid(3, 0);
+    rig.view.handle_input(&InputEvent::PointerMove { x, y });
+    assert_eq!(rig.view.state.fill_preview, Some((0, 0, 3, 0)));
+    rig.lose_logic();
+    rig.view.handle_input(&InputEvent::PointerUp {
+        x,
+        y,
+        button: 0,
+        ctrl: false,
+    });
+    assert_eq!(rig.view.state.selection.selected_cells(), [(0, 0)]);
+}
+
+/// `BUS-018`: a clear the Logic thread never receives leaves the cell
+/// reading its value.
+#[test]
+fn a_refused_clear_leaves_the_cell() {
+    let mut rig = Rig::new();
+    rig.store((0, 0), "a", "a");
+    rig.frame();
+    rig.lose_logic();
+    assert!(rig.key("Delete"));
+    assert_eq!(rig.view.cell_seed(0, 0), "a");
+}
+
+/// `TRAME-UI-142`: every lossless send the outbox refuses is logged. The
+/// resize, the paste, the clear and the commit each leave an error.
+#[test]
+fn a_refused_send_is_never_silent() {
+    type Act = fn(&mut Rig);
+    let acts: [(&str, Act); 4] = [
+        ("resize", |rig| rig.drag_col_1_to(200.0)),
+        ("paste", |rig| rig.view.paste_clipboard(clip(0, "a"), false)),
+        ("clear", |rig| {
+            rig.key("Delete");
+        }),
+        ("commit", |rig| {
+            rig.key("Enter");
+            rig.frame();
+        }),
+    ];
+    for (name, act) in acts {
+        let mut rig = Rig::new();
+        rig.frame();
+        if name == "commit" {
+            rig.type_text("x");
+            rig.frame();
+        }
+        rig.lose_logic();
+        assert!(errors_in(|| act(&mut rig)) > 0, "{name} left no trace");
+    }
+}
+
+/// `BUS-022`: the grid takes no input while its outbox holds a command, and
+/// takes it again once the queue drains.
+#[test]
+fn a_busy_grid_takes_no_input() {
+    let mut rig = Rig::with_queue(1);
+    rig.frame();
+    rig.to_logic.try_iter().for_each(drop);
+    for _ in 0..2 {
+        let cmd = rig.view.set_active_cmd();
+        assert!(rig.view.send_command_lossless(cmd).is_ok());
+    }
+    assert!(rig.view.is_busy());
+    assert!(rig.type_text("x"), "the refusal consumes the event");
+    assert!(rig.view.editor.is_none(), "the busy grid opened an editor");
+    rig.to_logic.try_iter().for_each(drop);
+    rig.view.flush_outbox();
+    assert!(!rig.view.is_busy());
+    rig.type_text("x");
+    assert!(
+        rig.view.editor.is_some(),
+        "the drained grid takes input again"
+    );
+}
+
+/// `BUS-024`: a viewport request the full queue dropped is offered again on
+/// the next frame, once.
+#[test]
+fn a_dropped_scroll_request_is_offered_again() {
+    let scrolls = |rig: &mut Rig| {
+        rig.to_logic
+            .try_iter()
+            .filter(|msg| {
+                matches!(
+                    msg,
+                    LogicCommand::App {
+                        command: AppCommand::Trame(TrameCommand::ScrollViewport { .. }),
+                        ..
+                    }
+                )
+            })
+            .count()
+    };
+    let mut rig = Rig::with_queue(1);
+    rig.frame();
+    rig.to_logic.try_iter().for_each(drop);
+    let cmd = rig.view.set_active_cmd();
+    assert!(rig.view.send_command_lossless(cmd).is_ok());
+    assert!(rig.wheel(5.0, 1, false));
+    rig.frame();
+    assert_eq!(scrolls(&mut rig), 0, "the full queue took the request");
+    rig.frame();
+    assert_eq!(
+        scrolls(&mut rig),
+        1,
+        "the dropped request was not offered again"
+    );
+    rig.frame();
+    assert_eq!(scrolls(&mut rig), 0, "the request was offered twice");
 }

@@ -778,6 +778,58 @@ mod tests {
     use ambre_prose::view::ruler::RulerHandle;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// `BUS-022`: the page takes no input while its outbox holds a command, and
+    /// takes it again once the queue drains.
+    #[wasm_bindgen_test]
+    fn a_busy_page_takes_no_input() {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        document
+            .body()
+            .expect("a body")
+            .append_child(&cell)
+            .expect("attached");
+        let (to_logic, queue) = ambre_bus::conduit::local(1);
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let document_id = DocumentId::new();
+        let mut view = ProseView::new(
+            document_id,
+            to_logic,
+            from_logic,
+            800.0,
+            600.0,
+            TextInput::create(&document, &cell),
+            ThemeControl::new(Theme::Dark),
+            RwSignal::new(None),
+            ProseSignals::new(),
+            BusyPublisher::new(),
+            NoticePublisher::new(),
+        );
+        let open = || LogicCommand::OpenDocument {
+            document_id,
+            doc_type: ambre_bus::DocType::Prose,
+        };
+        for _ in 0..2 {
+            let _ = view.outbox.send(open());
+        }
+        assert!(view.outbox.is_busy());
+        let wheel = InputEvent::Wheel {
+            dx: 0.0,
+            dy: 40.0,
+            delta_mode: 0,
+            ctrl_key: false,
+        };
+        view.dirty = false;
+        assert!(view.handle_input(&wheel), "the refusal consumes the event");
+        assert!(!view.dirty, "the busy page scrolled");
+        queue.try_iter().for_each(drop);
+        assert!(matches!(view.outbox.flush(), SendOutcome::Sent));
+        assert!(view.handle_input(&wheel));
+        assert!(view.dirty, "the drained page takes input again");
+    }
+
     /// The ruler moves with the canvas and keeps its scale, at any zoom and any
     /// column offset (`PROSE-UI-065`). Each handle lands at the canvas
     /// position plus the canvas's own offset on the page.

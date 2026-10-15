@@ -15,14 +15,14 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 10 | 1 |
+| `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 10 |  |
 | `trame-context-menu` | A user right-clicks. | implemented | 10 |  |
-| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 17 | 1 |
+| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 17 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 44 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 |  |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
-| `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 | 1 |
+| `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 |  |
 | `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 20 |  |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | implemented | 18 |  |
 | `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 24 |  |
@@ -31,7 +31,7 @@
 | `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 |  |
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 12 |  |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 22 |  |
-| `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 | 1 |
+| `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 |  |
 | `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 |  |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 |  |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 40 | 1 |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 467 contract rows, 5 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 467 contract rows, 1 loose.**

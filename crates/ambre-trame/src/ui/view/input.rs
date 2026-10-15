@@ -615,18 +615,19 @@ impl TrameView {
     }
 
     /// Clear every selected cell's content (Delete / Backspace in navigation
-    /// mode). Optimistically empties the local cache, then forwards an empty
-    /// `SetCellText` per cell -- the same path a committed empty edit takes. A
-    /// trailing `CommitEdit` seals them as one undo group. Returns `true`
-    /// (consumed).
+    /// mode). Forwards one `SetCellsBatch` of empty texts, then empties the
+    /// local cache. A refused send leaves the cache as it was (`BUS-018`).
+    /// Returns `true` (consumed).
     pub(crate) fn clear_active_cell(&mut self) -> bool {
         let cells = self.state.selection.selected_cells();
         // One batch command so the whole clear is a single undo item.
         let batch = cells.iter().map(|&(r, c)| (r, c, String::new())).collect();
-        if let Err(SendError::Refused) =
-            self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
+        if self
+            .send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
+            .is_err()
         {
-            tracing::error!("Trame: the outbox is full, the cell clear was dropped");
+            tracing::error!("Trame: the cell clear was dropped, the cells keep their text");
+            return true;
         }
         for &(row, col) in &cells {
             self.state.set_cell_text(row, col, String::new());

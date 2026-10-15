@@ -39,9 +39,9 @@ is what a full queue means.
 | `BUS-017` | `POST` | A stale answer to a lossy request MUST be dropped by its version. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_stale_viewport_answer_is_dropped_by_its_version`; `ambre_trame::ui::grid::tests::group2::a_stale_viewport_answer_is_dropped_by_its_version` | none | verified |
 | `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command` | none | verified |
 | `BUS-016` | `POST` | A full command queue MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries | partial -- the shell's per-frame read of that level and the notice it raises: a driven browser saturating the Logic thread reads the notice off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
-| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | none | unheld -- one early return at the head of each `handle_input`, which a native test reaches by building the view over an outbox that reads busy. The level it reads is `BUS-016`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
-| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from | partial -- each frame hook putting the dropped request back: Trame into `pending_viewport`, Toile into the same slot and into the set of media already asked for. A native test of each view drops a request and reads it offered on the next frame; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | partial |
-| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | none | unheld -- one branch at each Trame commit path, which a native test reads back off the cell after a refused send. The outcome it branches on is `BUS-011` or `BUS-023`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | `ambre_trame::ui::view::view_tests::a_busy_grid_takes_no_input`; `ambre_toile::ui::view::view_tests::a_busy_board_takes_no_input`; `ambre_app::host::prose::tests::a_busy_page_takes_no_input` | none | verified |
+| `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | `ambre_trame::ui::view::tests::a_dropped_request_is_re_offered_not_doubled` -- the slot Trame re-offers from; `ambre_trame::ui::view::view_tests::a_dropped_scroll_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_viewport_request_is_offered_again`; `ambre_toile::ui::view::view_tests::a_dropped_media_request_is_offered_again` | none | verified |
+| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | `ambre_trame::ui::view::view_tests::a_refused_clear_leaves_the_cell`; `ambre_trame::ui::view::view_tests::a_refused_resize_leaves_the_width`; `ambre_trame::ui::view::view_tests::a_refused_paste_leaves_the_cut_source` | none | verified |
 | `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the queue stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
 
 ### 1.3 Logic routes a content command
@@ -49,9 +49,9 @@ is what a full queue means.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `BUS-007` | `FAIL` | The Logic dispatcher MUST drop a mutating command when the caller's role on that document is not writable. | `ambre-spec-membership.md`, `SYNC-016` | `ambre_logic::dispatch::tests::viewer_edit_is_dropped_and_emits_no_update` -- no UI event and no outbound update; `::viewer_read_only_command_still_passes`; `::editor_edit_passes_through` -- the two sides the gate must not confuse | none | verified |
-| `BUS-005` | `FAIL` | A command for a document absent from the registry MUST be dropped, never synthesised. | this spec section 2 | `ambre_logic::dispatch::tests::a_command_for_an_unopened_document_is_dropped` -- no update reaches Sync and no event reaches the UI; `::app_command_on_unknown_doc_is_dropped` -- the same for a read-only command | partial -- neither test asserts that the registry stayed empty, so the synthesis half is held by the drop alone: an arm that inserts an entry and then drops the command leaves both assertions green; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | partial |
+| `BUS-005` | `FAIL` | A command for a document absent from the registry MUST be dropped, never synthesised. | this spec section 2 | `ambre_logic::dispatch::tests::a_command_for_an_unopened_document_is_dropped` -- no update reaches Sync and no event reaches the UI; `::app_command_on_unknown_doc_is_dropped` -- the same for a read-only command, and both read the registry still empty | none | verified |
 | `BUS-008` | `POST` | The role the relay reports MUST supersede the role a freshly opened document assumed. | this spec section 2 | `ambre_logic::dispatch::tests::document_ready_supersedes_the_optimistic_owner_role` -- it reads the optimistic `Owner` off the slot, feeds a `DocumentReady` carrying `Viewer`, and asserts a following edit no longer reaches Sync | none | verified |
-| `BUS-010` | `FRAME` | A command handler MUST NOT send on a queue: it returns an outcome and the dispatcher fans it out. | this spec section 2 | none | unheld -- each engine holds it over its own handlers (`TOILE-089`, the Prose row being unbuilt). Nothing holds it for an engine added later: a handler that captures a sender compiles; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-010` | `FRAME` | A command handler MUST NOT send on a queue: it returns an outcome and the dispatcher fans it out. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a queue sender, a `try_send` or a `send_to_` call in the `src/logic` directory of any engine above its tests | none | verified |
 
 ### 1.4 A service request crosses the hops
 
@@ -63,7 +63,7 @@ is what a full queue means.
 | `BUS-015` | `POST` | A service response MUST be relayed to the interface field for field, unless a recorded route claims it for the document that issued it. | this spec section 2 | `ambre_logic::dispatch::tests::an_unrouted_rest_event_still_forwards_to_the_ui` -- the unclaimed case; `::routed_media_uploaded_lands_in_engine_not_the_ui` -- the claimed case reaches the engine and no stray event reaches the interface | none | verified |
 | `BUS-020` | `FAIL` | A service response whose document was closed MUST be dropped, never delivered. | this spec section 2 | `ambre_logic::dispatch::tests::a_late_response_after_close_is_dropped_without_panic` -- the route is gone on close and the late response repaints nothing; `::a_correlated_upload_failure_aborts_the_import_without_a_raw_api_error` -- the same for the error direction | none | verified |
 | `BUS-004` | `PRE` | A service request identity MUST be allocated in the Main instance. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a `RequestId::next` in `ambre-sync` above its tests | none | verified |
-| `BUS-019` | `FRAME` | Relaying a service request MUST NOT touch the document registry, save for the two commands that remove a document from it. | this spec section 2 | none | unheld -- `ambre_logic::dispatch::tests::logout_clears_docs_and_forwards` pins the one exception that clears everything, and nothing pins that the other twenty-nine variants leave the registry alone: the hook is one `match` arm away from any of them; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-019` | `FRAME` | Relaying a service request MUST NOT touch the document registry, save for the two commands that remove a document from it. | this spec section 2 | `ambre_logic::dispatch::tests::a_relayed_request_leaves_the_registry_alone` -- every other variant, listed by an exhaustive `match`; `::logout_clears_docs_and_forwards` -- the exception that clears everything | none | verified |
 
 ### 1.5 A message crosses the worker hop
 
@@ -79,16 +79,13 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 19 `verified`, 3 `partial`, 4 `untested`, 2 `unimplemented`. What holds is the
-  Logic dispatcher, driven on host through an unknown document, a viewer's edit and a child's role.
-  A service round trip, a late response, the lossy gate and the backlog behind a full queue are
-  driven too. Loose is the envelope discipline the other two threads owe.
+* **Verification.** 25 `verified`, 1 `partial`, 2 `unimplemented`. What holds is the Logic
+  dispatcher, driven on host through an unknown document, a viewer's edit and a child's role. A
+  service round trip, a late response, the lossy gate and the backlog behind a full queue are driven
+  too. Native views drive the input gate, the re-offer and the refused commit. A gate refuses a
+  handler that sends on a queue.
 
-  Five paths are loose because nobody drives them. Three sit in the codec and dispatcher: an encode
-  no test names, a stale version, a handler capturing a sender. The fourth is the registry entry no
-  test asserts was never created; the fifth is Toile's re-offer of a dropped request. Three more
-  sit in the views: the busy notice, the input gate and the call site that must not write what it
-  failed to send. A native view or a driven browser reaches each of them.
+  One path is loose: the busy notice the shell raises, which only a driven browser reaches.
 ---
 
 ## 2. MODEL
@@ -217,9 +214,6 @@ The bus has no control of its own. What a user meets is what it does under load.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The two view halves of the lossless class run in no test.** A host test drives the outbox. The
-  branches that read it compile only under `wasm32`, where no test builds a view. Those are the
-  input gate (`BUS-022`) and the commit that must not write a refused edit (`BUS-018`).
 * **Nothing refuses a lossless send routed around the outbox.** Each view still holds a raw
   `ambre_bus::conduit::Sender`, which the lossy class and the session commands need. A call site
   added tomorrow can `try_send` a lossless command on it, and drop it silently. The

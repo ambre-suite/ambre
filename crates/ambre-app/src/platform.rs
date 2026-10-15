@@ -335,6 +335,15 @@ pub(crate) fn spawn_sync_worker(
     worker.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
     // Leak the closure: it lives for the whole session (the worker never stops).
     onmessage.forget();
+    // A worker that aborts closes no queue: its trap reaches this side as an
+    // error event alone, and the page latches its terminal screen (`ARCH-014`).
+    let onerror = Closure::<dyn FnMut(web_sys::Event)>::new(|_: web_sys::Event| {
+        let reason = "the Sync worker failed";
+        tracing::error!("{reason}");
+        ambre_canvas::signal_fatal(reason);
+    });
+    worker.set_onerror(Some(onerror.as_ref().unchecked_ref()));
+    onerror.forget();
     worker
 }
 

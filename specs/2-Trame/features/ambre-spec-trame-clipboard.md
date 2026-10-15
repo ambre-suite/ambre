@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | `ambre_trame::ui::view::view_tests::a_cut_clears_its_source_behind_the_paste` -- the copy writes nothing, and the paste goes out before the clear | none | verified |
-| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none | unheld -- the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. A native test cuts a range and pastes over an outbox that refuses; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | `ambre_trame::ui::view::view_tests::a_refused_paste_leaves_the_cut_source`; `ambre_trame::ui::view::view_tests::a_refused_source_clear_keeps_the_cut_range` | none | verified |
 
 ### 1.4 Paste
 
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 7 `verified`, 1 `untested`, 1 `unimplemented`. What holds is the rules that live
+* **Verification.** 8 `verified`, 1 `unimplemented`. What holds is the rules that live
   in the Logic thread, and two peers that paste and cut over each other's edits converge. Above the
   seam, a native test drives the view. The kept copy answers on the token, and a cut clears its
   source only behind its paste. The token itself is browser state, held in the browser tier.

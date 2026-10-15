@@ -1171,6 +1171,7 @@ mod tests {
             ui_rx.try_recv().is_err(),
             "no event should be emitted for an unknown doc"
         );
+        assert!(state.docs.is_empty(), "the unknown doc was synthesised");
     }
 
     #[test]
@@ -1424,6 +1425,7 @@ mod tests {
         // real one.
         assert!(updated_docs(&sync_rx).is_empty());
         assert!(ui_rx.try_recv().is_err());
+        assert!(state.docs.is_empty(), "the unopened doc was synthesised");
     }
 
     #[test]
@@ -1679,6 +1681,202 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// Every service request but the two that remove a document, each naming
+    /// `doc` where it names one. The `match` has no wildcard, so a new variant
+    /// fails the build here until it is listed.
+    fn relayed_requests(doc: DocumentId) -> Vec<RestCommand> {
+        use ambre_bus::rest::{SecretBytes, SecretString};
+        use ambre_bus::{ChannelId, MeetingId, Role, UserId};
+        let secret = || SecretBytes::new(b"pass".to_vec());
+        let (user, channel, meeting) = (UserId::new(), ChannelId::new(), MeetingId::new());
+        let all = vec![
+            RestCommand::Unlock {
+                passphrase: secret(),
+            },
+            RestCommand::SetupAccount {
+                passphrase: secret(),
+                email: "a@b.c".to_owned(),
+                display_name: "A".to_owned(),
+            },
+            RestCommand::DevLogin {
+                username: "a".to_owned(),
+            },
+            RestCommand::ChangePassphrase {
+                current_passphrase: secret(),
+                new_passphrase: secret(),
+            },
+            RestCommand::RecoverAccount {
+                recovery_words: SecretString::new("words".to_owned()),
+                new_passphrase: secret(),
+            },
+            RestCommand::ListDocuments,
+            RestCommand::CreateDocument {
+                doc_type: DocType::Trame,
+                name: "n".to_owned(),
+            },
+            RestCommand::RenameDocument {
+                document_id: doc,
+                name: "n".to_owned(),
+            },
+            RestCommand::FetchInviteeKey {
+                document_id: doc,
+                invitee_email: "a@b.c".to_owned(),
+            },
+            RestCommand::InviteToDocument {
+                document_id: doc,
+                invitee_email: "a@b.c".to_owned(),
+                role: Role::Editor,
+                expect_exchange_pub_key: [0; 32],
+            },
+            RestCommand::RevokeFromDocument {
+                document_id: doc,
+                user_id: user,
+            },
+            RestCommand::LeaveDocument { document_id: doc },
+            RestCommand::ListDocumentMembers { document_id: doc },
+            RestCommand::UpdateDocumentMemberRole {
+                document_id: doc,
+                user_id: user,
+                role: Role::Viewer,
+            },
+            RestCommand::SearchUsers {
+                query: "a".to_owned(),
+            },
+            RestCommand::UploadMedia {
+                document_id: doc,
+                data: vec![1],
+            },
+            RestCommand::DownloadMedia {
+                document_id: doc,
+                content_hash: "h".to_owned(),
+            },
+            RestCommand::SealDocFile {
+                plaintext: secret(),
+                passphrase: secret(),
+            },
+            RestCommand::OpenDocFile {
+                sealed: vec![1],
+                passphrase: secret(),
+            },
+            RestCommand::ListChannels,
+            RestCommand::CreateChannel {
+                name: "c".to_owned(),
+            },
+            RestCommand::DeleteChannel {
+                channel_id: channel,
+            },
+            RestCommand::InviteToChannel {
+                channel_id: channel,
+                invitee_email: "a@b.c".to_owned(),
+                role: Role::Editor,
+            },
+            RestCommand::RevokeFromChannel {
+                channel_id: channel,
+                user_id: user,
+            },
+            RestCommand::ListChannelMembers {
+                channel_id: channel,
+            },
+            RestCommand::UpdateChannelMemberRole {
+                channel_id: channel,
+                user_id: user,
+                role: Role::Viewer,
+            },
+            RestCommand::UpdateReadCursor {
+                channel_id: channel,
+                last_seq: 1,
+            },
+            RestCommand::GetUnreadCounts,
+            RestCommand::CreateMeeting {
+                name: "m".to_owned(),
+            },
+            RestCommand::JoinMeeting {
+                meeting_id: meeting,
+            },
+            RestCommand::LeaveMeeting {
+                meeting_id: meeting,
+            },
+            RestCommand::EndMeeting {
+                meeting_id: meeting,
+            },
+            RestCommand::ProviderSignIn {
+                provider: "p".to_owned(),
+            },
+            RestCommand::ProviderReturn {
+                provider: "p".to_owned(),
+                code: "c".to_owned(),
+                state: "s".to_owned(),
+            },
+        ];
+        for cmd in &all {
+            let removes = match cmd {
+                RestCommand::Logout | RestCommand::DeleteDocument { .. } => true,
+                RestCommand::Unlock { .. }
+                | RestCommand::SetupAccount { .. }
+                | RestCommand::DevLogin { .. }
+                | RestCommand::ChangePassphrase { .. }
+                | RestCommand::RecoverAccount { .. }
+                | RestCommand::ListDocuments
+                | RestCommand::CreateDocument { .. }
+                | RestCommand::RenameDocument { .. }
+                | RestCommand::FetchInviteeKey { .. }
+                | RestCommand::InviteToDocument { .. }
+                | RestCommand::RevokeFromDocument { .. }
+                | RestCommand::LeaveDocument { .. }
+                | RestCommand::ListDocumentMembers { .. }
+                | RestCommand::UpdateDocumentMemberRole { .. }
+                | RestCommand::SearchUsers { .. }
+                | RestCommand::UploadMedia { .. }
+                | RestCommand::DownloadMedia { .. }
+                | RestCommand::SealDocFile { .. }
+                | RestCommand::OpenDocFile { .. }
+                | RestCommand::ListChannels
+                | RestCommand::CreateChannel { .. }
+                | RestCommand::DeleteChannel { .. }
+                | RestCommand::InviteToChannel { .. }
+                | RestCommand::RevokeFromChannel { .. }
+                | RestCommand::ListChannelMembers { .. }
+                | RestCommand::UpdateChannelMemberRole { .. }
+                | RestCommand::UpdateReadCursor { .. }
+                | RestCommand::GetUnreadCounts
+                | RestCommand::CreateMeeting { .. }
+                | RestCommand::JoinMeeting { .. }
+                | RestCommand::LeaveMeeting { .. }
+                | RestCommand::EndMeeting { .. }
+                | RestCommand::ProviderSignIn { .. }
+                | RestCommand::ProviderReturn { .. } => false,
+            };
+            assert!(
+                !removes,
+                "the two removing commands are pinned on their own"
+            );
+        }
+        all
+    }
+
+    /// `BUS-019`: relaying a service request leaves the registry alone. Each
+    /// request reaches Sync, and the open document stays open, even when the
+    /// request names it.
+    #[test]
+    fn a_relayed_request_leaves_the_registry_alone() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc = DocumentId::new();
+        state.open_with_identity(doc, DocType::Trame);
+        let requests = relayed_requests(doc);
+        let count = requests.len();
+        for cmd in requests {
+            let name = format!("{cmd:?}");
+            state.handle_logic_command(rest(cmd));
+            assert!(state.docs.contains_key(&doc), "{name} closed the document");
+            assert_eq!(state.docs.len(), 1, "{name} touched the registry");
+        }
+        let relayed = sync_rx
+            .try_iter()
+            .filter(|c| matches!(c, SyncCommand::Rest { .. }))
+            .count();
+        assert_eq!(relayed, count, "every request reaches Sync");
     }
 
     /// `LoadFonts` seeds the export `FontContext` once and is local-only. It

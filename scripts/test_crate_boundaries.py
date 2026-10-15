@@ -46,7 +46,8 @@ def scratch(tmp: str) -> Path:
         "fn relay(ev: &UiEvent) { trame_relay.absorb(ev); }\n"
         "fn keys() { register(trame_chrome::COMMANDS); }\n"
         "fn boot() { spawn(move || ambre_logic::run(bell)); }\n"
-        "fn pre() { start.drain(&logic_to_sync_rx, post); }\n",
+        "fn pre() { start.drain(&logic_to_sync_rx, post); }\n"
+        "fn hook() { std::panic::set_hook(Box::new(|i| { ambre_canvas::signal_fatal(&m); })); }\n",
     )
     write(root, cb.FRAME_HOST, "fn go() { drive_frame(&raf_c, &mut pre_frame, render); }\n")
     write(root, cb.DENSITY, "fn read() -> f64 { window.device_pixel_ratio() }\n")
@@ -85,10 +86,18 @@ def scratch(tmp: str) -> Path:
         '<link data-trunk rel="rust" data-wasm-opt="0" />\n'
         '<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"\n      data-loader-shim="true" />\n',
     )
-    write(root, cb.WORKER_SPAWNER, "fn spawn() { web_sys::Worker::new(URL); }\n")
+    write(
+        root,
+        cb.WORKER_SPAWNER,
+        "fn spawn() {\n    web_sys::Worker::new(URL);\n"
+        "    let e = Closure::new(|_| { ambre_canvas::signal_fatal(r); });\n"
+        "    worker.set_onerror(Some(e));\n}\n",
+    )
     write(root, cb.LOGIC_MANIFEST, '[dependencies]\nambre-bus = { path = "../ambre-bus" }\n\n[dev-dependencies]\nwgpu = "1"\n')
     write(root, "crates/ambre-bus/Cargo.toml", '[dependencies]\nambre-core = { path = "../ambre-core" }\n')
     write(root, f"{cb.PROTOCOL}/lib.rs", "pub struct Update {\n    pub seq: u64,\n}\n")
+    write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
+    write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     return root
 
 
@@ -121,6 +130,9 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_thread_reach(errors)
             cb.check_worker_messages(errors)
             cb.check_engine_and_relay(errors)
+            cb.check_handlers(errors)
+            cb.check_failure_latches(errors)
+            cb.check_exit_writes(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -183,7 +195,8 @@ class CrateBoundaries(unittest.TestCase):
         line = "fn keep() { window.local_storage(); }\n"
         errors = self.breach("crates/ambre-chrome/src/theme.rs", line)
         self.assertTrue(any("a persistence path the rule does not name" in e for e in errors), errors)
-        self.assertEqual(self.breach(cb.STORAGE_OWNERS[2], line), [])
+        owner = cb.STORAGE_OWNERS[2]
+        self.assertFalse(any(e.startswith(owner) and "persistence" in e for e in self.breach(owner, line)))
 
     def test_a_compute_shader_is_refused(self):
         errors = self.breach("crates/ambre-canvas/src/render/blur.wgsl", "@compute @workgroup_size(8)\nfn main() {}\n")
@@ -568,6 +581,42 @@ class CrateBoundaries(unittest.TestCase):
             '#[cfg(test)]\nmod tests {\n    fn t() { println!("{payload:?}"); }\n}\n'
         )
         self.assertEqual(self.breach(f"{cb.RELAY}/blob.rs", text), [])
+
+    def test_a_handler_that_sends_on_a_queue_is_refused(self):
+        for line in (
+            "struct S { tx: Sender<UiEvent> }\n",
+            "fn h(s: &mut S) { s.out.try_send(e); }\n",
+            "fn h(s: &mut S) { s.send_to_sync(c); }\n",
+        ):
+            for rel in ("crates/ambre-trame/src/logic/state.rs", "crates/ambre-new/src/logic/mod.rs"):
+                errors = self.breach(rel, line)
+                self.assertTrue(any("sends on a queue" in e for e in errors), (rel, line, errors))
+
+    def test_a_handler_that_returns_an_outcome_stays_free(self):
+        text = "fn h(&mut self, c: Command) -> Outcome { Outcome::default() }\n"
+        self.assertEqual(self.breach("crates/ambre-toile/src/logic/state.rs", text), [])
+
+    def test_a_panic_hook_that_latches_nothing_is_refused(self):
+        text = "fn hook() { std::panic::set_hook(Box::new(|i| { tracing::error!(\"{i}\"); })); }\n"
+        errors = self.breach(cb.APP_LIB, text)
+        self.assertTrue(any("panic hook does not latch" in e for e in errors), errors)
+
+    def test_a_worker_error_that_latches_nothing_is_refused(self):
+        text = "fn spawn() {\n    let e = Closure::new(|_| { tracing::error!(\"x\"); });\n    worker.set_onerror(Some(e));\n}\n"
+        errors = self.breach(cb.WORKER_SPAWNER, text)
+        self.assertTrue(any("error event does not latch" in e for e in errors), errors)
+
+    def test_a_build_that_unwinds_on_a_panic_is_refused(self):
+        for text in ('[unstable]\nbuild-std = ["std", "panic_unwind"]\n', "[unstable]\n"):
+            errors = self.breach(cb.CARGO_CONFIG, text)
+            self.assertTrue(any("does not abort on a panic" in e for e in errors), (text, errors))
+
+    def test_a_destructor_in_a_thread_that_writes_is_refused(self):
+        text = "impl Drop for Flush {\n    fn drop(&mut self) { self.save(); }\n}\n"
+        for rel in ("crates/ambre-logic/src/flush.rs", "crates/ambre-toile/src/logic/flush.rs"):
+            errors = self.breach(rel, text)
+            self.assertTrue(any("destructor on its way out" in e for e in errors), (rel, errors))
+        self.assertEqual(self.breach("crates/ambre-canvas/src/flush.rs", text), [])
 
     def test_a_decay_outside_the_kinetic_model_is_refused(self):
         for line in ("const FRICTION: f64 = 0.95;\n", "fn step(velocity_x: f64) {}\n"):

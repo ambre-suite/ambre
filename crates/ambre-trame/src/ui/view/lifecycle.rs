@@ -156,6 +156,9 @@ impl TrameView {
     /// `Err` is the command the outbox took nowhere. A caller that mirrors it
     /// into its own grid cache MUST read this and decline (`BUS-018`). A cell
     /// showing an edit the document never received hides the loss.
+    ///
+    /// Every `Err` is logged here, so no caller can drop a command in silence
+    /// (`TRAME-UI-142`). The fatal latch logged its own cause once.
     pub(crate) fn send_command_lossless(&mut self, cmd: TrameCommand) -> Result<(), SendError> {
         if self.fatal {
             return Err(SendError::Disconnected);
@@ -170,8 +173,14 @@ impl TrameView {
                 tracing::warn!("Trame: UI->Logic channel full, command held for a later frame");
                 Ok(())
             }
-            SendOutcome::Refused => Err(SendError::Refused),
-            SendOutcome::Disconnected => Err(SendError::Disconnected),
+            SendOutcome::Refused => {
+                tracing::error!("Trame: the outbox is full, a lossless command was refused");
+                Err(SendError::Refused)
+            }
+            SendOutcome::Disconnected => {
+                tracing::error!("Trame: UI->Logic channel disconnected, a command was lost");
+                Err(SendError::Disconnected)
+            }
         }
     }
 
@@ -206,9 +215,9 @@ impl TrameView {
         }
         self.fatal = true;
         tracing::error!("Trame: fatal -- {reason}; the UI is now inert");
-        // Latch the canvas terminal screen. A Sync-worker death is a SEPARATE
-        // wasm instance, so it reaches us only as this queue disconnect; the
-        // panic-hook latch never fires for it. Forward it to the host here.
+        // Latch the canvas terminal screen. The page never waits on a
+        // disconnection, which comes late. A panic latches through the hook,
+        // and a failed Sync worker through its error event (`ARCH-014`).
         ambre_canvas::signal_fatal(reason);
     }
 

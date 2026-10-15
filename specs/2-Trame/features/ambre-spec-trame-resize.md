@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group11::a_column_is_never_narrower_than_its_minimum` | none | verified |
 | `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_resize_stores_an_unzoomed_width_and_reflows_at_once` -- one gesture at zoom 1 and at zoom 2 | none | verified |
 | `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_resize_stores_an_unzoomed_width_and_reflows_at_once` -- the grid reflows with no answer from the Logic thread | none | verified |
-| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | unheld -- the early return in `send_resize_col` and `send_resize_row` before the local map is written, which a native test reaches by resizing over an outbox that refuses. The outcome it branches on is `BUS-011`; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::view_tests::a_refused_resize_leaves_the_width` | none | verified |
 
 ### 1.3 Fit a boundary to its content
 
@@ -44,12 +44,11 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 9 `verified`, 1 `untested`. What holds is the document plane: the write, the
-  reload and the concurrent race each have a test. What is loose is the UI thread, where the pointer
-  meets the zoom and the cache, and the column clamp nothing reads back. A resize goes out lossless,
-  so a refused send leaves the local size map untouched, held by a manual read (`TRAME-UI-127`). A
-  column auto-fit asks the Logic thread for the whole column and measures that answer, never the
-  viewport cache (`TRAME-UI-128`).
+* **Verification.** 10 `verified`. What holds is the document plane: the write, the reload and the
+  concurrent race each have a test. A resize goes out lossless, and a native view reads that a
+  refused send leaves the local size map untouched (`TRAME-UI-127`). A column auto-fit asks the
+  Logic thread for the whole column and measures that answer, never the viewport cache
+  (`TRAME-UI-128`).
 
 ---
 

@@ -32,7 +32,7 @@ prefix is `ARCH`.
 | `ARCH-010` | `INV` | The engine MUST be created once per session. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip`; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a launcher that starts the Logic runtime other than once | none | verified |
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::a_route_walk_reuses_the_one_engine` -- each route change is a close, an open and a show; `::cross_kind_open_needs_reload` -- the one change allowed to end it | none | verified |
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line that names a `SharedWorker` or a service worker, and a worker spawned outside `platform.rs` | none | verified |
-| `ARCH-014` | `INV` | The client MUST NOT rely on a queue disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a queue, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-014` | `INV` | The client MUST NOT rely on a queue disconnection to detect a thread failure. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a panic hook in `ambre-app/src/lib.rs` that does not call `ambre_canvas::signal_fatal`, and a Sync worker whose error event in `platform.rs` does not call it | none | verified |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses a line of `ambre-app` naming a variant of an application's command or event, or one of its command ids | none | verified |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound queues, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
 | `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot`; `ambre_logic::pass_tests::a_document_closed_in_the_pass_keeps_its_last_edit` -- the close | none | verified |
@@ -42,7 +42,7 @@ prefix is `ARCH`.
 | `ARCH-021` | `INV` | A queue end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
 | `ARCH-032` | `INV` | Every crate of the workspace MUST inherit the workspace lint table. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a root manifest without `[workspace.lints]` and a member that does not set `[lints]` `workspace = true` | none | verified |
 | `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | lint-wall -- the workspace lint table denies `unwrap_used`, `expect_used`, `panic`, `unreachable`, `todo`, `unimplemented` and `indexing_slicing`, and every crate inherits it (`ARCH-032`). `just lint` reads the host with every feature on, and `just lint-wasm` the wasm-only code, in the CI `lint` and `test-wasm` jobs. A boot site that cannot recover carries an `expect` attribute with its reason | none | verified |
-| `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
 
 ### 1.2 A thread fails
 
@@ -54,7 +54,7 @@ that and a page that looks alive and answers nothing.
 | `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | `ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event`; `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view` | none | verified |
 | `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view`; `::a_vanished_logic_thread_latches_the_page` -- the page's fatal latch is set; `ambre_canvas::frame::tests::a_fatal_process_paints_its_screen_once_then_idles` -- the terminal screen | none | verified |
 | `ARCH-029` | `FAIL` | A reader fed by the relay or by a user's file MUST refuse a malformed input as a typed error, never a panic. | this spec section 2; `SRV-100` | cargo-fuzz -- the four targets under `fuzz/fuzz_targets/`, run by the CI `fuzz` job | partial -- the sealed path and the Trame and Toile readers have no target; lands with the `Fuzzing the remaining readers` Story (`ambre-roadmap.md` E9) | partial |
-| `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `Undo and the thread failure paths held` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | `ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event` -- nothing reaches the relay or local persistence; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a client build that does not abort on a panic, and a destructor in the Logic thread, an engine or the Sync worker | none | verified |
 
 ### 1.3 A message crosses a queue
 
@@ -82,10 +82,11 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 28 `verified`, 1 `partial`, 3 `untested`. The build refuses a cycle, a misplaced
-  cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
-  application logic in the launcher too. Host tests hold the Logic loop's pass, its unfinished work,
-  the wake, the full queue and the disconnection of each queue. The rest is held by the code alone.
+* **Verification.** 31 `verified`, 1 `partial`. The build refuses a cycle, a misplaced cryptographic
+  dependency, a missing atomics flag and a lock on a client queue. It refuses application logic in
+  the launcher too, a failure path that waits on a queue, and a write on a failing thread's way out.
+  Host tests hold the Logic pass, its unfinished work, the wake, the full queue, each queue's
+  disconnection and two tabs of one user. The rest is held by the code alone.
 
 ---
 
@@ -175,12 +176,16 @@ the pass is answered first, so its last edit is saved (`ARCH-019`).
 edit wrote, logged after the document's snapshot. A whole snapshot costs an export of the document.
 So it is taken only to start the log, to fold it past 256 deltas, and at close (`ARCH-027`).
 
-**Failure, in two paths.**
+**Failure, in three paths.**
 
 | Path | What happens | What the user gets |
 |---|---|---|
 | graceful | the thread emits a fatal event, then exits | the view latches an inert state and stops sending |
 | a panic | the build aborts rather than unwinding, so no value is dropped and no queue ever reports a disconnection | the panic hook calls the page's fatal hook before the abort, and a terminal screen replaces the content |
+| the Sync worker fails | its trap reaches the page as the worker's error event, and no queue closes | the error handler calls the page's fatal hook, and the same terminal screen replaces the content |
+
+No path writes the document on its way out (`ARCH-015`). The abort runs no destructor, and the
+graceful path emits its event before any state exists to flush.
 
 The second path is why `ARCH-008` exists. A leaked sender lives in shared memory forever, so the
 receiving side reads an empty queue rather than a closed one. A disconnection therefore means a
@@ -274,12 +279,10 @@ The stack has no control of its own. What a user meets is what it guarantees the
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The panic hook is driven by no test.** A fatal event and a dropped channel reach the page latch
-  in a host test. The hook that turns a panic into a fatal message runs only in a browser, and no
-  test panics a thread there.
+  in a host test. A gate reads that the hook calls the latch, but no test panics a thread in a
+  browser.
 * **The relay cadence is unmeasured.** `ARCH-007` states one drain per frame ahead of the draw, and
   the budget rows for both hops read that no measurement exists.
-* **Two tabs are never tested together.** `ARCH-013` rests on the convergence belt of each
-  application, which drives two peers in one process and not two tabs.
 * **The route poll runs every frame inside the launcher.** Its decision is `route::step`, which a
   test walks. The effects it applies, the document open and close and the render gate, run only in
   a browser. It exists because the interface framework requires a subtree that the engine handles

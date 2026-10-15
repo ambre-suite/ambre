@@ -3012,6 +3012,57 @@ fn a_history_step_reaches_the_other_peer_as_a_delta() {
     assert_eq!(b.bounds_of(&id), Some(Rect::new(0.0, 0.0, 10.0, 10.0)));
 }
 
+/// `UNDO-003` and `UNDO-008`: an undo with nothing to revert writes nothing
+/// and emits no delta. This holds on a fresh board and on a board undone to
+/// its start.
+#[test]
+fn an_undo_with_nothing_to_revert_writes_nothing() {
+    let mut st = ToileState::new();
+    for round in 0..2 {
+        let before = st.crdt().oplog_vv();
+        let out = st.handle_command(ToileCommand::Undo);
+        assert!(
+            out.update.is_none(),
+            "round {round}: the undo emitted a delta"
+        );
+        assert_eq!(
+            st.crdt().oplog_vv(),
+            before,
+            "round {round}: the undo wrote"
+        );
+        create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+        st.handle_command(ToileCommand::Undo);
+    }
+}
+
+/// `UNDO-007`: an undo reverts this peer's own work and leaves a remote
+/// peer's move in place.
+#[test]
+fn an_undo_leaves_a_remote_move_alone() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let shared = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    b.apply_remote(&a.export_snapshot());
+    let own = create_rect(&mut b, Point::new(50.0, 0.0), Size::new(10.0, 10.0));
+    let moved = a.handle_command(ToileCommand::MoveElements {
+        ids: vec![shared.clone()],
+        delta: Vec2::new(5.0, 7.0),
+    });
+    b.apply_remote(&moved.update.expect("a move writes"));
+    b.handle_command(ToileCommand::Undo);
+    assert!(
+        b.bounds_of(&own).is_none(),
+        "the undo takes back B's own sticky"
+    );
+    assert_eq!(b.bounds_of(&shared), Some(Rect::new(5.0, 7.0, 15.0, 17.0)));
+    let out = b.handle_command(ToileCommand::Undo);
+    assert!(
+        out.update.is_none(),
+        "B has nothing more of its own to revert"
+    );
+    assert_eq!(b.bounds_of(&shared), Some(Rect::new(5.0, 7.0, 15.0, 17.0)));
+}
+
 #[test]
 fn undo_reverts_group_as_one_item() {
     let mut st = ToileState::new();
