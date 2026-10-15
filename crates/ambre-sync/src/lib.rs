@@ -466,6 +466,10 @@ struct SyncDocumentState {
     /// the document is being lazily created server-side. Flushed in order once
     /// it is materialized.
     pending_updates: Vec<Vec<u8>>,
+    /// Uploads asked for while the document is local-only. The relay signs no
+    /// link for a document it does not hold, so each one waits for the lazy
+    /// creation (`SYNC-145`).
+    pending_uploads: Vec<(RequestId, Vec<u8>)>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: SnapshotId,
@@ -585,6 +589,7 @@ impl SyncDocumentState {
             server_created,
             creating: false,
             pending_updates: Vec::new(),
+            pending_uploads: Vec::new(),
             current_snapshot_id,
             local_clock: 0,
             ephemeral_counter: 0,

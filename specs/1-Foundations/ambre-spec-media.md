@@ -38,6 +38,8 @@ the put are the Sync worker's.
 | `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | type-level -- the worker's only upload takes a `SealedBlob`, whose bytes only the seal builds; `ambre_sync::pipeline::tests::a_blob_bound_for_storage_is_sealed` -- such a blob opens back under the document key alone | none | verified |
 | `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | `ambre_sync::http::tests::an_upload_names_only_the_address_and_the_size` -- both requests serialize to the keyed address and the sealed size, and to no other field | none | verified |
 | `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | `ambre_sync::media::tests::a_failed_upload_step_confirms_nothing` -- a failing link, put or confirmation each reaches the application as an error for the request, with no address answered, and no failure before the confirmation reaches it | none | verified |
+| `SYNC-145` | `POST` | An upload for a document the relay does not hold yet MUST wait for its creation. | this spec section 3, the upload steps | `ambre_sync::media::tests::an_upload_waits_for_its_document_on_the_relay` -- an upload on a local-only document answers nothing, then answers with the address once the document is created | none | verified |
+| `SYNC-146` | `FAIL` | An upload that waits for a creation that fails MUST be reported. | this spec section 3, the upload steps | `ambre_sync::media::tests::an_upload_waits_for_its_document_on_the_relay` -- an upload on a local-only document answers nothing, then answers with an error once its creation fails | none | verified |
 
 ### 1.3 Show a picture
 
@@ -47,7 +49,7 @@ The application names an address it does not hold. The worker fetches the object
 |---|---|---|---|---|---|---|
 | `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a download driven through a fake transport answers once, with the request, the address and the whole plaintext | none | verified |
 | `SYNC-139` | `POST` | A download MUST fetch, byte for byte, the blob an upload put through the relay's link. | this spec section 3; `ambre-spec-object-store.md` | `ambre_server::routes::tests::handler_tests::a_download_fetches_the_bytes_an_upload_put` -- the relay signs both links, the test puts every byte value through the upload link to the object store of the database tier, minio in the continuous integration, and reads the same bytes back through the download link | none | verified |
-| `SYNC-140` | `FRAME` | The browser transport MUST NOT alter a byte it puts to storage or fetches from it. | this spec section 3 | none | unheld -- the transport compiles for the browser alone, and every host test of the two legs drives a fake in its place; lands with the `The browser media transport held` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-140` | `FRAME` | The browser transport MUST NOT alter a byte it puts to storage or fetches from it. | this spec section 3 | `ambre_belt::toile::tests::an_image_crosses_the_object_store_whole` -- browser tier: one user drops a picture on a new board, and a second user's screen shows its colour where it lies. The seal authenticates every byte, so a byte either leg altered would leave the picture unopened | none | verified |
 | `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a line of `ambre-sync` that names browser storage, the browser database, the cache or a cookie | none | verified |
 | `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | `ambre_sync::media::tests::a_download_refuses_a_blob_the_address_does_not_name` -- it refuses a blob served in place of another, and one a member sealed under the address over other bytes, which only the recomputed address catches. It drives the open the leg calls, not the leg, which runs only in a browser | none | verified |
 | `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | `ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing` -- a failed link or fetch, and a short, altered or foreign blob, each reach the application as an error for the request, and no byte is answered | none | verified |
@@ -58,10 +60,10 @@ The application names an address it does not hold. The worker fetches the object
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
   (`SYNC-049`). Beside them travel the size and an address keyed by the document key, which the
   relay cannot compute from a file it holds (`SYNC-050`, `SYNC-053`).
-* **Verification.** 12 `verified`, 1 `untested`. The address and the two requests are held on the
-  host. So is each leg end to end through a fake transport, up to the answer or the error it hands
-  the application. The database tier round-trips a blob through a real store (`SYNC-139`). The
-  browser transport is loose (`SYNC-140`).
+* **Verification.** 15 `verified`. The address, the two requests and each leg through a fake
+  transport are held on the host. The database tier round-trips a blob through a real store
+  (`SYNC-139`). The browser tier carries a picture from one user's board to another's screen
+  (`SYNC-140`).
 
 ---
 
@@ -92,7 +94,8 @@ one upload and one object, with no coordination between peers. It is a keyed has
 HMAC under a subkey of the document key. Every member reaches the same address, and the relay,
 which holds no key, cannot compute it from a file it already has (`SYNC-050`).
 
-**An upload, in steps.**
+**An upload, in steps.** A document the relay does not hold yet gets no link. The upload waits for
+its creation, which it starts (`SYNC-145`).
 
 1. compute the address from the bytes, under the document key;
 2. seal the bytes under the document key, signed and committed (`ambre-spec-sealed-envelope.md`,
@@ -187,8 +190,6 @@ of the three, and what is painted in the meantime, is the application's own feat
   the document itself is deleted (`ambre-spec-object-store.md`, `SRV-057`).
 * **The addresses stored before the key are plain hashes.** The relay cannot rekey them, and no
   step migrates them. A document that held media before the change still exposes those addresses.
-* **No test drives the browser transport** (`SYNC-140`). The legs are held through a fake, so a
-  header the presigned link refuses, or a body the fetch truncates, fails nothing.
 * **The download leg has no caller in two applications.** The worker's half ships; Toile's reader is
   the gap `TOILE-IO-034` states, and Prose's pictures are unbuilt.
 

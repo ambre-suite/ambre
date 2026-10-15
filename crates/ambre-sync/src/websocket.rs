@@ -642,6 +642,7 @@ impl SyncState {
                 for body in pending {
                     self.send_body(document_id, body);
                 }
+                self.flush_pending_uploads(document_id, None);
             }
             SyncEvent::DocumentCreateFailed {
                 document_id,
@@ -651,6 +652,7 @@ impl SyncState {
                     doc_state.creating = false;
                 }
                 tracing::error!("Sync: lazy create failed for {document_id:?}: {message}");
+                self.flush_pending_uploads(document_id, Some(&message));
             }
             SyncEvent::HttpError { id: _id, message } => {
                 self.send_to_logic(LogicEvent::ApiError {

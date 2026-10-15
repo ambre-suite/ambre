@@ -164,6 +164,32 @@ impl Page {
         (r[0].as_f64().unwrap_or(0.0), r[1].as_f64().unwrap_or(0.0))
     }
 
+    /// The colour the screen shows at `at`, in canvas pixels, as red, green
+    /// and blue. It reads a screenshot, so it sees what the user sees.
+    pub async fn color_at(&self, at: (f64, f64)) -> [u8; 3] {
+        use base64::Engine;
+
+        let (ox, oy) = self.canvas_origin().await;
+        let shot = self
+            .browser
+            .cdp(
+                "Page.captureScreenshot",
+                json!({
+                    "format": "png",
+                    "clip": { "x": ox + at.0, "y": oy + at.1, "width": 1, "height": 1, "scale": 1 },
+                }),
+            )
+            .await;
+        let data = shot["data"].as_str().expect("a screenshot");
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .expect("a base64 screenshot");
+        let pixel = image::load_from_memory(&png)
+            .expect("a PNG screenshot")
+            .to_rgb8();
+        pixel.get_pixel(0, 0).0
+    }
+
     /// The text of the live region a screen reader hears beside the canvas.
     pub async fn announced(&self) -> String {
         self.browser

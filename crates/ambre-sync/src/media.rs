@@ -71,12 +71,25 @@ impl SyncState {
     /// 5. Confirms the upload via `POST /api/documents/{id}/media`, naming the
     ///    address and the sealed size only (`SYNC-053`).
     /// 6. Emits [`SyncEvent::MediaUploaded`].
+    ///
+    /// A document the relay does not hold yet gets no link. The upload waits,
+    /// and its creation starts: [`SyncState::flush_pending_uploads`] resumes it
+    /// (`SYNC-145`).
     pub(crate) fn handle_upload_media(
-        &self,
+        &mut self,
         id: RequestId,
         document_id: DocumentId,
         data: Vec<u8>,
     ) {
+        if let Some(doc_state) = self
+            .documents
+            .get_mut(&document_id)
+            .filter(|d| !d.server_created)
+        {
+            doc_state.pending_uploads.push((id, data));
+            self.trigger_lazy_create(document_id);
+            return;
+        }
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -130,6 +143,28 @@ impl SyncState {
             let base = format!("{url_scheme}://{api_base}/api/documents/{document_id}");
             upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
         });
+    }
+
+    /// Resumes the uploads that waited for the document's lazy creation
+    /// (`SYNC-145`). A creation that failed ends each of them with an error,
+    /// so no request waits for good (`SYNC-146`).
+    pub(crate) fn flush_pending_uploads(&mut self, document_id: DocumentId, failure: Option<&str>) {
+        let pending = self
+            .documents
+            .get_mut(&document_id)
+            .map(|d| std::mem::take(&mut d.pending_uploads))
+            .unwrap_or_default();
+        for (id, data) in pending {
+            match failure {
+                None => self.handle_upload_media(id, document_id, data),
+                Some(message) => self.send_to_logic(LogicEvent::ApiError {
+                    id: Some(id),
+                    request: "UploadMedia".into(),
+                    code: 502,
+                    message: format!("the document was not created: {message}"),
+                }),
+            }
+        }
     }
 
     /// Downloads a media blob from S3 via the presigned-URL flow:
@@ -386,6 +421,53 @@ mod tests {
             addresses.push(address);
         }
         assert_ne!(addresses[0], addresses[1]);
+    }
+
+    /// An upload for a document the relay does not hold waits for its
+    /// creation. A creation ends the wait with an address, and a failed one
+    /// with an error (`SYNC-145`, `SYNC-146`).
+    #[test]
+    fn an_upload_waits_for_its_document_on_the_relay() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let picture = b"a picture on a new board".to_vec();
+        let answered = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
+            rx.try_iter()
+                .filter_map(|event| match event {
+                    LogicEvent::Rest {
+                        evt: RestEvent::MediaUploaded { .. },
+                        ..
+                    } => Some(Ok(())),
+                    LogicEvent::ApiError { request, .. } if request == "UploadMedia" => {
+                        Some(Err(()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        for created in [true, false] {
+            let document_id = DocumentId::new();
+            let key = DocumentKey::from_array([0x41; 32]);
+            let doc_state = SyncDocumentState::new(document_id, key, DocType::Toile, false);
+            state.documents.insert(document_id, doc_state);
+            state.handle_upload_media(RequestId::next(), document_id, picture.clone());
+            assert!(
+                answered(&rx).is_empty(),
+                "the upload went ahead of its document"
+            );
+
+            let event = if created {
+                SyncEvent::DocumentMaterialized { document_id }
+            } else {
+                SyncEvent::DocumentCreateFailed {
+                    document_id,
+                    message: "refused".into(),
+                }
+            };
+            state.handle_sync_event(event);
+            let expected = if created { Ok(()) } else { Err(()) };
+            assert_eq!(answered(&rx), vec![expected]);
+        }
     }
 
     /// A transport that records each step and fails the one named.

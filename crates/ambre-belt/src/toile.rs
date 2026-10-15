@@ -149,6 +149,75 @@ mod tests {
         }
     }
 
+    /// Signs a second user in, in a second browser, and shares the board of
+    /// `first` with them. That browser has a profile of its own, so it holds
+    /// nothing of the board.
+    async fn invite_second(first: &Page) -> Page {
+        let name = format!("belt-{}", uuid::Uuid::new_v4());
+        let second = Page::home(first.relay()).await;
+        second.sign_in(&name).await;
+        first.share_with(&name).await;
+        second
+    }
+
+    /// Opens the board of `first` on `second`.
+    async fn open_board_of(second: &Page, first: &Page) {
+        let path = first
+            .browser
+            .script("return location.pathname;", json!([]))
+            .await;
+        let path = path.as_str().expect("a document route");
+        second
+            .browser
+            .goto(&format!("{}{path}", second.origin))
+            .await;
+        second.wait_canvas().await;
+    }
+
+    /// A square of one colour, as a PNG file a user brings onto a board.
+    fn square_png(rgb: [u8; 3]) -> Vec<u8> {
+        let square = image::RgbImage::from_pixel(120, 120, image::Rgb(rgb));
+        let mut png = std::io::Cursor::new(Vec::new());
+        square
+            .write_to(&mut png, image::ImageFormat::Png)
+            .expect("a PNG");
+        png.into_inner()
+    }
+
+    /// `SYNC-140`: an image one user drops reaches a second user's screen. The
+    /// first board shows the image once its upload is confirmed. The second
+    /// browser fetches the blob and opens it. The seal authenticates every
+    /// byte, so a byte either leg altered would leave the image unopened.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn an_image_crosses_the_object_store_whole() {
+        const MAGENTA: [u8; 3] = [255, 0, 255];
+        let first = Page::new_document("toile").await;
+        // The board is empty: the upload also waits for its creation (`SYNC-145`).
+        first
+            .drop_file((300.0, 200.0), "one.png", "image/png", &square_png(MAGENTA))
+            .await;
+        select_all_until(&first, "Image").await;
+
+        let second = invite_second(&first).await;
+        open_board_of(&second, &first).await;
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let seen = second.color_at((300.0, 200.0)).await;
+            if seen.iter().zip(MAGENTA).all(|(s, m)| s.abs_diff(m) <= 8) {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the second screen shows {seen:?} where the image is"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+    }
+
     /// `TOILE-044`: an arrow one peer draws between two shapes while another
     /// deletes one of them is announced on both, once each has both edits.
     /// The two peers are two users in two browsers. The second one's Sync
@@ -163,21 +232,8 @@ mod tests {
         draw_rect(&first, (300.0, 200.0), (360.0, 260.0)).await;
         draw_rect(&first, (500.0, 200.0), (560.0, 260.0)).await;
         deselect(&first).await;
-        let path = first
-            .browser
-            .script("return location.pathname;", json!([]))
-            .await;
-        let path = path.as_str().expect("a document route").to_owned();
-        let name = format!("belt-{}", uuid::Uuid::new_v4());
-        let second = Page::home(first.relay()).await;
-        second.sign_in(&name).await;
-        first.share_with(&name).await;
-
-        second
-            .browser
-            .goto(&format!("{}{path}", second.origin))
-            .await;
-        second.wait_canvas().await;
+        let second = invite_second(&first).await;
+        open_board_of(&second, &first).await;
         select_all_until(&second, "2 elements selected").await;
         deselect(&second).await;
         let workers = second.workers().await;

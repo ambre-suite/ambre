@@ -27,6 +27,13 @@
 //! They complement the server-side snapshot compaction which keeps at most
 //! 10 snapshots per document in PostgreSQL.
 //!
+//! ## S3 CORS
+//!
+//! The browser puts and fetches media through the presigned links itself.
+//! So the bucket must allow `PUT` and `GET` from the application's origin.
+//! Without that rule, every picture upload fails in the browser. minio
+//! allows every origin by default; AWS S3 allows none.
+//!
 //! ## Valkey 8+ Migration
 //!
 //! Current minimum: Redis 7.4+ / Valkey 8.0+.
