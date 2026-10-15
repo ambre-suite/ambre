@@ -11,6 +11,8 @@
 // and mutates it on each control. After a quiet interval it writes that style to
 // the shared `restyle` signal the canvas view drains. Selection is UI-only state
 // the view owns, so the view supplies the ids -- the inspector never names them.
+// Each control writes its one field through `StyleEdit`, so a field nobody
+// touched keeps the selection's value, a font family the picker cannot name too.
 //
 // The z-order / lock buttons are pure `CommandId`s already resolved by the view
 // against its selection (`ui::menu`). So they reuse the shared `on_command`
@@ -37,6 +39,7 @@ fn family_label(family: &str) -> Option<String> {
     matches!(family, "Sans" | "Serif" | "Monospace").then(|| family.to_owned())
 }
 
+use crate::ui::floatbar::StyleEdit;
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
 use crate::ui::style::StyleModel;
@@ -96,26 +99,12 @@ pub fn StyleInspector(
 
     let debouncer = Debouncer::new();
 
-    // Fold the current control values into `working` and schedule one debounced
-    // `RestyleElements`. Called after every edit; the timer coalesces bursts.
-    let commit = move || {
-        working.update(|s| {
-            s.fill = fill.get_untracked();
-            s.stroke = stroke.get_untracked();
-            s.stroke_w = stroke_w.get_untracked();
-            s.opacity = opacity.get_untracked();
-            s.text_color = text_color.get_untracked();
-            // A `None` family (Default) stores the default sans label, so the
-            // renderer resolves it to the bundled sans face.
-            s.font.family = font_family
-                .get_untracked()
-                .unwrap_or_else(|| "Sans".to_owned());
-            s.font.size = font_size.get_untracked().max(0.0);
-            s.font.weight = if bold.get_untracked() { 700 } else { 400 };
-            s.font.italic = italic.get_untracked();
-            s.font.underline = underline.get_untracked();
-            s.font.strikethrough = strikethrough.get_untracked();
-        });
+    // Write the one edited field into `working` and schedule one debounced
+    // `RestyleElements`. Every other field keeps the value the selection had: a
+    // control the user did not touch never rewrites its field (`TOILE-UI-172`).
+    // The timer coalesces bursts.
+    let commit = move |edit: StyleEdit| {
+        working.update(|s| edit.apply_to(s));
         let style = working.get_untracked();
         debouncer.call(RESTYLE_DEBOUNCE, move || restyle.set(Some(style)));
     };
@@ -123,19 +112,19 @@ pub fn StyleInspector(
     // Colour picks: update the local signal (so the swatch strip tracks) and commit.
     let on_fill = Callback::new(move |c: Option<u32>| {
         fill.set(c);
-        commit();
+        commit(StyleEdit::Fill(c));
     });
     let on_stroke = Callback::new(move |c: Option<u32>| {
         stroke.set(c);
-        commit();
+        commit(StyleEdit::Stroke(c));
     });
     let on_text_color = Callback::new(move |c: Option<u32>| {
         text_color.set(c);
-        commit();
+        commit(StyleEdit::TextColor(c));
     });
     let on_font = Callback::new(move |f: Option<String>| {
-        font_family.set(f);
-        commit();
+        font_family.set(f.clone());
+        commit(StyleEdit::Font(f));
     });
     // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto); the
     // working copy stores world px as `f32` with `0.0` = the auto sentinel.
@@ -144,25 +133,26 @@ pub fn StyleInspector(
         (s > 0.0).then_some(s.round() as u16)
     });
     let on_size = Callback::new(move |p: Option<u16>| {
-        font_size.set(p.map(f32::from).unwrap_or(0.0));
-        commit();
+        let size = p.map(f32::from).unwrap_or(0.0);
+        font_size.set(size);
+        commit(StyleEdit::Size(size));
     });
     // The four format toggles flip their signal and commit.
     let on_bold = Callback::new(move |()| {
         bold.update(|b| *b = !*b);
-        commit();
+        commit(StyleEdit::Bold(bold.get_untracked()));
     });
     let on_italic = Callback::new(move |()| {
         italic.update(|i| *i = !*i);
-        commit();
+        commit(StyleEdit::Italic(italic.get_untracked()));
     });
     let on_underline = Callback::new(move |()| {
         underline.update(|u| *u = !*u);
-        commit();
+        commit(StyleEdit::Underline(underline.get_untracked()));
     });
     let on_strike = Callback::new(move |()| {
         strikethrough.update(|s| *s = !*s);
-        commit();
+        commit(StyleEdit::Strikethrough(strikethrough.get_untracked()));
     });
 
     // A "Mixed" hint shown beside a control whose value differs across selection.
@@ -227,7 +217,7 @@ pub fn StyleInspector(
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
                                     stroke_w.set(v.max(0.0));
-                                    commit();
+                                    commit(StyleEdit::StrokeWidth(v));
                                 }
                             }
                         />
@@ -244,7 +234,7 @@ pub fn StyleInspector(
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
                                     opacity.set((v / 100.0).clamp(0.0, 1.0));
-                                    commit();
+                                    commit(StyleEdit::Opacity(v / 100.0));
                                 }
                             }
                         />

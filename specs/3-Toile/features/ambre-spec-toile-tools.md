@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-247` | `POST` | Arming a tool MUST abandon any gesture in flight on the previous one. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it arms a shape, presses, switches, and reads the machine idle | none | verified |
 | `TOILE-UI-369` | `POST` | Arming a tool MUST emit nothing of the gesture it abandons. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it reads no preview left after the switch | none | verified |
 | `TOILE-UI-248` | `FRAME` | Arming a tool MUST NOT touch the document or the selection. | this spec section 2 | type-level -- the switch returns nothing and holds no document handle, so the only state it can reach is the draft it drops | none | verified |
-| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host | partial -- nothing drives `ambre_app::platform::target_is_editable`, which reads the tag off the event and is the half that has to run; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host; `ambre_app::platform::tests::a_key_typed_into_a_field_reads_as_typing` -- a real `keydown` in the browser reaches the reader through its target | none | verified |
 
 ### 1.3 Drag on the board
 
@@ -48,14 +48,14 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-251` | `FAIL` | A press on an element that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::click_without_movement_emits_no_command` | none | verified |
 | `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::press_on_a_resize_handle_without_movement_emits_no_command` -- the resize; `ambre_toile::ui::tool::tests::press_on_the_rotate_handle_without_movement_emits_no_command` -- the rotate | none | verified |
 | `TOILE-UI-253` | `FAIL` | A connector released anywhere but on a second element MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::connector_release_on_empty_emits_nothing` | none | verified |
-| `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | none | unheld -- the guard is there and no test drives it, and the sibling guard on the freehand stroke is unreachable, because press and release each add a sample, section 5; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::a_pen_finish_on_one_node_emits_nothing` -- the finishing double-click lands a duplicate node, and the count is taken after it is dropped | none | verified |
 
 ### 1.4 Hold `Space` to pan
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | `ambre_toile::ui::view::view_tests::a_space_drag_pans_in_any_tool_and_starts_no_gesture` -- it holds `Space` and drags in four tools, and reads the camera moved | none | verified |
+| `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_space_drag_pans_in_any_tool_and_starts_no_gesture` -- it reads no selection and no board write after the drag | none | verified |
 | `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | unheld -- the host `keyup` listener and the board arm that lowers the pan flag and ends a pan under the pointer. A driven browser holds `Space`, pans, releases it and drags an element; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Cancel a gesture
@@ -71,8 +71,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-038` | `POST` | Placing a note or a text element MUST return the board to Select, so the next click does not place another one. | this spec section 3 | none | unheld -- the revert runs on the view where the placement command is sent, and the tool tests drive the machine below it, where the revert does not happen; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-259` | `POST` | Placing a note or a text element MUST open the inline editor on the new element once its id comes back. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 1` | none | unheld -- the view arms a flag and waits for the creation event, and no test drives the pair: the same view seam as the revert of `TOILE-UI-038`; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-038` | `POST` | Placing a note or a text element MUST return the board to Select, so the next click does not place another one. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_placed_note_opens_its_editor_and_the_tool_returns_to_select`; `ambre_toile::ui::view::view_tests::a_placed_text_opens_its_editor_and_the_tool_returns_to_select` | none | verified |
+| `TOILE-UI-259` | `POST` | Placing a note or a text element MUST open the inline editor on the new element once its id comes back. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 1` | `ambre_toile::ui::view::view_tests::a_placed_note_opens_its_editor_and_the_tool_returns_to_select`; `ambre_toile::ui::view::view_tests::a_placed_text_opens_its_editor_and_the_tool_returns_to_select` -- each answers the create, then the frame, and reads the editor open | none | verified |
 | `TOILE-UI-260` | `FRAME` | The revert MUST NOT clear the selection or move the camera: the new element stays selected and ready to type into. | this spec section 3 | structural -- the switch clears the draft, the preview and the overrides, and touches neither the selection nor the camera | none | verified |
 
 ### 1.7 Drop a comment thread
@@ -89,10 +89,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 23 `verified`, 1 `partial`, 6 `untested`. What holds is the machine: the modes,
-  the transitions and the command each gesture ends in, handle clicks included. What is loose is the
-  pan. Its three `Space` rows rest on DOM glue no host test reaches, and a degenerate pen path is
-  driven by nothing (`TOILE-UI-254`).
+* **Verification.** 29 `verified`, 0 `partial`, 1 `untested`. What holds is the machine: the modes,
+  the transitions and the command each gesture ends in. A `Space` drag pans on the host view, and a
+  placed note or text reverts the tool. What is loose is the release of `Space` (`TOILE-UI-256`).
 
 ---
 
@@ -219,12 +218,12 @@ board returns to Select, ready to type into (`TOILE-UI-038`).
   nodes of a committed path is described and unbuilt, so a path is editable by its box alone.
 * **The connector routing has one shape.** Every connector is created straight, with an arrow at the
   end. The routing modes and the end caps the model carries are not reachable from any gesture.
-* **The pan rests on DOM glue no test reaches.** The host `keyup` listener and the board's pan
-  flag are read by using the application. No host test drives a key press and its release, so the
-  three `Space` rows are held by a reader (`TOILE-UI-041`, `TOILE-UI-255`, `TOILE-UI-256`).
+* **The release of `Space` rests on DOM glue.** The host `keyup` listener is read by using the
+  application. The press and the drag are driven on the host view; the release waits for a driven
+  browser (`TOILE-UI-256`).
 * **The freehand refusal is unreachable.** Press and release each push a sample, so the guard that
   would drop a stroke of one point can never fire. A click with Draw armed commits a two-point
-  stroke standing still. The pen guard beside it is reachable and undriven (`TOILE-UI-254`).
+  stroke standing still.
 * **A resize has no floor.** The rectangle is normalised and nothing bounds it. Dragging a handle
   past the opposite edge lands an element at zero width or height. The decision above says a
   degenerate gesture never reaches that case.

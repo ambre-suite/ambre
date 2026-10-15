@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 30 partial and 84 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 29 partial and 59 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 668 | 413 | 751 | 605 |  | 2437 |
-| `partial` | 21 |  | 8 | 1 |  | 30 |
+| `verified` | 668 | 413 | 777 | 605 |  | 2463 |
+| `partial` | 21 |  | 7 | 1 |  | 29 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 13 | 5 | 54 | 1 |  | 73 |
+| `untested` | 13 | 5 | 29 | 1 |  | 48 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -120,16 +120,16 @@
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 36 | 1 | 4 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 12 |  |  |  |
 | `ambre-spec-toile-media.md` | 29 | 29 | 28 |  | 1 |  |
-| `ambre-spec-toile-menus.md` | 53 | 53 | 41 |  | 12 |  |
+| `ambre-spec-toile-menus.md` | 53 | 53 | 53 |  |  |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 |  | 4 | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 2 | 4 |  |
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 40 | 2 | 3 |  |
 | `ambre-spec-toile-reactions.md` | 35 | 29 | 21 | 1 | 7 | 6 |
 | `ambre-spec-toile-selection.md` | 33 | 33 | 33 |  |  |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 13 |  |  |  |
-| `ambre-spec-toile-styles.md` | 30 | 30 | 22 |  | 8 |  |
+| `ambre-spec-toile-styles.md` | 30 | 30 | 30 |  |  |  |
 | `ambre-spec-toile-text-editing.md` | 42 | 41 | 41 |  |  | 1 |
-| `ambre-spec-toile-tools.md` | 30 | 30 | 23 | 1 | 6 |  |
+| `ambre-spec-toile-tools.md` | 30 | 30 | 29 |  | 1 |  |
 | `ambre-spec-toile-undo.md` | 4 | 4 | 4 |  |  |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 12 | 12 |  |  | 1 |
 | `ambre-spec-toile-viewport.md` | 35 | 33 | 33 |  |  | 2 |

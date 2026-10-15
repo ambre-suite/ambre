@@ -4,7 +4,7 @@
 //! detached, and a frame paints into a recording surface.
 
 use super::*;
-use ambre_bus::app::toile::Anchor;
+use ambre_bus::app::toile::{Anchor, ElementStyle, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use kurbo::Rect;
 
@@ -2019,4 +2019,372 @@ fn an_undo_after_a_jump_reverts_the_edit_and_not_the_jump() {
     assert!(rig.key("z", true, false));
     assert!(matches!(rig.sent().as_slice(), [ToileCommand::Undo]));
     assert_eq!(rig.view.cam, jumped, "the camera stays on the frame");
+}
+
+/// A right press and release at the world point (x, y).
+fn right_click(rig: &mut Rig, x: f64, y: f64) {
+    let (x, y) = rig.screen(x, y);
+    rig.input(InputEvent::PointerDown {
+        x,
+        y,
+        button: 2,
+        shift: false,
+        ctrl: false,
+    });
+    rig.input(InputEvent::PointerUp {
+        x,
+        y,
+        button: 2,
+        ctrl: false,
+    });
+}
+
+/// `TOILE-UI-048`, `TOILE-UI-135`, `TOILE-UI-136`: a right-click on a
+/// selected element keeps the whole selection. It sends no board command
+/// and leaves the camera where it was.
+#[test]
+fn a_right_click_inside_the_selection_keeps_it() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.selection = vec![eid("a"), eid("b")];
+    let cam = rig.view.cam;
+    right_click(&mut rig, 50.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
+    assert!(rig.sent().is_empty(), "a right-click writes nothing");
+    assert_eq!(rig.view.cam, cam, "a right-click moves no camera");
+}
+
+/// `TOILE-UI-127`, `TOILE-UI-135`, `TOILE-UI-136`: a right-click on an
+/// element outside the selection collapses the selection to it. It writes
+/// nothing and moves no camera.
+#[test]
+fn a_right_click_outside_the_selection_collapses_it() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.selection = vec![eid("a")];
+    let cam = rig.view.cam;
+    right_click(&mut rig, 400.0, 50.0);
+    assert_eq!(rig.view.selection, [eid("b")]);
+    assert!(rig.sent().is_empty(), "a right-click writes nothing");
+    assert_eq!(rig.view.cam, cam, "a right-click moves no camera");
+}
+
+/// `TOILE-UI-128`: a right-click in the gap between two selected elements
+/// hits nothing, so it clears the selection although the point lies inside
+/// the selection box.
+#[test]
+fn a_right_click_on_nothing_clears_the_selection() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.selection = vec![eid("a"), eid("b")];
+    right_click(&mut rig, 250.0, 60.0);
+    assert!(rig.view.selection.is_empty());
+    assert!(rig.sent().is_empty(), "a right-click writes nothing");
+}
+
+/// The key event the keymap binds to `id`, as the host would deliver it.
+fn chord_of(id: CommandId) -> InputEvent {
+    let binding = crate::ui::commands::chord(id).expect("the id announces a chord");
+    let key = match binding.key {
+        ambre_commands::Key::Char(c) if binding.mods.shift => c.to_ascii_uppercase().to_string(),
+        ambre_commands::Key::Char(c) => c.to_string(),
+        ambre_commands::Key::Delete => "Delete".to_owned(),
+        other => panic!("no board chord decodes {other:?}"),
+    };
+    InputEvent::Key {
+        key,
+        ctrl: binding.mods.primary,
+        alt: binding.mods.alt,
+        shift: binding.mods.shift,
+        meta: false,
+    }
+}
+
+/// A board of two notes and one group, with `selection` selected and its
+/// data answered, the way a menu or a chord finds it.
+fn chord_board(selection: &[&str]) -> Rig {
+    let group = DisplayElement {
+        kind: ElementKind::Group,
+        geom: ambre_bus::app::toile::DisplayGeom::Group,
+        ..sticky("g", AWAY)
+    };
+    let elements = vec![sticky("a", A), sticky("b", B), group];
+    let mut rig = Rig::new();
+    rig.show(elements.iter().cloned().map(DisplayNode::Element).collect());
+    rig.sent();
+    rig.view.selection = selection.iter().copied().map(eid).collect();
+    rig.answer(ToileEvent::SelectionData {
+        elements: elements
+            .into_iter()
+            .filter(|e| selection.contains(&e.id.0.as_str()))
+            .collect(),
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    rig.sent();
+    rig
+}
+
+/// `TOILE-UI-052`: the shortcut a menu shows beside an entry does what the
+/// entry does. Each announced board chord is pressed on one board, and its
+/// entry is picked on a twin. Both send the same commands and leave the
+/// same selection.
+#[test]
+fn a_shown_shortcut_does_what_its_entry_does() {
+    use crate::ui::{menu, menu_bar};
+    let cases: [(CommandId, &[&str]); 7] = [
+        (menu::DUPLICATE, &["a", "b"]),
+        (menu::DELETE, &["a", "b"]),
+        (menu::GROUP, &["a", "b"]),
+        (menu::UNGROUP, &["g"]),
+        (menu::SELECT_ALL, &["a"]),
+        (menu_bar::UNDO, &["a"]),
+        (menu_bar::REDO, &["a"]),
+    ];
+    for (id, selection) in cases {
+        let mut by_key = chord_board(selection);
+        by_key.input(chord_of(id));
+        by_key.frame();
+        let mut by_menu = chord_board(selection);
+        by_menu.view.apply_menu_command(id);
+        by_menu.frame();
+        assert_eq!(
+            format!("{:?}", by_key.sent()),
+            format!("{:?}", by_menu.sent()),
+            "{id:?} sends another command"
+        );
+        assert_eq!(
+            by_key.view.selection, by_menu.view.selection,
+            "{id:?} leaves another selection"
+        );
+    }
+}
+
+/// `TOILE-UI-157`: zoom in, zoom out and zoom to 100 % each move the camera
+/// and queue a fresh cull for the new view.
+#[test]
+fn a_zoom_entry_moves_the_camera_and_queues_a_cull() {
+    use crate::ui::menu_bar::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.cam.zoom = 2.0;
+    for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET] {
+        let before = rig.view.cam.zoom;
+        rig.view.apply_menu_command(id);
+        assert_ne!(rig.view.cam.zoom, before, "{id:?} moves no camera");
+        rig.view.update();
+        assert!(
+            rig.sent()
+                .iter()
+                .any(|c| matches!(c, ToileCommand::SetViewport(_))),
+            "{id:?} queues no cull"
+        );
+    }
+    assert_eq!(rig.view.cam.zoom, 1.0, "reset lands on 100 %");
+}
+
+/// `TOILE-UI-158`: a fit asks the Logic thread for the extent first. The
+/// camera stays put until the answer comes back.
+#[test]
+fn a_fit_asks_for_the_extent_before_it_moves() {
+    use crate::ui::menu_bar::{ZOOM_FIT, ZOOM_TO_SELECTION};
+    for id in [ZOOM_FIT, ZOOM_TO_SELECTION] {
+        let mut rig = Rig::with_stickies(&[("a", A)]);
+        rig.view.selection = vec![eid("a")];
+        let cam = rig.view.cam;
+        rig.view.apply_menu_command(id);
+        assert!(matches!(
+            rig.sent().as_slice(),
+            [ToileCommand::RequestSelectionStats {
+                kind: StatsRequestKind::Fit,
+                ..
+            }]
+        ));
+        assert_eq!(rig.view.cam, cam, "{id:?} moved before the answer");
+        rig.answer(fit_reply(Some(Rect::new(5000.0, 5000.0, 5400.0, 5300.0))));
+        assert_ne!(rig.view.cam, cam, "{id:?} ignored its answer");
+    }
+}
+
+/// `TOILE-UI-159`: a pointer-mode entry stays in the view. It sends nothing
+/// and leaves the camera where it was.
+#[test]
+fn a_pointer_mode_entry_stays_in_the_view() {
+    use crate::ui::menu_bar::{POINTER_AUTO, POINTER_MOUSE, POINTER_TRACKPAD};
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let cam = rig.view.cam;
+    for (id, mode) in [
+        (POINTER_MOUSE, PointerMode::Mouse),
+        (POINTER_TRACKPAD, PointerMode::Trackpad),
+        (POINTER_AUTO, PointerMode::Auto),
+    ] {
+        rig.view.apply_menu_command(id);
+        assert!(rig.view.pointer_mode == mode, "{id:?} set another mode");
+        rig.view.update();
+        assert!(rig.sent().is_empty(), "{id:?} reached a thread");
+        assert_eq!(rig.view.cam, cam, "{id:?} moved the camera");
+    }
+}
+
+/// `TOILE-UI-041`, `TOILE-UI-255`: with `Space` held, a drag pans in every
+/// tool, and the tool's own gesture never starts.
+#[test]
+fn a_space_drag_pans_in_any_tool_and_starts_no_gesture() {
+    for tool in [
+        Tool::Select,
+        Tool::Draw,
+        Tool::Shape(ShapeKind::Rect),
+        Tool::Connector,
+    ] {
+        let mut rig = Rig::with_stickies(&[("a", A)]);
+        rig.view.set_tool(tool);
+        let cam = rig.view.cam;
+        assert!(rig.key(" ", false, false));
+        drag(&mut rig, (50.0, 50.0), (150.0, 90.0));
+        assert_ne!(rig.view.cam, cam, "{tool:?}: the drag did not pan");
+        assert!(rig.view.selection.is_empty(), "{tool:?}: the drag selected");
+        assert!(
+            !rig.sent().iter().any(|c| !matches!(
+                c,
+                ToileCommand::SetViewport(_) | ToileCommand::RequestSelectionData { .. }
+            )),
+            "{tool:?}: the drag wrote to the board"
+        );
+    }
+}
+
+/// `TOILE-UI-038`, `TOILE-UI-259`: a text element placed with the tool
+/// returns the board to Select and opens its editor once its id comes back.
+#[test]
+fn a_placed_text_opens_its_editor_and_the_tool_returns_to_select() {
+    let mut rig = Rig::new();
+    rig.sent();
+    rig.view.set_tool(Tool::Text);
+    rig.click(600.0, 400.0);
+    let token = rig.sent().iter().find_map(|c| match c {
+        ToileCommand::CreateElement {
+            kind: ElementKind::Text,
+            correlate,
+            ..
+        } => Some(*correlate),
+        _ => None,
+    });
+    assert_eq!(rig.view.machine.tool(), Tool::Select, "one text a click");
+    let token = token.expect("the click places a text");
+    rig.answer(ToileEvent::ElementCreated {
+        id: eid("t"),
+        correlate: token,
+    });
+    let text = DisplayElement {
+        kind: ElementKind::Text,
+        ..sticky("t", A)
+    };
+    rig.show(vec![DisplayNode::Element(text)]);
+    assert_eq!(editing(&rig), Some(eid("t")));
+}
+
+/// `TOILE-UI-170`: the bar hides while a move is in flight and comes back
+/// once the element lands.
+#[test]
+fn the_bar_hides_during_a_move() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.click(50.0, 50.0);
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![sticky("a", A)],
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    assert!(rig.view.float_bar_at((0.0, 0.0)).is_some(), "the bar shows");
+    let (from, to) = (rig.screen(50.0, 50.0), rig.screen(90.0, 70.0));
+    rig.press(from);
+    rig.input(InputEvent::PointerMove { x: to.0, y: to.1 });
+    assert!(
+        rig.view.float_bar_at((0.0, 0.0)).is_none(),
+        "the bar follows the drag"
+    );
+    rig.release(to);
+    assert!(
+        rig.view.float_bar_at((0.0, 0.0)).is_some(),
+        "the bar is back"
+    );
+}
+
+/// `TOILE-UI-176`, `TOILE-UI-182`, `TOILE-UI-173`: a panel restyle sends one
+/// whole style to every selected id, the locked one included. Each member
+/// gets the same value, a field it held mixed too, and the selection stays.
+#[test]
+fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
+    let mut rig = Rig::new();
+    let a = sticky("a", A);
+    let b = DisplayElement {
+        locked: true,
+        style: ElementStyle {
+            stroke_w: 4.0,
+            ..ElementStyle::default()
+        },
+        ..sticky("b", B)
+    };
+    rig.show(vec![
+        DisplayNode::Element(a.clone()),
+        DisplayNode::Element(b.clone()),
+    ]);
+    rig.view.selection = vec![eid("a"), eid("b")];
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![a, b],
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    rig.sent();
+    let model = crate::ui::style::style_scope_for(&rig.view.selection, &rig.view.selection_data)
+        .expect("a resolved selection has a model");
+    assert!(model.mixed.stroke_w, "the stroke width is mixed");
+    let mut style = model.base;
+    crate::ui::floatbar::StyleEdit::Fill(Some(0xff11_2233)).apply_to(&mut style);
+    rig.view.apply_restyle(style.clone());
+    match rig.sent().as_slice() {
+        [ToileCommand::RestyleElements { ids, style: sent }] => {
+            assert_eq!(ids, &[eid("a"), eid("b")], "the locked member is named");
+            assert_eq!(sent, &style, "one whole value for every member");
+        }
+        other => panic!("one restyle expected, got {other:?}"),
+    }
+    assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
+}
+
+/// `TOILE-UI-179`, `TOILE-UI-181`: each bar edit starts from the style the
+/// selection has now, so a second edit keeps the first. Neither changes
+/// what is selected.
+#[test]
+fn two_bar_edits_compose_and_keep_the_selection() {
+    use crate::ui::floatbar::StyleEdit;
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.selection = vec![eid("a")];
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![sticky("a", A)],
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    rig.sent();
+    rig.view
+        .apply_quick_style(StyleEdit::Fill(Some(0xff11_2233)));
+    let first = match rig.sent().as_slice() {
+        [ToileCommand::RestyleElements { style, .. }] => style.clone(),
+        other => panic!("one restyle expected, got {other:?}"),
+    };
+    // The Logic thread echoes the written style back with the selection.
+    rig.answer(ToileEvent::SelectionData {
+        elements: vec![DisplayElement {
+            style: first,
+            ..sticky("a", A)
+        }],
+        framed: Vec::new(),
+        missing: Vec::new(),
+    });
+    rig.sent();
+    rig.view.apply_quick_style(StyleEdit::Bold(true));
+    match rig.sent().as_slice() {
+        [ToileCommand::RestyleElements { ids, style }] => {
+            assert_eq!(ids, &[eid("a")]);
+            assert_eq!(style.fill, Some(0xff11_2233), "the first edit is kept");
+            assert_eq!(style.font.weight, 700);
+        }
+        other => panic!("one restyle expected, got {other:?}"),
+    }
+    assert_eq!(rig.view.selection, [eid("a")]);
 }

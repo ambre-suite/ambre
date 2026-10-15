@@ -2291,7 +2291,7 @@ mod tests {
         );
     }
 
-    /// `TOILE-UI-104`: a finish on one node emits nothing. The finishing
+    /// `TOILE-UI-104`, `TOILE-UI-254`: a finish on one node emits nothing. The finishing
     /// double-click lands a second press on that node, and the duplicate is
     /// dropped before the count.
     #[test]

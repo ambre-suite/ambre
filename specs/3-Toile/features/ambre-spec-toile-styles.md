@@ -36,7 +36,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-167` | `OBS` | A multi-selection MUST anchor the bar to the union of its members' boxes. | this spec section 4 | `ambre_toile::ui::floatbar::tests::union_bounds_anchor_a_multi_selection` -- the anchor of a two-element selection is the union's top-edge midpoint | none | verified |
 | `TOILE-UI-168` | `OBS` | The anchor MUST be in the units the page positions with, not the units the canvas draws in. | this spec section 4 | `ambre_toile::ui::floatbar::tests::the_canvas_offset_applies_to_the_anchor` -- the anchor after the canvas offset, the canvas drawing in CSS pixels (`CANVAS-032`) | none | verified |
 | `TOILE-UI-169` | `OBS` | The bar MUST hide when no selected element resolves. | this spec section 4 | `ambre_toile::ui::floatbar::tests::empty_selection_hides_bar` -- nothing is published for an empty selection; `ambre_toile::ui::floatbar::tests::unresolved_selection_hides_bar` -- none for an id the painted set does not hold | none | verified |
-| `TOILE-UI-170` | `OBS` | The bar MUST hide while a move, a resize or a rotate is in flight, so it does not follow the preview. | this spec section 6 | none | unheld -- the view decides the transient hiding at publish time and that seam is wasm-only, so only the empty and unresolved halves are driven; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-170` | `OBS` | The bar MUST hide while a move, a resize or a rotate is in flight, so it does not follow the preview. | this spec section 6 | `ambre_toile::ui::view::view_tests::the_bar_hides_during_a_move` -- it reads the bar the view would publish before, during and after a move drag | none | verified |
 | `TOILE-UI-171` | `OBS` | The bar MUST offer group, ungroup, lock and unlock according to what is selected. | this spec section 4 | `ambre_toile::ui::floatbar::tests::flags_track_group_and_lock_state` -- the group flag and both lock flags on a mixed pair | none | verified |
 | `TOILE-UI-070` | `OBS` | Both surfaces MUST read the whole selection, not the part on screen. | this spec section 6 | `ambre_toile::ui::style::tests::off_screen_selection_contributes_its_style` -- an off-screen member's differing fill still flags mixed; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
 | `TOILE-UI-071` | `IO` | A style written by an older build MUST survive a change to the value's layout. | this spec section 6; `SCHEMA-018` | `ambre_toile::logic::schema::tests::a_board_whose_styles_carry_no_version_keeps_them` -- a board whose registers carry no version byte keeps every style across the `1 -> 2` migration; `ambre_bus::app::toile::tests::a_style_round_trips_through_its_version` -- the register carries its layout version and a style reads back whole; `::a_style_from_an_unknown_layout_is_reported` -- a layout this build does not know is reported, never reset | none | verified |
@@ -45,12 +45,12 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-172` | `POST` | A panel edit MUST leave every field it did not edit as the selection had it. | this spec section 3 | none | unheld -- the panel edits a working copy of the base and sends it whole, and no test drives an edit through the surface; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-173` | `POST` | A field the panel reported as mixed MUST become uniform after any edit. | this spec section 2 | none | unheld -- the whole value goes to every member, so the base's value for a mixed field lands on all of them, and no test reads a second field back after an edit; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-172` | `POST` | A panel edit MUST leave every field it did not edit as the selection had it. | this spec section 3 | `ambre_toile::ui::floatbar::tests::a_panel_edit_keeps_every_field_it_did_not_edit` -- each panel control writes its working copy through the one-field edit, and the test reads every other field back, a family the picker cannot name included | none | verified |
+| `TOILE-UI-173` | `POST` | A field the panel reported as mixed MUST become uniform after any edit. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_panel_restyle_names_every_member_and_keeps_the_selection` -- a mixed width reads as mixed, and the edit sends one whole value for every member | none | verified |
 | `TOILE-UI-174` | `POST` | A restyle MUST NOT overwrite an attribute the surface does not show. | this spec section 6 | `ambre_toile::logic::state::elements::inner_tests::a_restyle_preserves_the_fields_no_surface_shows` -- it restyles two members seeded with differing corner, shadow and weight and reads each back keeping its own | none | verified |
-| `TOILE-UI-175` | `POST` | A restyle over a whole selection MUST undo as one step. | this spec section 3 | none | unheld -- one command carries the ids and the value and the undo document owns the grouping, and no test restyles a selection and undoes it; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-176` | `FRAME` | A restyle MUST NOT change what is selected. | this spec section 3 | none | unheld -- the command carries ids and a value and the selection is local to the view, and no test reads the selection back after a restyle; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-182` | `FRAME` | A restyle MUST NOT drop the locked members before it is sent: the refusal belongs to the write (`TOILE-033`). | this spec section 5 | none | unheld -- the panel's model never reads the lock, so it has nothing to filter on, but the surface that builds the command is wasm-only and reached by no test; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-175` | `POST` | A restyle over a whole selection MUST undo as one step. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_restyle_over_a_selection_is_one_undo_item` | none | verified |
+| `TOILE-UI-176` | `FRAME` | A restyle MUST NOT change what is selected. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_panel_restyle_names_every_member_and_keeps_the_selection` | none | verified |
+| `TOILE-UI-182` | `FRAME` | A restyle MUST NOT drop the locked members before it is sent: the refusal belongs to the write (`TOILE-033`). | this spec section 5 | `ambre_toile::ui::view::view_tests::a_panel_restyle_names_every_member_and_keeps_the_selection` -- a locked member is named in the command the view builds | none | verified |
 
 ### 1.3 Change one field from the floating bar
 
@@ -59,9 +59,9 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-019` | `POST` | A bar edit MUST overwrite exactly the field it carries. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_touches_only_its_field` -- a decoration toggle leaves the other three, the fill, the colour and the size intact, and a fill edit leaves the whole text style intact | none | verified |
 | `TOILE-UI-177` | `POST` | The bold toggle MUST write the two weights the renderer reads. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- both weights off the toggle | none | verified |
 | `TOILE-UI-178` | `POST` | Resetting the family MUST write the default face, not an absent one. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- the reset writes the default label, and a chosen family writes its own | none | verified |
-| `TOILE-UI-179` | `POST` | Each bar edit MUST start from the selection's style as it stands, so two quick edits compose. | this spec section 3 | none | unheld -- the view re-derives the common style at apply time and that seam is wasm-only, and no test applies two edits in sequence and reads both back; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-179` | `POST` | Each bar edit MUST start from the selection's style as it stands, so two quick edits compose. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` -- the second edit carries the first, echoed back with the selection | none | verified |
 | `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the auto sentinel. | this spec section 6 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- a negative size changes nothing, and zero still lands as the auto sentinel | none | verified |
-| `TOILE-UI-181` | `FRAME` | A bar edit MUST NOT change what is selected. | this spec section 3 | none | unheld -- the edit carries one field and the view attaches the live ids, and no test reads the selection back after an edit; lands with the `Toile menus, tools and styles held` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-181` | `FRAME` | A bar edit MUST NOT change what is selected. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` | none | verified |
 
 * **Budget.** the view-state update under 0.5 ms, one row of `ambre-spec-budgets.md section 2`. Both models
   are a fold over the selection, and the bar's screen position is recomputed every frame inside that figure.
@@ -69,11 +69,10 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 22 `verified`, 0 `failing`, 8 `untested`. What holds is the read: the base value, the
-  flags, the anchor, the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write now
-  holds too: a restyle preserves what no surface shows, and the bar reports every field it edits. A style
-  also carries its own layout version (`TOILE-UI-071`). What is loose is the remaining write paths, and the
-  lock itself is `TOILE-033`.
+* **Verification.** 30 `verified`, 0 `failing`, 0 `untested`. What holds is the read: the base value, the
+  flags, the anchor, the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write holds:
+  each surface writes one field, a restyle undoes as one step, and two bar edits compose. A style carries
+  its own layout version (`TOILE-UI-071`). The lock itself is `TOILE-033`.
 
 ---
 
@@ -197,11 +196,5 @@ the menus, so the three can never offer different behaviour for the same name
   and they write the element's style. So a word inside a sentence cannot be emphasized (`TOILE-UI-065`).
 * **A connector has no style to edit** (`TOILE-046`). Both surfaces address elements only, and a
   connector cannot be selected anyway.
-* **The bar's hide during a gesture has no test** (`TOILE-UI-170`). It hides while a drag, a resize or a
-  rotate is in flight, so it does not follow the preview. The view decides that at publish time, and that seam
-  is wasm-only, so only the empty and unresolved halves are driven.
-* **Four write rules are still read from the code** (`TOILE-UI-172`, `TOILE-UI-173`,
-  `TOILE-UI-175`, `TOILE-UI-179`): what a panel edit leaves alone, and what a mixed field becomes. Also
-  whether a restyle undoes as one step, and whether two bar edits compose.
 * **Nothing bounds a thickness or a shadow.** The panel accepts what the control offers, and no rule
   caps a border width or a shadow extent against the element it decorates.

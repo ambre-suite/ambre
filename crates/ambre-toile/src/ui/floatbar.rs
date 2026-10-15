@@ -69,6 +69,12 @@ pub struct FloatBar {
 pub enum StyleEdit {
     /// Fill colour (`None` == no fill).
     Fill(Option<u32>),
+    /// Stroke colour (`None` == no stroke). The panel alone emits it.
+    Stroke(Option<u32>),
+    /// Stroke width in world px, floored at zero. The panel alone emits it.
+    StrokeWidth(f32),
+    /// Opacity, clamped to `[0, 1]`. The panel alone emits it.
+    Opacity(f32),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<u32>),
     /// Font family label (`None` == the "Default" reset -> the app default face).
@@ -89,13 +95,16 @@ impl StyleEdit {
     /// Overwrite exactly the one field this edit carries, leaving every other
     /// attribute of `style` untouched. The view calls this on the selection's
     /// freshly-derived common style so back-to-back bar edits never clobber one
-    /// another. Kept in the always-compiled `ui` module so it is host-tested (the
-    /// `drain_quick_style` seam that calls it is wasm-only). A `None` family maps to
-    /// the default sans label so the renderer resolves it to the bundled sans face
-    /// (mirrors the inspector).
+    /// another. The inspector applies it to its working copy for the same reason
+    /// (`TOILE-UI-172`). Kept in the always-compiled `ui` module so it is
+    /// host-tested: both callers are wasm-only. A `None` family maps to the default
+    /// sans label so the renderer resolves it to the bundled sans face.
     pub fn apply_to(self, style: &mut ElementStyle) {
         match self {
             StyleEdit::Fill(c) => style.fill = c,
+            StyleEdit::Stroke(c) => style.stroke = c,
+            StyleEdit::StrokeWidth(w) => style.stroke_w = w.max(0.0),
+            StyleEdit::Opacity(o) => style.opacity = o.clamp(0.0, 1.0),
             StyleEdit::TextColor(c) => style.text_color = c,
             StyleEdit::Font(f) => style.font.family = f.unwrap_or_else(|| "Sans".to_owned()),
             // A negative size is refused, never clamped to the zero sentinel:
@@ -520,6 +529,71 @@ mod tests {
         assert_eq!(s.font.family, "Sans");
         StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
         assert_eq!(s.font.family, "Serif");
+    }
+
+    /// `TOILE-UI-172`: a panel edit writes its own field and keeps every other
+    /// one as the selection had it. That includes a family the picker cannot
+    /// name and a weight that is neither bold nor regular.
+    #[test]
+    fn a_panel_edit_keeps_every_field_it_did_not_edit() {
+        let base = ElementStyle {
+            fill: Some(0xff11_2233),
+            stroke: Some(0xff44_5566),
+            stroke_w: 3.0,
+            opacity: 0.5,
+            corner: 7.0,
+            text_color: Some(0xff77_8899),
+            font: FontSpec {
+                family: "sans-serif".to_owned(),
+                size: 18.0,
+                weight: 600,
+                italic: true,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        let edits = [
+            (
+                StyleEdit::Fill(None),
+                ElementStyle {
+                    fill: None,
+                    ..base.clone()
+                },
+            ),
+            (
+                StyleEdit::Stroke(Some(1)),
+                ElementStyle {
+                    stroke: Some(1),
+                    ..base.clone()
+                },
+            ),
+            (
+                StyleEdit::StrokeWidth(-2.0),
+                ElementStyle {
+                    stroke_w: 0.0,
+                    ..base.clone()
+                },
+            ),
+            (
+                StyleEdit::Opacity(2.0),
+                ElementStyle {
+                    opacity: 1.0,
+                    ..base.clone()
+                },
+            ),
+            (
+                StyleEdit::TextColor(None),
+                ElementStyle {
+                    text_color: None,
+                    ..base.clone()
+                },
+            ),
+        ];
+        for (edit, expected) in edits {
+            let mut s = base.clone();
+            edit.clone().apply_to(&mut s);
+            assert_eq!(s, expected, "{edit:?} touched another field");
+        }
     }
 
     /// `TOILE-UI-164`: the bar folds every field it edits. A field that

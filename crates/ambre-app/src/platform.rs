@@ -649,4 +649,53 @@ mod tests {
         assert_eq!(control.get(), ambre_canvas::Theme::Dark);
         assert_eq!(document_theme().as_deref(), Some("dark"));
     }
+
+    /// What `target_is_editable` reads off a real `keydown` dispatched on an
+    /// element of this tag, with this `contenteditable` value.
+    fn keydown_reads_editable(tag: &str, content_editable: Option<&str>) -> bool {
+        use std::cell::Cell;
+        use std::rc::Rc;
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::closure::Closure;
+
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a document");
+        let el = document.create_element(tag).expect("an element");
+        if let Some(value) = content_editable {
+            el.set_attribute("contenteditable", value)
+                .expect("an attribute");
+        }
+        document
+            .body()
+            .expect("a body")
+            .append_child(&el)
+            .expect("attached");
+        let read = Rc::new(Cell::new(None));
+        let sink = read.clone();
+        let listener = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |ev| {
+            sink.set(Some(target_is_editable(&ev)));
+        });
+        el.add_event_listener_with_callback("keydown", listener.as_ref().unchecked_ref())
+            .expect("a listener");
+        let init = web_sys::KeyboardEventInit::new();
+        init.set_key("v");
+        let ev = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
+            .expect("an event");
+        el.dispatch_event(&ev).expect("dispatched");
+        el.remove();
+        read.get().expect("the listener ran")
+    }
+
+    /// A key typed into a text field or a contenteditable host reads as typing,
+    /// so a bare tool chord leaves it alone. A key on any other element does
+    /// not. The decision is read off the event target, not passed in.
+    #[wasm_bindgen_test]
+    fn a_key_typed_into_a_field_reads_as_typing() {
+        assert!(keydown_reads_editable("input", None));
+        assert!(keydown_reads_editable("textarea", None));
+        assert!(keydown_reads_editable("div", Some("true")));
+        assert!(!keydown_reads_editable("div", None));
+        assert!(!keydown_reads_editable("button", None));
+    }
 }

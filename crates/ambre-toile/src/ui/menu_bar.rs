@@ -309,6 +309,19 @@ mod tests {
         assert_eq!(ids.len(), len, "duplicate menu-bar command id");
     }
 
+    /// `TOILE-UI-121`: no id the bar introduces is also a context-menu id. An
+    /// entry both surfaces show reuses the context constant. It is one
+    /// command reached two ways, never a second id with the same name.
+    #[test]
+    fn no_bar_id_is_also_a_context_id() {
+        for id in MENU_BAR_COMMANDS {
+            assert!(
+                !menu::COMMANDS.iter().any(|c| c.0 == id.0),
+                "{id:?} is declared by both surfaces"
+            );
+        }
+    }
+
     #[test]
     fn view_menu_exposes_all_zoom_actions() {
         let cmds = item_commands(&menu_layout(MenuId::View));

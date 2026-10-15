@@ -1944,6 +1944,31 @@ fn ungrouping_three_groups_is_one_undo_item() {
     }
 }
 
+/// `TOILE-UI-175`: a restyle over a whole selection is one gesture, so one
+/// undo restores the style of every element it named.
+#[test]
+fn a_restyle_over_a_selection_is_one_undo_item() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(20.0, 0.0), Size::new(10.0, 10.0));
+    let before = (st.style_of(&a), st.style_of(&b));
+    let style = ElementStyle {
+        fill: Some(0xff11_2233),
+        ..ElementStyle::default()
+    };
+    st.handle_command(ToileCommand::RestyleElements {
+        ids: vec![a.clone(), b.clone()],
+        style: style.clone(),
+    });
+    assert_eq!((st.style_of(&a), st.style_of(&b)), (style.clone(), style));
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(
+        (st.style_of(&a), st.style_of(&b)),
+        before,
+        "one undo restores both"
+    );
+}
+
 /// `TOILE-264`: a list holding a group unbinds it and answers nothing for the
 /// ids that are not groups; a list holding none answers one error.
 #[test]

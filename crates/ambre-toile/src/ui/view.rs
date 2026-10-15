@@ -1944,6 +1944,19 @@ impl ToileView {
             return;
         };
         self.restyle.set(None);
+        self.apply_restyle(style);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_restyle(&mut self) {}
+
+    /// Apply a whole style from the inspector to the live selection, locked
+    /// members included: the refusal belongs to the write (`TOILE-UI-182`).
+    /// The selection itself is left as it was (`TOILE-UI-176`).
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the inspector signal that calls it is wasm-only")
+    )]
+    fn apply_restyle(&mut self, style: ambre_bus::app::toile::ElementStyle) {
         if self.selection.is_empty() {
             // An arrow takes the same edit through its own command
             // (`toile-connectors`).
@@ -1959,8 +1972,6 @@ impl ToileView {
         });
         self.needs_full = true;
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    fn drain_restyle(&mut self) {}
 
     /// Republish the floating selection toolbar's placement + flags
     /// (`toile-styles`). Transform-synced: recomputed every frame
@@ -1971,26 +1982,31 @@ impl ToileView {
     /// cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_float_bar(&self) {
-        let next = if self.selection.is_empty()
-            || self.machine.is_active()
-            || self.panning.is_some()
-            || self.editor.is_some()
-        {
-            None
-        } else {
-            super::floatbar::build_floatbar(
-                &self.selection,
-                &self.selection_data,
-                &self.cam,
-                canvas_client_offset(),
-            )
-        };
+        let next = self.float_bar_at(canvas_client_offset());
         if self.float_bar.get_untracked() != next {
             self.float_bar.set(next);
         }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_float_bar(&self) {}
+
+    /// The floating bar this frame shows, with the canvas at `offset` in the
+    /// page. None while a move, a resize or a rotate is in flight, so the bar
+    /// does not follow the preview (`TOILE-UI-170`).
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the bar signal that reads it is wasm-only")
+    )]
+    fn float_bar_at(&self, offset: (f64, f64)) -> Option<super::floatbar::FloatBar> {
+        if self.selection.is_empty()
+            || self.machine.is_active()
+            || self.panning.is_some()
+            || self.editor.is_some()
+        {
+            return None;
+        }
+        super::floatbar::build_floatbar(&self.selection, &self.selection_data, &self.cam, offset)
+    }
 
     /// Drain a single-field style edit the floating bar emitted (`toile-styles`)
     /// and apply it to the live selection as one whole-register `RestyleElements`
@@ -2005,6 +2021,19 @@ impl ToileView {
             return;
         };
         self.quick_style.set(None);
+        self.apply_quick_style(edit);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_quick_style(&mut self) {}
+
+    /// Apply one bar edit to the live selection. The base is the selection's
+    /// style as it stands now, so two quick edits compose (`TOILE-UI-179`).
+    /// The selection itself is left as it was (`TOILE-UI-181`).
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the bar signal that calls it is wasm-only")
+    )]
+    fn apply_quick_style(&mut self, edit: super::floatbar::StyleEdit) {
         if self.selection.is_empty() {
             if let Some(id) = self.arrow.clone()
                 && let Some(model) = super::style::arrow_style_scope(&id, &self.display)
@@ -2028,8 +2057,6 @@ impl ToileView {
         });
         self.needs_full = true;
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    fn drain_quick_style(&mut self) {}
 
     // -- Presence (`toile-presence`) ---------------------------------------
 
@@ -2503,10 +2530,17 @@ impl ToileView {
         }
         // A refused command ends the sequence: a cut whose copy went nowhere
         // deletes nothing (`UI-THREAD-045`).
+        let mut sent_all = true;
         for cmd in cmds {
             if !self.send_edit(cmd) {
+                sent_all = false;
                 break;
             }
+        }
+        // The entry does what its `Del` chord does, so the deleted ids leave
+        // the selection here too (`TOILE-UI-052`).
+        if id == super::menu::DELETE && sent_all && self.arrow.is_none() {
+            self.selection.clear();
         }
         self.needs_full = true;
     }

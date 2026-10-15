@@ -600,6 +600,49 @@ mod tests {
         Rect::new(x0, y0, x1, y1)
     }
 
+    /// `TOILE-UI-047`: an entry that does not apply is left out. One unlocked
+    /// element in no frame gets no ungroup, unlock, align, distribute or frame
+    /// entry, and the empty board gets paste and select all alone.
+    #[test]
+    fn an_entry_that_does_not_apply_is_left_out() {
+        let dv = viewport(vec![elem(
+            "a",
+            ElementKind::Sticky,
+            r(0.0, 0.0, 10.0, 10.0),
+            false,
+        )]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
+        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        for omitted in [
+            UNGROUP,
+            UNLOCK,
+            ALIGN_LEFT,
+            DISTRIBUTE_H,
+            ADD_TO_FRAME,
+            REMOVE_FROM_FRAME,
+        ] {
+            assert!(!ids.contains(&omitted), "{omitted:?} does not apply");
+        }
+        let empty: Vec<CommandId> = context_menu_ids(&CtxScope::default())
+            .into_iter()
+            .flatten()
+            .collect();
+        assert_eq!(empty, [PASTE, SELECT_ALL]);
+    }
+
+    /// `TOILE-UI-150`: where two frames hold the selection, the entries
+    /// target the front-most one, the later in the painted order.
+    #[test]
+    fn overlapping_frames_resolve_to_the_front_most() {
+        let dv = viewport(vec![
+            elem("back", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
+            elem("front", ElementKind::Frame, r(5.0, 5.0, 50.0, 50.0), false),
+            elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
+        ]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
+        assert_eq!(scope.containing_frame, Some(eid("front")));
+    }
+
     #[test]
     fn react_emoji_resolves_to_one_react_per_target() {
         let dv = viewport(vec![
