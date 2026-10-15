@@ -2268,6 +2268,88 @@ mod handler_tests {
         );
     }
 
+    /// Posts `body` as JSON and answers the JSON the route returns, once it
+    /// answers 200.
+    async fn post_for_json(
+        app: &Router,
+        auth: &str,
+        uri: String,
+        body: serde_json::Value,
+    ) -> serde_json::Value {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::post(uri)
+                    .header("content-type", "application/json")
+                    .header("authorization", auth)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    // `SYNC-139`: a blob put through the relay's upload link comes back, byte
+    // for byte, through its download link. Both legs reach a real object store.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_download_fetches_the_bytes_an_upload_put(pool: sqlx::PgPool) {
+        let (s3, bucket) = crate::test_helpers::storage_service().await;
+        let state = crate::test_helpers::with_storage(&*test_app_state(pool).await, s3, bucket);
+        let setup = build_test_router(state.clone());
+        let app = shipped_router(state);
+        let owner = setup_and_get_auth(&setup).await;
+        let doc = create_test_doc(&setup, &owner).await;
+        // Every byte value, at a length no block size divides.
+        let blob: Vec<u8> = (0..=255u8).cycle().take(4099).collect();
+        let hash = "0123456789abcdef".repeat(4);
+        let size = blob.len() as u64;
+        // The store is local: no proxy stands between the test and it.
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        let upload = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/media/upload-url"),
+            serde_json::json!({ "content_hash": hash, "size_bytes": size }),
+        )
+        .await;
+        let put = http
+            .put(upload["upload_url"].as_str().unwrap())
+            .body(blob.clone())
+            .send()
+            .await
+            .unwrap();
+        assert!(put.status().is_success(), "upload: {}", put.status());
+        post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/media"),
+            serde_json::json!({ "content_hash": hash, "size_bytes": size }),
+        )
+        .await;
+
+        let download = post_for_json(
+            &app,
+            &owner,
+            format!("/api/documents/{doc}/media/download-url"),
+            serde_json::json!({ "content_hash": hash }),
+        )
+        .await;
+        let get = http
+            .get(download["download_url"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert!(get.status().is_success(), "download: {}", get.status());
+        assert_eq!(get.bytes().await.unwrap().as_ref(), blob.as_slice());
+    }
+
     // `ZK-008`: no presigned URL is signed before the document's access check.
     // An outsider gets none of the four (`SRV-002`), a viewer gets neither
     // upload URL (`SRV-056`).

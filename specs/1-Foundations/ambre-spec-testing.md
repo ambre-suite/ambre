@@ -251,7 +251,7 @@ run the same command.
 | :--- | :--- |
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, and the five corpus scripts |
 | `test-native` | the host tier, plus `ambre-server` on the native target |
-| `test-db` | postgres, redis and minio as services, with `--features db` |
+| `test-db` | postgres and redis as services, minio started by a step, with `--features db` |
 | `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `wasm-pack test --headless --chrome` |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
@@ -296,7 +296,6 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 | `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
 | The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them is extracted and host-tested |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |
-| A real S3 round trip | nothing in the suite performs one, and the CI minio service is missing. A presigned upload against a local minio is the check to run before this reaches an environment that matters |
 
 ---
 

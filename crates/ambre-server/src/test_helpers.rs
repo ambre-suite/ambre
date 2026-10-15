@@ -80,12 +80,17 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
 
 /// Like the state given, with another S3 client.
 pub fn with_s3(base: &AppState, s3: aws_sdk_s3::Client) -> Arc<AppState> {
+    with_storage(base, s3, base.s3_bucket.clone())
+}
+
+/// Like the state given, with another S3 client and bucket.
+pub fn with_storage(base: &AppState, s3: aws_sdk_s3::Client, bucket: String) -> Arc<AppState> {
     Arc::new(AppState {
         db: base.db.clone(),
         redis: base.redis.clone(),
         pubsub: base.pubsub.clone(),
         s3,
-        s3_bucket: base.s3_bucket.clone(),
+        s3_bucket: bucket,
         config: Arc::clone(&base.config),
         jwt: Arc::clone(&base.jwt),
         oidc_clients: Arc::clone(&base.oidc_clients),
@@ -110,6 +115,40 @@ pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
         conf = conf.endpoint_url(endpoint);
     }
     aws_sdk_s3::Client::from_conf(conf.build())
+}
+
+/// The object store of the database tier, and its bucket, which this call
+/// creates when it is missing. `S3_ENDPOINT` names the store. The credentials
+/// and the bucket default to those of the local stack, `docker-compose.yml`.
+///
+/// A run with no `S3_ENDPOINT` fails, so the tier cannot pass without a store.
+pub async fn storage_service() -> (aws_sdk_s3::Client, String) {
+    let endpoint = std::env::var("S3_ENDPOINT")
+        .expect("S3_ENDPOINT: the database tier needs an object store (just services-up)");
+    let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());
+    let conf = aws_sdk_s3::Config::builder()
+        .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+            env("AWS_ACCESS_KEY_ID", "minioadmin"),
+            env("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            None,
+            None,
+            "db-tier",
+        ))
+        .endpoint_url(endpoint)
+        .force_path_style(true)
+        .build();
+    let s3 = aws_sdk_s3::Client::from_conf(conf);
+    let bucket = env("S3_BUCKET", "ambre-dev");
+    if s3.head_bucket().bucket(&bucket).send().await.is_err() {
+        s3.create_bucket()
+            .bucket(&bucket)
+            .send()
+            .await
+            .expect("create the database tier's bucket");
+    }
+    (s3, bucket)
 }
 
 /// What an [`S3Stub`] holds: each object's bytes, how often each was read, and

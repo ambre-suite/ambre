@@ -138,9 +138,10 @@ instructions:
 # not even compile under `--features db` alone. 156 tests were collected where
 # 162 exist.
 
-# db tier: server integration tests (needs postgres/redis/minio).
+# db tier: server integration tests (needs postgres/redis/minio). S3_ENDPOINT
+# defaults to the minio of `services-up`; the media round trip fails without it.
 test-db:
-    cargo test -p ambre-server --features db,test-helpers
+    S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
 # `wasm-pack` drives `wasm-bindgen-test-runner`; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`.

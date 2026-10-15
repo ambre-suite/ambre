@@ -1249,7 +1249,7 @@
   {"edge": "verified-by", "from": "SYNC-077", "to": "ambre_sync::media::tests::a_blob_that_fails_to_open_delivers_nothing"},
   {"edge": "cites-section", "from": "SYNC-139", "section": "3", "to": "1-Foundations/ambre-spec-media.md"},
   {"edge": "cites-document", "from": "SYNC-139", "to": "ambre-spec-object-store.md"},
-  {"edge": "lands-with", "from": "SYNC-139", "to": "A real object-store round trip"},
+  {"edge": "verified-by", "from": "SYNC-139", "to": "ambre_server::routes::tests::handler_tests::a_download_fetches_the_bytes_an_upload_put"},
   {"edge": "cites-section", "from": "SYNC-140", "section": "3", "to": "1-Foundations/ambre-spec-media.md"},
   {"edge": "lands-with", "from": "SYNC-140", "to": "The browser media transport held"},
   {"edge": "cites-rule", "from": "SYNC-054", "to": "ZK-004"},

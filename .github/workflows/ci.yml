@@ -209,11 +209,10 @@ jobs:
   # Image tags are kept in sync with `docker-compose.yml` (the dev source of
   # truth) so a test never passes on one Postgres/Redis and fails on another.
   #
-  # No minio service: the gated tests build their S3 client from an empty config
-  # and never reach a real bucket (the S3 path -- snapshots, media -- has no db
-  # tier test yet). Add minio back (and the S3_* env) the day a test exercises
-  # `s3::*` end to end; that is also the trigger for the layered-compose
-  # migration noted in the spec's CI-debt section.
+  # minio is started by a step, not declared as a service: a service container
+  # cannot pass the image its `server /data` argument. The media round trip
+  # (`SYNC-139`) puts a blob through it and reads it back; `just test-db`
+  # points the suite at it through S3_ENDPOINT.
   # ---------------------------------------------------------------------------
   test-db:
     runs-on: ubuntu-latest
@@ -257,6 +256,19 @@ jobs:
           # Only the default branch writes caches; feature branches restore
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Same image and root user as docker-compose.yml. The test creates the
+      # bucket it needs.
+      - name: Start minio
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          docker logs minio
+          exit 1
       - run: just test-db
 
   # ---------------------------------------------------------------------------
