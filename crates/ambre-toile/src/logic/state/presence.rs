@@ -57,13 +57,7 @@ impl ToileState {
         };
         let mut sample = payload.clone();
         sample.name = self.my_name.clone();
-        match postcard::to_allocvec(&sample) {
-            Ok(bytes) => ToileOutcome::display_and_ephemeral(display, Some(bytes)),
-            Err(e) => {
-                tracing::warn!("Toile: presence encode failed: {e}");
-                ToileOutcome::display_only(display)
-            }
-        }
+        sample_outcome(display, &sample)
     }
 
     /// Apply a decrypted remote ephemeral (presence) frame, keyed by the sender's
@@ -152,5 +146,53 @@ impl ToileState {
     /// A remote peer's latest known presence, if any. Overlay / test accessor.
     pub fn peer_presence(&self, user_id: &UserId) -> Option<&PresencePayload> {
         self.presence.get(user_id).map(|(p, _)| p)
+    }
+}
+
+/// The outcome of one outbound sample: the frame to broadcast beside
+/// `display`, or `display` alone when the sample does not encode. A lost
+/// sample is corrected by the next one, so the failure is logged and never
+/// surfaced (`TOILE-184`). The function is generic so the failing arm has an
+/// input: no `PresencePayload` makes `postcard` refuse.
+fn sample_outcome<T: serde::Serialize>(display: Vec<ToileEvent>, sample: &T) -> ToileOutcome {
+    match postcard::to_allocvec(sample) {
+        Ok(bytes) => ToileOutcome::display_and_ephemeral(display, Some(bytes)),
+        Err(e) => {
+            tracing::warn!("Toile: presence encode failed: {e}");
+            ToileOutcome::display_only(display)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A value no encoder can write. Nothing the board sends serializes like
+    /// this; it exists so the failing arm of `sample_outcome` has an input.
+    struct Unwritable;
+
+    impl serde::Serialize for Unwritable {
+        fn serialize<S: serde::Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom(
+                "this value refuses to be written",
+            ))
+        }
+    }
+
+    /// `TOILE-184`: a sample that does not encode is dropped. No frame
+    /// leaves, no error event reaches the user, and no delta is written. The
+    /// events the aging produced still go out.
+    #[test]
+    fn a_sample_that_will_not_encode_is_dropped_silently() {
+        let aged = ToileEvent::PeerPresence(Vec::new());
+        let out = sample_outcome(vec![aged], &Unwritable);
+        assert!(out.ephemeral.is_none(), "no frame leaves");
+        assert!(out.update.is_none(), "no delta is written");
+        assert!(
+            matches!(out.display.as_slice(), [ToileEvent::PeerPresence(_)]),
+            "the aged set goes out, and no error does: {:?}",
+            out.display
+        );
     }
 }

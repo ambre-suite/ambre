@@ -88,9 +88,15 @@ fn paint_chip_row<S: DrawSurface>(
     // A single trailing vote badge when any vote exists: signed weight sum
     // and voter count, for example "+3 (5)".
     if tally.vote_count > 0 {
-        let label = format!("{:+} ({})", tally.vote_total, tally.vote_count);
+        let label = vote_label(tally.vote_total, tally.vote_count);
         paint_chip(surface, &label, x, y, font_cx, text_cache, palette);
     }
+}
+
+/// The trailing vote chip's label: the signed total, then the number of
+/// voters in parentheses (`TOILE-UI-304`).
+fn vote_label(total: i64, count: u32) -> String {
+    format!("{total:+} ({count})")
 }
 
 /// Paint one chip (rounded pill + label) with its top-left at `(x, y)`.
@@ -195,42 +201,96 @@ mod tests {
         }
     }
 
-    /// An element with a tally emits at least one filled pill and glyphs; an
-    /// element without one emits nothing.
-    #[test]
-    fn chip_row_paints_only_tallied_elements() {
+    /// Paint `vp` through `cam` and return the screen box of every pill, in
+    /// paint order. A pill is the one path stroked in the header border.
+    fn pills(vp: &DisplayViewport, cam: &ViewportTransform) -> Vec<Rect> {
         let mut font_cx = FontContext::new();
         let mut text_cache = TextCache::new(1.0);
         let mut surface = RecordingSurface::new();
+        paint_reactions(&mut surface, vp, cam, &mut font_cx, &mut text_cache, &LIGHT);
+        surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokePath { color, bounds, .. } if *color == Some(LIGHT.header_border) => {
+                    Some(*bounds)
+                }
+                _ => None,
+            })
+            .collect()
+    }
 
+    fn tally(emoji: &[(&str, u32)], vote_total: i64, vote_count: u32) -> ReactionTally {
+        ReactionTally {
+            emoji: emoji.iter().map(|(e, n)| ((*e).to_owned(), *n)).collect(),
+            vote_total,
+            vote_count,
+        }
+    }
+
+    /// `TOILE-UI-302`: of a tallied and an untallied element, only the tallied
+    /// one paints a chip. Exactly one pill is painted, and it sits under the
+    /// tallied element.
+    #[test]
+    fn chip_row_paints_only_tallied_elements() {
+        let a = Rect::new(0.0, 0.0, 40.0, 40.0);
         let mut reactions = BTreeMap::new();
-        reactions.insert(
-            ElementId("a".into()),
-            ReactionTally {
-                emoji: vec![("x".to_string(), 2)],
-                vote_total: 0,
-                vote_count: 0,
-            },
-        );
+        reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 0, 0));
         let vp = vp_with(
-            vec![
-                elem("a", Rect::new(0.0, 0.0, 40.0, 40.0)),
-                elem("b", Rect::new(80.0, 0.0, 120.0, 40.0)),
-            ],
+            vec![elem("a", a), elem("b", Rect::new(80.0, 0.0, 120.0, 40.0))],
             reactions,
         );
         let cam = ViewportTransform::new(200.0, 200.0);
-        paint_reactions(
-            &mut surface,
-            &vp,
-            &cam,
-            &mut font_cx,
-            &mut text_cache,
-            &LIGHT,
-        );
 
-        let fills = surface.count(|op| matches!(op, DrawOp::FillPath { .. }));
-        assert!(fills >= 1, "expected at least one chip pill fill");
+        let pills = pills(&vp, &cam);
+        let a_on_screen = rect_to_screen(a, &cam.world_to_screen());
+        assert_eq!(pills.len(), 1, "one chip, for the tallied element");
+        assert!(
+            (pills[0].x0 - a_on_screen.x0).abs() < 1.0 && pills[0].y0 > a_on_screen.y1,
+            "the chip sits under the tallied element: {pills:?}"
+        );
+    }
+
+    /// `TOILE-UI-080`: the same tally paints the same pills at 1x and at 4x.
+    /// Only where the row starts follows the zoom.
+    #[test]
+    fn a_badge_keeps_one_screen_size_through_the_zoom() {
+        let mut reactions = BTreeMap::new();
+        reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 1, 1));
+        let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
+        let near = ViewportTransform::new(800.0, 800.0);
+        let far = ViewportTransform { zoom: 4.0, ..near };
+
+        let (at_1x, at_4x) = (pills(&vp, &near), pills(&vp, &far));
+        assert_eq!(at_1x.len(), 2);
+        assert_eq!(at_4x.len(), 2);
+        for (one, four) in at_1x.iter().zip(&at_4x) {
+            assert!(
+                (one.width() - four.width()).abs() < 1e-6
+                    && (one.height() - four.height()).abs() < 1e-6,
+                "one size at both zooms: {one:?} against {four:?}"
+            );
+        }
+        assert_ne!(at_1x[0].y0, at_4x[0].y0, "the row follows the element");
+    }
+
+    /// `TOILE-UI-304`: votes collapse into one trailing chip after the emoji
+    /// chips. Its label is the signed total, then the voter count.
+    #[test]
+    fn votes_collapse_into_one_trailing_chip() {
+        let mut reactions = BTreeMap::new();
+        reactions.insert(ElementId("a".into()), tally(&[("x", 1), ("y", 2)], -2, 3));
+        let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
+        let pills = pills(&vp, &ViewportTransform::new(400.0, 400.0));
+
+        assert_eq!(pills.len(), 3, "two emoji chips and one vote chip");
+        assert!(
+            pills.windows(2).all(|w| w[0].x1 < w[1].x0),
+            "left to right, the vote chip last: {pills:?}"
+        );
+        assert_eq!(vote_label(-2, 3), "-2 (3)");
+        assert_eq!(vote_label(4, 2), "+4 (2)");
+        assert_eq!(vote_label(0, 2), "+0 (2)", "a zero total keeps its sign");
     }
 
     /// No reactions -> no draw ops at all (cheap early out).

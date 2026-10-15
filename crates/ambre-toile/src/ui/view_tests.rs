@@ -4,7 +4,8 @@
 //! detached, and a frame paints into a recording surface.
 
 use super::*;
-use ambre_bus::app::toile::{Anchor, ElementStyle, ShapeKind};
+use ambre_bus::UserId;
+use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use kurbo::Rect;
 
@@ -2387,4 +2388,286 @@ fn two_bar_edits_compose_and_keep_the_selection() {
         other => panic!("one restyle expected, got {other:?}"),
     }
     assert_eq!(rig.view.selection, [eid("a")]);
+}
+
+// -- Comments, reactions and presence (`toile-comments`, `toile-reactions`,
+// `toile-presence`) -----------------------------------------------------------
+
+/// A peer whose sample puts their cursor at the world point (x, y) and
+/// selects `selection`.
+fn peer_at(user_id: UserId, x: f64, y: f64, selection: &[&str]) -> PresenceUpdate {
+    PresenceUpdate {
+        user_id,
+        presence: PresencePayload {
+            cursor: Some(kurbo::Point::new(x, y)),
+            selection: selection.iter().map(|id| eid(id)).collect(),
+            ..Default::default()
+        },
+    }
+}
+
+/// A board showing sticky `a` with a reaction under it, an open thread
+/// pinned beside it, and one peer whose cursor sits on it.
+fn a_shared_board(peer: UserId) -> Rig {
+    let mut rig = Rig::new();
+    let mut reactions = std::collections::BTreeMap::new();
+    reactions.insert(
+        eid("a"),
+        ambre_bus::app::toile::ReactionTally {
+            emoji: vec![("+1".to_owned(), 2)],
+            vote_total: 0,
+            vote_count: 0,
+        },
+    );
+    rig.answer(ToileEvent::ViewportData(DisplayViewport {
+        version: 0,
+        grid_unit: 20.0,
+        pins: vec![ambre_bus::app::toile::CommentPin {
+            thread: eid("t"),
+            at: kurbo::Point::new(50.0, 50.0),
+            messages: 1,
+            resolved: false,
+        }],
+        reactions,
+        viewport: Viewport::default(),
+        nodes: vec![DisplayNode::Element(sticky("a", A))],
+    }));
+    rig.answer(ToileEvent::PeerPresence(vec![peer_at(
+        peer,
+        50.0,
+        50.0,
+        &["a"],
+    )]));
+    rig.sent();
+    rig
+}
+
+/// Paint the content pass and the overlay pass, each into its own surface.
+fn paint_passes(
+    rig: &mut Rig,
+) -> (
+    ambre_draw::testing::RecordingSurface,
+    ambre_draw::testing::RecordingSurface,
+) {
+    let mut font_cx = FontContext::new();
+    let mut cache = TextCache::new(1.0);
+    let mut content = ambre_draw::testing::RecordingSurface::new();
+    rig.view
+        .paint_content(&mut content, &mut font_cx, &mut cache, None);
+    let mut overlay = ambre_draw::testing::RecordingSurface::new();
+    rig.view.paint_overlay(
+        &mut overlay,
+        &mut font_cx,
+        &mut cache,
+        &FrameStats::default(),
+    );
+    (content, overlay)
+}
+
+/// The colour an op paints in, when it has one.
+fn op_color(op: &ambre_draw::testing::DrawOp) -> Option<ambre_draw::Color> {
+    use ambre_draw::testing::DrawOp;
+    match op {
+        DrawOp::FillRect { color, .. }
+        | DrawOp::StrokeRect { color, .. }
+        | DrawOp::StrokeLine { color, .. } => Some(*color),
+        DrawOp::Glyphs { color, .. }
+        | DrawOp::FillPath { color }
+        | DrawOp::StrokePath { color, .. } => *color,
+        _ => None,
+    }
+}
+
+/// The indices of the ops of `surface` filled in `color`, in paint order.
+fn fills_in(
+    surface: &ambre_draw::testing::RecordingSurface,
+    color: ambre_draw::Color,
+) -> Vec<usize> {
+    use ambre_draw::testing::DrawOp;
+    surface
+        .ops()
+        .iter()
+        .enumerate()
+        .filter(|(_, op)| matches!(op, DrawOp::FillPath { color: Some(c) } if *c == color))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// `TOILE-UI-219`, `TOILE-UI-299` and `TOILE-UI-306`: the board paints in
+/// its own pass, under the overlay pass. In the overlay, the peers paint
+/// first, the badge row next, and the pins last.
+#[test]
+fn the_overlays_stack_peers_then_badges_then_pins() {
+    let peer = UserId::new();
+    let mut rig = a_shared_board(peer);
+    let (content, overlay) = paint_passes(&mut rig);
+    let palette = rig.view.theme.palette();
+    let ink = ambre_draw::peer_color(&peer);
+
+    assert!(
+        !content.ops().iter().any(|op| op_color(op) == Some(ink)),
+        "no peer paints in the board pass"
+    );
+    let peers: Vec<usize> = (0..overlay.ops().len())
+        .filter(|i| op_color(&overlay.ops()[*i]) == Some(ink))
+        .collect();
+    let badges = fills_in(&overlay, palette.header_bg);
+    let pins = fills_in(&overlay, palette.selection);
+    assert!(!peers.is_empty() && !badges.is_empty() && !pins.is_empty());
+    assert!(
+        peers.iter().max() < badges.iter().min(),
+        "the badges paint above the peers"
+    );
+    assert!(
+        badges.iter().max() < pins.iter().min(),
+        "the pins paint above the badges"
+    );
+}
+
+/// `TOILE-UI-299`: a presentation still paints the badge row above the
+/// board, while it leaves the peers off the slide.
+#[test]
+fn a_presentation_keeps_the_badges() {
+    let peer = UserId::new();
+    let mut rig = a_shared_board(peer);
+    rig.answer(ToileEvent::PresentModeChanged(true));
+    let (_, overlay) = paint_passes(&mut rig);
+    let palette = rig.view.theme.palette();
+    assert!(
+        !fills_in(&overlay, palette.header_bg).is_empty(),
+        "the badges paint in a presentation"
+    );
+    let ink = ambre_draw::peer_color(&peer);
+    assert!(!overlay.ops().iter().any(|op| op_color(op) == Some(ink)));
+}
+
+/// `TOILE-180`: a sample arriving from a peer moves neither the camera nor
+/// the selection of this viewer, even when it selects something else.
+#[test]
+fn an_arriving_sample_keeps_the_camera_and_the_selection() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.selection = vec![eid("a")];
+    let camera = rig.view.cam;
+    rig.answer(ToileEvent::PeerPresence(vec![peer_at(
+        UserId::new(),
+        900.0,
+        900.0,
+        &["b"],
+    )]));
+    rig.frame();
+    assert_eq!(rig.view.selection, [eid("a")]);
+    assert_eq!(rig.view.cam, camera, "the camera did not move");
+    assert!(
+        !rig.sent()
+            .iter()
+            .any(|c| matches!(c, ToileCommand::SetViewport(_))),
+        "no camera change reaches the board"
+    );
+}
+
+/// `TOILE-UI-220`: opening another board drops every peer of the first. The
+/// overlay paints none of them over the new board.
+#[test]
+fn opening_another_board_drops_its_peers() {
+    let peer = UserId::new();
+    let mut rig = a_shared_board(peer);
+    rig.view.set_document(DocumentId::new());
+    rig.show(vec![DisplayNode::Element(sticky("a", A))]);
+    let (_, overlay) = paint_passes(&mut rig);
+    let ink = ambre_draw::peer_color(&peer);
+    assert!(
+        !overlay.ops().iter().any(|op| op_color(op) == Some(ink)),
+        "no peer of the first board paints on the second"
+    );
+}
+
+/// `TOILE-UI-073`: one gesture's sample carries the cursor, the selection
+/// and the stroke in flight, together.
+#[test]
+fn a_gesture_sample_carries_the_cursor_the_selection_and_the_stroke() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.selection = vec![eid("a")];
+    rig.view.set_tool(Tool::Draw);
+    rig.press(rig.screen(500.0, 500.0));
+    let (x, y) = rig.screen(530.0, 500.0);
+    rig.input(InputEvent::PointerMove { x, y });
+    rig.frame();
+    let samples: Vec<PresencePayload> = rig
+        .sent()
+        .into_iter()
+        .filter_map(|c| match c {
+            ToileCommand::Presence { payload, .. } => Some(payload),
+            _ => None,
+        })
+        .collect();
+    let [sample] = samples.as_slice() else {
+        panic!("one sample a frame, got {samples:?}");
+    };
+    let cursor = sample.cursor.expect("the cursor");
+    assert!((cursor.x - 530.0).abs() < 1e-6 && (cursor.y - 500.0).abs() < 1e-6);
+    assert_eq!(sample.selection, [eid("a")]);
+    assert!(
+        sample.live_stroke.as_ref().is_some_and(|s| s.len() >= 2),
+        "the stroke in flight: {:?}",
+        sample.live_stroke
+    );
+}
+
+/// `TOILE-UI-309`: a thread on a point brings the camera to that point at
+/// once. A thread on an element asks the board for its box, and the camera
+/// moves to its centre when the answer lands.
+#[test]
+fn a_thread_brings_the_camera_to_its_anchor() {
+    let mut rig = Rig::new();
+    rig.sent();
+    rig.view.focus_thread(&CommentAnchor::Point {
+        x: 700.0,
+        y: -300.0,
+    });
+    assert_eq!(rig.view.cam.center, kurbo::Point::new(700.0, -300.0));
+
+    rig.view.focus_thread(&CommentAnchor::Element(eid("far")));
+    let asked = rig.sent().iter().any(|c| {
+        matches!(
+            c,
+            ToileCommand::RequestSelectionStats { ids, kind: StatsRequestKind::CommentFocus }
+                if ids == &[eid("far")]
+        )
+    });
+    assert!(asked, "the view asks for the anchor's box");
+    rig.answer(ToileEvent::SelectionStats(
+        ambre_bus::app::toile::SelectionStats {
+            count: 1,
+            bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
+            kind: StatsRequestKind::CommentFocus,
+        },
+    ));
+    assert_eq!(rig.view.cam.center, kurbo::Point::new(4050.0, 4100.0));
+}
+
+/// `TOILE-UI-310`: a changed thread is read again while the panel is open:
+/// the list always, and the thread itself when the panel shows it. A closed
+/// panel reads nothing.
+#[test]
+fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
+    let reads = |rig: &mut Rig| -> Vec<Option<ThreadId>> {
+        rig.sent()
+            .into_iter()
+            .filter_map(|c| match c {
+                ToileCommand::ReadComments { thread } => Some(thread),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut rig = Rig::new();
+    rig.sent();
+    let t = eid("t");
+
+    rig.view.reread_comments_shown(true, Some(&t), &t);
+    assert_eq!(reads(&mut rig), [None, Some(t.clone())]);
+    rig.view
+        .reread_comments_shown(true, Some(&eid("other")), &t);
+    assert_eq!(reads(&mut rig), [None], "the list alone");
+    rig.view.reread_comments_shown(false, None, &t);
+    assert!(reads(&mut rig).is_empty(), "a closed panel reads nothing");
 }

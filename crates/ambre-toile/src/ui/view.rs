@@ -16,7 +16,6 @@
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
-#[cfg(target_arch = "wasm32")]
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
@@ -2121,19 +2120,35 @@ impl ToileView {
     /// panel keeps no answer of its own (`TOILE-UI-023`).
     #[cfg(target_arch = "wasm32")]
     fn reread_comments(&mut self, thread: &ThreadId) {
-        if !self.comments.panel.get_untracked() {
+        let panel = self.comments.panel.get_untracked();
+        let showing = self.comments.open.get_untracked().map(|t| t.id);
+        self.reread_comments_shown(panel, showing.as_ref(), thread);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn reread_comments(&mut self, _thread: &ThreadId) {}
+
+    /// The re-read itself, over what the panel shows: whether it is open, and
+    /// the thread it shows whole. A closed panel reads nothing.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the panel signals that feed it are wasm-only")
+    )]
+    fn reread_comments_shown(
+        &mut self,
+        panel: bool,
+        showing: Option<&ThreadId>,
+        thread: &ThreadId,
+    ) {
+        if !panel {
             return;
         }
         self.send_edit(ToileCommand::ReadComments { thread: None });
-        let showing = self.comments.open.get_untracked().map(|t| t.id);
-        if showing.as_ref() == Some(thread) {
+        if showing == Some(thread) {
             self.send_edit(ToileCommand::ReadComments {
                 thread: Some(thread.clone()),
             });
         }
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    fn reread_comments(&mut self, _thread: &ThreadId) {}
 
     /// Show the panel and refresh its board-wide list.
     #[cfg(target_arch = "wasm32")]
@@ -2316,7 +2331,10 @@ impl ToileView {
     /// its own target. An element anchor may sit outside the culled set. The
     /// view asks Logic for its bounds and recentres when the answer lands, the
     /// same round trip as the find focus.
-    #[cfg(target_arch = "wasm32")]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        allow(dead_code, reason = "the panel intent that calls it is wasm-only")
+    )]
     fn focus_thread(&mut self, anchor: &CommentAnchor) {
         match anchor {
             CommentAnchor::Point { x, y } => {

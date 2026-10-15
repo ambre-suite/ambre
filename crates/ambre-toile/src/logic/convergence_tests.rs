@@ -1455,6 +1455,10 @@ fn presence_command_broadcasts_ephemeral_only() {
         out.ephemeral.is_some(),
         "presence must broadcast an ephemeral frame"
     );
+    // `TOILE-183`: the sample pushed no undo item. The first undo takes back
+    // the sticky, the last edit before it.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 0, "the first undo took the sticky back");
 }
 
 #[test]
@@ -4683,6 +4687,130 @@ fn same_user_two_devices_is_one_entry() {
         ta.vote_count, 1,
         "two devices of one user is a single entry, not two votes"
     );
+}
+
+/// A board whose one target carries one reaction per entry. A distinct user
+/// places each one on a peer of its own, and the board merges it back in order.
+fn reacted_by(reactions: &[Reaction]) -> (ToileState, ElementId) {
+    let (mut board, t) = state_with_user(UserId::new());
+    for reaction in reactions {
+        let mut peer = ToileState::new();
+        peer.set_user_id(UserId::new());
+        peer.apply_remote(&board.export_snapshot());
+        let delta = peer
+            .handle_command(ToileCommand::React {
+                target: t.clone(),
+                reaction: Some(reaction.clone()),
+            })
+            .update
+            .expect("each reaction writes a delta");
+        board.apply_remote(&delta);
+    }
+    (board, t)
+}
+
+/// `TOILE-FEAT-057`: the derived frame carries the tallies of what the camera
+/// sees. A reacted target scrolled out of view is left out of the frame. The
+/// board still holds and counts its reaction: it is skipped, not deleted.
+#[test]
+fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
+    let (mut st, near) = state_with_user(UserId::new());
+    let far = create_sticky(&mut st, Point::new(1.0e6, 1.0e6), "far");
+    for t in [&near, &far] {
+        st.handle_command(ToileCommand::React {
+            target: t.clone(),
+            reaction: Some(emoji("heart")),
+        });
+    }
+    st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
+        center: Point::ZERO,
+        zoom: 1.0,
+        size: Size::new(800.0, 600.0),
+    }));
+
+    let frame = st.debug_viewport();
+    assert!(frame.reactions.contains_key(&near), "the target in view");
+    assert!(
+        !frame.reactions.contains_key(&far),
+        "the target out of view costs nothing"
+    );
+    assert_eq!(
+        st.reaction_tally(&far).emoji,
+        vec![("heart".to_owned(), 1)],
+        "the board still holds the reaction out of view"
+    );
+}
+
+/// `TOILE-FEAT-058`: two emoji on one target read in one order, whatever
+/// order the reactions arrived in, on every read and on every peer.
+#[test]
+fn the_chips_of_a_target_keep_one_order() {
+    let (one, t) = reacted_by(&[emoji("zebra"), emoji("apple"), emoji("zebra")]);
+    let (other, u) = reacted_by(&[emoji("apple"), emoji("zebra"), emoji("zebra")]);
+    let expected = vec![("apple".to_owned(), 1), ("zebra".to_owned(), 2)];
+
+    assert_eq!(one.reaction_tally(&t).emoji, expected);
+    assert_eq!(one.reaction_tally(&t), one.reaction_tally(&t), "two reads");
+    assert_eq!(
+        other.reaction_tally(&u).emoji,
+        expected,
+        "another arrival order"
+    );
+    let frame = one.debug_viewport();
+    assert_eq!(
+        frame.reactions.get(&t).map(|tally| tally.emoji.clone()),
+        Some(expected),
+        "the frame reads the same order"
+    );
+}
+
+/// `TOILE-FEAT-059`: votes of opposite signs fold into one signed total and
+/// one voter count, in the single-target read and in the frame alike.
+#[test]
+fn votes_fold_into_one_signed_total_and_one_count() {
+    let (st, t) = reacted_by(&[vote(3), vote(-1), vote(-1), emoji("heart")]);
+    let tally = st.reaction_tally(&t);
+    assert_eq!((tally.vote_total, tally.vote_count), (1, 3));
+    assert_eq!(
+        tally.emoji,
+        vec![("heart".to_owned(), 1)],
+        "a vote is no chip"
+    );
+    assert_eq!(st.debug_viewport().reactions.get(&t), Some(&tally));
+
+    let (st, t) = reacted_by(&[vote(1), vote(-1)]);
+    let tally = st.reaction_tally(&t);
+    assert_eq!(
+        (tally.vote_total, tally.vote_count),
+        (0, 2),
+        "a zero total still counts its voters"
+    );
+}
+
+/// `TOILE-FEAT-063`: placing again the reaction the user already has writes
+/// nothing, says nothing and costs no undo item.
+#[test]
+fn placing_the_same_reaction_again_does_nothing() {
+    let (mut st, t) = state_with_user(UserId::new());
+    st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("heart")),
+    });
+
+    let again = st.handle_command(ToileCommand::React {
+        target: t.clone(),
+        reaction: Some(emoji("heart")),
+    });
+    assert!(again.update.is_none(), "no delta");
+    assert!(again.display.is_empty(), "no event: {:?}", again.display);
+
+    // One undo removes the reaction: the second gesture pushed nothing. The
+    // next undo item is the target itself.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.my_reaction(&t), None);
+    assert_eq!(st.element_count(), 1, "the target is still there");
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.element_count(), 0, "the next undo item is the target");
 }
 
 // -----------------------------------------------------------------------------

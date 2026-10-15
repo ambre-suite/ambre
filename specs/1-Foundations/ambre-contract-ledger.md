@@ -20,14 +20,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3386 rows: 2551 shipped, of which 29 partial and 59 loose. 835 unbuilt.**
+**3386 rows: 2551 shipped, of which 26 partial and 43 loose. 835 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 668 | 413 | 777 | 605 |  | 2463 |
-| `partial` | 21 |  | 7 | 1 |  | 29 |
+| `verified` | 668 | 413 | 796 | 605 |  | 2482 |
+| `partial` | 21 |  | 4 | 1 |  | 26 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 13 | 5 | 29 | 1 |  | 48 |
+| `untested` | 13 | 5 | 13 | 1 |  | 32 |
 | `human-review` | 11 |  |  |  |  | 11 |
 | `qa-manual` |  |  |  |  |  | 0 |
 | `unimplemented` | 204 | 55 | 28 | 109 | 439 | 835 |
@@ -108,7 +108,7 @@
 | `ambre-spec-toile-auto-layout.md` | 27 | 25 | 25 |  |  | 2 |
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 30 |  |  |  |
 | `ambre-spec-toile-clipboard.md` | 18 | 17 | 17 |  |  | 1 |
-| `ambre-spec-toile-comments.md` | 31 | 31 | 26 |  | 5 |  |
+| `ambre-spec-toile-comments.md` | 31 | 31 | 31 |  |  |  |
 | `ambre-spec-toile-connectors.md` | 46 | 45 | 44 | 1 |  | 1 |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 33 |  |  |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 44 |  |  |  |
@@ -122,9 +122,9 @@
 | `ambre-spec-toile-media.md` | 29 | 29 | 28 |  | 1 |  |
 | `ambre-spec-toile-menus.md` | 53 | 53 | 53 |  |  |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 |  | 4 | 2 |
-| `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 2 | 4 |  |
+| `ambre-spec-toile-presence.md` | 28 | 28 | 28 |  |  |  |
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 40 | 2 | 3 |  |
-| `ambre-spec-toile-reactions.md` | 35 | 29 | 21 | 1 | 7 | 6 |
+| `ambre-spec-toile-reactions.md` | 35 | 29 | 29 |  |  | 6 |
 | `ambre-spec-toile-selection.md` | 33 | 33 | 33 |  |  |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 13 |  |  |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 30 |  |  |  |

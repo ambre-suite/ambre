@@ -28,7 +28,10 @@
 
 use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
-use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId, ToileEvent};
+use ambre_bus::app::toile::{
+    CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView, ElementId,
+    ToileEvent,
+};
 use ambre_bus::{AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
@@ -36,8 +39,9 @@ use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
-    DeckIntent, DeckMove, DeckPanel, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats,
-    SelectionToolbar, StatusBar, StyleEdit, StyleModel, Toggles, ToolPalette, TopMenuBar, UNDO,
+    CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
+    FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats, SelectionToolbar, StatusBar,
+    StyleEdit, StyleModel, Toggles, ToolPalette, TopMenuBar, UNDO,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -1039,5 +1043,121 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
         }
     );
     assert!(!dialogs.embed_doc_open.get_untracked());
+    root.remove();
+}
+
+// -- The comments panel and the drop composer (chrome/comments.rs) -----------
+
+fn summary(id: &str, preview: &str) -> CommentSummary {
+    CommentSummary {
+        id: ElementId(id.to_owned()),
+        anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+        resolved: false,
+        messages: 1,
+        preview: preview.to_owned(),
+    }
+}
+
+/// The text of every element under `root` that matches `selector`.
+fn texts(root: &web_sys::Element, selector: &str) -> Vec<String> {
+    let found = root.query_selector_all(selector).unwrap();
+    (0..found.length())
+        .filter_map(|i| found.item(i)?.text_content())
+        .collect()
+}
+
+/// `TOILE-UI-023`: the panel shows what the board answered and nothing else.
+/// A new answer replaces the rows whole, and a click on a row leaves as an
+/// intent. The panel changes nothing of its own.
+#[wasm_bindgen_test]
+async fn the_comment_panel_shows_what_the_board_answered() {
+    let owner = Owner::new();
+    owner.set();
+    let state = RwSignal::new(true);
+    let list = RwSignal::new(vec![summary("t1", "first"), summary("t2", "second")]);
+    let open = RwSignal::new(None::<CommentThread>);
+    let fired = RwSignal::new(None::<CommentIntent>);
+    let on_intent = Callback::new(move |i| fired.set(Some(i)));
+    let root = mount_in_container(move || {
+        view! { <CommentsPanel state=state list=list open=open on_intent=on_intent /> }
+    });
+    assert_eq!(texts(&root, ".ambre-comments-preview"), ["first", "second"]);
+
+    list.set(vec![summary("t3", "third")]);
+    open.set(Some(CommentThread {
+        id: ElementId("t3".to_owned()),
+        anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+        resolved: false,
+        messages: vec![CommentMessage {
+            author: UserId::new(),
+            ts: 0,
+            body: "read back".to_owned(),
+        }],
+    }));
+    leptos::task::tick().await;
+    assert_eq!(texts(&root, ".ambre-comments-preview"), ["third"]);
+    assert_eq!(texts(&root, ".ambre-comments-body"), ["read back"]);
+
+    assert!(click_in(&root, ".ambre-comments-list", "third1"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(CommentIntent::Focus {
+            thread: ElementId("t3".to_owned()),
+            anchor: CommentAnchor::Point { x: 10.0, y: 20.0 },
+        })
+    );
+    leptos::task::tick().await;
+    assert_eq!(
+        texts(&root, ".ambre-comments-preview"),
+        ["third"],
+        "the click changed no row"
+    );
+
+    open.set(None);
+    leptos::task::tick().await;
+    assert!(texts(&root, ".ambre-comments-body").is_empty());
+    root.remove();
+}
+
+/// `TOILE-UI-307`: a dropped comment opens its composer at the click, with
+/// the field focused, so the user types where they clicked.
+#[wasm_bindgen_test]
+async fn a_dropped_comment_opens_its_composer_where_it_clicked() {
+    let owner = Owner::new();
+    owner.set();
+    let draft = RwSignal::new(None::<CommentDraft>);
+    let on_intent = Callback::new(move |_: CommentIntent| {});
+    let root = mount_in_container(move || {
+        view! { <CommentComposer draft=draft on_intent=on_intent /> }
+    });
+    assert!(
+        root.query_selector(".ambre-comment-composer")
+            .unwrap()
+            .is_none()
+    );
+
+    draft.set(Some(CommentDraft {
+        anchor: CommentAnchor::Point { x: 0.0, y: 0.0 },
+        at: ambre_draw::Point::new(120.0, 80.0),
+    }));
+    leptos::task::tick().await;
+    let composer = root
+        .query_selector(".ambre-comment-composer")
+        .unwrap()
+        .expect("the composer opened");
+    let style = composer.get_attribute("style").unwrap_or_default();
+    assert!(
+        style.contains("left: 120px") && style.contains("top: 80px"),
+        "at the click: {style}"
+    );
+    let field = root
+        .query_selector(".ambre-comment-composer-input")
+        .unwrap()
+        .expect("the field");
+    assert_eq!(
+        document().active_element(),
+        Some(field),
+        "the field has the focus"
+    );
     root.remove();
 }
