@@ -212,8 +212,6 @@ say which of the four refusals fired.
   an empty proof (`ambre-spec-delta-order.md`).
 * **No bench measures this pipeline.** The four budgeted operations are measured on the primitives
   in `ambre-crypto`, so the compression step and the metadata encoding are outside every figure.
-* **Nothing fuzzes the open path.** It is fed by an untrusted relay, which is the case
-  `ambre-spec-testing.md section 2` names as not optional, and no target exists.
 
 ---
 

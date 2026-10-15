@@ -128,6 +128,8 @@ mod chain;
 mod channels;
 mod docfile;
 mod documents;
+#[cfg(feature = "fuzz")]
+pub mod fuzz;
 mod http;
 mod lifecycle;
 mod light;

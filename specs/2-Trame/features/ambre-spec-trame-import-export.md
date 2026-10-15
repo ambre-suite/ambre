@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-025` | `POST` | An import MUST land as one undo item, whatever the number of cells it writes. | this spec section 3 | `ambre_trame::logic::tests::group12::an_import_is_one_undo_item` | none | verified |
 | `TRAME-IO-028` | `FRAME` | A file holding no record MUST leave the document untouched: no sheet, no cell, no undo item. | this spec section 3 | `ambre_trame::logic::tests::group12::a_file_with_no_record_leaves_the_document_alone` | none | verified |
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
-| `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers | none | verified |
+| `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
 | `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | none | unheld -- the warning `open_csv_picker` raises when the queue refuses the file. A driven browser picks a file while the Logic thread is saturated and reads the warning off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-IO-045` | `POST` | A file that loads MUST show its formula cells as results, never as their source text. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state` -- it reads the formula cell back through a viewport request and asserts the result | none | verified |
 | `TRAME-IO-008` | `FRAME` | A rejected file MUST leave both the input bytes and the open document untouched. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` -- it compares the bytes and the snapshot across five rejection shapes | none | verified |
-| `TRAME-IO-046` | `FAIL` | A file it cannot read MUST fail as a typed error, never as a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | none | verified |
+| `TRAME-IO-046` | `FAIL` | A file it cannot read MUST fail as a typed error, never as a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs` wraps each input in a valid header, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-009` | `FAIL` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Trame. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | none | verified |
 
 ### 1.6 Open an Excel workbook
@@ -289,9 +289,6 @@ parameterized command has no caller (section 6).
 * **No property test drives an import.** An import creates a sheet and writes as many cells as a
   paste, and the convergence property drives neither it nor the two exporters. Several rows say
   `none` for that reason, and every row of section 2 does.
-* **The decoder has no fuzz target.** Two host tests feed it crafted bytes and four hundred
-  pseudo-random ones. That is more than the corpus average and less than what a decoder fed by user
-  files deserves.
 * **`TRAME-IO-013` asks for a behaviour the command model forbids.** A command runs to completion,
   so an import cannot yield mid-file, and there is no progress event. The only mechanism available
   is the re-entrant continuation the recompute already uses.

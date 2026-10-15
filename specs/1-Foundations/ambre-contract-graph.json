@@ -110,7 +110,6 @@
   {"edge": "verified-by", "from": "ARCH-008", "to": "ambre_canvas::frame::tests::a_fatal_process_paints_its_screen_once_then_idles"},
   {"edge": "cites-section", "from": "ARCH-029", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "cites-rule", "from": "ARCH-029", "to": "SRV-100"},
-  {"edge": "lands-with", "from": "ARCH-029", "to": "Fuzzing the remaining readers"},
   {"edge": "cites-section", "from": "ARCH-015", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},
   {"edge": "verified-by", "from": "ARCH-015", "to": "ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event"},
   {"edge": "cites-section", "from": "ARCH-022", "section": "2", "to": "1-Foundations/ambre-spec-architecture.md"},

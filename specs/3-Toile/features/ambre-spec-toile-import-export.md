@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-IO-090` | `POST` | Opening a file MUST repaint the board once, not once per element it carries. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state` -- it reads one repaint event, the rebuilt paint order and the element count | none | verified |
 | `TOILE-IO-011` | `FRAME` | A rejected file MUST leave both the input bytes and the current board untouched. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` -- it walks five rejection shapes and reads the bytes and the open board back after each | none | verified |
-| `TOILE-IO-089` | `FAIL` | A file the engine refuses MUST fail by name, never by a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | none | verified |
+| `TOILE-IO-089` | `FAIL` | A file the engine refuses MUST fail by name, never by a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/toile_file.rs` wraps each input in a valid header, run by the CI `fuzz` job | none | verified |
 | `TOILE-IO-012` | `FAIL` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | none | verified |
 
 ### 1.6 Import a Figma or a Miro document
@@ -342,5 +342,3 @@ view past its own gate.
 * **No property test drives an import.** An import creates as many elements as a paste, and the two-peer
   convergence property drives neither it nor the serializers. That is why every row of section 2 that names a
   concurrent case says `none`.
-* **The decoder has no fuzz target.** It is fed by user files and it is the first target
-  `ambre-spec-testing.md` names, and none exists yet.

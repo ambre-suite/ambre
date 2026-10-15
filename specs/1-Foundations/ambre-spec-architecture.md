@@ -53,7 +53,7 @@ that and a page that looks alive and answers nothing.
 |---|---|---|---|---|---|---|
 | `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | `ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event`; `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view` | none | verified |
 | `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_fatal_event_latches_the_page_and_silences_the_view`; `::a_vanished_logic_thread_latches_the_page` -- the page's fatal latch is set; `ambre_canvas::frame::tests::a_fatal_process_paints_its_screen_once_then_idles` -- the terminal screen | none | verified |
-| `ARCH-029` | `FAIL` | A reader fed by the relay or by a user's file MUST refuse a malformed input as a typed error, never a panic. | this spec section 2; `SRV-100` | cargo-fuzz -- the four targets under `fuzz/fuzz_targets/`, run by the CI `fuzz` job | partial -- the sealed path and the Trame and Toile readers have no target; lands with the `Fuzzing the remaining readers` Story (`ambre-roadmap.md` E9) | partial |
+| `ARCH-029` | `FAIL` | A reader fed by the relay or by a user's file MUST refuse a malformed input as a typed error, never a panic. | this spec section 2; `SRV-100` | cargo-fuzz -- the seven targets under `fuzz/fuzz_targets/`, run by the CI `fuzz` job: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers | none | verified |
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | `ambre_logic::a_logic_thread_that_cannot_wait_emits_a_fatal_event` -- nothing reaches the relay or local persistence; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a client build that does not abort on a panic, and a destructor in the Logic thread, an engine or the Sync worker | none | verified |
 
 ### 1.3 A message crosses a queue
@@ -82,11 +82,12 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 31 `verified`, 1 `partial`. The build refuses a cycle, a misplaced cryptographic
+* **Verification.** 32 `verified`. The build refuses a cycle, a misplaced cryptographic
   dependency, a missing atomics flag and a lock on a client queue. It refuses application logic in
   the launcher too, a failure path that waits on a queue, and a write on a failing thread's way out.
   Host tests hold the Logic pass, its unfinished work, the wake, the full queue, each queue's
-  disconnection and two tabs of one user. The rest is held by the code alone.
+  disconnection and two tabs of one user. Seven fuzz targets feed random bytes to every reader the
+  relay or a file reaches, and the code alone holds the rest.
 
 ---
 

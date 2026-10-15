@@ -11,6 +11,12 @@ description = "Sync worker — E2EE crypto, single multiplexed WebSocket, HTTP R
 # integration tests (and host builds) can link `SyncState`.
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# The sealed open path, reachable from the fuzz targets in `fuzz/` (`ARCH-029`).
+# Non-default and host-only: `ambre-app` never names it, so no client build
+# carries the entry points it adds.
+fuzz = []
+
 [dependencies]
 ambre-bus      = { path = "../ambre-bus" }
 ambre-protocol = { path = "../ambre-protocol" }

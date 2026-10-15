@@ -376,7 +376,7 @@ deny:
 # sanitizer flags never reach the main build. A crash stops the run and leaves
 # its input under `fuzz/artifacts/`.
 fuzz seconds="60":
-    cd fuzz && for target in wire_decode docfile formula markdown; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
+    cd fuzz && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
 # Local convenience: bring the db-tier backing services up.
 services-up:

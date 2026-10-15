@@ -274,7 +274,7 @@ whether it blocks the current MVP.
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
-| `cargo-fuzz` | wired | four targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser and the Markdown reader, one minute each in the CI `fuzz` job. The sealed open path and the Trame and Toile file readers have none |
+| `cargo-fuzz` | wired | seven targets in `fuzz/`: the wire decode, the `.ambre` container, the formula parser, the Markdown reader, the sealed open path, and the Trame and Toile file readers, one minute each in the CI `fuzz` job. The sealed target opens under a fixed key, so a key-holding peer's plaintext reaches the decompression |
 | `cargo-mutants` | absent | the whole suite, never adversarially checked |
 | `cargo-llvm-cov` | wired, non-blocking | an `lcov` baseline only. No diff-mode gate on added lines |
 | `criterion` | benches in `ambre-crypto`, `ambre-toile` and `ambre-murmure` | a desktop figure only. **The mobile measurement the targets are written against has never been taken** |

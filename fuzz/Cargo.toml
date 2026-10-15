@@ -18,6 +18,9 @@ ambre-core = { path = "../crates/ambre-core" }
 ambre-protocol = { path = "../crates/ambre-protocol" }
 ambre-trame = { path = "../crates/ambre-trame" }
 ambre-prose = { path = "../crates/ambre-prose" }
+ambre-toile = { path = "../crates/ambre-toile" }
+ambre-crypto = { path = "../crates/ambre-crypto" }
+ambre-sync = { path = "../crates/ambre-sync", features = ["fuzz"] }
 
 [[bin]]
 name = "wire_decode"
@@ -43,6 +46,27 @@ bench = false
 [[bin]]
 name = "markdown"
 path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sealed"
+path = "fuzz_targets/sealed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "trame_file"
+path = "fuzz_targets/trame_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "toile_file"
+path = "fuzz_targets/toile_file.rs"
 test = false
 doc = false
 bench = false
