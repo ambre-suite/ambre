@@ -24,7 +24,7 @@
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
-| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 2 |
+| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 1 |
 | `media` | A picture in a document travels apart from it. | implemented | 13 | 1 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 30 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
@@ -32,7 +32,7 @@
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 | 1 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 17 |  |
 | `sync` | The one part of the client that talks to the network. | implemented | 29 |  |
-| `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 |  |
+| `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
@@ -48,7 +48,7 @@
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 7 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 |  |
-| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 | 1 |
+| `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 |  |
 | `server` | The one process every client talks to. | partial | 52 | 1 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 917 contract rows, 16 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 919 contract rows, 14 loose.**

@@ -1,0 +1,28 @@
+[package]
+name = "ambre-belt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "The browser-driven belt: the built application, served and driven through WebDriver (ambre-spec-testing.md section 4)."
+
+[features]
+# `browser` flips the `cfg_attr(not(feature = "browser"), ignore = ...)` gate
+# off. It needs a Trunk build in `dist/` and a chromedriver
+# (`just test-browser`). Pure marker feature -- it gates test attributes only.
+browser = []
+
+[dependencies]
+# Intentionally empty: the belt is tests only, and ships nothing.
+
+[dev-dependencies]
+axum              = { workspace = true }
+futures-util      = { workspace = true }
+reqwest           = { workspace = true }
+serde_json        = { workspace = true }
+tokio             = { workspace = true }
+tokio-tungstenite = "0.29"
+uuid              = { workspace = true, features = ["v4"] }
+
+[lints]
+workspace = true

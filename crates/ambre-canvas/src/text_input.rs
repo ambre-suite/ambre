@@ -77,7 +77,14 @@ pub struct TextInput {
     /// How many times a view asked for the focus. A host test reads it to state
     /// that a gesture left the focus where it was.
     focus_requests: Rc<Cell<u32>>,
+    /// Whether a key on the pipe is typed text. Mirrored on the element as
+    /// [`TYPING_ATTR`], which the keymap listener reads off the key's target.
+    typing: Rc<Cell<bool>>,
 }
+
+/// The attribute that says a key on the pipe is not typed text, when it reads
+/// `false`. A pipe without it is typed text.
+pub const TYPING_ATTR: &str = "data-typing";
 
 #[derive(Clone)]
 struct Pipe {
@@ -96,6 +103,7 @@ impl TextInput {
             dom: None,
             composing: Rc::new(Cell::new(false)),
             focus_requests: Rc::new(Cell::new(0)),
+            typing: Rc::new(Cell::new(true)),
         }
     }
 
@@ -156,6 +164,7 @@ impl TextInput {
             dom: Some(Pipe { textarea, live }),
             composing: Rc::new(Cell::new(false)),
             focus_requests: Rc::new(Cell::new(0)),
+            typing: Rc::new(Cell::new(true)),
         }
     }
 
@@ -213,6 +222,23 @@ impl TextInput {
         if let Some(dom) = &self.dom {
             dom.textarea.set_value("");
         }
+    }
+
+    /// Say whether a key on the pipe is typed text (`CHROME-103`). A pipe is
+    /// typed text by default, as in a page or a cell. A board says it is not
+    /// while no text editor is open, so a bare tool key reaches the keymap.
+    pub fn set_typing(&self, typing: bool) {
+        self.typing.set(typing);
+        if let Some(dom) = &self.dom {
+            let _ = dom
+                .textarea
+                .set_attribute(TYPING_ATTR, if typing { "true" } else { "false" });
+        }
+    }
+
+    /// Whether a key on the pipe is typed text, as the view last said.
+    pub fn typing(&self) -> bool {
+        self.typing.get()
     }
 
     /// Name the pipe after the kind of document the view holds (`CHROME-024`).

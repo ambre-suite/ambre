@@ -604,6 +604,16 @@ fn only_a_text_typed_in_the_bar_opens_a_session() {
     );
 }
 
+/// `CHROME-102`: a press on a cell gives the keyboard focus to the pipe.
+#[test]
+fn a_press_on_a_cell_focuses_the_pipe() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let before = rig.view.text_input.focus_requests();
+    rig.click(120.0, 60.0);
+    assert!(rig.view.text_input.focus_requests() > before);
+}
+
 /// `TRAME-UI-169`: a commit from the bar writes the bar's text, not the buffer
 /// the grid held, and the selection then moves down.
 #[test]

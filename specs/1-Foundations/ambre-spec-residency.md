@@ -28,7 +28,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-003` | `INV` | A document a view shows MUST NOT leave memory. | this spec section 3 | `ambre_logic::residency::tests::a_shown_document_never_leaves_memory` -- it closes one document and finds the one still shown in memory | none | verified |
 | `RESID-004` | `INV` | A document not held in memory MUST cost only a light subscription: its key, its counters and its cursor. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_sync::light::tests::an_evicted_document_costs_only_a_light_subscription` -- it releases a document, finds its full session gone, and bounds the entry left by the budget row | none | verified |
 | `RESID-005` | `INV` | The activity counters of a document not held in memory MUST come from the activity summaries alone. | this spec section 3; `SYNC-113` | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- the counters it reads back are the ones the sealed summaries name | none | verified |
-| `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | none | unheld -- the launcher asks `navigator.storage.persist()` once the store opens. A driven browser reads `persisted()` after boot; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | `ambre_belt::store::tests::the_local_store_is_asked_to_persist` -- browser tier: the store reads best-effort before the permission, and persistent once a document opens after it | none | verified |
 
 ### 1.2 Evict a document
 
@@ -62,7 +62,7 @@ The browser can refuse a write before the local store reaches its own budget.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `RESID-017` | `POST` | A write the browser refuses for its quota MUST evict what the relay already holds from the local store, then retry once. | this spec section 3; `RESID-007`, `RESID-008` | `ambre_logic::store_ledger::tests::a_refused_write_frees_what_the_relay_holds_then_retries_once` -- the decision | partial -- `dom-glue` -- the quota detection is DOM glue, so a driven browser fills the quota and reads the retry; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
+| `RESID-017` | `POST` | A write the browser refuses for its quota MUST evict what the relay already holds from the local store, then retry once. | this spec section 3; `RESID-007`, `RESID-008` | `ambre_logic::store_ledger::tests::a_refused_write_frees_what_the_relay_holds_then_retries_once` -- the decision; `ambre_belt::store::tests::a_refused_write_evicts_what_the_relay_holds_then_retries` -- browser tier: a page script makes each store write abort with the quota error, since Chrome applies no driver-set quota to IndexedDB. The write is tried twice, and the copy of a document the relay holds is gone | none | verified |
 | `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | `ambre_logic::residency::tests::a_full_store_pauses_editing_until_the_change_is_safe` -- one warning, an edit refused, then taken again once space frees or the relay acknowledges | none | verified |
 | `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | `ambre_core::residency::tests::an_unsent_change_keeps_its_document`; `ambre_logic::store_ledger::tests::a_shown_or_unsent_copy_never_leaves` -- past the budget and under the quota alike; `ambre_sync::light::tests::a_release_waits_for_the_echo_of_every_frame_sent` -- the acknowledgement reaches the Logic thread only after the echo | none | verified |
 
@@ -70,9 +70,9 @@ The browser can refuse a write before the local store reaches its own budget.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 17 `verified`, 1 `partial`, 1 `untested`, 1 `unimplemented`, by host tests on
-  the Logic, Sync and ledger states. 1 `partial`: the quota detection is DOM glue. 1 `untested`: the
-  persistent storage request. 1 `unimplemented`: no read cursor exists.
+* **Verification.** 19 `verified`, 1 `unimplemented`, by host tests on the Logic, Sync and ledger
+  states. The browser tier holds the quota refusal and the persistent storage request. 1
+  `unimplemented`: no read cursor exists.
 
 ---
 

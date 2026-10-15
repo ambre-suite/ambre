@@ -529,6 +529,12 @@ impl ProseView {
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // A press in the page gives the keyboard focus to the pipe, so the
+        // next keystroke reaches the document (`ambre-spec-text-input.md`,
+        // section 3). The canvas cannot take it, and the pipe takes no click.
+        if matches!(ev, InputEvent::PointerDown { .. }) {
+            self.text_input.focus();
+        }
         // An edit waits in the outbox, so the page refuses input until it
         // drains (`BUS-016`). Consuming the event is what makes the refusal
         // visible, as on the board and the grid.
@@ -777,6 +783,53 @@ mod tests {
     use super::*;
     use ambre_prose::view::ruler::RulerHandle;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    /// `CHROME-102`: a press in the page gives the keyboard focus to the pipe,
+    /// so the next keystroke reaches the document.
+    #[wasm_bindgen_test]
+    fn a_press_in_the_page_focuses_the_pipe() {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        document
+            .body()
+            .expect("a body")
+            .append_child(&cell)
+            .expect("attached");
+        let (to_logic, _queue) = ambre_bus::conduit::local(4);
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let pipe = TextInput::create(&document, &cell);
+        let mut view = ProseView::new(
+            DocumentId::new(),
+            to_logic,
+            from_logic,
+            800.0,
+            600.0,
+            pipe.clone(),
+            ThemeControl::new(Theme::Dark),
+            RwSignal::new(None),
+            ProseSignals::new(),
+            BusyPublisher::new(),
+            NoticePublisher::new(),
+        );
+        if let Some(body) = document.body() {
+            let _ = body.focus();
+        }
+        let _ = view.handle_input(&InputEvent::PointerDown {
+            x: 300.0,
+            y: 200.0,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        });
+        let focused = document.active_element().expect("a focused element");
+        assert!(
+            focused.is_same_node(Some(pipe.element())),
+            "{}",
+            focused.tag_name()
+        );
+    }
 
     /// `BUS-022`: the page takes no input while its outbox holds a command, and
     /// takes it again once the queue drains.

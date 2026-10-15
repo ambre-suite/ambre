@@ -80,6 +80,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-belt"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-util",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.29.0",
+ "uuid",
+]
+
+[[package]]
 name = "ambre-bus"
 version = "0.1.0"
 dependencies = [

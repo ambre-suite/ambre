@@ -75,7 +75,7 @@ here only when it brings a shape this table does not hold.
 | A service that **is** persistence | model-based, over the real services | never mock the database: for such a service, mocking tests the mock. `#[sqlx::test]` gives one database per test. Order of operations produces the bugs, and order is what nobody enumerates by hand |
 | A decoder fed by a user file or by the relay | totality first | a round trip, a malformed case, a random-bytes case, then a `cargo-fuzz` target. Totality is not optional |
 | A GPU pipeline | assisted review plus a visual check | `qa-manual` through `/run`, whose first row declares its obstacle below. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
-| DOM glue | extraction first, then the browser | the decision logic on host (section 5.A), the rest in the wasm tier or in a driven browser. Never `qa-manual`: the obstacle is lifted, below |
+| DOM glue | extraction first, then the browser | the decision logic on host (section 5.A), the rest in the wasm tier or in the browser tier. Never `qa-manual`: the browser tier reaches it |
 
 **CRDT convergence is mandatory.** Every collaborative CRDT state ships a property test of
 convergence. It generates operation sequences with `proptest`, interleaves them across two peers or
@@ -86,13 +86,12 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A row a mechanism half holds opens on `` partial -- `<obstacle>` -- `` instead.
 
-**The three obstacles.**
+**The two obstacles.**
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `intent` | what a value means, or why a line exists: the right code and the wrong one have one shape, so no check tells them apart | -- |
 | `outside-the-tree` | a claim made where no check runs: a pull request, the commit an artifact was owed in, the origin of committed bytes | -- |
-| `dom-glue` | a listener, a browser API, the shell reading a level each frame | `The browser-driven belt` Story (`ambre-roadmap.md` E9) |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
@@ -105,13 +104,19 @@ table below. A row a mechanism half holds opens on `` partial -- `<obstacle>` --
 
 ---
 
-## 4. THE THREE TIERS
+## 4. THE FOUR TIERS
 
 | Tier | Command | Holds | Cost |
 | :--- | :--- | :--- | :--- |
 | **host** | `just test-native` | the default tier. Pure logic, zero external dependency. The Logic thread, the Sync pipeline, every formula and CRDT handler, and the render feed | fast |
 | **db** | `just test-db` | `ambre-server` integration behind the Cargo feature `db`. `docker compose up postgres redis minio`, then `#[sqlx::test]` per test | medium |
 | **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `wasm-pack test --headless --chrome` | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
+| **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`). A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
+
+**The browser tier pauses a worker, never the product.** A test that needs a thread to stall
+pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
+behaviour no driver can produce, such as a full quota, is a page script in the test. The row's
+`Mechanism` note says so.
 
 **The db tier is a Cargo feature, never a bare `#[ignore]`.** The engraved pattern is
 `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. A bare
@@ -205,7 +210,7 @@ the relay, a second instance. Both sides follow the same rule.
   connection tables. Sharing the stores is exactly what the deployment shares.
   `test_helpers::second_instance` builds the second one beside any test state.
 * **What never extracts:** the browser's own behaviour under a real network -- a proxy, a dropped
-  TCP connection, a CORS refusal. That stays with `The browser-driven belt`.
+  TCP connection, a CORS refusal. That stays with the browser tier (section 4).
 
 ---
 
@@ -230,6 +235,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-toile` | yes | yes (`tests/chrome_ui.rs`, `tests/chrome_effects.rs`) | `ToileState::with_peer`, `RecordingSurface` | CRDT convergence, and the spatial index against a full rebuild |
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
 | `ambre-prose` | yes (`proptest`, `criterion`) | yes (`tests/chrome_panel.rs`) | `ProseState::with_peer`, `RecordingSurface` | CRDT convergence of text and annotations, placement properties over generated documents, and a `RecordingSurface` assertion for anything painted. The comment panel is mounted in Chrome |
+| `ambre-belt` | -- (browser tier) | -- | a static server in front of a relay process; the DevTools Protocol, to pause a worker | the browser tier itself: one file per surface, each test a user gesture and the answer read off the page. A peer is a second browser signed in as a second user |
 | `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
@@ -253,6 +259,7 @@ run the same command.
 | `test-native` | the host tier, plus `ambre-server` on the native target |
 | `test-db` | postgres and redis as services, minio started by a step, with `--features db` |
 | `test-wasm` | `just lint-wasm`, the denied lints on the wasm target, then `wasm-pack test --headless --chrome` |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 
@@ -270,7 +277,7 @@ whether it blocks the current MVP.
 | Mechanism | State | Gap |
 | :--- | :--- | :--- |
 | Type-level invariants | **the strongest area**: the id newtype macro, `PublicKey`, `Ciphertext`, `SecretBytes`, `SecretString` | not the mechanism, the *statement*: nothing says which invariants these types hold, so the guarantee is invisible |
-| `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 17 crates refuse an `unsafe` block |
+| `#![forbid(unsafe_code)]` | **wired** | `unsafe_code = "forbid"` in the workspace lint table, so all 18 crates refuse an `unsafe` block |
 | `[workspace.lints]` | wired | every crate inherits it (`ARCH-032`). It denies `missing_errors_doc`, `missing_panics_doc` and the panic lints (`ARCH-028`); no `pedantic`. Clippy reads the wasm-only code in the `test-wasm` job |
 | `cargo-deny` | **wired** | advisories, licences, sources, and the capability bans that mechanise five ZK rows. Negative-tested |
 | `proptest` | wired | `ambre-crypto`, the Trame formula engine, 2-peer convergence on Trame and Toile, and the Toile index against rebuild |
@@ -291,8 +298,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Debt | Why it is not built |
 | :--- | :--- |
-| An `ambre-app` end-to-end headless boot | a real boot spawns the Logic thread, a second wasm artifact for Sync, and a wgpu surface. The `wasm-bindgen-test` harness provisions none of the three: no shared-memory page, no worker loader, no GPU adapter. A true belt needs browser automation against a served build, outside the unit-test runner |
-| An end-to-end command across the canvas and DOM boundary | three cases need a real canvas and a driven browser, so they wait on the same automation as the boot above: a click travelling `CommandId` -> `LogicCommand` -> `UiEvent` -> chrome toggle plus canvas repaint, one IME composition cycle (`CHROME-007`), and rAF suspension and resumption behind a modal |
+| Two browser cases of the canvas and DOM boundary | the browser tier boots the whole application and runs commands from the palette to the board. Two cases are left: one IME composition cycle (`CHROME-007`), which a driver cannot compose, and rAF suspension and resumption behind a modal, which no page reads back |
 | `ambre-chrome` DOM interactions | the reactive store, the toast and the shell cell are covered. `Dialog` (modal, Escape, backdrop click, the canvas suspend and resume) and `ContextMenu` (keyboard navigation, typeahead, outside close) need richer driving. `CommandPalette`, `Sidebar` and `Toolbar` are unbuilt, and get a belt when they land |
 | The GPU "how to draw" half | section 5.B: the upload and the shaders need a real device. The CPU work beside them is extracted and host-tested |
 | `ambre-sync` benchmarks, and further pipeline tiers | they land when the pipeline exits placeholder |

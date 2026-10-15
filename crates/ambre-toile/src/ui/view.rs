@@ -267,9 +267,11 @@ pub struct ToileView {
     /// The selected ids a frame holds, from the same reply. The menu offers
     /// removal from a frame by this, whatever the boxes (`TOILE-UI-384`).
     selection_framed: Vec<ElementId>,
-    /// Every element id on the board, off-screen included, fetched from Logic via
-    /// `RequestBoardIds` for select-all (`TOILE-UI-033`).
-    board_ids: Vec<ElementId>,
+    /// A select-all waits for Logic's answer to `RequestBoardIds`, which names
+    /// every element on the board, off-screen included (`TOILE-UI-033`). The
+    /// list is asked for at each select-all: one read at the open would miss
+    /// every element created since.
+    select_all_pending: bool,
     /// The selected arrow (`toile-connectors`). Exclusive with
     /// [`selection`](Self::selection): an arrow has no box, so it never joins a
     /// marquee, a group or a transform, and selecting one clears the other.
@@ -367,6 +369,8 @@ pub struct ToileView {
     detected_mouse: bool,
 
     text_input: TextInput,
+    /// The view is a board embedded in another document, which owns the pipe.
+    embedded: bool,
     perf_pub: PerfPublisher,
     theme_ctl: ThemeControl,
     theme: Theme,
@@ -653,6 +657,8 @@ impl ToileView {
         if !embedded {
             text_input.name_content(ambre_canvas::ContentKind::Board);
             text_input.focus();
+            // No editor is open yet, so a bare key arms a tool (`TOILE-UI-393`).
+            text_input.set_typing(false);
         }
         let theme = theme_ctl.get();
         Self {
@@ -675,7 +681,7 @@ impl ToileView {
             selection: Vec::new(),
             selection_data: Vec::new(),
             selection_framed: Vec::new(),
-            board_ids: Vec::new(),
+            select_all_pending: false,
             arrow: None,
             arrow_drag: None,
             group_scope: None,
@@ -704,6 +710,7 @@ impl ToileView {
             pointer_mode: PointerMode::default(),
             detected_mouse: false,
             text_input,
+            embedded,
             perf_pub,
             theme_ctl,
             theme,
@@ -1070,7 +1077,11 @@ impl ToileView {
             }
             // Every element id on the board, for select-all (`TOILE-UI-033`).
             ToileEvent::BoardIds(ids) => {
-                self.board_ids = ids;
+                if std::mem::take(&mut self.select_all_pending) {
+                    self.arrow = None;
+                    self.selection = ids;
+                    self.overlay_dirty = true;
+                }
             }
             // The selection's data may now be stale: its lock, its box, its
             // frame. `update` asks again once (`TOILE-UI-384`).
@@ -1961,6 +1972,26 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
 
+    /// Tell the keyboard pipe whether a key on it is typed text
+    /// (`TOILE-UI-393`). It is while an editor is open, or while a document
+    /// embedded in the board holds the focus. Otherwise a bare key arms a tool.
+    /// An embedded board leaves the pipe to the document around it.
+    fn sync_pipe_typing(&self) {
+        if self.embedded {
+            return;
+        }
+        let typing = self.editor.is_some() || self.embed_focus.current().is_some();
+        if typing != self.text_input.typing() {
+            self.text_input.set_typing(typing);
+        }
+    }
+
+    /// Whether a key on the keyboard pipe is typed text (`TOILE-UI-393`).
+    #[cfg(test)]
+    pub(crate) fn pipe_typing(&self) -> bool {
+        self.text_input.typing()
+    }
+
     /// Announce the selection through the shared live region (`CHROME-023`).
     /// A lone element waits for its data, which carries its kind and text.
     fn announce_selection(&self) {
@@ -2640,10 +2671,11 @@ impl ToileView {
     /// Select every displayed element (local, never synced). Shared by `Ctrl+A`
     /// and the context-menu "Select all" entry (`toile-selection`).
     fn select_all(&mut self) {
-        self.arrow = None;
-        // The whole board, not the culled viewport (`TOILE-UI-033`).
-        self.selection = self.board_ids.clone();
-        self.overlay_dirty = true;
+        // The whole board, not the culled viewport (`TOILE-UI-033`): Logic
+        // answers the ids, and the answer selects them.
+        if self.send_edit(ToileCommand::RequestBoardIds) {
+            self.select_all_pending = true;
+        }
     }
 
     fn handle_pointer_move(&mut self, x: f64, y: f64) -> bool {
@@ -3652,13 +3684,11 @@ impl ToileView {
             self.open_editor(id);
         }
 
-        // First frame: request the initial culled viewport for the boot camera,
-        // and the whole board's element ids for select-all (`TOILE-UI-033`).
+        // First frame: request the initial culled viewport for the boot camera.
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
             self.pending_viewport = Some(self.cam.to_bus_viewport());
-            self.send_edit(ToileCommand::RequestBoardIds);
         }
 
         // Flush the coalesced viewport request (at most one per frame). A full
@@ -3692,6 +3722,7 @@ impl ToileView {
         // Stash the frame clock for paint-time use (inline-edit caret blink,
         // `toile-text-editing`).
         self.frame_now_ms = now_ms;
+        self.sync_pipe_typing();
         // Open / close the nested documents behind the visible `doc_embed`s
         // (`toile-embeds`). Driven here rather than in `update` because
         // this is the one per-frame hook carrying the frame clock the close

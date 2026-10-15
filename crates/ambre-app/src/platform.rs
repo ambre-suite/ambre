@@ -446,6 +446,16 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
     let Some(target) = event.target() else {
         return false;
     };
+    // A board's keyboard pipe is a textarea. While no editor is open it is not
+    // typed text, so a bare tool key still arms its tool.
+    if target
+        .dyn_ref::<web_sys::Element>()
+        .and_then(|el| el.get_attribute(ambre_canvas::TYPING_ATTR))
+        .as_deref()
+        == Some("false")
+    {
+        return false;
+    }
     let tag = target
         .dyn_ref::<web_sys::Element>()
         .map(|el| el.tag_name())
@@ -714,5 +724,44 @@ mod tests {
         assert!(keydown_reads_editable("div", Some("true")));
         assert!(!keydown_reads_editable("div", None));
         assert!(!keydown_reads_editable("button", None));
+    }
+
+    /// `CHROME-103`: a pipe that is not typed text gives a bare key to the
+    /// keymap. Once it is typed text again, the key stays on the pipe.
+    #[wasm_bindgen_test]
+    fn a_pipe_that_is_not_typing_gives_its_keys_to_the_keymap() {
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a document");
+        let body = document.body().expect("a body");
+        let pipe = ambre_canvas::TextInput::create(&document, &body);
+        let reads = || {
+            use std::cell::Cell;
+            use std::rc::Rc;
+            use wasm_bindgen::JsCast;
+            use wasm_bindgen::closure::Closure;
+
+            let read = Rc::new(Cell::new(None));
+            let sink = read.clone();
+            let listener = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |ev| {
+                sink.set(Some(target_is_editable(&ev)));
+            });
+            let el = pipe.element();
+            el.add_event_listener_with_callback("keydown", listener.as_ref().unchecked_ref())
+                .expect("a listener");
+            let init = web_sys::KeyboardEventInit::new();
+            init.set_key("v");
+            let ev = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
+                .expect("an event");
+            el.dispatch_event(&ev).expect("dispatched");
+            el.remove_event_listener_with_callback("keydown", listener.as_ref().unchecked_ref())
+                .expect("removed");
+            read.get().expect("the listener ran")
+        };
+        assert!(reads(), "a pipe is typed text by default");
+        pipe.set_typing(false);
+        assert!(!reads(), "a board with no editor open");
+        pipe.set_typing(true);
+        assert!(reads(), "a board with an editor open");
     }
 }

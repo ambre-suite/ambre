@@ -705,6 +705,34 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    // `SRV-005`: the member list of an invented document and of a document the
+    // caller does not belong to draw the same 404. The client opens a new
+    // document on that 404, so a 403 here leaves every new document loading.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn members_of_an_absent_or_foreign_document_are_not_found(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &auth).await;
+        let stranger = setup_named(&app, "stranger@ambre.app", 0x51).await;
+        let invented = uuid::Uuid::new_v4().to_string();
+
+        for (who, id) in [(&auth, &invented), (&stranger, &doc_id)] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("/api/documents/{id}/members"))
+                        .header("authorization", who.as_str())
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND, "{id}");
+        }
+    }
+
     /// GET the member list and return the raw `members` JSON array. Asserts 200.
     async fn list_members(app: &Router, auth: &str, doc_id: &str) -> Vec<serde_json::Value> {
         let resp = app

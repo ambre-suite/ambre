@@ -272,6 +272,24 @@ fn an_untouched_editor_closes_without_a_write() {
     assert!(rig.sent().is_empty(), "and wrote nothing");
 }
 
+/// `TOILE-UI-393`: the keyboard pipe of a board is typed text only while an
+/// editor is open. Before and after, a bare key reaches the keymap and arms
+/// its tool.
+#[test]
+fn the_pipe_is_typed_text_only_while_an_editor_is_open() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.view.plan_repaint(0.0, false);
+    assert!(!rig.view.pipe_typing(), "a board with no editor");
+    rig.click(50.0, 50.0);
+    rig.double_click(50.0, 50.0);
+    rig.view.plan_repaint(16.0, false);
+    assert!(rig.view.pipe_typing(), "an open editor takes the keys");
+    rig.key("Escape", false, false);
+    rig.paint();
+    rig.view.plan_repaint(32.0, false);
+    assert!(!rig.view.pipe_typing(), "a closed editor gives them back");
+}
+
 #[test]
 fn a_double_click_keeps_the_body_and_a_close_writes_it_once() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
@@ -665,8 +683,8 @@ fn a_cut_whose_copy_went_nowhere_deletes_nothing() {
 #[test]
 fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
     assert!(rig.key("a", true, false));
+    rig.answer(ToileEvent::BoardIds(vec![eid("a"), eid("far")]));
     rig.sent();
     assert_eq!(
         rig.view.clipboard_write(false),
@@ -677,6 +695,39 @@ fn a_copy_names_the_whole_selection_and_sends_nothing_else() {
         [ToileCommand::CopyElements { ids }] if ids == &[eid("a"), eid("far")]
     ));
     assert_eq!(rig.view.selection.len(), 2, "a copy leaves the selection");
+}
+
+/// `TOILE-UI-033`: each select-all asks Logic for the board's ids, so an
+/// element created after the open is in it. An answer no select-all asked
+/// for selects nothing.
+#[test]
+fn each_select_all_asks_for_the_board_as_it_is_now() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    rig.answer(ToileEvent::BoardIds(vec![eid("a")]));
+    assert!(rig.view.selection.is_empty(), "an unasked answer selected");
+
+    for board in [vec![eid("a")], vec![eid("a"), eid("new")]] {
+        assert!(rig.key("a", true, false));
+        assert!(
+            rig.sent()
+                .iter()
+                .any(|c| matches!(c, ToileCommand::RequestBoardIds)),
+            "the select-all asked for nothing"
+        );
+        rig.answer(ToileEvent::BoardIds(board.clone()));
+        assert_eq!(rig.view.selection, board);
+    }
+}
+
+/// `CHROME-102`: a press on the board gives the keyboard focus to the pipe,
+/// on an element and on empty board alike.
+#[test]
+fn a_press_on_the_board_focuses_the_pipe() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let before = rig.view.text_input.focus_requests();
+    rig.click(A.center().x, A.center().y);
+    rig.click(A.x1 + 400.0, A.y1 + 400.0);
+    assert_eq!(rig.view.text_input.focus_requests(), before + 2);
 }
 
 /// Covers `UI-THREAD-022` and `UI-THREAD-046`: the kept copy answers when the
@@ -2757,6 +2808,10 @@ impl Rig {
 #[test]
 fn a_dropped_viewport_request_is_offered_again() {
     let mut rig = Rig::with_queue(1);
+    assert!(
+        rig.view.send_edit(ToileCommand::RequestBoardIds),
+        "the queue is full"
+    );
     rig.view.update();
     let first = rig.drain();
     assert!(
@@ -2780,6 +2835,10 @@ fn a_dropped_viewport_request_is_offered_again() {
 #[test]
 fn a_dropped_media_request_is_offered_again() {
     let mut rig = Rig::with_queue(2);
+    assert!(
+        rig.view.send_edit(ToileCommand::RequestBoardIds),
+        "the queue is full"
+    );
     rig.view.update();
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;

@@ -18,6 +18,7 @@ members = [
     "crates/ambre-murmure",
     "crates/ambre-app",
     "crates/ambre-server",
+    "crates/ambre-belt",
 ]
 # Server excluded from default builds: it's a native target (tokio/mio)
 # and would fail wasm32 compilations. Build it explicitly:

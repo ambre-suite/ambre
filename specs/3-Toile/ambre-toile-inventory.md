@@ -32,17 +32,17 @@
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 33 |  |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 |  |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 |  |
-| `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 1 |
+| `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 31 |  |
 | `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 4 |  |
 | `toile-z-order` | What overlaps what. | implemented | 16 |  |
 | `toile-auto-layout` | A frame lays its children out by a rule instead of by their coordinates. | partial | 27 |  |
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 46 |  |
-| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 53 | 2 |
+| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 53 |  |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 |  |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 |  |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 42 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 |  |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 831 contract rows, 4 loose.**
+**29 features: 20 implemented, 9 partial, 0 design-only. 832 contract rows, 1 loose.**

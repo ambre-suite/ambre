@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
-| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | none | unheld -- the warning `open_csv_picker` raises when the queue refuses the file. A driven browser picks a file while the Logic thread is saturated and reads the warning off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | `ambre_belt::trame::tests::an_import_the_full_queue_refuses_says_so` -- browser tier: a CSV picked while the paused Logic worker leaves the queue full raises the warning | none | verified |
 
 ### 1.3 Hand a sheet back as CSV
 
@@ -97,9 +97,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 26 `verified`, 1 `untested`, 13 `unimplemented`. What holds is the round trip
+* **Verification.** 27 `verified`, 13 `unimplemented`. What holds is the round trip
   of the two gestures and their frame conditions. An import is one undo item, an empty file writes
-  nothing, and an export or a save changes nothing. Every refusal answers. A gate and `deny.toml`
+  nothing, and an export or a save changes nothing. Every refusal answers, and the browser tier
+  reads the one a full queue raises. A gate and `deny.toml`
   keep every conversion in the Logic thread of `ambre-trame`.
 
 ---

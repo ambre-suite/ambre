@@ -62,7 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens` -- the save command goes through the real dispatcher; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the entry | none | verified |
-| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once | unheld -- the Blob hand-off in `crates/ambre-app/src/host/prose.rs` runs in a browser; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once; `ambre_belt::prose::tests::a_markdown_export_reaches_the_download_directory` -- browser tier: the typed paragraph lands in the download directory as Markdown | none | verified |
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -81,7 +81,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::a_file_of_another_application_is_handed_back` -- a Trame file comes back as `WrongDocType` and the document is unchanged | none | verified |
-| `PROSE-IO-065` | `POST` | A native Prose file MUST open from the home screen as a Prose document. | this spec section 4; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9): the home screen accepts Prose, and no test drives it to a Prose view | unimplemented |
+| `PROSE-IO-065` | `POST` | A native Prose file MUST open from the home screen as a Prose document. | this spec section 4; `ambre-spec-docfile.md section 3` | `ambre_belt::prose::tests::a_native_prose_file_opens_from_the_home_screen` -- browser tier: a file saved in one browser opens from the home screen of another as a Prose view holding its text | none | verified |
 | `PROSE-IO-066` | `FRAME` | Opening a native file MUST NOT write to the document: the opened document MUST export the bytes it was read from. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the file byte for byte | none | verified |
 
 ### 1.6 Import a Word file
@@ -119,8 +119,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 31 `verified`, 1 `untested`, 17 `unimplemented`. The native file and the
-  Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
+* **Verification.** 33 `verified`, 16 `unimplemented`. The native file and the Markdown pair are
+  built. The Word and HTML pairs are not, and no conversion runs in slices yet. The browser tier
+  holds the download and the open from the home screen.
 
 ---
 

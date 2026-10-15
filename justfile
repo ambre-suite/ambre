@@ -143,6 +143,15 @@ instructions:
 test-db:
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
+# browser tier: the Trunk build of the whole application, served in front of a
+# relay and driven through WebDriver (`crates/ambre-belt`). It needs the db-tier
+# services, a Chrome and its chromedriver (`CHROMEDRIVER`, `BELT_CHROME`). One
+# test at a time: each starts a relay and a browser of its own.
+test-browser:
+    trunk build
+    cargo build -p ambre-server
+    S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
+
 # `wasm-pack` drives `wasm-bindgen-test-runner`; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`.
 

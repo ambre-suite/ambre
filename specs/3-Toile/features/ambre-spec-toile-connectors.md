@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-164` | `INV` | Moving an element MUST NOT write a change to the connectors that touch it: a drag costs one register write, whatever hangs off it. | this spec section 3 | structural -- no path from a move reaches the connector map, and the routing runs inside the read-only derivation | none | verified |
 | `TOILE-166` | `OBS` | A connector whose endpoint element is not held MUST NOT be painted. | this spec section 2 | `ambre_toile::logic::connector::tests::missing_endpoint_yields_none` -- the routing answers nothing; structural -- the derivation drops the connector on that same `None` | none | verified |
 | `TOILE-007` | `CONC` | A connector whose endpoint element is deleted by another peer MUST keep its own data: dangling is not destruction. | this spec section 2 | `ambre_toile::logic::convergence_tests::an_arrow_whose_end_a_peer_deleted_keeps_its_record` -- a delete concurrent with the create, the record read back whole on both peers | none | verified |
-| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left | partial -- the shell raising its notice off this event. A driven browser deletes a shape a peer is joining to another and reads the notice off the page; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | partial |
+| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left; `ambre_belt::toile::tests::an_arrow_a_peer_strands_is_announced_on_both` -- browser tier: two users in two browsers, the second one's Sync worker paused while it draws the arrow the first one strands. Both pages raise the notice | none | verified |
 | `TOILE-165` | `OBS` | A connector that goes dangling because its endpoint left MUST be announced too, not only one re-aimed at a missing element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- a concurrent delete announcing the arrow on both peers, and the later delta that strands nothing announcing nothing | none | verified |
 | `TOILE-043` | `INV` | A connector MUST sit in the one paint order with the elements, so it can be placed behind one. | this spec section 3; `features/ambre-spec-toile-z-order.md` | `ambre_toile::logic::convergence_tests::an_arrow_goes_behind_an_element` -- the engine end; `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the four entries that send it | none | verified |
 | `TOILE-045` | `INV` | A connector MUST be culled with the viewport, like an element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled`; `ambre_toile::logic::connector::tests::the_hull_holds_the_routed_path` | none | verified |
@@ -99,11 +99,11 @@ status values are normative in `ambre-spec-template.md`.
   routes only the arrows whose hull meets it (`TOILE-045`).
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 44 `verified`, 1 `partial`, 1 `unimplemented`. The view tests drive the draw,
-  the re-aim, the caption editor and the arrow selection end to end. Two tests found defects: a
-  create took an endpoint the board does not hold, and a click on an arrow kept the element
-  selection. Both are fixed. The notice of a dangling arrow waits on the browser belt (`TOILE-044`),
-  and four shapes have no sender (`TOILE-167`).
+* **Verification.** 45 `verified`, 1 `unimplemented`. The view tests drive the draw,
+  the re-aim, the caption editor and the arrow selection end to end. Two tests found defects, now
+  fixed: a create took an endpoint the board lacks, and a click on an arrow kept the element
+  selection. The browser tier reads the notice of a stranded arrow on both peers
+  (`TOILE-044`). Four shapes have no sender (`TOILE-167`).
 
 ---
 

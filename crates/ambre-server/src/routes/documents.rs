@@ -559,9 +559,13 @@ pub async fn list_document_members(
     use base64::Engine;
     let s = auth;
     let doc_id = parse_doc_id(&document_id)?;
+    // A non-member and an absent document draw the same 404 (`SRV-005`). The
+    // client reads that 404 as a document not created yet, and opens it locally.
     let _m = db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
-        .ok_or(AppError::Forbidden)?;
+        .ok_or(AppError::NotFound {
+            resource: "document",
+        })?;
     let members = db::list_document_members(&state.db, &doc_id).await?;
     let json: Vec<_> = members
         .into_iter()

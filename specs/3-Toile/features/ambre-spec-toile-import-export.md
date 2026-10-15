@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-IO-020` | `POST` | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | none | unheld -- two canvas listeners and one `<input type="file">`, whose every decidable part is a row of its own: what the board reads (`TOILE-IO-098`), where the file lands (`TOILE-IO-023`) and what the user is told (`TOILE-IO-022`). A driven browser drops a file and picks one; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-020` | `POST` | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | `ambre_belt::toile::tests::a_dropped_file_and_a_picked_file_both_land` -- browser tier: an SVG dropped on the canvas and one chosen through the picker each land as a shape | none | verified |
 | `TOILE-IO-098` | `FAIL` | A file of a type no converter reads MUST be refused with a word, and MUST NOT be read into memory. | this spec section 4 | `ambre_toile::ui::interop::tests::a_format_no_converter_reads_is_refused`; `ambre_toile::ui::interop::tests::every_format_a_converter_reads_is_accepted`; `ambre_toile::ui::interop::tests::the_picker_offers_only_what_the_gate_accepts` -- it holds the picker's filter against the same gate, so a file the dialog offers is never one the board then drops | none | verified |
 | `TOILE-IO-001` | `POST` | The whole file MUST become one undoable batch: one undo MUST take the import back. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` -- it undoes a five-element import in one step; `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` -- a three-element one carrying two groups; `ambre_toile::logic::state::import::tests::svg_import_takes_the_fast_path` -- it reads the single delta; `ambre_toile::logic::state::import::tests::undo_removes_a_sliced_import_whole` -- a file of several slices | none | verified |
 | `TOILE-IO-002` | `POST` | An import MUST NOT trust foreign geometry: every coordinate MUST be clamped to the world. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`; `ambre_toile::logic::interop::limits::tests::rect_clamp_keeps_non_negative_extent`; `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | none | verified |
@@ -66,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-021` | `POST` | A user MUST be able to take the board out as a file. | this spec section 4 | `ambre_toile::logic::state::export::tests::the_board_exports_as_an_svg_document` -- it walks the board into the serializer and reads the element back out of the file; `ambre_toile::logic::state::export::tests::an_empty_board_exports_an_empty_document`; `ambre_toile::tests::chrome_ui::a_finished_export_names_its_file` -- it holds the confirmation | none | verified |
-| `TOILE-IO-085` | `POST` | The exported bytes MUST reach the browser's download path. | this spec section 4 | none | unheld -- a `Blob` behind an object URL, clicked through a detached anchor. The bytes it is handed are `TOILE-IO-021`. A driven browser catches the download and compares its bytes; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-085` | `POST` | The exported bytes MUST reach the browser's download path. | this spec section 4 | `ambre_belt::toile::tests::an_svg_export_reaches_the_download_directory` -- browser tier: the file lands in the download directory as an SVG of the board's one rectangle | none | verified |
 | `TOILE-IO-004` | `POST` | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`; `ambre_toile::logic::interop::svg_export::tests::rect_serializes_with_fixed_attrs`; `ambre_toile::logic::interop::svg_export::tests::text_body_is_escaped`; `ambre_toile::logic::interop::svg_export::tests::float_formatter_trims`; `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`; `ambre_toile::logic::interop::tests::round_trip_path_geometry_survives`; `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- through the Logic handler | none | verified |
 | `TOILE-IO-025` | `POST` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_kind_the_writer_cannot_express_is_reported` -- a sticky, a group and a stroke each named, with the shape beside them still written; `ambre_toile::logic::interop::svg_export::tests::a_picture_without_pixels_is_reported`; `ambre_toile::logic::state::export::tests::a_connector_is_named_in_the_report` -- the board walk names each connector, which never reaches the serializer | none | verified |
 | `TOILE-IO-026` | `POST` | An exported element MUST carry its rotation. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_rotated_element_carries_its_angle` -- the transform a rotated element writes, and the wrapper an upright one does not | none | verified |
@@ -114,10 +114,10 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 39 `verified`, 2 `untested`, 12 `unimplemented`. What holds carries a test of its own: the
+* **Verification.** 41 `verified`, 12 `unimplemented`. What holds carries a test of its own: the
   drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a populated
-  board and the refusal of the two foreign formats. The two `untested` rows are the DOM glue
-  underneath, which no belt reaches.
+  board and the refusal of the two foreign formats. The browser tier drives the glue underneath: a
+  drop, a picked file and a download.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -303,10 +303,6 @@ view past its own gate.
   commands are on the bus and answer with a refusal naming the format. The surface now offers neither, so a
   user meets the gap at the picker rather than at the board. The four rows that describe the mapping are the
   specification the converters will be built against.
-* **The drop and the download are held by a person** (`TOILE-IO-020`, `TOILE-IO-085`). Two canvas listeners,
-  one `<input type="file">` and a click on a detached anchor. No belt of this workspace drives a
-  `DataTransfer` or watches a file leave a browser. Everything decidable around them is a row with a test: the
-  formats, the drop point, the notice. What is left is the glue itself.
 * **A connector does not leave** (`TOILE-IO-025`). The report names each one, and the file holds
   no arrow. Writing them needs the routed path the solver derives, which the export does not read.
 * **An exported picture is the thumbnail, not the blob** (`TOILE-IO-100`). The full pixels are

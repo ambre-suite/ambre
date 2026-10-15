@@ -36,6 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-369` | `POST` | Arming a tool MUST emit nothing of the gesture it abandons. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it reads no preview left after the switch | none | verified |
 | `TOILE-UI-248` | `FRAME` | Arming a tool MUST NOT touch the document or the selection. | this spec section 2 | type-level -- the switch returns nothing and holds no document handle, so the only state it can reach is the draft it drops | none | verified |
 | `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host; `ambre_app::platform::tests::a_key_typed_into_a_field_reads_as_typing` -- a real `keydown` in the browser reaches the reader through its target | none | verified |
+| `TOILE-UI-393` | `POST` | Given the board's keyboard pipe holds the focus and no editor is open, a bare tool key MUST arm its tool. | this spec section 3; `ambre-spec-text-input.md`, `CHROME-102` | `ambre_toile::ui::view::view_tests::the_pipe_is_typed_text_only_while_an_editor_is_open` -- the board marks its pipe as typed text only while an editor is open, and `CHROME-103` gives a key on that pipe to the keymap | none | verified |
 
 ### 1.3 Drag on the board
 
@@ -56,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | `ambre_toile::ui::view::view_tests::a_space_drag_pans_in_any_tool_and_starts_no_gesture` -- it holds `Space` and drags in four tools, and reads the camera moved | none | verified |
 | `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_space_drag_pans_in_any_tool_and_starts_no_gesture` -- it reads no selection and no board write after the drag | none | verified |
-| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | unheld -- the host `keyup` listener and the board arm that lowers the pan flag and ends a pan under the pointer. A driven browser holds `Space`, pans, releases it and drags an element; lands with the `The browser-driven belt` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | `ambre_belt::toile::tests::releasing_space_gives_the_board_back_to_its_tool` -- browser tier: a drag with `Space` held pans and selects nothing, and once it is up a click selects the shape where the pan carried it | none | verified |
 
 ### 1.5 Cancel a gesture
 
@@ -89,10 +90,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 29 `verified`, 0 `partial`, 1 `untested`. What holds is the machine: the modes,
-  the transitions and the command each gesture ends in. A `Space` drag pans on the host view, and a
-  placed note or text reverts the tool. What is loose is the release of `Space` (`TOILE-UI-256`).
-
+* **Verification.** 31 `verified`. What holds is the machine: the modes, the transitions and the
+  command each gesture ends in. A `Space` drag pans on the host view, and a placed note or text
+  reverts the tool. The browser tier holds the release of `Space` (`TOILE-UI-256`).
 ---
 
 ## 2. MODEL
@@ -218,9 +218,6 @@ board returns to Select, ready to type into (`TOILE-UI-038`).
   nodes of a committed path is described and unbuilt, so a path is editable by its box alone.
 * **The connector routing has one shape.** Every connector is created straight, with an arrow at the
   end. The routing modes and the end caps the model carries are not reachable from any gesture.
-* **The release of `Space` rests on DOM glue.** The host `keyup` listener is read by using the
-  application. The press and the drag are driven on the host view; the release waits for a driven
-  browser (`TOILE-UI-256`).
 * **The freehand refusal is unreachable.** Press and release each push a sample, so the guard that
   would drop a stroke of one point can never fire. A click with Draw armed commits a two-point
   stroke standing still.

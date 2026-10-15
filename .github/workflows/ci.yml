@@ -272,6 +272,80 @@ jobs:
       - run: just test-db
 
   # ---------------------------------------------------------------------------
+  # test-browser -- the browser-driven belt (`crates/ambre-belt`): the Trunk
+  # build of the whole application, served in front of a relay and driven by
+  # headless Chrome through chromedriver. The relay needs the db-tier services.
+  # ---------------------------------------------------------------------------
+  test-browser:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine   # keep in sync with docker-compose.yml
+        env:
+          POSTGRES_USER: ambre
+          POSTGRES_PASSWORD: ambre
+          POSTGRES_DB: ambre_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ambre -d ambre_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine     # keep in sync with docker-compose.yml
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just and trunk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,trunk
+      - name: Install Chrome and chromedriver
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          install-chromedriver: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-browser
+          # Only the default branch writes caches; feature branches restore
+          # from main without consuming the shared 10 GB budget (avoids eviction).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Same image and root user as docker-compose.yml. The relay stores media
+      # in the bucket, and creates none.
+      - name: Start minio
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live; then
+              AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
+                aws --endpoint-url http://localhost:9000 s3 mb s3://ambre-dev
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs minio
+          exit 1
+      - run: just test-browser
+        env:
+          CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
+          BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
+
+  # ---------------------------------------------------------------------------
   # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:
   # leptos CSR + DOM) under headless Chrome via `wasm-pack test`. The pinned
   # nightly + rust-src (rust-toolchain.toml) supply `-Z build-std` for

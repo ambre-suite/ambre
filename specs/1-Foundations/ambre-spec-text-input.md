@@ -38,6 +38,8 @@ gets there: it rides the chord path instead.
 | `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | `ambre_app::host::pipe::tests::a_typed_run_reaches_the_view_whole_and_the_pipe_empties` -- the buffer reads empty after each run, and the next keystroke carries itself alone | none | verified |
 | `CHROME-062` | `FRAME` | The chord path MUST NOT consume a printable character. | this spec section 2, the three paths in; this spec section 3, row 5 | `ambre_app::host::pipe::tests::only_a_consumed_key_loses_its_default` -- the host half. `ambre_trame::ui::view::view_tests::a_printable_key_is_not_consumed`; `ambre_toile::ui::view::view_tests::a_printable_key_in_an_editor_is_not_consumed`; `ambre_prose::input_tests::a_printable_character_is_not_a_key` -- each view leaves a letter, a digit, an accented letter and the space | none | verified |
 | `CHROME-020` | `FAIL` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | `ambre_app::host::pipe::tests::a_key_aimed_at_another_editable_element_never_reaches_the_view` -- a key raised on an input, a textarea, a select and a contenteditable host reaches nothing, and the same key on the pipe does | none | verified |
+| `CHROME-102` | `POST` | A press in the content MUST give the keyboard focus to the pipe. | this spec section 2 | `ambre_toile::ui::view::view_tests::a_press_on_the_board_focuses_the_pipe` -- on an element and on empty board; `ambre_trame::ui::view::view_tests::a_press_on_a_cell_focuses_the_pipe`; `ambre_app::host::prose::tests::a_press_in_the_page_focuses_the_pipe` -- in the browser, a press in the page | none | verified |
+| `CHROME-103` | `POST` | A key on a pipe its view marks as not typed text MUST reach the keymap. | this spec section 2; `features/ambre-spec-toile-tools.md`, `TOILE-UI-393` | `ambre_app::platform::tests::a_pipe_that_is_not_typing_gives_its_keys_to_the_keymap` -- in the browser, a key on a pipe so marked reaches the keymap, and stays on the pipe once it is typed text again | none | verified |
 
 ### 1.3 Compose with an input method
 
@@ -63,7 +65,7 @@ The browser maps every clipboard chord, the legacy set included, onto three even
   is the first hop of that path, and the figure is measured nowhere.
 * **Boundary.** the operating system clipboard, and nothing else. What the copy and the paste may
   carry is `UI-THREAD-006`; the pipe opens no socket, holds no key and writes no store.
-* **Verification.** 13 `verified`. The wasm tier wires the six listeners onto a real pipe and
+* **Verification.** 15 `verified`. The wasm tier wires the six listeners onto a real pipe and
   raises the events an input method and the keyboard send. It reads the shipped styles back as
   computed. Each view is held on host for the keys it leaves to the text path, and for the caret
   its paint hands the pipe.

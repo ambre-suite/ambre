@@ -112,6 +112,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-toile` | Whiteboard/presentation application |
 | `ambre-murmure` | Secure messaging |
 | `ambre-app` | Main WASM application (UI integration). High-level integration and the shell only: the logic of an application lives in its own crate (`ARCH-018`) |
+| `ambre-belt` | Test-only: the browser tier, which drives the served build in headless Chrome. No product crate depends on it |
 
 ## Specifications
 
@@ -139,7 +140,7 @@ govern them, and each answers one question:
 
 * **What a rule looks like** -- the grammar, the seven status values, the binding of an unbuilt row to
   a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative.
-* **How a rule is verified** -- the mechanism ladder, the three tiers, the regime per component
+* **How a rule is verified** -- the mechanism ladder, the four tiers, the regime per component
   shape: [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md).
   Normative.
 * **What every rule's status is today** --

@@ -148,9 +148,11 @@ CRATES = "crates"
 DENSITY = "crates/ambre-canvas/src/density.rs"
 DENSITY_READ = re.compile(r"\bdevice_pixel_ratio\b|\bdevicePixelRatio\b")
 
-# The two crates a network call may leave from: the Sync worker, and the relay,
-# which is a server and not one of the two client instances.
-NETWORK_CRATES = ("crates/ambre-sync/", "crates/ambre-server/")
+# The crates a network call may leave from: the Sync worker, and the relay,
+# which is a server and not one of the two client instances. The browser belt
+# is neither instance either: it is a test harness that serves the build and
+# speaks WebDriver, and it ships nothing.
+NETWORK_CRATES = ("crates/ambre-sync/", "crates/ambre-server/", "crates/ambre-belt/")
 # The two reads `UI-THREAD-004` names as its exception: the same-origin font
 # fetch and the pre-session sign-in configuration.
 NETWORK_EXCEPTIONS = ("crates/ambre-canvas/src/host.rs", "crates/ambre-app/src/platform.rs")
