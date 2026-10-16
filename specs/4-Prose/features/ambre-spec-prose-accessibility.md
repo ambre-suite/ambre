@@ -22,20 +22,20 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-066` | `OBS` | The accessible surface MUST carry the text of the block the caret is in, so a screen reader reads what is being edited. | this spec section 3; `CANVAS-009` | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-077` | `OBS` | The caret of the accessible surface MUST sit at the offset the document caret sits at, so a screen reader resumes where the author is rather than at the head of the block. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-078` | `INV` | The accessible surface MUST NOT carry the text of any block but the one the caret is in. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-069` | `INV` | The accessible surface MUST be filled from the runs and the layout the page is painted from. | this spec section 3; `PROSE-UI-001` | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-079` | `OBS` | An edit to the block the caret is in MUST reach the accessible surface, whether or not the caret moved. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-066` | `OBS` | The accessible surface MUST carry the text of the block the caret is in, so a screen reader reads what is being edited. | this spec section 3; `CANVAS-009` | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-077` | `OBS` | The caret of the accessible surface MUST sit at the offset the document caret sits at, so a screen reader resumes where the author is rather than at the head of the block. | this spec section 3 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-078` | `INV` | The accessible surface MUST NOT carry the text of any block but the one the caret is in. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-069` | `INV` | The accessible surface MUST be filled from the runs and the layout the page is painted from. | this spec section 3; `PROSE-UI-001` | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-079` | `OBS` | An edit to the block the caret is in MUST reach the accessible surface, whether or not the caret moved. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Move the caret
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-067` | `POST` | After a caret move, the block it landed in MUST be announced: what kind of block it is, and the level when it is a heading. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-068` | `POST` | A move that enters or leaves a table cell, a footnote, a comment thread or a tracked change MUST announce it. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-080` | `FRAME` | A move that lands in the same context MUST NOT announce anything. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `PROSE-UI-081` | `FRAME` | Filling the accessible surface MUST NOT reach the document: the text written into it is not a keystroke. | derived | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-067` | `POST` | After a caret move, the block it landed in MUST be announced: what kind of block it is, and the level when it is a heading. | this spec section 3 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-068` | `POST` | A move that enters or leaves a table cell, a footnote, a comment thread or a tracked change MUST announce it. | this spec section 3 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-080` | `FRAME` | A move that lands in the same context MUST NOT announce anything. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-081` | `FRAME` | Filling the accessible surface MUST NOT reach the document: the text written into it is not a keystroke. | derived | not built | unbuilt -- lands with the `Drawn content reaches a screen reader` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** the content accessibility diff, a row of `ambre-spec-budgets.md section 2`. It
   is billed per frame in which the announced context changes, and no bench measures it.
