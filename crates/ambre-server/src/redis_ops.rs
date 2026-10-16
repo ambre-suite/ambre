@@ -5,6 +5,8 @@ use rustis::commands::{
 };
 use rustis::resp::RefBulkString;
 
+use crate::payload::Payload;
+
 /// Atomic Lua script that validates a client clock and assigns a global
 /// monotonic sequence number.
 ///
@@ -202,21 +204,14 @@ pub async fn append_pending_delta(
     document_id: &ambre_core::DocumentId,
     seq: u64,
     s3_key: &str,
-    update_wire: &[u8],
+    update_wire: &Payload,
 ) -> Result<(), AppError> {
-    use base64::Engine;
     let key = format!("doc:{document_id}:pending");
     // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
     // commitment + signature), not just the ciphertext. A reconnecting or
     // cross-device client replays these verbatim, and needs every field to
     // decrypt and verify. The flusher persists the same bytes to S3.
-    let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
-    let blob = serde_json::json!({
-        "seq": seq,
-        "s3_key": s3_key,
-        "update_b64": update_b64,
-    })
-    .to_string();
+    let entry = Payload::pending_entry(seq, s3_key, update_wire);
     // One script: the tombstone check, the RPUSH, then the dirty mark. The
     // flusher iterates only documents marked dirty (SMEMBERS), instead of
     // SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
@@ -235,7 +230,7 @@ return 1
         .eval::<i64>(
             LUA,
             [key.as_str(), FLUSH_DIRTY_SET, gone_key.as_str()],
-            [blob.as_str()],
+            [RefBulkString::new(entry.expose_bytes())],
         )
         .await
         .map_err(|e| store_refusal(&e.to_string(), "pending push failed"))?;
@@ -262,13 +257,13 @@ fn store_refusal(error: &str, what: &str) -> AppError {
     }
 }
 
-/// RPUSHes `blob` onto `list_key` unless `gone_key` exists. The flusher and
+/// RPUSHes `entry` onto `list_key` unless `gone_key` exists. The flusher and
 /// the dead-letter path use it, so neither recreates a purged list.
 async fn guarded_rpush(
     redis: &Client,
     list_key: &str,
     gone_key: &str,
-    blob: &str,
+    entry: &Payload,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 if redis.call('EXISTS', KEYS[2]) == 1 then
@@ -277,7 +272,11 @@ end
 return redis.call('RPUSH', KEYS[1], ARGV[1])
 "#;
     let _: i64 = redis
-        .eval::<i64>(LUA, [list_key, gone_key], [blob])
+        .eval::<i64>(
+            LUA,
+            [list_key, gone_key],
+            [RefBulkString::new(entry.expose_bytes())],
+        )
         .await
         .map_err(|e| store_refusal(&e.to_string(), "guarded push failed"))?;
     Ok(())
@@ -285,14 +284,30 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
 
 /// Dead-letters a poison pending entry the flusher found, unless the document
 /// is being deleted. `prefix` is the document's `doc:{id}` key prefix.
-pub async fn push_poison_entry(redis: &Client, prefix: &str, blob: &str) -> Result<(), AppError> {
+pub async fn push_poison_entry(
+    redis: &Client,
+    prefix: &str,
+    entry: &Payload,
+) -> Result<(), AppError> {
     guarded_rpush(
         redis,
         &format!("{prefix}:deadletter"),
         &format!("{prefix}:gone"),
-        blob,
+        entry,
     )
     .await
+}
+
+/// The entries of a pending list, front first.
+pub async fn pending_entries(redis: &Client, pending_key: &str) -> Result<Vec<Payload>, AppError> {
+    let entries: Vec<String> = redis
+        .lrange(pending_key, 0, -1)
+        .await
+        .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
+    Ok(entries
+        .into_iter()
+        .map(|entry| Payload::new(entry.into_bytes()))
+        .collect())
 }
 
 /// Redis SET holding the `doc:{id}:pending` keys that currently have unflushed
@@ -349,21 +364,13 @@ pub async fn push_dead_letter(
     document_id: &ambre_core::DocumentId,
     seq: u64,
     s3_key: &str,
-    update_wire: &[u8],
+    update_wire: &Payload,
 ) -> Result<(), AppError> {
-    use base64::Engine;
-    let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
-    let blob = serde_json::json!({
-        "seq": seq,
-        "s3_key": s3_key,
-        "update_b64": update_b64,
-    })
-    .to_string();
     guarded_rpush(
         redis,
         &format!("doc:{document_id}:deadletter"),
         &document_gone_key(document_id),
-        &blob,
+        &Payload::pending_entry(seq, s3_key, update_wire),
     )
     .await
 }
@@ -383,25 +390,12 @@ pub async fn push_dead_letter(
 pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-) -> Result<std::collections::HashMap<u64, Vec<u8>>, AppError> {
-    use base64::Engine;
-    let key = format!("doc:{document_id}:pending");
-    let blobs: Vec<String> = redis
-        .lrange(&key, 0, -1)
-        .await
-        .map_err(|e| AppError::Redis(format!("pending lrange failed: {e}")))?;
-    let mut map = std::collections::HashMap::with_capacity(blobs.len());
-    for blob in &blobs {
-        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(blob) else {
-            continue;
-        };
-        let (Some(seq), Some(b64)) = (
-            parsed.get("seq").and_then(serde_json::Value::as_u64),
-            parsed.get("update_b64").and_then(serde_json::Value::as_str),
-        ) else {
-            continue;
-        };
-        if let Ok(wire) = base64::engine::general_purpose::URL_SAFE.decode(b64) {
+) -> Result<std::collections::HashMap<u64, Payload>, AppError> {
+    let entries = pending_entries(redis, &format!("doc:{document_id}:pending")).await?;
+    let mut map = std::collections::HashMap::with_capacity(entries.len());
+    for entry in &entries {
+        // An entry that names no number cannot answer a replay.
+        if let (Some(seq), Some((_, _, wire))) = (entry.pending_seq(), entry.read_pending()) {
             map.insert(seq, wire);
         }
     }
@@ -590,14 +584,14 @@ pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<Refre
 pub async fn doc_broadcast(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
-    payload: &[u8],
+    payload: &Payload,
 ) -> Result<(), AppError> {
     let channel = format!("doc:{document_id}");
     // The payload is binary (encrypted ciphertext). rustis serializes a raw
     // `&[u8]` as a sequence of integers (a serde limitation) and panics. Wrap it
     // in `RefBulkString` so it is sent as a single RESP bulk string.
     redis
-        .publish(&channel, RefBulkString::new(payload))
+        .publish(&channel, RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
     Ok(())
@@ -611,11 +605,11 @@ pub async fn doc_broadcast(
 pub async fn user_broadcast(
     redis: &Client,
     user_id: &ambre_core::UserId,
-    payload: &[u8],
+    payload: &Payload,
 ) -> Result<(), AppError> {
     let channel = format!("user:{user_id}");
     redis
-        .publish(&channel, RefBulkString::new(payload))
+        .publish(&channel, RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("user broadcast: {e}")))?;
     Ok(())
@@ -625,11 +619,11 @@ pub async fn user_broadcast(
 pub async fn chan_broadcast(
     redis: &Client,
     channel_id: &ambre_core::ChannelId,
-    payload: &[u8],
+    payload: &Payload,
 ) -> Result<(), AppError> {
     let chan = format!("chan:{channel_id}");
     redis
-        .publish(&chan, RefBulkString::new(payload))
+        .publish(&chan, RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("channel broadcast: {e}")))?;
     Ok(())
@@ -644,9 +638,11 @@ pub async fn doc_presence_update(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
     pub_key_hex: &str,
-    presence_enc_b64: &str,
+    presence: &ambre_protocol::messages::Ciphertext,
     ttl_secs: u64,
 ) -> Result<(), AppError> {
+    use base64::Engine;
+    let presence_b64 = base64::engine::general_purpose::URL_SAFE.encode(&presence.0);
     // Expire THIS member's field individually (Redis 7.4+ / Valkey 8 `HEXPIRE`),
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
@@ -671,7 +667,7 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
         .eval::<Vec<i64>>(
             LUA,
             [key.as_str(), gone_key.as_str(), owed_key.as_str()],
-            [ttl.as_str(), pub_key_hex, presence_enc_b64],
+            [ttl.as_str(), pub_key_hex, presence_b64.as_str()],
         )
         .await
         .map_err(|e| {
@@ -964,6 +960,11 @@ pub async fn oidc_state_take(
 mod tests {
     use super::*;
 
+    /// A presence sample: its bytes stand for an encrypted cursor.
+    pub(super) fn sample() -> ambre_protocol::messages::Ciphertext {
+        ambre_protocol::messages::Ciphertext(b"blob".to_vec())
+    }
+
     #[test]
     fn the_script_refusal_becomes_the_typed_conflict() {
         let err = clock_refusal("ERR Error running script: CLOCK_MISMATCH:4", 7);
@@ -1022,7 +1023,8 @@ mod lua_tests {
             matches!(refused, Err(AppError::RotationOwed)),
             "{refused:?}"
         );
-        let presence = doc_presence_update(&redis, &doc_id, pk_hex, "cA==", 15).await;
+        let presence =
+            doc_presence_update(&redis, &doc_id, pk_hex, &super::tests::sample(), 15).await;
         assert!(
             matches!(presence, Err(AppError::RotationOwed)),
             "{presence:?}"
@@ -1297,7 +1299,7 @@ mod redis_integration_tests {
         let _: Result<usize, _> = redis.srem(FLUSH_DIRTY_SET, [pending_key.as_str()]).await;
 
         // Appending a delta marks the pending list dirty.
-        append_pending_delta(&redis, &doc, 1, "s3-x", &[1, 2, 3])
+        append_pending_delta(&redis, &doc, 1, "s3-x", &Payload::new(vec![1, 2, 3]))
             .await
             .unwrap();
         let members = dirty_pending_keys(&redis).await.unwrap();
@@ -1338,17 +1340,20 @@ mod redis_integration_tests {
         let key = format!("doc:{doc}:pending");
         let _ = redis.del([key.as_str()]).await;
 
-        append_pending_delta(&redis, &doc, 7, "s3-a", &[1, 2, 3])
+        append_pending_delta(&redis, &doc, 7, "s3-a", &Payload::new(vec![1, 2, 3]))
             .await
             .unwrap();
-        append_pending_delta(&redis, &doc, 8, "s3-b", &[4, 5])
+        append_pending_delta(&redis, &doc, 8, "s3-b", &Payload::new(vec![4, 5]))
             .await
             .unwrap();
 
         let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
         assert_eq!(map.len(), 2);
-        assert_eq!(map.get(&7).map(Vec::as_slice), Some(&[1u8, 2, 3][..]));
-        assert_eq!(map.get(&8).map(Vec::as_slice), Some(&[4u8, 5][..]));
+        assert_eq!(
+            map.get(&7).map(Payload::expose_bytes),
+            Some(&[1u8, 2, 3][..])
+        );
+        assert_eq!(map.get(&8).map(Payload::expose_bytes), Some(&[4u8, 5][..]));
 
         let _ = redis.del([key.as_str()]).await;
     }
@@ -1364,7 +1369,7 @@ mod redis_integration_tests {
         let pk = "0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de";
         let _ = redis.del([key.as_str()]).await;
 
-        doc_presence_update(&redis, &doc, pk, "blob", 15)
+        doc_presence_update(&redis, &doc, pk, &super::tests::sample(), 15)
             .await
             .unwrap();
         let present: bool = redis.hexists(&key, pk).await.unwrap();
@@ -1407,11 +1412,11 @@ mod redis_integration_tests {
         let pk = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef0";
         let _ = redis.del([key.as_str()]).await;
 
-        doc_presence_update(&redis, &doc, pk, "blob", 15)
+        doc_presence_update(&redis, &doc, pk, &super::tests::sample(), 15)
             .await
             .unwrap();
 
-        // HTTL returns the remaining per-field TTL; a positive value proves the
+        //HTTL returns the remaining per-field TTL; a positive value proves the
         // field will self-prune instead of leaking forever.
         let ttl: Vec<i64> = redis
             .eval::<Vec<i64>>(

@@ -20,7 +20,9 @@ use tokio::sync::mpsc;
 use tracing;
 
 use ambre_core::{ChannelId, DocumentId, UserId};
-use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg, encode_server_msg};
+use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
+
+use crate::payload::{self, Payload};
 
 use crate::auth;
 use crate::db;
@@ -73,20 +75,12 @@ async fn authenticate_first_frame(
     state: &AppState,
     socket: &mut WebSocket,
 ) -> Result<auth::AuthSession, AppError> {
-    let first = tokio::time::timeout(AUTH_DEADLINE, async {
-        loop {
-            match socket.recv().await {
-                Some(Ok(Message::Binary(data))) => return Some(data),
-                Some(Ok(Message::Close(_)) | Err(_)) | None => return None,
-                Some(Ok(_)) => continue,
-            }
-        }
-    })
-    .await
-    .ok()
-    .flatten()
-    .ok_or(AppError::Unauthorized)?;
-    match decode_client_msg(&first) {
+    let first = tokio::time::timeout(AUTH_DEADLINE, payload::first_frame(socket))
+        .await
+        .ok()
+        .flatten()
+        .ok_or(AppError::Unauthorized)?;
+    match first.client_msg() {
         Ok(WsClientMsg::Authenticate { token }) => auth::authenticate_token(state, token.expose()),
         _ => Err(AppError::Unauthorized),
     }
@@ -190,7 +184,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
-    let (outbound_tx, mut outbound_rx) = mpsc::channel::<Vec<u8>>(256);
+    let (outbound_tx, mut outbound_rx) = mpsc::channel::<Payload>(256);
 
     let user_id = session.user_id;
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -211,7 +205,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
 
     let outbound_handle = tokio::spawn(async move {
         while let Some(bytes) = outbound_rx.recv().await {
-            if ws_sink.send(Message::Binary(bytes.into())).await.is_err() {
+            if ws_sink.send(bytes.into_message()).await.is_err() {
                 break;
             }
         }
@@ -246,13 +240,11 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         if routed.is_err() {
             return;
         }
-        while let Some(Ok(msg)) = ws_stream.next().await {
-            let Message::Binary(data) = msg else { continue };
-
-            let client_msg = match decode_client_msg(&data) {
+        while let Some(frame) = payload::next_frame(&mut ws_stream).await {
+            let client_msg = match frame.client_msg() {
                 Ok(m) => m,
                 Err(e) => {
-                    let err = encode_server_msg(&WsServerMsg::Error {
+                    let err = Payload::server_msg(&WsServerMsg::Error {
                         code: 400,
                         message: format!("decode error: {e:?}"),
                     });
@@ -268,7 +260,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             // message before any handler (and any durable write) runs. The token costs
             // no Redis round-trip; it lives entirely on `conn`.
             if !conn.msg_bucket.try_consume(Instant::now()) {
-                let err = encode_server_msg(&WsServerMsg::Error {
+                let err = Payload::server_msg(&WsServerMsg::Error {
                     code: 429,
                     message: "message rate limit exceeded".into(),
                 });
@@ -360,7 +352,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                 }
                 WsClientMsg::ChannelUpdate { channel_id, update } => {
                     if !conn.channel_subscriptions.contains(&channel_id) {
-                        let err = encode_server_msg(&WsServerMsg::Error {
+                        let err = Payload::server_msg(&WsServerMsg::Error {
                             code: 403,
                             message: "not subscribed to this channel".into(),
                         });
@@ -412,6 +404,11 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
 // reached (and their pub(crate) fns brought into scope) via `use self::message::*`.
 mod message;
 use message::*;
+
+// The envelope signature check, the one reading of a ciphertext's bytes on the
+// socket path, in a file that holds no log line (`SRV-001`).
+mod signature;
+use signature::*;
 
 // Per-connection inbound-message rate limiter, kept in its own module so the
 // pure token-bucket logic is unit-testable without a socket.

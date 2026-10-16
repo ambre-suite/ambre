@@ -221,12 +221,11 @@ pub async fn invite_to_document(
         .await?
         .and_then(|d| doc_type_from_str(&d.doc_type))
     {
-        let msg = ambre_protocol::ws::encode_server_msg(
-            &ambre_protocol::ws::WsServerMsg::DocumentShared {
+        let msg =
+            crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
                 document_id: doc_id,
                 doc_type,
-            },
-        );
+            });
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
     Ok(axum::Json(InviteResponse {
@@ -357,7 +356,7 @@ async fn notify_removed(
     target: &ambre_core::UserId,
 ) {
     let msg =
-        ambre_protocol::ws::encode_server_msg(&ambre_protocol::ws::WsServerMsg::DocumentRevoked {
+        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentRevoked {
             document_id: *doc_id,
         });
     let _ = crate::redis_ops::user_broadcast(&state.redis, target, &msg).await;
@@ -366,7 +365,7 @@ async fn notify_removed(
 /// Tells every member still on the document to re-read its member list: a new
 /// wrapped copy, or a rotation owed. No user id: it is not a removal signal.
 async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
-    let msg = ambre_protocol::ws::encode_server_msg(
+    let msg = crate::payload::Payload::server_msg(
         &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
             document_id: *doc_id,
         },

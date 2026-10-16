@@ -517,14 +517,16 @@ mod handler_tests {
         assert!(gone(
             crate::redis_ops::verify_clock_and_assign_seq(redis, &doc, "aa", 4).await
         ));
+        let frame = crate::payload::Payload::new(vec![1]);
         assert!(gone(
-            crate::redis_ops::append_pending_delta(redis, &doc, 8, "k", &[1]).await
+            crate::redis_ops::append_pending_delta(redis, &doc, 8, "k", &frame).await
         ));
         assert!(gone(
-            crate::redis_ops::push_dead_letter(redis, &doc, 8, "k", &[1]).await
+            crate::redis_ops::push_dead_letter(redis, &doc, 8, "k", &frame).await
         ));
+        let sample = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
         assert!(gone(
-            crate::redis_ops::doc_presence_update(redis, &doc, "aa", "blob", 15).await
+            crate::redis_ops::doc_presence_update(redis, &doc, "aa", &sample, 15).await
         ));
         crate::redis_ops::seed_clock_state(redis, &doc, 9, &[("aa".into(), 9)])
             .await
@@ -534,7 +536,7 @@ mod handler_tests {
             .unwrap();
         let prefix = format!("doc:{doc}");
         assert!(gone(
-            crate::redis_ops::push_poison_entry(redis, &prefix, "x").await
+            crate::redis_ops::push_poison_entry(redis, &prefix, &frame).await
         ));
         let left: usize = redis
             .exists(crate::redis_ops::document_state_keys(&doc))
@@ -3374,7 +3376,7 @@ mod handler_tests {
             .unwrap()
             .unwrap();
         assert!(matches!(
-            ambre_protocol::ws::decode_server_msg(&heard),
+            ambre_protocol::ws::decode_server_msg(heard.expose_bytes()),
             Ok(WsServerMsg::KeyRotationRequired { .. })
         ));
         let read = list_members(&app, &stayer, &doc_id).await;

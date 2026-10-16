@@ -73,7 +73,10 @@ the page origin. So no Rust line includes the bytes of a font file.
 carry identifiers, lengths and sequence numbers. So no log macro or span of
 `ambre-server` names a value called for a payload, a blob, a body or its
 bytes, unless it reads only the length. A payload under a neutral name
-passes the scan, and `SRV-001` stays loose until a type refuses it.
+passes that scan, so `SRV-001` adds a second: a file that reads a payload's
+bytes -- `Payload::expose_bytes`, a ciphertext's field, or a ciphertext taken
+whole -- holds no log line. Every other binding is a `Payload`, which has no
+`Debug`.
 
 **A fixture benchmark reports no frame rate** (`FIXTURE-024`). A fixture is a
 document, not a screen, so a figure measured on one is the cost of an
@@ -318,6 +321,9 @@ PAYLOAD_NAME = re.compile(
     r"\b\w*(?:payload|blob|plaintext|ciphertext|cipher|sealed|bytes|body)\w*\b", re.IGNORECASE
 )
 PAYLOAD_SAFE = re.compile(r"_(?:len|size|count|key|id|hash)$", re.IGNORECASE)
+# A reading of a payload's bytes: the one accessor of the relay's payload type,
+# a ciphertext's field, or a ciphertext taken whole by a function.
+PAYLOAD_BYTES = re.compile(r"\bexpose_bytes\b|\bciphertext\.0\b|:\s*&(?:\w+::)*Ciphertext\b")
 STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')
 INTERPOLATION = re.compile(r"\{(\w+)")
 
@@ -954,11 +960,19 @@ def check_payload_logs(errors: list[str]) -> int:
         return 0
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
-        for number, invocation in log_invocations(above_tests(path)):
+        lines = above_tests(path)
+        invocations = log_invocations(lines)
+        for number, invocation in invocations:
             if invocation.startswith("#[") and "skip_all" in invocation:
                 continue
             for name in payload_names(invocation):
                 errors.append(f"{rel}:{number}: a log line or span names a payload: `{name}`")
+        # `SRV-001`: the bytes are read only where nothing is logged, so no
+        # binding of them, whatever its name, sits beside a log line.
+        reads = [(n, m.group(0)) for n, line in lines for m in [PAYLOAD_BYTES.search(line)] if m]
+        if reads and invocations:
+            number, found = reads[0]
+            errors.append(f"{rel}:{number}: a file that logs reads a payload's bytes: `{found}`")
     return len(files)
 
 

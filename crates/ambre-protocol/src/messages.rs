@@ -39,9 +39,28 @@ pub struct Clock(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Counter(pub u64);
 
-/// AEAD ciphertext wrapper.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// AEAD ciphertext wrapper. `Debug` prints its length and none of its bytes,
+/// so a logged message logs no ciphertext (`ZK-006`).
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ciphertext(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+impl Ciphertext {
+    /// The length in bytes, the one reading of a ciphertext a log may carry.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether it holds no byte.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Debug for Ciphertext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ciphertext({} bytes)", self.0.len())
+    }
+}
 
 // -----------------------------------------------------------------------------
 
@@ -224,6 +243,20 @@ mod validate_tests {
     #[test]
     fn update_valid() {
         assert!(update(vec![1], 1).validate().is_ok());
+    }
+
+    /// Holds `ZK-006` for a decoded message: a ciphertext prints its length
+    /// alone, so the debug form of anything carrying one prints no byte of it.
+    #[test]
+    fn a_message_debug_form_prints_no_byte_of_its_ciphertext() {
+        let printed = format!(
+            "{:?} {:?}",
+            update(vec![0xAB; 3], 1),
+            ephemeral(vec![0xAB; 5], 1)
+        );
+        assert!(printed.contains("Ciphertext(3 bytes)"), "{printed}");
+        assert!(printed.contains("Ciphertext(5 bytes)"), "{printed}");
+        assert!(!printed.contains("171"), "{printed}");
     }
 
     #[test]

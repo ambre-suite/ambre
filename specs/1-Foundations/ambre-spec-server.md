@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-012` | `INV` | The relay MUST perform no cryptographic operation beyond verifying a signature and minting its own tokens. | this spec section 5; `ZK-004` | cargo-deny -- `deny.toml` refuses the cipher, the exchange and the passphrase derivation in this process, and the continuous-integration `deny` job fails the manifest that adds one. `ed25519-dalek` is the one grant, which is exactly the two operations named | none | verified |
 | `SRV-011` | `INV` | A document MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner` -- the refusal; `::owner_can_leave_when_another_owner_remains` -- the case that must still work, so neither end rots into the other | none | verified |
 | `SRV-170` | `INV` | A log macro, a span or an `instrument` field of the relay MUST NOT name a payload, a blob, a body or its bytes, unless it reads only the length. | `ZK-001`, `ZK-006`; this spec section 3 | ci-gate -- `scripts/crate_boundaries.py` refuses each of those names in a log macro, a span or an `instrument` field of `ambre-server`, a length aside | none | verified |
-| `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | none | unheld -- the name gate (`SRV-170`) does not see a payload bound to a neutral name, which reads like any identifier; lands with the `The relay payload a type no log can print` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | type-level -- every payload the relay stores, reads back or forwards is a `Payload`, with no `Debug` and no `Display`, so a log line naming one under any name does not compile; `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a decoded message prints each ciphertext as its length; ci-gate -- `scripts/crate_boundaries.py` refuses a log line in a file that reads a payload's or a ciphertext's bytes | none | verified |
 | `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both` -- two instances over one database and one Redis server: a session opened, renewed and ended on either is served by the other | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
@@ -121,10 +121,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 34 `verified`, 2 `untested`, 18 `unimplemented`. What holds is
+* **Verification.** 35 `verified`, 1 `untested`, 18 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
-  and the origin list. The delete holds too. What is loose is every rule about the process or the
-  deployment.
+  and the origin list. The delete holds too, and so does the payload type no log line can name.
+  What is loose is every rule about the process or the deployment.
 ---
 
 ## 2. WHAT EACH USER SEES

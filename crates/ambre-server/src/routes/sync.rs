@@ -160,7 +160,7 @@ pub async fn report_snapshot(
         {
             tracing::warn!(s3_key = %key, error = %e, "reported snapshot: S3 delete failed");
         }
-        let ask = ambre_protocol::ws::encode_server_msg(
+        let ask = crate::payload::Payload::server_msg(
             &ambre_protocol::ws::WsServerMsg::SnapshotRequired {
                 document_id: doc_id,
             },
@@ -265,13 +265,12 @@ pub async fn create_snapshot(
         req.covered_seq.max(0),
     )
     .await?;
-    let msg = ambre_protocol::ws::encode_server_msg(
-        &ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
+    let msg =
+        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::SnapshotAvailable {
             document_id: doc_id,
             snapshot_id: sid,
             covered_seq: ambre_protocol::messages::Seq(covered),
-        },
-    );
+        });
     let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &msg).await;
     Ok(axum::Json(CreateSnapshotResponse {
         snapshot_id: sid.to_string(),

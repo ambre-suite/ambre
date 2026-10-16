@@ -44,7 +44,6 @@
 
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::presigning::PresigningConfig;
-use aws_sdk_s3::primitives::ByteStream;
 use rustis::commands::ScanOptions;
 use rustis::commands::{GenericCommands, ListCommands};
 use std::time::Duration;
@@ -52,6 +51,7 @@ use std::time::Duration;
 use tracing;
 
 use crate::error::AppError;
+use crate::payload::Payload;
 
 /// S3 object key for a snapshot blob.
 pub fn format_s3_snapshot_key(
@@ -240,16 +240,12 @@ pub async fn fetch_object(
     s3: &S3Client,
     bucket: &str,
     key: &str,
-) -> Result<Option<Vec<u8>>, AppError> {
+) -> Result<Option<Payload>, AppError> {
     match s3.get_object().bucket(bucket).key(key).send().await {
-        Ok(out) => {
-            let data = out
-                .body
-                .collect()
-                .await
-                .map_err(|e| AppError::S3(format!("read object body: {e}")))?;
-            Ok(Some(data.into_bytes().to_vec()))
-        }
+        Ok(out) => Payload::read_body(out.body)
+            .await
+            .map(Some)
+            .map_err(|e| AppError::S3(format!("read object body: {e}"))),
         Err(e) => {
             // A missing key is an expected miss (not-yet-flushed), not an error.
             // Use `as_service_error` (non-consuming, returns Option) rather than
@@ -426,17 +422,15 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
 
 /// Drain body, run under the per-document flush lock held by [`flush_doc_pending`].
 async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &str) {
-    let blobs: Result<Vec<String>, _> = state.redis.lrange(pending_key, 0, -1).await;
-
-    let blobs = match blobs {
-        Ok(b) => b,
+    let entries = match crate::redis_ops::pending_entries(&state.redis, pending_key).await {
+        Ok(entries) => entries,
         Err(e) => {
             tracing::error!(key = pending_key, error = %e, "flush: lrange failed");
             return;
         }
     };
 
-    if blobs.is_empty() {
+    if entries.is_empty() {
         return;
     }
 
@@ -445,7 +439,7 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
     let doc_prefix = pending_key.strip_suffix(":pending");
 
     let mut sink = S3Sink { state, doc_prefix };
-    let processed = drain_front(pending_key, &blobs, &mut sink).await;
+    let processed = drain_front(pending_key, &entries, &mut sink).await;
 
     if processed > 0 {
         let _: Result<(), _> = state.redis.ltrim(pending_key, processed, -1).await;
@@ -458,10 +452,10 @@ trait DrainSink {
     fn store(
         &mut self,
         s3_key: &str,
-        wire: Vec<u8>,
+        wire: Payload,
     ) -> impl Future<Output = Result<(), String>> + Send;
     /// Keeps an entry that will never parse where an operator can read it.
-    fn dead_letter(&mut self, blob: &str) -> impl Future<Output = ()> + Send;
+    fn dead_letter(&mut self, entry: &Payload) -> impl Future<Output = ()> + Send;
 }
 
 /// The production sink: the object store, and the document's dead letters.
@@ -471,22 +465,22 @@ struct S3Sink<'a> {
 }
 
 impl DrainSink for S3Sink<'_> {
-    async fn store(&mut self, s3_key: &str, wire: Vec<u8>) -> Result<(), String> {
+    async fn store(&mut self, s3_key: &str, wire: Payload) -> Result<(), String> {
         self.state
             .s3
             .put_object()
             .bucket(&self.state.s3_bucket)
             .key(s3_key)
-            .body(ByteStream::from(wire))
+            .body(wire.into_body())
             .send()
             .await
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
 
-    async fn dead_letter(&mut self, blob: &str) {
+    async fn dead_letter(&mut self, entry: &Payload) {
         if let Some(prefix) = self.doc_prefix {
-            let _ = crate::redis_ops::push_poison_entry(&self.state.redis, prefix, blob).await;
+            let _ = crate::redis_ops::push_poison_entry(&self.state.redis, prefix, entry).await;
         }
     }
 }
@@ -497,41 +491,25 @@ impl DrainSink for S3Sink<'_> {
 /// The count is the exact `ltrim` start index, so it tracks both outcomes. It
 /// stops at the first failed store, which the next cycle retries. The trim
 /// therefore never removes an entry that was neither stored nor dead-lettered.
-async fn drain_front(pending_key: &str, blobs: &[String], sink: &mut impl DrainSink) -> isize {
+async fn drain_front(pending_key: &str, entries: &[Payload], sink: &mut impl DrainSink) -> isize {
     let mut processed: isize = 0;
-    for blob_str in blobs {
-        // Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext.
-        // Only routing metadata (redis key, byte length, and once parsed the
-        // s3_key / seq) is safe to surface (C1).
-        let parsed: Option<serde_json::Value> = serde_json::from_str(blob_str).ok();
-        let poison = |reason: &str, seq: u64| {
-            tracing::error!(
-                key = pending_key,
-                seq,
-                blob_len = blob_str.len(),
-                reason,
-                "flush: dead-lettering poison entry"
-            );
-        };
-
+    for entry in entries {
+        // An entry carries `update_b64`, the E2EE ciphertext, and a `Payload`
+        // cannot be logged. Only routing metadata (redis key, byte length, and
+        // once parsed the s3_key / seq) is surfaced (C1).
+        //
         // Resolve the routing fields. Any structural defect is a permanent
         // poison entry that will never parse, so dead-letter it and advance
         // past it rather than blocking the queue forever.
-        let fields = parsed.as_ref().and_then(|p| {
-            let s3_key = p["s3_key"].as_str()?;
-            let update_b64 = p["update_b64"].as_str()?;
-            let seq = p["seq"].as_u64().unwrap_or(0);
-            use base64::Engine;
-            let wire = base64::engine::general_purpose::URL_SAFE
-                .decode(update_b64)
-                .ok()?;
-            Some((s3_key.to_string(), seq, wire))
-        });
-
-        let Some((s3_key, seq, update_wire)) = fields else {
-            let seq = parsed.as_ref().and_then(|p| p["seq"].as_u64()).unwrap_or(0);
-            poison("malformed json / missing fields / bad base64", seq);
-            sink.dead_letter(blob_str).await;
+        let Some((seq, s3_key, update_wire)) = entry.read_pending() else {
+            tracing::error!(
+                key = pending_key,
+                seq = entry.pending_seq().unwrap_or(0),
+                entry_len = entry.len(),
+                reason = "malformed json / missing fields / bad base64",
+                "flush: dead-lettering poison entry"
+            );
+            sink.dead_letter(entry).await;
             processed += 1;
             continue;
         };
@@ -572,41 +550,50 @@ mod tests {
     /// the trim keeps the failed entry and every one after it.
     #[tokio::test]
     async fn a_partial_flush_trims_only_what_it_stored() {
-        let blobs = vec![
+        let entries: Vec<Payload> = [
             entry("d/1", 1),
             "not json".to_owned(),
             entry("d/3", 3),
             entry("d/4", 4),
             entry("d/5", 5),
-        ];
+        ]
+        .into_iter()
+        .map(|b| Payload::new(b.into_bytes()))
+        .collect();
         /// Refuses one key, and records what it stored and dead-lettered.
         #[derive(Default)]
         struct Flaky {
             stored: Vec<String>,
-            dead: Vec<String>,
+            dead: Vec<Vec<u8>>,
         }
         impl DrainSink for Flaky {
-            async fn store(&mut self, s3_key: &str, _wire: Vec<u8>) -> Result<(), String> {
+            async fn store(&mut self, s3_key: &str, _wire: Payload) -> Result<(), String> {
                 if s3_key == "d/4" {
                     return Err("unavailable".to_owned());
                 }
                 self.stored.push(s3_key.to_owned());
                 Ok(())
             }
-            async fn dead_letter(&mut self, blob: &str) {
-                self.dead.push(blob.to_owned());
+            async fn dead_letter(&mut self, entry: &Payload) {
+                self.dead.push(entry.expose_bytes().to_vec());
             }
         }
         let mut sink = Flaky::default();
-        let processed = drain_front("doc:x:pending", &blobs, &mut sink).await;
+        let processed = drain_front("doc:x:pending", &entries, &mut sink).await;
 
         // Stored, dead-lettered, stored: the failure at the fourth stops it.
         assert_eq!(processed, 3);
         assert_eq!(sink.stored, ["d/1", "d/3"]);
-        assert_eq!(sink.dead, ["not json"]);
+        assert_eq!(sink.dead, [b"not json".to_vec()]);
         // The fifth entry was never tried, and the trim keeps it with the fourth.
-        let kept = &blobs[processed as usize..];
-        assert_eq!(kept, [entry("d/4", 4), entry("d/5", 5)]);
+        let kept: Vec<&[u8]> = entries[processed as usize..]
+            .iter()
+            .map(Payload::expose_bytes)
+            .collect();
+        assert_eq!(
+            kept,
+            [entry("d/4", 4).as_bytes(), entry("d/5", 5).as_bytes()]
+        );
     }
 
     #[test]

@@ -583,6 +583,26 @@ class CrateBoundaries(unittest.TestCase):
         )
         self.assertEqual(self.breach(f"{cb.RELAY}/blob.rs", text), [])
 
+    def test_a_file_that_logs_and_reads_a_payloads_bytes_is_refused(self):
+        log = 'fn put() {\n    tracing::info!(seq, "stored");\n}\n'
+        for read in (
+            "fn r() { let x = frame.expose_bytes(); }\n",
+            "fn r() { let x = &update.ciphertext.0; }\n",
+            "fn keep(c: &ambre_protocol::messages::Ciphertext) {}\n",
+        ):
+            text = log + read
+            errors = self.breach(f"{cb.RELAY}/store.rs", text)
+            self.assertTrue(any("reads a payload's bytes" in e for e in errors), (text, errors))
+
+    def test_a_file_that_reads_bytes_without_logging_stays_free(self):
+        text = (
+            "fn keep(c: &Ciphertext, frame: &Payload) {\n    put(&c.0, frame.expose_bytes());\n}\n"
+            '#[cfg(test)]\nmod tests {\n    fn t() { tracing::info!("x"); }\n}\n'
+        )
+        self.assertEqual(self.breach(f"{cb.RELAY}/store.rs", text), [])
+        logs = 'fn put(frame: &Payload) {\n    tracing::info!(len = frame.len(), "stored");\n}\n'
+        self.assertEqual(self.breach(f"{cb.RELAY}/handler.rs", logs), [])
+
     def test_a_handler_that_sends_on_a_queue_is_refused(self):
         for line in (
             "struct S { tx: Sender<UiEvent> }\n",

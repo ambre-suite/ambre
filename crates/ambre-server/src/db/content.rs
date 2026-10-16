@@ -2,6 +2,7 @@
 // Snapshot / update / media rows and their queries (incl. compaction).
 
 use super::*;
+use crate::payload::Payload;
 
 /// Row from `snapshots`.
 #[derive(Debug)]
@@ -73,8 +74,8 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
     })
 }
 
-/// Row from `updates` (encrypted deltas indexed by seq).
-#[derive(Debug)]
+/// Row from `updates` (encrypted deltas indexed by seq). No `Debug`: it may
+/// hold a frame (`ZK-006`).
 pub struct UpdateRow {
     #[allow(dead_code)]
     pub id: uuid::Uuid,
@@ -88,7 +89,7 @@ pub struct UpdateRow {
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<String>,
     /// The sealed frame itself, for a delta in the hot tail (`SRV-148`).
-    pub wire: Option<Vec<u8>>,
+    pub wire: Option<Payload>,
     /// The batch object that holds the frame (`SRV-151`).
     pub batch_key: Option<String>,
     #[allow(dead_code)]
@@ -325,7 +326,7 @@ pub async fn insert_inline_update(
     snapshot_id: &ambre_core::SnapshotId,
     clock: i64,
     seq: i64,
-    wire: &[u8],
+    wire: &Payload,
     cap: InlineCap,
 ) -> Result<InlineInsert, AppError> {
     let (deltas, bytes, room): (i64, i64, bool) = sqlx::query_as(
@@ -369,7 +370,7 @@ pub async fn attach_wire(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     seq: i64,
-    wire: &[u8],
+    wire: &Payload,
 ) -> Result<bool, AppError> {
     let attached = sqlx::query(
         "UPDATE updates SET wire = $3, s3_key = NULL \
@@ -389,7 +390,7 @@ pub async fn attach_wire(
 pub async fn lock_inline_tail(
     tx: &mut sqlx::PgConnection,
     document_id: &ambre_core::DocumentId,
-) -> Result<Option<Vec<(i64, Vec<u8>)>>, AppError> {
+) -> Result<Option<Vec<(i64, Payload)>>, AppError> {
     let rows = sqlx::query_as(
         "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
          ORDER BY seq FOR UPDATE NOWAIT",

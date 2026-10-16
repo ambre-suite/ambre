@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::db::InlineCap;
 use crate::error::AppError;
+use crate::payload::Payload;
 use crate::state::AppState;
 
 /// A delta whose sealed frame is under this size lives in its index row
@@ -33,7 +34,7 @@ pub fn past_watermark(deltas: i64, bytes: i64) -> bool {
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
-fn kept_after_move(tail: &[(i64, Vec<u8>)]) -> usize {
+fn kept_after_move(tail: &[(i64, Payload)]) -> usize {
     let mut kept = 0usize;
     let mut bytes = 0i64;
     for (_, wire) in tail.iter().rev() {
@@ -61,15 +62,15 @@ pub fn batch_key(
 
 /// Encodes a batch: each delta's number and its sealed frame, unchanged
 /// (`SRV-153`).
-fn encode_batch(frames: &[(i64, Vec<u8>)]) -> Result<Vec<u8>, AppError> {
-    postcard::to_allocvec(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
+fn encode_batch(frames: &[(i64, Payload)]) -> Result<Payload, AppError> {
+    Payload::batch(frames).map_err(|e| AppError::Internal(format!("batch encode: {e}")))
 }
 
 /// Decodes a batch into its frames by number.
-fn decode_batch(bytes: &[u8]) -> Result<BTreeMap<i64, Vec<u8>>, AppError> {
-    let frames: Vec<(i64, Vec<u8>)> = postcard::from_bytes(bytes)
-        .map_err(|e| AppError::Internal(format!("batch decode: {e}")))?;
-    Ok(frames.into_iter().collect())
+fn decode_batch(batch: &Payload) -> Result<BTreeMap<i64, Payload>, AppError> {
+    batch
+        .unbatch()
+        .map_err(|e| AppError::Internal(format!("batch decode: {e}")))
 }
 
 /// Moves the oldest inline deltas of a document into one batch object, and
@@ -104,7 +105,7 @@ pub async fn move_to_batch(
         .put_object()
         .bucket(&state.s3_bucket)
         .key(&key)
-        .body(body.into())
+        .body(body.into_body())
         .send()
         .await
         .map_err(|e| AppError::S3(format!("batch put {key}: {e}")))?;
@@ -164,7 +165,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
 /// The batch objects one replay has fetched, each fetched once (`SRV-155`).
 #[derive(Default)]
 pub struct BatchCache {
-    held: HashMap<String, BTreeMap<i64, Vec<u8>>>,
+    held: HashMap<String, BTreeMap<i64, Payload>>,
 }
 
 impl BatchCache {
@@ -197,7 +198,7 @@ impl BatchCache {
     }
 
     /// The frame of delta `seq` in batch `key`, when the batch is held.
-    pub fn frame(&self, key: &str, seq: i64) -> Option<Vec<u8>> {
+    pub fn frame(&self, key: &str, seq: i64) -> Option<Payload> {
         self.held.get(key)?.get(&seq).cloned()
     }
 
@@ -213,9 +214,9 @@ impl BatchCache {
 mod tests {
     use super::*;
 
-    fn tail(n: usize, size: usize) -> Vec<(i64, Vec<u8>)> {
+    fn tail(n: usize, size: usize) -> Vec<(i64, Payload)> {
         (1..=n)
-            .map(|s| (i64::try_from(s).unwrap(), vec![0u8; size]))
+            .map(|s| (i64::try_from(s).unwrap(), Payload::new(vec![0u8; size])))
             .collect()
     }
 
@@ -240,8 +241,16 @@ mod tests {
     #[test]
     fn a_batch_keeps_each_number_and_frame() {
         let frames = vec![(3, vec![1, 2]), (7, vec![]), (9, vec![5; 300])];
-        let back = decode_batch(&encode_batch(&frames).unwrap()).unwrap();
-        assert_eq!(back.into_iter().collect::<Vec<_>>(), frames);
+        let sealed: Vec<(i64, Payload)> = frames
+            .iter()
+            .map(|(s, f)| (*s, Payload::new(f.clone())))
+            .collect();
+        let back = decode_batch(&encode_batch(&sealed).unwrap()).unwrap();
+        let back: Vec<(i64, Vec<u8>)> = back
+            .into_iter()
+            .map(|(s, f)| (s, f.expose_bytes().to_vec()))
+            .collect();
+        assert_eq!(back, frames);
     }
 }
 
@@ -274,7 +283,8 @@ mod db_tests {
         cap: InlineCap,
     ) -> InlineInsert {
         let snap = ambre_core::SnapshotId::new();
-        crate::db::insert_inline_update(&state.db, doc, &[5u8; 32], &snap, seq, seq, wire, cap)
+        let wire = Payload::new(wire.to_vec());
+        crate::db::insert_inline_update(&state.db, doc, &[5u8; 32], &snap, seq, seq, &wire, cap)
             .await
             .unwrap()
     }
@@ -353,7 +363,11 @@ mod db_tests {
                 .all(|(_, w, b)| !w && b.as_deref() == Some(key.as_str()))
         );
         assert!(rows.iter().skip(136).all(|(_, w, b)| *w && b.is_none()));
-        let held = decode_batch(&stub.object(&key).unwrap()).unwrap();
+        let held: BTreeMap<i64, Vec<u8>> = decode_batch(&Payload::new(stub.object(&key).unwrap()))
+            .unwrap()
+            .into_iter()
+            .map(|(s, f)| (s, f.expose_bytes().to_vec()))
+            .collect();
         let expected: BTreeMap<i64, Vec<u8>> = (1..=136).map(|s| (s, frame(s))).collect();
         assert_eq!(
             held, expected,

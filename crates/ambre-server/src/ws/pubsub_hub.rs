@@ -26,6 +26,8 @@ use futures_util::StreamExt;
 use rustis::commands::PubSubCommands;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::payload::Payload;
+
 /// A registration/forwarding request sent from a WS connection to the hub task.
 enum HubCmd {
     Subscribe {
@@ -33,7 +35,7 @@ enum HubCmd {
         conn_id: String,
         /// Where to forward messages on `channel` for this connection (its WS
         /// outbound queue).
-        sink: mpsc::Sender<Vec<u8>>,
+        sink: mpsc::Sender<Payload>,
         /// Answered once the topic is routed. Dropped unanswered when the hub
         /// cannot route it, a panic included.
         routed: oneshot::Sender<()>,
@@ -81,7 +83,7 @@ impl PubSubHub {
         &self,
         channel: String,
         conn_id: String,
-        sink: mpsc::Sender<Vec<u8>>,
+        sink: mpsc::Sender<Payload>,
     ) -> Result<(), NotRouted> {
         let (routed, answer) = oneshot::channel();
         self.cmd_tx
@@ -116,7 +118,7 @@ const HUB_RESTART_DELAY: Duration = Duration::from_secs(1);
 /// topic -> (conn_id -> sink). The presence of an entry for a topic means the
 /// current stream holds a live Redis SUBSCRIBE on it; emptying it triggers
 /// UNSUBSCRIBE.
-type Routes = HashMap<String, HashMap<String, mpsc::Sender<Vec<u8>>>>;
+type Routes = HashMap<String, HashMap<String, mpsc::Sender<Payload>>>;
 
 /// Why one run of the hub ended.
 enum HubExit {
@@ -223,8 +225,9 @@ async fn hub_run(
                         // full outbound queue drops the message for that one
                         // connection (it will re-sync via RequestMissing); it
                         // never blocks the hub or the other subscribers.
+                        let payload = Payload::broadcast(&m);
                         for sink in sinks.values() {
-                            let _ = sink.try_send(m.payload().to_vec());
+                            let _ = sink.try_send(payload.clone());
                         }
                     }
                 }
@@ -248,11 +251,12 @@ pub(crate) mod tests {
     pub(crate) const PANIC_TOPIC: &str = "__ambre_test_panic__";
 
     /// The next message `sink` receives, or `None` after a few seconds.
-    async fn next_message(sink: &mut mpsc::Receiver<Vec<u8>>) -> Option<Vec<u8>> {
+    async fn next_message(sink: &mut mpsc::Receiver<Payload>) -> Option<Vec<u8>> {
         tokio::time::timeout(Duration::from_secs(5), sink.recv())
             .await
             .ok()
             .flatten()
+            .map(|frame| frame.expose_bytes().to_vec())
     }
 
     /// A document frame published by one instance reaches a connection that
@@ -278,7 +282,7 @@ pub(crate) mod tests {
             .await
             .expect("this instance routes the topic");
 
-        crate::redis_ops::doc_broadcast(&one.redis, &document_id, b"frame")
+        crate::redis_ops::doc_broadcast(&one.redis, &document_id, &Payload::new(b"frame".to_vec()))
             .await
             .expect("publish");
         assert_eq!(
@@ -325,7 +329,7 @@ pub(crate) mod tests {
             if let Ok(Some(bytes)) =
                 tokio::time::timeout(Duration::from_millis(200), watcher_rx.recv()).await
             {
-                break Some(bytes);
+                break Some(bytes.expose_bytes().to_vec());
             }
             if tokio::time::Instant::now() > deadline {
                 break None;

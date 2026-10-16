@@ -124,12 +124,12 @@ pub(crate) async fn handle_subscribe(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     document_id: DocumentId,
-    outbound_tx: &mpsc::Sender<Vec<u8>>,
+    outbound_tx: &mpsc::Sender<Payload>,
 ) {
     let role = match verify_document_access(&state.db, document_id, conn.user_id).await {
         Ok(role) => role,
         Err(e) => {
-            let err = encode_server_msg(&subscribe_refusal(document_id, &e));
+            let err = Payload::server_msg(&subscribe_refusal(document_id, &e));
             let _ = outbound_tx.send(err).await;
             return;
         }
@@ -191,7 +191,7 @@ pub(crate) async fn handle_subscribe(
     // (`viewer`) member's delta without re-hitting the database per message.
     conn.doc_write_allowed
         .insert(document_id, role_can_write(&role));
-    let ack = encode_server_msg(&WsServerMsg::Subscribed { document_id });
+    let ack = Payload::server_msg(&WsServerMsg::Subscribed { document_id });
     let _ = outbound_tx.send(ack).await;
 }
 
@@ -230,7 +230,7 @@ pub(crate) async fn announce_departure(
         return;
     }
     let _ = redis_ops::doc_presence_remove(&state.redis, document_id, &pub_key_hex).await;
-    let broadcast = encode_server_msg(&WsServerMsg::PeerLeft {
+    let broadcast = Payload::server_msg(&WsServerMsg::PeerLeft {
         document_id: *document_id,
         pub_key: signing_pubkey.clone(),
     });
@@ -241,11 +241,11 @@ pub(crate) async fn handle_update(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     update: ambre_protocol::Update,
-    outbound_tx: &mpsc::Sender<Vec<u8>>,
+    outbound_tx: &mpsc::Sender<Payload>,
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 403,
             message: "not subscribed".into(),
         });
@@ -259,9 +259,9 @@ pub(crate) async fn handle_update(
     // persisted durably (S3 + Redis pending) and fanned out to every subscriber.
     // That is the same storage/cost abuse the media and snapshot caps close, on
     // the hot path.
-    let cipher_len = update.ciphertext.0.len();
+    let cipher_len = update.ciphertext.len();
     if cipher_len > state.config.delta_max_bytes {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 413,
             message: format!(
                 "delta ciphertext {} bytes exceeds max {}",
@@ -276,7 +276,7 @@ pub(crate) async fn handle_update(
     // ciphertext, zero clock) before any DB/Redis work. Cheap, and it keeps the
     // durable index and the per-author clock hash free of no-op entries.
     if let Err(e) = update.validate() {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 400,
             message: format!("invalid update: {e}"),
         });
@@ -290,7 +290,7 @@ pub(crate) async fn handle_update(
     // helper drops the subscription so subsequent messages are rejected without a
     // DB hit; tell this client its access was revoked.
     if !membership_still_valid(state, conn, doc_id).await {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 403,
             message: "document access revoked".into(),
         });
@@ -305,7 +305,7 @@ pub(crate) async fn handle_update(
     // capability is cached at Subscribe and refreshed by `membership_still_valid`
     // above, so this is a map lookup, not a DB hit.
     if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 403,
             message: "read-only role cannot write to this document".into(),
         });
@@ -323,7 +323,7 @@ pub(crate) async fn handle_update(
     // forged identity. Reject the mismatch before the signature check so the
     // clock hash only ever sees known keys.
     if author_pubkey != conn.signing_pubkey {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 403,
             message: "author key does not match session identity".into(),
         });
@@ -331,7 +331,7 @@ pub(crate) async fn handle_update(
         return;
     }
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
-        let err = encode_server_msg(&WsServerMsg::Error {
+        let err = Payload::server_msg(&WsServerMsg::Error {
             code: 401,
             message: format!("invalid signature: {e}"),
         });
@@ -365,7 +365,7 @@ pub(crate) async fn handle_update(
                     conn.clock_fences.raise(doc_id, update.signature);
                 }
                 let _ = outbound_tx
-                    .send(encode_server_msg(&update_refusal(&update, &e)))
+                    .send(Payload::server_msg(&update_refusal(&update, &e)))
                     .await;
                 return;
             }
@@ -379,7 +379,7 @@ pub(crate) async fn handle_update(
     // `.expect()` would panic the whole connection task on the off chance it
     // isn't. Log and abort just this update instead: the seq is already assigned,
     // so a reconnecting client refetches it from the durable index.
-    let update_wire = match postcard::to_allocvec(&update) {
+    let update_wire = match Payload::seal(&update) {
         Ok(wire) => wire,
         Err(e) => {
             tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
@@ -457,7 +457,7 @@ pub(crate) async fn handle_update(
         }
     }
 
-    let broadcast = encode_server_msg(&WsServerMsg::Update {
+    let broadcast = Payload::server_msg(&WsServerMsg::Update {
         seq: ambre_protocol::messages::Seq(seq),
         update,
     });
@@ -492,7 +492,7 @@ async fn store_index_row(
     update: &ambre_protocol::Update,
     seq: u64,
     s3_key: &str,
-    wire: &[u8],
+    wire: &Payload,
 ) -> Result<bool, AppError> {
     let author = update.public_data.pub_key.as_array();
     let snapshot_id = &update.public_data.snapshot_id;
@@ -537,7 +537,6 @@ pub(crate) async fn handle_ephemeral(
     conn: &mut WsConnectionState,
     eph: ambre_protocol::Ephemeral,
 ) {
-    use base64::Engine;
     let doc_id = eph.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
         return;
@@ -547,7 +546,7 @@ pub(crate) async fn handle_ephemeral(
     // blob is tiny. This mirrors the `handle_update` delta cap for the
     // fire-and-forget path. An oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
-    if eph.ciphertext.0.len() > state.config.ephemeral_max_bytes {
+    if eph.ciphertext.len() > state.config.ephemeral_max_bytes {
         return;
     }
 
@@ -587,17 +586,16 @@ pub(crate) async fn handle_ephemeral(
     }
 
     let pub_key_hex = eph.public_data.pub_key.to_hex();
-    let presence_enc_b64 = base64::engine::general_purpose::URL_SAFE.encode(&eph.ciphertext.0);
     // A refused write is not broadcast either: a document that owes a rotation
     // carries no presence sealed under a key a departed member holds (`SRV-123`).
-    if redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &presence_enc_b64, 15)
+    if redis_ops::doc_presence_update(&state.redis, &doc_id, &pub_key_hex, &eph.ciphertext, 15)
         .await
         .is_err()
     {
         return;
     }
 
-    let broadcast = encode_server_msg(&WsServerMsg::Ephemeral(eph));
+    let broadcast = Payload::server_msg(&WsServerMsg::Ephemeral(eph));
     let _ = redis_ops::doc_broadcast(&state.redis, &doc_id, &broadcast).await;
 }
 
@@ -606,7 +604,7 @@ pub(crate) async fn handle_request_missing(
     conn: &mut WsConnectionState,
     document_id: DocumentId,
     after_seq: ambre_protocol::messages::Seq,
-    outbound_tx: &mpsc::Sender<Vec<u8>>,
+    outbound_tx: &mpsc::Sender<Payload>,
 ) {
     if !conn.doc_subscriptions.contains(&document_id) {
         return;
@@ -660,7 +658,7 @@ pub(crate) async fn handle_request_missing(
                 // already sent stand, and a retryable refusal names where the
                 // replay stopped, so the client asks again from there.
                 tracing::error!(error = %e, "failed to get updates after seq");
-                let msg = encode_server_msg(&WsServerMsg::Error {
+                let msg = Payload::server_msg(&WsServerMsg::Error {
                     code: 503,
                     message: format!("replay incomplete after delta {cursor}, retry later"),
                 });
@@ -677,7 +675,7 @@ pub(crate) async fn handle_request_missing(
             // silence here leaves its loading overlay spinning forever. Send
             // an empty page to release it.
             if first_page {
-                let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
+                let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
                     document_id,
                     updates: Vec::new(),
                 });
@@ -732,7 +730,7 @@ pub(crate) async fn handle_request_missing(
                     );
                     return (seq, None);
                 };
-                match postcard::from_bytes::<ambre_protocol::Update>(&wire) {
+                match wire.open::<ambre_protocol::Update>() {
                     Ok(update) => (
                         seq,
                         Some(ambre_protocol::SeqUpdate {
@@ -751,7 +749,7 @@ pub(crate) async fn handle_request_missing(
         let fetched = futures_util::future::join_all(fetches).await;
         let (seq_updates, unreadable) = contiguous_prefix(fetched);
 
-        let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
+        let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
             document_id,
             updates: seq_updates,
         });
@@ -759,7 +757,7 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         if let Some(seq) = unreadable {
-            let msg = encode_server_msg(&WsServerMsg::Error {
+            let msg = Payload::server_msg(&WsServerMsg::Error {
                 code: 503,
                 message: format!("replay incomplete: delta {seq} could not be read, retry later"),
             });
@@ -788,12 +786,12 @@ pub(crate) async fn handle_subscribe_channel(
     _state: &Arc<AppState>,
     conn: &mut WsConnectionState,
     channel_id: ChannelId,
-    outbound_tx: &mpsc::Sender<Vec<u8>>,
+    outbound_tx: &mpsc::Sender<Payload>,
 ) {
     // TODO(murmure): enforce the channel_members subscription ACL here, mirroring
     // `handle_subscribe`/`verify_document_access`. `SRV-047`.
     conn.channel_subscriptions.insert(channel_id);
-    let ack = encode_server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
+    let ack = Payload::server_msg(&WsServerMsg::ChannelSubscribed { channel_id });
     let _ = outbound_tx.send(ack).await;
 }
 
@@ -806,7 +804,7 @@ pub(crate) async fn handle_channel_update(
     // and the `verify_clock_and_assign_seq` path exactly like `handle_update`, and
     // persist the delta. Rebroadcasting unsigned, unsequenced updates is only safe
     // while no channel is wired to real data. `SRV-048`.
-    let broadcast = encode_server_msg(&WsServerMsg::ChannelUpdate {
+    let broadcast = Payload::server_msg(&WsServerMsg::ChannelUpdate {
         channel_id,
         seq: ambre_protocol::messages::Seq(0),
         update,
@@ -821,7 +819,7 @@ pub(crate) async fn handle_channel_ephemeral(
 ) {
     // TODO(murmure): signature-check the ephemeral (typing/presence carries the
     // anti-replay counter) once channel ACLs exist. `SRV-048`.
-    let broadcast = encode_server_msg(&WsServerMsg::ChannelEphemeral {
+    let broadcast = Payload::server_msg(&WsServerMsg::ChannelEphemeral {
         channel_id,
         ephemeral,
     });
@@ -889,102 +887,6 @@ pub(crate) async fn verify_document_access(
         .await?
         .ok_or(AppError::Forbidden)?;
     Ok(m.role)
-}
-
-/// Appends `len(field) as u32 LE || field` to `msg`.
-///
-/// MUST match `ambre_crypto::signature::push_framed` byte-for-byte: the client
-/// signs with that framing and the server (which does not link `ambre-crypto`)
-/// reconstructs it here to verify.
-#[expect(
-    clippy::expect_used,
-    reason = "a field past 4 GiB never reaches a signature, and a wrapped length would forge the transcript"
-)]
-fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
-    let len = u32::try_from(field.len()).expect("signed field exceeds u32::MAX");
-    msg.extend_from_slice(&len.to_le_bytes());
-    msg.extend_from_slice(field);
-}
-
-/// Verifies an Ed25519 signature over the length-prefixed transcript
-/// `len(nonce)||nonce || len(ciphertext)||ciphertext ||
-/// len(public_data_bytes)||public_data_bytes || len(commitment_tag)||commitment_tag`
-/// (every `len` a `u32` LE). The framing MUST match
-/// `ambre_crypto::signature::message`; positional (unframed) concatenation would
-/// let a distinct `(ciphertext, aad)` split forge the same transcript.
-///
-/// This is the ONLY cryptographic operation performed by the Blind Relay.
-/// The server never decrypts content -- it only checks that the sender
-/// owns the private key matching the public key in the message.
-pub(crate) fn verify_update_signature(
-    pubkey: &ambre_core::PublicKey,
-    update: &ambre_protocol::Update,
-) -> Result<(), AppError> {
-    let public_data_bytes = postcard::to_allocvec(&update.public_data).map_err(AppError::Decode)?;
-    verify_sealed_signature(
-        pubkey,
-        &update.nonce.0,
-        &update.ciphertext.0,
-        &public_data_bytes,
-        &update.commitment_tag.0,
-        &update.signature.0,
-    )
-}
-
-/// Verifies the Ed25519 signature over an [`ambre_protocol::Ephemeral`] envelope.
-///
-/// Presence/cursor blobs are relayed and written to the Redis presence hash. The
-/// durable `Update` path is signature-checked. Without the same check here the
-/// relay would broadcast an unauthenticated ciphertext under an author key. Every
-/// recipient's client would then reject it on open, a presence-display DoS. The
-/// transcript matches `verify_update_signature` byte-for-byte, with the `aad`
-/// being the postcard of the EPHEMERAL public data.
-pub(crate) fn verify_ephemeral_signature(
-    pubkey: &ambre_core::PublicKey,
-    ephemeral: &ambre_protocol::Ephemeral,
-) -> Result<(), AppError> {
-    let public_data_bytes =
-        postcard::to_allocvec(&ephemeral.public_data).map_err(AppError::Decode)?;
-    verify_sealed_signature(
-        pubkey,
-        &ephemeral.nonce.0,
-        &ephemeral.ciphertext.0,
-        &public_data_bytes,
-        &ephemeral.commitment_tag.0,
-        &ephemeral.signature.0,
-    )
-}
-
-/// Shared Ed25519 verification over the length-prefixed sealed-envelope transcript
-/// `len(nonce)||nonce || len(ciphertext)||ciphertext || len(public_data)||public_data
-/// || len(commitment_tag)||commitment_tag` (every `len` a `u32` LE), matching
-/// `ambre_crypto::signature::message`. Factored out so the `Update` and
-/// `Ephemeral` paths cannot drift apart.
-fn verify_sealed_signature(
-    pubkey: &ambre_core::PublicKey,
-    nonce: &[u8],
-    ciphertext: &[u8],
-    public_data_bytes: &[u8],
-    commitment_tag: &[u8],
-    signature: &[u8; 64],
-) -> Result<(), AppError> {
-    use ed25519_dalek::{Signature as DalekSig, VerifyingKey};
-
-    let mut signed_data = Vec::new();
-    push_framed(&mut signed_data, nonce);
-    push_framed(&mut signed_data, ciphertext);
-    push_framed(&mut signed_data, public_data_bytes);
-    push_framed(&mut signed_data, commitment_tag);
-
-    let vk = VerifyingKey::from_bytes(pubkey.as_array()).map_err(|_| AppError::InvalidSignature)?;
-    let sig = DalekSig::from_slice(signature).map_err(|_| AppError::InvalidSignature)?;
-
-    // Strict verification (canonical S, no small-order A) so a relayed signature
-    // cannot be malleated into a second valid signature over the same envelope.
-    vk.verify_strict(&signed_data, &sig)
-        .map_err(|_| AppError::InvalidSignature)?;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -1469,7 +1371,8 @@ mod ephemeral_binding_tests {
                 .await
                 .unwrap();
         }
-        redis_ops::doc_presence_update(&state.redis, &doc_id, &key_hex, "blob", 15)
+        let blob = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
+        redis_ops::doc_presence_update(&state.redis, &doc_id, &key_hex, &blob, 15)
             .await
             .unwrap();
 
@@ -1486,7 +1389,7 @@ mod ephemeral_binding_tests {
             .await
             .unwrap()
             .unwrap();
-        let msg = ambre_protocol::ws::decode_server_msg(&frame).unwrap();
+        let msg = ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).unwrap();
         assert!(matches!(msg, WsServerMsg::PeerLeft { pub_key, .. } if pub_key == key));
         let more = tokio::time::timeout(Duration::from_millis(300), rx.recv()).await;
         assert!(more.is_err(), "the first close announced nothing");
@@ -1582,7 +1485,7 @@ mod delta_size_cap_tests {
         let _ = state.redis.del([&pending_key]).await;
 
         let mut conn = conn_with(session_key.clone(), doc_id);
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         // 9 bytes > the 8-byte cap: rejected before any durable write.
         handle_update(&state, &mut conn, update_with(session_key, doc_id, 9), &tx).await;
@@ -1594,7 +1497,7 @@ mod delta_size_cap_tests {
         );
         // The client is told why (413), so it can move the blob to the media path.
         let reply = rx.try_recv().expect("a 413 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
             ambre_protocol::ws::WsServerMsg::Error { code: 413, .. }
@@ -1624,7 +1527,7 @@ mod delta_size_cap_tests {
         // false, exactly as `handle_subscribe` would set it for a `viewer`.
         let mut conn = conn_with(session_key.clone(), doc_id);
         conn.doc_write_allowed.insert(doc_id, false);
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_update(&state, &mut conn, update_with(session_key, doc_id, 16), &tx).await;
 
@@ -1634,7 +1537,7 @@ mod delta_size_cap_tests {
             "a viewer's delta must not be pushed to the pending list"
         );
         let reply = rx.try_recv().expect("a 403 error reply must be sent");
-        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
             ambre_protocol::ws::WsServerMsg::Error { code: 403, .. }
@@ -1676,7 +1579,7 @@ mod delta_size_cap_tests {
         // A fresh doc_id with no rows in the durable index: the very first page
         // of the replay is empty.
         let mut conn = conn_with(session_key, doc_id);
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_request_missing(
             &state,
@@ -1690,7 +1593,7 @@ mod delta_size_cap_tests {
         let reply = rx
             .try_recv()
             .expect("an empty replay must still send a MissingUpdates to release the client");
-        let decoded = ambre_protocol::ws::decode_server_msg(&reply).unwrap();
+        let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         match decoded {
             ambre_protocol::ws::WsServerMsg::MissingUpdates { updates, .. } => {
                 assert!(updates.is_empty(), "no deltas to replay for a fresh doc");
@@ -1770,9 +1673,9 @@ mod access_tests {
         }
     }
 
-    fn replies(rx: &mut mpsc::Receiver<Vec<u8>>) -> Vec<WsServerMsg> {
+    fn replies(rx: &mut mpsc::Receiver<Payload>) -> Vec<WsServerMsg> {
         std::iter::from_fn(|| rx.try_recv().ok())
-            .map(|wire| decode_server_msg(&wire).unwrap())
+            .map(|wire| decode_server_msg(wire.expose_bytes()).unwrap())
             .collect()
     }
 
@@ -1801,7 +1704,7 @@ mod access_tests {
         let key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let mut conn = conn_of(editor, key.clone(), doc_id, Duration::ZERO);
         conn.doc_subscriptions.clear();
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
         assert!(matches!(
@@ -1849,7 +1752,7 @@ mod access_tests {
         db::remove_document_member(&pool, &doc_id, &editor, None)
             .await
             .unwrap();
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         let mut conn = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
@@ -1882,7 +1785,7 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = PublicKey::from_array([33u8; 32]);
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         let mut kept = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_request_missing(
@@ -2412,9 +2315,11 @@ mod hot_tail_tests {
         doc_id: DocumentId,
     ) -> Vec<Vec<u8>> {
         conn.last_replay_at.clear();
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, mut rx) = mpsc::channel::<Payload>(8);
         handle_request_missing(state, conn, doc_id, ambre_protocol::messages::Seq(0), &tx).await;
-        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|frame| frame.expose_bytes().to_vec())
+            .collect()
     }
 
     /// `SRV-148`, `SRV-149`: a small delta is stored in its index row and takes
@@ -2429,7 +2334,7 @@ mod hot_tail_tests {
         let stub = S3Stub::spawn([]).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[41u8; 32]);
         let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, _rx) = mpsc::channel::<Payload>(8);
         let pending_key = format!("doc:{doc_id}:pending");
 
         handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
@@ -2481,8 +2386,8 @@ mod hot_tail_tests {
             msg_bucket: TokenBucket::new(1000, 1000),
             clock_fences: ClockFences::default(),
         };
-        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
-        let (second_tx, mut second_rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, _rx) = mpsc::channel::<Payload>(8);
+        let (second_tx, mut second_rx) = mpsc::channel::<Payload>(8);
         let stored = |state: Arc<AppState>| async move {
             db::get_updates_after(&state.db, &doc_id, 0, 10)
                 .await
@@ -2495,7 +2400,8 @@ mod hot_tail_tests {
         let lost_signature = lost.signature;
         handle_update(&state, &mut second, lost, &second_tx).await;
         let refusal =
-            ambre_protocol::ws::decode_server_msg(&second_rx.try_recv().unwrap()).unwrap();
+            ambre_protocol::ws::decode_server_msg(second_rx.try_recv().unwrap().expose_bytes())
+                .unwrap();
         let WsServerMsg::ClockRefused {
             clock,
             expected,
@@ -2535,7 +2441,7 @@ mod hot_tail_tests {
         let stub = S3Stub::spawn([]).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[42u8; 32]);
         let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
-        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
+        let (tx, _rx) = mpsc::channel::<Payload>(8);
         for clock in 1..=6 {
             handle_update(
                 &state,
