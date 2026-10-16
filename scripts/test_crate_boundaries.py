@@ -107,6 +107,7 @@ class CrateBoundaries(unittest.TestCase):
             errors: list[str] = []
             cb.check_client(errors)
             cb.check_generators(errors)
+            cb.check_generator_reads(errors)
             cb.check_chrome(errors)
             cb.check_launcher(errors)
             cb.check_density(errors)
@@ -407,6 +408,41 @@ class CrateBoundaries(unittest.TestCase):
             root = scratch(tmp)
             errors = self.run_checks(root)
         self.assertEqual([e for e in errors if "reaches the CRDT" in e], [])
+
+    def test_a_generator_reading_a_file_is_refused(self):
+        for line in (
+            'let b = include_bytes!("board.ambre");',
+            'let t = std::fs::read_to_string(p);',
+            "let f = File::open(p);",
+            'let s = std::env::var("SEED");',
+        ):
+            errors = self.breach(cb.FIXTURE_MODULES[0], f"fn build_a(s: &mut S) {{\n    {line}\n}}\n")
+            self.assertTrue(any("reads besides its seed" in e for e in errors), (line, errors))
+
+    def test_a_generator_module_no_list_names_is_read(self):
+        """A new application's generator is found by its file name, not by a list."""
+        errors = self.breach("crates/ambre-murmure/src/fixtures.rs", 'const B: &[u8] = include_bytes!("x");\n')
+        self.assertTrue(any("ambre-murmure" in e and "reads besides its seed" in e for e in errors), errors)
+
+    def test_the_driver_and_a_test_module_may_read_files(self):
+        errors = self.breach(cb.FIXTURE_DRIVER, "fn load(p: &Path) { std::fs::read(p); }\n")
+        self.assertEqual([e for e in errors if "reads besides its seed" in e], [])
+        errors = self.breach(
+            cb.FIXTURE_MODULES[0],
+            "fn build_a(s: &mut S) {\n    s.handle_command(C);\n}\n\n#[cfg(test)]\nmod tests {\n"
+            "    fn t() { std::fs::read(p); }\n}\n",
+        )
+        self.assertEqual([e for e in errors if "reads besides its seed" in e], [])
+
+    def test_a_tree_with_no_generator_is_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            for rel in cb.FIXTURE_MODULES:
+                (root / rel).unlink()
+            errors = self.run_checks(root)
+        self.assertTrue(any("no generator module found" in e for e in errors), errors)
 
     def test_a_chrome_that_depends_on_an_app_crate_is_refused(self):
         import tempfile

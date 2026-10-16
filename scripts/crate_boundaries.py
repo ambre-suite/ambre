@@ -18,6 +18,12 @@ and lives in `impl` blocks (`fixture_shape`, `canonical_dump`); the generating
 side is the free functions. No free function of a fixture module may name a
 CRDT container.
 
+**A generator reads only its seed** (`FIXTURE-032`). A real document and a
+generated one are both Loro bytes. A generator that reads no file and nothing
+of the host builds from the seed alone, so what it rebuilds came from no user.
+No line of a generator module may read a file, embed one, or read the host's
+environment.
+
 **A shared control emits one field** (`SCHEMA-002`). `ambre-chrome` depends on
 no application crate, so a shared control has no whole-style type to emit and
 can only report the scalar it edits. That holds as long as the manifest says
@@ -132,6 +138,16 @@ FIXTURE_MODULES = [
 # Naming any of these reaches a CRDT container rather than a command.
 CRDT_CALLS = re.compile(
     r"\bLoroDoc\b|\.doc\b|\bget_map\(|\bget_list\(|\bget_movable_list\(|\bget_text\(|\bget_tree\("
+)
+
+# The corpus driver reads and writes the corpus by design, so it is the one
+# `fixtures.rs` that holds no generator.
+FIXTURE_DRIVER = "crates/ambre-logic/src/fixtures.rs"
+
+# Naming any of these reads something besides the seed: a file, or the host.
+FILE_READS = re.compile(
+    r"\bstd::fs\b|\bfs::|\bFile::|\bOpenOptions\b|\binclude_bytes!|\binclude_str!"
+    r"|\bread_to_string\b|\bstd::env\b|\benv::var"
 )
 
 # The shared chrome toolkit, and the crates a whole-style type could come from.
@@ -474,6 +490,47 @@ def check_generators(errors: list[str]) -> int:
                 errors.append(f"{rel}:{line}: a generator reaches the CRDT: `{found.group(0)}`")
             held += 1
     return held
+
+
+def generator_modules(paths: list[str]) -> list[str]:
+    """The paths that hold a generator: each `fixtures.rs` of a crate's source,
+    the driver aside. Read off the tree rather than listed, so a generator a new
+    application adds is read without anyone naming it here."""
+    return sorted(
+        p
+        for p in paths
+        if p.startswith("crates/") and "/src/" in p and p.endswith("/fixtures.rs") and p != FIXTURE_DRIVER
+    )
+
+
+def file_reads(source: str) -> list[tuple[int, str]]:
+    """Each line of a generator module that reads besides its seed, with what it
+    names. The test module is not read: it builds no artifact."""
+    found = []
+    for number, line in enumerate(source.splitlines(), 1):
+        if line.strip() == "#[cfg(test)]":
+            break
+        hit = FILE_READS.search(code(line))
+        if hit:
+            found.append((number, hit.group(0)))
+    return found
+
+
+def check_generator_reads(errors: list[str]) -> int:
+    """`FIXTURE-032`: a generator reads no file and nothing of the host.
+
+    Its output is then a function of the seed alone, so an artifact it rebuilds
+    came from no user's document.
+    """
+    paths = [p.relative_to(ROOT).as_posix() for p in (ROOT / CRATES).rglob("fixtures.rs")]
+    modules = generator_modules(paths)
+    if not modules:
+        errors.append(f"{CRATES}: no generator module found, so no generator read is checked")
+        return 0
+    for rel in modules:
+        for line, token in file_reads(read(rel)):
+            errors.append(f"{rel}:{line}: a generator reads besides its seed: `{token}`")
+    return len(modules)
 
 
 def check_chrome(errors: list[str]) -> int:
@@ -1197,6 +1254,7 @@ def main() -> int:
     errors: list[str] = []
     manifests = check_client(errors)
     generators = check_generators(errors)
+    generator_reads = check_generator_reads(errors)
     toolkits = check_chrome(errors)
     launcher = check_launcher(errors)
     density = check_density(errors)
@@ -1227,6 +1285,7 @@ def main() -> int:
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
+        f"{generator_reads} generator modules read for a file read, "
         f"{toolkits} shared toolkit read for an application dependency, "
         f"{launcher} launcher files read for application logic, "
         f"{density} Rust files read for a density read, "

@@ -32,7 +32,11 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+      # The whole history: the base branch for `schema-freeze`, and each freeze
+      # commit for `freeze-provenance`.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
@@ -72,12 +76,12 @@ jobs:
       - run: just inventory
       # A frozen shape section is the record of what one `SCHEMA_VERSION`
       # wrote, so it never moves. The check compares the shape files against
-      # the default branch, which a depth-1 checkout does not carry: two
-      # commits are fetched, because a push of `main` itself is read against
-      # its parent.
-      - name: Fetch the base branch
-        run: git fetch --depth=2 origin main:refs/remotes/origin/main
+      # the default branch; a push of `main` itself is read against its
+      # parent. The checkout fetches the whole history (`fetch-depth: 0`).
       - run: just schema-freeze
+      # A frozen artifact is checked at the commit that froze it, which the
+      # whole history carries. Only the artifacts `main` lacks are rebuilt.
+      - run: just freeze-provenance
       # What each crate can reach: fixture machinery out of the client build,
       # a generator driving commands, a shared control with no whole-style
       # type to emit, and a launcher naming no application's logic.

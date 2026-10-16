@@ -327,10 +327,21 @@ prose:
 schema-freeze:
     python3 scripts/schema_freeze.py --check
 
+# A frozen artifact outlives its generator, so the tree of a later commit cannot
+# show where it came from. Its freeze commit can: the freeze must sit in the bump
+# commit (`DOCFILE-008`), its bytes must be the outgoing writer's run from a seed
+# (`FIXTURE-005`), and that writer must read no file (`FIXTURE-032`). A rerun
+# builds the generator at an old commit, so only the artifacts the base lacks are
+# read. Pass `--all` to read every one, and `--base` to name another revision.
+
+# each new frozen artifact traced to its seed at the commit that froze it.
+freeze-provenance:
+    python3 scripts/freeze_provenance.py --check
+
 # Three reachability rules a manifest line could erase: fixture machinery out
 # of the client build (`FIXTURE-007`), a generator driving commands rather than
-# the CRDT (`FIXTURE-004`), and a shared control with no whole-style type to
-# emit (`SCHEMA-002`).
+# the CRDT (`FIXTURE-004`) and reading no file (`FIXTURE-032`), and a shared
+# control with no whole-style type to emit (`SCHEMA-002`).
 crate-boundaries:
     python3 scripts/crate_boundaries.py --check
 
