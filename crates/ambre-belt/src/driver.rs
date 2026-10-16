@@ -68,6 +68,7 @@ impl Browser {
                 "--window-size=1280,800",
                 "--enable-unsafe-swiftshader",
                 "--use-angle=swiftshader",
+                "--disable-features=BackForwardCache",
             ],
             "prefs": {
                 "download.default_directory": downloads.display().to_string(),

@@ -39,7 +39,7 @@ frame later. What a cut deletes, and when, is each application's own policy.
 |---|---|---|---|---|---|---|
 | `UI-THREAD-010` | `POST` | A copy MUST be built by the Logic thread from the whole document, never culled to what the viewport holds. | this spec section 2 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- Trame's half. `ambre_toile::ui::view::view_tests::a_copy_names_the_whole_selection_and_sends_nothing_else` -- Toile's half, an id past the viewport included | none | verified |
 | `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | `ambre_app::host::pipe::tests::a_deferred_copy_writes_the_token_alone_and_prevents_the_default` -- a raised `copy` event ends prevented, with no `text/plain` written | none | verified |
-| `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | none | unheld -- the window is a browser property, so nothing on host can read it. Throwaway Chromium 141 and Firefox 156 runs saw a write from the next frame land. A headless Chromium grants activation to a trusted key press and refuses a write a timer makes, but no browser test drives a copy that way; lands with the `The clipboard write inside the activation window` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | `ambre_belt::trame::tests::a_deferred_copy_writes_inside_the_activation_window` -- a trusted `Ctrl+C` copies a range, the page reads the activation where it calls the write, and the clipboard then holds the private type and the token; `::a_copy_held_past_the_activation_window_writes_outside_it` -- the control: the Logic thread held past the window, the same reading says the window lapsed | none | verified |
 | `UI-THREAD-023` | `POST` | Where the browser accepts the `web ` types, the asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | `ambre_app::host::tests::the_asynchronous_item_carries_everything_the_copy_published` -- the item, read back, holds the mirror, the prefixed private type and the ownership token | none | verified |
 | `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | Trame `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it asserts the outcome carries no delta; Prose `ambre_prose::input_tests::a_copy_leaves_the_document_unchanged` -- the text reads back unchanged; Toile `ambre_toile::ui::view::view_tests::a_copy_names_the_whole_selection_and_sends_nothing_else` -- the copy request goes alone, and the Logic thread answers it for display only | none | verified |
 | `UI-THREAD-045` | `FAIL` | A cut whose copy fails MUST delete nothing. | this spec section 2, cut is each application's own policy | `ambre_toile::ui::view::view_tests::a_cut_whose_copy_went_nowhere_deletes_nothing`; `ambre_trame::ui::view::view_tests::a_cut_whose_copy_went_nowhere_arms_nothing`; `ambre_prose::input_tests::a_refused_copy_deletes_nothing` -- each drives a copy the channel refuses, and no delete follows | none | verified |
@@ -65,10 +65,9 @@ Four rungs of fidelity, in one order. The first that can answer does.
   outside the sealed path of `ambre-spec-zero-knowledge.md` and it is the only outbound
   surface the UI thread has besides the font fetch (`UI-THREAD-004`). Nothing here reaches the
   relay, holds a key or opens a socket.
-* **Verification.** 17 `verified`, 1 `untested`, 1 `unimplemented`. The wasm tier raises real
-  clipboard events and reads the written item back; the host tier drives each view's ladder. The
-  loose row is the activation window, which no test drives yet. The unbuilt one is rung 2 without
-  the `web ` types.
+* **Verification.** 18 `verified`, 1 `unimplemented`. The wasm tier raises real clipboard events
+  and reads the written item back; the host tier drives each view's ladder. The browser tier
+  holds the activation window. The unbuilt row is rung 2 without the `web ` types.
 ---
 
 ## 2. MODEL
