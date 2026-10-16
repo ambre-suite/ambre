@@ -55,10 +55,9 @@ class Vocabulary(unittest.TestCase):
 
     def test_loose_covers_every_built_status_but_verified(self):
         """The summary sums over `LOOSE`, so a status missing from it is a
-        silent under-count -- which is precisely what `unverified` was.
-        `partial` is counted on its own: a mechanism holds part of it."""
+        silent under-count -- which is precisely what `unverified` was."""
         self.assertEqual(
-            set(template_vocabulary.STATUSES) - {"verified", "partial", "unimplemented"},
+            set(template_vocabulary.STATUSES) - {"verified", "unimplemented"},
             set(contracts.LOOSE),
         )
 
@@ -193,9 +192,23 @@ class PerApplication(unittest.TestCase):
     def test_a_label_needs_the_header_field(self):
         self.assertIn("declares no", self.defects(self.TRAME, apps=None)[0])
 
-    def test_a_label_the_field_leaves_out_is_refused(self):
+    def test_a_label_the_row_does_not_bind_is_refused(self):
         found = self.defects(f"{self.TRAME}; {self.TOILE}", apps=["Trame"])
-        self.assertIn("does not declare", found[0])
+        self.assertIn("does not bind", found[0])
+
+    def test_a_statement_opening_on_applications_binds_those_alone(self):
+        bound, stray = contracts.scoped_applications(WHERE, "In Prose and Trame, it MUST x.", self.APPS)
+        self.assertEqual((["Prose", "Trame"], []), (bound, stray))
+        self.assertEqual([], self.defects(f"{self.TRAME}; {self.PROSE}", apps=bound))
+        bound, _ = contracts.scoped_applications(WHERE, "In Prose, Trame and Toile, it MUST x.", self.APPS)
+        self.assertEqual(self.APPS, bound)
+
+    def test_a_statement_with_no_opening_binds_the_field(self):
+        self.assertEqual((self.APPS, []), contracts.scoped_applications(WHERE, "It MUST x.", self.APPS))
+
+    def test_an_opening_the_field_does_not_declare_is_refused(self):
+        _, stray = contracts.scoped_applications(WHERE, "In Murmure, it MUST x.", self.APPS)
+        self.assertIn("does not declare", stray[0])
 
     def test_the_header_field_is_read_and_checked(self):
         self.assertEqual(
@@ -254,47 +267,67 @@ class Mechanism(unittest.TestCase):
 class Gap(unittest.TestCase):
     """What the mechanism leaves open, and the two rules across the columns."""
 
-    def defects(self, cell, mechanism="`insta`", status="untested"):
+    def defects(self, cell, mechanism="`insta`", status="verified"):
         return contracts.gap_defects(WHERE, cell, mechanism, status)
 
     def test_an_opener_off_the_closed_set_is_refused(self):
         self.assertIn("`Gap` opens on", self.defects("nothing holds it yet")[0])
 
     def test_every_declared_opener_is_accepted(self):
-        for opener in contracts.BARE_GAP_OPENERS:
-            with self.subTest(opener=opener):
-                self.assertEqual([], self.defects(opener))
+        self.assertEqual([], self.defects("none"))
         for opener in contracts.CARRIED_GAP_OPENERS:
-            status = "partial" if opener == "partial -- " else "untested"
             with self.subTest(opener=opener):
                 self.assertEqual(
-                    [], self.defects(f"{opener}the belt is not written", status=status)
+                    [],
+                    self.defects(
+                        f"{opener}the belt is not written", mechanism="none", status="untested"
+                    ),
                 )
 
-    def test_a_rule_half_held_is_partial_never_untested(self):
-        """`untested` beside a half-held rule reads as a row nothing tests, and
-        the ledger could not tell the two apart."""
-        self.assertIn("is `partial`", self.defects("partial -- the wiring is loose")[0])
-        self.assertEqual([], self.defects("partial -- the wiring is loose", status="partial"))
+    def test_the_half_opener_is_gone(self):
+        self.assertNotIn("partial -- ", contracts.CARRIED_GAP_OPENERS)
+        self.assertNotIn("partial", template_vocabulary.STATUSES)
 
-    def test_partial_names_its_mechanism_and_the_half_left(self):
-        self.assertIn(
-            "names the mechanism",
-            self.defects("partial -- half", mechanism="none", status="partial")[0],
+    def test_a_row_held_in_part_is_refused(self):
+        """A mechanism beside any status but `verified` is a rule held in part,
+        and a rule held in part is two rows."""
+        for status in ("untested", "failing", "unimplemented", "human-review", "qa-manual"):
+            with self.subTest(status=status):
+                found = self.defects("unheld -- the wiring", status=status)
+                self.assertIn("only a `verified` row names a mechanism", found[0])
+
+    def test_each_status_writes_its_own_token_alone(self):
+        self.assertEqual([], self.defects("unheld -- x", mechanism="none", status="untested"))
+        self.assertEqual(
+            [], self.defects("unbuilt -- lands with the x", mechanism="not built", status="unimplemented")
         )
-        self.assertIn(
-            "names the mechanism", self.defects("unheld -- nothing", status="partial")[0]
+        self.assertEqual(
+            [],
+            self.defects(
+                "unheld -- `intent` -- x", mechanism="human-review -- reads it", status="human-review"
+            ),
         )
+        found = self.defects(
+            "unheld -- `intent` -- x",
+            mechanism="ci-gate -- a scan; human-review -- the rest",
+            status="human-review",
+        )
+        self.assertIn("two rows", found[0])
+
+    def test_verified_beside_a_reviewer_is_refused(self):
+        found = self.defects("none", mechanism="`a::t`; human-review -- the rest")
+        self.assertIn("a row of its own", found[0])
 
     def test_no_mechanism_and_no_gap_is_a_coverage_the_row_does_not_have(self):
-        self.assertIn("claims a coverage", self.defects("none", mechanism="none")[0])
+        found = self.defects("none", mechanism="none", status="untested")
+        self.assertIn("claims a coverage", found[0])
 
     def test_verified_beside_an_open_gap_is_two_answers_to_one_question(self):
-        found = self.defects("partial -- the belt holds half", status="verified")
+        found = self.defects("unheld -- the belt holds half")
         self.assertIn("two answers", found[0])
 
     def test_verified_beside_a_closed_gap_passes(self):
-        self.assertEqual([], self.defects("none", status="verified"))
+        self.assertEqual([], self.defects("none"))
 
 
 class Stories(unittest.TestCase):
@@ -373,6 +406,10 @@ class Milestones(unittest.TestCase):
         self.assertEqual([], self.defects("failing", self.V1_CELL, current="V1"))
         self.assertIn("MVP story", self.defects("failing", self.MVP_CELL, current="V1")[0])
 
+    def test_an_untested_row_on_a_later_story_is_refused(self):
+        self.assertIn("`untested`", self.defects("untested", self.V1_CELL)[0])
+        self.assertEqual([], self.defects("untested", self.MVP_CELL))
+
     def test_a_later_story_may_carry_what_is_not_built(self):
         self.assertEqual([], self.defects("unimplemented", self.V1_CELL))
 
@@ -422,9 +459,15 @@ class Obstacles(unittest.TestCase):
         _, errors = contracts.read_obstacles(self.TABLE.replace("five", "six"))
         self.assertIn("counts six", errors[0])
 
+    def test_an_empty_table_reads_no_obstacle(self):
+        empty = "**No obstacle.**\n\n| Obstacle | What | Lifted by |\n| :--- | :--- | :--- |\n\nprose"
+        self.assertEqual(({}, []), contracts.read_obstacles(empty))
+        _, errors = contracts.read_obstacles(empty.replace("| :--- | :--- | :--- |", "| :--- | :--- | :--- |\n| `intent` | x | -- |"))
+        self.assertIn("counts no", errors[0])
+
     def test_a_standing_obstacle_passes(self):
         self.assertEqual([], self.defects("human-review", "unheld -- `intent` -- why"))
-        self.assertEqual([], self.defects("human-review", "partial -- `intent` -- the rest"))
+        self.assertNotEqual([], self.defects("human-review", "partial -- `intent` -- the rest"))
 
     def test_a_gap_naming_no_obstacle_is_refused(self):
         self.assertIn("cannot close", self.defects("qa-manual", "none")[0])
@@ -461,11 +504,9 @@ class Obstacles(unittest.TestCase):
         self.assertEqual("intent", contracts.leaned_on("human-review", "unheld -- `intent` -- x"))
         self.assertIsNone(contracts.leaned_on("untested", "unheld -- `intent` -- x"))
 
-    def test_a_row_owing_a_story_keeps_its_reviewer_listed(self):
-        self.assertTrue(contracts.held_by_a_reviewer("human-review", "none"))
-        self.assertTrue(contracts.held_by_a_reviewer("partial", "human-review -- reads it"))
-        self.assertTrue(contracts.held_by_a_reviewer("partial", "`a::t` -- x; human-review -- y"))
-        self.assertFalse(contracts.held_by_a_reviewer("partial", "`a::t` -- a human-review note"))
+    def test_the_review_list_follows_the_status(self):
+        self.assertTrue(contracts.held_by_a_reviewer("human-review"))
+        self.assertFalse(contracts.held_by_a_reviewer("untested"))
 
     def test_the_corpus_declares_the_table(self):
         text = (contracts.SPECS / contracts.TESTING).read_text()
@@ -548,7 +589,7 @@ class Counts(unittest.TestCase):
 
     def test_an_answer_counting_a_status_off_the_six_is_refused(self):
         found = contracts.answer_defects("spec.md", (9, "2 `unverified`."), Counter({"verified": 2}))
-        self.assertIn("no status of the seven", found[0])
+        self.assertIn("no status the template declares", found[0])
 
     def test_a_missing_answer_belongs_to_the_other_gate(self):
         """One rule, one home: `spec_shape.py` holds whether the label exists."""

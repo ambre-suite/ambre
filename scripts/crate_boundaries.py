@@ -69,11 +69,15 @@ tests names a colour constant or builds one from components.
 **No font is embedded in a binary** (`CANVAS-018`). The faces are fetched from
 the page origin. So no Rust line includes the bytes of a font file.
 
-**The relay logs no payload** (`SRV-001`, `ZK-006`). A log line or a span may
+**The relay logs no payload** (`SRV-170`). A log line or a span may
 carry identifiers, lengths and sequence numbers. So no log macro or span of
 `ambre-server` names a value called for a payload, a blob, a body or its
-bytes, unless it reads only the length. A payload under a neutral name is
-left to the reviewer.
+bytes, unless it reads only the length. A payload under a neutral name
+passes the scan, and `SRV-001` stays loose until a type refuses it.
+
+**A fixture benchmark reports no frame rate** (`FIXTURE-024`). A fixture is a
+document, not a screen, so a figure measured on one is the cost of an
+operation. No code line of a benchmark that loads a fixture names a frame rate.
 
 **Two instances, one client per tab** (`ARCH-001`, `ARCH-011`, `SYNC-056`). The
 page loads two artefacts: the launcher, and the Sync worker as a worker of its
@@ -96,7 +100,7 @@ starts the Logic runtime from one line. The frame loop hands the route-free
 relay to `drive_frame` as its first step, and that relay drains the Logic to
 Sync queue.
 
-**One kinetic model** (`KINETIC-001`). Pan, flick, wheel momentum and edge
+**One kinetic model** (`KINETIC-012`). Pan, flick, wheel momentum and edge
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
 one above its tests.
@@ -351,6 +355,9 @@ APP_MESSAGE = re.compile(
 )
 
 # The shared kinetic model, and the words a second copy of it would need.
+BENCH_FIXTURE = re.compile(r"fixture", re.IGNORECASE)
+FRAME_RATE = re.compile(r"(?<![a-z])fps(?![a-z])|frames?[_ ]?per[_ ]?second|frame[_ ]?rate", re.IGNORECASE)
+
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
@@ -706,7 +713,7 @@ def above_tests(path: Path) -> list[tuple[int, str]]:
 
 
 def check_ui_thread(errors: list[str]) -> int:
-    """`UI-THREAD-001`, `-002`, `-020`, `-050`, `-051`: what the UI thread may name.
+    """`UI-THREAD-058`, `-002`, `-020`, `-050`, `-051`: what the UI thread may name.
 
     No CRDT and no engine state, no file conversion, no blocking wait, and no
     canvas or drawing context outside the surface (`TRAME-UI-001`,
@@ -940,7 +947,7 @@ def payload_names(invocation: str) -> list[str]:
 
 
 def check_payload_logs(errors: list[str]) -> int:
-    """`SRV-001`, `ZK-006`: no log line or span of the relay names a payload."""
+    """`SRV-170`: no log line or span of the relay names a payload."""
     files = sources((RELAY,))
     if not files:
         errors.append(f"{RELAY}: gone from the tree, so the relay's log lines are unread")
@@ -1136,7 +1143,7 @@ def check_handlers(errors: list[str]) -> int:
 
 
 def check_kinetic_copy(errors: list[str]) -> int:
-    """`KINETIC-001`: no Rust line outside the shared model names a decay or a velocity."""
+    """`KINETIC-012`: no Rust line outside the shared model names a decay or a velocity."""
     if not KINETIC_TERM.search(read(KINETIC_MODEL)):
         errors.append(f"{KINETIC_MODEL}: names no decay, so the kinetic boundary holds nothing")
         return 0
@@ -1150,6 +1157,22 @@ def check_kinetic_copy(errors: list[str]) -> int:
             if found:
                 errors.append(f"{rel}:{number}: a kinetic model outside `kinetic.rs`: `{found.group(0)}`")
     return len(files)
+
+
+def check_bench_frame_rate(errors: list[str]) -> int:
+    """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
+    held = 0
+    for path in sorted((ROOT / CRATES).glob("*/benches/*.rs")):
+        rel = path.relative_to(ROOT).as_posix()
+        lines = [(n, code(line)) for n, line in enumerate(path.read_text().splitlines(), 1)]
+        if not any(BENCH_FIXTURE.search(line) for _, line in lines):
+            continue
+        held += 1
+        for number, line in lines:
+            found = FRAME_RATE.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a fixture benchmark reports a frame rate: `{found.group(0)}`")
+    return held
 
 
 def main() -> int:
@@ -1179,6 +1202,7 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
     worker_messages = check_worker_messages(errors)
@@ -1208,6 +1232,7 @@ def main() -> int:
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
+        f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
         f"{worker_messages} worker and relay files read for a wire copy, a worker id or an app message, "
@@ -1239,7 +1264,8 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, the page "
+            "relay logs no payload, one file holds the kinetic model, a fixture "
+            "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "
             "wire type, allocates no request id and names no app message. The launcher "

@@ -1217,7 +1217,7 @@ fn find_focus_wraps_after_from() {
     assert_eq!(r.focus, Some(a.clone()));
 }
 
-/// `FIND-010`: an edit took the resume point out of the hits, so it is no
+/// `FIND-015`: an edit took the resume point out of the hits, so it is no
 /// longer usable. The step elects the first hit, not the one after it.
 #[test]
 fn a_resume_point_edited_away_restarts_at_the_first_hit() {

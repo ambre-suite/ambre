@@ -25,7 +25,8 @@ that component's prefix instead.
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
-| `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | ci-gate -- `scripts/crate_boundaries.py` refuses a log macro, a span or an `instrument` field of the relay that names a payload, a length aside; human-review -- the reviewer reads every log line and span a change adds for a payload under a neutral name | partial -- `intent` -- a payload bound to a neutral name reads like any identifier, so the scan cannot see it | human-review |
+| `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | none | unheld -- the name gate (`ambre-spec-server.md`, `SRV-170`) does not see a payload bound to a neutral name, which reads like any identifier; lands with the `The relay payload a type no log can print` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-017` | `INV` | The debug form of a sealed envelope MUST print its ciphertext length and none of its bytes. | `ZK-006`; audit `C1` | `ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it` | none | verified |
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
@@ -41,8 +42,8 @@ that component's prefix instead.
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
-  fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 13 `verified`, 1 `human-review`, 2 `unimplemented`. Every row is an `INV`. This
+  rows on its own side, or answers `none` and says why.
+* **Verification.** 14 `verified`, 1 `untested`, 2 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -54,7 +55,10 @@ that component's prefix instead.
   What is loose is every rule stated as an absence. `ZK-001` covers the nominal path and forbids no
   unsealed send. `ZK-007` is a whitelist with no natural test. `ZK-008` has no test for the refusal
   a non-member must get. `ZK-009` is a constant no vector pins. `ZK-012` holds by the absence of a
-  field nothing guards, and `ZK-006` is a comment plus reviewer attention.
+  field nothing guards, and `ZK-006` rests on a name gate that a neutral name passes.
+
+  The client's envelope prints no byte in a debug log (`ZK-017`); the relay's payloads have no
+  such type yet.
 
   `ZK-013` and `ZK-014` are what the split of two conjunctions exposed. Neither half had a
   mechanism, and the row each sat in read as covered because its other half was.
@@ -205,8 +209,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 * **The passphrase is copied into a transient buffer.** It crosses the bus in a self-wiping type
   (`ZK-010`), and the per-frame relay then postcard-encodes it into an ordinary buffer for
   `postMessage`. That buffer is not wiped, and no type stops it.
-* **The log rule is a comment.** `ZK-006` rests on one comment in `s3.rs` and on reviewer attention.
-  No lint refuses a payload in a span field.
+* **The log rule is a name gate.** `ZK-006` rests on the scan of `ambre-spec-server.md`, `SRV-170`.
+  A payload bound to a neutral name passes it, and no type refuses it a log line.
 * **The membership graph has no whitelist.** `ZK-007` covers the sealed envelopes alone. The member
   row adds a role and an inviter. The relay reads the role and serves the inviter for the unwrap. A
   row must name the membership graph as a separate accepted set.

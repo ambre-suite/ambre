@@ -249,7 +249,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     .filter(|s| !s.is_empty() && !plain);
                 // Same-tab ownership: the synchronous token is here while no
                 // asynchronous write replaced it, or in the HTML a browser
-                // refusing the `web ` types received (`UI-THREAD-056`). A match
+                // refusing the `web ` types received (`UI-THREAD-057`). A match
                 // means paste our own in-memory copy at full fidelity.
                 let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().to_owned();

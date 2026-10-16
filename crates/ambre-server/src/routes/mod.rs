@@ -21,7 +21,7 @@ pub use sync::*;
 /// so a handler and the limiter both see the path with that prefix stripped.
 ///
 /// The two provider routes carry the provider as a path segment, which is what
-/// their handlers extract (`SRV-022`). A static route such as `/auth/dev/login`
+/// their handlers extract (`SRV-172`). A static route such as `/auth/dev/login`
 /// takes priority over the segment.
 pub fn api_router(
     state: std::sync::Arc<crate::state::AppState>,

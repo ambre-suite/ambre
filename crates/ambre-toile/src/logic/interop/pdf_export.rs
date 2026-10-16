@@ -293,7 +293,7 @@ mod tests {
         page
     }
 
-    /// Two peers holding the same faces export one file (`PDF-004`).
+    /// Two peers holding the same faces export one file (`PDF-010`).
     ///
     /// Each run builds its own sealed context, as a second peer would, and
     /// feeds it the shipped faces. A sealed context discovers nothing of the
@@ -418,7 +418,7 @@ mod tests {
     }
 
     /// A page with a shape and a word draws no image. The text is glyphs and
-    /// the shape is a path, both vector (`PDF-006`). A walk that
+    /// the shape is a path, both vector (`PDF-012`). A walk that
     /// rasterized either one would record an image paint here.
     #[test]
     fn a_page_without_a_picture_paints_no_image() {

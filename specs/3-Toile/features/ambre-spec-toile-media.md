@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-050` | `OBS` | A picture whose pixels are resident MUST paint them scaled to its box and rotated with it. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- one image draw at the element box | none | verified |
 | `TOILE-IO-051` | `OBS` | A picture whose pixels are not resident MUST paint a placeholder box, never a hole. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- the fallback fill for the unresolved address in the same walk | none | verified |
 | `TOILE-IO-034` | `OBS` | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | `ambre_toile::logic::state::export::media_request_tests::a_media_request_answers_with_decoded_pixels` -- the Logic half; `ambre_toile::ui::render::tests::only_the_unresolved_pictures_are_asked_for` -- the UI half. The pixels are the thumbnail's, which is every pixel this side holds (`TOILE-IO-035`, `TOILE-IO-100`) | none | verified |
-| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none | unheld -- the thumbnail is what reaches the screen now (`TOILE-IO-034`), and the clause this row adds is held by nothing: no download is ever in flight for a paint to happen *during*, so what a test would separate does not yet exist, section 6; lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6) | untested |
+| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | not built | unbuilt -- lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6): the thumbnail is what reaches the screen now (`TOILE-IO-034`), and no full blob is ever fetched for a paint to wait on, section 6 | unimplemented |
 
 ### 1.2 Bring a picture in
 
@@ -73,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 28 `verified`, 1 `untested`. The upload half holds: the address dedups, and a failed
-  upload takes the import with it. An undo takes the entry back, and no placeholder becomes a key. A
-  decoded picture stays out of the document. Only the thumbnail shown during a download is loose
-  (`TOILE-IO-035`), because nothing downloads yet.
+* **Verification.** 28 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and a
+  failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes a
+  key. A decoded picture stays out of the document. The thumbnail shown during a download is not
+  built (`TOILE-IO-035`), because nothing downloads yet.
 
 ---
 

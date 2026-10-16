@@ -174,7 +174,7 @@ impl ProseState {
     }
 
     /// Replace every match, from the end of the document backwards, in one
-    /// commit and so one undo item (`PROSE-FEAT-036`, `FIND-006`).
+    /// commit and so one undo item (`PROSE-FEAT-036`, `FIND-013`).
     pub(super) fn replace_all(&mut self, replacement: &str) -> ProseOutcome {
         let Some(session) = self.find.as_ref() else {
             return Self::err_no_search();
@@ -447,7 +447,7 @@ mod tests {
     }
 
     /// A fresh search starts at the first hit. A resume point an edit took out
-    /// of the list restarts there too, and nothing is replaced (`FIND-010`).
+    /// of the list restarts there too, and nothing is replaced (`FIND-015`).
     #[test]
     fn a_resume_point_edited_away_restarts_at_the_first_hit() {
         let (mut state, ids) = document(&["needle one", "needle two", "needle three"]);

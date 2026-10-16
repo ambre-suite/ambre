@@ -269,7 +269,7 @@ fn a_search_reads_past_the_requested_window() {
     assert_eq!(find_result(&out), (vec![(0, 0), (900, 60)], Some(1)));
 }
 
-/// `FIND-009`: a replace-all rewrites the matched text and nothing else.
+/// `FIND-014`: a replace-all rewrites the matched text and nothing else.
 /// The text around a match reads back as it was. So does a cell the query
 /// never matched, and a match on a sheet out of scope.
 #[test]

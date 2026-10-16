@@ -110,7 +110,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
   ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 45 `verified`, 0 `partial`, 0 `failing`, 0 `untested`. What holds is the
+* **Verification.** 45 `verified`, 0 `failing`, 0 `untested`. What holds is the
   machinery, the best-covered subject of the application: convergence, playback, follow, the solver
   endpoints, the camera and both panels. The presenter relay and the board locked while it presents
   hold too. What is loose is behaviour no row rules on yet, listed in section 6.

@@ -292,7 +292,7 @@ mod tests {
         assert!(off.is_empty());
     }
 
-    /// `SRV-022`: a sign-in with a configured provider is sent to that
+    /// `SRV-172`: a sign-in with a configured provider is sent to that
     /// provider's authorization endpoint, under the configured client.
     #[tokio::test]
     async fn a_sign_in_is_sent_to_the_configured_provider() {

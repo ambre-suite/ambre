@@ -156,7 +156,7 @@ pub(crate) async fn read_clipboard_blob(
         }
     }
     // A browser that refused the `web ` types left the token in the HTML
-    // (`UI-THREAD-056`).
+    // (`UI-THREAD-057`).
     let token = token.or_else(|| {
         blob.html
             .as_deref()

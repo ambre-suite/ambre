@@ -347,7 +347,7 @@ mod tests {
     }
 
     /// A PDF export writes nothing: the oplog's version vector is the same after
-    /// it, so no delta can leave for a peer (`PDF-002`). The receiver is shared,
+    /// it, so no delta can leave for a peer (`PDF-016`). The receiver is shared,
     /// but the `LoroDoc` mutates through one, so the type does not hold this.
     #[cfg(feature = "pdf")]
     #[test]

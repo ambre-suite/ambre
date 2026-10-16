@@ -12,7 +12,7 @@
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-find.md`,
-`FIND-001` through `FIND-007`: the search writes nothing, wraps, reveals its match, and a replace-all
+`FIND-001` through `FIND-015`: the search writes nothing, wraps, reveals its match, and a replace-all
 is one undo item. Prose's own turn is what a document match is, and how a replace-all stays correct.
 
 ### 1.1 The state

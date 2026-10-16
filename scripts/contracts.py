@@ -9,11 +9,11 @@ reads it.
 
 The rules it enforces, beyond generating the file:
 
-  * a status must be one of the seven declared values;
-  * **a rule half held is `partial`, never `untested`.** The status names a
-    mechanism and a `Gap` opening on `partial -- `, so the ledger tells a row
-    whose wiring is loose from a row nothing tests;
-  * a `partial`, `failing`, `untested` or `unimplemented` row must name the Story that closes
+  * a status must be one of the declared values;
+  * **a row is held whole, or not at all.** Only a `verified` row names a
+    mechanism. A rule held in part is two rows, so no status has to say "half"
+    and the ledger never weighs a row whose loose part has no size;
+  * a `failing`, `untested` or `unimplemented` row must name the Story that closes
     its gap ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved". Reading the
@@ -58,7 +58,7 @@ The rules it enforces, beyond generating the file:
     has its test. One test of the shared crate proved `KINETIC-002` while Toile
     broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
-  * **every gap that can close names its Story.** A `partial`, `failing`, `untested` or
+  * **every gap that can close names its Story.** A `failing`, `untested` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
     resolve to one open row of it. A per-document ceiling on `unverified` sums
     three states nobody can compare: a rule the code breaks today reads as a
@@ -130,7 +130,7 @@ JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that close them
 LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
 # The three that are debt: each owes an open Story of the roadmap.
-OWES_STORY = ("partial", "failing", "untested", "unimplemented")
+OWES_STORY = ("failing", "untested", "unimplemented")
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose", "5-Murmure")
 
 # An id minted once, then withdrawn because the rule it carried left the
@@ -197,35 +197,35 @@ RETIRED = {
     "TRAME-IO-024": "PDF-004",
     "TRAME-UI-022": "CANVAS-028",
     "TRAME-UI-023": "PDF-006",
-    "TOILE-IO-032": "PDF-002",
+    "TOILE-IO-032": "PDF-016",
     "TOILE-IO-033": "PDF-005",
-    "PROSE-IO-015": "PDF-001",
+    "PROSE-IO-015": "PDF-009",
     "PROSE-IO-030": "PDF-005",
     "TRAME-UI-075": "FIND-002",
     "TRAME-UI-076": "FIND-003",
-    "TRAME-UI-081": "FIND-007",
-    "TRAME-UI-082": "FIND-006",
+    "TRAME-UI-081": "FIND-011",
+    "TRAME-UI-082": "FIND-013",
     "TRAME-UI-084": "FIND-001",
     "TOILE-019": "FIND-001",
     "TOILE-078": "FIND-002",
-    "TOILE-081": "FIND-010",
-    "PROSE-FEAT-015": "FIND-006",
+    "TOILE-081": "FIND-015",
+    "PROSE-FEAT-015": "FIND-013",
     "PROSE-FEAT-016": "FIND-001",
     "PROSE-FEAT-037": "FIND-004",
     # Withdrawn to `ambre-spec-find.md`: each restated a rule the shared document
     # states for every application, which is the second reason this register
     # admits.
-    "TRAME-UI-137": "FIND-008",
-    "TOILE-141": "FIND-010",
+    "TRAME-UI-137": "FIND-012",
+    "TOILE-141": "FIND-015",
     "TOILE-146": "FIND-005",
     "TOILE-147": "FIND-003",
     "TOILE-148": "FIND-003",
     "PROSE-FEAT-147": "FIND-001",
     "PROSE-FEAT-149": "UI-THREAD-020",
-    "PROSE-FEAT-154": "FIND-007",
-    "TOILE-IO-005": "PDF-004",
+    "PROSE-FEAT-154": "FIND-011",
+    "TOILE-IO-005": "PDF-010",
     "TRAME-IO-032": "PDF-001",
-    "PROSE-IO-034": "PDF-006",
+    "PROSE-IO-034": "PDF-013",
     "PROSE-IO-036": "CANVAS-028",
     "PROSE-102": "SCHEMA-017",
     "TRAME-224": "SCHEMA-017",
@@ -546,14 +546,34 @@ def declared_applications(line: str) -> tuple[list[str], list[str]] | None:
     return names, [name for name in names if name not in APPLICATION_NAMES]
 
 
+# A statement may open on the applications it binds, `In Toile, ` or `In Prose
+# and Trame, `: a rule one application holds and another does not yet is two
+# rows, one per state.
+SCOPE = re.compile(r"^In (?P<apps>[A-Z][a-z]+(?:(?:, | and )[A-Z][a-z]+)*), ")
+
+
+def scoped_applications(where: str, statement: str, apps: list[str] | None) -> tuple[list[str] | None, list[str]]:
+    """The applications a row binds: its statement's opening, else its document's."""
+    m = SCOPE.match(statement)
+    if not m:
+        return apps, []
+    names = re.split(r", | and ", m["apps"])
+    stray = [name for name in names if apps is None or name not in apps]
+    if stray:
+        return apps, [
+            f"{where}: the statement opens on {', '.join(stray)}, which the "
+            f"`**Applications:**` field does not declare"
+        ]
+    return names, []
+
+
 def per_application_defects(
     where: str, mechanism: str, status: str, apps: list[str] | None
 ) -> list[str]:
     """Whether a row held once per application names a test in each one.
 
     A row with no label is the shared code's own rule, and passes. A labelled
-    row may be `verified` only once every declared application has its test:
-    the ones missing are the half nothing holds.
+    row may be `verified` only once every application it binds has its test.
     """
     labels = set(APPLICATION_LABEL.findall(mechanism))
     if not labels:
@@ -566,18 +586,29 @@ def per_application_defects(
     stray = sorted(labels - set(apps))
     if stray:
         return [
-            f"{where}: the `Mechanism` labels {', '.join(stray)}, which the "
-            f"`**Applications:**` field does not declare"
+            f"{where}: the `Mechanism` labels {', '.join(stray)}, which the row "
+            f"does not bind"
         ]
     missing = [app for app in apps if app not in labels]
     if status == "verified" and missing:
         return [
             f"{where}: `verified` with no test in {', '.join(missing)} -- a rule "
-            f"each application must hold is proven in each, so the row is "
-            f"`partial` until every declared application names its test"
+            f"each application must hold is proven in each. Bind the row to the "
+            f"applications that hold it, and write the others a row of their own"
         ]
     return []
 
+
+# What the `Mechanism` cell of each status other than `verified` reads, alone:
+# a row is held whole or not at all, so only a `verified` row names a mechanism.
+HELD_WHOLE = {
+    "failing": "none",
+    "untested": "none",
+    "unimplemented": "not built",
+    "human-review": "human-review",
+    "qa-manual": "qa-manual",
+}
+UNHELD_TOKENS = ("none", "not built", "human-review", "qa-manual")
 
 # `GAP_OPENERS` is the closed set a `Gap` cell opens on. The template writes the
 # five carrying an argument with the dash and the space that argument follows,
@@ -644,18 +675,19 @@ def gap_defects(where: str, cell: str, mechanism: str, status: str) -> list[str]
             f"{where}: `Mechanism` is {mechanism!r} and `Gap` is {cell!r} -- a row "
             f"with no mechanism and no gap claims a coverage it does not have"
         )
-    held = mechanism.split(";")[0].partition(" -- ")[0].strip() not in BARE_TOKENS
-    half = cell.startswith("partial -- ")
-    if status == "partial" and not (half and held):
+    items = [i.partition(" -- ")[0].strip() for i in mechanism.split(";")]
+    owed = HELD_WHOLE.get(status)
+    if owed is not None and items != [owed]:
         defects.append(
-            f"{where}: status is `partial` -- the row names the mechanism that "
-            f"holds half the rule, and `Gap` opens on 'partial -- ' to say which "
-            f"half is left"
+            f"{where}: `{status}` beside the `Mechanism` {mechanism[:60]!r} -- only "
+            f"a `verified` row names a mechanism, and this status writes `{owed}` "
+            f"alone. A rule held in part is two rows: the half held is `verified`"
         )
-    if status == "untested" and half:
+    if status == "verified" and any(i in UNHELD_TOKENS for i in items):
         defects.append(
-            f"{where}: `untested` beside a `Gap` opening on 'partial -- ' -- a rule "
-            f"half held is `partial`, and one nothing holds opens on 'unheld -- '"
+            f"{where}: `verified` beside {', '.join(i for i in items if i in UNHELD_TOKENS)} "
+            f"-- each item of a `verified` row turns red. A half no mechanism "
+            f"holds is a row of its own"
         )
     if status == "verified" and not bare:
         defects.append(
@@ -800,13 +832,15 @@ def milestone_defects(
     milestones: dict[str, tuple[str, bool]],
     current: str | None,
 ) -> list[str]:
-    """Whether a `failing` row lands with a story of the milestone in progress.
+    """Whether a `failing` or `untested` row lands with a story of the milestone
+    in progress.
 
-    A `failing` row is code that breaks its rule today, so the defect was found
-    in the milestone in progress, and it is fixed there. A later milestone
-    carries only what is not built, and `--` carries no release at all.
+    A `failing` row is code that breaks its rule today, and an `untested` row is
+    shipped code no mechanism holds. Either was found in the milestone in
+    progress, and it is fixed there. A later milestone carries only what is not
+    built, and `--` carries no release at all.
     """
-    if status != "failing" or current is None:
+    if status not in ("failing", "untested") or current is None:
         return []
     cite = cited_story(cell)
     if cite is None:
@@ -816,7 +850,7 @@ def milestone_defects(
     if entry is None or entry[0] == current:
         return []  # an unknown story is `story_defects`' to report
     return [
-        f"{where}: `failing` and lands with {name!r}, a {entry[0]} story -- a "
+        f"{where}: `{status}` and lands with {name!r}, a {entry[0]} story -- a "
         f"defect is fixed in the milestone that finds it, and {current} is in "
         f"progress"
     ]
@@ -828,10 +862,8 @@ def milestone_defects(
 # the Story bringing the mechanism, or `--`.
 CANNOT_CLOSE = ("human-review", "qa-manual")
 TESTING = "1-Foundations/ambre-spec-testing.md"
-OBSTACLES_AT = re.compile(r"\*\*The (?P<count>[a-z]+) obstacles\.\*\*")
-# `partial -- ` when a mechanism holds part of the rule and the obstacle is why
-# the rest stays a reviewer's.
-OBSTACLE_GAP = re.compile(r"^(?:unheld|partial) -- `(?P<name>[a-z][a-z-]*)`(?: -- |$)")
+OBSTACLES_AT = re.compile(r"\*\*(?:The (?P<count>[a-z]+) obstacles?|No obstacle)\.\*\*")
+OBSTACLE_GAP = re.compile(r"^unheld -- `(?P<name>[a-z][a-z-]*)`(?: -- |$)")
 OBSTACLE_ROW = re.compile(r"^\|\s*`(?P<name>[a-z][a-z-]*)`\s*\|")
 
 
@@ -846,7 +878,7 @@ def read_obstacles(text: str) -> tuple[dict[str, str | None], list[str]]:
     at = [i for i, line in enumerate(lines) if OBSTACLES_AT.search(line)]
     if len(at) != 1:
         return {}, [f"{TESTING}: {len(at)} lines carry '**The <n> obstacles.**', want 1"]
-    word = OBSTACLES_AT.search(lines[at[0]])["count"]
+    word = OBSTACLES_AT.search(lines[at[0]])["count"] or "no"
     obstacles: dict[str, str | None] = {}
     started = False
     for line in lines[at[0] + 1 :]:
@@ -861,7 +893,7 @@ def read_obstacles(text: str) -> tuple[dict[str, str | None], list[str]]:
         lifted = line.strip().strip("|").split("|")[-1].strip()
         cite = CITED_STORY.search(lifted)
         obstacles[row["name"]] = cite["name"].strip('`"') if cite else None
-    if NUMBERS.get(word) != len(obstacles):
+    if {"no": 0, "one": 1, **NUMBERS}.get(word) != len(obstacles):
         return obstacles, [
             f"{TESTING}: the obstacles heading counts {word}, its table carries "
             f"{len(obstacles)}"
@@ -903,8 +935,7 @@ def obstacle_defects(
     if not found:
         return [
             f"{where}: `{status}` claims a gap that cannot close -- `Gap` opens on "
-            f"'unheld -- `<obstacle>` -- ', or 'partial -- ' when a mechanism holds "
-            f"part of it, with one obstacle of {TESTING} section 3"
+            f"'unheld -- `<obstacle>` -- ', with one obstacle of {TESTING} section 3"
         ]
     name = found["name"]
     if name not in obstacles:
@@ -916,8 +947,8 @@ def obstacle_defects(
     if story:
         return [
             f"{where}: `{status}` on the obstacle `{name}`, which the {story!r} Story "
-            f"lifts -- the gap can close, so the row is debt: `untested` or "
-            f"`partial`, landing with a Story"
+            f"lifts -- the gap can close, so the row is debt: `untested`, landing "
+            f"with a Story"
         ]
     return []
 
@@ -1341,15 +1372,13 @@ def rewrite_answer(path: Path, lineno: int, counts: Counter) -> bool:
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 REVIEW_OPEN = "<!-- human-review rows: generated by `just contracts-write`, never edit -->"
 REVIEW_CLOSE = "<!-- end of the human-review rows -->"
-# A `human-review` item of the `Mechanism` cell. A row owing a Story keeps the
-# reviewer it leans on until the Story lands, so the list follows the item, not
-# the status: a requalification must not drop a reading from the list.
-REVIEWED_BY = re.compile(r"(?:^|;)\s*human-review -- ")
+# A row is held whole or not at all, so a reviewer never stands beside a
+# mechanism: the list follows the status alone.
 
 
-def held_by_a_reviewer(status: str, held_by: str) -> bool:
-    """Whether a reviewer holds the row, alone or beside a mechanism."""
-    return status == "human-review" or bool(REVIEWED_BY.search(held_by))
+def held_by_a_reviewer(status: str) -> bool:
+    """Whether a reviewer holds the row."""
+    return status == "human-review"
 
 
 def render_review_table(reviewed: list[tuple[str, str, str]]) -> str:
@@ -1393,7 +1422,7 @@ def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -
         if status not in STATUSES:
             defects.append(
                 f"{where}: the `Verification` answer counts {status!r}, which is "
-                f"no status of the seven"
+                f"no status the template declares"
             )
         elif stated.get(status, 0) != counts.get(status, 0):
             defects.append(
@@ -1499,15 +1528,15 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "  split is the whole point: one number is a debt, the other is a plan.",
         "* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,",
         "  `human-review`, `qa-manual`. That number is the coverage debt of the product.",
-        "* **Partial** counts a shipped row a mechanism holds in part: `partial`.",
-        "* **Every gap that can close names its Story.** A `partial`, `failing`, `untested` or",
+        "* **A row is held whole, or not at all.** A rule a mechanism holds in part is two rows,",
+        "  so no count weighs a row whose loose part has no size.",
+        "* **Every gap that can close names its Story.** A `failing`, `untested` or",
         "  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and",
         "  `contracts.py` fails when that Story does not resolve. The roadmap is the debt",
         "  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
-        f"**{sum(total.values())} rows: {shipped} shipped, of which {total['partial']} partial "
-        f"and {loose} loose. "
+        f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
         f"{total['unimplemented']} unbuilt.**",
         "",
         "| Status | " + " | ".join(a.split("-", 1)[-1] for a in APPS) + " | Total |",
@@ -1523,8 +1552,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "",
         "> A document with no shipped row is omitted. `Loose` is the column to read.",
         "",
-        "| Document | Rows | Shipped | `verified` | Partial | Loose | Unbuilt |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Document | Rows | Shipped | `verified` | Loose | Unbuilt |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for spec, counts in sorted(per_spec.items()):
         built = sum(counts[s] for s in STATUSES if s != "unimplemented")
@@ -1533,7 +1562,7 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         slack = sum(counts[s] for s in LOOSE)
         lines.append(
             f"| `{Path(spec).name}` | {sum(counts.values())} | {built} | "
-            f"{counts['verified']} | {counts['partial'] or ''} | {slack or ''} | "
+            f"{counts['verified']} | {slack or ''} | "
             f"{counts['unimplemented'] or ''} |"
         )
 
@@ -1723,7 +1752,9 @@ def main() -> int:
                     mechanism = cell.get(MECHANISM, "")
                     errors += mechanism_defects(where, mechanism)
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
-                    errors += per_application_defects(where, mechanism, status, apps)
+                    bound, stray = scoped_applications(where, statement, apps)
+                    errors += stray
+                    errors += per_application_defects(where, mechanism, status, bound)
                 kind = kind_cell.strip("`")
                 kind_of[rid] = kind
                 table.append((lineno, rid, kind))
@@ -1786,7 +1817,7 @@ def main() -> int:
                         leans[name].append(rid)
 
             counts[status] += 1
-            if held_by_a_reviewer(status, held_by):
+            if held_by_a_reviewer(status):
                 reviewed.append((rid, cell.get(STATEMENT, "").strip(), path.name))
         if columns is not None and table:
             errors += table_defects(rel, table)

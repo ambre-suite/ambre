@@ -977,7 +977,7 @@ fn the_board_editor_drives_the_shared_core() {
 
 /// A finished export reaches the browser as one download, and nothing else
 /// happens. No command leaves the view, the selection holds and the board
-/// paints the same pixels (`PDF-003`).
+/// paints the same pixels (`PDF-014`).
 #[test]
 fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
     let mut rig = Rig::with_stickies(&[("a", A)]);

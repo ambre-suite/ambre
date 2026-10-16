@@ -251,7 +251,7 @@ mod tests {
     }
 
     /// A drained face comes back to the caller, which owes it to the threads
-    /// that keep a `FontContext` of their own (`CANVAS-068`).
+    /// that keep a `FontContext` of their own (`CANVAS-073`).
     ///
     /// The Logic thread paginates Prose on a sealed context and cannot fetch.
     /// A face this thread keeps to itself leaves that context short, and the

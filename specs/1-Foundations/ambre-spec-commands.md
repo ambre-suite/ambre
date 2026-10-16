@@ -57,7 +57,7 @@ The chord table accepts a new binding for a chord that may already carry one.
 * **Boundary.** none: an identity is a string in memory. It reaches no relay, holds no key and
   opens no socket, and the payload it produces is sealed by the thread that sends it
   (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 13 `verified`, 0 `partial`, 0 `untested`, 0 `unimplemented`. The host tier holds
+* **Verification.** 13 `verified`, 0 `untested`, 0 `unimplemented`. The host tier holds
   every rule that is pure data: resolution, refusal, displacement, isolation, the fold and the
   browser's own chords. It also reads each table's whole description, a chord collision included. The browser
   tier reads the labels the button bars announce, and a menu row has no label of its own to show.

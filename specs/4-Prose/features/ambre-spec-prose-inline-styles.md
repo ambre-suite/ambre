@@ -19,7 +19,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-007` | `INV` | An inline mark MUST expand or not expand at its boundaries according to the registry alone (`ambre-spec-prose-schema.md section 3`), never according to the applying feature. | this spec section 3; `PROSE-007` | `ambre_prose::logic::marks::tests::typing_at_a_span_edge_follows_the_registry`; `ambre_prose::mark::tests::a_formatting_mark_swallows_an_insertion_at_its_edge`; `ambre_prose::mark::tests::an_anchor_mark_never_swallows_an_insertion`; structural -- `ambre_prose::mark::expand_type_for` is the one reader of the key, and no handler of `ambre_prose::logic::marks` states a policy | none | verified |
-| `PROSE-FEAT-020` | `INV` | The value of a property MUST be taken from the first level that carries it, in the order inline mark, paragraph style, block type, document default. | this spec section 3 | `ambre_prose::style::tests::a_mark_wins_over_the_block_which_wins_over_the_defaults` | partial -- three levels resolve; the named paragraph style is the fourth, and no command writes one yet. It lands with the `The later writing set` Story (`ambre-roadmap.md` POST-V1) | partial |
+| `PROSE-FEAT-311` | `INV` | The value of a property MUST be taken from the first level that carries it, in the order inline mark, block type, document default. | this spec section 3 | `ambre_prose::style::tests::a_mark_wins_over_the_block_which_wins_over_the_defaults` | none | verified |
+| `PROSE-FEAT-020` | `INV` | A named paragraph style MUST sit between the inline mark and the block type: a property it carries MUST win over the block type and lose to the inline mark. | this spec section 3 | not built | unbuilt -- lands with the `The later writing set` Story (`ambre-roadmap.md` POST-V1). No command writes a named paragraph style yet | unimplemented |
 | `PROSE-FEAT-177` | `INV` | The cascade MUST terminate: a property no level carries MUST resolve to a decided absence, and a reader of the resolved style MUST NOT look further up. | this spec section 3 | `ambre_prose::style::tests::a_property_no_level_carries_resolves_to_a_decided_absence`; type-level -- every field of `ambre_prose::style::ResolvedStyle` is a decided value, and none of them is a "look further up" | none | verified |
 | `PROSE-FEAT-173` | `INV` | Superscript and subscript MUST both be storable on one range: writing either one MUST NOT clear the other. | this spec section 3 | `ambre_prose::logic::convergence_tests::two_peers_raising_and_lowering_one_word_resolve_one_style` | none | verified |
 | `PROSE-FEAT-174` | `INV` | Where both are stored on one range, the resolved style MUST be the raised one, by a priority fixed in the reader and not by which mark was written last. | this spec section 3 | `ambre_prose::style::tests::raised_beats_lowered_by_a_fixed_priority` | none | verified |
@@ -71,9 +72,9 @@ status values are normative in `ambre-spec-template.md`.
   pagination path rather than beside it.
 * **Boundary.** none of its own: a mark is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 25 `verified`, 1 `partial`, 0 `untested`, 1 `unimplemented`. `PROSE-FEAT-020` is the
-  `untested` one: three levels of the cascade resolve, and the named paragraph style is the
-  fourth. No command writes one yet. `PROSE-FEAT-310` is the hanging indent. The layout carries
+* **Verification.** 26 `verified`, 0 `untested`, 2 `unimplemented`. `PROSE-FEAT-311` holds the
+  three levels of the cascade that resolve today. `PROSE-FEAT-020` is the named paragraph style,
+  the fourth level: no command writes one yet. `PROSE-FEAT-310` is the hanging indent. The layout carries
   the first-line indent as a box ahead of the text, and a box has no negative width.
 
   `PROSE-FEAT-021`, `PROSE-FEAT-008`, `PROSE-FEAT-184` and `PROSE-FEAT-176` are the four the
@@ -259,7 +260,7 @@ Which control sits where, and what the format bar shows for the current selectio
   resolves to for the reader who does not have it, only that measurement may then differ.
 * **A named paragraph style carries nothing yet.** Level two of the cascade reads the `styles`
   store, and no command writes an entry into it. Every property therefore falls through to the
-  block type and the document defaults, which is why `PROSE-FEAT-020` is `untested`. The store and
+  block type and the document defaults, which is why `PROSE-FEAT-020` is `unimplemented`. The store and
   the command that fills it land with "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **A named paragraph style cannot inherit from another.** The style store is flat and the cascade
   above has no level for a base style. The deferred design gives a style a `based_on` key and walks

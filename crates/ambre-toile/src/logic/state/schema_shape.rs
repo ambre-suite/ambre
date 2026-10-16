@@ -28,7 +28,7 @@
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
-//! stays with the reviewer. A `LoroText` reads as `text` and a register as
+//! needs a frozen reading of the values, not of their types. A `LoroText` reads as `text` and a register as
 //! `string`, so a body demoted from a text container moves a line.
 
 use std::collections::BTreeSet;

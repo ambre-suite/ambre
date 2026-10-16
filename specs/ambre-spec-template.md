@@ -152,8 +152,8 @@ carries both:
 | `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. **A statement carrying none of them binds nothing**: it describes, and a description cannot be falsified, so it cannot carry a status. One rule per row, no conjunction |
 | `Sources` | where the rule comes from, `;` between one source and the next. Each source names its kind, its target and, where it has one, its section, in one of six forms: **a section** of this spec (`this spec section 3`); a **named `document.md`**, with the section it lands in and the rule ids it cites (`` `1-Foundations/ambre-spec-message-bus.md section 4` (`BUS-018`) ``); a **bare rule id**, which resolves through the ledger without naming the file that declares it (`` `ZK-001` ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; or **`derived`**, which claims no source but the design. A source outside the six is refused on its own, whatever the sources beside it read. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Mechanism` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable. The `Verification` answer under the table asks a different question, and section 5 says why the column is the cell that carries the mechanism's name |
-| `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
-| `Status` | one of the seven values below. An empty cell fails |
+| `Gap` | what the mechanism does not hold: one of the five openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
+| `Status` | one of the six values below. An empty cell fails |
 
 **The mechanism tokens.** The closed set `Mechanism` draws on. Each token names a rung of the
 ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
@@ -192,19 +192,17 @@ follows either one is an argument, and it belongs in `Gap`.
 **A rule each application holds names a test in each.** A test of the shared crate proves the
 shared code, and never that an application calls it: `KINETIC-002` read `verified` while Toile broke
 it. So a row binding what each application does labels its tests `Prose`, `Trame` or `Toile`, and
-its document declares the `Applications` field. Such a row is `verified` only once every declared
-application has its test; until then it is `untested`, and `Gap` names the ones missing.
-`contracts.py` fails a labelled row whose document declares no field, a label the field leaves out,
-and a `verified` row missing an application. A row with no label is the shared code's own rule, and
-the reviewer holds which rows need one.
+its document declares the `Applications` field. The row binds every declared application, or the
+ones its statement opens on (`In Toile, `, `In Prose and Trame, `), and is `verified` once each
+has its test. `contracts.py` fails a label or an opening name the row cannot bind, and a `verified`
+row missing an application. An unlabelled row is the shared code's own rule.
 
-**The six gap openers.** The closed set `Gap` opens on. What follows an opener is prose, and it is
+**The five gap openers.** The closed set `Gap` opens on. What follows an opener is prose, and it is
 the one place in the row where an argument belongs.
 
 | Opener | Means |
 | :--- | :--- |
 | `none` | the mechanism holds the whole rule, and nothing follows |
-| `partial -- ` | the mechanism holds part of the rule; the prose says which part is left |
 | `fails -- ` | the code breaks the rule today; the prose says how |
 | `claim -- ` | what the row cites is an observation and not a mechanism: nothing turns red |
 | `unheld -- ` | the code exists, nothing holds it; the prose says what a mechanism would take |
@@ -215,24 +213,20 @@ the one place in the row where an argument belongs.
 * **No mechanism and no gap fails.** `Mechanism` at `none` or `not built`, with `Gap` at
   `none`, claims a coverage the row does not have. The mechanism cell says what turns red, the gap
   cell says what is loose, and one cell saying both says neither.
-* **A `verified` row with a gap fails.** A status saying something turns red, beside a cell saying
-  which half is loose, is two answers to one question. Move the status or close the gap.
-* **A `partial` row names its mechanism and opens its gap on `partial -- `.** An `untested` row
-  opening on it fails. The rule is half held, and `untested` reads as a row nothing tests at all.
-  A gap that holds nothing opens on `unheld -- `.
+* **A row is held whole, or not at all.** Only a `verified` row names a mechanism, and its gap is
+  `none`; the others write the token the table below gives. A rule held in part is two rows.
 
-**The seven status values.** `Owes` is what the row must carry beside the status, and
+**The six status values.** `Owes` is what the row must carry beside the status, and
 `contracts.py` holds it.
 
 | Value | Means | Owes |
 | :--- | :--- | :--- |
 | `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` | the mechanism |
-| `partial` | a mechanism holds part of the rule, and `Gap` says which part is left | the mechanism and a Story |
-| `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | a Story |
-| `untested` | the code exists, nothing holds it, and a mechanism could | a Story |
-| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | an obstacle no Story lifts |
-| `qa-manual` | caught by using the application | an obstacle no Story lifts |
-| `unimplemented` | the code does not exist yet | a Story |
+| `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | `Mechanism` at `none`, and a Story |
+| `untested` | the code exists, nothing holds it, and a mechanism could | `Mechanism` at `none`, and a Story |
+| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | `Mechanism` at `human-review`, and an obstacle no Story lifts |
+| `qa-manual` | caught by using the application | `Mechanism` at `qa-manual`, and an obstacle no Story lifts |
+| `unimplemented` | the code does not exist yet | `Mechanism` at `not built`, and a Story |
 
 **Every gap that can close names its Story.** A row with no mechanism answers one question: can
 this gap close? If it can, it is debt, and debt has an owner, so the row lands with a Story of

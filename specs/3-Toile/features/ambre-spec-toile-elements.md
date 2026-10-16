@@ -92,7 +92,7 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 33 `verified`, 0 `partial`, 0 `failing`, 0 `untested`. Align and distribute holds
+* **Verification.** 33 `verified`, 0 `failing`, 0 `untested`. Align and distribute holds
   through nine tests over the pure geometry and five over the handler. A place in the 2-peer property
   strategy lets `TOILE-037` claim convergence rather than assert it. The lock is driven through every
   command it binds. A birth is held on its box, its seed and its style.

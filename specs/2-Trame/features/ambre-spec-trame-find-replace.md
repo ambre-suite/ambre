@@ -13,7 +13,7 @@
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-find.md`,
-`FIND-001` through `FIND-007`. The search writes nothing, covers the whole scope, wraps, reveals its
+`FIND-001` through `FIND-015`. The search writes nothing, covers the whole scope, wraps, reveals its
 match, and the replace-all is one undo item. Trame's own turn is what a cell match is.
 
 ### 1.1 What counts as a match

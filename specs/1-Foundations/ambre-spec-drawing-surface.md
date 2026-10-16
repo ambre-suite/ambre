@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
 | `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate-graph -- `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | none | verified |
+| `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | none | unheld -- nothing reads the parameter types of the trait, so a primitive taking a density or a frame number compiles. A gate that holds every parameter to a closed list of geometry and paint types reaches it; lands with the `One walk the screen and the page share` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a Rust line naming `krilla` or `ambre_pdf` outside `crates/ambre-pdf/` and the `src/logic/` directories | none | verified |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level -- each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | none | verified |
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). Every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
@@ -45,7 +46,7 @@ or a page, and the walk is not told which.
 |---|---|---|---|---|---|---|
 | `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | `ambre_toile::logic::interop::pdf_export::tests::the_page_and_the_screen_share_one_walk` -- one board walked onto both, the page's record the screen's inside the frame clip | none | verified |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` -- the degenerate case, where an unbalanced push corrupts the rest of the page | none | verified |
-| `CANVAS-056` | `FRAME` | A drawing primitive MUST NOT hold screen-only state. | this spec section 2 | human-review -- the reviewer reads each change to a `DrawSurface` back end for a value only a screen has, a frame counter or a density, read behind the trait | unheld -- `intent` -- a back end reading screen state compiles and passes `the_page_and_the_screen_share_one_walk`, which compares the walks and not what each back end does with them | human-review |
+| `CANVAS-074` | `FRAME` | The walk an application shares between the screen and the page MUST take a view of the document and a region in document coordinates, and nothing else. | this spec section 2; `CANVAS-029` | none | unheld -- each application's walk is a set of functions generic over the surface, mixed with the screen overlays that may read screen state, so no check knows which code must ignore the screen. One walk entry per application, a gate on what its module imports, and a property test per application (`Prose`, `Trame`, `Toile`) that varies the camera, the density and the frame and reads the same calls back reach it; lands with the `One walk the screen and the page share` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-062` | `FRAME` | Antialiasing MUST NOT add a render pass, a compute dispatch or a multisampled attachment. | this spec section 2; `ambre-spec-frame.md section 4` | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). It is the rule that keeps the edge treatment inside the decision `ambre-spec-frame.md` already took against a compute rasterizer, and a WebGL2 back end has no compute stage to run one on | unimplemented |
 
 * **Budget.** the krilla row of `ambre-spec-budgets.md section 5`, counted once for the whole suite
@@ -54,9 +55,10 @@ or a page, and the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
   what a plaintext export owes them.
-* **Verification.** 10 `verified`, 1 `human-review`, 4 `unimplemented`. The crate graph, the
-  compiler and a source gate hold most of it; a test walks one board onto the page and the screen.
-  What no gate reaches is intent: a back end reading screen state behind the trait is a review call.
+* **Verification.** 10 `verified`, 2 `untested`, 4 `unimplemented`. The crate graph, the compiler
+  and a source gate hold most of it; a test walks one board onto the page and the screen. Nothing
+  keeps screen state out of the walk yet (`CANVAS-056`, `CANVAS-074`). A back end may read the
+  screen to rasterize, a density for a tolerance, since that changes the pixels and not the calls.
 
 ---
 

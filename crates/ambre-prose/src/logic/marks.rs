@@ -116,7 +116,7 @@ impl ProseState {
     }
 
     /// One block's text, run by run, each with the style the cascade resolves
-    /// for it (`PROSE-FEAT-020`).
+    /// for it (`PROSE-FEAT-311`).
     ///
     /// The read the view draws from, and the one a test asserts on. It writes
     /// nothing: the resolution is a read of the marks, the block and the

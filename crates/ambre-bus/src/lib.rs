@@ -94,7 +94,7 @@ impl ClipboardBlob {
     }
 
     /// Prefix `html` with the ownership token, for a browser that refuses the
-    /// `web ` types and so keeps no token of its own (`UI-THREAD-056`). A
+    /// `web ` types and so keeps no token of its own (`UI-THREAD-057`). A
     /// comment, so another editor renders nothing of it.
     #[must_use]
     pub fn mark_html(html: &str, token: &str) -> String {
@@ -148,7 +148,7 @@ mod clipboard_tests {
         }
     }
 
-    /// `UI-THREAD-056`: the token survives in the HTML as Firefox 156 hands it
+    /// `UI-THREAD-057`: the token survives in the HTML as Firefox 156 hands it
     /// back, the comment moved before the `<html>` wrapper it adds.
     #[test]
     fn the_token_reads_back_from_the_marked_html() {

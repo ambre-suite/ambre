@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 23 `verified`, 0 `partial`, 0 `untested`. What holds is membership as data, the
+* **Verification.** 23 `verified`, 0 `untested`. What holds is membership as data, the
   title beside it, and what a press or a double-click on it does. An element joins one frame,
   detaches from its group and paints after it in one undo item, and the notes and the name converge.
   The membership gesture is driven through what it refuses and skips, and the title's glyphs are

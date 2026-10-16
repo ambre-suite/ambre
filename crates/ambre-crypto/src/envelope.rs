@@ -17,7 +17,10 @@ use crate::keys::DocumentKey;
 use crate::signature;
 
 /// The cryptographic envelope: nonce, ciphertext, commitment tag and signature.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Its `Debug` form prints the ciphertext length and none of the bytes, so a
+/// `{:?}` in a log carries no payload (`ZK-017`).
+#[derive(Clone, PartialEq, Eq)]
 pub struct Sealed {
     /// XChaCha20 nonce.
     pub nonce: [u8; aead::NONCE_LEN],
@@ -27,6 +30,14 @@ pub struct Sealed {
     pub commitment_tag: [u8; commitment::TAG_LEN],
     /// Ed25519 signature over `nonce || ciphertext || aad || commitment_tag`.
     pub signature: [u8; signature::SIGNATURE_LEN],
+}
+
+impl core::fmt::Debug for Sealed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Sealed")
+            .field("ciphertext_len", &self.ciphertext.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// Encrypts and authenticates `plaintext` under `doc_key`, binding it to `aad`

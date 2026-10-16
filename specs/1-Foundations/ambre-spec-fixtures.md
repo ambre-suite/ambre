@@ -28,9 +28,10 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate-graph -- `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly, so the surface is unreachable from the wasm artifact today; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses the client naming the feature and any crate folding it into its own `default`, the two manifest lines that would make it reachable | none | verified |
 | `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` -- over the seven shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all; `fixtures_bench::no_generator_shares_a_name_or_a_seed_with_another` -- across the shipping and the scale registries | none | verified |
-| `FIXTURE-005` | `INV` | Every committed artifact MUST trace to a generator run from a seed. | this spec section 2 | `fixtures_gate::a_generator_that_changes_its_output_drifts_against_the_committed_bytes` -- every artifact of `current/` is regenerated from its seed and diffed by `just fixtures-check`; human-review -- the reviewer reads a freeze commit against the generator and the seed the manifest names, which is the line the contribution checklist carries | partial -- `outside-the-tree` -- a frozen artifact outlives its generator by design, so nothing can rerun the seed that made it. Where its bytes came from is read once, in the commit that freezes it | human-review |
-| `FIXTURE-032` | `INV` | A committed artifact MUST NOT come from a real user document. | this spec section 2 | human-review -- the same reading, and the one it exists for | unheld -- `outside-the-tree` -- no gate is possible: a real document and a generated one are both Loro bytes, so nothing can tell them apart. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed: write a generator that reproduces its shape instead | human-review |
-| `FIXTURE-024` | `INV` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | human-review -- the reviewer reads a pull request that reports a fixture benchmark and refuses a frame-rate claim read off it, section 3 stating what the corpus does measure so the honest claim is at hand | unheld -- `outside-the-tree` -- no gate is possible: the claim is made in a pull request, not in a test | human-review |
+| `FIXTURE-036` | `INV` | Every artifact of `current/` MUST regenerate byte for byte from the generator and the seed its manifest names. | this spec section 2 | `fixtures_gate::a_generator_that_changes_its_output_drifts_against_the_committed_bytes` -- every artifact of `current/` is regenerated from its seed and diffed by `just fixtures-check` | none | verified |
+| `FIXTURE-005` | `INV` | Every frozen artifact MUST trace to a generator run from a seed. | this spec section 2 | none | unheld -- a frozen artifact outlives its generator by design, so the tree of a later commit cannot rerun the seed that made it. Only the commit that freezes it can; lands with the `The freeze checked against its own commit` Story (`ambre-roadmap.md` E9) | untested |
+| `FIXTURE-032` | `INV` | A committed artifact MUST NOT come from a real user document. | this spec section 2 | none | unheld -- a real document and a generated one are both Loro bytes, so the bytes alone cannot tell them apart. An artifact its generator reproduces from its seed at its freeze commit, with a generator that reads no file, came from no user; lands with the `The freeze checked against its own commit` Story (`ambre-roadmap.md` E9) | untested |
+| `FIXTURE-024` | `INV` | A benchmark that loads a fixture MUST NOT name or report a frame rate. | this spec section 3; `ambre-spec-testing.md section 5` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a code line of such a benchmark that names one | none | verified |
 | `FIXTURE-022` | `INV` | A benchmark corpus MUST NOT be committed. | this spec section 3 | `fixtures_bench::the_scale_corpus_is_ignored_by_git` -- the ignore entry is read back out of `.gitignore`; `::every_scale_generator_writes_under_the_ignored_directory` -- a generator whose name escapes the directory that entry covers is refused, neither test reading the corpus itself since no CI job has one | none | verified |
 | `FIXTURE-023` | `INV` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | `fixtures_bench::every_committed_baseline_names_its_machine` -- over the committed set; `::a_blank_machine_is_not_a_named_machine` -- over both shapes, which is what holds the rule while that set is one file | none | verified |
 
@@ -93,10 +94,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machinery is host-only and gated behind a non-default `fixtures` feature
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary. The one key it
   touches is derived at test setup and never written to disk (section 2).
-* **Verification.** 32 `verified`, 3 `human-review`. Determinism is held on four axes including
-  the cross-process one, the whole loader is held, and each gate runs over a throwaway corpus root.
-  A gate now refuses the manifest line that would pull the machinery into the client build. It also
-  refuses a generator that writes to the CRDT rather than driving a command.
+* **Verification.** 34 `verified`, 2 `untested`. Determinism is held on four axes, the whole
+  loader is held, and each gate runs over a throwaway corpus root. A gate refuses the machinery in
+  the client build, a generator that writes to the CRDT, and a frame rate in a fixture benchmark.
+  The two loose rows are a frozen artifact's seed and origin, which only its freeze commit shows.
 ---
 
 ## 2. MODEL
@@ -423,7 +424,7 @@ The surface is a contributor's, not a user's: five recipes and one feature flag.
 | Trigger | Behaviour |
 |---|---|
 | `just fixtures` | regenerate `fixtures/current/` in place, delete any artifact whose generator no longer exists, and run the frozen retention pass (`FIXTURE-021`, `FIXTURE-026`). Detecting an orphan or an overflow is the gate's job; removing one is this recipe's, so the fix for a red gate is always to run this, never a manual delete |
-| `just fixtures-check` | regenerate into a temporary directory and diff against the committed goldens, refuse a golden whose generator is gone and a generator with no golden (`FIXTURE-025`), then load every frozen artifact and assert its migration (`FIXTURE-006`). It also refuses a superseded container version the retention window keeps with no frozen artifact (`DOCFILE-008`). Runs in the CI host job |
+| `just fixtures-check` | regenerate into a temporary directory and diff against the committed goldens, refuse a golden whose generator is gone and a generator with no golden (`FIXTURE-025`), then load every frozen artifact and assert its migration (`FIXTURE-006`). It also refuses a superseded container version the retention window keeps with no frozen artifact (`DOCFILE-018`). Runs in the CI host job |
 | `just fixtures-freeze <name>` | copy the **named** artifact out of `current/` into `frozen/`, deriving the version suffix from its manifest rather than from a person typing it. A name, not a document type: several generators share one, and which lineage keeps migration coverage is a deliberate choice |
 | `just fixtures-bench-corpus` | produce the large, git-ignored scale corpora into `fixtures/bench/` (`FIXTURE-022`), skipping every artifact already there, and report each one's size |
 | `just fixtures-bench` | run the `criterion` benches, building the corpus first when it is absent. Split from the recipe above because generating is minutes and re-running benches is not |
@@ -493,7 +494,7 @@ batch build. All are measurable on host with no GPU, through the recording surfa
 | A scale board pastes one block | creating every element through its own command | `CreateElement` derives the viewport once per call, so 50 000 of them cost the square of the count: a measured run passed 20 minutes without finishing. A paste re-mints a whole payload under one command, and copy and paste are user commands, so the generator still drives `handle_command` alone (`FIXTURE-004`). |
 | A delta batch is derived at bench setup | committing recorded delta batches beside the corpus | a second artifact format, with a drift gate of its own, for bytes a second peer reproduces from the corpus in microseconds. |
 | "No silent golden refresh" is a review rule | a gate that claims to enforce it | it would put a machine check's name on a review rule: the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. The manifest makes a refresh **visible** instead, moving a digest and usually a shape in a JSON file read as plain text, and `generator_version` is the author's declaration that the change was intended. |
-| A real document is never committed | capturing a fixture from a real document, and trusting the gate to notice | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. No check can hold the rule, and `FIXTURE-005` says so rather than implying otherwise. |
+| A real document is never committed | capturing a fixture from a real document, and trusting the gate to notice | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. The bytes cannot hold the rule; the freeze commit can, by rerunning a generator that reads no file (`FIXTURE-032`). |
 
 ---
 
@@ -507,7 +508,7 @@ batch build. All are measurable on host with no GPU, through the recording surfa
   stands: the memory budget it serves names 100 000 formula cells, and the recipe reports its size.
 * **The GPU half of the paint budget is not measured here, and cannot be.** The dense board charges
   the derivation of 2 000 visible elements, which is the CPU half. The frame rate stays a visual
-  check (`FIXTURE-024`).
+  check, and no fixture benchmark reports one (`FIXTURE-024`).
 * **No baseline exists yet.** The directory holds the shape and the belt that refuses an
   unnamed machine. The first figures arrive with the first change that needs them.
 * **Determinism has been measured on one architecture.** Every figure and every determinism test

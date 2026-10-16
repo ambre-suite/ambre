@@ -350,7 +350,7 @@ mod handler_tests {
             .with_state(state)
     }
 
-    // `SRV-022`: the provider route reaches its handler with the provider read
+    // `SRV-172`: the provider route reaches its handler with the provider read
     // from the path. An unconfigured provider draws the typed refusal, never the
     // 500 a failed path extraction answered.
     #[sqlx::test]

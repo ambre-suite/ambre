@@ -45,7 +45,8 @@ fetched, and the strings that were shaped without it are dropped.
 | `CANVAS-006` | `POST` | A script-specific font MUST be fetched only when text needing it appears. | this spec section 2 | `ambre_canvas::fonts::tests::latin_and_symbols_never_trigger` -- every codepoint the base faces cover must classify to no lazy font, so a fetch armed for ordinary text fails | none | verified |
 | `CANVAS-052` | `POST` | A script-specific font MUST be fetched once. | this spec section 2 | `ambre_canvas::fonts::tests::observe_latches_each_script_once` -- it reads the request count back after repeated observations of the same script and asserts it stays at one | none | verified |
 | `CANVAS-053` | `FRAME` | Fetching a font MUST NOT block the frame that needed it. | this spec section 2; `ambre-spec-frame.md` | `ambre_canvas::fonts::tests::drain_is_empty_without_fetches` -- the empty case; `ambre_canvas::text_cache::tests::a_missing_script_arms_a_fetch_and_its_face_lands_later` -- the frame shapes at once, and the face lands on a later one | none | verified |
-| `CANVAS-068` | `POST` | A face fetched after startup MUST travel to the other threads by the same path a base face travels. | this spec section 2 | `ambre_canvas::fonts::tests::a_drained_face_comes_back_for_the_other_threads` -- the drain hands the registered bytes back; `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- a later delivery reaches both documents; qa-manual -- the send site, one `try_send` on the frame loop of `ambre-app/src/host/frame.rs` | none | verified |
+| `CANVAS-073` | `POST` | A face fetched after startup MUST be drained back for the other threads, and its delivery MUST reach every open document. | this spec section 2 | `ambre_canvas::fonts::tests::a_drained_face_comes_back_for_the_other_threads` -- the drain hands the registered bytes back; `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- a later delivery reaches both documents | none | verified |
+| `CANVAS-068` | `POST` | A face fetched after startup MUST travel to the other threads by the same path a base face travels. | this spec section 2 | none | unheld -- the send site, one `try_send` on the frame loop of `ambre-app/src/host/frame.rs`, runs in no test; lands with the `The host glue held in the browser tier` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Overflow an atlas or a cache
 
@@ -64,9 +65,10 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 14 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven
-  on the host past their capacity, and what survives is compared with what it drew before. The
-  font fetch and its origin are read from the paths, and a source gate refuses an embedded face.
+* **Verification.** 14 `verified`, 1 `untested`, 3 `unimplemented`. The atlases and the layout cache
+  are driven on the host past their capacity, and what survives is compared with what it drew
+  before. The font fetch and its origin are read from the paths, and a source gate refuses an
+  embedded face. The send of a late face from the frame loop runs in no test.
 
 ---
 

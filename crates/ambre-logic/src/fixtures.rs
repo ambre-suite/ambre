@@ -865,7 +865,7 @@ pub enum Drift {
     FrozenOverflow { doc_type: DocType, kept: usize },
 
     /// A superseded container version with no frozen artifact for a document
-    /// type the registry generates (`DOCFILE-008`). A bump that skipped its
+    /// type the registry generates (`DOCFILE-018`). A bump that skipped its
     /// freeze reads this way, and so does the drop of the last artifact a
     /// version kept.
     Unfrozen {
@@ -993,7 +993,7 @@ pub fn check_corpus(
 }
 
 /// Every superseded container version below `current` that owes a frozen
-/// artifact for a document type of `registry`, and holds none (`DOCFILE-008`).
+/// artifact for a document type of `registry`, and holds none (`DOCFILE-018`).
 ///
 /// Container versions count from 1, so each one below `current` is superseded.
 /// A version is owed only while retention could still keep its artifact. Once

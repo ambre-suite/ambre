@@ -126,6 +126,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
             cb.check_worker_messages(errors)
@@ -626,6 +627,17 @@ class CrateBoundaries(unittest.TestCase):
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
+
+    def test_a_fixture_benchmark_reporting_a_frame_rate_is_refused(self):
+        for line in ('c.bench_function("fixture_board_fps", |b| {});\n', "let frame_rate = 60.0 / t; // fixture\n"):
+            text = "use ambre_core::fixture::load;\n" + line
+            errors = self.breach("crates/ambre-toile/benches/board.rs", text)
+            self.assertTrue(any("reports a frame rate" in e for e in errors), (line, errors))
+
+    def test_a_frame_rate_outside_a_fixture_benchmark_stays_free(self):
+        text = "use ambre_core::fixture::load;\n// No figure here is a frame rate.\nfn main() {}\n"
+        self.assertEqual(self.breach("crates/ambre-toile/benches/board.rs", text), [])
+        self.assertEqual(self.breach("crates/ambre-canvas/benches/frame.rs", 'c.bench_function("fps", |b| {});\n'), [])
 
     def test_a_third_artefact_on_the_page_is_refused(self):
         page = '<link data-trunk rel="rust" />\n<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker" />\n'

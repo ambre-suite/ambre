@@ -961,7 +961,7 @@ pub enum ProseCommand {
     ReplaceOne {
         replacement: String,
     },
-    /// Replace every match, as one write and one undo item (`FIND-006`).
+    /// Replace every match, as one write and one undo item (`FIND-013`).
     ReplaceAll {
         replacement: String,
     },

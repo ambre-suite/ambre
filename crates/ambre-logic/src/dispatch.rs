@@ -1895,7 +1895,7 @@ mod tests {
         assert!(sync_rx.try_recv().is_err(), "nothing forwarded to Sync");
 
         // A second delivery extends the same context rather than replacing it:
-        // a script face fetched after boot must export too (`CANVAS-068`).
+        // a script face fetched after boot must export too (`CANVAS-073`).
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some());
     }
@@ -1973,7 +1973,7 @@ mod tests {
             "a document opened afterwards takes the same set"
         );
 
-        // A later delivery (a script face) reaches both (`CANVAS-068`).
+        // A later delivery (a script face) reaches both (`CANVAS-073`).
         state.handle_logic_command(LogicCommand::LoadFonts {
             faces: vec![faces[0].clone()],
         });
@@ -2069,7 +2069,7 @@ mod tests {
     }
 
     /// A deck export sends nothing to Sync: no delta leaves for a peer
-    /// (`PDF-002`).
+    /// (`PDF-016`).
     #[cfg(feature = "toile-pdf")]
     #[test]
     fn a_deck_export_sends_no_delta() {

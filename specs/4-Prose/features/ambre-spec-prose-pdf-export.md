@@ -12,7 +12,7 @@
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-pdf-export.md`,
-`PDF-001` through `PDF-006`.
+`PDF-001` through `PDF-017`.
 
 ### 1.1 The file
 

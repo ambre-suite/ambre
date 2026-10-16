@@ -28,6 +28,19 @@ fn roundtrip_envelope() {
     assert_eq!(opened, plaintext);
 }
 
+/// `ZK-017`: the debug form of an envelope prints its length and none of its
+/// bytes, so a `{:?}` in a log carries no payload.
+#[test]
+fn an_envelope_debug_form_prints_no_byte_of_it() {
+    let signing = fixed_seed().derive_signing_key();
+    let mut sealed = envelope::seal(b"payload", b"aad", &fixed_doc_key(), &signing).unwrap();
+    // Bytes no length or field name can spell, so a match is a leak.
+    sealed.ciphertext = vec![0xAB; 7];
+    sealed.nonce = [0xCD; aead::NONCE_LEN];
+    let shown = format!("{sealed:?}");
+    assert_eq!(shown, "Sealed { ciphertext_len: 7, .. }");
+}
+
 #[test]
 fn tampered_ciphertext_fails() {
     let doc_key = fixed_doc_key();

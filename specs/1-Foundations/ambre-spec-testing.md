@@ -84,18 +84,16 @@ more, and asserts identical final states once every delta has been exchanged.
 **An obstacle is why no mechanism reaches a rule, and it is named.** A `qa-manual` or a
 `human-review` row claims a gap that cannot close. That claim is a fact about the tooling, and
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
-table below. A row a mechanism half holds opens on `` partial -- `<obstacle>` -- `` instead.
+table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**The two obstacles.**
+**No obstacle.** No row claims a gap that cannot close today, so the table carries its header alone.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
-| `intent` | what a value means, or why a line exists: the right code and the wrong one have one shape, so no check tells them apart | -- |
-| `outside-the-tree` | a claim made where no check runs: a pull request, the commit an artifact was owed in, the origin of committed bytes | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
-  it is debt: `untested` or `partial`, and it lands with a Story.
+  it is debt: `untested`, and it lands with a Story.
 * **A new obstacle is a row here first.** A row citing a name the table does not carry fails.
 * **An obstacle lives while a row needs it.** A standing one no row cites fails, since it would
   excuse the next row without an argument. A lifted one goes once its Story ships.

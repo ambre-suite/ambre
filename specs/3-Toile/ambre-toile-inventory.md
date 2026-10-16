@@ -25,7 +25,6 @@
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 12 |  |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 26 |  |
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | implemented | 12 |  |
-| `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 29 | 1 |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 54 |  |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 28 |  |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 |  |
@@ -39,10 +38,11 @@
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 18 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 46 |  |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 53 |  |
+| `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 29 |  |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 |  |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 |  |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 42 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 13 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 |  |
 
-**29 features: 20 implemented, 9 partial, 0 design-only. 835 contract rows, 1 loose.**
+**29 features: 19 implemented, 10 partial, 0 design-only. 835 contract rows, 0 loose.**

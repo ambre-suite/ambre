@@ -3,7 +3,7 @@
 //!
 //! A property is taken from the first level that carries it. The inline mark on
 //! the character comes first, then the built-in settings of the block type,
-//! then the document defaults (`PROSE-FEAT-020`). Every field of [`ResolvedStyle`] is a
+//! then the document defaults (`PROSE-FEAT-311`). Every field of [`ResolvedStyle`] is a
 //! decided value, so a caller draws from it and never looks further up
 //! (`PROSE-FEAT-177`).
 //!
@@ -93,7 +93,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 }
 
 /// Resolve one run against its block and the document defaults
-/// (`PROSE-FEAT-020`).
+/// (`PROSE-FEAT-311`).
 ///
 /// A mark the run carries wins over the block, which wins over the defaults.
 /// A colour that fails its grammar is dropped rather than resolved to a wrong
@@ -158,7 +158,7 @@ mod tests {
     }
 
     /// A property is taken from the first level that carries it
-    /// (`PROSE-FEAT-020`).
+    /// (`PROSE-FEAT-311`).
     #[test]
     fn a_mark_wins_over_the_block_which_wins_over_the_defaults() {
         let defaults = DocDefaults::default();

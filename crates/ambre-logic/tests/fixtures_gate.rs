@@ -453,7 +453,7 @@ fn plant_frozen(root: &TempRoot, stem: &str) {
     .expect("copies the sidecar");
 }
 
-/// `DOCFILE-008`. A container bump that skipped its freeze fails the gate, by
+/// `DOCFILE-018`. A container bump that skipped its freeze fails the gate, by
 /// version and by document type. The freeze clears it, and a document type the
 /// registry does not generate owes nothing.
 #[test]
@@ -475,7 +475,7 @@ fn a_superseded_container_version_with_no_frozen_artifact_fails_the_gate() {
     assert!(owed.is_empty(), "the freeze pays the version: {owed:?}");
 }
 
-/// `DOCFILE-008`. A version owes an artifact only while retention could keep
+/// `DOCFILE-018`. A version owes an artifact only while retention could keep
 /// it. Three newer artifacts of one document type release the older versions,
 /// and a version between them that holds none is still owed.
 #[test]

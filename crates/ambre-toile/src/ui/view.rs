@@ -219,7 +219,7 @@ fn trigger_download(filename: &str, data: &[u8]) {
 
 /// Host-build stub: no DOM to download into outside the browser. Kept so the
 /// exhaustive event dispatch compiles in the headless tests. A host test reads
-/// back each file the view handed over (`PDF-003`).
+/// back each file the view handed over (`PDF-014`).
 #[cfg(not(target_arch = "wasm32"))]
 fn trigger_download(filename: &str, data: &[u8]) {
     #[cfg(test)]

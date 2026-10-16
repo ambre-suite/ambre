@@ -416,7 +416,7 @@ mod isolation_tests {
     /// repository ships.
     const TRUNK: &str = include_str!("../../../Trunk.toml");
 
-    /// `SRV-069`: the page that loads the client is served cross-origin
+    /// `SRV-171`: the page that loads the client is served cross-origin
     /// isolated, both headers set on the development server.
     #[test]
     fn the_page_is_served_cross_origin_isolated() {

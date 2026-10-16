@@ -165,7 +165,7 @@ pub(crate) fn async_write_clipboard(
 /// the `web ` types in the item constructor (throwaway Firefox 156 run). The copy
 /// event left only the token, so without a second attempt no other application
 /// could paste the copy. The second carries the token in an HTML comment where
-/// the view wrote HTML (`UI-THREAD-055`, `UI-THREAD-056`).
+/// the view wrote HTML (`UI-THREAD-055`, `UI-THREAD-057`).
 fn publish_item<T>(
     tsv: &str,
     html: Option<&str>,

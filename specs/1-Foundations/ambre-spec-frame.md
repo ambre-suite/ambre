@@ -37,7 +37,8 @@ one numbering over the four documents the rendering layer produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-004` | `PRE` | GPU initialization MUST have completed before the rAF loop is started. | this spec section 2 | type-level -- `start_raf_loop` takes a `GpuSettled`, which only `bootstrap_gpu` builds and only once it has resolved, so a loop started first does not compile; `ambre_app::host::tests::the_loop_ticks_while_the_content_is_static` -- the loop started from the token, in the browser tier | none | verified |
-| `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | callgrind -- the `board_paint` operation of `crates/ambre-toile/benches/instructions.rs`, the content walk of 2 000 visible elements, under its ceiling in the CI `instructions` job | partial -- the count holds the walk and not the tessellation, the upload or the GPU, and nobody has taken the phone measurement the budget is written against; lands with the `The frame measured on a phone` Story (`ambre-roadmap.md` E9) | partial |
+| `CANVAS-072` | `POST` | The content walk of a busy board MUST stay under the instruction ceiling its budget row sets. | `ambre-spec-budgets.md section 2`, the Toile board paint row | callgrind -- the `board_paint` operation of `crates/ambre-toile/benches/instructions.rs`, the content walk of 2 000 visible elements, under its ceiling in the CI `instructions` job | none | verified |
+| `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | none | unheld -- the walk's count (`CANVAS-072`) leaves out the tessellation, the upload and the GPU, and nobody has taken the phone measurement the budget is written against; lands with the `The frame measured on a phone` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-010` | `POST` | The present phase MUST run on every frame, whatever the repaint plan decides. | this spec section 2 | `ambre_canvas::frame::tests::a_reused_layer_is_skipped_and_the_present_always_runs` -- every plan, the present phase kept | none | verified |
 | `CANVAS-011` | `POST` | The rAF loop MUST keep ticking while the content is static, so an inbound event is drained on the next frame. | this spec section 2 | `ambre_app::host::tests::the_loop_ticks_while_the_content_is_static` -- a frame that draws nothing, still ticking, in the browser tier | none | verified |
 | `CANVAS-003` | `FRAME` | A layer planned `Reuse` MUST skip both its CPU batch build and its GPU upload. | this spec section 2 | `ambre_canvas::frame::tests::a_reused_layer_is_skipped_and_the_present_always_runs` -- the phases of each plan; `ambre_canvas::render::tests::a_layer_uploads_only_on_the_frame_that_rebuilt_it` -- the upload | none | verified |
@@ -70,10 +71,10 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 15 `verified`, 1 `partial`, 2 `unimplemented`. The frame's decisions are pure
+* **Verification.** 16 `verified`, 1 `untested`, 2 `unimplemented`. The frame's decisions are pure
   functions a host test drives: the phases of each plan, the pause, the fatal screen, the clear.
-  The browser tier drives the loop and the page beside the canvas. The frame budget is held by a
-  count of its content walk; the phone measurement is the one gap.
+  The browser tier drives the loop and the page beside the canvas. A count holds the content walk
+  of a busy frame; the whole frame on the phone is the one loose row.
 ---
 
 ## 2. MODEL

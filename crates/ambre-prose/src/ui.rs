@@ -875,7 +875,7 @@ mod tests {
         assert_eq!(state.take_export(), None);
     }
 
-    /// `PROSE-FEAT-040`: each of the five figures has its label, in the order
+    /// `PROSE-FEAT-312`: each of the five figures has its label, in the order
     /// the status bar shows them.
     #[test]
     fn the_status_bar_reads_the_five_figures() {
