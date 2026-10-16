@@ -28,7 +28,7 @@
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 30 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
-| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 | 1 |
+| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 18 |  |
 | `sync` | The one part of the client that talks to the network. | implemented | 29 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 951 contract rows, 10 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 951 contract rows, 9 loose.**

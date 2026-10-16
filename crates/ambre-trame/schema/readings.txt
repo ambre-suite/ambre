@@ -1,0 +1,37 @@
+# ambre-trame/schema/readings.txt  The frozen schema readings (`SCHEMA-017`).
+#
+# One section per `SCHEMA_VERSION`, each holding what a build stores and what
+# it reads back, for every value of the shape belt's workbook. A line reads
+# `path = stored => reading`. The path collapses ids as `shapes.txt` does. The
+# reading is taken by a second workbook that reopened the first one's
+# snapshot, in absolute units: px, pt, `#rrggbb`, one-based rows and columns.
+#
+# Written by `logic::schema_reading`, which fails when a build stores or reads
+# a value otherwise than the section frozen for its version. A reading that
+# moves needs a raised `SCHEMA_VERSION` and a new section below, never an edit
+# to the section above: a section is the record of what that version meant.
+
+== v3
+cells_*/* = "=1+1" => R2C1 shows "2"
+cells_*/* = "hello" => R1C1 shows "hello"
+cellstyle_*/* = 010000000001000199cdcd010000010e000000000000 => R1C1 bold, aligned Auto Middle, text #336699, 14 pt, format General
+col_widths_*/* = 120 => column 1 is 120 px wide
+cols_*/* = "0000000000000001_00000001" => column 1
+cols_*/* = "0000000000000001_00000006" => column 2
+filter_hidden_*/* = true => row 2 hidden
+filter_hidden_*/* = true => row 3 hidden
+filter_hidden_*/* = true => row 4 hidden
+filter_hidden_*/* = true => row 5 hidden
+filters_*/active = 19303030303030303030303030303030315f303030303030303101000568656c6c6f => column 1 keeps Condition { op: Eq, value: "hello" }
+merges_*/* = "0000000000000001_00000005:0000000000000001_00000006" => R4C1:R5C2 merged
+meta/schema_version = 3 => version 3, Current
+named_ranges/* = "#s0!A1" => N names sheet 1 R1C1
+row_heights_*/* = 33 => row 1 is 33 px tall
+rows_*/* = "0000000000000001_00000000" => row 1
+rows_*/* = "0000000000000001_00000002" => row 2
+rows_*/* = "0000000000000001_00000003" => row 3
+rows_*/* = "0000000000000001_00000004" => row 4
+rows_*/* = "0000000000000001_00000005" => row 5
+sheet_order/* = "0000000000000001_00000000" => tab 2
+sheets/* = "Sheet1" => tab 1 named "Sheet1"
+sheets/* = "Two" => tab 2 named "Two"

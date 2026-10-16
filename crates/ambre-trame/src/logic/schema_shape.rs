@@ -28,7 +28,7 @@
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
-//! needs a frozen reading of the values, not of their types.
+//! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
 use std::collections::BTreeSet;
 
@@ -61,7 +61,7 @@ const STEPS: &str = include_str!("../../schema/migrations.txt");
 const SCHEMA_SOURCE: &str = include_str!("schema.rs");
 
 /// The segment a sheet id or a stable id pair collapses to.
-const ANY: &str = "*";
+pub(super) const ANY: &str = "*";
 
 /// The declared `&str` constants that name something other than a schema key,
 /// and so carry no line of their own. `MATERIALIZE_ORIGIN` is a Loro commit
@@ -71,7 +71,7 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["mat"];
 /// The roots whose keys are schema words rather than data. Every other map is
 /// a dictionary keyed by an id, a sheet name or a user-chosen name, so its
 /// keys collapse to [`ANY`].
-fn keys_are_schema_words(root: &str) -> bool {
+pub(super) fn keys_are_schema_words(root: &str) -> bool {
     root == ambre_core::schema::SCHEMA_META_MAP || root.starts_with("filters_")
 }
 
@@ -113,7 +113,7 @@ impl Shape {
 ///
 /// Reading them rather than listing them is what makes a new per-sheet
 /// container fail the coverage assertion instead of passing unseen.
-fn declared_sheet_prefixes(source: &str) -> Vec<String> {
+pub(super) fn declared_sheet_prefixes(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in source.lines() {
         let Some((_, tail)) = line.split_once("format!(\"") else {
@@ -132,7 +132,7 @@ fn declared_sheet_prefixes(source: &str) -> Vec<String> {
 }
 
 /// The name a root is frozen under: a per-sheet container loses its sheet id.
-fn canonical_root(name: &str) -> String {
+pub(super) fn canonical_root(name: &str) -> String {
     for prefix in declared_sheet_prefixes(SCHEMA_SOURCE) {
         if name.starts_with(&prefix) {
             return format!("{prefix}{ANY}");
@@ -272,7 +272,7 @@ fn frozen_section(version: u32) -> Option<String> {
 }
 
 /// The section of a frozen text that names this version.
-fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -296,7 +296,7 @@ fn section_of(frozen: &str, version: u32) -> Option<String> {
 ///
 /// The declarations are the schema's key vocabulary, and reading them here is
 /// what makes a new key fail the coverage assertion rather than pass unseen.
-fn declared_string_consts(source: &str) -> Vec<String> {
+pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in source.lines() {
         let bare = line.trim_start();
@@ -326,7 +326,7 @@ fn declared_string_consts(source: &str) -> Vec<String> {
 /// Every per-sheet container written, a second sheet, a named range, a filter
 /// and a styled cell. It is deliberately not a realistic workbook: its job is
 /// width, and the coverage assertion fails when it stops having it.
-fn workbook_of_every_key() -> TrameState {
+pub(super) fn workbook_of_every_key() -> TrameState {
     let mut state = TrameState::with_peer(1);
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -347,8 +347,12 @@ fn workbook_of_every_key() -> TrameState {
         kind: SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
+        // A size and a colour beside the bold, so the reading belt has a
+        // measure and a colour to resolve (`SCHEMA-017`).
         patch: StylePatch {
             bold: Some(true),
+            size: Some(Some(14)),
+            fg: Some(Some(0x33_66_99)),
             ..Default::default()
         },
     });

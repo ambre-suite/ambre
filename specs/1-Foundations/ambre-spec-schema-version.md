@@ -32,7 +32,7 @@ prefix is `SCHEMA`.
 | `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a field written into a register of its own is a key the shape did not carry, so the frozen text gains a line and the belt turns red; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds the published section append-only, so the red cannot be cleared by rewriting it | none | verified |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
 | `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- each recomputes the shape from this build and compares it against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key, a moved value type or a moved `postcard` layout is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only, so the red cannot be cleared by rewriting the section it broke | none | verified |
-| `SCHEMA-017` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise the schema version in the same commit as the change. | this spec section 2; `ambre-spec-fixtures.md section 2` | none | unheld -- no frozen shape shows it. Prose's `meta/defaults/line_height` holds a multiple of the font size; a build that reads the same `f32` as a point measure writes the same key and the same type, every shape snapshot stays green, and every document written before the change is read wrong. A frozen reading of each document, in absolute units, turns red on it; lands with the `The meaning of each key frozen with its reading` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-017` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise the schema version in the same commit as the change. | this spec section 2; `ambre-spec-fixtures.md section 2` | `ambre_prose::logic::schema_reading::the_reading_a_build_makes_is_the_reading_frozen_for_its_version`; `::every_stored_value_has_a_reading`; `::every_declared_key_has_a_reading`; `::a_stored_value_moving_moves_the_reading`; `::a_reader_moving_moves_the_reading`; `ambre_trame::logic::schema_reading::the_reading_a_build_makes_is_the_reading_frozen_for_its_version`; `::every_stored_value_has_a_reading`; `::every_declared_key_has_a_reading`; `::a_stored_value_moving_moves_the_reading`; `::a_reader_moving_moves_the_reading`; `ambre_toile::logic::state::schema_reading::the_reading_a_build_makes_is_the_reading_frozen_for_its_version`; `::every_stored_value_has_a_reading`; `::every_declared_key_has_a_reading`; `::a_stored_value_moving_moves_the_reading`; `::a_reader_moving_moves_the_reading` -- a second peer reopens the shape belt's snapshot and reads every stored value back through the production readers, in absolute units, so a unit moved under an unchanged key and type changes a line of the section frozen for the compiled `SCHEMA_VERSION` and is red until the number rises. A stored value or a declared key that no reader resolves and no `UNREAD` entry names is red, and so is a stored unit or a reader moved without the reading moving; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a stamped crate carrying no frozen reading and holds a published section append-only, so the red cannot be cleared by rewriting the section it broke | none | verified |
 | `SCHEMA-015` | `INV` | An application that stamps a schema version MUST freeze the shape its build writes. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which reads every crate declaring a `SCHEMA_VERSION` and refuses one carrying no frozen shape | none | verified |
 | `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
 | `SCHEMA-018` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | this spec section 2; architecture section 2.D; `ambre-spec-fixtures.md section 2` | Trame `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape`; Toile `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_toile::logic::state::schema_shape::a_key_appearing_moves_the_shape`; `ambre_toile::logic::state::schema_shape::a_value_type_changing_moves_the_shape`; Prose `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
@@ -62,10 +62,9 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 19 `verified`, 1 `untested`. A test holds the register: the
-  number carried from creation, the check at each full-state entry, a case per verdict. A layout
-  moved under an unchanged number turns a shape belt red. A meaning moved under it turns nothing
-  red yet (`SCHEMA-017`). Two peers
+* **Verification.** 20 `verified`. A test holds the register: the number carried from creation,
+  the check at each full-state entry, a case per verdict. A layout moved under an unchanged number
+  turns a shape belt red. A meaning moved under it turns a reading belt red (`SCHEMA-017`). Two peers
   migrating at once keep both edits (`SCHEMA-020`).
 
 ---
@@ -149,9 +148,11 @@ layout is then red until the number rises.
 * **The pairing is read, not trusted.** A crate that stamps a version and freezes nothing, and a
   frozen shape no belt compares, are each a half that holds nothing (`SCHEMA-015`). The same gate
   pairs them both ways, so a fourth application inherits the obligation rather than the list.
-* **What a layout is.** The frozen text records shape, not meaning. A value read differently under
-  the same key and type leaves it identical, so that half of the bump obligation stays with the
-  reviewer.
+* **What a layout is.** The frozen shape records layout, not meaning. A value read differently
+  under the same key and type leaves it identical. So each application also freezes a reading
+  beside it, in `schema/readings.txt` (`SCHEMA-017`). A second peer reopens the shape belt's
+  document and reads every stored value back through the production readers, in absolute units.
+  A register no reader reads is named as such, and so is listed in the frozen text.
 
 **Two versions, and the reader checks both.**
 
@@ -248,10 +249,10 @@ The user never sees the version. What they meet is what it protects them from.
 * **A second unreadable register says nothing new.** The import drains the notice, so a document
   with one broken record and a document with a thousand read identically. Deliberate -- see the
   rejected alternative -- but it does mean the surface cannot express severity.
-* **A meaning that moves under an unchanged layout still raises nothing.** The shape belts hold
-  `SCHEMA-009` because a layout change moves a line of the frozen text. A value read differently
-  under the same key and type leaves that text identical. The bump obligation on meaning
-  therefore stays with the reviewer. Each application's schema document names that half.
+* **A meaning is held only where the scenario stores a value.** The reading belt reads the
+  values the shape belt's document holds, one per declared key. A reader branch that value does
+  not take, a mark on a block kind the scenario lacks for instance, can move unseen. A register
+  no reader reads yet freezes that absence, so a first reader of it moves a line.
 * **Two peers who each edited the old version before migrating still race.** Their histories
   differ, so they derive two identities and mint rival containers. An edit typed into the losing
   one before they meet is lost. The common case, two peers opening one stored version, shares a

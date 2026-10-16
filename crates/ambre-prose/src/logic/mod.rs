@@ -66,6 +66,11 @@ mod convergence_tests;
 #[cfg(test)]
 mod schema_shape;
 
+/// The reading belt (`SCHEMA-017`): what each stored value means, frozen per
+/// `SCHEMA_VERSION` over the shape belt's scenario. Test-only, like it.
+#[cfg(test)]
+mod schema_reading;
+
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};

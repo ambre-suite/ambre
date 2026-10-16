@@ -291,7 +291,11 @@ impl ToileState {
     }
 
     /// The arrow `id` as the UI paints it, along the outline the cull routed.
-    fn display_connector(&self, id: &ConnectorId, path: BezPath) -> Option<DisplayConnector> {
+    pub(super) fn display_connector(
+        &self,
+        id: &ConnectorId,
+        path: BezPath,
+    ) -> Option<DisplayConnector> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
         Some(DisplayConnector {

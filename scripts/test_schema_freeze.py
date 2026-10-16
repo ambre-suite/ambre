@@ -233,6 +233,16 @@ class BeltTest(unittest.TestCase):
         belt(self.root, "ambre-x", version=1)
         self.assertEqual(len(self.findings()), 1)
 
+    def test_a_stamped_crate_with_no_frozen_readings_is_refused(self):
+        frozen(self.root, "ambre-x", missing="readings.txt")
+        belt(self.root, "ambre-x", version=1)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_frozen_readings_with_no_belt_are_refused(self):
+        frozen(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1, missing=schema_freeze.READING_BELT)
+        self.assertEqual(len(self.findings()), 1)
+
     def test_a_bump_with_no_section_to_compare_against_is_refused(self):
         # One finding per frozen file: none carries a `v2` section.
         frozen(self.root, "ambre-x")

@@ -17,7 +17,7 @@
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
-//! needs a frozen reading of the values, not of their types.
+//! is the reading belt's, in `schema_reading.rs`, over this same scenario.
 
 use std::collections::BTreeSet;
 
@@ -43,13 +43,13 @@ const STEPS: &str = include_str!("../../schema/migrations.txt");
 
 /// The source the key declarations are read from, so the coverage assertion
 /// cannot drift from the module it guards.
-const DOC_SOURCE: &str = include_str!("../doc.rs");
-const MARK_SOURCE: &str = include_str!("../mark.rs");
+pub(super) const DOC_SOURCE: &str = include_str!("../doc.rs");
+pub(super) const MARK_SOURCE: &str = include_str!("../mark.rs");
 
 /// The segment a tree node, a body container or a user-named register collapses
 /// to. Their names carry a `TreeID` or a peer id, so a shape that kept them
 /// would differ between two runs of the same build.
-const ANY: &str = "*";
+pub(super) const ANY: &str = "*";
 
 /// The type a value holds, named in the one spelling the freeze uses.
 ///
@@ -152,7 +152,7 @@ fn shape_of(doc: &LoroDoc) -> Shape {
 }
 
 /// The body container, under the one name every body collapses to.
-const ANY_BODY: &str = "t:*";
+pub(super) const ANY_BODY: &str = "t:*";
 
 /// The field a rich-text run carries its marks under. Loro's naming, not the
 /// schema's, so it stays out of the frozen lines.
@@ -238,7 +238,7 @@ fn frozen_section(version: u32) -> Option<String> {
 }
 
 /// The section of a frozen text that names this version.
-fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -262,7 +262,7 @@ fn section_of(frozen: &str, version: u32) -> Option<String> {
 ///
 /// The declarations are the schema's key vocabulary, and reading them here is
 /// what makes a new key fail the coverage assertion rather than pass unseen.
-fn declared_string_consts(source: &str) -> Vec<String> {
+pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in source.lines() {
         let bare = line.trim_start();
@@ -288,7 +288,7 @@ fn declared_string_consts(source: &str) -> Vec<String> {
 }
 
 /// Every `&str` element of the mark registry's arrays.
-fn declared_mark_roots(source: &str) -> Vec<String> {
+pub(super) fn declared_mark_roots(source: &str) -> Vec<String> {
     let mut found = declared_string_consts(source);
     for name in ["FORMATTING_KEYS", "ANCHOR_KEYS"] {
         let Some(start) = source.find(&format!("{name}: [&str;")) else {
@@ -318,7 +318,7 @@ fn declared_mark_roots(source: &str) -> Vec<String> {
 /// One block per shape, every paragraph property set, and one mark per
 /// registered root. It is deliberately not a realistic document: its job is
 /// width, and the coverage assertion fails when it stops having it.
-fn document_of_every_key() -> ProseState {
+pub(super) fn document_of_every_key() -> ProseState {
     let mut state = ProseState::with_peer(1).expect("a document is built");
     let root = state.root_blocks()[0];
     state.handle_command(ProseCommand::InsertText {

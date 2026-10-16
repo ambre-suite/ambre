@@ -74,8 +74,8 @@ status values are normative in `ambre-spec-template.md`.
   (`features/ambre-spec-prose-images.md`).
 * **Verification.** 26 `verified`. The bump obligation splits in two. A key or a
   type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
-  under an unchanged key turns nothing red yet (`SCHEMA-017`). The four convergence rows each run a
-  two-peer test.
+  under an unchanged key is red against the frozen reading (`SCHEMA-017`). The four convergence
+  rows each run a two-peer test.
   * The two annotation rows are held by the footnote, the first entry a command writes.
 
 ---

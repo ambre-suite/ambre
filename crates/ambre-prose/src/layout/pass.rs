@@ -785,7 +785,7 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Vec<f32> {
+pub(crate) fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Vec<f32> {
     let usable = stored_pt.len() == cols
         && stored_pt
             .iter()
@@ -804,7 +804,7 @@ fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Ve
 
 /// The look a cell stores. A value that does not parse, or a width that is
 /// negative or not finite, reads as absent.
-fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
+pub(crate) fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
     let Some(attrs) = doc::node_of(tree, cell).and_then(|node| doc::map_read(&node, doc::K_ATTRS))
     else {
         return CellStyle::default();

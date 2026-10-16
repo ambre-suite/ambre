@@ -309,7 +309,7 @@ impl ToileState {
     /// A config the board does not carry reads as the default. So does a value
     /// that is not a plain length. A negative or absurd one would make every
     /// slide change instant or unending, on a register any peer can write.
-    fn transition_ms(&self) -> f64 {
+    pub(super) fn transition_ms(&self) -> f64 {
         const MAX_TRANSITION_MS: f64 = 10_000.0;
         self.doc
             .get_map(PRESENTATION_CONFIG)

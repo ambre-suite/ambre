@@ -546,3 +546,8 @@ mod convergence_tests;
 /// so no client build carries it.
 #[cfg(test)]
 mod schema_shape;
+
+/// The schema reading belt (`SCHEMA-017`): what each stored value means, in
+/// absolute units, frozen per `SCHEMA_VERSION`. Test-only, like the shape belt.
+#[cfg(test)]
+mod schema_reading;

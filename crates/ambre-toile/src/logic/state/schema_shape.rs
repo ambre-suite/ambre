@@ -28,8 +28,9 @@
 //!
 //! **What it cannot hold.** A value whose meaning moves under an unchanged key
 //! and an unchanged type leaves the shape identical (`SCHEMA-017`). That half
-//! needs a frozen reading of the values, not of their types. A `LoroText` reads as `text` and a register as
-//! `string`, so a body demoted from a text container moves a line.
+//! is the reading belt's, in `schema_reading.rs`, over this same scenario. A
+//! `LoroText` reads as `text` and a register as `string`, so a body demoted
+//! from a text container moves a line.
 
 use std::collections::BTreeSet;
 
@@ -65,7 +66,7 @@ const STEPS: &str = include_str!("../../../schema/migrations.txt");
 /// The sources the key declarations are read from, so the coverage assertion
 /// cannot drift from the modules it guards. Every module that writes a key into
 /// the document is here; one that stops writing keys may leave.
-const KEY_SOURCES: [&str; 10] = [
+pub(super) const KEY_SOURCES: [&str; 10] = [
     include_str!("mod.rs"),
     include_str!("boolean.rs"),
     include_str!("clipboard.rs"),
@@ -79,7 +80,7 @@ const KEY_SOURCES: [&str; 10] = [
 ];
 
 /// The segment a minted id, a user id or a content hash collapses to.
-const ANY: &str = "*";
+pub(super) const ANY: &str = "*";
 
 /// The declared `&str` constants that name something other than a schema key,
 /// and so carry no line of their own. `COMMENT_ORIGIN` is a Loro commit origin,
@@ -88,7 +89,7 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["cmt"];
 
 /// The roots whose keys are schema words rather than data. Every other root is
 /// a dictionary keyed by an id, so its keys collapse to [`ANY`].
-fn keys_are_schema_words(root: &str) -> bool {
+pub(super) fn keys_are_schema_words(root: &str) -> bool {
     matches!(root, "board" | "presentation_config" | "meta")
         || root == ambre_core::schema::SCHEMA_META_MAP
 }
@@ -343,7 +344,7 @@ fn frozen_section(version: u32) -> Option<String> {
 }
 
 /// The section of a frozen text that names this version.
-fn section_of(frozen: &str, version: u32) -> Option<String> {
+pub(super) fn section_of(frozen: &str, version: u32) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
@@ -375,7 +376,7 @@ fn shipped(source: &str) -> &str {
 /// Toile writes most of its element fields as literals rather than through
 /// constants. Reading only the constants would leave the wider half of the
 /// schema uncovered.
-fn declared_keys(source: &str) -> Vec<String> {
+pub(super) fn declared_keys(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in shipped(source).lines() {
         let bare = line.trim_start();
@@ -424,7 +425,7 @@ fn created(outcome: &ToileOutcome) -> ElementId {
 /// thread with a reply, and a media entry. It is deliberately not a realistic
 /// board: its job is width, and the coverage assertion fails when it stops
 /// having it.
-fn board_of_every_key() -> ToileState {
+pub(super) fn board_of_every_key() -> ToileState {
     let mut st = ToileState::with_peer(1);
     st.set_user_id(UserId::from_bytes([7; 16]));
 
@@ -612,14 +613,22 @@ fn board_of_every_key() -> ToileState {
         resolved: true,
     });
     // The media map is seeded by the importer, which no command reaches from
-    // here: its entries are the blobs an import carries.
+    // here: its entries are the blobs an import carries. The thumbnail is a
+    // real PNG, so the reading belt (`SCHEMA-017`) reads its size back.
+    let mut thumb = Vec::new();
+    image::RgbaImage::new(1, 2)
+        .write_to(
+            &mut std::io::Cursor::new(&mut thumb),
+            image::ImageFormat::Png,
+        )
+        .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
         hash: ContentHash("h".to_owned()),
         plaintext: vec![1],
         mime: "image/png".to_owned(),
         width: 1,
         height: 2,
-        thumb: vec![2],
+        thumb,
     }]);
     st.doc.commit();
     st
