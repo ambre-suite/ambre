@@ -20,11 +20,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3394 rows: 2560 shipped, of which 14 partial and 14 loose. 834 unbuilt.**
+**3397 rows: 2563 shipped, of which 14 partial and 14 loose. 834 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 691 | 418 | 816 | 607 |  | 2532 |
+| `verified` | 694 | 418 | 816 | 607 |  | 2535 |
 | `partial` | 13 |  |  | 1 |  | 14 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` | 1 |  | 1 |  |  | 2 |
@@ -45,7 +45,7 @@
 | `ambre-spec-chrome.md` | 23 | 20 | 20 |  |  | 3 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 16 |  | 1 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |  |
-| `ambre-spec-delta-order.md` | 20 | 20 | 20 |  |  |  |
+| `ambre-spec-delta-order.md` | 22 | 22 | 22 |  |  |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 6 |  |  |  |
 | `ambre-spec-docfile.md` | 17 | 17 | 16 |  | 1 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 10 |  | 1 | 4 |
@@ -69,7 +69,7 @@
 | `ambre-spec-residency.md` | 20 | 19 | 19 |  |  | 1 |
 | `ambre-spec-schema-version.md` | 20 | 20 | 19 |  | 1 |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 22 | 22 |  |  | 2 |
-| `ambre-spec-sequencer.md` | 46 | 37 | 37 |  |  | 9 |
+| `ambre-spec-sequencer.md` | 47 | 38 | 38 |  |  | 9 |
 | `ambre-spec-server.md` | 52 | 34 | 32 | 1 | 1 | 18 |
 | `ambre-spec-session.md` | 17 | 17 | 16 | 1 |  |  |
 | `ambre-spec-sync.md` | 29 | 29 | 29 |  |  |  |
@@ -175,7 +175,7 @@
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
-| `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087,101,131 |
+| `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087,101,131,147..148 |
 | `ambre-spec-design-tokens.md` | UI-THREAD-029..034 |
 | `ambre-spec-docfile.md` | DOCFILE-001..017 |
 | `ambre-spec-drawing-surface.md` | CANVAS-002,025..030,055..056,061..066 |
@@ -259,7 +259,7 @@
 | `ambre-spec-residency.md` | RESID-001..020 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137 |

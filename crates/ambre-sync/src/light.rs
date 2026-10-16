@@ -290,8 +290,14 @@ mod tests {
         let doc = SyncDocumentState::new(document_id, doc_key.clone(), DocType::Trame, true);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
+        let echo = update(document_id, snapshot, &doc_key, None);
         if let Some(doc) = state.documents.get_mut(&document_id) {
-            doc.rekey.record_sent(1, doc_key.id(), b"edit".to_vec());
+            doc.rekey.record_sent(crate::rekey::SentFrame {
+                clock: 1,
+                key_id: doc_key.id(),
+                signature: echo.signature,
+                payload: b"edit".to_vec(),
+            });
         }
         state.handle_command(SyncCommand::ReleaseDocument {
             document_id,
@@ -303,7 +309,6 @@ mod tests {
             "an unacknowledged frame was dropped"
         );
         assert!(!released(drain(&rx)), "the store heard of a change unsent");
-        let echo = update(document_id, snapshot, &doc_key, None);
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
         state.receive_update(Seq(1), echo);
         assert_eq!(state.documents_len(), 0);

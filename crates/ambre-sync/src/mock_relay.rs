@@ -96,7 +96,9 @@ impl MockBlindRelay {
                     }
                 }
             }
-            WsClientMsg::Unsubscribe { document_id: _ } | WsClientMsg::Authenticate { .. } => {}
+            WsClientMsg::Unsubscribe { document_id: _ }
+            | WsClientMsg::Authenticate { .. }
+            | WsClientMsg::ClockResync { .. } => {}
             WsClientMsg::Update(update) => {
                 let doc_id = update.public_data.document_id;
                 let state = self

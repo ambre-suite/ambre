@@ -6,7 +6,7 @@
 // Demux by document_id / channel_id in each message.
 // ============================================================================
 
-use crate::messages::{Clock, Seq};
+use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::{ChannelId, DocType, DocumentId, KeyId, PublicKey, SnapshotId};
@@ -62,6 +62,15 @@ pub enum WsClientMsg {
     /// (`ambre-spec-session.md`, `SRV-031`). The relay reads nothing else
     /// until this frame is accepted.
     Authenticate { token: AccessToken },
+
+    /// The author's answer to a [`WsServerMsg::ClockRefused`], naming the
+    /// refused frame by its signature. The relay drops this socket's later
+    /// frames of the document until it reads this answer to the frame that
+    /// set the fence (`ambre-spec-sequencer.md`, `SRV-169`).
+    ClockResync {
+        document_id: DocumentId,
+        signature: Signature,
+    },
 }
 
 /// An access token on the wire. `Debug` prints no byte of it, so a logged
@@ -189,6 +198,17 @@ pub enum WsServerMsg {
         document_id: DocumentId,
         key_id: KeyId,
         clock: Clock,
+    },
+
+    /// A delta refused for its clock: another session of the same author took
+    /// it first (`ambre-spec-sequencer.md`, `SRV-037`). Sent to the author
+    /// alone, naming the frame by its signature. The author seals that frame
+    /// again from the `expected` clock on (`SYNC-147`).
+    ClockRefused {
+        document_id: DocumentId,
+        clock: Clock,
+        expected: Clock,
+        signature: Signature,
     },
 }
 

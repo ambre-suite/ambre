@@ -137,6 +137,9 @@ struct WsConnectionState {
     /// storage/cost amplification. One token is spent per inbound message; when
     /// the bucket is empty the message is rejected before any handler runs.
     msg_bucket: TokenBucket,
+    /// The documents whose frames this socket drops until the author answers
+    /// a refused clock (`SRV-169`).
+    clock_fences: ClockFences,
 }
 
 /// Close code of an upgrade refused on authentication (expired or rotated
@@ -201,6 +204,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         last_replay_at: HashMap::new(),
         channel_subscriptions: HashSet::new(),
         msg_bucket: TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec),
+        clock_fences: ClockFences::default(),
     };
 
     let (mut ws_sink, mut ws_stream) = socket.split();
@@ -319,6 +323,10 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                     );
                     handle_update(&state, &mut conn, update, &outbound_tx).await;
                 }
+                WsClientMsg::ClockResync {
+                    document_id,
+                    signature,
+                } => conn.clock_fences.answer(document_id, &signature),
                 WsClientMsg::Ephemeral(eph) => {
                     handle_ephemeral(&state, &mut conn, eph).await;
                 }

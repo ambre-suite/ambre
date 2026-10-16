@@ -458,6 +458,15 @@ impl SealedFrame {
     pub(crate) fn message(&self) -> &WsClientMsg {
         &self.0
     }
+
+    /// The signature of a sealed update, which names the frame in the relay's
+    /// echo and refusal (`SYNC-147`). `None` for any other frame.
+    pub(crate) fn update_signature(&self) -> Option<Signature> {
+        match &self.0 {
+            WsClientMsg::Update(update) => Some(update.signature),
+            _ => None,
+        }
+    }
 }
 
 /// Bytes bound for object storage, built by the seal and by nothing else. The

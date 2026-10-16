@@ -1,4 +1,6 @@
 use super::*;
+use crate::rekey::SentFrame;
+use ambre_protocol::messages::Signature;
 
 impl SyncState {
     // -- Causal quarantine (`ambre-spec-delta-order.md`) ------------
@@ -58,8 +60,9 @@ impl SyncState {
         if authored_by_us {
             doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock.0);
             // The echo is the relay's receipt: that frame and every earlier
-            // one need no resend (`SYNC-129`).
-            doc_state.rekey.confirm_through(update.public_data.clock.0);
+            // one need no resend (`SYNC-129`). Another session of this user
+            // signs its own frames, so its echo confirms nothing (`SYNC-148`).
+            doc_state.rekey.confirm(&update.signature);
             // A release waiting on this echo lands now (`RESID-009`).
             if doc_state.released.is_some() {
                 self.settle_release(document_id);
@@ -947,16 +950,23 @@ impl SyncState {
         }
         doc_state.local_clock += 1;
         let clock = doc_state.local_clock;
-        if let Some(key_id) = self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
+        if let Some((key_id, signature)) =
+            self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
             && let Some(doc_state) = self.documents.get_mut(&document_id)
-            && doc_state.rekey.record_sent(clock, key_id, body)
+            && doc_state.rekey.record_sent(SentFrame {
+                clock,
+                key_id,
+                signature,
+                payload: body,
+            })
         {
             tracing::warn!("[Sync] unconfirmed log full doc={document_id}, oldest forgotten");
         }
     }
 
     /// Seals an update `body` at `clock` under the current key and sends it.
-    /// Returns the key it was sealed under, `None` when the seal failed.
+    /// Returns the key it was sealed under and its signature, `None` when the
+    /// seal failed.
     fn seal_and_send(
         &self,
         document_id: DocumentId,
@@ -964,7 +974,7 @@ impl SyncState {
         body: &[u8],
         signing_key: &SigningKey,
         pub_key: PublicKey,
-    ) -> Option<KeyId> {
+    ) -> Option<(KeyId, Signature)> {
         let doc_state = self.documents.get(&document_id)?;
         let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
@@ -978,7 +988,9 @@ impl SyncState {
             Ok(frame) => {
                 tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
                 self.ws_send_sealed(&frame);
-                Some(key_id)
+                frame
+                    .update_signature()
+                    .map(|signature| (key_id, signature))
             }
             Err(e) => {
                 tracing::error!("[Sync] SendUpdate seal failed for {document_id:?}: {e}");
@@ -1000,10 +1012,48 @@ impl SyncState {
             (self.signing_key.clone(), self.author_pub_key())
         {
             for (clock, body) in refused {
-                self.seal_and_send(document_id, clock, &body, &signing_key, pub_key.clone());
+                if let Some((_, signature)) =
+                    self.seal_and_send(document_id, clock, &body, &signing_key, pub_key.clone())
+                    && let Some(doc_state) = self.documents.get_mut(&document_id)
+                {
+                    doc_state.rekey.resealed(clock, signature);
+                }
             }
         }
         for body in waiting {
+            self.send_body(document_id, body);
+        }
+    }
+
+    /// The relay refused our frame signed `signature` for its clock: another
+    /// session of this user took it first (`SRV-037`). The answer lifts the
+    /// relay's fence on this socket (`SRV-169`). The frame and every later one
+    /// then leave again in order, from the `expected` clock on (`SYNC-147`).
+    pub(crate) fn handle_clock_refused(
+        &mut self,
+        document_id: DocumentId,
+        expected: u64,
+        signature: Signature,
+    ) {
+        // Answered even when no frame here carries it, so a frame this log
+        // forgot never leaves the fence standing.
+        self.ws_send(&WsClientMsg::ClockResync {
+            document_id,
+            signature,
+        });
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some(bodies) = doc_state.rekey.clock_refused(&signature) else {
+            return;
+        };
+        tracing::info!(
+            "[Sync] clock refused doc={document_id}, {} frame(s) leave again from {expected}",
+            bodies.len()
+        );
+        // The clocks of the frames taken back are void: the relay took none.
+        doc_state.local_clock = expected.saturating_sub(1);
+        for body in bodies {
             self.send_body(document_id, body);
         }
     }
@@ -2517,8 +2567,13 @@ mod tests {
         rx: &ambre_bus::conduit::Receiver<Vec<u8>>,
         keys: &[&DocumentKey],
     ) -> Vec<(u64, KeyId, Vec<u8>)> {
-        drain_ws(rx)
-            .into_iter()
+        opened_updates(drain_ws(rx), keys)
+    }
+
+    /// Each update among `msgs`, as its clock, the key it names and its
+    /// plaintext.
+    fn opened_updates(msgs: Vec<WsClientMsg>, keys: &[&DocumentKey]) -> Vec<(u64, KeyId, Vec<u8>)> {
+        msgs.into_iter()
             .filter_map(|msg| match msg {
                 WsClientMsg::Update(u) => {
                     let key = keys.iter().find(|k| k.id() == u.public_data.key_id)?;
@@ -2529,6 +2584,89 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The signature of each update among `msgs`, in order.
+    fn signatures(msgs: &[WsClientMsg]) -> Vec<Signature> {
+        msgs.iter()
+            .filter_map(|msg| match msg {
+                WsClientMsg::Update(u) => Some(u.signature),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `SYNC-147`: another session of this user took clock 1. The relay
+    /// refuses this session's frame 1 and drops frame 2 behind it. The answer
+    /// names the refused frame, then both leave again in order from clock 2.
+    /// A late refusal of frame 2's first seal is answered and sends nothing.
+    #[test]
+    fn a_frame_refused_for_its_clock_leaves_again_with_every_later_one() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let first = signatures(&drain_ws(&ws_rx));
+        assert_eq!(first.len(), 2);
+
+        state.handle_ws_message(WsServerMsg::ClockRefused {
+            document_id: doc,
+            clock: Clock(1),
+            expected: Clock(2),
+            signature: first[0],
+        });
+        let mut msgs = drain_ws(&ws_rx);
+        assert!(
+            matches!(msgs.first(), Some(WsClientMsg::ClockResync { signature, .. }) if *signature == first[0]),
+            "the answer leaves first: {msgs:?}"
+        );
+        let resent = opened_updates(msgs.split_off(1), &[&key]);
+        assert_eq!(
+            resent,
+            vec![(2, key.id(), b"a".to_vec()), (3, key.id(), b"b".to_vec())]
+        );
+
+        state.handle_ws_message(WsServerMsg::ClockRefused {
+            document_id: doc,
+            clock: Clock(2),
+            expected: Clock(2),
+            signature: first[1],
+        });
+        let late = drain_ws(&ws_rx);
+        assert!(
+            matches!(late.as_slice(), [WsClientMsg::ClockResync { signature, .. }] if *signature == first[1]),
+            "a late refusal sends its answer alone: {late:?}"
+        );
+    }
+
+    /// `SYNC-148`: the echo of another session's frame, under this user's key
+    /// and at the clock of a frame this session sent, confirms nothing. The
+    /// echo of this session's own frame does.
+    #[test]
+    fn the_echo_of_another_sessions_frame_confirms_nothing_here() {
+        let (mut state, _rx, doc, key, sk, snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        let ours = drain_ws(&ws_rx);
+        assert_eq!(state.documents[&doc].rekey.sent_len(), 1);
+
+        let theirs = make_update(doc, snap, 1, b"other session", &key, &sk);
+        state.receive_update(Seq(1), theirs);
+        assert_eq!(
+            state.documents[&doc].rekey.sent_len(),
+            1,
+            "still unconfirmed"
+        );
+
+        let Some(WsClientMsg::Update(echo)) = ours.into_iter().next() else {
+            panic!("an update left");
+        };
+        state.receive_update(Seq(2), echo);
+        assert_eq!(state.documents[&doc].rekey.sent_len(), 0);
     }
 
     /// A frame refused while a rotation is owed waits for the rotation, then is

@@ -21,11 +21,56 @@ pub(crate) fn contiguous_prefix(
     (prefix, None)
 }
 
+/// The documents whose later frames this socket drops after a refused clock,
+/// each with the signature of the frame refused (`SRV-169`).
+///
+/// Two sessions of one user share one clock. When one session's frame is
+/// refused, the frames it sent behind it may fit the clock the other session
+/// left. Accepted, they would land ahead of the refused frame they build on.
+/// So the socket drops them until the author answers the refusal.
+#[derive(Debug, Default)]
+pub(crate) struct ClockFences(HashMap<DocumentId, ambre_protocol::messages::Signature>);
+
+impl ClockFences {
+    /// The frame signed `signature` was refused for its clock.
+    pub(crate) fn raise(
+        &mut self,
+        document_id: DocumentId,
+        signature: ambre_protocol::messages::Signature,
+    ) {
+        self.0.insert(document_id, signature);
+    }
+
+    /// Whether the socket drops this document's frames.
+    pub(crate) fn holds(&self, document_id: &DocumentId) -> bool {
+        self.0.contains_key(document_id)
+    }
+
+    /// The author answered the refusal of the frame signed `signature`. Only
+    /// the answer to the frame that raised the fence lifts it, so a late
+    /// answer to an earlier refusal never opens a later fence.
+    pub(crate) fn answer(
+        &mut self,
+        document_id: DocumentId,
+        signature: &ambre_protocol::messages::Signature,
+    ) {
+        if self.0.get(&document_id) == Some(signature) {
+            self.0.remove(&document_id);
+        }
+    }
+
+    /// The socket left the document: nothing it sends there is read.
+    pub(crate) fn forget(&mut self, document_id: &DocumentId) {
+        self.0.remove(document_id);
+    }
+}
+
 /// The frame an update refused at clock validation sends back.
 ///
-/// A refused clock is a conflict the client acts on, so it carries the expected
-/// and the received clock (`SRV-037`). A store failure reaches the client as one
-/// generic message, and its name and text stay in the log (`SRV-081`, `SRV-020`).
+/// The client acts on a refused clock. So the refusal names the frame by its
+/// signature, and carries the expected and the received clock (`SRV-037`).
+/// A store failure reaches the client as one generic message, and its name and
+/// text stay in the log (`SRV-081`, `SRV-020`).
 ///
 /// A document that owes a rotation refuses the frame for its key. The refusal
 /// names the key and the clock, so the author seals that frame again under the
@@ -38,9 +83,11 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
             key_id: update.public_data.key_id,
             clock: update.public_data.clock,
         },
-        AppError::ClockMismatch { .. } => WsServerMsg::Error {
-            code: 409,
-            message: e.to_string(),
+        AppError::ClockMismatch { expected, got } => WsServerMsg::ClockRefused {
+            document_id: *doc_id,
+            clock: ambre_protocol::messages::Clock(*got),
+            expected: ambre_protocol::messages::Clock(*expected),
+            signature: update.signature,
         },
         // The document is being deleted (`SRV-017`).
         AppError::NotFound { .. } => WsServerMsg::Error {
@@ -152,6 +199,7 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
     conn.doc_subscriptions.remove(&document_id);
     conn.doc_access_verified_at.remove(&document_id);
     conn.doc_write_allowed.remove(&document_id);
+    conn.clock_fences.forget(&document_id);
 }
 
 /// Tell everyone still watching `document_id` that this connection's peer
@@ -294,6 +342,14 @@ pub(crate) async fn handle_update(
     let pub_key_hex = author_pubkey.to_hex();
     let clock = update.public_data.clock.0;
 
+    // A frame sent behind a refused one waits for the author's answer: it
+    // takes no clock and no sequence number (`SRV-169`). The author sends it
+    // again after its answer, so dropping it loses nothing.
+    if conn.clock_fences.holds(&doc_id) {
+        tracing::debug!("[Server] fenced frame dropped doc={doc_id} clock={clock}");
+        return;
+    }
+
     let seq =
         match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock)
             .await
@@ -305,6 +361,9 @@ pub(crate) async fn handle_update(
                 s
             }
             Err(e) => {
+                if matches!(e, AppError::ClockMismatch { .. }) {
+                    conn.clock_fences.raise(doc_id, update.signature);
+                }
                 let _ = outbound_tx
                     .send(encode_server_msg(&update_refusal(&update, &e)))
                     .await;
@@ -1117,7 +1176,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x05);
+        assert_eq!(bytes[0], 0x06);
     }
 
     #[test]
@@ -1193,6 +1252,7 @@ mod ephemeral_binding_tests {
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
         }
     }
 
@@ -1490,6 +1550,7 @@ mod delta_size_cap_tests {
             // A wide bucket so these tests exercise their own concern, not the
             // rate limit (which the loop enforces, covered by its own test).
             msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
         }
     }
 
@@ -1689,6 +1750,7 @@ mod access_tests {
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
         }
     }
 
@@ -2170,21 +2232,49 @@ mod refusal_tests {
 
     #[test]
     fn a_refused_clock_carries_the_expected_and_the_received_value() {
+        let update = seq_update(9).update;
         let refusal = update_refusal(
-            &seq_update(9).update,
+            &update,
             &AppError::ClockMismatch {
                 expected: 5,
                 got: 9,
             },
         );
-        let WsServerMsg::Error { code, message } = refusal else {
-            panic!("expected an error frame");
+        let WsServerMsg::ClockRefused {
+            document_id,
+            clock,
+            expected,
+            signature,
+        } = refusal
+        else {
+            panic!("expected a clock refusal, got {refusal:?}");
         };
-        assert_eq!(code, 409);
+        assert_eq!(document_id, update.public_data.document_id);
+        assert_eq!((clock.0, expected.0), (9, 5));
+        assert_eq!(signature, update.signature, "the refusal names the frame");
+    }
+
+    /// `SRV-169`: after a refused clock, the socket drops the document's later
+    /// frames. Only the author's answer to the frame that raised the fence
+    /// lifts it, and leaving the document forgets it.
+    #[test]
+    fn a_refused_clock_fences_the_socket_until_its_answer() {
+        use ambre_protocol::messages::Signature;
+        let doc = DocumentId::new();
+        let other = DocumentId::new();
+        let mut fences = ClockFences::default();
+        fences.raise(doc, Signature([1; 64]));
+        assert!(fences.holds(&doc) && !fences.holds(&other));
+        fences.answer(doc, &Signature([2; 64]));
         assert!(
-            message.contains("expected 5") && message.contains("got 9"),
-            "{message}"
+            fences.holds(&doc),
+            "an answer to another frame lifts nothing"
         );
+        fences.answer(doc, &Signature([1; 64]));
+        assert!(!fences.holds(&doc));
+        fences.raise(doc, Signature([3; 64]));
+        fences.forget(&doc);
+        assert!(!fences.holds(&doc));
     }
 
     #[test]
@@ -2278,6 +2368,7 @@ mod hot_tail_tests {
             last_replay_at: HashMap::new(),
             channel_subscriptions: HashSet::new(),
             msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
         };
         (state, conn, doc_id)
     }
@@ -2363,6 +2454,73 @@ mod hot_tail_tests {
         assert!(matches!(rows.as_slice(), [r] if r.wire.is_none() && r.s3_key.is_some()));
         let pending: usize = state.redis.llen(pending_key.as_str()).await.unwrap();
         assert_eq!(pending, 1, "a large delta waits for the flush");
+        let _: usize = state.redis.del(pending_key).await.unwrap();
+    }
+
+    /// `SRV-037`, `SRV-169`: two sessions of one key race for clock 1. The
+    /// loser hears a refusal naming its frame. Its clock-2 frame, sent behind
+    /// it, fits the clock the winner left and is still dropped. After the
+    /// answer, the frame sealed again at clock 2 lands.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_frame_behind_a_refused_clock_waits_for_the_answer(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let key = ed25519_dalek::SigningKey::from_bytes(&[43u8; 32]);
+        let (state, mut first, doc_id) = writer(pool, &stub, &key).await;
+        let mut second = WsConnectionState {
+            user_id: first.user_id,
+            signing_pubkey: first.signing_pubkey.clone(),
+            doc_subscriptions: HashSet::from([doc_id]),
+            doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
+            doc_write_allowed: HashMap::from([(doc_id, true)]),
+            last_replay_at: HashMap::new(),
+            channel_subscriptions: HashSet::new(),
+            msg_bucket: TokenBucket::new(1000, 1000),
+            clock_fences: ClockFences::default(),
+        };
+        let (tx, _rx) = mpsc::channel::<Vec<u8>>(8);
+        let (second_tx, mut second_rx) = mpsc::channel::<Vec<u8>>(8);
+        let stored = |state: Arc<AppState>| async move {
+            db::get_updates_after(&state.db, &doc_id, 0, 10)
+                .await
+                .unwrap()
+                .len()
+        };
+
+        handle_update(&state, &mut first, signed_update(&key, doc_id, 1, 16), &tx).await;
+        let lost = signed_update(&key, doc_id, 1, 20);
+        let lost_signature = lost.signature;
+        handle_update(&state, &mut second, lost, &second_tx).await;
+        let refusal =
+            ambre_protocol::ws::decode_server_msg(&second_rx.try_recv().unwrap()).unwrap();
+        let WsServerMsg::ClockRefused {
+            clock,
+            expected,
+            signature,
+            ..
+        } = refusal
+        else {
+            panic!("expected a clock refusal, got {refusal:?}");
+        };
+        assert_eq!((clock.0, expected.0), (1, 2));
+        assert_eq!(signature, lost_signature);
+
+        let behind = signed_update(&key, doc_id, 2, 20);
+        handle_update(&state, &mut second, behind, &second_tx).await;
+        assert!(
+            second_rx.try_recv().is_err(),
+            "a fenced frame is dropped unanswered"
+        );
+        assert_eq!(stored(state.clone()).await, 1, "clock 2 is still free");
+
+        second.clock_fences.answer(doc_id, &lost_signature);
+        let again = signed_update(&key, doc_id, 2, 24);
+        handle_update(&state, &mut second, again, &second_tx).await;
+        assert_eq!(stored(state.clone()).await, 2, "the answer lifts the fence");
+        let pending_key = format!("doc:{doc_id}:pending");
         let _: usize = state.redis.del(pending_key).await.unwrap();
     }
 

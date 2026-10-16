@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 32 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
-| `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 20 |  |
+| `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 1 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 |  |
@@ -50,7 +50,7 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 17 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | partial | 20 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 46 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 47 |  |
 | `server` | The one process every client talks to. | partial | 52 | 1 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 |  |
 | `ui` | The page's own thread. | partial | 17 | 2 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 19 implemented, 21 partial, 5 design-only. 921 contract rows, 13 loose.**
+**45 features: 19 implemented, 21 partial, 5 design-only. 924 contract rows, 13 loose.**

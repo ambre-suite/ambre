@@ -1009,6 +1009,20 @@ impl SyncState {
                 clock,
             } => self.handle_key_refused(document_id, key_id, clock.0),
 
+            WsServerMsg::ClockRefused {
+                document_id,
+                clock,
+                expected,
+                signature,
+            } => {
+                tracing::info!(
+                    "Sync: clock {} refused doc={document_id}, expected {}",
+                    clock.0,
+                    expected.0
+                );
+                self.handle_clock_refused(document_id, expected.0, signature);
+            }
+
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
                 // personal topic). Close it locally and tell the Logic thread we

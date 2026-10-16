@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (5, "fe1a5d6a47ebc20d0820d5b089212a98");
+const FROZEN_LAYOUT: (u8, &str) = (6, "48119f86bf38225f347ae0afc20d3abe");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -304,6 +304,10 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::Authenticate {
             token: crate::ws::AccessToken::new("t".into()),
         },
+        C::ClockResync {
+            document_id: doc,
+            signature: Signature([41; 64]),
+        },
     ]
 }
 
@@ -362,6 +366,12 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             document_id: doc,
             key_id: KeyId::from_array([10; 16]),
             clock: Clock(11),
+        },
+        S::ClockRefused {
+            document_id: doc,
+            clock: Clock(12),
+            expected: Clock(13),
+            signature: Signature([14; 64]),
         },
     ]
 }

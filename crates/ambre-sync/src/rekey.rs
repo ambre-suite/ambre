@@ -10,12 +10,18 @@
 // under the next key (`SYNC-129`). An edit made while the rotation is owed waits
 // for the new key unsealed (`SYNC-128`).
 //
+// Two sessions of one user share one clock at the relay. So this log knows a
+// frame by its signature, never by its clock. The other session's echo at the
+// same clock confirms nothing here (`SYNC-148`). A frame refused for its
+// clock leaves again, with every later one, at the next clocks (`SYNC-147`).
+//
 // Pure state, no IO: the caller seals, sends and spawns.
 // ============================================================================
 
 use std::collections::VecDeque;
 
 use ambre_core::KeyId;
+use ambre_protocol::messages::Signature;
 
 /// Updates kept per document until the relay echoes them back. Past the cap the
 /// oldest is forgotten, and a refusal of it can no longer be answered
@@ -28,6 +34,8 @@ pub(crate) struct SentFrame {
     pub clock: u64,
     /// The key the frame was last sealed under.
     pub key_id: KeyId,
+    /// The signature of its last seal. The relay's echo and refusal carry it.
+    pub signature: Signature,
     /// The plaintext body, its session nonce ahead of the delta, kept to seal
     /// it again under another key.
     pub payload: Vec<u8>,
@@ -52,7 +60,7 @@ pub(crate) enum Refusal {
 /// The sent-frame log and the debt of one document.
 #[derive(Debug, Default)]
 pub(crate) struct Rekey {
-    /// Updates sent and not yet echoed, in clock order.
+    /// Updates sent and not yet echoed, in the order they left.
     sent: VecDeque<SentFrame>,
     /// The document owes a rotation this client pays before it sends.
     owed: bool,
@@ -66,12 +74,8 @@ pub(crate) struct Rekey {
 
 impl Rekey {
     /// Records an update just sent. Returns `true` when the cap forgot one.
-    pub(crate) fn record_sent(&mut self, clock: u64, key_id: KeyId, payload: Vec<u8>) -> bool {
-        self.sent.push_back(SentFrame {
-            clock,
-            key_id,
-            payload,
-        });
+    pub(crate) fn record_sent(&mut self, sent: SentFrame) -> bool {
+        self.sent.push_back(sent);
         let over = self.sent.len() > UNCONFIRMED_LIMIT;
         if over {
             self.sent.pop_front();
@@ -79,14 +83,46 @@ impl Rekey {
         over
     }
 
-    /// The relay echoed our update at `clock`: it and every earlier one landed.
-    pub(crate) fn confirm_through(&mut self, clock: u64) {
-        while self.sent.front().is_some_and(|f| f.clock <= clock) {
-            self.sent.pop_front();
-        }
+    /// The relay echoed our update signed `signature`: it and every frame
+    /// that left before it landed. An echo of a frame not here, such as
+    /// another session's at the same clock, confirms nothing (`SYNC-148`).
+    pub(crate) fn confirm(&mut self, signature: &Signature) {
+        let Some((at, clock)) = self.position(signature) else {
+            return;
+        };
+        self.sent.drain(..=at);
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
         }
+    }
+
+    /// The relay refused the frame signed `signature` for its clock. Returns
+    /// its body and the body of every frame that left after it, in order, to
+    /// seal again at the next clocks. The relay dropped those later frames
+    /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no frame here
+    /// carries that signature: a refusal of a frame already sent again.
+    pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+        let (at, from) = self.position(signature)?;
+        if self.refused_from.is_some_and(|c| c >= from) {
+            self.refused_from = None;
+        }
+        Some(self.sent.drain(at..).map(|f| f.payload).collect())
+    }
+
+    /// The frame at `clock` was sealed again, under a new signature.
+    pub(crate) fn resealed(&mut self, clock: u64, signature: Signature) {
+        if let Some(frame) = self.sent.iter_mut().find(|f| f.clock == clock) {
+            frame.signature = signature;
+        }
+    }
+
+    /// The index and the clock of the frame signed `signature`.
+    fn position(&self, signature: &Signature) -> Option<(usize, u64)> {
+        self.sent
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.signature == *signature)
+            .map(|(at, f)| (at, f.clock))
     }
 
     /// The relay refused the frame at `clock`, sealed under `key_id`, while
@@ -187,11 +223,24 @@ mod tests {
         KeyId::from_array([n; 16])
     }
 
-    /// A log with clocks 1 to 3 sent under key 1.
+    fn sig(n: u8) -> Signature {
+        Signature([n; 64])
+    }
+
+    fn frame(clock: u64, signature: u8) -> SentFrame {
+        SentFrame {
+            clock,
+            key_id: key(1),
+            signature: sig(signature),
+            payload: vec![clock as u8],
+        }
+    }
+
+    /// A log with clocks 1 to 3 sent under key 1, each signed with its clock.
     fn three_sent() -> Rekey {
         let mut r = Rekey::default();
         for c in 1..=3 {
-            r.record_sent(c, key(1), vec![c as u8]);
+            r.record_sent(frame(c, c as u8));
         }
         r
     }
@@ -202,7 +251,7 @@ mod tests {
     #[test]
     fn a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks() {
         let mut r = three_sent();
-        r.confirm_through(1);
+        r.confirm(&sig(1));
         assert_eq!(r.refused(key(1), 2, key(1)), Refusal::Settle);
         assert_eq!(r.refused(key(1), 3, key(1)), Refusal::Wait);
         assert!(r.owes());
@@ -246,15 +295,38 @@ mod tests {
     #[test]
     fn the_sent_log_is_cleared_by_the_echo_and_bounded() {
         let mut r = three_sent();
-        r.confirm_through(2);
+        r.confirm(&sig(2));
         assert_eq!(r.sent_len(), 1);
         assert_eq!(r.refused(key(1), 1, key(1)), Refusal::Stale);
         let mut big = Rekey::default();
         let forgot = (0..=UNCONFIRMED_LIMIT as u64)
-            .map(|c| big.record_sent(c, key(1), Vec::new()))
+            .map(|c| big.record_sent(frame(c, 0)))
             .filter(|&f| f)
             .count();
         assert_eq!(forgot, 1);
         assert_eq!(big.sent_len(), UNCONFIRMED_LIMIT);
+    }
+
+    /// `SYNC-148`: the echo of another session's frame, at a clock this log
+    /// holds and under the same key, confirms nothing. Only the signature of
+    /// a frame sent here does.
+    #[test]
+    fn an_echo_at_the_same_clock_from_another_session_confirms_nothing() {
+        let mut r = three_sent();
+        r.confirm(&sig(99));
+        assert_eq!(r.sent_len(), 3, "a foreign signature takes nothing");
+        r.confirm(&sig(3));
+        assert_eq!(r.sent_len(), 0);
+    }
+
+    /// `SYNC-147`: a frame refused for its clock comes back with every frame
+    /// that left after it, in order. A second refusal of one of them, sent
+    /// before the relay read the answer, is stale.
+    #[test]
+    fn a_clock_refusal_returns_the_frame_and_every_later_one() {
+        let mut r = three_sent();
+        assert_eq!(r.clock_refused(&sig(2)), Some(vec![vec![2], vec![3]]));
+        assert_eq!(r.sent_len(), 1, "the frame before it stays unconfirmed");
+        assert_eq!(r.clock_refused(&sig(3)), None, "already taken back");
     }
 }

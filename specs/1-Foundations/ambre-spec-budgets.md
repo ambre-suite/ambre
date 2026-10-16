@@ -251,7 +251,7 @@
 | `SyncDocumentState`, per open document | < 1 MB | `DocumentKey`, counters, sync state, quarantine |
 | `quarantine`, per document | ~2 MB max | Capped at 1000 updates of ~2 KB average |
 | `old_keys`, per document | negligible | Capped at 10 `DocumentKey` (32 bytes plus overhead) |
-| Unconfirmed updates, per document | 1024 updates | `UNCONFIRMED_LIMIT`: the sent frames the relay has not echoed yet, kept to resend one it refuses (`SYNC-129`). Past the cap the oldest is forgotten, and a refusal for it resends nothing |
+| Unconfirmed updates, per document | 1024 updates | `UNCONFIRMED_LIMIT`: the sent frames the relay has not echoed yet, kept to resend one it refuses for its key (`SYNC-129`) or its clock (`SYNC-147`). Past the cap the oldest is forgotten, and a refusal for it resends nothing |
 | Sync events held on Main past a full channel | 4096 events, released at 1024 | `SYNC_INBOX_HIGH` and `SYNC_INBOX_LOW`, four times and once the channel capacity. At the high mark the Sync worker closes its socket, and the relay holds the rest (`SYNC-059`). The bound is a count, not bytes: a replay batch is one event |
 | Edits held before the session identity, per document | 256 edits | `HELD_EDITS_LIMIT` in `ambre-logic`. The wait is one message from the Sync worker, so the cap is reached only by a session opened before its unlock. Past the cap a new edit is dropped and logged (`AUTHOR-026`). A cached document restored in that wait is held too, one copy of its bytes until the identity lands (`AUTHOR-027`) |
 | Sync overhead, 1 host document plus 3 embedded | ~4-8 MB | The typical scenario |

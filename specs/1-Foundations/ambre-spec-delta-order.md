@@ -69,6 +69,16 @@ relay.
 | `SYNC-025` | `POST` | A reload MUST recover the clock from the relay's echo of this client's own updates. | this spec section 3 | `ambre_sync::updates::tests::a_reload_takes_its_clock_from_the_echo_of_its_own_update` -- the echo of its own clock-41 update moves the counter, a peer's clock 99 does not, and the next frame leaves with clock 42 | none | verified |
 | `SYNC-087` | `FRAME` | A reconnect MUST NOT apply an update the client already applied. | this spec section 3; derived | `ambre_sync::updates::tests::a_reconnect_replay_applies_nothing_twice` -- a replay overlapping a broadcast already received delivers the overlap once, and a held copy is not held twice | none | verified |
 
+### 1.5 Two sessions of one author write at once
+
+Two tabs or two devices of one user sign with one author key, so they share one clock on the
+relay. A frame each sends before it sees the other's echo takes a clock the other already used.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-147` | `POST` | A frame the relay refuses for its clock MUST be sealed again at the next free clock and sent again, with every frame sent after it, in order. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-037`, `SRV-169` | `ambre_sync::updates::tests::a_frame_refused_for_its_clock_leaves_again_with_every_later_one` -- the answer leaves first, then the refused frame and the later one at the expected clock and the next, and a late refusal sends its answer alone; `ambre_sync::rekey::tests::a_clock_refusal_returns_the_frame_and_every_later_one` -- the log gives back the refused frame and every later one, and a refusal of a frame already taken back gives back nothing | none | verified |
+| `SYNC-148` | `FRAME` | The echo of another session's frame MUST NOT confirm a frame this session sent at the same clock. | this spec section 3; `SYNC-147` | `ambre_sync::updates::tests::the_echo_of_another_sessions_frame_confirms_nothing_here` -- an echo of the same author and clock, under another signature, leaves the frame in the log; `ambre_sync::rekey::tests::an_echo_at_the_same_clock_from_another_session_confirms_nothing` -- the log confirms by signature alone | none | verified |
+
 * **Budget.** the release of 100 quarantined updates under 1 ms, a row of
   `ambre-spec-budgets.md section 1`, and the two memory holders of
   `ambre-spec-budgets.md section 6`. No bench measures the release, which that first table records
@@ -76,7 +86,7 @@ relay.
 * **Boundary.** nothing here opens a socket or holds a key of its own. Every message it orders is
   already sealed (`ambre-spec-sealed-envelope.md`). The parent snapshot, the clock and the sequence
   number it reads are the routing metadata `ZK-007` allows.
-* **Verification.** 20 `verified`. What holds is the quarantine itself. An update ahead of its
+* **Verification.** 22 `verified`. What holds is the quarantine itself. An update ahead of its
   snapshot waits, and one whose base is known is delivered. The release runs in clock order, and
   the overflow drops the lowest clock and warns once. The clock recovery, the batched replay and the
   pull after a reconnect are driven over the mock transport, whose open event the host tier fires.
@@ -97,6 +107,7 @@ example to its verification.
 | edits while Bob is offline | reconnects | Alice's edits | Bob receives them as one repaint, not one per edit (`SYNC-027`) | `updates::tests::a_history_replay_reaches_logic_as_one_batch` |
 | compacts the document | is editing it | the new snapshot | Bob keeps his base until the snapshot is downloaded and opened (`SYNC-030`) | `updates::tests::an_announced_snapshot_releases_nothing_until_fetched` |
 | reloads the page and edits | watches | Alice's edit | Alice's edit reaches Bob rather than being refused (`SYNC-025`) | `updates::tests::a_reload_takes_its_clock_from_the_echo_of_its_own_update` |
+| edits in two tabs at once | watches | both of Alice's edits | Bob sees both, in the order Alice's tabs sent them; the refused one arrives a round trip later (`SYNC-147`) | `updates::tests::a_frame_refused_for_its_clock_leaves_again_with_every_later_one` |
 
 ---
 
