@@ -64,8 +64,8 @@ pub enum WsClientMsg {
     Authenticate { token: AccessToken },
 
     /// The author's answer to a [`WsServerMsg::ClockRefused`], naming the
-    /// refused frame by its signature. The relay drops this socket's later
-    /// frames of the document until it reads this answer to the frame that
+    /// refused delta by its signature. The relay drops this socket's later
+    /// deltas of the document until it reads this answer to the delta that
     /// set the fence (`ambre-spec-sequencer.md`, `SRV-169`).
     ClockResync {
         document_id: DocumentId,
@@ -202,7 +202,7 @@ pub enum WsServerMsg {
 
     /// A delta refused for its clock: another session of the same author took
     /// it first (`ambre-spec-sequencer.md`, `SRV-037`). Sent to the author
-    /// alone, naming the frame by its signature. The author seals that frame
+    /// alone, naming the delta by its signature. The author seals that delta
     /// again from the `expected` clock on (`SYNC-147`).
     ClockRefused {
         document_id: DocumentId,

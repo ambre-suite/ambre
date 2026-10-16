@@ -137,7 +137,7 @@ struct WsConnectionState {
     /// storage/cost amplification. One token is spent per inbound message; when
     /// the bucket is empty the message is rejected before any handler runs.
     msg_bucket: TokenBucket,
-    /// The documents whose frames this socket drops until the author answers
+    /// The documents whose deltas this socket drops until the author answers
     /// a refused clock (`SRV-169`).
     clock_fences: ClockFences,
 }

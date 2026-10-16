@@ -36,8 +36,8 @@ move together or neither moves.
 |---|---|---|---|---|---|---|
 | `SRV-032` | `POST` | An ordering state the ephemeral store has lost MUST be rebuilt from the durable history before any delta is validated. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` -- the author's next delta is accepted after a reset that would otherwise refuse it for ever, the rebuild raising and never lowering, so a live writer cannot be undone by it | none | verified |
 | `SRV-080` | `POST` | The clock check and the number MUST be one indivisible step. | this spec section 3; `SRV-006` | `ambre_server::redis_ops::redis_integration_tests::one_clock_sent_at_once_is_numbered_once` -- one author's clock sent at once over sixteen connections is numbered once and refused fifteen times, and the counter moves by one | none | verified |
-| `SRV-037` | `FAIL` | A refused clock MUST reach its author as a typed conflict, naming the document and the refused frame, and carrying the expected and the received value. | `ambre-spec-server.md`, `SRV-020`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::redis_ops::tests::the_script_refusal_becomes_the_typed_conflict`; `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_carries_the_expected_and_the_received_value` -- the script refusal is parsed into the typed conflict, and the frame carries the document, the signature and both values | none | verified |
-| `SRV-169` | `FRAME` | After a clock refusal, the relay MUST NOT number a later frame of that document on that socket until the author answers the refused frame. | this spec section 3; `SRV-037`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_fences_the_socket_until_its_answer` -- the fence holds one document, an answer naming another frame lifts nothing, and the answer lifts it, as does forgetting the document; `ambre_server::ws::handler::message::hot_tail_tests::a_frame_behind_a_refused_clock_waits_for_the_answer` -- of two sockets of one key, the refused one drops its next frame unanswered and unnumbered, and numbers it after the answer, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-037` | `FAIL` | A refused clock MUST reach its author as a typed conflict, naming the document and the refused delta, and carrying the expected and the received value. | `ambre-spec-server.md`, `SRV-020`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::redis_ops::tests::the_script_refusal_becomes_the_typed_conflict`; `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_carries_the_expected_and_the_received_value` -- the script refusal is parsed into the typed conflict, and the refusal carries the document, the signature and both values | none | verified |
+| `SRV-169` | `FRAME` | After a clock refusal, the relay MUST NOT number a later delta of that document on that socket until the author answers the refused delta. | this spec section 3; `SRV-037`; `ambre-spec-delta-order.md`, `SYNC-147` | `ambre_server::ws::handler::message::refusal_tests::a_refused_clock_fences_the_socket_until_its_answer` -- the fence holds one document, an answer naming another delta lifts nothing, and the answer lifts it, as does forgetting the document; `ambre_server::ws::handler::message::hot_tail_tests::a_delta_behind_a_refused_clock_waits_for_the_answer` -- of two sockets of one key, the refused one drops its next delta unanswered and unnumbered, and numbers it after the answer, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-081` | `FRAME` | A refusal MUST NOT carry a store's own name or error text out to the client. | `ZK-006`; `ambre-spec-server.md`, `SRV-020` | `ambre_server::ws::handler::message::refusal_tests::a_store_failure_reaches_the_client_without_its_name_or_text` -- any failure other than the typed conflict reaches the client as a bare internal error | none | verified |
 
 ### 1.3 A numbered delta is made durable
@@ -128,7 +128,7 @@ Two peers over one document. Every row is about order, which is the only thing t
 | edits nothing while Bob is away | reconnects with a current snapshot | nothing new | Bob's document opens rather than spinning (`SRV-040`) | `ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` |
 | edits for a year | opens the document | every delta since the first (`SRV-038`) | both wait through the whole history, every time | none, and it fails -- section 6 |
 | edits during a reset of the ephemeral store | watches | the durable history alone, then the rebuilt state | Alice's next edit is accepted rather than refused for ever (`SRV-032`) | `redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` |
-| edits in two tabs at once | watches | both edits, the second tab's under a later clock | Bob sees both edits, in the order Alice's tabs sent them (`SRV-169`) | `ws::handler::message::hot_tail_tests::a_frame_behind_a_refused_clock_waits_for_the_answer` |
+| edits in two tabs at once | watches | both edits, the second tab's under a later clock | Bob sees both edits, in the order Alice's tabs sent them (`SRV-169`) | `ws::handler::message::hot_tail_tests::a_delta_behind_a_refused_clock_waits_for_the_answer` |
 
 ---
 
@@ -152,14 +152,14 @@ The step runs inside the ephemeral store, so no two frames can interleave betwee
 increment (`SRV-080`). The exact script is in the source.
 
 **Two sessions of one author.** Two tabs or devices of one user sign with one key, so they share one
-clock. A frame each sends before it sees the other's echo is refused once. The refusal names the
-frame by its signature, and goes to that socket alone (`SRV-037`). The relay then fences the
-document on that socket: it drops each later frame unanswered, with no clock and no number.
+clock. A delta each sends before it sees the other's echo is refused once. The refusal names the
+delta by its signature, and goes to that socket alone (`SRV-037`). The relay then fences the
+document on that socket: it drops each later delta unanswered, with no clock and no number.
 
-The author answers with the refused frame's signature, and the answer lifts the fence (`SRV-169`).
-The author then seals that frame and every later one again from the expected clock (`SYNC-147`).
-Without the fence, a later frame would take the refused clock's place. Peers would then see one
-author's frames out of order.
+The author answers with the refused delta's signature, and the answer lifts the fence (`SRV-169`).
+The author then seals that delta and every later one again from the expected clock (`SYNC-147`).
+Without the fence, a later delta would take the refused clock's place. Peers would then see one
+author's deltas out of order.
 
 **Why the author clocks are never pruned.** The hash grows one entry per authoring key, which is
 bounded by the document's members. Expiring it would reset an author to zero, and a returning client

@@ -40,7 +40,7 @@ impl Version {
     /// Version 5 - an announced snapshot names the last delta it folds in.
     pub const V5: Self = Self(5);
 
-    /// Version 6 - a refused clock names its frame, and the author answers it.
+    /// Version 6 - a refused clock names its delta, and the author answers it.
     pub const V6: Self = Self(6);
 
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.

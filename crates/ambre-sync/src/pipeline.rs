@@ -459,8 +459,8 @@ impl SealedFrame {
         &self.0
     }
 
-    /// The signature of a sealed update, which names the frame in the relay's
-    /// echo and refusal (`SYNC-147`). `None` for any other frame.
+    /// The signature of a sealed update, which names the delta in the relay's
+    /// echo and refusal (`SYNC-147`). `None` for any other sealed message.
     pub(crate) fn update_signature(&self) -> Option<Signature> {
         match &self.0 {
             WsClientMsg::Update(update) => Some(update.signature),

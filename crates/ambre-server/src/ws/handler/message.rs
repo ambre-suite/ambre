@@ -21,18 +21,18 @@ pub(crate) fn contiguous_prefix(
     (prefix, None)
 }
 
-/// The documents whose later frames this socket drops after a refused clock,
-/// each with the signature of the frame refused (`SRV-169`).
+/// The documents whose later deltas this socket drops after a refused clock,
+/// each with the signature of the delta refused (`SRV-169`).
 ///
-/// Two sessions of one user share one clock. When one session's frame is
-/// refused, the frames it sent behind it may fit the clock the other session
-/// left. Accepted, they would land ahead of the refused frame they build on.
+/// Two sessions of one user share one clock. When one session's delta is
+/// refused, the deltas it sent behind it may fit the clock the other session
+/// left. Accepted, they would land ahead of the refused delta they build on.
 /// So the socket drops them until the author answers the refusal.
 #[derive(Debug, Default)]
 pub(crate) struct ClockFences(HashMap<DocumentId, ambre_protocol::messages::Signature>);
 
 impl ClockFences {
-    /// The frame signed `signature` was refused for its clock.
+    /// The delta signed `signature` was refused for its clock.
     pub(crate) fn raise(
         &mut self,
         document_id: DocumentId,
@@ -41,13 +41,13 @@ impl ClockFences {
         self.0.insert(document_id, signature);
     }
 
-    /// Whether the socket drops this document's frames.
+    /// Whether the socket drops this document's deltas.
     pub(crate) fn holds(&self, document_id: &DocumentId) -> bool {
         self.0.contains_key(document_id)
     }
 
-    /// The author answered the refusal of the frame signed `signature`. Only
-    /// the answer to the frame that raised the fence lifts it, so a late
+    /// The author answered the refusal of the delta signed `signature`. Only
+    /// the answer to the delta that raised the fence lifts it, so a late
     /// answer to an earlier refusal never opens a later fence.
     pub(crate) fn answer(
         &mut self,
@@ -67,7 +67,7 @@ impl ClockFences {
 
 /// The frame an update refused at clock validation sends back.
 ///
-/// The client acts on a refused clock. So the refusal names the frame by its
+/// The client acts on a refused clock. So the refusal names the delta by its
 /// signature, and carries the expected and the received clock (`SRV-037`).
 /// A store failure reaches the client as one generic message, and its name and
 /// text stay in the log (`SRV-081`, `SRV-020`).
@@ -342,11 +342,11 @@ pub(crate) async fn handle_update(
     let pub_key_hex = author_pubkey.to_hex();
     let clock = update.public_data.clock.0;
 
-    // A frame sent behind a refused one waits for the author's answer: it
+    // A delta sent behind a refused one waits for the author's answer: it
     // takes no clock and no sequence number (`SRV-169`). The author sends it
     // again after its answer, so dropping it loses nothing.
     if conn.clock_fences.holds(&doc_id) {
-        tracing::debug!("[Server] fenced frame dropped doc={doc_id} clock={clock}");
+        tracing::debug!("[Server] fenced delta dropped doc={doc_id} clock={clock}");
         return;
     }
 
@@ -2251,11 +2251,11 @@ mod refusal_tests {
         };
         assert_eq!(document_id, update.public_data.document_id);
         assert_eq!((clock.0, expected.0), (9, 5));
-        assert_eq!(signature, update.signature, "the refusal names the frame");
+        assert_eq!(signature, update.signature, "the refusal names the delta");
     }
 
     /// `SRV-169`: after a refused clock, the socket drops the document's later
-    /// frames. Only the author's answer to the frame that raised the fence
+    /// deltas. Only the author's answer to the delta that raised the fence
     /// lifts it, and leaving the document forgets it.
     #[test]
     fn a_refused_clock_fences_the_socket_until_its_answer() {
@@ -2268,7 +2268,7 @@ mod refusal_tests {
         fences.answer(doc, &Signature([2; 64]));
         assert!(
             fences.holds(&doc),
-            "an answer to another frame lifts nothing"
+            "an answer to another delta lifts nothing"
         );
         fences.answer(doc, &Signature([1; 64]));
         assert!(!fences.holds(&doc));
@@ -2458,15 +2458,15 @@ mod hot_tail_tests {
     }
 
     /// `SRV-037`, `SRV-169`: two sessions of one key race for clock 1. The
-    /// loser hears a refusal naming its frame. Its clock-2 frame, sent behind
+    /// loser hears a refusal naming its delta. Its clock-2 delta, sent behind
     /// it, fits the clock the winner left and is still dropped. After the
-    /// answer, the frame sealed again at clock 2 lands.
+    /// answer, the delta sealed again at clock 2 lands.
     #[sqlx::test]
     #[cfg_attr(
         not(feature = "db"),
         ignore = "needs postgres+redis; run with --features db"
     )]
-    async fn a_frame_behind_a_refused_clock_waits_for_the_answer(pool: sqlx::PgPool) {
+    async fn a_delta_behind_a_refused_clock_waits_for_the_answer(pool: sqlx::PgPool) {
         let stub = S3Stub::spawn([]).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[43u8; 32]);
         let (state, mut first, doc_id) = writer(pool, &stub, &key).await;
@@ -2512,7 +2512,7 @@ mod hot_tail_tests {
         handle_update(&state, &mut second, behind, &second_tx).await;
         assert!(
             second_rx.try_recv().is_err(),
-            "a fenced frame is dropped unanswered"
+            "a fenced delta is dropped unanswered"
         );
         assert_eq!(stored(state.clone()).await, 1, "clock 2 is still free");
 

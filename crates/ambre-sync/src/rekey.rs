@@ -11,8 +11,8 @@
 // for the new key unsealed (`SYNC-128`).
 //
 // Two sessions of one user share one clock at the relay. So this log knows a
-// frame by its signature, never by its clock. The other session's echo at the
-// same clock confirms nothing here (`SYNC-148`). A frame refused for its
+// delta by its signature, never by its clock. The other session's echo at the
+// same clock confirms nothing here (`SYNC-148`). A delta refused for its
 // clock leaves again, with every later one, at the next clocks (`SYNC-147`).
 //
 // Pure state, no IO: the caller seals, sends and spawns.
@@ -83,8 +83,8 @@ impl Rekey {
         over
     }
 
-    /// The relay echoed our update signed `signature`: it and every frame
-    /// that left before it landed. An echo of a frame not here, such as
+    /// The relay echoed our update signed `signature`: it and every delta
+    /// that left before it landed. An echo of a delta not here, such as
     /// another session's at the same clock, confirms nothing (`SYNC-148`).
     pub(crate) fn confirm(&mut self, signature: &Signature) {
         let Some((at, clock)) = self.position(signature) else {
@@ -96,11 +96,11 @@ impl Rekey {
         }
     }
 
-    /// The relay refused the frame signed `signature` for its clock. Returns
-    /// its body and the body of every frame that left after it, in order, to
-    /// seal again at the next clocks. The relay dropped those later frames
-    /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no frame here
-    /// carries that signature: a refusal of a frame already sent again.
+    /// The relay refused the delta signed `signature` for its clock. Returns
+    /// its body and the body of every delta that left after it, in order, to
+    /// seal again at the next clocks. The relay dropped those later deltas
+    /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no delta here
+    /// carries that signature: a refusal of a delta already sent again.
     pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
@@ -109,14 +109,14 @@ impl Rekey {
         Some(self.sent.drain(at..).map(|f| f.payload).collect())
     }
 
-    /// The frame at `clock` was sealed again, under a new signature.
+    /// The delta at `clock` was sealed again, under a new signature.
     pub(crate) fn resealed(&mut self, clock: u64, signature: Signature) {
         if let Some(frame) = self.sent.iter_mut().find(|f| f.clock == clock) {
             frame.signature = signature;
         }
     }
 
-    /// The index and the clock of the frame signed `signature`.
+    /// The index and the clock of the delta signed `signature`.
     fn position(&self, signature: &Signature) -> Option<(usize, u64)> {
         self.sent
             .iter()
@@ -307,9 +307,9 @@ mod tests {
         assert_eq!(big.sent_len(), UNCONFIRMED_LIMIT);
     }
 
-    /// `SYNC-148`: the echo of another session's frame, at a clock this log
+    /// `SYNC-148`: the echo of another session's delta, at a clock this log
     /// holds and under the same key, confirms nothing. Only the signature of
-    /// a frame sent here does.
+    /// a delta sent here does.
     #[test]
     fn an_echo_at_the_same_clock_from_another_session_confirms_nothing() {
         let mut r = three_sent();
@@ -319,14 +319,14 @@ mod tests {
         assert_eq!(r.sent_len(), 0);
     }
 
-    /// `SYNC-147`: a frame refused for its clock comes back with every frame
+    /// `SYNC-147`: a delta refused for its clock comes back with every delta
     /// that left after it, in order. A second refusal of one of them, sent
     /// before the relay read the answer, is stale.
     #[test]
-    fn a_clock_refusal_returns_the_frame_and_every_later_one() {
+    fn a_clock_refusal_returns_the_delta_and_every_later_one() {
         let mut r = three_sent();
         assert_eq!(r.clock_refused(&sig(2)), Some(vec![vec![2], vec![3]]));
-        assert_eq!(r.sent_len(), 1, "the frame before it stays unconfirmed");
+        assert_eq!(r.sent_len(), 1, "the delta before it stays unconfirmed");
         assert_eq!(r.clock_refused(&sig(3)), None, "already taken back");
     }
 }

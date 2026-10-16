@@ -61,7 +61,7 @@ impl SyncState {
             doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock.0);
             // The echo is the relay's receipt: that frame and every earlier
             // one need no resend (`SYNC-129`). Another session of this user
-            // signs its own frames, so its echo confirms nothing (`SYNC-148`).
+            // signs its own deltas, so its echo confirms nothing (`SYNC-148`).
             doc_state.rekey.confirm(&update.signature);
             // A release waiting on this echo lands now (`RESID-009`).
             if doc_state.released.is_some() {
@@ -1025,9 +1025,9 @@ impl SyncState {
         }
     }
 
-    /// The relay refused our frame signed `signature` for its clock: another
+    /// The relay refused our delta signed `signature` for its clock: another
     /// session of this user took it first (`SRV-037`). The answer lifts the
-    /// relay's fence on this socket (`SRV-169`). The frame and every later one
+    /// relay's fence on this socket (`SRV-169`). The delta and every later one
     /// then leave again in order, from the `expected` clock on (`SYNC-147`).
     pub(crate) fn handle_clock_refused(
         &mut self,
@@ -1035,7 +1035,7 @@ impl SyncState {
         expected: u64,
         signature: Signature,
     ) {
-        // Answered even when no frame here carries it, so a frame this log
+        // Answered even when no delta here carries it, so a delta this log
         // forgot never leaves the fence standing.
         self.ws_send(&WsClientMsg::ClockResync {
             document_id,
@@ -1048,10 +1048,10 @@ impl SyncState {
             return;
         };
         tracing::info!(
-            "[Sync] clock refused doc={document_id}, {} frame(s) leave again from {expected}",
+            "[Sync] clock refused doc={document_id}, {} delta(s) leave again from {expected}",
             bodies.len()
         );
-        // The clocks of the frames taken back are void: the relay took none.
+        // The clocks of the deltas taken back are void: the relay took none.
         doc_state.local_clock = expected.saturating_sub(1);
         for body in bodies {
             self.send_body(document_id, body);
@@ -2597,11 +2597,11 @@ mod tests {
     }
 
     /// `SYNC-147`: another session of this user took clock 1. The relay
-    /// refuses this session's frame 1 and drops frame 2 behind it. The answer
-    /// names the refused frame, then both leave again in order from clock 2.
-    /// A late refusal of frame 2's first seal is answered and sends nothing.
+    /// refuses this session's delta 1 and drops delta 2 behind it. The answer
+    /// names the refused delta, then both leave again in order from clock 2.
+    /// A late refusal of delta 2's first seal is answered and sends nothing.
     #[test]
-    fn a_frame_refused_for_its_clock_leaves_again_with_every_later_one() {
+    fn a_delta_refused_for_its_clock_leaves_again_with_every_later_one() {
         let (mut state, _rx, doc, key, sk, _snap) = setup();
         state.signing_key = Some(sk);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
@@ -2641,11 +2641,11 @@ mod tests {
         );
     }
 
-    /// `SYNC-148`: the echo of another session's frame, under this user's key
-    /// and at the clock of a frame this session sent, confirms nothing. The
-    /// echo of this session's own frame does.
+    /// `SYNC-148`: the echo of another session's delta, under this user's key
+    /// and at the clock of a delta this session sent, confirms nothing. The
+    /// echo of this session's own delta does.
     #[test]
-    fn the_echo_of_another_sessions_frame_confirms_nothing_here() {
+    fn the_echo_of_another_sessions_delta_confirms_nothing_here() {
         let (mut state, _rx, doc, key, sk, snap) = setup();
         state.signing_key = Some(sk.clone());
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
