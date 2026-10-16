@@ -248,38 +248,279 @@ pub async fn exchange_code(
     Ok(claims)
 }
 
+/// An identity provider that a test runs in process. It publishes its
+/// discovery document and its key. It hands out a code for an authorization
+/// URL, and answers the code with an identity token it signs.
+#[cfg(test)]
+pub(crate) mod stub {
+    use std::sync::{Arc, Mutex};
+
+    use openidconnect::core::{
+        CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm, CoreRsaPrivateSigningKey,
+    };
+    use openidconnect::{
+        Audience, EmptyAdditionalClaims, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeyId, Nonce,
+        PkceCodeChallenge, PkceCodeVerifier, PrivateSigningKey, StandardClaims, SubjectIdentifier,
+    };
+    use rsa::pkcs1::EncodeRsaPrivateKey;
+
+    /// The client the provider knows.
+    pub(crate) const CLIENT_ID: &str = "client";
+    /// The subject, the email and the name of the person who signs in.
+    pub(crate) const SUBJECT: &str = "stub-subject";
+    pub(crate) const EMAIL: &str = "ada@example.org";
+    pub(crate) const NAME: &str = "Ada";
+
+    /// What one authorization left for the token endpoint to check.
+    struct Grant {
+        code: String,
+        challenge: String,
+        nonce: String,
+    }
+
+    struct Shared {
+        issuer: String,
+        key: CoreRsaPrivateSigningKey,
+        /// A key the provider does not publish, signing in place of `key`
+        /// while `forge` is set.
+        foreign: CoreRsaPrivateSigningKey,
+        forge: bool,
+        grant: Option<Grant>,
+    }
+
+    /// A running provider. Its address is its issuer.
+    #[derive(Clone)]
+    pub(crate) struct StubProvider {
+        pub(crate) issuer: String,
+        shared: Arc<Mutex<Shared>>,
+    }
+
+    fn signing_key(kid: &str) -> CoreRsaPrivateSigningKey {
+        let key = rsa::RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 2048).unwrap();
+        let pem = key.to_pkcs1_pem(rsa::pkcs8::LineEnding::LF).unwrap();
+        CoreRsaPrivateSigningKey::from_pem(&pem, Some(JsonWebKeyId::new(kid.into()))).unwrap()
+    }
+
+    impl StubProvider {
+        pub(crate) async fn spawn() -> Self {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let issuer = format!("http://{}", listener.local_addr().unwrap());
+            let stub = Self {
+                issuer: issuer.clone(),
+                shared: Arc::new(Mutex::new(Shared {
+                    issuer: issuer.clone(),
+                    // The same key id on both, so only the signature tells them apart.
+                    key: signing_key("k"),
+                    foreign: signing_key("k"),
+                    forge: false,
+                    grant: None,
+                })),
+            };
+            let metadata = serde_json::json!({
+                "issuer": issuer,
+                "authorization_endpoint": format!("{issuer}/authorize"),
+                "token_endpoint": format!("{issuer}/token"),
+                "jwks_uri": format!("{issuer}/jwks"),
+                "response_types_supported": ["code"],
+                "subject_types_supported": ["public"],
+                "id_token_signing_alg_values_supported": ["RS256"],
+            });
+            let jwks = {
+                let shared = stub.shared.lock().unwrap();
+                serde_json::json!({ "keys": [shared.key.as_verification_key()] })
+            };
+            let shared = Arc::clone(&stub.shared);
+            let app = axum::Router::new()
+                .route(
+                    "/.well-known/openid-configuration",
+                    axum::routing::get(move || async move { axum::Json(metadata) }),
+                )
+                .route(
+                    "/jwks",
+                    axum::routing::get(move || async move { axum::Json(jwks) }),
+                )
+                .route(
+                    "/token",
+                    axum::routing::post(
+                        move |axum::extract::Form(form): axum::extract::Form<
+                            std::collections::HashMap<String, String>,
+                        >| async move { token(&shared, &form) },
+                    ),
+                );
+            tokio::spawn(async move { axum::serve(listener, app).await });
+            stub
+        }
+
+        /// Signs every later identity token with a key the provider does not
+        /// publish.
+        pub(crate) fn forge(&self) {
+            self.shared.lock().unwrap().forge = true;
+        }
+
+        /// What the provider does once the person signs in at `url`. It keeps
+        /// the challenge and the one-time value the URL carries. It returns the
+        /// code it hands back.
+        pub(crate) fn authorize(&self, url: &str) -> String {
+            let url = url::Url::parse(url).unwrap();
+            let param = |name: &str| {
+                url.query_pairs()
+                    .find(|(k, _)| k == name)
+                    .map(|(_, v)| v.into_owned())
+                    .unwrap()
+            };
+            let code = format!("code-{}", uuid::Uuid::new_v4());
+            self.shared.lock().unwrap().grant = Some(Grant {
+                code: code.clone(),
+                challenge: param("code_challenge"),
+                nonce: param("nonce"),
+            });
+            code
+        }
+    }
+
+    /// The token endpoint: the code it handed out, under the verifier whose
+    /// challenge the authorization carried, answers with a signed identity
+    /// token. Anything else is refused.
+    fn token(
+        shared: &Mutex<Shared>,
+        form: &std::collections::HashMap<String, String>,
+    ) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        let mut shared = shared.lock().unwrap();
+        let Some(grant) = shared.grant.take() else {
+            return refused();
+        };
+        let verifier =
+            PkceCodeVerifier::new(form.get("code_verifier").cloned().unwrap_or_default());
+        let challenge = PkceCodeChallenge::from_code_verifier_sha256(&verifier);
+        if form.get("code") != Some(&grant.code) || challenge.as_str() != grant.challenge {
+            return refused();
+        }
+        let now = chrono::Utc::now();
+        let claims = CoreIdTokenClaims::new(
+            IssuerUrl::new(shared.issuer.clone()).unwrap(),
+            vec![Audience::new(CLIENT_ID.into())],
+            now + chrono::Duration::minutes(5),
+            now,
+            StandardClaims::new(SubjectIdentifier::new(SUBJECT.into()))
+                .set_email(Some(EndUserEmail::new(EMAIL.into())))
+                .set_email_verified(Some(true))
+                .set_name(Some(EndUserName::new(NAME.into()).into())),
+            EmptyAdditionalClaims {},
+        )
+        .set_nonce(Some(Nonce::new(grant.nonce)));
+        let key = if shared.forge {
+            &shared.foreign
+        } else {
+            &shared.key
+        };
+        let id_token = CoreIdToken::new(
+            claims,
+            key,
+            CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
+            None,
+            None,
+        )
+        .unwrap();
+        axum::Json(serde_json::json!({
+            "access_token": "stub-access",
+            "token_type": "bearer",
+            "id_token": id_token.to_string(),
+        }))
+        .into_response()
+    }
+
+    fn refused() -> axum::response::Response {
+        use axum::response::IntoResponse;
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": "invalid_grant" })),
+        )
+            .into_response()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::stub::{CLIENT_ID, EMAIL, SUBJECT, StubProvider};
     use super::*;
 
     /// An issuer nothing listens on.
     const SILENT_ISSUER: &str = "http://127.0.0.1:1";
 
-    /// A provider that publishes its discovery document and an empty key set.
-    /// Returns its issuer.
+    /// A provider that publishes its discovery document and its key. Returns
+    /// its issuer.
     async fn spawn_provider() -> String {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let issuer = format!("http://{}", listener.local_addr().unwrap());
-        let metadata = serde_json::json!({
-            "issuer": issuer,
-            "authorization_endpoint": format!("{issuer}/authorize"),
-            "token_endpoint": format!("{issuer}/token"),
-            "jwks_uri": format!("{issuer}/jwks"),
-            "response_types_supported": ["code"],
-            "subject_types_supported": ["public"],
-            "id_token_signing_alg_values_supported": ["RS256"],
-        });
-        let app = axum::Router::new()
-            .route(
-                "/.well-known/openid-configuration",
-                axum::routing::get(move || async move { axum::Json(metadata) }),
-            )
-            .route(
-                "/jwks",
-                axum::routing::get(|| async { axum::Json(serde_json::json!({ "keys": [] })) }),
-            );
-        tokio::spawn(async move { axum::serve(listener, app).await });
-        issuer
+        StubProvider::spawn().await.issuer
+    }
+
+    /// The `google` client discovered at `stub`.
+    async fn client_of(stub: &StubProvider) -> OidcClients {
+        start_oidc_clients(&stub.issuer, CLIENT_ID, "secret", "https://app/cb")
+            .await
+            .unwrap()
+    }
+
+    /// `SRV-022`: the code the provider hands back is exchanged under the
+    /// verifier the sign-in kept. The relay checks the identity token's
+    /// signature, issuer, audience and one-time value.
+    #[tokio::test]
+    async fn a_provider_code_is_exchanged_for_a_verified_identity() {
+        let stub = StubProvider::spawn().await;
+        let clients = client_of(&stub).await;
+        let (login, kept) = login_url(&clients["google"]).await.unwrap();
+        let code = stub.authorize(&login.url);
+        let claims = exchange_code(&clients["google"], code, &kept)
+            .await
+            .unwrap();
+        assert_eq!(claims.subject().as_str(), SUBJECT);
+        assert_eq!(claims.email().map(|e| e.as_str()), Some(EMAIL));
+        assert_eq!(claims.email_verified(), Some(true));
+    }
+
+    /// `SRV-022`: an exchange is refused in three cases. The token is signed by
+    /// a key the provider does not publish. Its one-time value is not the one
+    /// the sign-in kept. The verifier is not the sign-in's.
+    #[tokio::test]
+    async fn an_identity_the_relay_cannot_verify_is_refused() {
+        let stub = StubProvider::spawn().await;
+        let clients = client_of(&stub).await;
+        let provider = &clients["google"];
+        let refused_at = |result: Result<CoreIdTokenClaims, AppError>, stage: &str| match result {
+            Err(AppError::Oidc(reason)) => assert!(reason.starts_with(stage), "{reason}"),
+            Err(other) => panic!("{other}"),
+            Ok(_) => panic!("the exchange was accepted"),
+        };
+
+        let (login, kept) = login_url(provider).await.unwrap();
+        let other_nonce = OidcAuthState {
+            pkce_verifier_secret: kept.pkce_verifier_secret.clone(),
+            nonce: Nonce::new("another".into()),
+        };
+        let code = stub.authorize(&login.url);
+        refused_at(
+            exchange_code(provider, code, &other_nonce).await,
+            "id token verification failed",
+        );
+
+        let (login, kept) = login_url(provider).await.unwrap();
+        let other_verifier = OidcAuthState {
+            pkce_verifier_secret: "a-verifier-the-sign-in-never-made-0123456789".into(),
+            nonce: kept.nonce.clone(),
+        };
+        let code = stub.authorize(&login.url);
+        refused_at(
+            exchange_code(provider, code, &other_verifier).await,
+            "token exchange failed",
+        );
+
+        stub.forge();
+        let (login, kept) = login_url(provider).await.unwrap();
+        let code = stub.authorize(&login.url);
+        refused_at(
+            exchange_code(provider, code, &kept).await,
+            "id token verification failed",
+        );
     }
 
     /// `SRV-074`: a configured provider that does not answer stops the start.

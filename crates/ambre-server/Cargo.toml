@@ -57,6 +57,10 @@ tokio = { workspace = true }
 goose = "0.18"
 # Already in the tree through axum's `ws` feature; drives the upgrade from a test.
 tokio-tungstenite = "0.29"
+# Already in the tree through `openidconnect`. A test plays the provider and
+# signs an identity token with a key it generates; the relay itself holds no
+# RSA private key.
+rsa = { version = "0.9", features = ["getrandom"] }
 
 [lints]
 workspace = true

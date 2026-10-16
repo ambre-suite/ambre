@@ -306,6 +306,7 @@ dependencies = [
  "openidconnect",
  "postcard",
  "reqwest",
+ "rsa",
  "rustis",
  "serde",
  "serde_bytes",

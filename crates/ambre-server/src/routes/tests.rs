@@ -378,6 +378,74 @@ mod handler_tests {
         }
     }
 
+    // `SRV-022`: a provider's return, through the shipped router, exchanges its
+    // code against the provider and signs the person in. The session it opens
+    // answers `/auth/me` as that person, and the same return is not taken twice.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_provider_return_signs_the_person_in(pool: sqlx::PgPool) {
+        use crate::oidc::stub::{CLIENT_ID, EMAIL, NAME, StubProvider};
+        let stub = StubProvider::spawn().await;
+        let clients =
+            crate::oidc::start_oidc_clients(&stub.issuer, CLIENT_ID, "s", "https://app/cb")
+                .await
+                .unwrap();
+        let app = shipped_router(test_app_state_with(pool, clients).await);
+        let salt = uuid::Uuid::new_v4().into_bytes();
+        let peer = std::net::SocketAddr::from(([10, 22, salt[0], salt[1]], 0));
+        let send = |mut req: Request<Body>| {
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(peer));
+            let app = app.clone();
+            async move {
+                let resp = app.oneshot(req).await.unwrap();
+                let status = resp.status();
+                let body = axum::body::to_bytes(resp.into_body(), 65536).await.unwrap();
+                (
+                    status,
+                    serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+                )
+            }
+        };
+
+        let (status, login) = send(
+            Request::get("/api/auth/google/login")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{login}");
+        let code = stub.authorize(login["url"].as_str().unwrap());
+        let callback = serde_json::json!({ "code": code, "state": login["state"] }).to_string();
+        let post = || {
+            Request::post("/api/auth/google/callback")
+                .header("content-type", "application/json")
+                .body(Body::from(callback.clone()))
+                .unwrap()
+        };
+
+        let (status, signed_in) = send(post()).await;
+        assert_eq!(status, StatusCode::OK, "{signed_in}");
+        assert_eq!(signed_in["email"], EMAIL);
+        assert_eq!(signed_in["display_name"], NAME);
+        assert_eq!(signed_in["is_new_user"], true);
+
+        let token = signed_in["access_token"].as_str().unwrap();
+        let (status, me) = send(
+            Request::get("/api/auth/me")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{me}");
+        assert_eq!(me["email"], EMAIL);
+        assert_eq!(me["user_id"], signed_in["user_id"]);
+
+        let (status, replayed) = send(post()).await;
+        assert_ne!(status, StatusCode::OK, "{replayed}");
+    }
+
     // `SRV-093`: a sign-in request counts against the sign-in tier through the
     // nested router. The eleventh request from one peer inside the window is
     // refused, where the ordinary tier would allow three hundred.
@@ -1317,6 +1385,14 @@ mod handler_tests {
     }
 
     async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
+        test_app_state_with(pool, empty_oidc_clients()).await
+    }
+
+    /// Like [`test_app_state`], with `oidc_clients` as the configured providers.
+    async fn test_app_state_with(
+        pool: sqlx::PgPool,
+        oidc_clients: crate::oidc::OidcClients,
+    ) -> Arc<AppState> {
         let redis = rustis::client::Client::connect("redis://localhost:6379")
             .await
             .expect("need Redis for tests");
@@ -1331,7 +1407,7 @@ mod handler_tests {
             s3_bucket: "test-bucket".into(),
             config: Arc::new(Config::default()),
             jwt: Arc::new(crate::jwt::JwtKeys::from_seed(&[7u8; 32])),
-            oidc_clients: empty_oidc_clients(),
+            oidc_clients,
         })
     }
 
