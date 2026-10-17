@@ -2130,6 +2130,52 @@ mod tests {
         );
     }
 
+    /// Holds `SYNC-150`: the relay's acknowledgement of a subscription lists
+    /// the members again. A newcomer committed after the open read its members,
+    /// and before the relay sent this client any word, resolves. A document not
+    /// open here, or not yet on the relay, lists nothing.
+    #[test]
+    fn a_subscription_reads_the_members_a_change_during_the_open_left_out() {
+        let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
+        let carol = UserId::new();
+        assert!(!state.documents[&doc].signing_keys.contains_key(&[3u8; 32]));
+
+        state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
+        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::MembersChanged { document_id } if *document_id == doc
+            )),
+            "an open view reads the members too"
+        );
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            members: Vec::new(),
+            signing_keys: vec![([3u8; 32], carol)],
+        });
+        let keys = &state.documents[&doc].signing_keys;
+        assert_eq!(keys.get(&[3u8; 32]), Some(&carol), "the newcomer resolves");
+
+        let local = DocumentId::new();
+        state.documents.insert(
+            local,
+            SyncDocumentState::new(local, DocumentKey::generate(), DocType::Trame, false),
+        );
+        for document_id in [local, DocumentId::new()] {
+            state.handle_ws_message(WsServerMsg::Subscribed { document_id });
+        }
+        assert_eq!(state.documents[&local].directory_asked, 0);
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::MembersChanged { .. })),
+            "nothing to list for a document the relay does not serve here"
+        );
+    }
+
     /// A server document opened over a live WS is only fully hydrated once its
     /// post-open catch-up replay (`MissingUpdates`) lands. The snapshot does not
     /// cover deltas committed after it, and a delta-only document has NO snapshot

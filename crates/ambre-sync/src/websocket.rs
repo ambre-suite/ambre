@@ -896,6 +896,18 @@ impl SyncState {
         self.lifecycle.frame();
         match server_msg {
             WsServerMsg::Subscribed { document_id } => {
+                // The relay's word that the members changed reaches this
+                // client only from here on. A change committed before it,
+                // after the open read its members or while the socket was
+                // down, is read now (`SYNC-150`).
+                if self
+                    .documents
+                    .get(&document_id)
+                    .is_some_and(|doc| doc.server_created)
+                {
+                    self.handle_list_document_members(None, document_id);
+                    self.send_to_logic(LogicEvent::MembersChanged { document_id });
+                }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
                     connected: true,

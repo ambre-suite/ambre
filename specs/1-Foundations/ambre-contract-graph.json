@@ -1361,7 +1361,7 @@
   {"edge": "verified-by", "from": "SYNC-037", "to": "ambre_sync::updates::tests::a_change_of_members_reads_the_directory_again_and_a_crossed_answer_changes_nothing"},
   {"edge": "cites-section", "from": "SYNC-150", "section": "3", "to": "1-Foundations/ambre-spec-membership.md"},
   {"edge": "cites-rule", "from": "SYNC-150", "to": "SRV-177"},
-  {"edge": "lands-with", "from": "SYNC-150", "to": "A change of members during an open is kept"},
+  {"edge": "verified-by", "from": "SYNC-150", "to": "ambre_sync::updates::tests::a_subscription_reads_the_members_a_change_during_the_open_left_out"},
   {"edge": "cites-section", "from": "SYNC-151", "section": "3", "to": "1-Foundations/ambre-spec-membership.md"},
   {"edge": "cites-rule", "from": "SYNC-151", "to": "SRV-177"},
   {"edge": "lands-with", "from": "SYNC-151", "to": "One member request per change"},
