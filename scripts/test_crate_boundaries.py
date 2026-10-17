@@ -80,6 +80,11 @@ def scratch(tmp: str) -> Path:
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
+    for rel, holder in cb.SIGNAL_HOLDERS.items():
+        path = root / rel
+        held = path.read_text() if path.exists() else ""
+        body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<f64>,\n}}\n"
+        write(root, rel, held + body)
     write(
         root,
         cb.PAGE,
@@ -127,6 +132,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_one_copy(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -683,6 +689,26 @@ class CrateBoundaries(unittest.TestCase):
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
+
+    def test_a_view_field_holding_a_signals_state_is_refused(self):
+        for field in ("stats: SelStats,", "pub(crate) last: Option<crate::chrome::SelStats>,", "seen: Vec<Rc<SelStats>>,"):
+            text = f"pub struct BoardView {{\n    {field}\n}}\n"
+            errors = self.breach("crates/ambre-toile/src/ui/view.rs", text)
+            self.assertTrue(any("`sel_stats` signal already holds" in e for e in errors), (field, errors))
+
+    def test_a_view_holding_the_signal_or_a_primitive_stays_free(self):
+        text = "pub struct BoardView {\n    stats: RwSignal<Option<SelStats>>,\n    zoom: f64,\n    id: ElementId,\n}\n"
+        self.assertEqual(self.breach("crates/ambre-toile/src/ui/view.rs", text), [])
+        tests = "pub struct Plain;\n#[cfg(test)]\nmod tests {\n    struct Rig {\n        stats: SelStats,\n    }\n}\n"
+        self.assertEqual(self.breach("crates/ambre-trame/src/ui/grid.rs", tests), [])
+
+    def test_an_accepted_view_field_stays_free(self):
+        text = "pub struct ToolMachine {\n    tool: SelStats,\n}\n"
+        self.assertEqual(self.breach("crates/ambre-toile/src/ui/tool.rs", text), [])
+
+    def test_a_signal_holder_holding_no_signal_is_an_error_not_a_pass(self):
+        errors = self.breach("crates/ambre-toile/src/chrome/relay.rs", "pub struct ToileRelay {}\n")
+        self.assertTrue(any("holds no signal" in e for e in errors), errors)
 
     def test_a_fixture_benchmark_reporting_a_frame_rate_is_refused(self):
         for line in ('c.bench_function("fixture_board_fps", |b| {});\n', "let frame_rate = 60.0 / t; // fixture\n"):

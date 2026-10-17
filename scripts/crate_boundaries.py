@@ -383,6 +383,47 @@ FRAME_RATE = re.compile(r"(?<![a-z])fps(?![a-z])|frames?[_ ]?per[_ ]?second|fram
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
+# The structs holding the shell's signals: the launcher's wiring and each
+# application's relay. A signal's payload names a piece of interface state.
+SIGNAL_HOLDERS = {
+    "crates/ambre-app/src/lib.rs": "Wiring",
+    "crates/ambre-trame/src/chrome/relay.rs": "TrameRelay",
+    "crates/ambre-toile/src/chrome/relay.rs": "ToileRelay",
+}
+# A view's own state: the structs of each application's view and render code.
+VIEW_STATE = (
+    "crates/ambre-trame/src/ui",
+    "crates/ambre-trame/src/render",
+    "crates/ambre-toile/src/ui",
+    "crates/ambre-prose/src/ui.rs",
+    "crates/ambre-prose/src/view",
+)
+STRUCT_OPEN = re.compile(r"^\s*(?:pub(?:\([a-z]+\))?\s+)?struct\s+(\w+)\b[^;(]*\{\s*$")
+STRUCT_FIELD = re.compile(r"^\s*(?:pub(?:\([a-z]+\))?\s+)?([a-z_][a-z0-9_]*)\s*:\s*(.+?),?\s*$")
+SIGNAL_FIELD = re.compile(r"^RwSignal<(.*)>$")
+# A wrapper holds its payload's state, so a field matches through it.
+TYPE_WRAPPERS = {"Option", "Vec", "VecDeque", "Box", "Rc", "Arc", "RefCell", "Cell"}
+# A primitive or an identifier says nothing of the state it holds: a view keeps
+# a hundred of each. Neither is matched (`UI-THREAD-003`).
+PRIMITIVES = {"bool", "char", "str", "String", "Cow", "usize", "isize", "f32", "f64"} | {
+    f"{sign}{bits}" for sign in "ui" for bits in (8, 16, 32, 64, 128)
+}
+# A view field a reviewer accepts beside a signal of its type, and why.
+ONE_COPY_ACCEPTED = {
+    "crates/ambre-trame/src/ui/view/mod.rs:TrameView.menu_scope": (
+        "the host build holds no signal; the scope is written here and into the signal in one call"
+    ),
+    "crates/ambre-trame/src/ui/view/mod.rs:FormulaBar.action": (
+        "the host build holds no signal; the frame copies the signal into it and clears the signal once served"
+    ),
+    "crates/ambre-toile/src/ui/tool.rs:ToolMachine.tool": (
+        "the host build holds no signal; the frame reads the signal into it and publishes it back"
+    ),
+    "crates/ambre-toile/src/ui/style.rs:StyleModel.base": (
+        "the selection's common style, which the inspector shows; the restyle signal carries an edit"
+    ),
+}
+
 # The two failure paths that reach the page with no queue: the panic hook of the
 # shared instance, and the error event of the Sync worker.
 PANIC_HOOK = "std::panic::set_hook("
@@ -1230,6 +1271,81 @@ def check_kinetic_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def struct_fields(lines: list[tuple[int, str]]) -> list[tuple[str, int, str, str]]:
+    """Each named field of each braced struct: the struct, the line, the field
+    and its type. An attribute line or a field spread over lines is skipped."""
+    fields: list[tuple[str, int, str, str]] = []
+    current: str | None = None
+    for number, line in lines:
+        opened = STRUCT_OPEN.match(line)
+        if opened:
+            current = opened.group(1)
+            continue
+        if current is None:
+            continue
+        if line.strip().startswith("}"):
+            current = None
+            continue
+        found = STRUCT_FIELD.match(line)
+        if found and not line.strip().startswith("#"):
+            fields.append((current, number, found.group(1), found.group(2).strip()))
+    return fields
+
+
+def state_type(ty: str) -> str | None:
+    """The type a field holds state of: wrappers peeled, the path's last segment.
+    `None` for a tuple, an array, a primitive or an identifier."""
+    ty = ty.strip().lstrip("&").strip()
+    generic = re.match(r"^([\w:]+)\s*<(.*)>$", ty)
+    if generic:
+        head = generic.group(1).split("::")[-1]
+        if head in TYPE_WRAPPERS:
+            return state_type(generic.group(2))
+        ty = head
+    if not re.fullmatch(r"[\w:]+", ty):
+        return None
+    name = ty.split("::")[-1]
+    if name in PRIMITIVES or name.endswith("Id"):
+        return None
+    return name
+
+
+def check_one_copy(errors: list[str]) -> int:
+    """`UI-THREAD-059`: no view field holds a type a shell signal carries.
+
+    The signal is the one copy of that state. A view field beside it agrees
+    until one frame writes only one of them.
+    """
+    signals: dict[str, str] = {}
+    for rel, holder in SIGNAL_HOLDERS.items():
+        text = read(rel)
+        lines = [(number, code(line)) for number, line in enumerate(text.splitlines(), 1)]
+        payloads = [
+            (field, found.group(1))
+            for struct, _, field, ty in struct_fields(lines)
+            if struct == holder and (found := SIGNAL_FIELD.match(ty))
+        ]
+        if not payloads:
+            errors.append(f"{rel}: `{holder}` holds no signal, so no interface state is read")
+            continue
+        for field, payload in payloads:
+            held = state_type(payload)
+            if held:
+                signals.setdefault(held, field)
+    files = sources(VIEW_STATE)
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for struct, number, field, ty in struct_fields(above_tests(path)):
+            if "Signal" in ty or f"{rel}:{struct}.{field}" in ONE_COPY_ACCEPTED:
+                continue
+            held = state_type(ty)
+            if held in signals:
+                errors.append(
+                    f"{rel}:{number}: `{struct}.{field}` holds a `{held}`, which the `{signals[held]}` signal already holds"
+                )
+    return len(files)
+
+
 def check_bench_frame_rate(errors: list[str]) -> int:
     """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
     held = 0
@@ -1274,6 +1390,7 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    copies = check_one_copy(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
@@ -1305,6 +1422,7 @@ def main() -> int:
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
+        f"{copies} view files read for a second copy of a signal's state, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
@@ -1337,7 +1455,8 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, a fixture "
+            "relay logs no payload, one file holds the kinetic model, no view "
+            "holds the state a shell signal holds, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "
