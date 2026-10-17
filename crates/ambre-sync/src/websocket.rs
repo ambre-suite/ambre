@@ -328,12 +328,28 @@ impl SyncState {
         if let Some(delay_ms) = delay {
             self.arm_replay_timer(document_id, self.replay_ticket, delay_ms);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
-            self.send_to_logic(LogicEvent::ApiError {
-                id: None,
-                request: "websocket".into(),
-                code: RefusalCode::InternalError.status(),
-                message: format!("replay of {document_id:?} stopped {stop} times"),
-            });
+            let message = format!("replay of {document_id:?} stopped {stop} times");
+            // A first replay given up is an open that failed: no ready would
+            // ever follow it, and nothing of the document is kept (`SYNC-157`).
+            let opening = self
+                .documents
+                .get(&document_id)
+                .is_some_and(|doc| doc.awaiting_initial_hydration);
+            if opening {
+                self.handle_close_document(document_id);
+                self.replay_stops.remove(&document_id);
+                self.send_to_logic(LogicEvent::DocumentOpenFailed {
+                    document_id,
+                    message,
+                });
+            } else {
+                self.send_to_logic(LogicEvent::ApiError {
+                    id: None,
+                    request: "websocket".into(),
+                    code: RefusalCode::InternalError.status(),
+                    message,
+                });
+            }
         }
     }
 
@@ -1353,7 +1369,7 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::{replay_retry_delay_ms, socket_address};
+    use super::{REPLAY_RETRY_LIMIT, replay_retry_delay_ms, socket_address};
     use crate::http::{SecretToken, TokenPair};
     use crate::{
         LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState, WS_CLOSE_SETUP_REQUIRED,
@@ -1825,6 +1841,31 @@ mod tests {
                 after_seq: Seq(7),
                 ..
             }]
+        ));
+    }
+
+    /// `SYNC-157`: a first replay given up is an open that failed. The
+    /// document is let go, and neither a ready nor a generic error follows.
+    #[test]
+    fn a_first_replay_given_up_fails_the_open() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        state
+            .documents
+            .get_mut(&id)
+            .unwrap()
+            .awaiting_initial_hydration = true;
+        for _ in 0..=REPLAY_RETRY_LIMIT {
+            state.handle_sync_event(stopped(id));
+        }
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(told[..], [LogicEvent::DocumentOpenFailed { document_id, .. }] if document_id == id),
+            "{told:?}"
+        );
+        assert!(!state.documents.contains_key(&id), "nothing of it is kept");
+        assert!(matches!(
+            sent(&wire)[..],
+            [WsClientMsg::Unsubscribe { document_id }] if document_id == id
         ));
     }
 

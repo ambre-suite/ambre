@@ -62,6 +62,7 @@ is what a full queue means.
 | `BUS-014` | `POST` | A service request identity MUST be echoed unchanged by every hop. | this spec section 2 | `ambre_bus::host::request_id_echo_is_preserved_across_the_hop` -- the id survives the `postcard` codec byte for byte; `ambre_logic::dispatch::tests::rest_command_forwards_to_sync_with_id`; `::rest_event_forwards_to_ui_with_id` -- the dispatcher echoes it in both directions | none | verified |
 | `BUS-009` | `POST` | A service request MUST be relayed to the Sync worker field for field. | this spec section 2 | `ambre_logic::dispatch::tests::create_document_preserves_fields` -- both fields survive the arm, and the relay is one arm for the whole family, so what the test pins for one variant is structural for the rest of it | none | verified |
 | `BUS-015` | `POST` | A service response MUST be relayed to the interface field for field, unless a recorded route claims it for the document that issued it. | this spec section 2 | `ambre_logic::dispatch::tests::an_unrouted_rest_event_still_forwards_to_the_ui` -- the unclaimed case; `::routed_media_uploaded_lands_in_engine_not_the_ui` -- the claimed case reaches the engine and no stray event reaches the interface | none | verified |
+| `BUS-030` | `POST` | A document that could not open MUST reach the interface as a failed open naming it, never as an authentication error. | this spec section 2; `ambre-spec-sync.md`, `SYNC-157` | not built | unbuilt -- lands with the `A failed open ends its loading screen` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `BUS-020` | `FAIL` | A service response whose document was closed MUST be dropped, never delivered. | this spec section 2 | `ambre_logic::dispatch::tests::a_late_response_after_close_is_dropped_without_panic` -- the route is gone on close and the late response repaints nothing; `::a_correlated_upload_failure_aborts_the_import_without_a_raw_api_error` -- the same for the error direction | none | verified |
 | `BUS-004` | `PRE` | A service request identity MUST be allocated in the Main instance. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a `RequestId::next` in `ambre-sync` above its tests | none | verified |
 | `BUS-019` | `FRAME` | Relaying a service request MUST NOT touch the document registry, save for the two commands that remove a document from it. | this spec section 2 | `ambre_logic::dispatch::tests::a_relayed_request_leaves_the_registry_alone` -- every other variant, listed by an exhaustive `match`; `::logout_clears_docs_and_forwards` -- the exception that clears everything | none | verified |
@@ -80,10 +81,11 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 29 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
-  viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
-  gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
-  gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
+* **Verification.** 29 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: an
+  unknown document, a viewer's edit, a child's role. They also drive a service round trip, a late
+  response, the lossy gate and a full queue. Native views drive the input gate, the re-offer and the
+  refused commit. A gate refuses a handler that sends on a queue, and the browser tier reads the
+  busy notice.
 ---
 
 ## 2. MODEL
