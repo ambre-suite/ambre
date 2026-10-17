@@ -58,7 +58,7 @@ pub async fn store_master_keys(
     // re-store here is always a mistake, and is rejected.
     let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
     let result = sqlx::query(
-        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5, updated_at = now() WHERE id = $1 AND master_key_enc IS NULL"
+        "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1 AND master_key_enc IS NULL"
     )
     .bind(uid)
     .bind(&mk_enc)

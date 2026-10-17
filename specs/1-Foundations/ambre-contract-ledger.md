@@ -21,13 +21,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3481 rows: 2685 shipped, of which 5 loose. 796 unbuilt.**
+**3481 rows: 2685 shipped, of which 4 loose. 796 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 755 | 418 | 816 | 609 | 82 | 2680 |
+| `verified` | 756 | 418 | 816 | 609 | 82 | 2681 |
 | `failing` | 2 |  |  |  |  | 2 |
-| `untested` | 1 |  |  |  |  | 1 |
+| `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
 | `unimplemented` | 214 | 55 | 29 | 109 | 389 | 796 |
@@ -77,7 +77,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-zero-knowledge.md` | 18 | 17 | 16 | 1 | 1 |
+| `ambre-spec-zero-knowledge.md` | 18 | 17 | 17 |  | 1 |
 | `ambre-spec-trame-schema.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 41 | 29 | 29 |  | 12 |

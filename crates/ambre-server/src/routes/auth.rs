@@ -292,7 +292,6 @@ mod tests {
             master_key_salt: None,
             exchange_pubkey: signing_pubkey.as_ref().map(|_| vec![4u8; 32]),
             signing_pubkey,
-            org_id: None,
         }
     }
 

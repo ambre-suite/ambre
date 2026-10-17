@@ -2879,7 +2879,7 @@
   {"edge": "cites-section", "from": "ZK-018", "section": "2", "to": "1-Foundations/ambre-spec-zero-knowledge.md"},
   {"edge": "cites-document", "from": "ZK-018", "section": "3", "to": "ambre-spec-session.md"},
   {"edge": "cites-document", "from": "ZK-018", "section": "3", "to": "ambre-spec-profile.md"},
-  {"edge": "lands-with", "from": "ZK-018", "to": "The account table holds what the relay may learn"},
+  {"edge": "verified-by", "from": "ZK-018", "to": "ambre_server::db::users::tests::the_account_table_holds_only_what_the_relay_may_learn"},
   {"edge": "cites-section", "from": "ZOOM-004", "section": "3", "to": "1-Foundations/ambre-spec-zoom.md"},
   {"edge": "lands-with", "from": "ZOOM-004", "to": "One zoom model"},
   {"edge": "cites-section", "from": "ZOOM-006", "section": "2", "to": "1-Foundations/ambre-spec-zoom.md"},
