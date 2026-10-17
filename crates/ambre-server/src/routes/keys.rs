@@ -1,10 +1,11 @@
-use axum::extract::{Json, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::state::AppState;
 
 /// Request body for first-time master key upload.

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
 use ambre_protocol::MembershipAct;
@@ -177,7 +178,7 @@ async fn free_murmure_document(
 pub async fn create_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    axum::Json(req): axum::Json<CreateChannelRequest>,
+    Json(req): Json<CreateChannelRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let new = db::NewChannel {
         channel_id: req.channel_id,
@@ -226,7 +227,7 @@ pub async fn create_channel(
 pub async fn create_direct_message(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    axum::Json(req): axum::Json<CreateDirectMessageRequest>,
+    Json(req): Json<CreateDirectMessageRequest>,
 ) -> Result<axum::Json<DirectMessageJson>, AppError> {
     use base64::Engine;
     let invalid = |detail: &str| AppError::BadRequest(detail.into());
@@ -345,7 +346,7 @@ pub async fn join_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path(channel_id): Path<String>,
-    axum::Json(req): axum::Json<JoinChannelRequest>,
+    Json(req): Json<JoinChannelRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use base64::Engine;
     let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
@@ -587,7 +588,7 @@ mod tests {
             create_channel(
                 State(state.clone()),
                 session(who),
-                axum::Json(CreateChannelRequest {
+                Json(CreateChannelRequest {
                     public,
                     channel_id: channel.id,
                     space_id: space,
@@ -643,7 +644,7 @@ mod tests {
                 State(state.clone()),
                 session(who),
                 Path(channel.to_string()),
-                axum::Json(JoinChannelRequest {
+                Json(JoinChannelRequest {
                     doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([key; 48]),
                     entry,
                 }),
@@ -686,7 +687,7 @@ mod tests {
         let answer = crate::routes::create_document(
             State(state.clone()),
             session(alice),
-            axum::Json(crate::routes::CreateDocumentRequest {
+            Json(crate::routes::CreateDocumentRequest {
                 doc_type: ambre_core::DocType::Murmure,
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
@@ -968,7 +969,7 @@ mod tests {
             State(state.clone()),
             session(alice),
             Path(channel.id.to_string()),
-            axum::Json(JoinChannelRequest {
+            Json(JoinChannelRequest {
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
                 entry: entry.clone(),
             }),
@@ -1006,7 +1007,7 @@ mod tests {
             State(state.clone()),
             session(alice),
             Path(channel.id.to_string()),
-            axum::Json(JoinChannelRequest {
+            Json(JoinChannelRequest {
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
                 entry: None,
             }),
@@ -1036,7 +1037,7 @@ mod tests {
             State(state.clone()),
             session(alice),
             Path(channel.id.to_string()),
-            axum::Json(JoinChannelRequest {
+            Json(JoinChannelRequest {
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1; 48]),
                 entry: Some(entry),
             }),
@@ -1605,7 +1606,7 @@ mod tests {
         who: UserId,
         req: CreateDirectMessageRequest,
     ) -> Result<DirectMessageJson, AppError> {
-        create_direct_message(State(state.clone()), session(who), axum::Json(req))
+        create_direct_message(State(state.clone()), session(who), Json(req))
             .await
             .map(|axum::Json(json)| json)
     }

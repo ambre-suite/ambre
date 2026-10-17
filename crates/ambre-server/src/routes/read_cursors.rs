@@ -12,6 +12,7 @@ use std::sync::Arc;
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::state::AppState;
 
 /// The body of a cursor move: the sequence number the caller has read up to.
@@ -41,7 +42,7 @@ pub async fn set_read_cursor(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path(document_id): Path<String>,
-    axum::Json(req): axum::Json<ReadCursorRequest>,
+    Json(req): Json<ReadCursorRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let not_found = || AppError::NotFound {
         resource: "document",
@@ -100,10 +101,10 @@ pub struct MarkReadRequest {
 pub async fn mark_read(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    body: Option<axum::Json<MarkReadRequest>>,
+    body: Option<Json<MarkReadRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let wanted: Option<std::collections::HashSet<uuid::Uuid>> =
-        body.and_then(|axum::Json(req)| req.documents).map(|ids| {
+        body.and_then(|Json(req)| req.documents).map(|ids| {
             ids.iter()
                 .filter_map(|id| uuid::Uuid::parse_str(id).ok())
                 .collect()
@@ -230,7 +231,7 @@ mod tests {
             State(state.clone()),
             who,
             Path(document.to_string()),
-            axum::Json(ReadCursorRequest {
+            Json(ReadCursorRequest {
                 seq: ambre_core::Seq(seq),
             }),
         )
@@ -448,13 +449,9 @@ mod tests {
         let body = MarkReadRequest {
             documents: Some(vec![segments[0].to_string(), strangers[0].to_string()]),
         };
-        mark_read(
-            State(state.clone()),
-            session(alice, 1),
-            Some(axum::Json(body)),
-        )
-        .await
-        .expect("mark read");
+        mark_read(State(state.clone()), session(alice, 1), Some(Json(body)))
+            .await
+            .expect("mark read");
         assert_eq!(cursor_of(&state.db, alice, segments[0]).await, Some(5));
         assert_eq!(cursor_of(&state.db, alice, segments[1]).await, None);
         assert_eq!(cursor_of(&state.db, alice, strangers[0]).await, None);

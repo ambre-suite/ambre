@@ -1,10 +1,11 @@
-use axum::extract::{Json, Path, State};
+use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use crate::auth;
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::oidc::{self, CallbackRequest, CallbackResponse};
 use crate::redis_ops;
 use crate::state::AppState;

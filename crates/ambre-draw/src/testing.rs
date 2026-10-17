@@ -215,7 +215,7 @@ impl DrawSurface for RecordingSurface {
     fn stroke_path(&mut self, path: &BezPath, brush: &Brush, stroke: &Stroke) {
         self.ops.push(DrawOp::StrokePath {
             color: brush_color(brush),
-            bounds: kurbo::Shape::bounding_box(path),
+            bounds: path.control_box(),
             width: stroke.width,
         });
     }

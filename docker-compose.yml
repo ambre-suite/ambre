@@ -24,7 +24,9 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    # MinIO no longer publishes a public image. Chainguard builds this one
+    # from the MinIO sources, with the same entrypoint and `mc` on board.
+    image: cgr.dev/chainguard/minio:latest
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin

@@ -1,4 +1,4 @@
-use axum::extract::{Json, Path, Query, State};
+use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,6 +8,7 @@ use ambre_core::Role;
 use crate::auth::{self};
 use crate::db;
 use crate::error::AppError;
+use crate::extract::Json;
 use crate::redis_ops;
 use crate::state::AppState;
 

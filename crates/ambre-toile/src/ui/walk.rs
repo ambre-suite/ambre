@@ -16,6 +16,7 @@
 // ============================================================================
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use ambre_bus::app::toile::{
     ConnectorId, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport,
@@ -148,15 +149,28 @@ pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
 /// The light ink (ARGB) of a sticky-note body, for a dark card.
 pub(crate) const STICKY_INK_ON_DARK: u32 = 0xFFFF_FFFF;
 
-/// The relative luminance of an ARGB colour, alpha ignored (WCAG 2).
-fn luminance(argb: u32) -> f64 {
-    let channel = |shift: u32| {
-        let c = f64::from((argb >> shift) & 0xff) / 255.0;
+/// The linear value of each 8-bit sRGB channel (WCAG 2), built once. A sticky
+/// body weighs four colours, and computing their powers on every frame cost an
+/// eighth of the board walk.
+static LINEAR: LazyLock<[f64; 256]> = LazyLock::new(|| {
+    std::array::from_fn(|v| {
+        let c = v as f64 / 255.0;
         if c <= 0.039_28 {
             c / 12.92
         } else {
             ((c + 0.055) / 1.055).powf(2.4)
         }
+    })
+});
+
+/// The relative luminance of an ARGB colour, alpha ignored (WCAG 2).
+fn luminance(argb: u32) -> f64 {
+    // A masked byte is always inside the table.
+    let channel = |shift: u32| {
+        LINEAR
+            .get(((argb >> shift) & 0xff) as usize)
+            .copied()
+            .unwrap_or(0.0)
     };
     0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
 }

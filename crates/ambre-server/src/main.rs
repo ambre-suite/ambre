@@ -5,6 +5,7 @@ mod compaction;
 mod db;
 mod deletion;
 mod error;
+mod extract;
 mod hot_tail;
 mod jwt;
 mod middleware;
