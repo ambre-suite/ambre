@@ -181,7 +181,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                     StatusCode::SERVICE_UNAVAILABLE,
                     [("Retry-After", window_secs.to_string())],
                     crate::error::ErrorBody::json(
-                        "RATE_LIMITER_UNAVAILABLE",
+                        ambre_core::RefusalCode::RateLimiterUnavailable,
                         "Service temporarily unavailable, please retry",
                     ),
                 )
@@ -205,7 +205,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                 ("Retry-After", window_secs.to_string()),
             ],
             crate::error::ErrorBody::json(
-                "RATE_LIMITED",
+                ambre_core::RefusalCode::RateLimited,
                 "Too many requests, please try again later",
             ),
         )

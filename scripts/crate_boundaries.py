@@ -131,7 +131,8 @@ that holds a core identifier names its text adapter.
 **A closed set typed on the JSON wire** (`SRV-180`). A word held as a string
 is parsed again by whoever reads it, and three parsers of the document type
 disagreed on case and on a fallback. So the same rows, routes and types hold
-no `doc_type`, `role`, `kind` or `status` field as a `String`.
+no `doc_type`, `role`, `kind` or `status` field as a `String`. The refusal
+of the relay joins them, so its `error` code is an enum too (`SRV-182`).
 
 **An answer of the relay is a type** (`SRV-181`). A body built with `json!`
 escapes both checks above, and a renamed field changes the wire unseen. So
@@ -538,7 +539,7 @@ BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # The relay's rows and routes and the HTTP layer of Sync, whose identifiers
 # each take their newtype and reach JSON as their text (`SRV-179`).
 WIRE_DIRS = ("crates/ambre-server/src/routes", "crates/ambre-server/src/db")
-WIRE_FILES = ("crates/ambre-sync/src/http.rs",)
+WIRE_FILES = ("crates/ambre-sync/src/http.rs", "crates/ambre-server/src/error.rs")
 WIRE_ID_NAME = re.compile(r"^(?:\w+_)?ids?$")
 WIRE_UNTYPED = re.compile(r"\b(String|str|Uuid)\b")
 CORE_ID = re.compile(
@@ -555,8 +556,8 @@ ANSWER_SOURCES = (
 )
 AD_HOC_BODY = re.compile(r"\bjson!\s*[\(\[\{]")
 # The fields whose word belongs to a closed set, parsed once at the edge into
-# its enum (`SRV-180`).
-WIRE_CLOSED_NAME = re.compile(r"^(?:doc_type|role|kind|status)$")
+# its enum (`SRV-180`). A refusal's `error` names its code (`SRV-182`).
+WIRE_CLOSED_NAME = re.compile(r"^(?:doc_type|role|kind|status|error)$")
 # A signal whose payload a reviewer accepts as a primitive, and why: free text
 # has no unit and no closed set, so a type of its own would name nothing.
 BARE_PAYLOAD_ACCEPTED = {
@@ -1851,6 +1852,9 @@ def check_wire_ids(errors: list[str]) -> int:
 
     `SRV-180`: on the same files, a field named `doc_type`, `role`, `kind` or
     `status` holds its enum, never a `String` or a `str`.
+
+    `SRV-182`: so does the `error` code of a refusal, on the relay's refusal
+    and in the HTTP layer of Sync.
     """
     files = [p for d in WIRE_DIRS for p in sorted((ROOT / d).rglob("*.rs"))]
     files += [ROOT / f for f in WIRE_FILES if (ROOT / f).exists()]

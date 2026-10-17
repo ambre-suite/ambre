@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_core::RefusalCode;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -256,65 +257,57 @@ impl Transport for Fetch {
     }
 }
 
-/// The relay's error code for a request refused because the account still owes
-/// its key setup (HTTP 403). An error message ends with it exactly when the
-/// relay refused the request for that reason (`SYNC-134`).
-const SETUP_REQUIRED: &str = "SETUP_REQUIRED";
-
-/// The body the relay sends with a refusal. Only its code is read.
+/// The body the relay sends with a refusal. Only its code is read, a word of
+/// one closed set (`SRV-182`). A code this build does not hold fails the read,
+/// so the refusal reads as its status alone.
 #[derive(Deserialize)]
 struct RefusalBody {
-    error: String,
+    error: RefusalCode,
 }
-
-/// The relay's code for a rotation refused because a member joined after it
-/// read the members (HTTP 409, `SYNC-143`).
-const MEMBERS_CHANGED: &str = "MEMBERS_CHANGED";
-
-/// The relay's code for an invitation refused because a rotation replaced the
-/// key it wraps (HTTP 409, `SYNC-143`).
-const KEY_CHANGED: &str = "KEY_CHANGED";
-
-/// The relay's code for a membership entry refused because another entry
-/// took its place in the log first (HTTP 409, `SRV-104`).
-const LOG_MOVED: &str = "LOG_MOVED";
 
 /// The error a refused request reads as. `code` is the relay's error code,
 /// kept only with the status that may carry it. A 403 carries a setup still
-/// owed, and a 409 a membership or a key that moved under the request.
-fn refusal(method: &str, url: &str, status: u16, code: Option<&str>) -> String {
+/// owed (`SYNC-134`), and a 409 a membership, a key or a log that moved
+/// under the request (`SYNC-143`, `SRV-104`).
+fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> String {
+    use RefusalCode::{KeyChanged, LogMoved, MembersChanged, SetupRequired};
     match (status, code) {
-        (403, Some(SETUP_REQUIRED)) => format!("{method} {url}: {SETUP_REQUIRED}"),
-        (409, Some(code @ (MEMBERS_CHANGED | KEY_CHANGED | LOG_MOVED))) => {
+        (403, Some(code @ SetupRequired))
+        | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => {
             format!("{method} {url}: {code}")
         }
         _ => format!("{method} {url}: HTTP {status}"),
     }
 }
 
+/// Whether `message` closes with the relay's `code`. The code comes after the
+/// URL, so no URL or other status can end with it.
+fn ends_with_code(message: &str, code: RefusalCode) -> bool {
+    message.ends_with(&format!(": {code}"))
+}
+
 /// Whether `message` is the error of a request the relay refused for a key
-/// setup still owed. The code closes the message, after the URL, so no URL or
-/// other status can end with it.
+/// setup still owed.
 pub(crate) fn is_setup_refusal(message: &str) -> bool {
-    message.ends_with(&format!(": {SETUP_REQUIRED}"))
+    ends_with_code(message, RefusalCode::SetupRequired)
 }
 
 /// Whether `message` is a rotation the relay refused because the members
 /// changed since it read them.
 pub(crate) fn is_members_changed(message: &str) -> bool {
-    message.ends_with(&format!(": {MEMBERS_CHANGED}"))
+    ends_with_code(message, RefusalCode::MembersChanged)
 }
 
 /// Whether `message` is an invitation the relay refused because the key it
 /// wraps is no longer the document's.
 pub(crate) fn is_key_changed(message: &str) -> bool {
-    message.ends_with(&format!(": {KEY_CHANGED}"))
+    ends_with_code(message, RefusalCode::KeyChanged)
 }
 
 /// Whether `message` is a membership entry the relay refused because the log
 /// moved since the writer read it.
 pub(crate) fn is_log_moved(message: &str) -> bool {
-    message.ends_with(&format!(": {LOG_MOVED}"))
+    ends_with_code(message, RefusalCode::LogMoved)
 }
 
 /// Closes the error of an answer that names a word of a closed set this build
@@ -344,7 +337,7 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
         request.method.as_str(),
         &request.url,
         resp.status,
-        code.as_deref(),
+        code,
     ))
 }
 
@@ -1443,11 +1436,13 @@ mod tests {
         let url = "https://relay.test/api/documents/d/members";
         let auth = session("access-1", "refresh-1");
         let body = serde_json::json!({});
-        let answer = |status: u16, code: &str| Ok((status, serde_json::json!({ "error": code })));
+        let answer = |status: u16, code: RefusalCode| {
+            Ok((status, serde_json::json!({ "error": code.as_str() })))
+        };
         let transport = Scripted::new([
-            answer(409, MEMBERS_CHANGED),
-            answer(403, SETUP_REQUIRED),
-            answer(500, SETUP_REQUIRED),
+            answer(409, RefusalCode::MembersChanged),
+            answer(403, RefusalCode::SetupRequired),
+            answer(500, RefusalCode::SetupRequired),
             Ok((404, serde_json::json!({}))),
             Err("network down".to_owned()),
         ]);
@@ -1520,25 +1515,26 @@ mod tests {
     /// URL makes another status read as one (`SYNC-134`).
     #[test]
     fn only_a_setup_refusal_reads_as_one() {
+        use RefusalCode::{Forbidden, SetupRequired};
         let url = "https://relay.example/api/documents";
         assert!(is_setup_refusal(&refusal(
             "GET",
             url,
             403,
-            Some(SETUP_REQUIRED)
+            Some(SetupRequired)
         )));
         assert!(!is_setup_refusal(&refusal(
             "GET",
             url,
             403,
-            Some("FORBIDDEN")
+            Some(Forbidden)
         )));
         assert!(!is_setup_refusal(&refusal("GET", url, 403, None)));
         assert!(!is_setup_refusal(&refusal(
             "GET",
             url,
             500,
-            Some(SETUP_REQUIRED)
+            Some(SetupRequired)
         )));
         let crafted = "https://relay.example/api/users/search?q=: SETUP_REQUIRED";
         assert!(!is_setup_refusal(&refusal("GET", crafted, 500, None)));
@@ -1548,37 +1544,63 @@ mod tests {
     /// status or code reads as either (`SYNC-143`).
     #[test]
     fn a_moved_membership_or_key_reads_as_its_own_refusal() {
+        use RefusalCode::{Conflict, KeyChanged, LogMoved, MembersChanged};
         let url = "https://relay.example/api/documents/d/revoke";
         assert!(is_members_changed(&refusal(
             "POST",
             url,
             409,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
-        assert!(is_key_changed(&refusal(
-            "POST",
-            url,
-            409,
-            Some(KEY_CHANGED)
-        )));
+        assert!(is_key_changed(&refusal("POST", url, 409, Some(KeyChanged))));
+        assert!(is_log_moved(&refusal("POST", url, 409, Some(LogMoved))));
         assert!(!is_members_changed(&refusal(
             "POST",
             url,
             409,
-            Some("CONFLICT")
+            Some(Conflict)
         )));
         assert!(!is_members_changed(&refusal(
             "POST",
             url,
             500,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
         assert!(!is_key_changed(&refusal(
             "POST",
             url,
             409,
-            Some(MEMBERS_CHANGED)
+            Some(MembersChanged)
         )));
+    }
+
+    /// Holds `SRV-182`: Sync reads the refusal's code from its closed set. A
+    /// code this build does not hold reads as the bare status, never as a
+    /// moved membership.
+    #[tokio::test]
+    async fn a_refusal_code_outside_the_set_reads_as_its_status() {
+        let url = "https://relay.test/api/documents/d/rotate";
+        let auth = session("access-1", "refresh-1");
+        let body = serde_json::json!({});
+        let transport = Scripted::new([
+            Ok((
+                409,
+                serde_json::json!({ "error": "LOG_MOVED", "message": "m" }),
+            )),
+            Ok((
+                409,
+                serde_json::json!({ "error": "QUOTA_EXCEEDED", "message": "m" }),
+            )),
+            Ok((
+                409,
+                serde_json::json!({ "error": "log_moved", "message": "m" }),
+            )),
+        ]);
+        let send = || send_json_auth_via(&transport, Method::Post, url, &body, &auth);
+
+        assert!(is_log_moved(&send().await.unwrap_err()));
+        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
+        assert_eq!(send().await.unwrap_err(), format!("POST {url}: HTTP 409"));
     }
 
     /// An unlock finding no master material reads as a setup owed, not as a

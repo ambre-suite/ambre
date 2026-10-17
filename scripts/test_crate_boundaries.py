@@ -493,6 +493,8 @@ class CrateBoundaries(unittest.TestCase):
             (cb.WIRE_FILES[0], "pub role: String,"),
             (cb.WIRE_FILES[0], "pub status: Option<String>,"),
             (f"{cb.WIRE_DIRS[0]}/channels.rs", "pub kind: &'static str,"),
+            (cb.WIRE_FILES[1], "pub error: &'static str,"),
+            (cb.WIRE_FILES[0], "error: String,"),
         ):
             with self.subTest(rel=rel, field=untyped):
                 body = f"#[derive(Deserialize)]\npub struct Row {{\n    {untyped}\n}}\n"

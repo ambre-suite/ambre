@@ -94,9 +94,121 @@ pub enum WriteStatus {
     Recovered,
 }
 
+/// The code a refusal of the relay names, which Sync matches (`SRV-182`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RefusalCode {
+    /// No valid session.
+    Unauthorized,
+    /// The role does not allow the request.
+    Forbidden,
+    /// The account still owes its key setup.
+    SetupRequired,
+    /// The resource is not there, or not for this caller.
+    NotFound,
+    /// The request contradicts what the relay holds.
+    Conflict,
+    /// The writer's clock does not follow the relay's.
+    ClockMismatch,
+    /// The document owes a key rotation.
+    RotationOwed,
+    /// A member joined after the rotation read the members.
+    MembersChanged,
+    /// The key an invitation wraps is no longer the document's.
+    KeyChanged,
+    /// Another membership entry took the place this one was signed for.
+    LogMoved,
+    /// A signature does not verify.
+    InvalidSignature,
+    /// The document asks for a snapshot first.
+    SnapshotRequired,
+    /// Another writer holds the compaction lock.
+    CompactionLockHeld,
+    /// No identity provider of that name.
+    UnknownProvider,
+    /// The request does not read.
+    BadRequest,
+    /// The body exceeds its ceiling.
+    PayloadTooLarge,
+    /// The caller sent too many requests in the window.
+    RateLimited,
+    /// The rate limiter cannot be read, so an auth request is refused.
+    RateLimiterUnavailable,
+    /// The relay failed; the cause stays in its log.
+    InternalError,
+}
+
+impl RefusalCode {
+    /// The word the relay answers, which Sync keeps at the end of an error.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unauthorized => "UNAUTHORIZED",
+            Self::Forbidden => "FORBIDDEN",
+            Self::SetupRequired => "SETUP_REQUIRED",
+            Self::NotFound => "NOT_FOUND",
+            Self::Conflict => "CONFLICT",
+            Self::ClockMismatch => "CLOCK_MISMATCH",
+            Self::RotationOwed => "ROTATION_OWED",
+            Self::MembersChanged => "MEMBERS_CHANGED",
+            Self::KeyChanged => "KEY_CHANGED",
+            Self::LogMoved => "LOG_MOVED",
+            Self::InvalidSignature => "INVALID_SIGNATURE",
+            Self::SnapshotRequired => "SNAPSHOT_REQUIRED",
+            Self::CompactionLockHeld => "COMPACTION_LOCK_HELD",
+            Self::UnknownProvider => "UNKNOWN_PROVIDER",
+            Self::BadRequest => "BAD_REQUEST",
+            Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
+            Self::RateLimited => "RATE_LIMITED",
+            Self::RateLimiterUnavailable => "RATE_LIMITER_UNAVAILABLE",
+            Self::InternalError => "INTERNAL_ERROR",
+        }
+    }
+}
+
+impl fmt::Display for RefusalCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Holds `SRV-182`: each refusal code keeps the word the relay answered
+    /// before it was typed. The wire spells it as `as_str` does, and it reads
+    /// back from it alone.
+    #[test]
+    fn each_refusal_code_keeps_its_word() {
+        use RefusalCode::*;
+        for (code, word) in [
+            (Unauthorized, "UNAUTHORIZED"),
+            (Forbidden, "FORBIDDEN"),
+            (SetupRequired, "SETUP_REQUIRED"),
+            (NotFound, "NOT_FOUND"),
+            (Conflict, "CONFLICT"),
+            (ClockMismatch, "CLOCK_MISMATCH"),
+            (RotationOwed, "ROTATION_OWED"),
+            (MembersChanged, "MEMBERS_CHANGED"),
+            (KeyChanged, "KEY_CHANGED"),
+            (LogMoved, "LOG_MOVED"),
+            (InvalidSignature, "INVALID_SIGNATURE"),
+            (SnapshotRequired, "SNAPSHOT_REQUIRED"),
+            (CompactionLockHeld, "COMPACTION_LOCK_HELD"),
+            (UnknownProvider, "UNKNOWN_PROVIDER"),
+            (BadRequest, "BAD_REQUEST"),
+            (PayloadTooLarge, "PAYLOAD_TOO_LARGE"),
+            (RateLimited, "RATE_LIMITED"),
+            (RateLimiterUnavailable, "RATE_LIMITER_UNAVAILABLE"),
+            (InternalError, "INTERNAL_ERROR"),
+        ] {
+            assert_eq!(code.as_str(), word);
+            let json = serde_json::to_value(code).unwrap();
+            assert_eq!(json, serde_json::json!(word));
+            assert_eq!(serde_json::from_value::<RefusalCode>(json).unwrap(), code);
+        }
+        assert!(serde_json::from_value::<RefusalCode>(serde_json::json!("forbidden")).is_err());
+    }
 
     /// Holds `SRV-180`: every snapshot status reads back from its word, on the
     /// wire and from a row, and an unknown word is refused.

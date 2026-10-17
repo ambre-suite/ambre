@@ -1,3 +1,4 @@
+use ambre_core::RefusalCode;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 #[allow(clippy::single_component_path_imports)]
@@ -126,33 +127,46 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
             AppError::Unauthorized | AppError::SessionExpired => {
-                (StatusCode::UNAUTHORIZED, "UNAUTHORIZED")
+                (StatusCode::UNAUTHORIZED, RefusalCode::Unauthorized)
             }
-            AppError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
-            AppError::SetupRequired => (StatusCode::FORBIDDEN, "SETUP_REQUIRED"),
-            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND"),
-            AppError::Conflict { .. } => (StatusCode::CONFLICT, "CONFLICT"),
-            AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, "CLOCK_MISMATCH"),
-            AppError::RotationOwed => (StatusCode::CONFLICT, "ROTATION_OWED"),
-            AppError::MembersChanged => (StatusCode::CONFLICT, "MEMBERS_CHANGED"),
-            AppError::KeyChanged => (StatusCode::CONFLICT, "KEY_CHANGED"),
-            AppError::LogMoved => (StatusCode::CONFLICT, "LOG_MOVED"),
-            AppError::InvalidSignature => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_SIGNATURE"),
-            AppError::SnapshotRequired => (StatusCode::CONFLICT, "SNAPSHOT_REQUIRED"),
-            AppError::CompactionLockHeld => (StatusCode::CONFLICT, "COMPACTION_LOCK_HELD"),
-            AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, "UNKNOWN_PROVIDER"),
-            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "BAD_REQUEST"),
-            AppError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE"),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, RefusalCode::Forbidden),
+            AppError::SetupRequired => (StatusCode::FORBIDDEN, RefusalCode::SetupRequired),
+            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, RefusalCode::NotFound),
+            AppError::Conflict { .. } => (StatusCode::CONFLICT, RefusalCode::Conflict),
+            AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, RefusalCode::ClockMismatch),
+            AppError::RotationOwed => (StatusCode::CONFLICT, RefusalCode::RotationOwed),
+            AppError::MembersChanged => (StatusCode::CONFLICT, RefusalCode::MembersChanged),
+            AppError::KeyChanged => (StatusCode::CONFLICT, RefusalCode::KeyChanged),
+            AppError::LogMoved => (StatusCode::CONFLICT, RefusalCode::LogMoved),
+            AppError::InvalidSignature => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                RefusalCode::InvalidSignature,
+            ),
+            AppError::SnapshotRequired => (StatusCode::CONFLICT, RefusalCode::SnapshotRequired),
+            AppError::CompactionLockHeld => (StatusCode::CONFLICT, RefusalCode::CompactionLockHeld),
+            AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, RefusalCode::UnknownProvider),
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, RefusalCode::BadRequest),
+            AppError::PayloadTooLarge(_) => {
+                (StatusCode::PAYLOAD_TOO_LARGE, RefusalCode::PayloadTooLarge)
+            }
+            AppError::Database(_)
+            | AppError::Redis(_)
+            | AppError::S3(_)
+            | AppError::Internal(_)
+            | AppError::Decode(_)
+            | AppError::Oidc(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                RefusalCode::InternalError,
+            ),
         };
 
         // Log by severity. A 5xx is a genuine server fault (Redis/DB/S3/...) and
         // must be loud. A 4xx is client-caused (bad auth, not found, conflict)
         // and is routine, so it stays at debug to keep `error` meaningful.
         if status.is_server_error() {
-            tracing::error!(error = %self, code = code);
+            tracing::error!(error = %self, code = %code);
         } else {
-            tracing::debug!(error = %self, code = code);
+            tracing::debug!(error = %self, code = %code);
         }
 
         let message = self.caller_message();
@@ -162,16 +176,16 @@ impl IntoResponse for AppError {
 }
 
 /// The body of every refusal: the code a client matches, and a message for
-/// a person (`SRV-181`).
+/// a person (`SRV-181`). The code is a word of one closed set (`SRV-182`).
 #[derive(serde::Serialize)]
 pub(crate) struct ErrorBody {
-    pub error: &'static str,
+    pub error: RefusalCode,
     pub message: String,
 }
 
 impl ErrorBody {
     /// The refusal under `code`.
-    pub(crate) fn json(code: &'static str, message: impl Into<String>) -> axum::Json<Self> {
+    pub(crate) fn json(code: RefusalCode, message: impl Into<String>) -> axum::Json<Self> {
         axum::Json(Self {
             error: code,
             message: message.into(),
