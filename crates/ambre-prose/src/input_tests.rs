@@ -8,7 +8,7 @@ use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent
 use crate::input::{ProseInput, ProseKey};
 use crate::logic::ProseState;
 use crate::ui::{ProseUiState, SendResult};
-use crate::view::tests::append;
+use crate::view::tests::{append, down};
 
 /// One peer: its Logic side, its view, and the commands the view sent that
 /// have not reached the Logic side yet.
@@ -888,7 +888,7 @@ fn select_all_spans_the_document_and_keeps_the_window() {
     let blocks = rig.logic.root_blocks();
     let (first, last) = (blocks[0], *blocks.last().expect("a block"));
     rig.ui.set_caret((blocks[3], 0));
-    rig.ui.scroll_by(700.0);
+    rig.ui.scroll_by(down(700.0));
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::SelectAll, false, true);
     let len = rig.ui.run_of(last).expect("a run").len();
@@ -910,7 +910,7 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
         rig.ui.viewport.zoom = zoom;
         rig.ui.viewport.scroll_y = 0.0;
-        rig.ui.scroll_by(scroll * zoom);
+        rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42, 120] {
             let (x, y) = rig.point_of(block, offset);
             let hit = rig.ui.hit_test(f64::from(x), f64::from(y));
@@ -1462,7 +1462,7 @@ fn the_bar_follows_its_text_through_a_scroll_and_a_zoom() {
     let text_at = |rig: &Rig| rig.point_of(block, 5);
     let (x0, y0) = rig.ui.toolbar().anchor.expect("the bar shows");
     let (_, line) = text_at(&rig);
-    rig.ui.scroll_by(120.0);
+    rig.ui.scroll_by(down(120.0));
     let (x1, y1) = rig.ui.toolbar().anchor.expect("the bar shows");
     let (_, moved) = text_at(&rig);
     assert!((x1 - x0).abs() < 0.01);
@@ -2233,8 +2233,9 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     assert!(!rig.ui.tick_fling(now + 16.0));
     // Near the end of the column, the motion stops there.
     let end = rig.ui.column.max_scroll(&rig.ui.viewport);
-    rig.ui
-        .scroll_by((end - rig.ui.viewport.scroll_y - 5.0) * rig.ui.viewport.scale());
+    rig.ui.scroll_by(down(
+        (end - rig.ui.viewport.scroll_y - 5.0) * rig.ui.viewport.scale(),
+    ));
     flick_up(&mut rig);
     for frame in 1..=20 {
         rig.ui.tick_fling(80.0 + 16.0 * f64::from(frame));
@@ -2348,7 +2349,7 @@ fn the_pipe_spot_is_the_caret_the_paint_drew() {
     for (zoom, scroll) in [(1.0, 0.0), (1.5, 900.0), (0.75, 2400.0)] {
         rig.ui.viewport.zoom = zoom;
         rig.ui.viewport.scroll_y = 0.0;
-        rig.ui.scroll_by(scroll * zoom);
+        rig.ui.scroll_by(down(scroll * zoom));
         for offset in [0, 9, 42] {
             caret_at(&mut rig, block, offset);
             let (x, y) = rig.point_of(block, offset);

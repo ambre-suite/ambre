@@ -82,6 +82,16 @@ impl ScrollStep {
     pub fn y(self) -> f32 {
         self.y
     }
+
+    /// The step of a pointer dragged from `from` to `to`, one for one, the
+    /// content going with the pointer. It has no slop and leaves no motion,
+    /// which is what a mouse held on the board asks for (`KINETIC-001`).
+    pub fn dragged(from: (f32, f32), to: (f32, f32)) -> Self {
+        Self {
+            x: from.0 - to.0,
+            y: from.1 - to.1,
+        }
+    }
 }
 
 /// The speed a drag held near an edge asks for, in screen pixels per
@@ -394,6 +404,18 @@ mod tests {
         assert_eq!(kinetic.release(20.0), Release::Tap { x: 10.0, y: 20.0 });
         assert!(!kinetic.moving());
         assert_eq!(kinetic.tick(36.0), None);
+    }
+
+    /// `KINETIC-001`: a drag moves the view as a pan past the slop does, the
+    /// content going with the pointer.
+    #[test]
+    fn a_drag_moves_the_view_as_a_pan_past_the_slop_does() {
+        let mut kinetic = Kinetic::default();
+        kinetic.press(0.0, 0.0, 0.0);
+        let panned = kinetic.sample(-12.0, 30.0, 16.0);
+        let dragged = ScrollStep::dragged((0.0, 0.0), (-12.0, 30.0));
+        assert_eq!(panned, Some(dragged));
+        assert_eq!((dragged.x(), dragged.y()), (12.0, -30.0));
     }
 
     /// `KINETIC-004`: a pan released carries on at the speed of its last

@@ -316,7 +316,10 @@ impl TrameUiState {
     /// Pan the viewport by `(dr, dc)` rows/cols *without* moving the active
     /// cell (wheel / touchpad scroll). Clamps the top-left within the grid.
     /// Returns `true` if the scroll position actually changed.
-    pub fn scroll_by(&mut self, dr: i32, dc: i32) -> bool {
+    ///
+    /// The whole cells come from the accumulator of model steps alone, so a
+    /// distance the grid computed itself does not move it (`KINETIC-001`).
+    pub(crate) fn scroll_by(&mut self, dr: i32, dc: i32) -> bool {
         let new_top = (self.top_row as i64 + dr as i64).clamp(0, (TOTAL_ROWS - 1) as i64) as u32;
         let new_left = (self.left_col as i64 + dc as i64).clamp(0, (TOTAL_COLS - 1) as i64) as u32;
         // Keep the top edge on a visible row so the collapsed-row slot math stays

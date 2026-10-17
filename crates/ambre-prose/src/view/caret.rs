@@ -528,7 +528,7 @@ impl ProseUiState {
             return false;
         };
         let before = self.viewport.scroll_y;
-        self.scroll_by(step.y());
+        self.scroll_by(step);
         if let Some((x, y)) = self.drag_pointer {
             self.update_drag(x, y);
         }

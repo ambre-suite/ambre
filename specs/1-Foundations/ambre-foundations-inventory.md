@@ -23,7 +23,7 @@
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 36 |  |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | implemented | 10 |  |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 |  |
-| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 13 | 1 |
+| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 13 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 15 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 30 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 953 contract rows, 5 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 953 contract rows, 4 loose.**

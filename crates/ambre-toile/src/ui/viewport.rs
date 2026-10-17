@@ -14,6 +14,7 @@ use ambre_bus::app::toile::Viewport;
 /// Minimum / maximum zoom: the bounds the culling type clamps to
 /// (`TOILE-UI-281`), so the camera and the Logic thread share one range.
 pub use ambre_bus::app::toile::{MAX_ZOOM, MIN_ZOOM};
+use ambre_draw::kinetic::ScrollStep;
 use ambre_draw::{Affine, Point, Rect, Size, Vec2};
 
 /// One press of the zoom-in / zoom-out button multiplies (or divides) the zoom
@@ -153,11 +154,13 @@ impl ViewportTransform {
         }
     }
 
-    /// Pan the camera by a screen-space delta. A drag of `delta` logical pixels
-    /// moves the content under the cursor by the same amount. The world center
-    /// shifts against the drag, scaled down by the current zoom.
-    pub fn pan_by_screen(&mut self, delta: Vec2) {
-        self.center -= delta / self.zoom;
+    /// Move the view by a step of the shared model, in screen pixels. The world
+    /// center follows the step, scaled down by the current zoom, so a drag
+    /// moves the content under the cursor by the drag. Only the model builds a
+    /// step, so a distance the board computed itself does not move the camera
+    /// (`KINETIC-001`).
+    pub fn pan_by_screen(&mut self, step: ScrollStep) {
+        self.center += Vec2::new(f64::from(step.x()), f64::from(step.y())) / self.zoom;
     }
 
     /// Set the logical canvas size (on resize). Keeps center and zoom.
@@ -381,7 +384,7 @@ mod tests {
         vt.zoom = 2.0;
         let world_pt = Point::new(50.0, 50.0);
         let screen_before = vt.world_to_screen() * world_pt;
-        vt.pan_by_screen(Vec2::new(30.0, -20.0));
+        vt.pan_by_screen(ScrollStep::dragged((0.0, 0.0), (30.0, -20.0)));
         let screen_after = vt.world_to_screen() * world_pt;
         // A pan of (30, -20) screen px moves every painted world point by the
         // same screen delta.

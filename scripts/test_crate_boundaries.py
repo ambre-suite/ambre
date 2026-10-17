@@ -82,6 +82,16 @@ def scratch(tmp: str) -> Path:
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
     write(root, cb.DRAW_TRAIT, "pub trait DrawSurface {\n    fn fill_rect(&mut self, rect: Rect, color: Color);\n}\n")
     write(root, cb.COMPOSED_NAME, 'const UNTITLED: &str = "Untitled";\n')
+    for rel, setter in zip(
+        cb.SCROLL_SETTERS,
+        (
+            "    pub fn scroll_by(&mut self, step: ScrollStep) {\n        let moved = self.scroll_y + step.y();\n    }\n",
+            "    pub fn pan_by_screen(&mut self, step: ScrollStep) {\n        self.center += step.x();\n    }\n",
+            "    fn accumulate(&mut self, step: ScrollStep) {\n        self.accum_y += step.y();\n    }\n"
+            "    fn apply(&mut self, grid: &mut G) {\n        grid.scroll_by(1, 0);\n    }\n",
+        ),
+    ):
+        write(root, rel, f"impl V {{\n{setter}}}\n")
     for rel, holder in cb.SIGNAL_HOLDERS.items():
         path = root / rel
         held = path.read_text() if path.exists() else ""
@@ -135,6 +145,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
             cb.check_primitives(errors)
+            cb.check_scroll_sources(errors)
             cb.check_composed_names(errors)
             cb.check_one_copy(errors)
             cb.check_bench_frame_rate(errors)
@@ -741,6 +752,41 @@ class CrateBoundaries(unittest.TestCase):
     def test_a_drawing_crate_without_the_trait_is_an_error_not_a_pass(self):
         errors = self.breach(cb.DRAW_TRAIT, "pub struct Rect;\n")
         self.assertTrue(any("holds nothing" in e for e in errors), errors)
+
+    def test_a_scroll_moved_by_a_bare_distance_is_refused(self):
+        for rel, text, said in (
+            ("crates/ambre-prose/src/view/caret.rs", "fn f(v: &mut V) { v.scroll_y += 12.0; }\n", "outside its setter"),
+            ("crates/ambre-toile/src/ui/view.rs", "fn f(c: &mut C) { c.center = c.center - d; }\n", "outside its setter"),
+            ("crates/ambre-trame/src/ui/view/input.rs", "fn f(g: &mut G) { g.scroll_by(3, 0); }\n", "outside its accumulator"),
+            ("crates/ambre-prose/src/view/fling.rs", "fn f() { ScrollStep::dragged((0.0, d), (0.0, 0.0)); }\n", "drag step"),
+            (cb.GRID_SCROLL, "fn accumulate(&mut self, dy: f32) {}\n", "takes no model step"),
+            (
+                "crates/ambre-prose/src/view/mod.rs",
+                "pub fn scroll_by(&mut self, dy: f32) {\n    self.scroll_y += dy;\n}\n",
+                "takes no model step",
+            ),
+        ):
+            errors = self.breach(rel, text)
+            self.assertTrue(any(said in e for e in errors), (rel, errors))
+
+    def test_a_scroll_set_to_a_target_or_moved_in_a_test_stays_free(self):
+        text = (
+            "    pub fn scroll_by(&mut self, step: ScrollStep) {\n        self.scroll_y = self.scroll_y + step.y();\n    }\n"
+            "    // The offset is set to the caret, never moved by a distance.\n"
+            "    fn to_caret(&mut self) { self.scroll_y = self.caret_top; }\n"
+            "\n#[cfg(test)]\nmod tests {\n    fn t(v: &mut V) { v.scroll_y += 5.0; }\n}\n"
+        )
+        self.assertEqual(self.breach("crates/ambre-prose/src/view/mod.rs", text), [])
+
+    def test_a_test_module_declared_under_a_second_attribute_is_test_code(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            lib = '#[cfg(test)]\n#[cfg(not(target_arch = "wasm32"))]\nmod input_tests;\n'
+            write(root, "crates/ambre-prose/src/lib.rs", lib)
+            write(root, "crates/ambre-prose/src/input_tests.rs", "fn t(v: &mut V) { v.scroll_y += 5.0; }\n")
+            self.assertEqual(self.run_checks(root), [])
 
     def test_a_name_composed_outside_its_type_is_refused(self):
         for line in ('let t = format!("Untitled - {label}");\n', 'let n = name.unwrap_or("Untitled");\n'):

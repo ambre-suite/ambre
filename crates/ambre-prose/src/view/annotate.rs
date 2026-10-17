@@ -326,7 +326,7 @@ mod tests {
         BlockId, CommentThread, ProseEvent, Suggestion, SuggestionKind, SuggestionSpan, block_id,
     };
     use crate::ui::ProseUiState;
-    use crate::view::tests::laid_out;
+    use crate::view::tests::{down, laid_out};
 
     fn view(paragraphs: usize) -> ProseUiState {
         let (_, shaped) = laid_out(paragraphs, 20);
@@ -434,7 +434,7 @@ mod tests {
         assert!(anchors[0].y_px <= y && y - anchors[0].y_px < 40.0);
         assert!(anchors[1].y_px > anchors[0].y_px);
         // Scrolling moves the anchors with the text.
-        ui.scroll_by(100.0);
+        ui.scroll_by(down(100.0));
         let moved = ui.thread_anchors();
         assert!((anchors[0].y_px - moved[0].y_px - 100.0 * ui.viewport.scale()).abs() < 0.5);
     }
@@ -562,7 +562,7 @@ mod tests {
         assert!(ui.lost_drafts(&drafts).is_empty(), "every thread is open");
 
         // A scroll and a peer's text above move the thread: its draft stays.
-        ui.scroll_by(120.0);
+        ui.scroll_by(down(120.0));
         let mut shifted = all.clone();
         shifted[0].anchor_start = 7;
         ui.apply_event(&ProseEvent::CommentsUpdated { threads: shifted });

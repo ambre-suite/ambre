@@ -419,6 +419,23 @@ PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
 PRIMITIVE_TYPES = {"Rect", "Color", "f64", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun", "ImageSource"}
 NUMBER_NAMES = {"x0", "y0", "x1", "y1", "width"}
 
+# Each view's scroll setter, the signature that keeps it on a model step, and
+# the offset a relative write elsewhere would move. A write that sets the
+# offset outright names a target (the caret, a page, a cell) and stays free.
+SCROLL_SETTERS = {
+    "crates/ambre-prose/src/view/mod.rs": re.compile(r"^(\s*)pub fn scroll_by\(&mut self, \w+: ScrollStep\)"),
+    "crates/ambre-toile/src/ui/viewport.rs": re.compile(r"^(\s*)pub fn pan_by_screen\(&mut self, \w+: ScrollStep\)"),
+    "crates/ambre-trame/src/ui/view/scroll.rs": re.compile(r"^(\s*)fn accumulate\(&mut self, \w+: ScrollStep\)"),
+}
+SCROLL_APPS = ("crates/ambre-prose/src", "crates/ambre-toile/src", "crates/ambre-trame/src")
+SCROLL_OFFSET = re.compile(r"\b(?:scroll_y|center)\s*(?:[+-]=|[+-](?!=))")
+GRID_SCROLL = "crates/ambre-trame/src/ui/view/scroll.rs"
+GRID_PAN = re.compile(r"\.scroll_by\(")
+# A mouse drag is the one step built from two pointer positions, so only the
+# board's pointer handler builds it.
+DRAG_STEP = re.compile(r"\bScrollStep::dragged\(")
+DRAG_CALLER = "crates/ambre-toile/src/ui/view.rs"
+
 # The one file that composes a document's name for display, and the placeholder
 # a composition outside it would spell again.
 COMPOSED_NAME = "crates/ambre-chrome/src/composed.rs"
@@ -838,7 +855,11 @@ def declared_for_tests(path: Path) -> bool:
         declaring = next((f for f in outer if f.is_file()), None)
         if declaring is None:
             return False
-        decl = re.compile(r"#\[cfg\((?:test|all\(test\b[^\]]*)\)\]\s*(?:pub(?:\([a-z]+\))?\s+)?mod\s+" + re.escape(name) + r"\s*;")
+        decl = re.compile(
+            r"#\[cfg\((?:test|all\(test\b[^\]]*)\)\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([a-z]+\))?\s+)?mod\s+"
+            + re.escape(name)
+            + r"\s*;"
+        )
         if decl.search(declaring.read_text()):
             return True
         path = declaring
@@ -1358,6 +1379,45 @@ def check_primitives(errors: list[str]) -> int:
     return held
 
 
+def check_scroll_sources(errors: list[str]) -> int:
+    """`KINETIC-001`: each view's scroll setter takes a step of the shared
+    model, and no other line of an application moves an offset by a distance.
+
+    The setter's own body is the one place a relative write is read as the
+    model's. The Trame grid pans by whole cells from its accumulator alone."""
+    exempt: dict[str, range] = {}
+    for rel, signature in SCROLL_SETTERS.items():
+        lines = read(rel).splitlines()
+        start = next((i for i, line in enumerate(lines) if signature.match(line)), None)
+        if start is None:
+            errors.append(f"{rel}: the scroll setter takes no model step, so a bare distance reaches the view")
+            continue
+        close = signature.match(lines[start]).group(1) + "}"
+        end = next((i for i in range(start + 1, len(lines)) if lines[i] == close), len(lines))
+        exempt[rel] = range(start + 1, end + 2)
+    files = [path for app in SCROLL_APPS for path in sorted((ROOT / app).rglob("*.rs"))]
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == GRID_SCROLL:
+            continue
+        for number, line in above_tests(path):
+            if number in exempt.get(rel, ()):
+                continue
+            found = SCROLL_OFFSET.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: an offset moved by a distance outside its setter: `{found.group(0).strip()}`")
+            if rel.startswith("crates/ambre-trame/") and GRID_PAN.search(line):
+                errors.append(f"{rel}:{number}: the grid panned outside its accumulator")
+    for path in rust_files():
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in (KINETIC_MODEL, DRAG_CALLER):
+            continue
+        for number, line in above_tests(path):
+            if DRAG_STEP.search(line):
+                errors.append(f"{rel}:{number}: a drag step built away from the board's pointer")
+    return len(files)
+
+
 def check_composed_names(errors: list[str]) -> int:
     """`CHROME-080`: no Rust line outside `composed.rs` spells the placeholder.
 
@@ -1499,6 +1559,7 @@ def main() -> int:
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
     primitives = check_primitives(errors)
+    scrolls = check_scroll_sources(errors)
     composed = check_composed_names(errors)
     copies = check_one_copy(errors)
     benches = check_bench_frame_rate(errors)
@@ -1533,6 +1594,7 @@ def main() -> int:
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
         f"{primitives} drawing primitives read for a screen-only parameter, "
+        f"{scrolls} application files read for a scroll with no model step, "
         f"{composed} Rust files read for a name composed outside its type, "
         f"{copies} view files read for a second copy of a signal's state, "
         f"{benches} fixture benchmarks read for a frame rate, "

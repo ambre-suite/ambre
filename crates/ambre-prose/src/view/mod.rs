@@ -26,6 +26,7 @@ use std::sync::Arc;
 use loro::TreeID;
 
 use ambre_bus::app::prose::ProseCommand;
+use ambre_draw::kinetic::ScrollStep;
 
 use crate::events::{BlockId, TocEntry, tree_id};
 use crate::layout::run::ShapedLayout;
@@ -125,14 +126,14 @@ impl ProseUiState {
         Some(ProseCommand::ShowPages { first, last })
     }
 
-    /// Scroll by a distance on the canvas, in screen pixels, down for a
-    /// positive one.
+    /// Scroll by a step of the shared model, down for a positive one.
     ///
     /// The column moves by what the gesture asks, up to its ends
     /// (`PROSE-UI-126`). The zoom and the column stay as they were
-    /// (`PROSE-UI-127`).
-    pub fn scroll_by(&mut self, dy_px: f32) {
-        let moved = self.viewport.scroll_y + dy_px / self.viewport.scale();
+    /// (`PROSE-UI-127`). Only the model builds a step, so a distance the view
+    /// computed itself does not reach the column (`KINETIC-001`).
+    pub fn scroll_by(&mut self, step: ScrollStep) {
+        let moved = self.viewport.scroll_y + step.y() / self.viewport.scale();
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, moved);
     }
 
@@ -242,6 +243,12 @@ pub(crate) mod tests {
     use crate::layout::pass::PageLayout;
     use crate::logic::ProseState;
 
+    /// The step of a finger dragged up by `dy` screen pixels, which scrolls
+    /// the column down by as much.
+    pub(crate) fn down(dy: f32) -> ScrollStep {
+        ScrollStep::dragged((0.0, dy), (0.0, 0.0))
+    }
+
     /// Append one block at the root, after the last one, holding `text`.
     pub(crate) fn append(state: &mut ProseState, init: BlockInit, text: &str) -> BlockId {
         let last = *state.root_blocks().last().expect("a root block");
@@ -329,7 +336,7 @@ pub(crate) mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
-        ui.scroll_by(ui.column.page_top_y(30) * ui.viewport.scale());
+        ui.scroll_by(down(ui.column.page_top_y(30) * ui.viewport.scale()));
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let Some(ProseCommand::ShowPages { first, last }) = ui.window_request() else {
             panic!("the pages under the canvas are asked for");
@@ -542,7 +549,7 @@ pub(crate) mod tests {
     fn a_shorter_layout_brings_the_offset_back_inside_the_column() {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 30));
-        ui.scroll_by(1.0e9);
+        ui.scroll_by(down(1.0e9));
         assert_eq!(ui.viewport.scroll_y, ui.column.max_scroll(&ui.viewport));
         ui.apply_layout(a_layout(2, 2));
         assert_eq!(ui.viewport.scroll_y, ui.column.max_scroll(&ui.viewport));
@@ -556,11 +563,11 @@ pub(crate) mod tests {
         ui.apply_layout(a_layout(1, 10));
         ui.viewport.zoom = 2.0;
         let (column, version) = (ui.column, ui.layout_version);
-        ui.scroll_by(300.0);
+        ui.scroll_by(down(300.0));
         assert_eq!(ui.viewport.scroll_y, 150.0);
-        ui.scroll_by(-100.0);
+        ui.scroll_by(down(-100.0));
         assert_eq!(ui.viewport.scroll_y, 100.0);
-        ui.scroll_by(-1.0e6);
+        ui.scroll_by(down(-1.0e6));
         assert_eq!(ui.viewport.scroll_y, 0.0);
         assert_eq!(ui.viewport.zoom, 2.0);
         assert_eq!(ui.column, column);
@@ -572,7 +579,7 @@ pub(crate) mod tests {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 10));
         ui.viewport.zoom = 0.8;
-        ui.scroll_by(2000.0);
+        ui.scroll_by(down(2000.0));
         let scroll_y = ui.viewport.scroll_y;
         ui.resize(300.0, 4000.0);
         assert_eq!(ui.viewport.scroll_y, scroll_y);

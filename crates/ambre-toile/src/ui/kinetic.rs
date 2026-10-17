@@ -6,7 +6,7 @@
 //! other way, so the zoom never changes how far a flick travels.
 
 use ambre_draw::kinetic::{EdgeSpeed, Kinetic, ScrollStep};
-use kurbo::{Point, Vec2};
+use kurbo::Point;
 
 use super::tool::Tool;
 use super::viewport::ViewportTransform;
@@ -47,7 +47,7 @@ pub fn coast(cam: &mut ViewportTransform, kinetic: &mut Kinetic, now_ms: f64) ->
 
 /// Move the camera by a view step of the model.
 pub fn move_view(cam: &mut ViewportTransform, step: ScrollStep) {
-    cam.pan_by_screen(-Vec2::new(f64::from(step.x()), f64::from(step.y())));
+    cam.pan_by_screen(step);
 }
 
 /// The speed a gesture held at `at` pans the board at, in screen pixels per

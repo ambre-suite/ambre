@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 |---|---|---|---|---|---|---|
 | `KINETIC-012` | `INV` | Code outside the shared model MUST NOT name a decay, a friction, a damping, an inertia, a half-life or a velocity. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses each of those names outside `crates/ambre-draw/src/kinetic.rs`, above its tests | none | verified |
 | `KINETIC-013` | `INV` | A pan, flick, glide or edge step an application takes MUST be built by the shared model alone. | this spec section 2 | type-level -- the model hands each step back as a `ScrollStep`, whose fields and zero are private, and keeps the edge clock in `EdgeScroll` and the step clamp private. Its three `compile_fail` doctests show a step and the clamp refused outside the model; `ambre_toile::ui::kinetic::tests::a_step_moves_the_same_screen_distance_at_any_zoom` | none | verified |
-| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | none | unheld -- `KINETIC-013` types each step the model builds, but each view's own scroll setter (Prose `scroll_by`, the Trame accumulator, the Toile camera pan) still takes a bare offset, which a neutral-named speed estimate can feed; lands with the `Every scroll an application sets names its source` Story (`ambre-roadmap.md` E9) | untested |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | type-level -- each view's scroll setter (Prose `scroll_by`, the Trame `accumulate`, the Toile `pan_by_screen`) takes a `ScrollStep`, which only the model builds (`KINETIC-013`); `ambre_draw::kinetic::tests::a_drag_moves_the_view_as_a_pan_past_the_slop_does`; ci-gate -- `scripts/crate_boundaries.py` refuses a setter that drops its step, an offset moved by a distance outside its setter, the Trame grid panned outside its accumulator, and a drag step built away from the board's pointer, each above its tests | none | verified |
 
 ### 1.2 Pan and flick
 
@@ -63,10 +63,10 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 12 `verified`, 1 `untested`. The browser tier holds the cancelled pointer
-  (`KINETIC-011`). A gate refuses a speed name outside the model, and a step only the model builds
-  holds each step it hands back (`KINETIC-013`). A bare offset fed to a view's own setter is still
-  open (`KINETIC-001`).
+* **Verification.** 13 `verified`. The browser tier holds the cancelled pointer (`KINETIC-011`). A
+  gate refuses a speed name outside the model, and a step only the model builds holds each step it
+  hands back (`KINETIC-013`). Each view's setter takes that step, and a gate refuses an offset moved
+  by a distance anywhere else (`KINETIC-001`).
 
   The model's rows are unit tests of
   `crates/ambre-draw`, which knows no application. The glide is also held once per application, each

@@ -21,7 +21,7 @@ impl ProseUiState {
         let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return false;
         };
-        self.scroll_by(step.y());
+        self.scroll_by(step);
         true
     }
 
@@ -45,7 +45,7 @@ impl ProseUiState {
     /// (`KINETIC-002`). `stepped` marks a line or page delta mode.
     pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: f64) {
         let step = self.kinetic.wheel(0.0, dy, stepped, now_ms);
-        self.scroll_by(step.y());
+        self.scroll_by(step);
     }
 
     /// Stop the motion a flick left (`PROSE-UI-218`).
@@ -62,7 +62,7 @@ impl ProseUiState {
         };
         let dy = step.y();
         let before = self.viewport.scroll_y;
-        self.scroll_by(dy);
+        self.scroll_by(step);
         let moved = self.viewport.scroll_y != before;
         if !moved && dy != 0.0 {
             self.kinetic.stop();

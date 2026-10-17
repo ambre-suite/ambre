@@ -749,7 +749,7 @@ mod tests {
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::cache::RunKey;
-    use crate::view::tests::{append, laid_out};
+    use crate::view::tests::{append, down, laid_out};
     use crate::view::{Highlight, HighlightKind};
 
     fn palette() -> PagePalette {
@@ -855,7 +855,7 @@ mod tests {
         while ui.viewport.scroll_y < bottom {
             super::super::tests::follow(&mut ui, &mut state);
             paint(&mut ui);
-            ui.scroll_by(800.0);
+            ui.scroll_by(down(800.0));
         }
         paint(&mut ui);
         assert!(ui.runs.built() > super::super::cache::RUN_CACHE_RUNS as u64);

@@ -40,7 +40,7 @@ use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, NoticePublisher, OverlayRepaint,
     PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl,
 };
-use ambre_draw::kinetic::Release;
+use ambre_draw::kinetic::{Release, ScrollStep};
 use ambre_draw::{FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
@@ -2696,7 +2696,11 @@ impl ToileView {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         if let Some(prev) = self.panning {
-            self.cam.pan_by_screen(screen - prev);
+            // A mouse held on the board drags it one for one and leaves no
+            // flick (`KINETIC-001`).
+            let at = |p: Point| (p.x as f32, p.y as f32);
+            self.cam
+                .pan_by_screen(ScrollStep::dragged(at(prev), at(screen)));
             self.panning = Some(screen);
             self.queue_viewport();
             return true;

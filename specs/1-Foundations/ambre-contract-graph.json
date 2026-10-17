@@ -925,7 +925,7 @@
   {"edge": "cites-section", "from": "KINETIC-013", "section": "2", "to": "1-Foundations/ambre-spec-kinetic-scroll.md"},
   {"edge": "verified-by", "from": "KINETIC-013", "to": "ambre_toile::ui::kinetic::tests::a_step_moves_the_same_screen_distance_at_any_zoom"},
   {"edge": "cites-section", "from": "KINETIC-001", "section": "2", "to": "1-Foundations/ambre-spec-kinetic-scroll.md"},
-  {"edge": "lands-with", "from": "KINETIC-001", "to": "Every scroll an application sets names its source"},
+  {"edge": "verified-by", "from": "KINETIC-001", "to": "ambre_draw::kinetic::tests::a_drag_moves_the_view_as_a_pan_past_the_slop_does"},
   {"edge": "cites-section", "from": "KINETIC-003", "section": "2", "to": "1-Foundations/ambre-spec-kinetic-scroll.md"},
   {"edge": "verified-by", "from": "KINETIC-003", "to": "ambre_draw::kinetic::tests::a_pointer_inside_the_slop_is_a_tap_and_moves_nothing"},
   {"edge": "cites-section", "from": "KINETIC-004", "section": "2", "to": "1-Foundations/ambre-spec-kinetic-scroll.md"},
