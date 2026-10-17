@@ -2,7 +2,7 @@
 // The grid's scroll motion: wheel steps, glides, finger pans and the edge
 // scroll, folded into whole-cell pans of the viewport.
 
-use ambre_draw::kinetic::{Kinetic, MAX_STEP_MS, Release};
+use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
 use crate::ui::grid::{COL_WIDTH, ROW_HEIGHT, TrameUiState};
@@ -20,8 +20,8 @@ pub(crate) struct GridScroll {
     accum_y: f64,
     /// The shared kinetic scroll (`1-Foundations/ambre-spec-kinetic-scroll.md`).
     kinetic: Kinetic,
-    /// When the edge scroll last ticked (`KINETIC-007`).
-    edge_ms: Option<f64>,
+    /// The edge scroll of a held drag (`KINETIC-007`).
+    edge: EdgeScroll,
 }
 
 impl GridScroll {
@@ -45,16 +45,21 @@ impl GridScroll {
         // The shared model applies the step one for one, and lets a trackpad
         // glide coast once it pauses; a notch never coasts (`KINETIC-002`,
         // `KINETIC-009`).
-        let (px, py) =
-            self.kinetic
-                .wheel((dx * sx) as f32, (dy * sy) as f32, delta_mode != 0, now_ms);
-        self.accum_x += f64::from(px);
-        self.accum_y += f64::from(py);
+        let step = self
+            .kinetic
+            .wheel((dx * sx) as f32, (dy * sy) as f32, delta_mode != 0, now_ms);
+        self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {
             self.kinetic.stop();
         }
         outcome
+    }
+
+    /// Add a step of the model to the sub-cell residue.
+    fn accumulate(&mut self, step: ScrollStep) {
+        self.accum_x += f64::from(step.x());
+        self.accum_y += f64::from(step.y());
     }
 
     /// Peel whole rows and columns out of the accumulator and pan the grid,
@@ -80,11 +85,10 @@ impl GridScroll {
     /// Advance the kinetic motion by one frame. It stops once it dies down or
     /// the grid meets an edge.
     pub(crate) fn tick(&mut self, grid: &mut TrameUiState, now_ms: f64) -> ScrollOutcome {
-        let Some((dx, dy)) = self.kinetic.tick(now_ms) else {
+        let Some(step) = self.kinetic.tick(now_ms) else {
             return ScrollOutcome::Idle;
         };
-        self.accum_x += f64::from(dx);
-        self.accum_y += f64::from(dy);
+        self.accumulate(step);
         let outcome = self.apply(grid);
         if matches!(outcome, ScrollOutcome::Edge) {
             self.stop();
@@ -92,24 +96,18 @@ impl GridScroll {
         outcome
     }
 
-    /// Scroll a held drag at `speed` (px per ms), once a frame
-    /// (`KINETIC-007`). `None` ends it; the first tick only starts the clock.
+    /// Scroll a held drag at `speed`, once a frame (`KINETIC-007`). `None`
+    /// ends it; the first tick only starts the clock.
     pub(crate) fn edge(
         &mut self,
         grid: &mut TrameUiState,
-        speed: Option<(f64, f64)>,
+        speed: Option<(EdgeSpeed, EdgeSpeed)>,
         now_ms: f64,
     ) -> ScrollOutcome {
-        let Some((sx, sy)) = speed else {
-            self.edge_ms = None;
+        let Some(step) = self.edge.tick(speed, now_ms) else {
             return ScrollOutcome::Idle;
         };
-        let Some(last) = self.edge_ms.replace(now_ms) else {
-            return ScrollOutcome::Idle;
-        };
-        let dt = (now_ms - last).clamp(0.0, MAX_STEP_MS);
-        self.accum_x += sx * dt;
-        self.accum_y += sy * dt;
+        self.accumulate(step);
         self.apply(grid)
     }
 
@@ -127,11 +125,10 @@ impl GridScroll {
         y: f32,
         now_ms: f64,
     ) -> ScrollOutcome {
-        let Some((dx, dy)) = self.kinetic.sample(x, y, now_ms) else {
+        let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return ScrollOutcome::Idle;
         };
-        self.accum_x += f64::from(dx);
-        self.accum_y += f64::from(dy);
+        self.accumulate(step);
         self.apply(grid)
     }
 

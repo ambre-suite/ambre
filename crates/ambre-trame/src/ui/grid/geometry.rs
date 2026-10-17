@@ -2,7 +2,7 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
-use ambre_draw::kinetic::edge_speed;
+use ambre_draw::kinetic::EdgeSpeed;
 
 impl TrameUiState {
     /// Record a formula evaluation failure for `(row, col)` (from
@@ -193,11 +193,12 @@ impl TrameUiState {
     /// The speed a drag held at `(x, y)` scrolls the grid at, in logical
     /// pixels per millisecond on each axis (`KINETIC-007`). Each edge is the
     /// cell area's, past the header strips; zero away from them.
-    pub fn edge_scroll_speed(&self, x: f64, y: f64) -> (f64, f64) {
+    pub fn edge_scroll_speed(&self, x: f64, y: f64) -> (EdgeSpeed, EdgeSpeed) {
         let (left, top) = (self.header_w(), self.header_h());
-        let sx = edge_speed((x - left) as f32, (self.canvas_width - left) as f32);
-        let sy = edge_speed((y - top) as f32, (self.grid_bottom() - top) as f32);
-        (f64::from(sx), f64::from(sy))
+        (
+            EdgeSpeed::at((x - left) as f32, (self.canvas_width - left) as f32),
+            EdgeSpeed::at((y - top) as f32, (self.grid_bottom() - top) as f32),
+        )
     }
 
     /// Cell `(row, col)` at logical pixel `(x, y)`, or `None` if the point is

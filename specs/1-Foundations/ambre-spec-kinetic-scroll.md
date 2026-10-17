@@ -25,7 +25,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `KINETIC-012` | `INV` | Code outside the shared model MUST NOT name a decay, a friction, a damping, an inertia, a half-life or a velocity. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses each of those names outside `crates/ambre-draw/src/kinetic.rs`, above its tests | none | verified |
-| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | none | unheld -- the name gate (`KINETIC-012`) does not tell a speed estimate or an edge speed under a neutral name from any other arithmetic; lands with the `The scroll offset owned by the shared model` Story (`ambre-roadmap.md` E9) | untested |
+| `KINETIC-013` | `INV` | A pan, flick, glide or edge step an application takes MUST be built by the shared model alone. | this spec section 2 | type-level -- the model hands each step back as a `ScrollStep`, whose fields and zero are private, and keeps the edge clock in `EdgeScroll` and the step clamp private. Its three `compile_fail` doctests show a step and the clamp refused outside the model; `ambre_toile::ui::kinetic::tests::a_step_moves_the_same_screen_distance_at_any_zoom` | none | verified |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | none | unheld -- `KINETIC-013` types each step the model builds, but each view's own scroll setter (Prose `scroll_by`, the Trame accumulator, the Toile camera pan) still takes a bare offset, which a neutral-named speed estimate can feed; lands with the `Every scroll an application sets names its source` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Pan and flick
 
@@ -62,9 +63,10 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 11 `verified`, 1 `untested`. The browser tier holds the cancelled pointer
-  (`KINETIC-011`). A gate refuses a speed name outside the model, and nothing yet refuses one under
-  a neutral name (`KINETIC-001`).
+* **Verification.** 12 `verified`, 1 `untested`. The browser tier holds the cancelled pointer
+  (`KINETIC-011`). A gate refuses a speed name outside the model, and a step only the model builds
+  holds each step it hands back (`KINETIC-013`). A bare offset fed to a view's own setter is still
+  open (`KINETIC-001`).
 
   The model's rows are unit tests of
   `crates/ambre-draw`, which knows no application. The glide is also held once per application, each
@@ -80,17 +82,24 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
 the application's view state.
 
 **The value.** A pan in progress, or a motion with a speed on each axis, in screen pixels per
-millisecond. An application feeds it pointer positions and frame times, and reads back distances.
+millisecond. An application feeds it pointer positions and frame times, and reads back steps. Only
+the model builds a step, so an application reads one and never computes its own (`KINETIC-013`).
 
 ```rust
+/// How far the view moves, in screen pixels on each axis. Read-only outside the model.
+pub struct ScrollStep { /* x and y, private */ }
+
 /// One pointer's pan, then the motion its release left.
 pub struct Kinetic { /* the press and the motion, private */ }
 
 /// What a release leaves: a tap at the press point, a motion, or nothing.
 pub enum Release { Tap { x: f32, y: f32 }, Fling, Rest }
 
-/// The speed a drag held at `at` scrolls a view of length `extent` at.
-pub fn edge_speed(at: f32, extent: f32) -> f32;
+/// The speed a drag held at `at` scrolls a view of length `extent` at: `EdgeSpeed::at`.
+pub struct EdgeSpeed(/* private */);
+
+/// The edge scroll of a held drag: its clock, and the step each frame takes.
+pub struct EdgeScroll { /* the last frame, private */ }
 ```
 
 **The constants.** One set, so the gesture feels the same in every editor.

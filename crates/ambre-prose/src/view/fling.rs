@@ -18,10 +18,10 @@ impl ProseUiState {
     /// A finger moved: past the tap slop the column follows it. Answers
     /// whether the view moved.
     pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) -> bool {
-        let Some((_, dy)) = self.kinetic.sample(x, y, now_ms) else {
+        let Some(step) = self.kinetic.sample(x, y, now_ms) else {
             return false;
         };
-        self.scroll_by(dy);
+        self.scroll_by(step.y());
         true
     }
 
@@ -44,8 +44,8 @@ impl ProseUiState {
     /// trackpad glide that pauses keeps its momentum; a notch never does
     /// (`KINETIC-002`). `stepped` marks a line or page delta mode.
     pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: f64) {
-        let (_, dy) = self.kinetic.wheel(0.0, dy, stepped, now_ms);
-        self.scroll_by(dy);
+        let step = self.kinetic.wheel(0.0, dy, stepped, now_ms);
+        self.scroll_by(step.y());
     }
 
     /// Stop the motion a flick left (`PROSE-UI-218`).
@@ -57,9 +57,10 @@ impl ProseUiState {
     /// each frame, and the motion stops once slow or at an end of the
     /// column. Nothing is sent. Answers whether the view moved.
     pub fn tick_fling(&mut self, now_ms: f64) -> bool {
-        let Some((_, dy)) = self.kinetic.tick(now_ms) else {
+        let Some(step) = self.kinetic.tick(now_ms) else {
             return false;
         };
+        let dy = step.y();
         let before = self.viewport.scroll_y;
         self.scroll_by(dy);
         let moved = self.viewport.scroll_y != before;

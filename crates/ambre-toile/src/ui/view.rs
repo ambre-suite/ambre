@@ -355,8 +355,8 @@ pub struct ToileView {
     /// The finger down, if any: `true` when it pans, `false` when it acts
     /// as the mouse.
     finger_pans: Option<bool>,
-    /// When the edge pan of a held gesture last ticked (`TOILE-UI-380`).
-    edge_ms: Option<f64>,
+    /// The edge pan of a held gesture (`TOILE-UI-380`).
+    edge: ambre_draw::kinetic::EdgeScroll,
     /// Space held: a drag pans in any tool (`toile-viewport`).
     space_down: bool,
 
@@ -705,7 +705,7 @@ impl ToileView {
             panning: None,
             kinetic: Default::default(),
             finger_pans: None,
-            edge_ms: None,
+            edge: ambre_draw::kinetic::EdgeScroll::default(),
             space_down: false,
             pointer_mode: PointerMode::default(),
             detected_mouse: false,
@@ -1668,16 +1668,11 @@ impl ToileView {
     /// clock.
     fn step_edge_pan(&mut self, now_ms: f64) {
         let held = self.machine.is_active() || self.arrow_drag.is_some();
-        let speed = super::kinetic::edge_pan_speed(&self.cam, self.last_pointer);
-        if !held || speed == (0.0, 0.0) {
-            self.edge_ms = None;
-            return;
-        }
-        let Some(last) = self.edge_ms.replace(now_ms) else {
+        let speed = held.then(|| super::kinetic::edge_pan_speed(&self.cam, self.last_pointer));
+        let Some(step) = self.edge.tick(speed, now_ms) else {
             return;
         };
-        let dt = (now_ms - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS) as f32;
-        super::kinetic::move_view(&mut self.cam, (speed.0 * dt, speed.1 * dt));
+        super::kinetic::move_view(&mut self.cam, step);
         self.queue_viewport();
         let at = self.last_pointer;
         self.handle_pointer_move(at.x, at.y);

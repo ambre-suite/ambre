@@ -17,8 +17,9 @@ pub const DECAY_MS: f32 = 325.0;
 /// Below this speed, in screen pixels per millisecond, a release leaves no
 /// motion and a motion stops.
 pub const STOP_SPEED: f32 = 0.02;
-/// The longest step one tick takes, so a stalled frame does not jump.
-pub const MAX_STEP_MS: f64 = 50.0;
+/// The longest step one tick takes, so a stalled frame does not jump. It is
+/// private: a step is timed here alone (`KINETIC-013`).
+const MAX_STEP_MS: f64 = 50.0;
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
@@ -37,6 +38,107 @@ pub const EDGE_BAND_PX: f32 = 32.0;
 pub const EDGE_DEPTH_PX: f32 = 160.0;
 /// Screen pixels per millisecond for each pixel of depth: 2 px/ms at most.
 pub const EDGE_GAIN: f32 = 1.0 / 80.0;
+
+/// How far the view moves, in screen pixels on each axis (`KINETIC-013`).
+///
+/// Only this model builds one, so an application reads a step and never
+/// computes its own. A view's scroll by a pan, a flick, a glide or an edge
+/// takes one. A notch is a step the model hands back one for one:
+///
+/// ```
+/// use ambre_draw::kinetic::Kinetic;
+/// let step = Kinetic::default().wheel(0.0, 30.0, true, 0.0);
+/// assert_eq!(step.y(), 30.0);
+/// ```
+///
+/// Each block below fails on the step it builds outside the model alone:
+///
+/// ```compile_fail
+/// let step = ambre_draw::kinetic::ScrollStep { x: 0.0, y: 30.0 };
+/// ```
+///
+/// ```compile_fail
+/// let step = ambre_draw::kinetic::ScrollStep::ZERO;
+/// ```
+///
+/// ```compile_fail
+/// let clamp = ambre_draw::kinetic::MAX_STEP_MS;
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScrollStep {
+    x: f32,
+    y: f32,
+}
+
+impl ScrollStep {
+    const ZERO: Self = Self { x: 0.0, y: 0.0 };
+
+    /// The step along the horizontal axis.
+    pub fn x(self) -> f32 {
+        self.x
+    }
+
+    /// The step along the vertical axis.
+    pub fn y(self) -> f32 {
+        self.y
+    }
+}
+
+/// The speed a drag held near an edge asks for, in screen pixels per
+/// millisecond, towards the far end for a positive one (`KINETIC-007`).
+/// Only [`EdgeSpeed::at`] builds a speed other than none.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeSpeed(f32);
+
+impl EdgeSpeed {
+    /// No edge scroll on this axis.
+    pub const NONE: Self = Self(0.0);
+
+    /// The speed of a pointer at `at` along one axis, in a view of `extent`.
+    /// Zero away from both edges.
+    pub fn at(at: f32, extent: f32) -> Self {
+        Self(edge_speed(at, extent))
+    }
+
+    /// The speed, for a reader.
+    pub fn get(self) -> f32 {
+        self.0
+    }
+}
+
+/// The edge scroll of a held drag: its clock, and the step each frame takes
+/// (`KINETIC-007`).
+#[derive(Clone, Debug, Default)]
+pub struct EdgeScroll {
+    last_ms: Option<f64>,
+}
+
+impl EdgeScroll {
+    /// One frame of the edge scroll. No speed, or none on either axis, ends
+    /// it. The first frame only starts the clock.
+    pub fn tick(
+        &mut self,
+        speed: Option<(EdgeSpeed, EdgeSpeed)>,
+        now_ms: f64,
+    ) -> Option<ScrollStep> {
+        let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
+        let Some((sx, sy)) = speed.filter(|&s| s != still) else {
+            self.last_ms = None;
+            return None;
+        };
+        let last = self.last_ms.replace(now_ms)?;
+        let elapsed = (now_ms - last).clamp(0.0, MAX_STEP_MS) as f32;
+        Some(ScrollStep {
+            x: sx.0 * elapsed,
+            y: sy.0 * elapsed,
+        })
+    }
+
+    /// End the edge scroll: the drag ended.
+    pub fn stop(&mut self) {
+        self.last_ms = None;
+    }
+}
 
 /// What a release leaves.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,7 +200,7 @@ impl Kinetic {
     /// Past it, the answer is how far the view follows, in screen pixels.
     /// The content moves with the pointer, so it is the pointer's step
     /// reversed.
-    pub fn sample(&mut self, x: f32, y: f32, now_ms: f64) -> Option<(f32, f32)> {
+    pub fn sample(&mut self, x: f32, y: f32, now_ms: f64) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
         if !pan.panned {
             if (x - pan.start.0).hypot(y - pan.start.1) < TAP_SLOP_PX {
@@ -106,7 +208,10 @@ impl Kinetic {
             }
             pan.panned = true;
         }
-        let step = (pan.last.0 - x, pan.last.1 - y);
+        let step = ScrollStep {
+            x: pan.last.0 - x,
+            y: pan.last.1 - y,
+        };
         pan.last = (x, y);
         pan.samples.push((now_ms, x, y));
         pan.samples.retain(|(at, _, _)| now_ms - at <= SAMPLE_MS);
@@ -159,11 +264,12 @@ impl Kinetic {
     /// view takes now, one for one. A notch stops any motion and never starts
     /// one; a glide feeds a speed the motion starts from once the glide
     /// pauses (`KINETIC-002`, `KINETIC-009`). `stepped` marks a line or page delta mode.
-    pub fn wheel(&mut self, dx: f32, dy: f32, stepped: bool, now_ms: f64) -> (f32, f32) {
+    pub fn wheel(&mut self, dx: f32, dy: f32, stepped: bool, now_ms: f64) -> ScrollStep {
         self.motion = None;
+        let step = ScrollStep { x: dx, y: dy };
         if stepped || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
             self.glide = None;
-            return (dx, dy);
+            return step;
         }
         let speed = match self.glide {
             Some(glide) if now_ms - glide.last_ms <= WHEEL_GAP_MS => {
@@ -180,18 +286,18 @@ impl Kinetic {
             speed,
             last_ms: now_ms,
         });
-        (dx, dy)
+        step
     }
 
     /// One tick of the motion, once a frame. The answer is how far the view
     /// moves, each tick less than the one before; the first tick only starts
     /// the clock (`KINETIC-005`). The motion stops below the stop speed.
     /// A glide that paused past the gap launches its motion here.
-    pub fn tick(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+    pub fn tick(&mut self, now_ms: f64) -> Option<ScrollStep> {
         if self.motion.is_none() {
             let glide = self.glide?;
             if now_ms - glide.last_ms < WHEEL_GAP_MS {
-                return Some((0.0, 0.0));
+                return Some(ScrollStep::ZERO);
             }
             self.glide = None;
             if glide.speed.0.hypot(glide.speed.1) < WHEEL_START_SPEED {
@@ -201,14 +307,17 @@ impl Kinetic {
                 speed: glide.speed,
                 last_ms: Some(now_ms),
             });
-            return Some((0.0, 0.0));
+            return Some(ScrollStep::ZERO);
         }
         let motion = self.motion.as_mut()?;
         let Some(last) = motion.last_ms.replace(now_ms) else {
-            return Some((0.0, 0.0));
+            return Some(ScrollStep::ZERO);
         };
         let elapsed = (now_ms - last).clamp(0.0, MAX_STEP_MS) as f32;
-        let step = (motion.speed.0 * elapsed, motion.speed.1 * elapsed);
+        let step = ScrollStep {
+            x: motion.speed.0 * elapsed,
+            y: motion.speed.1 * elapsed,
+        };
         let decay = (-elapsed / DECAY_MS).exp();
         motion.speed = (motion.speed.0 * decay, motion.speed.1 * decay);
         if motion.speed.0.hypot(motion.speed.1) < STOP_SPEED {
@@ -247,7 +356,7 @@ impl Kinetic {
 /// `at` is the pointer along one axis, and `extent` the length of the view
 /// on it. The speed is zero away from both edges. It grows with how deep
 /// the pointer sits in the band or past it, and stops growing further out.
-pub fn edge_speed(at: f32, extent: f32) -> f32 {
+fn edge_speed(at: f32, extent: f32) -> f32 {
     let far = extent - EDGE_BAND_PX;
     let depth = if at < EDGE_BAND_PX {
         at - EDGE_BAND_PX
@@ -300,7 +409,8 @@ mod tests {
         // The view follows the pointer while it pans.
         let mut kinetic = Kinetic::default();
         kinetic.press(0.0, 0.0, 0.0);
-        assert_eq!(kinetic.sample(0.0, -20.0, 16.0), Some((0.0, 20.0)));
+        let step = ScrollStep { x: 0.0, y: 20.0 };
+        assert_eq!(kinetic.sample(0.0, -20.0, 16.0), Some(step));
         // Held still for longer than the window, then lifted: no motion.
         assert_eq!(kinetic.release(400.0), Release::Rest);
         assert!(!kinetic.moving());
@@ -311,9 +421,10 @@ mod tests {
     #[test]
     fn each_tick_moves_less_and_the_motion_stops() {
         let mut kinetic = flicked();
-        assert_eq!(kinetic.tick(80.0), Some((0.0, 0.0)));
+        assert_eq!(kinetic.tick(80.0), Some(ScrollStep::ZERO));
         let (mut now, mut last) = (80.0, f32::INFINITY);
-        while let Some((_, dy)) = kinetic.tick(now + 16.0) {
+        while let Some(step) = kinetic.tick(now + 16.0) {
+            let dy = step.y();
             now += 16.0;
             assert!(dy > 0.0 && dy < last, "{dy} after {last}");
             last = dy;
@@ -323,7 +434,7 @@ mod tests {
         // A stalled frame takes one bounded step.
         let mut kinetic = flicked();
         kinetic.tick(80.0);
-        let (_, dy) = kinetic.tick(5_080.0).expect("a step");
+        let dy = kinetic.tick(5_080.0).expect("a step").y();
         assert!(dy <= 2.0 * MAX_STEP_MS as f32 + 1e-3);
     }
 
@@ -348,15 +459,17 @@ mod tests {
         let mut kinetic = Kinetic::default();
         for step in 0..6 {
             let t = 8.0 * f64::from(step);
-            assert_eq!(kinetic.wheel(0.0, 12.0, false, t), (0.0, 12.0));
+            let step = ScrollStep { x: 0.0, y: 12.0 };
+            assert_eq!(kinetic.wheel(0.0, 12.0, false, t), step);
         }
         // Inside the gap the glide waits; past it the motion starts.
-        assert_eq!(kinetic.tick(60.0), Some((0.0, 0.0)));
-        assert_eq!(kinetic.tick(110.0), Some((0.0, 0.0)));
-        let (_, dy) = kinetic.tick(126.0).expect("a motion");
+        assert_eq!(kinetic.tick(60.0), Some(ScrollStep::ZERO));
+        assert_eq!(kinetic.tick(110.0), Some(ScrollStep::ZERO));
+        let dy = kinetic.tick(126.0).expect("a motion").y();
         assert!(dy > 0.0, "{dy}");
         // A notch stops it, moves one for one, and leaves nothing behind.
-        assert_eq!(kinetic.wheel(0.0, 100.0, false, 130.0), (0.0, 100.0));
+        let notch = ScrollStep { x: 0.0, y: 100.0 };
+        assert_eq!(kinetic.wheel(0.0, 100.0, false, 130.0), notch);
         assert!(!kinetic.moving());
         assert_eq!(kinetic.tick(300.0), None);
         kinetic.wheel(0.0, 3.0, true, 400.0);

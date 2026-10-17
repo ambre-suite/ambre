@@ -5,6 +5,8 @@
 //! state alone. Nothing shapes a block, and nothing is sent: a selection never
 //! enters the document (`PROSE-UI-010`).
 
+use ambre_draw::kinetic::EdgeSpeed;
+
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use crate::layout::run::ParleyRunData;
 use crate::ui::ProseUiState;
@@ -472,14 +474,14 @@ impl ProseUiState {
     pub(crate) fn start_drag(&mut self, anchor: Spot) {
         self.dragging = Some(anchor);
         self.drag_pointer = None;
-        self.autoscroll_ms = None;
+        self.autoscroll.stop();
     }
 
     /// The release of a drag: nothing stays armed (`PROSE-UI-163`). Answers
     /// whether a drag was in flight.
     pub(crate) fn end_drag(&mut self) -> bool {
         self.drag_pointer = None;
-        self.autoscroll_ms = None;
+        self.autoscroll.stop();
         self.dragging.take().is_some()
     }
 
@@ -511,11 +513,9 @@ impl ProseUiState {
     /// The autoscroll speed the last pointer of a drag asks for, in screen
     /// pixels per millisecond, down for a positive one. It is the shared
     /// edge speed (`KINETIC-007`).
-    fn autoscroll_speed(&self) -> f32 {
-        match self.drag_pointer.filter(|_| self.dragging.is_some()) {
-            Some((_, y)) => ambre_draw::kinetic::edge_speed(y, self.viewport.height_px),
-            None => 0.0,
-        }
+    fn autoscroll_speed(&self) -> Option<EdgeSpeed> {
+        let (_, y) = self.drag_pointer.filter(|_| self.dragging.is_some())?;
+        Some(EdgeSpeed::at(y, self.viewport.height_px))
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near
@@ -523,17 +523,12 @@ impl ProseUiState {
     /// selection follows the text being revealed. Answers whether the view
     /// moved. With no drag in flight nothing is armed (`PROSE-UI-163`).
     pub fn tick_autoscroll(&mut self, now_ms: f64) -> bool {
-        let speed = self.autoscroll_speed();
-        if speed == 0.0 {
-            self.autoscroll_ms = None;
-            return false;
-        }
-        let Some(last) = self.autoscroll_ms.replace(now_ms) else {
+        let speed = self.autoscroll_speed().map(|y| (EdgeSpeed::NONE, y));
+        let Some(step) = self.autoscroll.tick(speed, now_ms) else {
             return false;
         };
-        let elapsed = (now_ms - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS) as f32;
         let before = self.viewport.scroll_y;
-        self.scroll_by(speed * elapsed);
+        self.scroll_by(step.y());
         if let Some((x, y)) = self.drag_pointer {
             self.update_drag(x, y);
         }

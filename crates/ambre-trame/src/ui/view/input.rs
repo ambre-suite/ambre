@@ -491,8 +491,7 @@ impl TrameView {
         let speed = self
             .drag_point
             .filter(|_| held)
-            .map(|(x, y)| self.state.edge_scroll_speed(x, y))
-            .filter(|&(sx, sy)| sx != 0.0 || sy != 0.0);
+            .map(|(x, y)| self.state.edge_scroll_speed(x, y));
         let outcome = self
             .scroll
             .edge(&mut self.state, speed, self.clock.now_ms());

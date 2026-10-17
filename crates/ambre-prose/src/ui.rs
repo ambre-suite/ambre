@@ -399,10 +399,10 @@ pub struct ProseUiState {
     pub(crate) band_page: Option<u32>,
     /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
     pub(crate) dragging: Option<(BlockId, u32)>,
-    /// The last pointer of the drag in flight, and when the autoscroll last
-    /// ticked (`PROSE-UI-038`). Both go with the drag.
+    /// The last pointer of the drag in flight, and its autoscroll
+    /// (`PROSE-UI-038`). Both go with the drag.
     pub(crate) drag_pointer: Option<(f32, f32)>,
-    pub(crate) autoscroll_ms: Option<f64>,
+    pub(crate) autoscroll: ambre_draw::kinetic::EdgeScroll,
     /// A finger on the canvas, and the motion a flick left
     /// (`PROSE-UI-217`).
     pub(crate) kinetic: ambre_draw::kinetic::Kinetic,
