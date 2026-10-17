@@ -27,6 +27,7 @@ prefix is `BUS`.
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_bus::host::the_ui_to_logic_path_carries_nothing_an_encoder_takes` -- `LogicCommand`, `UiEvent` and the app envelopes implement no `Serialize` | none | verified |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
+| `BUS-029` | `INV` | A message field that carries an identifier MUST carry a type of its own, never a bare string or integer. | this spec section 2; `ai/ambre-rust-style.md`; `UI-THREAD-060`, the same rule for a shell signal | none | fails -- twenty-one Trame command fields and one Trame event field carry a sheet id as a `String`, beside the `SheetId` the sheet list already carries, so a rename that swaps the name and the id compiles. A filter view id, a conditional format id and two Prose style ids are bare strings too. A gate that refuses an `id` or `*_id` field of a primitive type in `ambre-bus` reaches it; lands with the `An identifier typed on the bus` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.2 The interface sends a command
 
@@ -79,11 +80,11 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 26 `verified`, 2 `unimplemented`. Host tests drive the Logic dispatcher: an
-  unknown document, a viewer's edit, a child's role. They also drive a service round trip, a late
-  response, the lossy gate and a full queue. Native views drive the input gate, the re-offer and
-  the refused commit. A gate refuses a handler that sends on a queue, and the browser tier reads the
-  busy notice.
+* **Verification.** 26 `verified`, 1 `failing`, 2 `unimplemented`. Host tests drive the Logic
+  dispatcher: an unknown document, a viewer's edit, a child's role. They also drive a service round
+  trip, a late response, the lossy gate and a full queue. Native views drive the input gate, the
+  re-offer and the refused commit. A gate refuses a handler that sends on a queue, and the browser
+  tier reads the busy notice.
 ---
 
 ## 2. MODEL
