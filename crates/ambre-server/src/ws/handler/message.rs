@@ -23,6 +23,32 @@ pub(crate) async fn refuse(
         .await;
 }
 
+/// The answer to a delta refused before it took a sequence number: its
+/// document, its signature and its code (`SRV-185`). The author learns which
+/// edit the relay lacks.
+pub(crate) fn delta_refusal(update: &ambre_protocol::Update, code: RefusalCode) -> WsServerMsg {
+    WsServerMsg::DeltaRefused {
+        document_id: update.public_data.document_id,
+        signature: update.signature,
+        code,
+    }
+}
+
+/// Sends [`delta_refusal`] and logs `detail`, which holds no content
+/// (`SRV-170`).
+async fn refuse_delta(
+    outbound_tx: &mpsc::Sender<Payload>,
+    update: &ambre_protocol::Update,
+    code: RefusalCode,
+    detail: &str,
+) {
+    let document_id = update.public_data.document_id;
+    tracing::debug!(%document_id, %code, detail, "delta refused");
+    let _ = outbound_tx
+        .send(Payload::server_msg(&delta_refusal(update, code)))
+        .await;
+}
+
 /// Orders a replay page and keeps the run of deltas before the first one that
 /// could not be read. Returns that run and the unreadable seq, if any, so the
 /// page never carries a hole the caller cannot see (`SRV-041`).
@@ -255,9 +281,9 @@ pub(crate) async fn handle_update(
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
-        refuse(
+        refuse_delta(
             outbound_tx,
-            Some(doc_id),
+            &update,
             RefusalCode::Forbidden,
             "not subscribed",
         )
@@ -277,13 +303,7 @@ pub(crate) async fn handle_update(
             "delta ciphertext {} bytes exceeds max {}",
             cipher_len, state.config.delta_max_bytes
         );
-        refuse(
-            outbound_tx,
-            Some(doc_id),
-            RefusalCode::PayloadTooLarge,
-            &detail,
-        )
-        .await;
+        refuse_delta(outbound_tx, &update, RefusalCode::PayloadTooLarge, &detail).await;
         return;
     }
 
@@ -292,7 +312,7 @@ pub(crate) async fn handle_update(
     // durable index and the per-author clock hash free of no-op entries.
     if let Err(e) = update.validate() {
         let detail = format!("invalid update: {e}");
-        refuse(outbound_tx, Some(doc_id), RefusalCode::BadRequest, &detail).await;
+        refuse_delta(outbound_tx, &update, RefusalCode::BadRequest, &detail).await;
         return;
     }
 
@@ -303,7 +323,7 @@ pub(crate) async fn handle_update(
     // DB hit; tell this client its access was revoked.
     if !membership_still_valid(state, conn, doc_id).await {
         let detail = "document access revoked";
-        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -315,7 +335,7 @@ pub(crate) async fn handle_update(
     // above, so this is a map lookup, not a DB hit.
     if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
         let detail = "read-only role cannot write to this document";
-        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -330,18 +350,12 @@ pub(crate) async fn handle_update(
     // clock hash only ever sees known keys.
     if author_pubkey != conn.signing_pubkey {
         let detail = "author key does not match session identity";
-        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
+        refuse_delta(outbound_tx, &update, RefusalCode::Forbidden, detail).await;
         return;
     }
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
         let detail = format!("invalid signature: {e}");
-        refuse(
-            outbound_tx,
-            Some(doc_id),
-            RefusalCode::InvalidSignature,
-            &detail,
-        )
-        .await;
+        refuse_delta(outbound_tx, &update, RefusalCode::InvalidSignature, &detail).await;
         return;
     }
 
@@ -1031,7 +1045,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x08);
+        assert_eq!(bytes[0], 0x09);
     }
 
     #[test]
@@ -1424,11 +1438,11 @@ mod delta_size_cap_tests {
         }
     }
 
-    /// `SRV-183`: each refusal of the write path answers its code and its
-    /// document, and the frame carries nothing else to leak.
+    /// `SRV-183`, `SRV-185`: each refusal of the write path answers its code,
+    /// its document and the delta it refused, and carries nothing else to leak.
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
-    async fn each_write_refusal_names_its_code_and_its_document() {
+    async fn each_write_refusal_names_its_delta_and_its_code() {
         let Some(state) = test_state(1024).await else {
             return;
         };
@@ -1447,7 +1461,8 @@ mod delta_size_cap_tests {
                 RefusalCode::InvalidSignature,
             ),
         ];
-        for (update, expected) in cases {
+        for (fill, (mut update, expected)) in (1u8..).zip(cases) {
+            update.signature = Signature([fill; 64]);
             let mut conn = conn_with(session_key.clone(), doc_id);
             let (tx, mut rx) = mpsc::channel::<Payload>(8);
             handle_update(&state, &mut conn, update, &tx).await;
@@ -1456,7 +1471,8 @@ mod delta_size_cap_tests {
             assert!(
                 matches!(
                     decoded,
-                    WsServerMsg::Error { document_id: Some(d), code } if d == doc_id && code == expected
+                    WsServerMsg::DeltaRefused { document_id, signature, code }
+                        if document_id == doc_id && signature == Signature([fill; 64]) && code == expected
                 ),
                 "expected {expected}, got {decoded:?}"
             );
@@ -1491,9 +1507,10 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error {
+            ambre_protocol::ws::WsServerMsg::DeltaRefused {
                 code: RefusalCode::PayloadTooLarge,
-                document_id: Some(d),
+                document_id: d,
+                ..
             } if d == doc_id
         ));
 
@@ -1534,7 +1551,7 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error {
+            ambre_protocol::ws::WsServerMsg::DeltaRefused {
                 code: RefusalCode::Forbidden,
                 ..
             }
@@ -1713,7 +1730,7 @@ mod access_tests {
         handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
         assert!(matches!(
             replies(&mut rx).as_slice(),
-            [WsServerMsg::Error {
+            [WsServerMsg::DeltaRefused {
                 code: RefusalCode::Forbidden,
                 ..
             }]
@@ -1765,9 +1782,10 @@ mod access_tests {
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         match replies(&mut rx).as_slice() {
             [
-                WsServerMsg::Error {
+                WsServerMsg::DeltaRefused {
                     code: RefusalCode::Forbidden,
-                    document_id: Some(d),
+                    document_id: d,
+                    ..
                 },
             ] => {
                 assert_eq!(*d, doc_id);
@@ -2576,9 +2594,10 @@ mod channel_gate_tests {
         }
     }
 
+    /// The code of a refusal, of a wire message or of a delta.
     fn error_code(frame: &Payload) -> Option<RefusalCode> {
         match ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).ok()? {
-            WsServerMsg::Error { code, .. } => Some(code),
+            WsServerMsg::Error { code, .. } | WsServerMsg::DeltaRefused { code, .. } => Some(code),
             _ => None,
         }
     }

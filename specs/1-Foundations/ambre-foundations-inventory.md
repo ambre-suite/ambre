@@ -35,7 +35,7 @@
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
-| `broadcast` | One connection per person, carrying every document they have open. | partial | 26 |  |
+| `broadcast` | One connection per person, carrying every document they have open. | partial | 27 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 19 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 |  |
@@ -51,7 +51,7 @@
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 48 |  |
 | `server` | The one process every client talks to. | partial | 64 | 1 |
-| `sync` | The one part of the client that talks to the network. | partial | 37 |  |
+| `sync` | The one part of the client that talks to the network. | partial | 38 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 18 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 18 implemented, 22 partial, 6 design-only. 990 contract rows, 2 loose.**
+**46 features: 18 implemented, 22 partial, 6 design-only. 992 contract rows, 2 loose.**

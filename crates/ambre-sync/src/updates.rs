@@ -952,6 +952,12 @@ impl SyncState {
             });
             return;
         };
+        // A delta refused by name holds the document: a later one would build
+        // on an edit the relay lacks (`SYNC-156`).
+        if doc_state.rekey.holds_refused() {
+            tracing::debug!("[Sync] edit held: doc={document_id} has a refused delta");
+            return;
+        }
         // An owed rotation is paid before any frame: the edit waits unsealed,
         // and takes its clock once the new key lands (`SYNC-128`).
         if doc_state.rekey.owes() {
@@ -988,6 +994,9 @@ impl SyncState {
         pub_key: PublicKey,
     ) -> Option<(KeyId, Signature)> {
         let doc_state = self.documents.get(&document_id)?;
+        if doc_state.rekey.holds_refused() {
+            return None;
+        }
         let key_id = doc_state.doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
@@ -1068,6 +1077,31 @@ impl SyncState {
         for body in bodies {
             self.send_body(document_id, body);
         }
+    }
+
+    /// The relay refused our delta signed `signature` before sequencing it
+    /// (`SRV-185`). It leaves the unconfirmed log with every later delta, and
+    /// the document holds every edit from here until it reopens. The first
+    /// refusal is reported, so the user learns the relay lacks an edit
+    /// (`SYNC-155`, `SYNC-156`).
+    pub(crate) fn handle_delta_refused(
+        &mut self,
+        document_id: DocumentId,
+        signature: Signature,
+        code: ambre_core::RefusalCode,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        if !doc_state.rekey.delta_refused(&signature) {
+            return;
+        }
+        tracing::warn!("[Sync] delta refused doc={document_id} code={code}");
+        self.send_to_logic(LogicEvent::SyncWarning {
+            document_id,
+            code: SyncWarningCode::EditRefused,
+            message: format!("the relay refused an edit: {code}"),
+        });
     }
 
     /// Installs `new_key` as the document's current key, then sends what the
@@ -2833,6 +2867,80 @@ mod tests {
             matches!(late.as_slice(), [WsClientMsg::ClockResync { signature, .. }] if *signature == first[1]),
             "a late refusal sends its answer alone: {late:?}"
         );
+    }
+
+    /// The relay refuses the delta signed `signature`, naming it.
+    fn refuse_by_name(state: &mut SyncState, doc: DocumentId, signature: Signature) {
+        state.handle_ws_message(WsServerMsg::DeltaRefused {
+            document_id: doc,
+            signature,
+            code: ambre_core::RefusalCode::PayloadTooLarge,
+        });
+    }
+
+    /// `SYNC-155`: a delta refused by name leaves the unconfirmed log with the
+    /// delta sent behind it. The document is reported once as holding an edit
+    /// the relay lacks, and it no longer reads as settled.
+    #[test]
+    fn a_delta_refused_by_name_leaves_the_log_and_is_reported_once() {
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        refuse_by_name(&mut state, doc, sent[1]);
+        let rekey = &state.documents[&doc].rekey;
+        assert_eq!(rekey.unconfirmed(), 0, "a refused delta stayed unconfirmed");
+        assert!(
+            !rekey.settled(),
+            "a document missing an edit read as settled"
+        );
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::SyncWarning { document_id, code: SyncWarningCode::EditRefused, .. }]
+                    if *document_id == doc
+            ),
+            "the refusal was told as {told:?}"
+        );
+    }
+
+    /// `SYNC-156`: once a delta is refused by name, no later delta of its
+    /// document leaves. Neither a new edit nor one a refused clock sends again
+    /// gets out. The document opened afresh sends once more.
+    #[test]
+    fn a_document_with_a_refused_delta_sends_no_further_delta() {
+        let (mut state, _rx, doc, key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+
+        refuse_by_name(&mut state, doc, sent[0]);
+        state.handle_send_update(doc, b"c".to_vec());
+        state.handle_ws_message(WsServerMsg::ClockRefused {
+            document_id: doc,
+            clock: Clock(2),
+            expected: Clock(1),
+            signature: sent[1],
+        });
+        assert!(
+            signatures(&drain_ws(&ws_rx)).is_empty(),
+            "a delta left a document holding a refused one"
+        );
+
+        let reopened = SyncDocumentState::new(doc, key, DocType::Trame, true);
+        state.documents.insert(doc, reopened);
+        state.handle_send_update(doc, b"d".to_vec());
+        assert_eq!(signatures(&drain_ws(&ws_rx)).len(), 1);
     }
 
     /// `SYNC-148`: the echo of another session's delta, under this user's key

@@ -197,6 +197,17 @@ pub enum WsServerMsg {
         document_id: DocumentId,
         after_seq: Seq,
     },
+
+    /// A delta refused before it took a sequence number, for its size, its
+    /// shape, its signature or the sender's role (`ambre-spec-broadcast.md`,
+    /// `SRV-185`). Sent to the author alone, naming the delta by its signature.
+    /// The relay holds nothing of it, so the author holds an edit the relay
+    /// lacks (`SYNC-155`).
+    DeltaRefused {
+        document_id: DocumentId,
+        signature: Signature,
+        code: RefusalCode,
+    },
 }
 
 // ---------------------------------------------------------------------------

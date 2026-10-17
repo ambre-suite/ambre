@@ -51,6 +51,10 @@ impl Version {
     /// stopped replay names the last delta it delivered.
     pub const V8: Self = Self(8);
 
+    /// Version 9 - a delta refused before it is sequenced is named by its
+    /// signature.
+    pub const V9: Self = Self(9);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

@@ -77,8 +77,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-136` | `FAIL` | A create whose answer names another document than the one the client minted MUST fail. | this spec section 2; `SYNC-068` | `ambre_sync::documents::tests::a_create_fails_on_a_foreign_answer` -- a foreign id and a malformed one each answer an error, and only the minted id is reported | none | verified |
 | `SYNC-069` | `FAIL` | A channel message sent with no open session of its document MUST be refused aloud, never dropped in silence. | this spec section 2 | `ambre_sync::updates::tests::an_update_for_a_document_with_no_session_is_refused_aloud` -- the update answers the Logic thread with an `UpdateRefused` warning, and reaches no socket | none | verified |
 | `SYNC-149` | `FAIL` | A channel message sent while the socket is down MUST reach the relay once it is back, or be refused aloud. | this spec section 2; `SYNC-069` | not built | unbuilt -- lands with the `ARCH P4` -- offline durability Story (`ambre-roadmap.md` E6) | unimplemented |
-| `SYNC-155` | `POST` | Given a delta the relay refused by name, the worker MUST drop it from the unconfirmed log and report its document as holding an edit the relay lacks. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-185` | not built | unbuilt -- lands with the `A refused delta is reported and holds its document` Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-156` | `FAIL` | After a delta refused by name, the worker MUST send no further delta of its document before that document reopens. | this spec section 2; `SYNC-155`; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A refused delta is reported and holds its document` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-155` | `POST` | Given a delta the relay refused by name, the worker MUST drop it from the unconfirmed log and report its document as holding an edit the relay lacks. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-185` | `ambre_sync::updates::tests::a_delta_refused_by_name_leaves_the_log_and_is_reported_once` -- the refused delta and the one behind it leave the log, one warning names the document, and it no longer reads as settled | none | verified |
+| `SYNC-156` | `FAIL` | After a delta refused by name, the worker MUST send no further delta of its document before that document reopens. | this spec section 2; `SYNC-155`; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::a_document_with_a_refused_delta_sends_no_further_delta` -- neither a new edit nor a delta a refused clock resends leaves, and the document opened afresh sends again | none | verified |
+| `SYNC-159` | `POST` | Given a delta the relay failed to sequence through a fault of its own, the worker MUST send it again, with every delta that left after it. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-186`; `SYNC-155` | not built | unbuilt -- lands with the `A delta the relay failed to sequence is sent again` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.6 The session ends
 
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 34 `verified`, 3 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 36 `verified`, 2 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

@@ -1231,6 +1231,12 @@ impl SyncState {
                 self.handle_clock_refused(document_id, expected.0, signature);
             }
 
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                code,
+            } => self.handle_delta_refused(document_id, signature, code),
+
             WsServerMsg::MembersChanged { document_id } => {
                 // Only an open document holds a directory and a view; the next
                 // open reads the rows from scratch. The directory is read

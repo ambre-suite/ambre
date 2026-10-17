@@ -70,6 +70,9 @@ pub(crate) struct Rekey {
     refused_from: Option<u64>,
     /// Edits made while the rotation is owed, sealed once it lands.
     waiting: Vec<Vec<u8>>,
+    /// The relay refused a delta by name. It holds an edit this client made,
+    /// so no later delta leaves until the document reopens (`SYNC-156`).
+    refused: bool,
 }
 
 impl Rekey {
@@ -107,6 +110,29 @@ impl Rekey {
             self.refused_from = None;
         }
         Some(self.sent.drain(at..).map(|f| f.payload).collect())
+    }
+
+    /// The relay refused the delta signed `signature` before sequencing it
+    /// (`SYNC-155`). It and every delta that left after it are dropped: those
+    /// build on it, and the relay took no clock for it. Returns whether this
+    /// is the first refusal, the one to report.
+    pub(crate) fn delta_refused(&mut self, signature: &Signature) -> bool {
+        if let Some((at, _)) = self.position(signature) {
+            self.sent.truncate(at);
+        }
+        self.refused_from = None;
+        !std::mem::replace(&mut self.refused, true)
+    }
+
+    /// Whether a delta was refused by name, so nothing more may leave.
+    pub(crate) fn holds_refused(&self) -> bool {
+        self.refused
+    }
+
+    /// How many deltas wait for the relay's echo.
+    #[cfg(test)]
+    pub(crate) fn unconfirmed(&self) -> usize {
+        self.sent.len()
     }
 
     /// The delta at `clock` was sealed again, under a new signature.
@@ -156,9 +182,10 @@ impl Rekey {
     }
 
     /// Whether every frame sent was acknowledged, and no edit waits on a
-    /// payment (`RESID-009`).
+    /// payment (`RESID-009`). A refused delta never settles: the relay lacks
+    /// an edit this client holds.
     pub(crate) fn settled(&self) -> bool {
-        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight
+        self.sent.is_empty() && self.waiting.is_empty() && !self.in_flight && !self.refused
     }
 
     /// Holds an edit made while the rotation is owed. Returns whether the
