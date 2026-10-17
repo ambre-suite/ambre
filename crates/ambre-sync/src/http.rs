@@ -317,6 +317,16 @@ pub(crate) fn is_log_moved(message: &str) -> bool {
     message.ends_with(&format!(": {LOG_MOVED}"))
 }
 
+/// Closes the error of an answer that names a word of a closed set this build
+/// does not know.
+const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
+
+/// Whether `message` is an answer that names a word of a closed set this
+/// build does not know, which only a newer relay writes (`SYNC-152`).
+pub(crate) fn is_unknown_word(message: &str) -> bool {
+    message.ends_with(&format!(": {UNKNOWN_WORD}"))
+}
+
 /// The error a refused answer reads as, or `Ok` for a success. The relay's
 /// code is read from the body only on the statuses that may carry one.
 fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), String> {
@@ -345,11 +355,13 @@ fn read_json<R: serde::de::DeserializeOwned>(
 ) -> Result<R, String> {
     expect_ok(request, resp)?;
     serde_json::from_slice(&resp.body).map_err(|e| {
-        format!(
-            "{} {}: parse error: {e}",
-            request.method.as_str(),
-            request.url
-        )
+        let method = request.method.as_str();
+        // A word of a closed set this build does not know means the relay is
+        // newer. The code closes the message, as a refusal's does (`SYNC-152`).
+        if e.is_data() && e.to_string().starts_with("unknown variant `") {
+            return format!("{method} {}: parse error: {e}: {UNKNOWN_WORD}", request.url);
+        }
+        format!("{method} {}: parse error: {e}", request.url)
     })
 }
 
@@ -1433,6 +1445,44 @@ mod tests {
         );
         assert_eq!(transport.calls().len(), 5, "one request per answer");
         assert!(transport.calls().iter().all(|(_, called)| called == url));
+    }
+
+    /// Holds `SYNC-152`: an answer naming a word this build does not know
+    /// reads as one. An adapter or a derived enum may refuse it. A malformed
+    /// identifier or a missing field does not read as one.
+    #[tokio::test]
+    async fn only_an_unknown_word_reads_as_one() {
+        #[derive(Debug, serde::Deserialize)]
+        struct Row {
+            #[serde(with = "ambre_core::serde_id::user_id")]
+            _user_id: ambre_core::UserId,
+            #[serde(with = "ambre_core::serde_enums::role")]
+            _role: ambre_core::Role,
+            _status: ambre_core::SnapshotStatus,
+        }
+        let url = "https://relay.test/api/documents/d/members";
+        let auth = session("access-1", "refresh-1");
+        let user = &ambre_core::UserId::new().to_string();
+        let row = |user: &str, role: &str, status: &str| {
+            Ok((
+                200,
+                serde_json::json!({ "_user_id": user, "_role": role, "_status": status }),
+            ))
+        };
+        let transport = Scripted::new([
+            row(user, "editor", "self"),
+            row(user, "auditor", "self"),
+            row(user, "editor", "vouched"),
+            row("not-an-id", "editor", "self"),
+            Ok((200, serde_json::json!({ "_user_id": user }))),
+        ]);
+        let read = || get_json_auth_via::<Row>(&transport, url, &auth);
+
+        assert!(read().await.is_ok());
+        assert!(is_unknown_word(&read().await.unwrap_err()), "a role");
+        assert!(is_unknown_word(&read().await.unwrap_err()), "a status");
+        assert!(!is_unknown_word(&read().await.unwrap_err()), "an id");
+        assert!(!is_unknown_word(&read().await.unwrap_err()), "a field");
     }
 
     /// Only a 403 carrying the setup code reads as a setup refusal, and no

@@ -103,21 +103,27 @@ impl LogicSink {
     /// Never today. The sink owns a closure that swallows a closed queue, and
     /// the signature keeps the `Result` for a sink that can refuse.
     pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
-        (self.0)(as_setup_owed(event));
+        (self.0)(as_step_owed(event));
         Ok(())
     }
 }
 
-/// Tells a failure the relay raised for a key setup still owed as the setup it
-/// is, never as a generic error (`ambre-spec-sync.md`, `SYNC-134`). Every error
-/// leaves the worker through [`LogicSink::send`], so this one mapping covers
-/// every request, whichever handler raised it.
-fn as_setup_owed(event: LogicEvent) -> LogicEvent {
+/// Tells a failure that asks the user for a step as that step, never as a
+/// generic error. A key setup still owed reads as the setup (`SYNC-134`). An
+/// answer naming a word this build does not know reads as an update to
+/// install (`SYNC-152`). Every error leaves the worker through
+/// [`LogicSink::send`], so this one mapping covers every request.
+fn as_step_owed(event: LogicEvent) -> LogicEvent {
     match &event {
         LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
             if http::is_setup_refusal(message) =>
         {
             LogicEvent::SetupRequired
+        }
+        LogicEvent::ApiError { message, .. } | LogicEvent::AuthError { message }
+            if http::is_unknown_word(message) =>
+        {
+            LogicEvent::UpdateRequired
         }
         _ => event,
     }
@@ -1531,6 +1537,34 @@ mod setup_tests {
         assert!(matches!(told[0], LogicEvent::SetupRequired));
         assert!(matches!(told[1], LogicEvent::SetupRequired));
         assert!(matches!(told[2], LogicEvent::ApiError { code: 403, .. }));
+    }
+
+    /// Holds `SYNC-152`: an answer naming a word this build does not know
+    /// reaches Logic as an update to install, under either error variant.
+    /// Any other parse error passes through unchanged.
+    #[test]
+    fn an_answer_with_an_unknown_word_reaches_logic_as_an_update() {
+        let (sink, rx) = LogicSink::channel();
+        let url = "GET https://relay.example/api/documents/d/members";
+        let unknown = format!("{url}: parse error: unknown variant `auditor`: UNKNOWN_WORD");
+        assert!(http::is_unknown_word(&unknown));
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocumentMembers".into(),
+            code: 500,
+            message: unknown.clone(),
+        });
+        let _ = sink.send(LogicEvent::AuthError { message: unknown });
+        let _ = sink.send(LogicEvent::ApiError {
+            id: None,
+            request: "ListDocumentMembers".into(),
+            code: 500,
+            message: format!("{url}: parse error: missing field `role`"),
+        });
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(told[0], LogicEvent::UpdateRequired));
+        assert!(matches!(told[1], LogicEvent::UpdateRequired));
+        assert!(matches!(told[2], LogicEvent::ApiError { code: 500, .. }));
     }
 }
 
