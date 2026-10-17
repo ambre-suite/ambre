@@ -78,8 +78,7 @@ fn style_applied(
 #[wasm_bindgen_test]
 fn style_applied_mirrors_into_style_state() {
     // A reactive owner is required to allocate signals outside a component.
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
 
     let state = StyleState::new();
     let style = CellStyle {
@@ -117,8 +116,7 @@ fn style_applied_mirrors_into_style_state() {
 /// the rest.
 #[wasm_bindgen_test]
 fn style_state_ignores_unrelated_events() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
 
     let state = StyleState::new();
     state.bold.set(true);
@@ -138,8 +136,7 @@ fn style_state_ignores_unrelated_events() {
 /// their `disabled` state.
 #[wasm_bindgen_test]
 fn undo_state_mirrors_into_command_store() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
 
     let store = CommandStates::new(chrome::COMMANDS.iter().map(|c| c.id));
     chrome::init_command_states(&store);
@@ -202,6 +199,27 @@ fn document() -> web_sys::Document {
 /// removed via `container.remove()` -- leaves the harness elements untouched.
 /// `mount_to(..).forget()` keeps the view mounted for the assertions (like
 /// `mount_to_body`); the container removal tears it down.
+/// A fresh reactive owner, current until the guard drops.
+///
+/// `Owner::set` alone leaves the thread-local pointing at the owner after the
+/// test drops it, so the next test starts from a dead current owner. The
+/// guard unsets it, then drops it, which cleans up every view mounted under it.
+struct OwnerScope(Owner);
+
+impl OwnerScope {
+    fn new() -> Self {
+        let owner = Owner::new();
+        owner.set();
+        Self(owner)
+    }
+}
+
+impl Drop for OwnerScope {
+    fn drop(&mut self) {
+        self.0.clone().unset();
+    }
+}
+
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
 where
     F: FnOnce() -> N + 'static,
@@ -574,8 +592,7 @@ fn the_toolbar_announces_the_registry_labels() {
 /// toast, not the log alone (`TRAME-UI-176`).
 #[wasm_bindgen_test]
 fn a_lost_edit_reaches_the_user() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
@@ -661,8 +678,7 @@ fn an_aggregate_reads_whole_or_with_two_decimals() {
 /// (`TRAME-UI-120`): a refused merge and a refused command each say why.
 #[wasm_bindgen_test]
 fn a_refusal_reaches_the_user_as_a_toast() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
     let toasts = ambre_chrome::Toasts::new();
     for event in [
         TrameEvent::MergeRejected {
@@ -736,8 +752,7 @@ fn sort_dialog(
 /// `TRAME-FEAT-046`: the toast a filter raises says how many rows it hid.
 #[wasm_bindgen_test]
 fn the_filter_toast_says_how_many_rows_it_hid() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
     let toasts = ambre_chrome::Toasts::new();
     chrome::notify_event(
         &toasts,
@@ -763,8 +778,7 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
 /// offers exactly the columns of that range, D to F.
 #[wasm_bindgen_test]
 fn the_sort_reply_opens_the_dialog_over_its_columns() {
-    let owner = Owner::new();
-    owner.set();
+    let _owner = OwnerScope::new();
     let relay = relay();
     relay.absorb(&UiEvent::Viewport {
         document_id: DocumentId::new(),
