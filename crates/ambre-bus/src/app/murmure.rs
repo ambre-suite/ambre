@@ -179,6 +179,9 @@ pub enum MurmureEvent {
     /// to it. `None` for an unnamed channel: the view composes what it shows
     /// from the members, and stores nothing (`MURMURE-016`).
     Named { name: Option<String> },
+    /// This user left the channel from another client, or the leave deleted
+    /// it. Nothing of it is held any more (`MURMURE-468`).
+    Left,
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).

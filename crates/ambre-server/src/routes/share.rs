@@ -291,10 +291,12 @@ pub async fn revoke_from_document(
             notify_removed(&state, &doc_id, &target).await;
             return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
         }
-        // Nobody is left to tell (`SRV-142`).
+        // No member is left (`SRV-142`), but the other clients of the one who
+        // left still hold the channel (`SRV-187`).
         db::Removed::ChannelDeleted(documents) => {
             tracing::info!(document_id = %doc_id, "last member left, channel deleted");
             crate::deletion::empty_marked(&state, &documents, sweep_due).await;
+            notify_removed(&state, &doc_id, &target).await;
             return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
         }
     }

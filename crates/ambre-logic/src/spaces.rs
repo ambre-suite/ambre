@@ -628,6 +628,36 @@ impl LogicState {
         });
     }
 
+    /// The relay removed this user from `document_id` (`SRV-187`). Is it the
+    /// `meta` of a channel held here? Then the user left it from another
+    /// client, and the channel goes as after a leave asked here. A leave
+    /// asked here waits for its own answer.
+    pub(crate) fn channel_revoked(&mut self, document_id: DocumentId) {
+        let meta = ambre_bus::MetaId::from_document(document_id);
+        let open = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.meta_id() == meta)
+            .map(|(id, _)| *id);
+        let opening = || {
+            self.opening
+                .iter()
+                .find(|(_, o)| o.as_ref().is_some_and(|o| o.meta_id() == meta))
+                .map(|(id, _)| *id)
+        };
+        let Some(channel_id) = open.or_else(opening) else {
+            return;
+        };
+        if self.leaving.contains_key(&channel_id) {
+            return;
+        }
+        self.drop_channel(channel_id);
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: ambre_bus::MurmureEvent::Left,
+        });
+    }
+
     /// Drop a channel, open or opening, with its read cursors. The session of
     /// each document ends, so the Sync worker forgets their keys.
     fn drop_channel(&mut self, channel_id: ChannelId) {
@@ -1352,6 +1382,68 @@ mod tests {
 
         // An answer nobody here asked for drops nothing.
         state.handle_logic_event(LogicEvent::ChannelLeft { channel_id: kept });
+        assert!(drain(&sync).is_empty());
+        assert!(state.channels.contains_key(&kept));
+    }
+
+    /// The relay tells this client its user left a channel,
+    /// from another client. The channel goes with its sessions, and the view
+    /// learns it. A removal of someone else, or from a document no channel
+    /// here holds, drops nothing.
+    #[test]
+    fn a_leave_from_another_client_drops_the_channel_here() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        state.my_user_id = Some(me);
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, meta, segment) =
+            public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (kept, kept_meta, _) = public_channel(&mut state, space_id, "general", &ui, &sync);
+        let revoked = |document_id, revoked_user_id| LogicEvent::MemberRevoked {
+            document_id,
+            revoked_user_id,
+        };
+
+        state.handle_logic_event(revoked(kept_meta, UserId::new()));
+        state.handle_logic_event(revoked(segment, me));
+        assert!(
+            drain(&sync).is_empty(),
+            "a session ended for no leave of ours"
+        );
+        assert!(state.channels.contains_key(&kept) && state.channels.contains_key(&channel_id));
+        let _ = drain(&ui);
+
+        state.handle_logic_event(revoked(meta, me));
+        let mut closed: Vec<DocumentId> = drain(&sync)
+            .iter()
+            .map(|c| match c {
+                SyncCommand::CloseDocument { document_id } => *document_id,
+                other => panic!("only sessions end, got {other:?}"),
+            })
+            .collect();
+        closed.sort_by_key(|d| *d.as_bytes());
+        let mut expected = [meta, segment];
+        expected.sort_by_key(|d| *d.as_bytes());
+        assert_eq!(closed, expected);
+        assert!(!state.channels.contains_key(&channel_id));
+        assert!(state.channels.contains_key(&kept));
+        let told = drain(&ui);
+        assert!(
+            told.iter().any(|e| matches!(
+                e,
+                UiEvent::Channel { channel_id: id, event: ambre_bus::MurmureEvent::Left }
+                    if *id == channel_id
+            )),
+            "the view was told {told:?}"
+        );
+
+        // A leave asked here is dropped by its answer, not by the notice.
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::LeaveChannel { channel_id: kept },
+        });
+        let _ = drain(&sync);
+        state.handle_logic_event(revoked(kept_meta, me));
         assert!(drain(&sync).is_empty());
         assert!(state.channels.contains_key(&kept));
     }

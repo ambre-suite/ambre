@@ -71,6 +71,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-015` | `FAIL` | Outside the exceptions of `SRV-144` to `SRV-146`, only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`; `::delete_document_only_by_owner` -- the refusals; `::revoke_then_rotate_replaces_owner_key` -- the owner's own path still completes | none | verified |
 | `SRV-144` | `POST` | While a rotation is owed, the relay MUST accept it from any member with write access. | this spec section 3; `SYNC-128` | `ambre_server::routes::tests::handler_tests::an_owed_rotation_is_open_to_an_editor_and_clears_the_debt` -- an editor's rotation is refused while nothing is owed and accepted once a member left | none | verified |
 | `SRV-145` | `POST` | A member MUST be able to remove themselves. | this spec section 3; `SYNC-127` | `ambre_server::routes::tests::handler_tests::a_member_leaves_alone_and_the_document_owes_a_rotation` -- an editor removes their own share, and the relay answers with success | none | verified |
+| `SRV-187` | `POST` | A removal MUST reach every connection of the member removed, even when it deletes their channel. | this spec section 3; `SRV-145`, `SRV-142`; `5-Murmure/features/ambre-spec-murmure-channels.md` | `ambre_server::routes::tests::handler_tests::a_removal_reaches_the_person_removed_alone` -- the notice reaches the topic of the member removed alone, database tier; `ambre_server::routes::channels::tests::a_leave_that_deletes_its_channel_still_reaches_its_member` -- the last member's leave deletes the channel and still reaches their own topic, database tier | none | verified |
 | `SRV-146` | `POST` | An admin of a space MUST be able to re-key a public channel of that space. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-157` | `FAIL` | Given a removal from a member whose standing to moderate the relay revoked, the relay MUST refuse it. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-moderation.md` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-159` | `POST` | A conversion of a direct message MUST record the space of the channel and mark it private. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -131,7 +132,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 53 `verified`, 1 `qa-manual`, 10 `unimplemented`. A request test drives what
+* **Verification.** 54 `verified`, 1 `qa-manual`, 10 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---

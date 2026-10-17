@@ -1429,6 +1429,54 @@ mod tests {
         );
     }
 
+    /// `SRV-187`: the last member of a private channel leaves through the
+    /// removal route, which deletes it. Their own topic still hears that they
+    /// left, so their other clients drop the channel.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_leave_that_deletes_its_channel_still_reaches_its_member(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = private_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+
+        let listener = rustis::client::Client::connect("redis://localhost:6379")
+            .await
+            .expect("redis");
+        let mut stream = listener
+            .subscribe(format!("user:{alice}"))
+            .await
+            .expect("subscribe");
+        let answer = crate::routes::share::revoke_from_document(
+            State(state.clone()),
+            session(alice),
+            Path((meta.to_string(), alice.to_string())),
+            None,
+        )
+        .await;
+        assert_eq!(status(answer), StatusCode::OK);
+        let held = db::get_channel(&state.db, &channel.id)
+            .await
+            .expect("query");
+        assert!(held.is_none(), "the channel stayed");
+
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+            .await
+            .expect("the notice arrives")
+            .expect("a message")
+            .expect("readable");
+        let notice = decode_server_msg(heard.payload()).expect("decodes");
+        assert!(
+            matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
+            "heard {notice:?}"
+        );
+    }
+
     /// An editor leaves a public channel, then its owner, the last member.
     /// Neither is refused, and the channel stays with its documents and
     /// owes no rotation. Another member of the space then joins it alone.

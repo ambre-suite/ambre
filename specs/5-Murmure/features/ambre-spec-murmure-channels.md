@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-461` | `POST` | The last member leaving a public channel MUST leave it listed, with its history, for the next member to join. | this spec section 3; `SRV-173` | `ambre_server::routes::channels::tests::the_last_member_leaves_a_public_channel_for_the_next_to_join` -- the relay keeps the channel public with its documents, and the next member of the space joins it; `ambre_sync::membership_log::tests::a_log_its_last_member_left_admits_the_next_self_join` -- that member's client verifies the join on a log nobody holds | none | verified |
 | `MURMURE-467` | `POST` | Leaving a channel MUST drop it from the client of the member who leaves, with its documents and its keys. | this spec section 3; `MURMURE-059` | `ambre_logic::spaces::tests::a_left_channel_leaves_the_client_once_the_relay_answers` -- once the relay answers, the channel goes, the session of each of its documents ends, and the catalogue keeps it; `ambre_logic::spaces::tests::a_refused_leave_keeps_the_channel_whole` -- a refusal keeps it; `ambre_sync::sharing::tests::leaving_a_channel_posts_this_users_removal_on_its_meta` -- the leave is a signed removal on `meta`, with no rotation; `ambre_sync::updates::tests::closing_a_document_forgets_its_keys` -- an ended session takes its keys with it | none | verified |
-| `MURMURE-468` | `POST` | Leaving a channel MUST drop it from every other client of the member who leaves. | this spec section 3; `MURMURE-467` | not built | unbuilt -- lands with the `A leave reaches every client of its member` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-468` | `POST` | Leaving a channel MUST drop it from every other client of the member who leaves. | this spec section 3; `MURMURE-467`; `ambre-spec-server.md`, `SRV-187` | `ambre_logic::spaces::tests::a_leave_from_another_client_drops_the_channel_here` -- the relay's notice to this user ends each session of the channel and tells the view, where a removal of someone else, of a segment, or of a leave asked here drops nothing | none | verified |
 | `MURMURE-469` | `FAIL` | Given a channel whose open the relay refuses for want of membership, the client MUST drop it. | this spec section 3; `SRV-047` | not built | unbuilt -- lands with the `A channel the relay refuses to open` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | `ambre_server::routes::channels::tests::a_leave_owes_a_rotation_on_a_private_channel_only` -- the public channel owes no rotation after the leave | none | verified |
 | `MURMURE-257` | `FAIL` | Given the last owner leaving a private channel that keeps other members, the relay MUST refuse the leave. | this spec section 3; `SRV-015` | `ambre_server::routes::channels::tests::the_last_owner_hands_the_role_on_before_leaving` -- refused and kept, then let through once the role is handed on | none | verified |
@@ -117,11 +117,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 25 `verified`, 21 `unimplemented`. The relay holds a private channel, its
-  leave and its delete, and the key links of a channel under its `meta` document. The Logic thread
-  creates a private channel without the catalogue, the owner's client deletes one, and a member's
-  client leaves one. A direct message opens, is reused for one set of members, and takes a name.
-  Invites, the segment a rotation closes, conversion and archive are not built.
+* **Verification.** 26 `verified`, 20 `unimplemented`. The relay holds a private channel, its leave
+  and its delete, and the key links of a channel under its `meta` document. The Logic thread creates
+  a private channel without the catalogue, the owner's client deletes one, and a member's client
+  leaves one. A direct message opens, is reused for one set of members, and takes a name. Invites,
+  the segment a rotation closes, conversion and archive are not built.
 
 ---
 
@@ -190,6 +190,10 @@ edit written after it never travels under the key the member who left still hold
 members who stay would otherwise trust a key the leaver chose (`SYNC-130`). Once the relay answers,
 the client drops the channel, its documents and its keys (`MURMURE-467`). A refusal keeps it whole.
 The catalogue keeps a public channel listed, for the next member to join (`MURMURE-461`).
+
+**Every client of the leaver drops it.** The relay tells each of them, even when the leave deleted
+the channel (`ambre-spec-server.md`, `SRV-187`). Each other client drops it the same way, and tells
+the view (`MURMURE-468`).
 
 **A leave signs on the head the relay serves.** The leaver signs after the last entry served, valid
 or not, as every author does. A relay that serves a false head can only make the leave fail, which
@@ -290,9 +294,6 @@ who writes its key into the catalogue.
 * **A delete reaches its owner alone.** The relay pushes nothing when a channel goes, so another
   member's client keeps it until it reopens it (`MURMURE-465`). The relay's word lands with the
   `A delete reaches every member` Story (`ambre-roadmap.md` E5).
-* **A leave reaches the client that asked for it alone.** The relay tells every client of the
-  member who left, and the others pass it to the view but keep the channel (`MURMURE-468`). It
-  lands with the `A leave reaches every client of its member` Story (`ambre-roadmap.md` E5).
 * **A lost answer leaves a channel the client no longer belongs to.** A leave or a delete the relay
   took, whose answer never came back, keeps the channel, and its next open is refused
   (`MURMURE-469`). It lands with the
