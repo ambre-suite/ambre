@@ -198,7 +198,8 @@ keeps nothing.
 
 **A refused open drops the channel.** A leave or a delete whose answer never came back leaves a
 channel the user no longer belongs to. Its next open is refused for want of membership, and the
-client drops it rather than show a failure (`MURMURE-469`).
+client drops it rather than show a failure (`MURMURE-469`). An open channel whose notice went
+while offline goes on the reopen (`ambre-spec-sync.md`, `SYNC-160`).
 
 **A leave signs on the head the relay serves.** The leaver signs after the last entry served, valid
 or not, as every author does. A relay that serves a false head can only make the leave fail, which
@@ -299,7 +300,3 @@ who writes its key into the catalogue.
 * **A delete reaches its owner alone.** The relay pushes nothing when a channel goes, so another
   member's client keeps it until it reopens it (`MURMURE-465`). The relay's word lands with the
   `A delete reaches every member` Story (`ambre-roadmap.md` E5).
-* **A channel held open across a removal it missed stays open.** A leave whose answer and notice
-  were both lost while the socket was down keeps the open channel. The relay refuses it on the
-  reopen, and nothing drops it yet (`ambre-spec-sync.md`, `SYNC-160`). It lands with the
-  `A document refused on a resubscription` Story (`ambre-roadmap.md` E5).

@@ -1033,6 +1033,19 @@ impl SyncState {
 
     // -- Inbound: Server -> Sync (WebSocket demux) -----------------------------
 
+    /// This user no longer reaches `document_id`. Close it here, and tell the
+    /// Logic thread they were removed from it, so the view reacts.
+    fn document_removed(&mut self, document_id: DocumentId) {
+        self.documents.remove(&document_id);
+        self.light.remove(&document_id);
+        if let Some(uid) = self.user_id {
+            self.send_to_logic(LogicEvent::MemberRevoked {
+                document_id,
+                revoked_user_id: uid,
+            });
+        }
+    }
+
     /// Demultiplex an inbound [`WsServerMsg`] received from the WebSocket.
     /// Decoding from wire bytes is done in the `onmessage` callback;
     /// this method receives the already-decoded message.
@@ -1255,17 +1268,9 @@ impl SyncState {
 
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
-                // personal topic). Close it locally and tell the Logic thread we
-                // were revoked so the UI can react.
+                // personal topic).
                 tracing::info!("Sync: DocumentRevoked {document_id:?}");
-                self.documents.remove(&document_id);
-                self.light.remove(&document_id);
-                if let Some(uid) = self.user_id {
-                    self.send_to_logic(LogicEvent::MemberRevoked {
-                        document_id,
-                        revoked_user_id: uid,
-                    });
-                }
+                self.document_removed(document_id);
             }
 
             WsServerMsg::DocumentShared {
@@ -1279,6 +1284,15 @@ impl SyncState {
                 });
             }
 
+            // Only a subscription is refused so: a removal missed while the
+            // socket was down (`SYNC-160`).
+            WsServerMsg::Error {
+                document_id: Some(document_id),
+                code: RefusalCode::Forbidden,
+            } if self.documents.contains_key(&document_id) => {
+                tracing::info!("Sync: subscription refused for {document_id}");
+                self.document_removed(document_id);
+            }
             WsServerMsg::Error { document_id, code } => {
                 tracing::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
@@ -1903,6 +1917,41 @@ mod tests {
         assert!(sent(&wire).is_empty(), "a timer from before the reset");
         state.handle_sync_event(retry(id, armed(&state, id)));
         assert_eq!(sent(&wire).len(), 1);
+    }
+
+    /// `SYNC-160`: a subscription refused for want of access closes its
+    /// document and reports this user removed from it. Another code, or a
+    /// document not held here, stays a refusal.
+    #[test]
+    fn a_refused_resubscription_closes_its_document() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        let me = ambre_core::UserId::new();
+        state.user_id = Some(me);
+        let refused = |document_id, code| {
+            SyncEvent::WsMessage(WsServerMsg::Error {
+                document_id: Some(document_id),
+                code,
+            })
+        };
+
+        state.handle_sync_event(refused(id, RefusalCode::RateLimited));
+        state.handle_sync_event(refused(DocumentId::new(), RefusalCode::Forbidden));
+        assert!(state.documents.contains_key(&id));
+        state.handle_sync_event(refused(id, RefusalCode::Forbidden));
+        assert!(!state.documents.contains_key(&id));
+
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                told[..],
+                [
+                    LogicEvent::ApiError { code: 429, .. },
+                    LogicEvent::ApiError { code: 403, .. },
+                    LogicEvent::MemberRevoked { document_id, revoked_user_id },
+                ] if document_id == id && revoked_user_id == me
+            ),
+            "{told:?}"
+        );
     }
 
     /// `SRV-183`: a socket refusal reaches Logic with the status its code

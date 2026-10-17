@@ -2654,7 +2654,7 @@
   {"edge": "cites-section", "from": "SYNC-160", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-document", "from": "SYNC-160", "to": "ambre-spec-broadcast.md"},
   {"edge": "cites-rule", "from": "SYNC-160", "to": "SRV-047"},
-  {"edge": "lands-with", "from": "SYNC-160", "to": "A document refused on a resubscription"},
+  {"edge": "verified-by", "from": "SYNC-160", "to": "ambre_sync::websocket::tests::a_refused_resubscription_closes_its_document"},
   {"edge": "cites-section", "from": "SYNC-158", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-rule", "from": "SYNC-158", "to": "SYNC-154"},
   {"edge": "cites-document", "from": "SYNC-158", "section": "8", "to": "ambre-spec-budgets.md"},
