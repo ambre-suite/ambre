@@ -908,4 +908,39 @@ mod tests {
             Some(Role::Viewer)
         );
     }
+
+    /// The links of a channel live under its `meta` document, and a segment
+    /// reads them from there. The bytes stand for an encoded link: the
+    /// relay stores them and opens none.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_channel_link_is_kept_under_meta_and_served_for_a_segment(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = public_channel(&state, alice, space).await;
+        sqlx::query(
+            "INSERT INTO document_key_links (document_id, key_id, previous_key_id, link) \
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(uuid_of_doc(channel.meta.document_id()))
+        .bind([2u8; 16].as_slice())
+        .bind([1u8; 16].as_slice())
+        .bind(b"link".as_slice())
+        .execute(&state.db)
+        .await
+        .expect("insert a link");
+        let served = db::document_key_links(&state.db, &channel.segment.document_id())
+            .await
+            .expect("links");
+        assert_eq!(served, vec![b"link".to_vec()]);
+        let alone = document(&state, alice).await;
+        assert!(
+            db::document_key_links(&state.db, &alone)
+                .await
+                .expect("links")
+                .is_empty(),
+            "a document outside the channel reads its own links"
+        );
+    }
 }

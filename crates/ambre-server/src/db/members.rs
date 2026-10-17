@@ -448,13 +448,17 @@ async fn append_link(
 }
 
 /// Every link of a document, in the order the rotations landed (`SYNC-117`).
+/// A channel document reads the links of its access document, the channel's
+/// `meta`, where every document of the channel finds them.
 pub async fn document_key_links(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
 ) -> Result<Vec<Vec<u8>>, AppError> {
-    Ok(sqlx::query_scalar(
-        "SELECT link FROM document_key_links WHERE document_id = $1 ORDER BY seq",
-    )
+    Ok(sqlx::query_scalar(concat!(
+        "SELECT link FROM document_key_links WHERE document_id = ",
+        access_document!(),
+        " ORDER BY seq"
+    ))
     .bind(id_to_uuid(*document_id))
     .fetch_all(pool)
     .await?)

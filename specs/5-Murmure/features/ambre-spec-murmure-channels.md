@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: PRIVATE CHANNELS AND DIRECT MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the relay keeps the key links of a channel under its `meta`
+document. No private channel, direct message or invitation exists yet
 
 > A few people talk where nobody else reads: a private channel of a space, or a direct message
 > between two or more members. Opening a direct message with the same people finds the one that
@@ -21,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | `ambre_server::routes::channels::tests::a_channel_link_is_kept_under_meta_and_served_for_a_segment` -- database tier | none | verified |
 | `MURMURE-333` | `OBS` | An archived channel MUST show as archived, with no composer. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a private channel
@@ -107,7 +108,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 38 `unimplemented`: no channel exists in the code.
+* **Verification.** 1 `verified`, 37 `unimplemented`. No private channel exists in the code. What
+  holds is the relay keeping a channel's key links under its `meta` document.
 
 ---
 
