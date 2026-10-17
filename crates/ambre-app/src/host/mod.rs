@@ -221,6 +221,10 @@ pub(crate) struct ClipboardPaste {
 /// no `Box<dyn Any>`, exhaustiveness checked by the compiler, symmetric to
 /// `AppCommand`/`DocState`. The driver (`FrameHost`) dispatches over it by
 /// `match`; each variant's view exposes the same inherent method set.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "the page holds one view at a time, so a box would save nothing"
+)]
 pub enum AppView {
     /// A Trame (spreadsheet) document.
     Trame(TrameView),

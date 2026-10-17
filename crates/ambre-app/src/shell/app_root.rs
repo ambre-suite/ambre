@@ -102,7 +102,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
         present_toile,
         presenter_slide,
         presenter_notes,
-        presenter_frame,
         broadcasting_toile,
         following_toile,
         presenter_peer_toile,

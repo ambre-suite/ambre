@@ -135,6 +135,7 @@ pub struct ProseView {
 }
 
 impl ProseView {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,

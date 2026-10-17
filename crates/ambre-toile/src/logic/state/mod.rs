@@ -1178,7 +1178,7 @@ impl ToileState {
     /// Every derived cache, in an order that does not depend on how it was
     /// filled: bounds, leaves, both membership maps and the paint order. Two
     /// states whose caches agree print the same text. Test helper.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn debug_caches(&self) -> String {
         fn sorted<K: Ord + std::fmt::Debug, V: std::fmt::Debug>(
             it: impl Iterator<Item = (K, V)>,
@@ -1206,13 +1206,13 @@ impl ToileState {
     }
 
     /// The history this board holds, as a version vector. Test helper.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn history(&self) -> VersionVector {
         self.doc.oplog_vv()
     }
 
     /// How many times a call walked every leaf of the spatial index. Test helper.
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn index_walks(&self) -> usize {
         self.index.walks()
     }

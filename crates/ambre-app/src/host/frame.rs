@@ -354,16 +354,10 @@ impl FrameHost {
 
     /// Resolve a `copy`/`cut` synchronously inside the native clipboard event.
     /// See [`AppView::clipboard_write`]: `Text` writes immediately, `Deferred`
-    /// waits for [`poll_clipboard`](Self::poll_clipboard), `Nothing` lets the
+    /// waits for the next frame to drain the payload, `Nothing` lets the
     /// browser default proceed.
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         self.view.clipboard_write(cut)
-    }
-
-    /// Drain a pending authoritative clipboard blob for the OS clipboard write.
-    /// Called per frame right after [`update`](Self::update).
-    pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
-        self.view.poll_clipboard()
     }
 
     /// Service a `paste` event with the shared clipboard transport blob.

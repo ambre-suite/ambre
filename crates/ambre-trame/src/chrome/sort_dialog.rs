@@ -188,7 +188,7 @@ pub fn SortDialog(
                         <button
                             class="ambre-sort-add"
                             // Cannot sort by more keys than the range has columns.
-                            prop:disabled=move || levels.with(|ls| ls.len() as usize >= cols.get_value().len())
+                            prop:disabled=move || levels.with(|ls| ls.len() >= cols.get_value().len())
                             on:click=move |_| levels.update(|ls| {
                                 // New level defaults to the first not-yet-used column.
                                 let used: Vec<u32> = ls.iter().map(|k| k.col).collect();

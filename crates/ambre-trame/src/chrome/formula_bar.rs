@@ -29,12 +29,12 @@ pub fn FormulaBar(
     // When the signal changes from outside, push the new value into the DOM
     // input without resetting the caret. A new cell was selected, or an edit
     // was seeded. The comparison avoids fighting the user's typing.
-    create_effect(move |_| {
+    Effect::new(move |_| {
         let val = content.get();
-        if let Some(input) = input_ref.get() {
-            if val != input.value() {
-                input.set_value(&val);
-            }
+        if let Some(input) = input_ref.get()
+            && val != input.value()
+        {
+            input.set_value(&val);
         }
     });
 
@@ -42,30 +42,25 @@ pub fn FormulaBar(
         content.set(event_target_value(&ev));
     };
 
-    let on_keydown = {
-        let content = content;
-        move |ev: web_sys::KeyboardEvent| {
-            match ev.key().as_str() {
-                "Enter" => {
-                    ev.prevent_default();
-                    // Ctrl/Cmd+Enter fills the whole selection with the value.
-                    if ev.ctrl_key() || ev.meta_key() {
-                        on_action.run(FormulaAction::CommitFill);
-                    } else {
-                        on_action.run(FormulaAction::Commit(CommitDirection::Down));
-                    }
-                }
-                "Tab" => {
-                    ev.prevent_default();
-                    on_action.run(FormulaAction::Commit(CommitDirection::Right));
-                }
-                "Escape" => {
-                    ev.prevent_default();
-                    on_action.run(FormulaAction::Cancel);
-                }
-                _ => {}
+    let on_keydown = move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
+        "Enter" => {
+            ev.prevent_default();
+            // Ctrl/Cmd+Enter fills the whole selection with the value.
+            if ev.ctrl_key() || ev.meta_key() {
+                on_action.run(FormulaAction::CommitFill);
+            } else {
+                on_action.run(FormulaAction::Commit(CommitDirection::Down));
             }
         }
+        "Tab" => {
+            ev.prevent_default();
+            on_action.run(FormulaAction::Commit(CommitDirection::Right));
+        }
+        "Escape" => {
+            ev.prevent_default();
+            on_action.run(FormulaAction::Cancel);
+        }
+        _ => {}
     };
 
     view! {

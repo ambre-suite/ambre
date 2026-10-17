@@ -2028,7 +2028,7 @@ impl ToileView {
     }
 
     /// Whether a key on the keyboard pipe is typed text (`TOILE-UI-393`).
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn pipe_typing(&self) -> bool {
         self.text_input.typing()
     }

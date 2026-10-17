@@ -380,12 +380,12 @@ pub(crate) fn inject_theme(theme: ambre_canvas::Theme) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
-    if let Ok(Some(head)) = document.query_selector("head") {
-        if let Ok(style) = document.create_element("style") {
-            style.set_id("ambre-theme");
-            style.set_text_content(Some(ambre_canvas::theme::THEME_CSS));
-            let _ = head.append_child(&style);
-        }
+    if let Ok(Some(head)) = document.query_selector("head")
+        && let Ok(style) = document.create_element("style")
+    {
+        style.set_id("ambre-theme");
+        style.set_text_content(Some(ambre_canvas::theme::THEME_CSS));
+        let _ = head.append_child(&style);
     }
     apply_theme_attr(theme);
 }

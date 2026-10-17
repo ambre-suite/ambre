@@ -39,8 +39,8 @@ use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
-    Role, SheetId, SheetTab, SyncCommand, UiEvent, UserId,
+    AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role,
+    SheetId, SheetTab, SyncCommand, UiEvent, UserId,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
@@ -105,6 +105,9 @@ type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<ambre_bus::conduit::Sender
 /// What a child's queue could not take yet, oldest first, by document
 /// (`TOILE-UI-340`).
 type ChildBacklog = Rc<RefCell<HashMap<DocumentId, VecDeque<UiEvent>>>>;
+
+/// A handle the shell mount fills and the imperative wiring reads back.
+type Slot<T> = Rc<RefCell<Option<T>>>;
 
 /// How many events may wait for one child before the oldest are dropped.
 ///
@@ -297,9 +300,6 @@ struct Wiring {
     /// Active slide's speaker notes, re-seeded on each slide change; the panel
     /// editor diffs against it and emits `EditNotes`.
     presenter_notes: RwSignal<String>,
-    /// Active slide's frame id: the target of the panel's `EditNotes` intent.
-    /// `None` when the deck is empty or the slide is dangling (edits skipped).
-    presenter_frame: RwSignal<Option<ambre_bus::app::toile::ElementId>>,
     /// "Follow presenter" role signals (`toile-presentation`). `broadcasting`
     /// mirrors the local broadcast toggle, `following` the active follow target,
     /// and `presenter_peer` the latest peer seen broadcasting (drives the panel's
@@ -490,12 +490,11 @@ pub fn main() {
         ambre_canvas::signal_fatal(&msg);
         // Notify the page that the WASM application has suffered an
         // unrecoverable panic (panic=abort, so no graceful shutdown).
-        if let Some(window) = web_sys::window() {
-            if let Ok(f) = js_sys::Reflect::get(&window, &"ambreFatal".into()) {
-                if let Ok(f) = f.dyn_into::<js_sys::Function>() {
-                    let _ = f.call1(&window, &msg.into());
-                }
-            }
+        if let Some(window) = web_sys::window()
+            && let Ok(f) = js_sys::Reflect::get(&window, &"ambreFatal".into())
+            && let Ok(f) = f.dyn_into::<js_sys::Function>()
+        {
+            let _ = f.call1(&window, &msg.into());
         }
     }));
 
@@ -738,7 +737,7 @@ pub fn main() {
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route. The canvas is hidden there, and the
     // route effect swaps it to the real document on the first navigation.
-    let initial_doc = boot_doc.unwrap_or_else(DocumentId::new);
+    let initial_doc = boot_doc.unwrap_or_default();
 
     // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
     // halves of its queues. The Sync-bound half (`logic_to_sync_tx`) is relayed
@@ -822,28 +821,24 @@ pub fn main() {
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
-    let switcher_slot: Rc<RefCell<Option<DocSwitcher>>> = Rc::new(RefCell::new(None));
+    let switcher_slot: Slot<DocSwitcher> = Rc::new(RefCell::new(None));
 
     // ---- Mount the Leptos shell (once). Reactive state is created inside the
     // mount owner and pulled back out via slots for the imperative relay below. -
-    let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
-    let toile_store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
-    let commands_slot: Rc<RefCell<Option<shell::CommandPath>>> = Rc::new(RefCell::new(None));
-    let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
+    let store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
+    let toile_store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
+    let commands_slot: Slot<shell::CommandPath> = Rc::new(RefCell::new(None));
+    let anchor_slot: Slot<RwSignal<Option<(f64, f64)>>> = Rc::new(RefCell::new(None));
+    let toasts_slot: Slot<Toasts> = Rc::new(RefCell::new(None));
+    let user_slot: Slot<RwSignal<Option<String>>> = Rc::new(RefCell::new(None));
+    let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
+    let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
+    let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
+    let current_doc_slot: Slot<RwSignal<Option<DocumentId>>> = Rc::new(RefCell::new(None));
+    let relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)> =
         Rc::new(RefCell::new(None));
-    let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
-    let user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>> = Rc::new(RefCell::new(None));
-    let docs_slot: Rc<RefCell<Option<RwSignal<Vec<DocItem>>>>> = Rc::new(RefCell::new(None));
-    let members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>> = Rc::new(RefCell::new(None));
-    let devmode_slot: Rc<RefCell<Option<RwSignal<Option<landing::SignInMode>>>>> =
-        Rc::new(RefCell::new(None));
-    let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
-        Rc::new(RefCell::new(None));
-    let relays_slot: Rc<RefCell<Option<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>>> =
-        Rc::new(RefCell::new(None));
-    let style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>> = Rc::new(RefCell::new(None));
-    let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
-        Rc::new(RefCell::new(None));
+    let style_slot: Slot<trame_chrome::StyleState> = Rc::new(RefCell::new(None));
+    let chrome_status_slot: Slot<RwSignal<ChromeStatus>> = Rc::new(RefCell::new(None));
 
     // The Paste-button signal: the shell decodes an async clipboard read and
     // hands the transport to the host, which routes it to the active view

@@ -93,11 +93,9 @@ impl ToileRelay {
             // A fit or a find focus also answers `SelectionStats`, and its
             // bounds belong to that request. Only the band's own request
             // updates the band (`TOILE-UI-108`).
-            ToileEvent::SelectionStats(s) => {
-                if s.kind == StatsRequestKind::Band {
-                    self.sel_stats
-                        .set(Some(SelStats::from_reply(s.count, s.bounds)));
-                }
+            ToileEvent::SelectionStats(s) if s.kind == StatsRequestKind::Band => {
+                self.sel_stats
+                    .set(Some(SelStats::from_reply(s.count, s.bounds)));
             }
             ToileEvent::SlideChanged(c) => {
                 self.presenter_slide.set(c.position);
@@ -108,10 +106,10 @@ impl ToileRelay {
             // (`TOILE-UI-316`). The slide event alone seeds the editor, so
             // without this the writing would stay invisible until the slide
             // changed.
-            ToileEvent::NotesChanged { frame, notes } => {
-                if self.presenter_frame.get_untracked().as_ref() == Some(frame) {
-                    self.presenter_notes.set(notes.clone());
-                }
+            ToileEvent::NotesChanged { frame, notes }
+                if self.presenter_frame.get_untracked().as_ref() == Some(frame) =>
+            {
+                self.presenter_notes.set(notes.clone());
             }
             ToileEvent::PresentBroadcastChanged(b) => self.broadcasting.set(*b),
             ToileEvent::FollowingChanged(who) => self.following.set(*who),

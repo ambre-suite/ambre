@@ -94,14 +94,6 @@ impl WebFrames {
             place(&frame, e);
         }
     }
-
-    /// Take every frame down at once: the board is going away.
-    pub fn clear(&mut self, layer: &web_sys::HtmlElement) {
-        for (_, frame) in self.frames.drain() {
-            let _ = layer.remove_child(&frame);
-        }
-        self.urls.clear();
-    }
 }
 
 /// Build one sandboxed frame and attach it to `layer`. `None` if the document is
@@ -201,7 +193,7 @@ mod tests {
             frame.get_attribute("referrerpolicy").as_deref(),
             Some("no-referrer")
         );
-        frames.clear(&layer);
+        frames.sync(&layer, &[]);
         assert_eq!(layer.child_element_count(), 0);
     }
 }

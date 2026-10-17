@@ -90,7 +90,7 @@ pub use crate::ui::palette::{
 };
 
 use ambre_bus::DocType;
-use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
+use ambre_chrome::commands::Keymap;
 
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;

@@ -24,7 +24,6 @@
 // ============================================================================
 
 use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand, SecretBytes};
-use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 

@@ -15,7 +15,7 @@
 // ============================================================================
 
 use ambre_bus::{AppEvent, DocType, TrameEvent, UiEvent};
-use ambre_chrome::commands::{CommandId, Keymap, Locale};
+use ambre_chrome::commands::{Keymap, Locale};
 use ambre_chrome::{CommandStates, MenuEntry, Toasts};
 
 use super::icons;
