@@ -155,22 +155,6 @@ pub fn booted_kind(boot_is_toile: bool, boot_is_prose: bool) -> DocType {
     }
 }
 
-/// The browser tab's title. A tab carries no kind icon, so the name is
-/// composed with the generic kind label at the point of use (`CHROME-043`).
-///
-/// `doc` is the open document's kind and decrypted name; `None` is the
-/// landing. The result is for the tab alone and never stored (`CHROME-080`).
-pub fn tab_title(doc: Option<(DocType, Option<&str>)>) -> String {
-    let Some((doc_type, name)) = doc else {
-        return "Ambre".to_owned();
-    };
-    let label = doc_type.generic_label();
-    match name.map(str::trim) {
-        Some(n) if !n.is_empty() => format!("{n} - {label}"),
-        _ => format!("Untitled - {label}"),
-    }
-}
-
 // -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`, so even this pure path<->Route
 // mapping is only reachable on the wasm target. These run under node via the
@@ -179,27 +163,6 @@ pub fn tab_title(doc: Option<(DocType, Option<&str>)>) -> String {
 mod tests {
     use super::*;
     use wasm_bindgen_test::wasm_bindgen_test;
-
-    /// A tab composes the name with the generic kind label, never the brand
-    /// (`CHROME-043`). An unnamed document reads as untitled, not as the kind.
-    #[wasm_bindgen_test]
-    fn a_tab_title_composes_the_name_with_the_kind_label() {
-        let label = DocType::Trame.generic_label();
-        assert_ne!(label, DocType::Trame.name(), "the label is not the brand");
-        assert_eq!(
-            tab_title(Some((DocType::Trame, Some("Budget")))),
-            format!("Budget - {label}")
-        );
-        assert_eq!(
-            tab_title(Some((DocType::Trame, Some("  ")))),
-            format!("Untitled - {label}")
-        );
-        assert_eq!(
-            tab_title(Some((DocType::Trame, None))),
-            format!("Untitled - {label}")
-        );
-        assert_eq!(tab_title(None), "Ambre");
-    }
 
     #[wasm_bindgen_test]
     fn root_is_landing() {

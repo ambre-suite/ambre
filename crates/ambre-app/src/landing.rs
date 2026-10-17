@@ -28,7 +28,7 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use ambre_chrome::Toasts;
+use ambre_chrome::{ComposedName, Toasts};
 
 use crate::route;
 
@@ -125,7 +125,7 @@ pub fn landing_view(
     // The irreversible delete (E2EE: no server-side trash). A card only names
     // its target here; `DeleteConfirm` renders the name and holds the dispatch
     // behind its confirming action (`CHROME-041`).
-    let pending_delete = RwSignal::new(None::<(DocumentId, String)>);
+    let pending_delete = RwSignal::new(None::<(DocumentId, ComposedName)>);
 
     // Distinct clones for the two view sites (the `view!` macro's capture
     // analysis cannot share one binding across both closures).
@@ -314,7 +314,7 @@ fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    pending_delete: RwSignal<Option<(DocumentId, String)>>,
+    pending_delete: RwSignal<Option<(DocumentId, ComposedName)>>,
     booted: DocType,
 ) -> impl IntoView {
     let doc_type = d.doc_type;
@@ -422,12 +422,10 @@ fn doc_card(
                     title="Delete"
                     on:click=move |e| {
                         e.stop_propagation();
-                        let label = docs
-                            .get_untracked()
-                            .iter()
-                            .find(|x| x.document_id == id)
-                            .and_then(|x| x.name.clone())
-                            .unwrap_or_else(|| UNTITLED.to_owned());
+                        let label = docs.with_untracked(|list| {
+                            let doc = list.iter().find(|x| x.document_id == id);
+                            ComposedName::or_placeholder(doc.and_then(|x| x.name.as_deref()))
+                        });
                         pending_delete.set(Some((id, label)));
                     }
                 >
@@ -438,20 +436,20 @@ fn doc_card(
     }
 }
 
-/// What a card shows for a document never named (`CHROME-079`).
-const UNTITLED: &str = "Untitled";
-
 /// A card's name: the decrypted name (`CHROME-036`), or a dimmed placeholder.
 ///
 /// It takes the name alone, so no fallback can reach for the identifier or
-/// the kind (`CHROME-079`).
+/// the kind (`CHROME-079`). The text is a [`ComposedName`], which no rename
+/// can take back (`CHROME-080`).
 fn card_name(name: Option<String>) -> impl IntoView {
-    let class = if name.is_some() {
+    let named = name.as_deref().is_some_and(|n| !n.trim().is_empty());
+    let class = if named {
         "ambre-doc-name"
     } else {
         "ambre-doc-name ambre-doc-name-untitled"
     };
-    view! { <span class=class>{name.unwrap_or_else(|| UNTITLED.to_owned())}</span> }
+    let shown = ComposedName::or_placeholder(name.as_deref());
+    view! { <span class=class>{shown.into_view()}</span> }
 }
 
 /// The confirmation every delete passes through (`CHROME-041`).
@@ -462,7 +460,7 @@ fn card_name(name: Option<String>) -> impl IntoView {
 #[component]
 fn DeleteConfirm(
     /// The document a card asked to delete, with the name to confirm against.
-    pending: RwSignal<Option<(DocumentId, String)>>,
+    pending: RwSignal<Option<(DocumentId, ComposedName)>>,
     /// The dispatch, run with the confirmed document.
     on_confirm: Callback<DocumentId>,
 ) -> impl IntoView {
@@ -480,7 +478,7 @@ fn DeleteConfirm(
             <h3>"Delete document?"</h3>
             <p>
                 "\""
-                {move || pending.get().map(|(_, label)| label).unwrap_or_default()}
+                {move || pending.get().map(|(_, label)| label.into_view())}
                 "\" will be permanently deleted. This cannot be undone."
             </p>
             <div class="ambre-confirm-actions">
@@ -827,10 +825,10 @@ mod tests {
 
         let unnamed = mount_in_container(|| card_name(None));
         let span = unnamed.query_selector(".ambre-doc-name").unwrap().unwrap();
-        assert_eq!(span.text_content().as_deref(), Some(UNTITLED));
+        assert_eq!(span.text_content().as_deref(), Some("Untitled"));
         assert!(span.class_name().contains("ambre-doc-name-untitled"));
         for &kind in DocType::creatable() {
-            assert_ne!(UNTITLED, kind.generic_label(), "never the kind's word");
+            assert_ne!("Untitled", kind.generic_label(), "never the kind's word");
         }
         unnamed.remove();
     }
@@ -844,7 +842,7 @@ mod tests {
     async fn a_delete_waits_for_the_confirmation_on_the_name() {
         let owner = Owner::new();
         owner.set();
-        let pending = RwSignal::new(None::<(DocumentId, String)>);
+        let pending = RwSignal::new(None::<(DocumentId, ComposedName)>);
         let confirmed = RwSignal::new(Vec::<DocumentId>::new());
         let on_confirm = Callback::new(move |id| confirmed.update(|v| v.push(id)));
         let container = mount_in_container(move || {
@@ -864,7 +862,8 @@ mod tests {
         };
 
         let id = DocumentId::new();
-        pending.set(Some((id, "Payroll".to_owned())));
+        let payroll = || ComposedName::or_placeholder(Some("Payroll"));
+        pending.set(Some((id, payroll())));
         leptos::task::tick().await;
         assert!(dialog.open(), "a delete opens the confirmation");
         let text = dialog.text_content().unwrap_or_default();
@@ -883,7 +882,7 @@ mod tests {
             "cancel dispatches nothing"
         );
 
-        pending.set(Some((id, "Payroll".to_owned())));
+        pending.set(Some((id, payroll())));
         leptos::task::tick().await;
         click(&button("ambre-btn-danger"));
         tick().await;

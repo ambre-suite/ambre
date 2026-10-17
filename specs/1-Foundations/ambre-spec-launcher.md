@@ -26,10 +26,10 @@ other five documents of the DOM side.
 | `CHROME-035` | `INV` | The home screen MUST list every kind of document through one view: it MUST NOT belong to an application. | this spec section 2 | `ambre_app::landing::tests::creatable_types_round_trip_through_doc_path` -- every creatable kind walks one path builder and one parser, so a kind the view named separately would not round-trip | none | verified |
 | `CHROME-038` | `INV` | The kind picker MUST offer exactly the kinds whose engine can be instantiated, naming no kind of its own. | this spec section 2 | `ambre_app::landing::tests::picker_lists_creatable_types_and_reports_pick` -- the picker mounted in a real document carries one entry per creatable kind in order under its generic label, and the pick is reported | none | verified |
 | `CHROME-044` | `INV` | The home screen MUST perform no cryptography: a name MUST reach it already decrypted. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `UI-THREAD-004` | cargo-deny -- `deny.toml` lets only `ambre-sync` and `ambre-logic` declare `ambre-crypto`, and only the crypto wrappers declare a cipher, so the page's crate cannot name one | none | verified |
-| `CHROME-080` | `INV` | A composed name MUST NOT be stored. | this spec section 2; `ambre-spec-zero-knowledge.md` | none | unheld -- a composed name is a `String` like a typed one, and a rename sent with it compiles and passes every test. A type the composition returns, which converts to no `String` and serializes to nothing, makes a stored one fail to compile; lands with the `A composed name the type refuses to store` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-080` | `INV` | A composed name MUST NOT be stored. | this spec section 2; `ambre-spec-zero-knowledge.md` | type-level -- every composition returns a `ComposedName`, with no `Debug`, no `Display`, no `AsRef<str>` and no `Into<String>`, in a crate that takes no `serde`. Its four `compile_fail` doctests show a conversion refused, and its text reaches the tab title and a view alone; `ambre_chrome::composed::tests::only_a_missing_or_blank_name_is_the_placeholder`; ci-gate -- `scripts/crate_boundaries.py` refuses the placeholder spelled outside `composed.rs`, so no composition can be rebuilt as a `String` | none | verified |
 | `CHROME-036` | `OBS` | A card MUST show the document's decrypted name. | this spec section 2; `ambre-spec-zero-knowledge.md` | `ambre_app::landing::tests::a_card_shows_the_name_or_the_placeholder` -- a named card mounted and read back | none | verified |
 | `CHROME-079` | `OBS` | An unnamed document MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | `ambre_app::landing::tests::a_card_shows_the_name_or_the_placeholder` -- an unnamed card reads the placeholder, which is no creatable kind's word | none | verified |
-| `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | `ambre_app::route::tests::a_tab_title_composes_the_name_with_the_kind_label` -- the one function the tab title is set from | none | verified |
+| `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | `ambre_chrome::composed::tests::a_tab_title_composes_the_name_with_the_kind_label` -- the one function the tab title is set from | none | verified |
 | `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | `ambre_app::landing::tests::the_sign_in_waits_for_the_answer` -- the panel mounted with no answer shows neither route, then the answer shows its own | none | verified |
 | `CHROME-099` | `OBS` | The recovery words MUST be shown once, at the setup, and be readable nowhere afterwards. | this spec section 2; `ambre-spec-zero-knowledge.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
 
@@ -90,10 +90,10 @@ The provider says who the person is; a passphrase opens their keys, or a setup c
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 19 `verified`, 1 `untested`, 4 `unimplemented`. What holds is what a pure
-  function or one mounted control carries, and what a scan of the source refuses. Creation is held
-  by the gate that keeps the named command off the page. Where a composed name goes is held by
-  nothing yet (`CHROME-080`).
+* **Verification.** 20 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+  mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
+  keeps the named command off the page. A composed name is held by its type, which converts to no
+  `String` (`CHROME-080`).
 ---
 
 ## 2. MODEL

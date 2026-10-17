@@ -42,7 +42,7 @@
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 19 | 1 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 |  |
-| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 | 1 |
+| `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 24 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 28 |  |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 952 contract rows, 9 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 952 contract rows, 8 loose.**

@@ -113,6 +113,10 @@ Sync queue.
 scroll all come from `kinetic.rs`. A second copy of the model needs a decay,
 a friction or a velocity of its own. So no Rust line outside that file names
 one above its tests.
+
+**One composed name** (`CHROME-080`). The placeholder of an unnamed document
+is spelled in `composed.rs` alone, whose type converts to no `String`. So no
+Rust line outside that file spells it above its tests.
 """
 
 from __future__ import annotations
@@ -382,6 +386,11 @@ FRAME_RATE = re.compile(r"(?<![a-z])fps(?![a-z])|frames?[_ ]?per[_ ]?second|fram
 
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
+
+# The one file that composes a document's name for display, and the placeholder
+# a composition outside it would spell again.
+COMPOSED_NAME = "crates/ambre-chrome/src/composed.rs"
+PLACEHOLDER = re.compile(r'"Untitled(?:"| - )')
 
 # The structs holding the shell's signals: the launcher's wiring and each
 # application's relay. A signal's payload names a piece of interface state.
@@ -1271,6 +1280,27 @@ def check_kinetic_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def check_composed_names(errors: list[str]) -> int:
+    """`CHROME-080`: no Rust line outside `composed.rs` spells the placeholder.
+
+    A composition there returns a `ComposedName`, which converts to no
+    `String`. One spelled elsewhere would be a `String` a rename takes.
+    """
+    if not PLACEHOLDER.search(read(COMPOSED_NAME)):
+        errors.append(f"{COMPOSED_NAME}: spells no placeholder, so the composed-name boundary holds nothing")
+        return 0
+    files = rust_files()
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == COMPOSED_NAME:
+            continue
+        for number, line in above_tests(path):
+            found = PLACEHOLDER.search(line)
+            if found:
+                errors.append(f"{rel}:{number}: a name composed outside `composed.rs`: `{found.group(0)}`")
+    return len(files)
+
+
 def struct_fields(lines: list[tuple[int, str]]) -> list[tuple[str, int, str, str]]:
     """Each named field of each braced struct: the struct, the line, the field
     and its type. An attribute line or a field spread over lines is skipped."""
@@ -1390,6 +1420,7 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    composed = check_composed_names(errors)
     copies = check_one_copy(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
@@ -1422,6 +1453,7 @@ def main() -> int:
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
+        f"{composed} Rust files read for a name composed outside its type, "
         f"{copies} view files read for a second copy of a signal's state, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
@@ -1455,7 +1487,8 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, no view "
+            "relay logs no payload, one file holds the kinetic model, one file "
+            "composes a document's name, no view "
             "holds the state a shell signal holds, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "

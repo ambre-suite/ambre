@@ -80,6 +80,7 @@ def scratch(tmp: str) -> Path:
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
+    write(root, cb.COMPOSED_NAME, 'const UNTITLED: &str = "Untitled";\n')
     for rel, holder in cb.SIGNAL_HOLDERS.items():
         path = root / rel
         held = path.read_text() if path.exists() else ""
@@ -132,6 +133,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_composed_names(errors)
             cb.check_one_copy(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
@@ -689,6 +691,19 @@ class CrateBoundaries(unittest.TestCase):
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
+
+    def test_a_name_composed_outside_its_type_is_refused(self):
+        for line in ('let t = format!("Untitled - {label}");\n', 'let n = name.unwrap_or("Untitled");\n'):
+            errors = self.breach("crates/ambre-app/src/landing.rs", line)
+            self.assertTrue(any("composed outside" in e for e in errors), (line, errors))
+
+    def test_a_frame_placeholder_or_a_comment_stays_free(self):
+        text = '// An unnamed card shows "Untitled".\nlet l = "Untitled frame";\n'
+        self.assertEqual(self.breach("crates/ambre-toile/src/chrome/choosers.rs", text), [])
+
+    def test_a_composed_name_file_spelling_no_placeholder_is_an_error_not_a_pass(self):
+        errors = self.breach(cb.COMPOSED_NAME, "pub struct ComposedName(String);\n")
+        self.assertTrue(any("holds nothing" in e for e in errors), errors)
 
     def test_a_view_field_holding_a_signals_state_is_refused(self):
         for field in ("stats: SelStats,", "pub(crate) last: Option<crate::chrome::SelStats>,", "seen: Vec<Rc<SelStats>>,"):

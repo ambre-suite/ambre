@@ -43,8 +43,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ContextMenu, Dialog, FormulaBar, Header, StatusBar, Tabs, ToastHost,
-    Toasts, Toolbar,
+    AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, StatusBar,
+    Tabs, ToastHost, Toasts, Toolbar,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -1060,7 +1060,7 @@ pub fn main() {
     let route_tx = ui_to_logic_tx.clone();
     let route_raf = raf.clone();
     let mut prev_route: Option<route::Route> = None;
-    let mut last_title: Option<String> = None;
+    let mut last_title: Option<ComposedName> = None;
 
     let pre_frame = move || {
         let cur_route = route::current();
@@ -1101,9 +1101,9 @@ pub fn main() {
             prev_route = Some(cur_route);
         }
 
-        // Browser tab title (`route::tab_title`). Recomputed each frame so a
-        // rename or a late-arriving document list updates the tab; the DOM
-        // write happens only when the title changes.
+        // Browser tab title (`ComposedName::tab_title`). Recomputed each frame
+        // so a rename or a late-arriving document list updates the tab; the
+        // DOM write happens only when the title changes.
         let title = match cur_doc {
             Some((doc_type, document_id)) => {
                 let name = docs.with_untracked(|list| {
@@ -1111,13 +1111,13 @@ pub fn main() {
                         .find(|d| d.document_id == document_id)
                         .and_then(|d| d.name.clone())
                 });
-                route::tab_title(Some((doc_type, name.as_deref())))
+                ComposedName::tab_title(Some((doc_type.generic_label(), name.as_deref())))
             }
-            None => route::tab_title(None),
+            None => ComposedName::tab_title(None),
         };
-        if last_title.as_deref() != Some(title.as_str()) {
+        if last_title.as_ref() != Some(&title) {
             if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                doc.set_title(&title);
+                title.set_as_title(&doc);
             }
             last_title = Some(title);
         }

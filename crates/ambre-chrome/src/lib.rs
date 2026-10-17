@@ -17,6 +17,7 @@
 //   - shortcut     -- keybinding presentation (the <Kbd> component)
 //   - app_shell    -- CSS-grid shell: header, command bar, status bar, canvas
 //   - command      -- command-state store + keybinding manager
+//   - composed     -- a name composed for display, which converts to no `String`
 //   - dialog       -- native <dialog> modal (rAF-suspending)
 //   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
 //   - menu         -- the key map every menu shares, and two-state ARIA values
@@ -33,6 +34,7 @@ pub use ambre_commands as commands;
 mod app_shell;
 mod color;
 mod command;
+mod composed;
 mod context_menu;
 mod debounce;
 mod dialog;
@@ -49,6 +51,7 @@ mod toast;
 pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
 pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
+pub use composed::ComposedName;
 pub use context_menu::{ContextMenu, MenuEntry, MenuItem};
 pub use debounce::{DRAG_DEBOUNCE, Debouncer};
 pub use dialog::{Dialog, ModalHold};

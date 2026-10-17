@@ -12,7 +12,7 @@
 
 use ambre_bus::app::toile::LinkTarget;
 use ambre_bus::{DocType, DocumentId};
-use ambre_chrome::Dialog;
+use ambre_chrome::{ComposedName, Dialog};
 use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
@@ -208,9 +208,10 @@ pub fn ToileChoosers(
     }
 }
 
-/// A document's name as a chooser lists it.
-fn label(doc: &DocChoice) -> String {
-    doc.name.clone().unwrap_or_else(|| "Untitled".to_owned())
+/// A document's name as a chooser lists it, which no rename takes back
+/// (`CHROME-080`).
+fn label(doc: &DocChoice) -> impl IntoView + use<> {
+    ComposedName::or_placeholder(doc.name.as_deref()).into_view()
 }
 
 /// Resolve what the user typed into an address the board may hold, and place
