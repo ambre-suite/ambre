@@ -38,7 +38,7 @@
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 24 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 19 |  |
-| `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 | 2 |
+| `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 | 1 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 19 | 1 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 28 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 953 contract rows, 6 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 953 contract rows, 5 loose.**

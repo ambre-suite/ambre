@@ -80,6 +80,7 @@ def scratch(tmp: str) -> Path:
     write(root, cb.PIPE, 'fn create() {\n    for (k, v) in [("tabindex", "0")] {}\n}\n')
     write(root, f"{cb.RELAY}/ws.rs", 'fn put() {\n    tracing::info!(seq, len = payload.len(), "update {doc_id}");\n}\n')
     write(root, cb.KINETIC_MODEL, "pub const DECAY_MS: f64 = 325.0;\n")
+    write(root, cb.DRAW_TRAIT, "pub trait DrawSurface {\n    fn fill_rect(&mut self, rect: Rect, color: Color);\n}\n")
     write(root, cb.COMPOSED_NAME, 'const UNTITLED: &str = "Untitled";\n')
     for rel, holder in cb.SIGNAL_HOLDERS.items():
         path = root / rel
@@ -133,6 +134,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_accessibility(errors)
             cb.check_payload_logs(errors)
             cb.check_kinetic_copy(errors)
+            cb.check_primitives(errors)
             cb.check_composed_names(errors)
             cb.check_one_copy(errors)
             cb.check_bench_frame_rate(errors)
@@ -715,6 +717,30 @@ class CrateBoundaries(unittest.TestCase):
     def test_the_kinetic_model_named_from_a_view_stays_free(self):
         text = "// A flick decays through `Kinetic`.\nfn fling(k: &mut Kinetic) { k.step(dt); }\n"
         self.assertEqual(self.breach("crates/ambre-toile/src/ui/pan.rs", text), [])
+
+    def test_a_primitive_taking_screen_state_is_refused(self):
+        for signature, said in (
+            ("fn fill_rect(&mut self, rect: Rect, color: Color, density: f32);", "neither geometry nor paint"),
+            ("fn stroke_rect(&mut self, rect: Rect, frame: &FrameStats);", "neither geometry nor paint"),
+            ("fn stroke_line(&mut self, x0: f64, zoom: f64);", "bare number `zoom`"),
+        ):
+            errors = self.breach(cb.DRAW_TRAIT, f"pub trait DrawSurface {{\n    {signature}\n}}\n")
+            self.assertTrue(any(said in e for e in errors), (signature, errors))
+
+    def test_a_primitive_split_over_lines_with_a_glyph_run_stays_free(self):
+        text = (
+            "pub trait DrawSurface {\n"
+            "    // A density read here would be the back end's (`CANVAS-056`).\n"
+            "    fn draw_glyphs(\n        &mut self,\n        run: &GlyphRun<'_, ParleyBrush>,\n"
+            "        brush: &Brush,\n        transform: Affine,\n    );\n"
+            "    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}\n"
+            "}\n\nfn density(scale: f32) {}\n"
+        )
+        self.assertEqual(self.breach(cb.DRAW_TRAIT, text), [])
+
+    def test_a_drawing_crate_without_the_trait_is_an_error_not_a_pass(self):
+        errors = self.breach(cb.DRAW_TRAIT, "pub struct Rect;\n")
+        self.assertTrue(any("holds nothing" in e for e in errors), errors)
 
     def test_a_name_composed_outside_its_type_is_refused(self):
         for line in ('let t = format!("Untitled - {label}");\n', 'let n = name.unwrap_or("Untitled");\n'):

@@ -410,6 +410,15 @@ FRAME_RATE = re.compile(r"(?<![a-z])fps(?![a-z])|frames?[_ ]?per[_ ]?second|fram
 KINETIC_MODEL = "crates/ambre-draw/src/kinetic.rs"
 KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|damping)\w*\b", re.IGNORECASE)
 
+# The drawing trait, and the closed list a primitive's parameters are held to.
+# A bare number is geometry only under a coordinate or a width name, so a
+# `density: f64` is refused although its type is listed.
+DRAW_TRAIT = "crates/ambre-draw/src/lib.rs"
+DRAW_TRAIT_OPEN = re.compile(r"^pub trait DrawSurface\b")
+PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
+PRIMITIVE_TYPES = {"Rect", "Color", "f64", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun", "ImageSource"}
+NUMBER_NAMES = {"x0", "y0", "x1", "y1", "width"}
+
 # The one file that composes a document's name for display, and the placeholder
 # a composition outside it would spell again.
 COMPOSED_NAME = "crates/ambre-chrome/src/composed.rs"
@@ -1319,6 +1328,36 @@ def check_kinetic_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def check_primitives(errors: list[str]) -> int:
+    """`CANVAS-056`: every parameter of a drawing primitive is geometry or paint.
+
+    The trait body is read up to its closing brace, comments removed, so a
+    signature split over lines is read whole."""
+    lines = read(DRAW_TRAIT).splitlines()
+    start = next((i for i, line in enumerate(lines) if DRAW_TRAIT_OPEN.match(line)), None)
+    if start is None:
+        errors.append(f"{DRAW_TRAIT}: no `DrawSurface` trait, so the primitive boundary holds nothing")
+        return 0
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("}")), len(lines))
+    body = "\n".join(code(line) for line in lines[start + 1 : end])
+    held = 0
+    for name, params in PRIMITIVE.findall(body):
+        held += 1
+        for param in params.split(","):
+            if ":" not in param:
+                continue
+            label, kind = (part.strip() for part in param.split(":", 1))
+            idents = set(re.findall(r"(?<!')\b[A-Za-z_]\w*", kind)) - {"mut", "_"}
+            foreign = sorted(idents - PRIMITIVE_TYPES)
+            if foreign:
+                errors.append(f"{DRAW_TRAIT}: `{name}` takes `{label}: {kind}`, which is neither geometry nor paint")
+            elif kind == "f64" and label not in NUMBER_NAMES:
+                errors.append(f"{DRAW_TRAIT}: `{name}` takes a bare number `{label}`, not a coordinate or a width")
+    if not held:
+        errors.append(f"{DRAW_TRAIT}: the `DrawSurface` trait declares no primitive, so the boundary holds nothing")
+    return held
+
+
 def check_composed_names(errors: list[str]) -> int:
     """`CHROME-080`: no Rust line outside `composed.rs` spells the placeholder.
 
@@ -1459,6 +1498,7 @@ def main() -> int:
     access = check_accessibility(errors)
     relay_logs = check_payload_logs(errors)
     kinetic = check_kinetic_copy(errors)
+    primitives = check_primitives(errors)
     composed = check_composed_names(errors)
     copies = check_one_copy(errors)
     benches = check_bench_frame_rate(errors)
@@ -1492,6 +1532,7 @@ def main() -> int:
         f"{access} UI files read for a silent state, a panel modal, a mute menu or a hidden pipe, "
         f"{relay_logs} relay files read for a payload in a log line, "
         f"{kinetic} Rust files read for a second kinetic model, "
+        f"{primitives} drawing primitives read for a screen-only parameter, "
         f"{composed} Rust files read for a name composed outside its type, "
         f"{copies} view files read for a second copy of a signal's state, "
         f"{benches} fixture benchmarks read for a frame rate, "
@@ -1526,7 +1567,8 @@ def main() -> int:
             "alone hashes a key, an invitation waits on the trust decision, a "
             "two-state attribute says false, only the shared dialog is a "
             "modal, a menu answers the keyboard, the pipe stays reachable, the "
-            "relay logs no payload, one file holds the kinetic model, one file "
+            "relay logs no payload, one file holds the kinetic model, a drawing "
+            "primitive takes geometry and paint alone, one file "
             "composes a document's name, no view "
             "holds the state a shell signal holds, a fixture "
             "benchmark reports no frame rate, the page "

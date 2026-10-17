@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
 | `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate-graph -- `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | none | verified |
-| `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | none | unheld -- nothing reads the parameter types of the trait, so a primitive taking a density or a frame number compiles. A gate that holds every parameter to a closed list of geometry and paint types reaches it; lands with the `One walk the screen and the page share` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, reads every method of `DrawSurface` and refuses a parameter whose type is not a rectangle, a colour, an affine, a path, a stroke, a brush, a glyph run or an image. It refuses a bare number not named as a coordinate or a width, so a `density: f64` fails though its type is listed | none | verified |
 | `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a Rust line naming `krilla` or `ambre_pdf` outside `crates/ambre-pdf/` and the `src/logic/` directories | none | verified |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level -- each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | none | verified |
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). Every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
@@ -55,9 +55,9 @@ or a page, and the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
   what a plaintext export owes them.
-* **Verification.** 10 `verified`, 2 `untested`, 4 `unimplemented`. The crate graph, the compiler
-  and a source gate hold most of it; a test walks one board onto the page and the screen. Nothing
-  keeps screen state out of the walk yet (`CANVAS-056`, `CANVAS-074`). A back end may read the
+* **Verification.** 11 `verified`, 1 `untested`, 4 `unimplemented`. The crate graph, the compiler
+  and two source gates hold most of it; a test walks one board onto the page and the screen.
+  Nothing keeps screen state out of the walk yet (`CANVAS-074`). A back end may read the
   screen to rasterize, a density for a tolerance, since that changes the pixels and not the calls.
 
 ---

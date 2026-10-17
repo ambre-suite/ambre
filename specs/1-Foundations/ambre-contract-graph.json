@@ -521,7 +521,6 @@
   {"edge": "cites-section", "from": "CANVAS-055", "section": "2", "to": "1-Foundations/ambre-spec-drawing-surface.md"},
   {"edge": "cites-document", "from": "CANVAS-055", "section": "5", "to": "ambre-spec-budgets.md"},
   {"edge": "cites-section", "from": "CANVAS-056", "section": "2", "to": "1-Foundations/ambre-spec-drawing-surface.md"},
-  {"edge": "lands-with", "from": "CANVAS-056", "to": "One walk the screen and the page share"},
   {"edge": "cites-section", "from": "CANVAS-028", "section": "2", "to": "1-Foundations/ambre-spec-drawing-surface.md"},
   {"edge": "cites-section", "from": "CANVAS-030", "section": "2", "to": "1-Foundations/ambre-spec-drawing-surface.md"},
   {"edge": "cites-section", "from": "CANVAS-061", "section": "2", "to": "1-Foundations/ambre-spec-drawing-surface.md"},
