@@ -184,6 +184,7 @@ test-wasm:
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-chrome
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-toile
     # The Prose unit tests are host-only (proptest, shaped fixtures): the chrome test alone.
+    # `wasm-pack` builds the lib test target anyway; the crate root empties it on wasm.
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-prose --test chrome_panel
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-logic
     RUSTFLAGS="-Awarnings -C debuginfo=0" wasm-pack test --headless --chrome crates/ambre-app
