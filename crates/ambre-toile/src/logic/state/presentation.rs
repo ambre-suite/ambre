@@ -715,12 +715,6 @@ mod pdf_tests {
             .expect("shape creation yields an id")
     }
 
-    /// `r` mapped through `a`, the camera's scale and translate, as the page
-    /// maps its clip.
-    fn mapped(a: kurbo::Affine, r: kurbo::Rect) -> kurbo::Rect {
-        kurbo::Rect::from_points(a * Point::new(r.x0, r.y0), a * Point::new(r.x1, r.y1))
-    }
-
     /// Record one page onto a surface that keeps every op.
     fn record(page: &crate::logic::interop::PdfPage) -> ambre_draw::testing::RecordingSurface {
         let mut s = ambre_draw::testing::RecordingSurface::new();
@@ -761,13 +755,16 @@ mod pdf_tests {
                 .any(|n| matches!(n, DisplayNode::Element(e) if e.id == near)),
             "the neighbour is in view of the page camera"
         );
-        let to_page = page.camera.world_to_screen();
-        let frame = mapped(to_page, st.bounds_of(&a).expect("frame bounds"));
-        let neighbour = mapped(to_page, st.bounds_of(&near).expect("shape bounds"));
+        // The walk clips in board units, under the page camera.
+        let frame = st.bounds_of(&a).expect("frame bounds");
+        let neighbour = st.bounds_of(&near).expect("shape bounds");
 
         let ops = record(page);
-        let Some(DrawOp::PushClip { rect }) = ops.ops().first() else {
-            panic!("the page opens with its clip: {:?}", ops.ops());
+        let Some(rect) = ops.ops().iter().find_map(|op| match op {
+            DrawOp::PushClip { rect } => Some(rect),
+            _ => None,
+        }) else {
+            panic!("the page carries a clip: {:?}", ops.ops());
         };
         assert_eq!(*rect, frame, "the clip is the frame rect");
         assert!(

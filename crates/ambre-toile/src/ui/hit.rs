@@ -84,16 +84,8 @@ pub fn ellipse_contains(bounds: Rect, local: Point) -> bool {
     nx * nx + ny * ny <= 1.0
 }
 
-/// The Phase-0 triangle inscribed in `bounds`: apex at the top-center, base along
-/// the bottom edge. Kept identical to the renderer so hit-test matches paint.
-pub fn triangle_path(bounds: Rect) -> BezPath {
-    let mut p = BezPath::with_capacity(4);
-    p.move_to((bounds.center().x, bounds.y0));
-    p.line_to((bounds.x1, bounds.y1));
-    p.line_to((bounds.x0, bounds.y1));
-    p.close_path();
-    p
-}
+/// The triangle the walk paints, so hit-test matches paint.
+pub use super::walk::triangle_path;
 
 /// How far from its outline a stroke of width `stroke_w` is hit: half its
 /// width, and never less than the pointer's reach `pick`.

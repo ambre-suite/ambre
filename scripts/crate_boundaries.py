@@ -121,6 +121,12 @@ Rust line outside that file spells it above its tests.
 **An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
 two strings swap without a compile error. So no field of `ambre-bus` named
 `id`, `*_id` or `*_ids` carries a bare string or integer above its tests.
+
+**A walk reads no screen state** (`CANVAS-074`). The screen and the page draw
+one walk per application, so a walk that reached the screen would print a
+caret, a selection or a zoom on the page. A file that implements
+`DocumentWalk` reaches only the modules its crate lists below, and names no
+type of the screen's state above its tests.
 """
 
 from __future__ import annotations
@@ -486,6 +492,30 @@ ONE_COPY_ACCEPTED = {
         "the selection's common style, which the inspector shows; the restyle signal carries an edit"
     ),
 }
+# The modules a walk may reach, per application crate, and why each holds no
+# screen state (`CANVAS-074`). A module not listed is refused, so a new reach
+# is a reviewed line here.
+WALK_REACH = {
+    "ambre-prose": {
+        "crate::layout::run": "the shaped runs the page lays out",
+        "crate::view::cache": "the run cache, keyed by block and holding no camera",
+        "crate::view": "the highlight types the block paints carry",
+    },
+    "ambre-trame": {
+        "crate": "the sheet's dimensions",
+        "crate::render": "the sheet's layout and cell drawing, in sheet coordinates",
+    },
+    "ambre-toile": {
+        "crate::logic::animate": "the presented element's animated state",
+        "crate::ui::label": "the label geometry, in board units",
+    },
+}
+WALK_IMPL = re.compile(r"\bimpl\b[^{;]*\bDocumentWalk\s+for\b")
+WALK_PATH = re.compile(r"\b(?:crate|super|self)(?:::(?:\w+|\*))+")
+WALK_USE = re.compile(r"\buse\s+((?:crate|super|self)::[^;]*);", re.S)
+SCREEN_STATE = re.compile(
+    r"\b(?:\w*UiState|Viewport|ViewportTransform|TextEditor|CursorPosition|Clock|device_pixel_ratio)\b"
+)
 # The bus crate, whose identifier fields each carry a type of their own
 # (`BUS-029`).
 BUS = "crates/ambre-bus/src"
@@ -1755,6 +1785,79 @@ def check_bench_frame_rate(errors: list[str]) -> int:
     return held
 
 
+def module_of(path: Path) -> list[str]:
+    """The module path of a Rust file, given relative to its crate's `src`."""
+    segments = list(path.parts)
+    last = segments.pop()
+    if last not in ("lib.rs", "main.rs", "mod.rs"):
+        segments.append(last.removesuffix(".rs"))
+    return ["crate", *segments]
+
+
+def resolve(path: str, here: list[str]) -> str:
+    """An absolute module path for a `crate::`, `super::` or `self::` path
+    read in the module `here`, its last segment dropped as the item named."""
+    segments = path.split("::")[:-1]
+    out = list(here)
+    if segments and segments[0] == "crate":
+        out, segments = ["crate"], segments[1:]
+    while segments and segments[0] in ("super", "self"):
+        if segments.pop(0) == "super":
+            out.pop()
+    return "::".join(out + segments)
+
+
+def use_paths(text: str) -> list[str]:
+    """Each path a `use` names, its braces expanded one level at a time."""
+    paths: list[str] = []
+    for found in WALK_USE.finditer(text):
+        pending = [re.sub(r"\s+", "", found.group(1))]
+        while pending:
+            path = pending.pop()
+            if "{" not in path:
+                paths.append(path.split(" as ")[0])
+                continue
+            head, body = path.split("{", 1)
+            body = body[: body.rindex("}")]
+            depth, start = 0, 0
+            for i, ch in enumerate(body + ","):
+                depth += {"{": 1, "}": -1}.get(ch, 0)
+                if ch == "," and depth == 0:
+                    item = body[start:i]
+                    if item:
+                        pending.append(head + item)
+                    start = i + 1
+    return paths
+
+
+def check_walks(errors: list[str]) -> int:
+    """`CANVAS-074`: a walk reaches the modules its crate lists and names no
+    screen state above its tests."""
+    held = 0
+    for crate, reach in WALK_REACH.items():
+        src = ROOT / CRATES / crate / "src"
+        walks = [p for p in sorted(src.rglob("*.rs")) if any(WALK_IMPL.search(line) for _, line in above_tests(p))]
+        if not walks:
+            errors.append(f"{CRATES}/{crate}: no `DocumentWalk` implementation read, so the walk boundary holds nothing")
+        for path in walks:
+            held += 1
+            rel = path.relative_to(ROOT).as_posix()
+            here = module_of(path.relative_to(src))
+            lines = above_tests(path)
+            text = "\n".join(line for _, line in lines)
+            reached = {resolve(p, here) for p in use_paths(text)}
+            for number, line in lines:
+                if line.lstrip().startswith(("use ", "pub use ")):
+                    continue
+                reached.update(resolve(p, here) for p in WALK_PATH.findall(line))
+                found = SCREEN_STATE.search(line)
+                if found:
+                    errors.append(f"{rel}:{number}: the walk names screen state: `{found.group(0)}`")
+            for module in sorted(reached - set(reach) - {"::".join(here)}):
+                errors.append(f"{rel}: the walk reaches `{module}`, which `WALK_REACH` does not list")
+    return held
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a breach")
@@ -1798,6 +1901,7 @@ def main() -> int:
     handlers = check_handlers(errors)
     latches = check_failure_latches(errors)
     exits = check_exit_writes(errors)
+    walks = check_walks(errors)
     print(
         f"{manifests} manifests read for the fixture feature, "
         f"{generators} generator functions read for CRDT calls, "
@@ -1835,7 +1939,8 @@ def main() -> int:
         f"{engine} launcher files read for a second engine or a relay out of the frame, "
         f"{handlers} engine files read for a handler that sends on a queue, "
         f"{latches} launcher files read for a failure that waits on a queue, "
-        f"{exits} build and thread files read for a write on the way out"
+        f"{exits} build and thread files read for a write on the way out, "
+        f"{walks} walks read for a screen module or screen state"
     )
     for line in errors:
         print(f"  {line}")
@@ -1873,7 +1978,7 @@ def main() -> int:
             "starts one engine, and every frame relays before it draws. A command "
             "handler returns an outcome and names no queue. A panic and a failed "
             "worker each latch the fatal screen without a queue, and a failing thread "
-            "writes nothing on its way out.",
+            "writes nothing on its way out. A walk reaches no screen state.",
             file=sys.stderr,
         )
         return 1

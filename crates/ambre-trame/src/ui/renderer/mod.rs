@@ -259,6 +259,74 @@ mod tests {
         )
     }
 
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
+
+        /// Whatever the zoom, the scroll and the canvas size, the cells layer
+        /// draws the sheet's walk for the region it shows, call for call
+        /// (`CANVAS-074`). The dirty veil and the error marker are drawn
+        /// apart. The surface exposes no density, so the walk cannot read one.
+        #[test]
+        fn the_screen_draws_the_walk_at_any_camera(
+            zoom in 0.5f64..2.0,
+            left_col in 0u32..6,
+            top_row in 0u32..6,
+            width in 300.0f64..1600.0,
+            height in 300.0f64..1200.0,
+        ) {
+            use crate::render::{SheetView, SheetWalk};
+            use ambre_draw::DocumentWalk;
+
+            let mut state = fixture(&[
+                (2, 2, "wide text that overflows"),
+                (3, 4, "12"),
+                (4, 3, "merged"),
+                (6, 6, "x"),
+                (9, 1, "hidden"),
+            ]);
+            state.cell_cache.get_mut(&(4, 3)).unwrap().merge_span = Some((2, 2));
+            state.col_widths.insert(3, 150.0);
+            state.row_heights.insert(5, 44.0);
+            state.hidden_rows = vec![9];
+            state.dirty_cells.insert((2, 2));
+            state.resize(width, height);
+            state.set_zoom(zoom);
+            state.left_col = left_col;
+            state.top_row = top_row;
+            let palette = Theme::Light.palette();
+            let (mut screen, clock, mut font_cx, mut cache, mut stats) = harness();
+            draw_cells(
+                &mut screen, &state, palette, &mut font_cx, &mut cache, true, None, &clock,
+                &mut stats,
+            );
+
+            let cell_area = Rect::new(
+                state.header_w(),
+                state.header_h(),
+                state.canvas_width,
+                state.grid_bottom(),
+            );
+            let region = cells::sheet_camera(&state)
+                .inverse()
+                .transform_rect_bbox(cell_area);
+            let cells = cells::CacheCells(&state.cell_cache);
+            let view = SheetView {
+                cells: &cells,
+                axes: cells::sheet_axes(&state),
+                palette,
+                text_enabled: true,
+            };
+            let mut walked = RecordingSurface::new();
+            SheetWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut cache,
+                cells_drawn: 0,
+            }
+            .walk(&view, region, &mut walked);
+            proptest::prop_assert!(screen.holds_walk(&walked));
+        }
+    }
+
     /// A border the user did not colour follows the active theme (`TRAME-101`):
     /// its stroke is the palette's `cell_border`, and the two themes differ.
     #[test]
@@ -435,9 +503,14 @@ mod tests {
         );
 
         // The merge pass strokes the span's outer border with the grid colour as
-        // a rect (the per-cell separators are only ever stroked as lines).
-        let layout = screen_layout(&state);
-        let span_rect = layout.merge_rect(0, 0, 2, 2);
+        // a rect (the per-cell separators are only ever stroked as lines). The
+        // walk draws in sheet coordinates: the camera maps the span onto the
+        // screen layout's rect.
+        let span_rect = Rect::new(0.0, 0.0, 2.0 * COL_WIDTH, 2.0 * ROW_HEIGHT);
+        assert_eq!(
+            cells::sheet_camera(&state).transform_rect_bbox(span_rect),
+            screen_layout(&state).merge_rect(0, 0, 2, 2),
+        );
         assert!(
             surface.count(|op| matches!(
                 op, DrawOp::StrokeRect { rect, color, .. }

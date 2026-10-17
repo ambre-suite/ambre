@@ -145,6 +145,24 @@ impl RecordingSurface {
         }
         seen
     }
+
+    /// The rect of every clip pushed, in order.
+    pub fn clip_rects(&self) -> Vec<Rect> {
+        self.ops
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::PushClip { rect } => Some(*rect),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether these ops hold every op of `walk`, in order and contiguous: a
+    /// walk drawn unchanged among the screen's own layers (`CANVAS-074`).
+    pub fn holds_walk(&self, walk: &RecordingSurface) -> bool {
+        let walk = walk.ops();
+        !walk.is_empty() && self.ops.windows(walk.len()).any(|ops| ops == walk)
+    }
 }
 
 impl DrawSurface for RecordingSurface {

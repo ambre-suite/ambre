@@ -19,6 +19,7 @@ pub mod provisional;
 pub mod ruler;
 pub mod slash;
 pub mod toolbar;
+pub mod walk;
 
 use std::collections::HashMap;
 use std::sync::Arc;

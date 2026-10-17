@@ -42,7 +42,7 @@
 #![forbid(unsafe_code)]
 // The unit tests are host-only: they shape with the shipped faces and run
 // proptest, neither of which exists on wasm. `wasm-pack test` still builds the
-// lib test target, so on wasm that target is empty, and the browser tests in
+// lib test target, so on wasm that target is empty. The browser tests in
 // `tests/` link the library as it ships.
 #![cfg(not(all(test, target_arch = "wasm32")))]
 

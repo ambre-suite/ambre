@@ -46,7 +46,7 @@ or a page, and the walk is not told which.
 |---|---|---|---|---|---|---|
 | `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | `ambre_toile::logic::interop::pdf_export::tests::the_page_and_the_screen_share_one_walk` -- one board walked onto both, the page's record the screen's inside the frame clip | none | verified |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` -- the degenerate case, where an unbalanced push corrupts the rest of the page | none | verified |
-| `CANVAS-074` | `FRAME` | The walk an application shares between the screen and the page MUST take a view of the document and a region in document coordinates, and nothing else. | this spec section 2; `CANVAS-029` | none | unheld -- each application's walk is a set of functions generic over the surface, mixed with the screen overlays that may read screen state, so no check knows which code must ignore the screen. One walk entry per application, a gate on what its module imports, and a property test per application (`Prose`, `Trame`, `Toile`) that varies the camera, the density and the frame and reads the same calls back reach it; lands with the `One walk the screen and the page share` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-074` | `FRAME` | The walk an application shares between the screen and the page MUST take a view of the document and a region in document coordinates, and nothing else. | this spec section 2; `CANVAS-029` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, finds each file that implements `DocumentWalk`, refuses a module its crate does not list in `WALK_REACH` and names no screen-state type above its tests; proptest -- `ambre_prose::view::paint::tests::the_screen_draws_the_walk_at_any_camera`, `ambre_trame::ui::renderer::tests::the_screen_draws_the_walk_at_any_camera` and `ambre_toile::logic::interop::pdf_export::tests::the_screen_draws_the_walk_at_any_camera` each vary the zoom, the scroll and the canvas, walk the same region onto a fresh surface with no camera, and find those calls unchanged inside the screen's. The density never reaches a walk, since `DrawSurface` exposes none (`CANVAS-056`); `ambre_canvas::render::surface::tests::a_zoomed_glyph_is_rasterized_at_its_screen_size` -- the back end rasterizes a run drawn in document units at the size it covers | none | verified |
 | `CANVAS-062` | `FRAME` | Antialiasing MUST NOT add a render pass, a compute dispatch or a multisampled attachment. | this spec section 2; `ambre-spec-frame.md section 4` | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). It is the rule that keeps the edge treatment inside the decision `ambre-spec-frame.md` already took against a compute rasterizer, and a WebGL2 back end has no compute stage to run one on | unimplemented |
 
 * **Budget.** the krilla row of `ambre-spec-budgets.md section 5`, counted once for the whole suite
@@ -55,10 +55,11 @@ or a page, and the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
   what a plaintext export owes them.
-* **Verification.** 11 `verified`, 1 `untested`, 4 `unimplemented`. The crate graph, the compiler
-  and two source gates hold most of it; a test walks one board onto the page and the screen.
-  Nothing keeps screen state out of the walk yet (`CANVAS-074`). A back end may read the
-  screen to rasterize, a density for a tolerance, since that changes the pixels and not the calls.
+* **Verification.** 12 `verified`, 4 `unimplemented`. The crate graph, the compiler and three
+  source gates hold most of it; a test walks a board onto the page and the screen. A walk
+  reaches only its listed modules, and a property test per application finds it unchanged under
+  any camera (`CANVAS-074`). A back end may read the screen to
+  rasterize, a density for a tolerance: that changes the pixels, not the calls.
 
 ---
 
@@ -269,8 +270,9 @@ The user touches no drawing call. What they see of this document is that two des
 * **PDF text is not selectable.** A glyph run carries no `ToUnicode` mapping, so a reader shows the
   shapes and copies nothing. Threading the cluster source text through is a refinement nothing has
   scheduled.
-* **A signature alone holds `CANVAS-029`.** The trait declares no screen type, and nothing
-  refuses an implementation that stores frame-local state behind it.
+* **A walk's view is trusted for what it carries.** The gate reads what a walk reaches, not what
+  its caller puts in the view. Prose hands the walk the composition at the caret, so a page
+  export that built its view from the screen's state would print it.
 * **No golden PDF exists.** `ambre_pdf::tests` asserts that the bytes parse as a valid document and
   that four primitives reach it. Nothing compares a rendered page against a reference, so a
   regression in placement passes.

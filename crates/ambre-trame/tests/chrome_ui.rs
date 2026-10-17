@@ -868,7 +868,7 @@ async fn the_open_sort_dialog_is_modal() {
 /// dialog and none of them sorts.
 ///
 /// Each path ends in the native `close` event, which the browser queues as a
-/// task of its own source: a timer tick does not order after it, so the test
+/// task of its own source. A timer tick does not order after it, so the test
 /// awaits the event itself before it reads the snapshot.
 #[wasm_bindgen_test]
 async fn closing_the_sort_dialog_sorts_nothing() {

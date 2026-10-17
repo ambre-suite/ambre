@@ -41,6 +41,7 @@ pub mod style;
 pub mod tool;
 pub mod view;
 pub mod viewport;
+pub mod walk;
 
 pub use tool::Tool;
 pub use view::ToileView;

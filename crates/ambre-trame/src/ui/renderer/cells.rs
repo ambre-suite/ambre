@@ -1,7 +1,56 @@
 // ambre-trame/src/ui/renderer/cells.rs
 // Cell-layer rendering: full/scroll/reuse repaint of the persistent grid.
 
+use std::collections::HashMap;
+
+use ambre_draw::{Affine, DocumentWalk};
+
+use super::super::grid::CellData;
 use super::*;
+use crate::render::{CellContent, SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk};
+
+/// The screen cache as the sheet walk reads it.
+pub(super) struct CacheCells<'a>(pub(super) &'a HashMap<(u32, u32), CellData>);
+
+impl SheetCells for CacheCells<'_> {
+    fn cell(&self, row: u32, col: u32) -> Option<SheetCell<'_>> {
+        self.0.get(&(row, col)).map(|c| SheetCell {
+            content: c.content(&c.text),
+            merge_span: c.merge_span,
+        })
+    }
+
+    fn for_each_merge(&self, f: &mut dyn FnMut(u32, u32, u32, u32, CellContent<'_>)) {
+        for (&(row, col), c) in self.0 {
+            if let Some((col_span, row_span)) = c.merge_span {
+                f(row, col, col_span, row_span, c.content(&c.text));
+            }
+        }
+    }
+}
+
+/// The sheet's axes on screen: the default sizes, the resized entries and the
+/// rows the shared filter hides.
+pub(crate) fn sheet_axes(state: &TrameUiState) -> SheetAxes<'_> {
+    SheetAxes {
+        col_width: COL_WIDTH,
+        row_height: ROW_HEIGHT,
+        col_widths: &state.col_widths,
+        row_heights: &state.row_heights,
+        hidden_rows: &state.hidden_rows,
+    }
+}
+
+/// The camera from sheet coordinates to the screen: the zoom, then the scroll
+/// origin pinned at the corner of the header strips.
+pub(crate) fn sheet_camera(state: &TrameUiState) -> Affine {
+    let axes = sheet_axes(state);
+    let zoom = state.zoom;
+    Affine::translate((
+        state.header_w() - zoom * axes.col_x(state.left_col),
+        state.header_h() - zoom * axes.row_y(state.top_row),
+    )) * Affine::scale(zoom)
+}
 
 /// Draw the cells layer (white bg + pending fill + cell text + grid lines).
 ///
@@ -12,6 +61,10 @@ use super::*;
 /// `strip_rect == Some(r)`: only the area inside `r` is repainted, on top of
 /// existing (shifted) pixels. Pending grey covers the strip first, then cells
 /// and grid lines are drawn over.
+///
+/// The cells, lines, merges and borders come from the sheet's walk, under the
+/// camera (`CANVAS-074`). The base fill and the per-cell UI layers are the
+/// screen's own, drawn before and after it.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cells<S: DrawSurface>(
     surface: &mut S,
@@ -52,128 +105,48 @@ pub fn draw_cells<S: DrawSurface>(
         return;
     }
 
-    let layout = screen_layout(state);
     let t0 = clock.now_ms();
 
     // -- 1. Base fill over the strip (see `base_fill` above). -------------------
     surface.fill_rect(strip, base_fill);
     let t_pending = clock.now_ms();
 
-    // -- 2. Received-cell backgrounds + body text, via the shared primitive. ---
-    // The cell area is virtual, so we feed only the cached cells inside the
-    // strip rather than a full DisplayViewport.
-    let span = rows_cols_in_strip(state, strip);
-    let cells = (span.row_start..span.row_end)
-        // A collapsed (filtered) row occupies no slot: skip it so its successors
-        // are not double-drawn over the next visible row.
-        .filter(move |row| !state.is_row_hidden(*row))
-        .flat_map(move |row| {
-            (span.col_start..span.col_end).filter_map(move |col| {
-                state.cell_cache.get(&(row, col)).map(|c| {
-                    // A merge master's text is laid out by the merge pass over the
-                    // full span. Drawing it here too would double it (single-cell
-                    // baseline + span baseline). Pass empty text so only its bg fill
-                    // lands here. Covered cells already carry empty text.
-                    let text = if c.merge_span.is_some() {
-                        ""
-                    } else {
-                        c.text.as_str()
-                    };
-                    (row, col, c.content(text))
-                })
-            })
-        });
-    // A neighbour is "empty" when the cache has no entry for it or its text is
-    // blank. An overflowing non-wrapped line may then spill over it. A merge
-    // master keeps its (non-empty) text, so overflow stops at a merged block.
-    let is_empty = |row: u32, col: u32| {
-        state
-            .cell_cache
-            .get(&(row, col))
-            .is_none_or(|c| c.text.is_empty())
-    };
-    let cells_drawn = render::draw_cells_on(
-        surface,
-        &layout,
+    // -- 2. The sheet's walk under the camera, over the strip's sheet region. --
+    let camera = sheet_camera(state);
+    let region = camera.inverse().transform_rect_bbox(strip);
+    let view = SheetView {
+        cells: &CacheCells(&state.cell_cache),
+        axes: sheet_axes(state),
         palette,
+        text_enabled,
+    };
+    let mut walk = SheetWalk {
         font_cx,
         text_cache,
-        text_enabled,
-        cells,
-        is_empty,
-    );
+        cells_drawn: 0,
+    };
+    surface.push_transform(camera);
+    walk.walk(&view, region, surface);
+    surface.pop_transform();
     let t_cells = clock.now_ms();
 
-    // -- 3. Grid lines on top of the fills, so separators stay visible. --------
-    render::draw_grid_lines_on(surface, &layout, palette.grid_line, strip);
-
-    // -- 3bis. Merge masters: paint over the interior separators of the covered
-    // cells, lay the master's text across the span, re-stroke the outer border.
-    // Iterates the (bounded) cache rather than the strip so a master pinned just
-    // outside the strip still repaints the part of its span that is inside.
-    let merges = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
-        c.merge_span.and_then(|(col_span, row_span)| {
-            let hit = layout
-                .merge_rect(row, col, col_span, row_span)
-                .intersect(strip);
-            (hit.width() > 0.0 && hit.height() > 0.0).then_some((
-                row,
-                col,
-                col_span,
-                row_span,
-                c.content(&c.text),
-            ))
-        })
-    });
-    render::draw_merges_on(
+    // -- 3. UI-only layers tied to cell content (dirty veil + error marker). ---
+    // These live on the persistent cells layer so they scroll with the data,
+    // and they are intentionally absent from the walk: a page never shows
+    // "pending recompute" or transient error state.
+    let layout = screen_layout(state);
+    draw_ui_cell_layers(
         surface,
+        state,
         &layout,
         palette,
-        font_cx,
-        text_cache,
-        text_enabled,
-        merges,
+        rows_cols_in_strip(state, strip),
     );
-
-    // -- 3ter. Cell borders LAST, so a deliberate border is never overpainted by a
-    // faint grid separator nor by the merge repaint (`trame-cell-styles`). A merged
-    // master's border wraps the whole span (merge_rect); plain cells use their own
-    // rect. Second pass over the strip (the first iterator was consumed by
-    // draw_cells_on); plus the cache for merge masters pinned just outside it.
-    let bspan = rows_cols_in_strip(state, strip);
-    let strip_borders = (bspan.row_start..bspan.row_end)
-        .filter(move |row| !state.is_row_hidden(*row))
-        .flat_map(move |row| {
-            (bspan.col_start..bspan.col_end).filter_map(move |col| {
-                let c = state.cell_cache.get(&(row, col))?;
-                // Merge masters are handled by the cache pass below (full span);
-                // skip them here so a single-cell rect is not drawn under the span.
-                if c.merge_span.is_some() {
-                    return None;
-                }
-                Some((layout.cell_rect(row, col), c.content("")))
-            })
-        });
-    render::draw_cell_borders_on(surface, strip_borders, palette.cell_border);
-    // Merge masters: border around the full span rect.
-    let merge_borders = state.cell_cache.iter().filter_map(|(&(row, col), c)| {
-        let (col_span, row_span) = c.merge_span?;
-        let rect = layout.merge_rect(row, col, col_span, row_span);
-        let hit = rect.intersect(strip);
-        (hit.width() > 0.0 && hit.height() > 0.0).then(|| (rect, c.content("")))
-    });
-    render::draw_cell_borders_on(surface, merge_borders, palette.cell_border);
-
-    // -- 4. UI-only layers tied to cell content (dirty veil + error marker). ---
-    // These live on the persistent cells layer so they scroll with the data,
-    // and they are intentionally absent from the shared `render` primitives:
-    // a PDF export never shows "pending recompute" or transient error state.
-    draw_ui_cell_layers(surface, state, &layout, palette, span);
     let t_lines = clock.now_ms();
 
     stats.bg_ms = ((t_pending - t0) + (t_lines - t_cells)) as f32;
     stats.cells_ms = (t_cells - t_pending) as f32;
-    stats.cells_drawn = cells_drawn;
+    stats.cells_drawn = walk.cells_drawn;
 }
 
 /// Paint the per-cell UI-only layers for the cells intersecting the strip:

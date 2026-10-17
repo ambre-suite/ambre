@@ -2,31 +2,32 @@
 //! feature so the krilla dependency only links when export is compiled in.
 //!
 //! One presentation frame becomes one PDF page. The export drives the **same**
-//! [`paint_content`](crate::ui::render::paint_content) walk the screen uses, as
-//! the reuse demands ("the same `DrawSurface` code as the screen"). It runs
-//! against a [`KrillaSurface`](ambre_pdf::KrillaSurface) instead of the GPU
-//! surface, so screen and PDF render identically. This is why `logic::interop`
-//! reaches into `ui::render` / `ui::viewport`: both are pure, wgpu-free geometry.
+//! [`BoardWalk`](crate::ui::walk::BoardWalk) the screen uses (`CANVAS-074`). It
+//! runs against a [`KrillaSurface`](ambre_pdf::KrillaSurface) instead of the
+//! GPU surface, so screen and PDF render identically. This is why
+//! `logic::interop` reaches into `ui::walk` / `ui::viewport`: both are pure,
+//! wgpu-free geometry.
 //!
 //! Each page is culled and fitted to its frame's spatial rect (a [`PdfPage`],
-//! built by `ToileState::pdf_pages`, a later slice) and then **clipped** to that
-//! rect. The clip is the fix for the aspect-ratio bleed. `fit_target` scales to
-//! the tighter axis (`ui::viewport`), so slack on the wider axis would otherwise
-//! pull neighbouring board content into the page. Present mode (`present = true`)
-//! also drops the board grid, so the page shows only slide content.
+//! built by `ToileState::pdf_pages`). The walk's region is that rect, and the
+//! walk clips to it. The clip is the fix for the aspect-ratio bleed. `fit_target`
+//! scales to the tighter axis (`ui::viewport`), so slack on the wider axis
+//! would otherwise pull neighbouring board content into the page. The page
+//! draws no board grid and no frame title, so it shows only slide content.
 
 use std::collections::HashMap;
 
 use ambre_canvas::{Palette, TextCache};
-use ambre_draw::{Affine, DrawSurface, FontContext, Point, Rect};
+use ambre_draw::{DocumentWalk, DrawSurface, FontContext, Rect};
 
 use ambre_pdf::KrillaSurface;
 use krilla::Document;
 use krilla::page::PageSettings;
 
 use crate::logic::command::DisplayViewport;
-use crate::ui::render::{ImageStore, paint_content};
+use crate::ui::grid;
 use crate::ui::viewport::ViewportTransform;
+use crate::ui::walk::{BoardView, BoardWalk, ImageStore};
 
 /// Output page dimensions, in PDF points (1 pt = 1/72 inch). The export camera's
 /// pixel size equals these points 1:1, so the on-screen `fit_bounds` math maps
@@ -130,8 +131,8 @@ pub fn export_pdf(
         .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
 }
 
-/// Paint one page onto any surface: the screen's content walk inside the
-/// frame clip (`CANVAS-029`).
+/// Paint one page onto any surface: the board background, then the screen's
+/// board walk under the page camera, over the frame's region (`CANVAS-074`).
 ///
 /// It names no surface type, so the page a test records is the page krilla
 /// writes.
@@ -143,43 +144,31 @@ pub(crate) fn paint_page<S: DrawSurface>(
     text_cache: &mut TextCache,
     images: &ImageStore,
 ) {
-    // Clip to the frame rect (mapped world -> page space through the same
-    // camera the walk uses), so the page carries only slide content.
-    let clipped = pdf_page.clip.is_some();
-    if let Some(world) = pdf_page.clip {
-        s.push_clip(map_rect(pdf_page.camera.world_to_screen(), world));
-    }
-
-    paint_content(
-        s,
-        &pdf_page.viewport,
-        &pdf_page.camera,
+    grid::paint_background(s, &pdf_page.camera, palette);
+    // The region is the frame, so the page carries only slide content. The
+    // fallback page of an empty deck has no frame and shows what its camera
+    // sees.
+    let region = pdf_page
+        .clip
+        .unwrap_or_else(|| pdf_page.camera.visible_world());
+    // Nothing is under inline edit off-screen, and no Smart Animate
+    // transition runs on export.
+    let anim = HashMap::new();
+    let view = BoardView {
+        viewport: &pdf_page.viewport,
         palette,
+        images,
+        anim: &anim,
+        muted_body: None,
+        muted_caption: None,
+    };
+    s.push_transform(pdf_page.camera.world_to_screen());
+    BoardWalk {
         font_cx,
         text_cache,
-        None, // nothing is under inline edit off-screen
-        images,
-        &HashMap::new(), // no Smart Animate transition on export
-        true,            // present mode: no board grid
-    );
-
-    if clipped {
-        s.pop_clip();
     }
-}
-
-/// Map an axis-aligned rect through a scale + translate affine, the camera's
-/// `world_to_screen`, which has no rotation. It yields the enclosing axis-aligned
-/// rect in the target space.
-fn map_rect(a: Affine, r: Rect) -> Rect {
-    let p0 = a * Point::new(r.x0, r.y0);
-    let p1 = a * Point::new(r.x1, r.y1);
-    Rect::new(
-        p0.x.min(p1.x),
-        p0.y.min(p1.y),
-        p0.x.max(p1.x),
-        p0.y.max(p1.y),
-    )
+    .walk(&view, region, s);
+    s.pop_transform();
 }
 
 #[cfg(test)]
@@ -189,6 +178,7 @@ mod tests {
         DisplayElement, DisplayGeom, DisplayNode, ElementId, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_canvas::Theme;
+    use ambre_draw::Affine;
 
     fn rect_node(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
@@ -370,11 +360,12 @@ mod tests {
         assert!(bytes.starts_with(b"%PDF"));
     }
 
-    /// Covers `CANVAS-029`: a page is the screen's walk, unchanged, inside the
-    /// frame clip.
+    /// Covers `CANVAS-029`: a page is the screen's walk, unchanged, over the
+    /// frame's region.
     ///
-    /// Both walks record onto the same kind of surface, from the same faces.
-    /// What the page adds is the clip and nothing else.
+    /// Both record onto the same kind of surface, from the same faces, at the
+    /// same camera. The region the walk clips to is the one thing that differs:
+    /// the frame on the page, the visible board on the screen.
     #[test]
     fn the_page_and_the_screen_share_one_walk() {
         use ambre_draw::testing::{DrawOp, RecordingSurface};
@@ -391,7 +382,7 @@ mod tests {
         let mut printed = RecordingSurface::new();
         paint_page(&mut printed, &page, palette, &mut font_cx, &mut tc, &images);
         let mut screen = RecordingSurface::new();
-        paint_content(
+        crate::ui::render::paint_content(
             &mut screen,
             &page.viewport,
             &page.camera,
@@ -404,17 +395,92 @@ mod tests {
             true,
         );
 
-        let ops = printed.ops();
+        let frame = page.clip.expect("the page has a frame");
+        let regions = |ops: &[DrawOp]| -> Vec<Rect> {
+            ops.iter()
+                .filter_map(|op| match op {
+                    DrawOp::PushClip { rect } => Some(*rect),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(regions(printed.ops()), [frame]);
+        assert_eq!(regions(screen.ops()), [page.camera.visible_world()]);
+        let rest = |ops: &[DrawOp]| -> Vec<DrawOp> {
+            ops.iter()
+                .filter(|op| !matches!(op, DrawOp::PushClip { .. }))
+                .cloned()
+                .collect()
+        };
         assert!(
-            matches!(ops.first(), Some(DrawOp::PushClip { .. })),
-            "{ops:?}"
-        );
-        assert_eq!(ops.last(), Some(&DrawOp::PopClip));
-        assert!(
-            screen.ops().len() > 1,
+            screen.ops().len() > 4,
             "the walk drew the shape and the word"
         );
-        assert_eq!(&ops[1..ops.len() - 1], screen.ops());
+        assert_eq!(rest(printed.ops()), rest(screen.ops()));
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
+
+        /// Whatever the camera, the zoom and the canvas size, the screen
+        /// draws the board's walk for the region it shows, call for call
+        /// (`CANVAS-074`). The surface exposes no density, so the walk
+        /// cannot read one.
+        #[test]
+        fn the_screen_draws_the_walk_at_any_camera(
+            x in -400.0f64..600.0,
+            y in -300.0f64..400.0,
+            zoom in 0.1f64..8.0,
+            width in 200.0f64..2000.0,
+            height in 200.0f64..1400.0,
+            present: bool,
+        ) {
+            use ambre_draw::testing::RecordingSurface;
+
+            let palette = Theme::Light.palette();
+            let page = a_page_with_text();
+            let mut font_cx = ambre_draw::sealed_font_context();
+            for bytes in shipped_faces() {
+                font_cx.collection.register_fonts(bytes.into(), None);
+            }
+            let mut tc = TextCache::new(1.0);
+            let images = ImageStore::new();
+            let anim = HashMap::new();
+            let camera = ViewportTransform {
+                center: ambre_draw::Point::new(x, y),
+                zoom,
+                size: ambre_draw::Size::new(width, height),
+            };
+
+            let mut screen = RecordingSurface::new();
+            crate::ui::render::paint_content(
+                &mut screen,
+                &page.viewport,
+                &camera,
+                palette,
+                &mut font_cx,
+                &mut tc,
+                None,
+                &images,
+                &anim,
+                present,
+            );
+            let view = BoardView {
+                viewport: &page.viewport,
+                palette,
+                images: &images,
+                anim: &anim,
+                muted_body: None,
+                muted_caption: None,
+            };
+            let mut walked = RecordingSurface::new();
+            BoardWalk {
+                font_cx: &mut font_cx,
+                text_cache: &mut tc,
+            }
+            .walk(&view, camera.visible_world(), &mut walked);
+            proptest::prop_assert!(screen.holds_walk(&walked));
+        }
     }
 
     /// A page with a shape and a word draws no image. The text is glyphs and

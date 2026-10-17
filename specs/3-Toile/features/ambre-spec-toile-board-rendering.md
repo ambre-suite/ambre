@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-263` | `OBS` | A note's body MUST size itself to the card, within a legible range, unless the style names a size. | this spec section 3 | `ambre_toile::ui::render::tests::sticky_font_size_tracks_the_card_and_is_clamped` -- the growth and the two clamps; `ambre_toile::ui::render::tests::sticky_font_size_auto_unless_overridden` -- the sentinel and the override | none | verified |
 | `TOILE-UI-013` | `OBS` | An image whose media is not resolved MUST paint a placeholder, never nothing. | this spec section 3; `features/ambre-spec-toile-media.md section 4` | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- one image draw at the element box and one placeholder fill beside it | none | verified |
 | `TOILE-UI-264` | `OBS` | An element the walk cannot draw MUST hold its place: a group paints nothing, an embed and a nested document paint a box until their child is composited. | this spec section 3; `features/ambre-spec-toile-embeds.md section 3` | `ambre_toile::ui::render::tests::a_group_paints_nothing_and_an_embed_holds_its_place` -- a group draws no op, and a web embed and a nested document each a box | none | verified |
-| `TOILE-UI-044` | `OBS` | A body MUST be laid out in screen space at a zoom-scaled size, so its glyphs stay crisp at any zoom. | this spec section 3 | `ambre_toile::ui::render::tests::a_body_is_laid_out_in_screen_space_at_a_zoom_scaled_size` -- each run outside the camera push, and the baseline drop doubling with the zoom | none | verified |
+| `TOILE-UI-044` | `OBS` | A body MUST be laid out in board units and painted under the camera, as the page lays it out; the surface rasterizes its glyphs at their screen size (`CANVAS-074`). | this spec section 3 | `ambre_toile::ui::render::tests::a_body_is_laid_out_in_board_units_under_the_camera` -- each run inside the camera push, at the same board point at 1x and 2x, below the padded top of the card | none | verified |
 | `TOILE-UI-265` | `OBS` | A rotated element MUST carry its body and the rules through it round with it. | this spec section 3 | `ambre_toile::ui::render::tests::a_rotated_note_carries_its_body_and_rules_round` -- the shipped font shapes the body, and every run and both rules carry the angle | none | verified |
 | `TOILE-UI-276` | `OBS` | An element a transition or an in-flight gesture overrides MUST paint that override's colour and opacity, not the ones its style carries. | this spec section 3; `features/ambre-spec-toile-presentation.md section 4` | `ambre_toile::ui::render::tests::content_walk_applies_animation_override` -- the interpolated blue at half alpha reaches the surface, a colour the default white style cannot produce | none | verified |
 | `TOILE-UI-277` | `OBS` | An element so overridden MUST paint at the override's bounds and rotation. | this spec section 3; `features/ambre-spec-toile-presentation.md section 4` | `ambre_toile::ui::render::tests::an_override_moves_its_own_element_and_no_other` -- the image lands at the override bounds, under the override rotation | none | verified |
@@ -93,8 +93,9 @@ declared in `features/ambre-spec-toile-engine.md section 3`; this document does 
 3. plan the repaint from the dirty flags: a content change repaints the content, anything else
    repaints the overlay alone. A clean frame plans neither (`TOILE-UI-021`);
 4. paint the background and, unless a presentation holds focus, the grid, in screen space. Then
-   push the camera, walk the sequence once (`TOILE-UI-043`) and pop it. The bodies are laid out in
-   screen space, skipping the one element the inline editor sits over (`TOILE-UI-266`);
+   push the camera, walk the sequence once (`TOILE-UI-043`) and pop it. The walk is the page's
+   (`CANVAS-074`). Bodies and captions are laid out in board units inside it. The one element the
+   inline editor sits over is skipped (`TOILE-UI-266`). The frame titles follow, in screen space;
 5. paint the overlay: the gesture preview, the find highlights, then the selection box and its
    handles (`TOILE-UI-046`). Then come the presence cursors, the reaction badges and, when one is
    open, the inline editor -- three further passes this feature drives without owning.
@@ -127,7 +128,7 @@ calls, with no GPU.
 |---|---|
 | background | the board fill, then the adaptive grid, in screen space; presentation focus drops the grid (`TOILE-UI-045`, `TOILE-UI-267`) |
 | content | the visible sequence under the camera: frames, shapes, images, strokes, notes, embeds and connectors, interleaved by z-order |
-| bodies | notes and text elements, laid out in screen space at a zoom-scaled size, rotated with their element (`TOILE-UI-044`) |
+| bodies | notes and text elements, laid out in board units under the camera, rotated with their element (`TOILE-UI-044`) |
 | overlay | the gesture preview (`TOILE-UI-270`), the find highlights (`TOILE-UI-269`), then the selection box and its handles, which only a single selection carries (`TOILE-UI-268`) |
 | above the overlay | the presence cursors, the reaction badges of the visible set, and the inline editor when one is open: driven here, owned elsewhere |
 
@@ -138,7 +139,7 @@ calls, with no GPU.
 | a rectangle, a frame | its fill, then its outline |
 | an ellipse, a triangle, a path | the same, through a tessellated path |
 | a freehand stroke | the smoothed polyline stroked at its width, no fill |
-| a note | a drop shadow, then a coloured card; the body rides the screen-space pass in a readable ink (`TOILE-UI-012`): the dark ink or white, whichever contrasts more with the card (`TOILE-UI-262`) |
+| a note | a drop shadow, then a coloured card; the body follows in the same walk, in a readable ink (`TOILE-UI-012`): the dark ink or white, whichever contrasts more with the card (`TOILE-UI-262`) |
 | a text element | no card: the body alone, in its own colour |
 | an image | its decoded pixels, or a placeholder box until they arrive (`TOILE-UI-013`) |
 | an embed, a nested document | a placeholder box; the child is composited outside this walk (`features/ambre-spec-toile-embeds.md section 3`) |
@@ -160,7 +161,7 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
 | One walk of one sequence | separate passes for frames, elements and connectors | a connector can sit behind or in front of an element, and a frame's children must follow their frame; any split into passes re-orders them, so the z-order would have to be rebuilt inside the renderer from data it does not hold |
 | The render side never links the CRDT | reading the document behind a discipline | a render path that could read the document would eventually read it. Cutting the link is the only mechanical way to hold the thread contract, since the board lives in one document on one thread |
 | The walk emits abstract draw calls | painting through the GPU types directly | the feature stops being host-testable against a recording surface, and the GPU stack is written twice instead of once: this is the same seam the spreadsheet uses |
-| Bodies are laid out in screen space | shaping text in world space with the rest of the walk | glyphs rasterized at a world size and scaled would blur at every zoom, and the atlas would hold one entry per zoom level |
+| Bodies are laid out in board units, inside the walk | shaping each body in screen space at a zoom-scaled size, outside the walk | the page would lay the body out at another size than the screen, so a line could break elsewhere on paper. The surface rasterizes a glyph at its screen size (`CANVAS-074`), so the body stays crisp at every zoom without a screen layout |
 | An unresolved image paints a placeholder | leaving the element out of the walk until its pixels land | media arrives after the board does, and painting nothing makes an image look deleted rather than pending |
 | A clean frame plans no draw | painting every frame and relying on the GPU to be fast | an infinite board is mostly idle, and the pillar is a battery on a phone, not a frame rate on a desktop |
 | Any content change repaints the whole content | a dirty-rectangle scheme, as the grid uses for a scroll | a partial strip would have to be derived from a diff nothing computes. The board is transformed on the GPU for a pan, so the common cases are a full change or no change at all |

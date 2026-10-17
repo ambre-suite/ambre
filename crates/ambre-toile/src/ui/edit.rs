@@ -19,9 +19,7 @@ use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point}
 // import path (the enum lives in the shared core now).
 pub use ambre_canvas::EditIntent;
 
-/// Inner padding (screen px at zoom 1) between the element border and the text,
-/// matching the sticky / text body inset.
-const TEXT_PAD: f64 = 4.0;
+use super::walk::TEXT_PAD;
 
 /// What an inline edit is writing into: an element's body, or the caption of a
 /// connector (`toile-connectors`). The two differ in where the box comes from
@@ -84,14 +82,13 @@ impl InlineEditor {
         // body matches its committed look. The element opacity is baked into
         // the alpha, as the committed pass does (`TOILE-UI-186`).
         let color =
-            super::render::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
+            super::walk::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
                 .map(|c| argb_text(c, elem.style.opacity))
                 .unwrap_or(palette.cell_text);
         // Size: sticky auto-sizes from bounds unless overridden. A zero size is
         // kept, not floored, so an invisible body stays invisible under edit
         // (`TOILE-UI-188`).
-        let base_size =
-            super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds);
+        let base_size = super::walk::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds);
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
@@ -161,7 +158,10 @@ impl InlineEditor {
         self.core.style()
     }
 
-    /// Inner padding in screen pixels at the given zoom.
+    /// Inner padding in screen pixels at the given zoom: the walk's board-unit
+    /// inset (`TEXT_PAD`) under the camera. The editor lays out in screen
+    /// pixels, so its caret keeps one width at every zoom, and lands where the
+    /// walk's body does.
     pub fn pad(zoom: f64) -> f64 {
         TEXT_PAD * zoom
     }

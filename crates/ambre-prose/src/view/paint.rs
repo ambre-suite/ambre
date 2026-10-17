@@ -1,42 +1,27 @@
 //! Painting the pages (`features/ambre-spec-prose-page-rendering.md section 2`).
 //!
-//! One implementation, generic over the drawing surface: the screen and the
-//! PDF export call the same code (`PROSE-UI-018`). Every colour comes from the
-//! palette the host fills from the theme tokens, or from a peer's own colour
-//! (`PROSE-UI-014`). A paint reads the layout in force and writes nothing to
-//! the document (`PROSE-UI-120`).
+//! The page's content comes from one walk, generic over the drawing surface
+//! (`PROSE-UI-018`, `CANVAS-074`). The screen resolves what each page shows
+//! and draws the sheets and the selections. It hands the pages to the walk
+//! under its camera, then draws the carets and the composition over them. Every colour
+//! comes from the palette the host fills from the theme tokens, or from a
+//! peer's own colour (`PROSE-UI-014`). A paint reads the layout in force and
+//! writes nothing to the document (`PROSE-UI-120`).
 
-use ambre_draw::{Affine, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
+use ambre_draw::{Affine, DocumentWalk, DrawSurface, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR_PX;
-use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun, TableShape};
+use crate::layout::run::{ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
-use crate::view::HighlightKind;
-use crate::view::cache::{RunCache, RunKey};
+use crate::view::cache::RunKey;
 use crate::view::hit::{Fragment, cell_frame};
-
-/// The colours a page is painted with, filled by the host from the generated
-/// theme tokens (`ambre-spec-design-tokens.md`). The painter holds no colour
-/// of its own.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PagePalette {
-    /// The sheet, its border and its shadow: the `surfaces` group.
-    pub sheet: Color,
-    pub sheet_border: Color,
-    pub shadow: Color,
-    /// The surface's foreground: body text, bands and footnotes.
-    pub text: Color,
-    /// The caret, and the local selection at a fifth.
-    pub accent: Color,
-    /// A comment highlight, at two fifths.
-    pub warning: Color,
-    /// A suggested insertion, at three tenths.
-    pub success: Color,
-    /// A suggested deletion, at three tenths and struck through.
-    pub error: Color,
-}
+pub use crate::view::walk::PagePalette;
+use crate::view::walk::{
+    BlockPaint, CellPaint, Insertion, PageItem, PagePaint, PageView, PageWalk, Placed, draw_shape,
+    to_rect,
+};
 
 /// How far the shadow falls from the sheet.
 const SHADOW_OFFSET_PX: f64 = 3.0;
@@ -45,23 +30,28 @@ const CARET_WIDTH_PX: f64 = 1.5;
 /// The tab a remote caret carries above its bar, standing for its label.
 const LABEL_TAB_PX: f64 = 5.0;
 
-impl PagePalette {
-    fn highlight(&self, kind: HighlightKind) -> Color {
-        match kind {
-            HighlightKind::Comment => self.warning.multiply_alpha(0.4),
-            HighlightKind::Insertion => self.success.multiply_alpha(0.3),
-            HighlightKind::Deletion => self.error.multiply_alpha(0.3),
-            HighlightKind::Find => self.accent.multiply_alpha(0.3),
-        }
-    }
+/// A block the screen draws around: its selections under the walk, its
+/// carets over it.
+struct ScreenBlock {
+    id: BlockId,
+    run: ShapedRun,
+    placed: Placed,
+    /// The top of its page down the column.
+    top: f64,
+    /// Whether the local caret and selection show in it.
+    local: bool,
+    /// Whether the other peers' carets show in it: body text only.
+    remote_carets: bool,
 }
 
-/// Where a run is drawn on its page: its origin, and the clip of the part
-/// the page shows.
-struct Placed {
-    origin_x: f64,
-    origin_y: f64,
-    clip: Rect,
+/// What one frame resolves before it paints.
+#[derive(Default)]
+struct Frame {
+    pages: Vec<PagePaint>,
+    blocks: Vec<ScreenBlock>,
+    /// The caret of the paragraph a split opens, before the document names
+    /// its block: its page top, its clip and its bar.
+    ghost_carets: Vec<(f64, Rect, Rect)>,
 }
 
 /// Where a run is drawn: from the left of the content box, at the top of
@@ -120,134 +110,6 @@ fn ordered(ui: &ProseUiState, cursor: &CursorPosition) -> Option<((BlockId, u32)
         Some((anchor, focus))
     } else {
         Some((focus, anchor))
-    }
-}
-
-fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
-    Rect::new(
-        placed.origin_x + rect.x0,
-        placed.origin_y + rect.y0,
-        placed.origin_x + rect.x1,
-        placed.origin_y + rect.y1,
-    )
-}
-
-/// A text the view draws on a line ahead of the layout: the draft or the
-/// composition. The glyphs after its point move right by its width.
-#[derive(Clone, Copy)]
-struct Insertion {
-    line: usize,
-    x: f64,
-    width: f64,
-}
-
-/// Far enough past any page that a clip band never cuts a glyph vertically.
-const BAND: f64 = 1.0e7;
-
-/// Draw the glyphs of a run, building its drawing state on its first paint.
-///
-/// A line that carries insertions is drawn in slices, each clipped at an
-/// insertion point and moved right by the widths before it (`PROSE-UI-199`).
-fn draw_run<S: DrawSurface>(
-    surface: &mut S,
-    cache: &mut RunCache,
-    key: RunKey,
-    run: &ShapedRun,
-    placed: &Placed,
-    color: Color,
-    insertions: &[Insertion],
-) {
-    let data: &ParleyRunData = run.data();
-    let brush = Brush::Solid(color);
-    for (line_index, item_index, _) in &cache.draw_state(key, run).glyph_runs {
-        let Some((line, shift)) = data.line(*line_index) else {
-            continue;
-        };
-        // A line shaped in a later segment is moved down to its place
-        // (`PROSE-128`).
-        let origin_y = placed.origin_y + f64::from(shift);
-        let transform = Affine::translate((placed.origin_x, origin_y));
-        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
-            continue;
-        };
-        let mut cuts = insertions
-            .iter()
-            .filter(|cut| cut.line == *line_index)
-            .peekable();
-        if cuts.peek().is_none() {
-            surface.draw_glyphs(&glyphs, &brush, transform);
-            draw_lines(surface, &glyphs, placed.origin_x, origin_y, color);
-            continue;
-        }
-        let (mut from, mut shift) = (-BAND, 0.0);
-        let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
-            let left = placed.origin_x + from + shift;
-            let right = placed.origin_x + to + shift;
-            surface.push_clip(Rect::new(left, -BAND, right, BAND));
-            let moved = Affine::translate((placed.origin_x + shift, origin_y));
-            surface.draw_glyphs(&glyphs, &brush, moved);
-            draw_lines(surface, &glyphs, placed.origin_x + shift, origin_y, color);
-            surface.pop_clip();
-        };
-        for cut in cuts {
-            if cut.x > from {
-                slice(surface, from, cut.x, shift);
-                from = cut.x;
-            }
-            shift += cut.width;
-        }
-        slice(surface, from, BAND, shift);
-    }
-}
-
-/// Draw the underline and the strike-through a glyph run carries, at the
-/// offsets and thicknesses its font gives (`PROSE-UI-209`).
-fn draw_lines<S: DrawSurface>(
-    surface: &mut S,
-    glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>,
-    x: f64,
-    y: f64,
-    color: Color,
-) {
-    let style = glyphs.style();
-    let metrics = glyphs.run().metrics();
-    let lines = [
-        (
-            style.underline.as_ref(),
-            metrics.underline_offset,
-            metrics.underline_size,
-        ),
-        (
-            style.strikethrough.as_ref(),
-            metrics.strikethrough_offset,
-            metrics.strikethrough_size,
-        ),
-    ];
-    let left = x + f64::from(glyphs.offset());
-    let right = left + f64::from(glyphs.advance());
-    for (line, offset, size) in lines {
-        let Some(line) = line else {
-            continue;
-        };
-        let size = line.size.unwrap_or(size);
-        let offset = line.offset.unwrap_or(offset);
-        let at = y + f64::from(glyphs.baseline() - offset + size / 2.0);
-        surface.stroke_line(left, at, right, at, color, f64::from(size));
-    }
-}
-
-/// Draw every glyph of a shaped text at `(x, y)`.
-fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64, color: Color) {
-    let brush = Brush::Solid(color);
-    for (line, shift) in shape.data().lines() {
-        let y = y + f64::from(shift);
-        let transform = Affine::translate((x, y));
-        for item in line.items() {
-            if let PositionedLayoutItem::GlyphRun(glyphs) = item {
-                surface.draw_glyphs(&glyphs, &brush, transform);
-                draw_lines(surface, &glyphs, x, y, color);
-            }
-        }
     }
 }
 
@@ -322,50 +184,121 @@ impl ProseUiState {
     /// Paint the pages the canvas shows, and one more on each side
     /// (`PROSE-UI-007`).
     ///
-    /// Per page, the sheet comes first. Each block then draws its selections,
-    /// its glyphs and its inline highlights, in that order (`PROSE-UI-117`).
-    /// The bands and the footnotes follow (`PROSE-UI-115`), and the carets of
-    /// the other peers come last (`PROSE-UI-118`).
+    /// The sheets come first, then the selections under the glyphs. The walk
+    /// draws each block's glyphs and inline highlights (`PROSE-UI-117`), then
+    /// the bands and the footnotes (`PROSE-UI-115`). The local caret and the
+    /// composition follow, and the carets of the other peers come last
+    /// (`PROSE-UI-118`).
     pub fn paint<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette) {
         self.caret_drawn = None;
         let Some(pages) = self.column.built_pages(&self.viewport) else {
             return;
         };
-        let scale = f64::from(self.viewport.scale());
-        let camera = Affine::translate((f64::from(self.column.left_px(&self.viewport)), 0.0))
-            * Affine::scale(scale)
-            * Affine::translate((0.0, -f64::from(self.viewport.scroll_y)));
-        surface.push_transform(camera);
+        let camera = self.camera();
+        let width = f64::from(self.shaped.layout.page_width_px);
+        let height = f64::from(self.shaped.layout.page_height_px);
+        let mut frame = Frame::default();
         for page in pages {
             let top = f64::from(self.column.page_top_y(page));
+            self.resolve_page(&mut frame, page, top);
+        }
+
+        surface.push_transform(camera);
+        for page in &frame.pages {
+            paint_sheet(surface, palette, page.top, width, height);
+        }
+        for block in &frame.blocks {
+            surface.push_transform(Affine::translate((0.0, block.top)));
+            surface.push_clip(block.placed.clip);
+            self.paint_selections(surface, palette, block);
+            surface.pop_clip();
+            surface.pop_transform();
+        }
+
+        let region = self.walk_region(camera, &frame);
+        let view = PageView {
+            palette,
+            width,
+            height,
+            pages: &frame.pages,
+        };
+        let mut walk = PageWalk {
+            runs: &mut self.runs,
+            highlights_walked: 0,
+        };
+        walk.walk(&view, region, surface);
+        self.highlights_walked = self
+            .highlights_walked
+            .saturating_add(walk.highlights_walked);
+
+        for block in &frame.blocks {
+            self.page_frame = camera * Affine::translate((0.0, block.top));
+            surface.push_transform(Affine::translate((0.0, block.top)));
+            surface.push_clip(block.placed.clip);
+            self.paint_caret(surface, palette, block);
+            surface.pop_clip();
+            surface.pop_transform();
+        }
+        for &(top, clip, bar) in &frame.ghost_carets {
             surface.push_transform(Affine::translate((0.0, top)));
-            self.page_frame = camera * Affine::translate((0.0, top));
-            self.paint_page(surface, palette, page);
+            surface.push_clip(clip);
+            surface.fill_rect(bar, palette.accent);
+            surface.pop_clip();
+            surface.pop_transform();
+            self.caret_drawn =
+                Some((camera * Affine::translate((0.0, top))).transform_rect_bbox(bar));
+        }
+        // Last, so a collaborator's caret never hides the text under it.
+        for block in frame.blocks.iter().filter(|block| block.remote_carets) {
+            surface.push_transform(Affine::translate((0.0, block.top)));
+            self.paint_carets(surface, block.id, block.run.data(), &block.placed);
             surface.pop_transform();
         }
         surface.pop_transform();
     }
 
-    fn paint_page<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, page: u32) {
-        let layout = std::sync::Arc::clone(&self.shaped.layout);
-        let width = f64::from(layout.page_width_px);
-        let height = f64::from(layout.page_height_px);
-        let sheet = Rect::new(0.0, 0.0, width, height);
-        let shadow = Rect::new(
-            SHADOW_OFFSET_PX,
-            SHADOW_OFFSET_PX,
-            width + SHADOW_OFFSET_PX,
-            height + SHADOW_OFFSET_PX,
-        );
-        surface.fill_rect(shadow, palette.shadow);
-        surface.fill_rect(sheet, palette.sheet);
-        surface.stroke_rect(sheet, palette.sheet_border, 1.0);
+    /// The camera from column coordinates to the canvas: the column's left
+    /// edge, the zoom, then the scroll.
+    fn camera(&self) -> Affine {
+        Affine::translate((f64::from(self.column.left_px(&self.viewport)), 0.0))
+            * Affine::scale(f64::from(self.viewport.scale()))
+            * Affine::translate((0.0, -f64::from(self.viewport.scroll_y)))
+    }
 
+    /// The region the walk covers: the canvas, and the pages built on each
+    /// side of it. Their runs are then ready when a scroll reaches them.
+    fn walk_region(&self, camera: Affine, frame: &Frame) -> Rect {
+        let width = f64::from(self.shaped.layout.page_width_px);
+        let height = f64::from(self.shaped.layout.page_height_px);
+        let canvas = Rect::new(
+            0.0,
+            0.0,
+            f64::from(self.viewport.width_px),
+            f64::from(self.viewport.height_px),
+        );
+        frame.pages.iter().fold(
+            camera.inverse().transform_rect_bbox(canvas),
+            |region, page| {
+                region.union(Rect::new(
+                    0.0,
+                    page.top,
+                    width + SHADOW_OFFSET_PX,
+                    page.top + height + SHADOW_OFFSET_PX,
+                ))
+            },
+        )
+    }
+
+    /// Resolve what `page` shows into the items the walk draws, and the
+    /// blocks the screen draws around.
+    fn resolve_page(&self, frame: &mut Frame, page: u32, top: f64) {
+        let layout = std::sync::Arc::clone(&self.shaped.layout);
         let left = f64::from(layout.margin_left_px);
         let body_top = f64::from(layout.body_top_px());
         let content_width = f64::from(layout.content_width_px);
+        let right = left + content_width;
+        let mut items = Vec::new();
         let (pieces, ghost_at) = self.pieces(page);
-        let mut drawn: Vec<(BlockId, ShapedRun, Placed)> = Vec::with_capacity(pieces.len());
         for piece in pieces {
             let Some(block) = self.shaped.block(piece.index) else {
                 continue;
@@ -375,7 +308,7 @@ impl ProseUiState {
                 let clip_top = body_top + f64::from(fragment.top);
                 // A table may be wider than the text: it grows to the right
                 // rather than squeezing its columns.
-                let right = table
+                let table_right = table
                     .cells
                     .iter()
                     .map(|cell| f64::from(cell.x_px + cell.width_px))
@@ -383,18 +316,12 @@ impl ProseUiState {
                 let clip = Rect::new(
                     left,
                     clip_top,
-                    left + right + 1.0,
+                    left + table_right + 1.0,
                     clip_top + f64::from(fragment.height) + 1.0,
                 );
-                surface.push_clip(clip);
-                self.paint_table(
-                    surface,
-                    palette,
-                    &table,
-                    left,
-                    clip_top - f64::from(fragment.run_top),
-                );
-                surface.pop_clip();
+                let origin = (left, clip_top - f64::from(fragment.run_top));
+                let cells = self.table_cells(frame, &table, origin, clip, top);
+                items.push(PageItem::Table { clip, cells });
                 continue;
             }
             let Some(run) = piece.run else {
@@ -402,59 +329,245 @@ impl ProseUiState {
             };
             let id = block_id(block.block_id);
             let placed = place(left, body_top, content_width, &run, fragment);
-            surface.push_clip(placed.clip);
-            self.paint_block(surface, palette, id, &run, &placed, true);
-            surface.pop_clip();
-            drawn.push((id, run, placed));
+            items.push(PageItem::Block(self.block_paint(
+                frame,
+                id,
+                run,
+                placed,
+                top,
+                (true, true),
+            )));
         }
         // The paragraph a split opens, below the block it parts
         // (`PROSE-UI-203`).
         if let (Some(at), Some(ghost)) = (ghost_at, self.ghost().cloned()) {
             let placed = place(left, body_top, content_width, &ghost.run, at);
-            surface.push_clip(placed.clip);
             match self.splitting.and_then(|split| split.new_block) {
-                Some(new_block) => {
-                    self.paint_block(surface, palette, new_block, &ghost.run, &placed, true);
-                }
+                Some(new_block) => items.push(PageItem::Block(self.block_paint(
+                    frame,
+                    new_block,
+                    ghost.run,
+                    placed,
+                    top,
+                    (true, false),
+                ))),
                 None => {
-                    let data = ghost.run.data();
-                    draw_shape(
-                        surface,
-                        &ghost.run,
-                        placed.origin_x,
-                        placed.origin_y,
-                        palette.text,
-                    );
                     if let Some(caret) = ghost.caret {
-                        let rect = to_rect(&placed, &data.caret_box(caret));
+                        let rect = to_rect(&placed, &ghost.run.data().caret_box(caret));
                         let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
-                        surface.fill_rect(bar, palette.accent);
-                        self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
+                        frame.ghost_carets.push((top, placed.clip, bar));
                     }
+                    items.push(PageItem::Shape {
+                        run: ghost.run,
+                        placed,
+                    });
                 }
             }
-            surface.pop_clip();
         }
-        self.paint_bands(surface, palette, page);
-        self.paint_notes(surface, palette, page);
-        // Last, so a collaborator's caret never hides the text under it.
-        for (id, run, placed) in &drawn {
-            self.paint_carets(surface, palette, *id, run.data(), placed);
+        // The header and the footer, from their own runs. They draw like body
+        // text: the local caret and selection show on the page the caret was
+        // placed on (`PROSE-UI-033`).
+        let local = self.band_page == Some(page);
+        for slot in self.band_slots(page) {
+            let Some(run) = self.drawn_of(slot.block).cloned() else {
+                continue;
+            };
+            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
+            let placed = Placed {
+                origin_x: left + f64::from(run.data().indent_px()),
+                origin_y: from,
+                clip: Rect::new(left, from, right, to),
+            };
+            let id = block_id(slot.block);
+            items.push(PageItem::Block(self.block_paint(
+                frame,
+                id,
+                run,
+                placed,
+                top,
+                (local, false),
+            )));
+        }
+        // The footnote band at the foot of the body: a separator, then each
+        // note by ordinal, its number then its text (`PROSE-UI-187`).
+        let slots = self.note_slots(page);
+        if let Some(first) = slots.first() {
+            items.push(PageItem::Rule {
+                x0: left,
+                x1: left + content_width / 3.0,
+                y: f64::from(first.top - NOTE_SEPARATOR_PX / 2.0),
+            });
+        }
+        for slot in slots {
+            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
+            let clip = Rect::new(left, from, right, to);
+            if let Some(number) = self.shaped.notes.get(&slot.footnote_id).cloned() {
+                items.push(PageItem::Block(BlockPaint {
+                    key: RunKey::Note(slot.footnote_id),
+                    run: number,
+                    placed: Placed {
+                        origin_x: left,
+                        origin_y: from,
+                        clip,
+                    },
+                    insertion: None,
+                    highlights: Vec::new(),
+                }));
+            }
+            if let Some(text) = self.drawn_of(slot.block).cloned() {
+                let placed = Placed {
+                    origin_x: left + f64::from(text.data().indent_px()),
+                    origin_y: from,
+                    clip,
+                };
+                let id = block_id(slot.block);
+                items.push(PageItem::Block(self.block_paint(
+                    frame,
+                    id,
+                    text,
+                    placed,
+                    top,
+                    (true, false),
+                )));
+            }
+        }
+        frame.pages.push(PagePaint { top, items });
+    }
+
+    /// The cells of a table, each with its fill, its border and its blocks.
+    /// A merged region is one cell and is drawn once; a covered cell is not
+    /// in the shape, so nothing is drawn for it (`PROSE-UI-147`). The text
+    /// sits inside the padding, at the cell's vertical alignment
+    /// (`PROSE-UI-180`).
+    fn table_cells(
+        &self,
+        frame: &mut Frame,
+        table: &TableShape,
+        (left, top_y): (f64, f64),
+        clip: Rect,
+        page_top: f64,
+    ) -> Vec<CellPaint> {
+        let mut cells = Vec::with_capacity(table.cells.len());
+        for cell in &table.cells {
+            let Some(cell_box) = cell_frame(table, cell) else {
+                continue;
+            };
+            let bounds = Rect::new(
+                left + f64::from(cell_box.x0),
+                top_y + f64::from(cell_box.y0),
+                left + f64::from(cell_box.x1),
+                top_y + f64::from(cell_box.y1),
+            );
+            let mut blocks = Vec::with_capacity(cell.blocks.len());
+            for (block, y, run) in &cell.blocks {
+                let placed = Placed {
+                    origin_x: left + f64::from(cell_box.text_x + run.data().indent_px()),
+                    origin_y: top_y + f64::from(cell_box.text_y + *y),
+                    clip: bounds.intersect(clip),
+                };
+                let id = block_id(*block);
+                blocks.push(self.block_paint(
+                    frame,
+                    id,
+                    run.clone(),
+                    placed,
+                    page_top,
+                    (true, false),
+                ));
+            }
+            cells.push(CellPaint {
+                style: cell.style,
+                bounds,
+                blocks,
+            });
+        }
+        cells
+    }
+
+    /// The walk's record of one block, and the screen's beside it. `shows`
+    /// says whether the local caret and selection show in it, and whether
+    /// the other peers' carets do.
+    fn block_paint(
+        &self,
+        frame: &mut Frame,
+        id: BlockId,
+        run: ShapedRun,
+        placed: Placed,
+        top: f64,
+        (local, remote_carets): (bool, bool),
+    ) -> BlockPaint {
+        // The composition, placed before the run is drawn: the text after it
+        // moves right by its width (`PROSE-UI-199`).
+        let insertion = self
+            .local_caret(id, run.data(), local)
+            .zip(self.composition())
+            .map(|((line, caret), (width, _))| Insertion {
+                line,
+                x: caret.x0,
+                width,
+            });
+        frame.blocks.push(ScreenBlock {
+            id,
+            run: run.clone(),
+            placed,
+            top,
+            local,
+            remote_carets,
+        });
+        BlockPaint {
+            key: RunKey::Block(crate::events::tree_id(id)),
+            run,
+            placed,
+            insertion,
+            highlights: self.highlights.get(&id).cloned().unwrap_or_default(),
         }
     }
 
-    fn paint_block<S: DrawSurface>(
-        &mut self,
+    /// The local caret in block `id`, when it is drawn there: its line and
+    /// its box in the run.
+    fn local_caret(
+        &self,
+        id: BlockId,
+        data: &ParleyRunData,
+        local: bool,
+    ) -> Option<(usize, ambre_draw::BoundingBox)> {
+        self.cursor
+            .as_ref()
+            .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
+            // Parted and not yet answered, the block leaves its caret to the
+            // paragraph drawn below it (`PROSE-UI-203`).
+            .filter(|_| {
+                !(self.ghost().is_some()
+                    && self
+                        .splitting
+                        .is_some_and(|split| split.block == id && split.new_block.is_none()))
+            })
+            .map(|cursor| {
+                let laid = self.to_laid(id, cursor.offset);
+                (
+                    data.line_of(laid, self.caret_upstream),
+                    data.caret_box_at(laid, self.caret_upstream),
+                )
+            })
+    }
+
+    /// The composition in progress, shaped for the text composed now, and
+    /// its width.
+    fn composition(&self) -> Option<(f64, ShapedRun)> {
+        let (shaped_text, shape) = self.compose_shape.as_ref()?;
+        (*shaped_text == self.composing)
+            .then(|| (f64::from(shape.data().full_width()), shape.clone()))
+    }
+
+    /// Under the glyphs: the local selection, then each peer's.
+    fn paint_selections<S: DrawSurface>(
+        &self,
         surface: &mut S,
         palette: &PagePalette,
-        id: BlockId,
-        run: &ShapedRun,
-        placed: &Placed,
-        local: bool,
+        block: &ScreenBlock,
     ) {
-        let data = run.data();
-        // Under the glyphs: the local selection, then each peer's.
-        if local
+        let (id, data, placed) = (block.id, block.run.data(), &block.placed);
+        if block.local
             && let Some(ends) = self
                 .cursor
                 .as_ref()
@@ -475,196 +588,30 @@ impl ProseUiState {
                 }
             }
         }
-        // The composition, placed before the run is drawn: the text after it
-        // moves right by its width (`PROSE-UI-199`).
-        let caret = self
-            .cursor
-            .as_ref()
-            .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
-            // Parted and not yet answered, the block leaves its caret to the
-            // paragraph drawn below it (`PROSE-UI-203`).
-            .filter(|_| {
-                !(self.ghost().is_some()
-                    && self
-                        .splitting
-                        .is_some_and(|split| split.block == id && split.new_block.is_none()))
-            })
-            .map(|cursor| {
-                let laid = self.to_laid(id, cursor.offset);
-                let caret = data.caret_box_at(laid, self.caret_upstream);
-                (
-                    data.line_of(laid, self.caret_upstream),
-                    caret,
-                    cursor.offset,
-                )
-            });
-        let compose = caret.and_then(|(line, caret, _)| {
-            let (shaped_text, shape) = self.compose_shape.as_ref()?;
-            (*shaped_text == self.composing).then(|| {
-                let width = f64::from(shape.data().full_width());
-                (line, caret.x0, width, shape)
-            })
-        });
-        let insertions: Vec<Insertion> = compose
-            .map(|(line, x, width, _)| Insertion { line, x, width })
-            .into_iter()
-            .collect();
-        draw_run(
-            surface,
-            &mut self.runs,
-            RunKey::Block(crate::events::tree_id(id)),
-            run,
-            placed,
-            palette.text,
-            &insertions,
-        );
-        // Over the glyphs: the inline highlights of this block and no other.
-        for mark in self.highlights.get(&id).map_or(&[][..], Vec::as_slice) {
-            self.highlights_walked = self.highlights_walked.saturating_add(1);
-            for rect in data.range_boxes(mark.start, mark.end) {
-                let rect = to_rect(placed, &rect);
-                surface.fill_rect(rect, palette.highlight(mark.kind));
-                // A suggestion reads in the text itself: an insertion is
-                // underlined, a deletion struck through (`PROSE-UI-051`).
-                match mark.kind {
-                    HighlightKind::Deletion => {
-                        let middle = (rect.y0 + rect.y1) / 2.0;
-                        surface.stroke_line(rect.x0, middle, rect.x1, middle, palette.error, 1.0);
-                    }
-                    HighlightKind::Insertion => {
-                        let base = rect.y1 - 1.0;
-                        surface.stroke_line(rect.x0, base, rect.x1, base, palette.success, 1.0);
-                    }
-                    HighlightKind::Comment | HighlightKind::Find => {}
-                }
-            }
-        }
-        if let Some((_, caret, _)) = caret {
-            let mut rect = to_rect(placed, &caret);
-            // The composition in progress, at the caret, and the caret after
-            // it. It never waits on the document (`PROSE-UI-142`).
-            if let Some((_, _, width, shape)) = compose {
-                draw_shape(surface, shape, rect.x0, rect.y0, palette.text);
-                let base = rect.y1 - 1.0;
-                surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
-                rect.x0 += width;
-            }
-            let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
-            surface.fill_rect(bar, palette.accent);
-            // The host places the input pipe on this bar (`CHROME-007`).
-            self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
-        }
     }
 
-    /// A table: each cell's fill and border, then the text it holds. A merged
-    /// region is one cell and is drawn once; a covered cell is not in the
-    /// shape, so nothing is drawn for it (`PROSE-UI-147`). The text sits
-    /// inside the padding, at the cell's vertical alignment (`PROSE-UI-180`).
-    fn paint_table<S: DrawSurface>(
+    /// The composition in progress at the local caret, and the caret after
+    /// it. It never waits on the document (`PROSE-UI-142`).
+    fn paint_caret<S: DrawSurface>(
         &mut self,
         surface: &mut S,
         palette: &PagePalette,
-        table: &TableShape,
-        left: f64,
-        top: f64,
+        block: &ScreenBlock,
     ) {
-        for cell in &table.cells {
-            let Some(frame) = cell_frame(table, cell) else {
-                continue;
-            };
-            let bounds = Rect::new(
-                left + f64::from(frame.x0),
-                top + f64::from(frame.y0),
-                left + f64::from(frame.x1),
-                top + f64::from(frame.y1),
-            );
-            paint_cell_box(surface, palette, &cell.style, bounds);
-            surface.push_clip(bounds);
-            for (block, y, run) in &cell.blocks {
-                let placed = Placed {
-                    origin_x: left + f64::from(frame.text_x + run.data().indent_px()),
-                    origin_y: top + f64::from(frame.text_y + *y),
-                    clip: bounds,
-                };
-                self.paint_block(surface, palette, block_id(*block), run, &placed, true);
-            }
-            surface.pop_clip();
-        }
-    }
-
-    /// The header and the footer this page carries, from their own runs.
-    /// They draw like body text: the local caret and selection show on the
-    /// page the caret was placed on (`PROSE-UI-033`).
-    fn paint_bands<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, page: u32) {
-        let left = f64::from(self.shaped.layout.margin_left_px);
-        let right = left + f64::from(self.shaped.layout.content_width_px);
-        let local = self.band_page == Some(page);
-        for slot in self.band_slots(page) {
-            let Some(run) = self.drawn_of(slot.block).cloned() else {
-                continue;
-            };
-            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
-            let placed = Placed {
-                origin_x: left + f64::from(run.data().indent_px()),
-                origin_y: from,
-                clip: Rect::new(left, from, right, to),
-            };
-            surface.push_clip(placed.clip);
-            self.paint_block(surface, palette, block_id(slot.block), &run, &placed, local);
-            surface.pop_clip();
-        }
-    }
-
-    /// The footnote band at the foot of the body: a separator, then each note
-    /// this page carries, in the order of their ordinals. Each note draws its
-    /// number, then its text as any block draws, caret and selection with it
-    /// (`PROSE-UI-187`).
-    fn paint_notes<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, page: u32) {
-        let slots = self.note_slots(page);
-        let Some(first) = slots.first() else {
+        let Some((_, caret)) = self.local_caret(block.id, block.run.data(), block.local) else {
             return;
         };
-        let left = f64::from(self.shaped.layout.margin_left_px);
-        let right = left + f64::from(self.shaped.layout.content_width_px);
-        let rule = f64::from(first.top - NOTE_SEPARATOR_PX / 2.0);
-        surface.stroke_line(
-            left,
-            rule,
-            left + (right - left) / 3.0,
-            rule,
-            palette.sheet_border,
-            1.0,
-        );
-        for slot in slots {
-            let (top, bottom) = (f64::from(slot.top), f64::from(slot.bottom));
-            let clip = Rect::new(left, top, right, bottom);
-            surface.push_clip(clip);
-            if let Some(number) = self.shaped.notes.get(&slot.footnote_id).cloned() {
-                let placed = Placed {
-                    origin_x: left,
-                    origin_y: top,
-                    clip,
-                };
-                draw_run(
-                    surface,
-                    &mut self.runs,
-                    RunKey::Note(slot.footnote_id),
-                    &number,
-                    &placed,
-                    palette.text,
-                    &[],
-                );
-            }
-            if let Some(text) = self.drawn_of(slot.block).cloned() {
-                let placed = Placed {
-                    origin_x: left + f64::from(text.data().indent_px()),
-                    origin_y: top,
-                    clip,
-                };
-                self.paint_block(surface, palette, block_id(slot.block), &text, &placed, true);
-            }
-            surface.pop_clip();
+        let mut rect = to_rect(&block.placed, &caret);
+        if let Some((width, shape)) = self.composition() {
+            draw_shape(surface, &shape, rect.x0, rect.y0, palette.text);
+            let base = rect.y1 - 1.0;
+            surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
+            rect.x0 += width;
         }
+        let bar = Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1);
+        surface.fill_rect(bar, palette.accent);
+        // The host places the input pipe on this bar (`CHROME-007`).
+        self.caret_drawn = Some(self.page_frame.transform_rect_bbox(bar));
     }
 
     /// The carets of the other peers in one block, each with the tab that
@@ -672,7 +619,6 @@ impl ProseUiState {
     fn paint_carets<S: DrawSurface>(
         &self,
         surface: &mut S,
-        _palette: &PagePalette,
         id: BlockId,
         data: &ParleyRunData,
         placed: &Placed,
@@ -697,58 +643,43 @@ impl ProseUiState {
     }
 }
 
-/// A cell's fill, then its border. A stored border draws each edge at its own
-/// width, inside the cell; none draws the theme's hairline (`PROSE-UI-179`,
-/// `PROSE-UI-181`).
-fn paint_cell_box<S: DrawSurface>(
+/// A sheet, its shadow and its border, at `top` down the column. The page
+/// itself is the sheet, so the walk never draws one.
+fn paint_sheet<S: DrawSurface>(
     surface: &mut S,
     palette: &PagePalette,
-    style: &CellStyle,
-    bounds: Rect,
+    top: f64,
+    width: f64,
+    height: f64,
 ) {
-    if let Some(fill) = style.fill {
-        surface.fill_rect(bounds, packed(fill));
-    }
-    let Some(border) = style.border else {
-        surface.stroke_rect(bounds, palette.sheet_border, 1.0);
-        return;
-    };
-    let colour = border.color.map_or(palette.sheet_border, packed);
-    let (top, bottom) = (f64::from(border.top), f64::from(border.bottom));
-    let (left, right) = (f64::from(border.left), f64::from(border.right));
-    let edges = [
-        Rect::new(bounds.x0, bounds.y0, bounds.x1, bounds.y0 + top),
-        Rect::new(bounds.x0, bounds.y1 - bottom, bounds.x1, bounds.y1),
-        Rect::new(bounds.x0, bounds.y0, bounds.x0 + left, bounds.y1),
-        Rect::new(bounds.x1 - right, bounds.y0, bounds.x1, bounds.y1),
-    ];
-    for edge in edges {
-        if edge.width() > 0.0 && edge.height() > 0.0 {
-            surface.fill_rect(edge, colour);
-        }
-    }
-}
-
-/// A colour packed as `0xRRGGBBAA`.
-fn packed(rgba: u32) -> Color {
-    let [r, g, b, a] = rgba.to_be_bytes();
-    Color::from_rgba8(r, g, b, a)
+    let sheet = Rect::new(0.0, 0.0, width, height);
+    let shadow = Rect::new(
+        SHADOW_OFFSET_PX,
+        SHADOW_OFFSET_PX,
+        width + SHADOW_OFFSET_PX,
+        height + SHADOW_OFFSET_PX,
+    );
+    surface.push_transform(Affine::translate((0.0, top)));
+    surface.fill_rect(shadow, palette.shadow);
+    surface.fill_rect(sheet, palette.sheet);
+    surface.stroke_rect(sheet, palette.sheet_border, 1.0);
+    surface.pop_transform();
 }
 
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use ambre_core::UserId;
-    use ambre_draw::Color;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
+    use ambre_draw::{Color, DocumentWalk};
 
-    use super::PagePalette;
+    use super::{PagePalette, PageView, PageWalk};
     use crate::events::{
         BlockId, BlockInit, CursorPosition, ProseCommand, RemoteCursor, block_id, tree_id,
     };
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
-    use crate::view::cache::RunKey;
+    use crate::view::cache::{RunCache, RunKey};
     use crate::view::tests::{append, down, laid_out};
     use crate::view::{Highlight, HighlightKind};
 
@@ -1898,5 +1829,65 @@ mod tests {
         assert!(line(pal.success) > inserted.y0 + inserted.height() * 0.75);
         let middle = (deleted.y0 + deleted.y1) / 2.0;
         assert!((line(pal.error) - middle).abs() < 0.5);
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(32))]
+
+        /// The screen draws the pages' walk unchanged among its own layers,
+        /// whatever the zoom, scroll and canvas (`CANVAS-074`).
+        #[test]
+        fn the_screen_draws_the_walk_at_any_camera(
+            zoom in 0.25f32..4.0,
+            scroll in 0.0f32..1.0,
+            width in 320.0f32..2400.0,
+            height in 240.0f32..1600.0,
+        ) {
+            let (_, shaped) = laid_out(1, 20);
+            let mut ui = ProseUiState::default();
+            ui.resize(width, height);
+            ui.apply_layout(shaped);
+            ui.viewport.zoom = zoom;
+            let bottom = ui.column.page_top_y(1);
+            ui.viewport.scroll_y = ui.column.clamp_scroll(&ui.viewport, scroll * bottom);
+            let id = first_block(&ui);
+            ui.cursor = Some(CursorPosition {
+                block_id: id,
+                offset: 12,
+                anchor: Some((id, 2)),
+            });
+            ui.highlights.insert(
+                id,
+                vec![Highlight {
+                    kind: HighlightKind::Comment,
+                    start: 5,
+                    end: 15,
+                }],
+            );
+            let screen = paint(&mut ui);
+
+            let mut frame = super::Frame::default();
+            for page in ui.column.built_pages(&ui.viewport).into_iter().flatten() {
+                let top = f64::from(ui.column.page_top_y(page));
+                ui.resolve_page(&mut frame, page, top);
+            }
+            let region = ui.walk_region(ui.camera(), &frame);
+            let palette = palette();
+            let view = PageView {
+                palette: &palette,
+                width: f64::from(ui.shaped.layout.page_width_px),
+                height: f64::from(ui.shaped.layout.page_height_px),
+                pages: &frame.pages,
+            };
+            let mut runs = RunCache::default();
+            let mut walked = RecordingSurface::new();
+            PageWalk {
+                runs: &mut runs,
+                highlights_walked: 0,
+            }
+            .walk(&view, region, &mut walked);
+            proptest::prop_assert!(walked.count(glyphs) > 0);
+            proptest::prop_assert!(screen.holds_walk(&walked));
+        }
     }
 }

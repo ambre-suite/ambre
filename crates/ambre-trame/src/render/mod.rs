@@ -44,7 +44,9 @@ pub const HEADER_SIZE: f32 = 11.0;
 //   - cells    : the cell-body pass;
 //   - grid     : grid lines;
 //   - merges   : merged-cell overlays;
-//   - headers  : row/column header bands.
+//   - headers  : row/column header bands;
+//   - walk     : the sheet's document walk, composing the passes above in
+//                sheet coordinates (`CANVAS-074`).
 // -----------------------------------------------------------------------------
 mod cells;
 mod content;
@@ -53,6 +55,7 @@ mod headers;
 mod layout;
 mod merges;
 mod text;
+mod walk;
 
 pub use cells::draw_cells_on;
 pub use content::{CellContent, draw_cell_borders_on};
@@ -61,6 +64,7 @@ pub use headers::{draw_col_headers_on, draw_row_headers_on};
 pub use layout::GridLayout;
 pub use merges::draw_merges_on;
 pub use text::{col_label, draw_layout_runs, draw_layout_runs_decorated, draw_text, row_label};
+pub use walk::{SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk};
 
 // -----------------------------------------------------------------------------
 // Formula bar action types (shared between the UI thread and the Leptos chrome)

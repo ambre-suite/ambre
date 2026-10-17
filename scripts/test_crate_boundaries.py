@@ -61,6 +61,21 @@ TOILE_ABSORB = (
     "}\n"
 )
 
+# One walk per application, each reaching only what `WALK_REACH` lists.
+WALKS = {
+    "crates/ambre-prose/src/view/walk.rs": (
+        "use crate::view::cache::{RunCache, RunKey};\nuse crate::view::{Highlight, HighlightKind};\n"
+        "impl DocumentWalk for PageWalk<'_> {}\n"
+    ),
+    "crates/ambre-trame/src/render/walk.rs": (
+        "use super::*;\nuse crate::{TOTAL_COLS, TOTAL_ROWS};\nimpl<'t> DocumentWalk for SheetWalk<'t> {}\n"
+    ),
+    "crates/ambre-toile/src/ui/walk.rs": (
+        "use crate::logic::animate::AnimatedElement;\nuse super::label::{LABEL_FONT_SIZE, label_rect};\n"
+        "impl DocumentWalk for BoardWalk<'_> {}\n"
+    ),
+}
+
 
 def scratch(tmp: str) -> Path:
     """A minimal tree that passes every check."""
@@ -148,6 +163,8 @@ def scratch(tmp: str) -> Path:
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
+    for rel, text in WALKS.items():
+        write(root, rel, text)
     return root
 
 
@@ -192,6 +209,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_handlers(errors)
             cb.check_failure_latches(errors)
             cb.check_exit_writes(errors)
+            cb.check_walks(errors)
             return errors
 
     def breach(self, rel: str, text: str) -> list[str]:
@@ -1034,6 +1052,32 @@ class CrateBoundaries(unittest.TestCase):
             (root / cb.CLIENT).unlink()
             errors = self.run_checks(root)
         self.assertTrue(any("gone from the tree" in e for e in errors), errors)
+
+    def test_a_walk_reaching_a_screen_module_is_refused(self):
+        rel = "crates/ambre-prose/src/view/walk.rs"
+        for line, module in (
+            ("use crate::view::caret::CaretPath;\n", "crate::view::caret"),
+            ("use super::{cache::RunKey, column::Column};\n", "crate::view::column"),
+            ("fn f() { crate::ui::state::touch(); }\n", "crate::ui::state"),
+        ):
+            errors = self.breach(rel, WALKS[rel] + line)
+            self.assertTrue(any(f"reaches `{module}`" in e for e in errors), (line, errors))
+
+    def test_a_walk_naming_screen_state_is_refused(self):
+        rel = "crates/ambre-toile/src/ui/walk.rs"
+        for line in ("struct V<'v> { camera: &'v ViewportTransform }\n", "fn f(s: &ToileUiState) {}\n"):
+            errors = self.breach(rel, WALKS[rel] + line)
+            self.assertTrue(any("names screen state" in e for e in errors), (line, errors))
+
+    def test_a_walk_test_module_stays_free(self):
+        rel = "crates/ambre-trame/src/render/walk.rs"
+        text = WALKS[rel] + "#[cfg(test)]\nmod tests {\n    use crate::ui::TrameUiState;\n}\n"
+        self.assertEqual(self.breach(rel, text), [])
+
+    def test_an_application_without_a_walk_is_an_error_not_a_pass(self):
+        rel = "crates/ambre-trame/src/render/walk.rs"
+        errors = self.breach(rel, "use super::*;\n")
+        self.assertTrue(any("walk boundary holds nothing" in e for e in errors), errors)
 
 
 if __name__ == "__main__":

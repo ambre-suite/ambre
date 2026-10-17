@@ -11,7 +11,8 @@
 //
 // `kinetic` is the one kinetic scroll the applications share: pure arithmetic
 // over timed pointer positions, beside the drawing primitives they share.
-// `hit` is the trait each view's content hit-test implements.
+// `hit` is the trait each view's content hit-test implements, and `walk` the
+// trait each application's document walk implements.
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
 // No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core
@@ -31,6 +32,9 @@ pub use peer::peer_color;
 
 pub mod text;
 pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};
+
+pub mod walk;
+pub use walk::DocumentWalk;
 
 #[cfg(feature = "testing")]
 pub mod testing;

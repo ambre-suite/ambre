@@ -23,12 +23,39 @@ use lyon::tessellation::{
 // vertices to screen space.
 const PATH_TOLERANCE_PX: f64 = 0.15;
 
-/// The size a glyph is rasterized at: its logical size times the density.
+/// The size a glyph is rasterized at: its logical size, times the scale of the
+/// transform it is drawn under, times the density.
 ///
-/// The atlas keys a raster by this size. A density change therefore never
-/// draws a raster made for the previous screen (`CANVAS-034`).
-fn raster_size(font_size: f32, density: f32) -> f32 {
-    font_size * density
+/// A walk is laid out in document units and drawn under a zoom. Its glyphs get
+/// a bitmap of the size they cover on the screen, never a stretched one
+/// (`CANVAS-074`). The
+/// atlas keys a raster by this size. A density change therefore never draws a
+/// raster made for the previous screen (`CANVAS-034`).
+fn raster_size(font_size: f32, scale: f64, density: f32) -> f32 {
+    (f64::from(font_size) * scale) as f32 * density
+}
+
+/// A transform's linear part split into its scale and the rest. The scale is
+/// the square root of the determinant, as a path's tolerance reads it. The
+/// rest is the linear part divided by it.
+///
+/// The raster already carries the scale, so a rotated glyph quad is mapped by
+/// the rest alone. `None` for a transform that collapses the plane.
+fn split_linear(t: Affine) -> Option<(f64, Affine)> {
+    let scale = affine_scale(t);
+    if !(scale.is_finite() && scale > 1e-9) {
+        return None;
+    }
+    let c = t.as_coeffs();
+    let unit = Affine::new([
+        c[0] / scale,
+        c[1] / scale,
+        c[2] / scale,
+        c[3] / scale,
+        0.0,
+        0.0,
+    ]);
+    Some((scale, unit))
 }
 
 /// A glyph bitmap's logical box, as `(left bearing, top bearing, width,
@@ -321,12 +348,15 @@ impl DrawSurface for WgpuSurface<'_> {
         // path is skipped for it.
         let coeffs = transform.as_coeffs();
         let rotated = coeffs[1].abs() > 1e-9 || coeffs[2].abs() > 1e-9;
-        let linear = Affine::new([coeffs[0], coeffs[1], coeffs[2], coeffs[3], 0.0, 0.0]);
+        let Some((scale, linear)) = split_linear(transform) else {
+            return;
+        };
 
         // The layout is logical, and the bitmap is not (`CANVAS-033`). A glyph
-        // is rasterized at the density, then drawn back at its logical size.
+        // is rasterized at the transform's scale and the density, then drawn
+        // back over the screen box that scale gives it (`CANVAS-074`).
         let density = self.renderer.density();
-        let raster = raster_size(font_size, density);
+        let raster = raster_size(font_size, scale, density);
 
         let mut pen_x = 0.0f32;
         for glyph in run.glyphs() {
@@ -722,7 +752,7 @@ mod tests {
     /// stretched over twice its texels on a dense screen.
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
-        assert_eq!(raster_size(14.0, 2.0), 28.0);
+        assert_eq!(raster_size(14.0, 1.0, 2.0), 28.0);
         // A bitmap of 20 x 30 device pixels at density 2.
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), 2.0),
@@ -740,10 +770,29 @@ mod tests {
     #[test]
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::GlyphKey;
-        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, density));
+        let key = |density| GlyphKey::new(7, 42, raster_size(14.0, 1.0, density));
         assert_ne!(key(1.0), key(2.0));
         assert_ne!(key(1.25), key(1.5));
         assert_eq!(key(2.0), key(2.0));
+    }
+
+    /// A run drawn under a zoom is rasterized at the size it covers
+    /// (`CANVAS-074`). A rotated quad is then mapped by the rotation alone, or
+    /// the zoom would apply twice.
+    #[test]
+    fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
+        assert_eq!(raster_size(14.0, 2.0, 1.0), 28.0);
+        assert_eq!(raster_size(14.0, 2.0, 2.0), 56.0);
+
+        let (scale, unit) =
+            split_linear(Affine::translate((5.0, 7.0)) * Affine::scale(3.0) * Affine::rotate(0.5))
+                .expect("a plane-preserving transform");
+        assert!((scale - 3.0).abs() < 1e-12, "{scale}");
+        let want = Affine::rotate(0.5).as_coeffs();
+        for (got, want) in unit.as_coeffs().iter().zip(want) {
+            assert!((got - want).abs() < 1e-12, "{unit:?}");
+        }
+        assert_eq!(split_linear(Affine::scale(0.0)), None);
     }
 
     /// The active transform scales tessellated positions into screen space.
