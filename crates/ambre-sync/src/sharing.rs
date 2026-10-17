@@ -271,13 +271,13 @@ pub(crate) fn presence_directory<'a>(
 /// Picks this client's own role out of a members response, given `(user_id,
 /// role)` pairs and our canonical `UserId` (architecture).
 ///
-/// Every failure path -- no session id, no row for us, an unknown role string --
-/// yields `Role::Viewer`. That is the safe direction for a UX gate. It hides
-/// affordances we may in fact have, whereas guessing `Owner` would offer edits
-/// the server then rejects. A document we genuinely own always has a
-/// well-formed row saying so.
-pub(crate) fn own_role<'a>(
-    entries: impl IntoIterator<Item = (UserId, &'a str)>,
+/// Every failure path -- no session id, no row for us, a role that is not a
+/// document one -- yields `Role::Viewer`. That is the safe direction for a UX
+/// gate. It hides affordances we may in fact have, whereas guessing `Owner`
+/// would offer edits the server then rejects. An unknown role word never gets
+/// here: it refused the answer when it was read (`SRV-180`).
+pub(crate) fn own_role(
+    entries: impl IntoIterator<Item = (UserId, Role)>,
     my_user_id: Option<UserId>,
 ) -> Role {
     let Some(me) = my_user_id else {
@@ -286,15 +286,15 @@ pub(crate) fn own_role<'a>(
     entries
         .into_iter()
         .find(|(user_id, _)| *user_id == me)
-        .and_then(|(_, role)| role.parse().ok())
-        .filter(|role: &Role| role.is_valid_for_document())
+        .map(|(_, role)| role)
+        .filter(|role| role.is_valid_for_document())
         .unwrap_or(Role::Viewer)
 }
 
 /// Maps server member entries into bus `MemberInfo` (plaintext name/email,
-/// parsed role). Unknown roles fall back to viewer. Each identifier was parsed
-/// when the response was read, so a malformed one refused the whole answer
-/// there. An invented id would name a person nothing can act on (`SYNC-038`).
+/// typed role). Each identifier and each role was parsed when the response was
+/// read, so a malformed one refused the whole answer there. An invented id
+/// would name a person nothing can act on (`SYNC-038`).
 ///
 /// Each row carries what `log` says of it. A verified row shows the role of
 /// its latest valid entry, whatever the relay's row says (`SYNC-110`).
@@ -307,7 +307,7 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) ->
                 user_id: m.user_id,
                 display_name: m.display_name,
                 email: m.email,
-                role: logged.unwrap_or_else(|| m.role.parse().unwrap_or(Role::Viewer)),
+                role: logged.unwrap_or(m.role),
                 standing,
             }
         })
@@ -664,7 +664,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 member: p.user_id,
                 member_key: decode_signing_pubkey(&m.signing_pub_key)?,
                 act: MembershipAct::Revoke,
-                role: m.role.parse().unwrap_or(Role::Viewer),
+                role: m.role,
                 key: Some(new_doc_key.id()),
             };
             entry_after(&log, draft, &p.author)
@@ -793,8 +793,7 @@ async fn leave_document<H: ShareHttp>(
             .members
             .iter()
             .find(|m| m.user_id == me)
-            .and_then(|m| m.role.parse().ok())
-            .unwrap_or(Role::Viewer);
+            .map_or(Role::Viewer, |m| m.role);
         let draft = Draft {
             document: document_id,
             member: me,
@@ -1020,10 +1019,13 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             link: text.clone(),
         };
         match http
-            .post_json::<_, serde_json::Value>(&rotate_url, &body)
+            .post_json::<_, http::RotateKeyResponse>(&rotate_url, &body)
             .await
         {
-            Ok(_) => {
+            // The one word of the set; another refuses the answer (`SRV-180`).
+            Ok(http::RotateKeyResponse {
+                status: ambre_core::RotationStatus::Rotated,
+            }) => {
                 let _ = event_tx.send(SyncEvent::DebtSettled {
                     document_id,
                     new_doc_key,
@@ -1119,7 +1121,7 @@ mod tests {
             signing_pub_key: String::new(),
             exchange_pub_key: pub_hex.to_string(),
             doc_key_enc: String::new(),
-            role: "editor".into(),
+            role: Role::Editor,
             wrapper_exchange_pub_key: String::new(),
         }
     }
@@ -1228,42 +1230,30 @@ mod tests {
 
     #[test]
     fn map_members_parses_roles_and_refuses_malformed_ids() {
-        let row = |user_id: &str| {
-            serde_json::json!({
+        let read = |user_id: &str, role: &str| {
+            serde_json::from_value::<http::DocumentMemberEntry>(serde_json::json!({
                 "user_id": user_id,
                 "display_name": "Member",
                 "email": "m@test.local",
                 "signing_pub_key": "",
                 "exchange_pub_key": "ab",
                 "doc_key_enc": "",
-                "role": "editor",
-            })
+                "role": role,
+            }))
         };
+        let sound_id = "44444444-4444-4444-4444-444444444444";
         // An unparsable id refuses the row when it is read, so nothing is
         // left to replace by an invented one (`SYNC-038`).
-        let read = |user_id| serde_json::from_value::<http::DocumentMemberEntry>(row(user_id));
-        assert!(read("not-a-uuid").is_err());
-        let sound = read("44444444-4444-4444-4444-444444444444").expect("a sound row");
+        assert!(read("not-a-uuid", "editor").is_err());
+        // So does a role word no build wrote, and a spelling of a known one
+        // (`SRV-180`).
+        assert!(read(sound_id, "bogus").is_err());
+        assert!(read(sound_id, "Editor").is_err());
+        let sound = read(sound_id, "editor").expect("a sound row");
         let none = Log::walk(DocumentId::new(), None, &[], membership_log::no_self_join);
         let mapped = map_members(vec![sound], &none);
-        assert_eq!(
-            mapped[0].user_id,
-            UserId::parse_str("44444444-4444-4444-4444-444444444444").unwrap()
-        );
+        assert_eq!(mapped[0].user_id, UserId::parse_str(sound_id).unwrap());
         assert_eq!(mapped[0].role, Role::Editor);
-        let bogus_role = map_members(
-            vec![{
-                let mut m = member("55555555-5555-5555-5555-555555555555", "ab");
-                m.role = "bogus".into();
-                m
-            }],
-            &none,
-        );
-        assert_eq!(
-            bogus_role[0].role,
-            Role::Viewer,
-            "an unknown role reads viewer"
-        );
     }
 
     // -- Orchestration tasks (Tier 2): driven natively against a fake transport.
@@ -2141,7 +2131,7 @@ mod tests {
     fn own_role_reads_our_own_row() {
         let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
-        let role = own_role([(other, "owner"), (me, "viewer")], Some(me));
+        let role = own_role([(other, Role::Owner), (me, Role::Viewer)], Some(me));
 
         // Our own row wins: a peer being owner says nothing about our access.
         assert_eq!(role, Role::Viewer);
@@ -2153,21 +2143,19 @@ mod tests {
         let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
 
         // No session id yet.
-        assert_eq!(own_role([(other, "owner")], None), Role::Viewer);
+        assert_eq!(own_role([(other, Role::Owner)], None), Role::Viewer);
         // No row for us in the response.
-        assert_eq!(own_role([(other, "owner")], Some(me)), Role::Viewer);
-        // Our row carries a role string this client does not know.
-        assert_eq!(own_role([(me, "wizard")], Some(me)), Role::Viewer);
+        assert_eq!(own_role([(other, Role::Owner)], Some(me)), Role::Viewer);
         // A valid role that is not a document role (channel / org side).
-        assert_eq!(own_role([(me, "admin")], Some(me)), Role::Viewer);
+        assert_eq!(own_role([(me, Role::Admin)], Some(me)), Role::Viewer);
     }
 
     #[test]
     fn own_role_reads_writable_roles() {
         let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        for (wire, expected) in [("owner", Role::Owner), ("editor", Role::Editor)] {
-            assert_eq!(own_role([(me, wire)], Some(me)), expected);
-            assert!(expected.can_write_document());
+        for role in [Role::Owner, Role::Editor] {
+            assert_eq!(own_role([(me, role)], Some(me)), role);
+            assert!(role.can_write_document());
         }
     }
 

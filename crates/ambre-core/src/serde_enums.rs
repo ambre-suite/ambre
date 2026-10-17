@@ -1,8 +1,9 @@
 //! Serde adapters for enum serialization as lowercase strings.
 //!
 //! These adapters serialize enums as their lowercase string representations for
-//! JSON APIs. For example, `DocType::Prose` serializes as "prose" and deserializes
-//! from "prose", "Prose", or "PROSE" (case-insensitive).
+//! JSON APIs. For example, `DocType::Prose` serializes as "prose" and
+//! deserializes from "prose" alone. Each closed set has one parser, which
+//! refuses any other word when the body is read.
 
 use serde::{Deserialize, Deserializer, Serializer};
 
@@ -21,11 +22,10 @@ pub mod doc_type {
     where
         S: Serializer,
     {
-        let lowercase = doc_type.name().to_lowercase();
-        serializer.serialize_str(&lowercase)
+        serializer.serialize_str(doc_type.as_str())
     }
 
-    /// Reads the document type from its name, in any case.
+    /// Reads the document type from its lowercase name.
     ///
     /// # Errors
     ///
@@ -35,13 +35,7 @@ pub mod doc_type {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        match s.to_lowercase().as_str() {
-            "prose" => Ok(DocType::Prose),
-            "trame" => Ok(DocType::Trame),
-            "toile" => Ok(DocType::Toile),
-            "murmure" => Ok(DocType::Murmure),
-            _ => Err(serde::de::Error::custom(format!("unknown doc_type: {}", s))),
-        }
+        s.parse::<DocType>().map_err(serde::de::Error::custom)
     }
 }
 

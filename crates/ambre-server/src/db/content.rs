@@ -28,29 +28,12 @@ pub struct SnapshotRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Who vouched for a snapshot (`SRV-126`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SnapshotStatus {
-    /// Nobody yet. Never served, and never moves a trim.
-    Pending,
-    /// Its own author. Served beside the reference snapshot.
-    #[serde(rename = "self")]
-    SelfConfirmed,
-    /// Another member. Moves the trim.
-    Confirmed,
-}
+pub use ambre_core::SnapshotStatus;
 
-impl SnapshotStatus {
-    /// The stored spelling, which the migration checks.
-    fn parse(text: &str) -> Result<Self, AppError> {
-        match text {
-            "pending" => Ok(Self::Pending),
-            "self" => Ok(Self::SelfConfirmed),
-            "confirmed" => Ok(Self::Confirmed),
-            other => Err(AppError::Internal(format!("snapshot status {other}"))),
-        }
-    }
+/// The stored spelling, which the migration checks (`SRV-180`).
+fn parse_status(text: &str) -> Result<SnapshotStatus, AppError> {
+    text.parse()
+        .map_err(|error| AppError::Internal(format!("snapshot {error}")))
 }
 
 /// The columns [`snapshot_row`] reads, in one place for every query.
@@ -69,7 +52,7 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         update_clocks: r.try_get("update_clocks")?,
         s3_key: r.try_get("s3_key")?,
         covered_seq: r.try_get("covered_seq")?,
-        status: SnapshotStatus::parse(&status)?,
+        status: parse_status(&status)?,
         created_at: r.try_get("created_at")?,
     })
 }
@@ -226,7 +209,7 @@ pub async fn confirm_snapshot(
             .bind(did)
             .fetch_optional(pool)
             .await?;
-    status.as_deref().map(SnapshotStatus::parse).transpose()
+    status.as_deref().map(parse_status).transpose()
 }
 
 /// Drops a snapshot nobody confirmed yet, and returns its object key for the

@@ -228,17 +228,10 @@ pub async fn list_documents(
         .map(|d| {
             let doc_id = d.id;
             let owner_id = d.owner_id;
-            let doc_type = match d.doc_type.to_lowercase().as_str() {
-                "prose" => ambre_core::DocType::Prose,
-                "trame" => ambre_core::DocType::Trame,
-                "toile" => ambre_core::DocType::Toile,
-                "murmure" => ambre_core::DocType::Murmure,
-                _ => ambre_core::DocType::Prose, // fallback
-            };
             DocumentSummaryJson {
                 id: doc_id,
                 owner_id,
-                doc_type,
+                doc_type: d.doc_type,
                 name_enc: d
                     .name_enc
                     .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
@@ -303,11 +296,10 @@ pub async fn create_document(
         })
         .transpose()?;
     let client_id = req.document_id;
-    let doc_type_str = req.doc_type.name().to_lowercase();
     let (doc, created) = db::create_document(
         &state.db,
         &s.user_id,
-        &doc_type_str,
+        req.doc_type,
         name_enc.as_deref(),
         client_id.as_ref(),
     )
@@ -338,7 +330,7 @@ pub async fn create_document(
         let expected = super::share::Expected {
             act: ambre_protocol::MembershipAct::Create,
             member: s.user_id,
-            role: Some("owner"),
+            role: Some(ambre_core::Role::Owner),
             key: None,
         };
         let entry = super::share::checked_entry(&state, &s, doc_id, text, expected).await?;
@@ -398,25 +390,16 @@ pub async fn get_document(
     // document's existence) to an arbitrary caller who holds only the UUID is an
     // unnecessary metadata disclosure. The owner keeps access even without a
     // `document_members` row (they may have been the creator pre-membership).
-    let is_owner = auth.user_id.as_uuid().as_bytes() == doc.owner_id.as_bytes();
+    let is_owner = auth.user_id == doc.owner_id;
     if mem.is_none() && !is_owner {
         return Err(AppError::NotFound {
             resource: "document",
         });
     }
-    let doc_id_typed = doc.id;
-    let owner_id_typed = doc.owner_id;
-    let doc_type = match doc.doc_type.to_lowercase().as_str() {
-        "prose" => ambre_core::DocType::Prose,
-        "trame" => ambre_core::DocType::Trame,
-        "toile" => ambre_core::DocType::Toile,
-        "murmure" => ambre_core::DocType::Murmure,
-        _ => ambre_core::DocType::Prose, // fallback
-    };
     Ok(axum::Json(GetDocumentResponse {
-        id: doc_id_typed,
-        owner_id: owner_id_typed,
-        doc_type,
+        id: doc.id,
+        owner_id: doc.owner_id,
+        doc_type: doc.doc_type,
         name_enc: doc
             .name_enc
             .map(|n| base64::engine::general_purpose::URL_SAFE.encode(&n)),
@@ -674,7 +657,7 @@ pub async fn update_document_member_role(
     let expected = super::share::Expected {
         act: ambre_protocol::MembershipAct::ChangeRole,
         member: target,
-        role: Some(role.as_str()),
+        role: Some(role),
         key: Some(None),
     };
     let entry =

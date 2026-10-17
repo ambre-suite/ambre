@@ -8,7 +8,7 @@ use super::*;
 pub struct DocumentRow {
     pub id: ambre_core::DocumentId,
     pub owner_id: ambre_core::UserId,
-    pub doc_type: String,
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<Vec<u8>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -19,7 +19,7 @@ pub struct DocumentRow {
 pub struct DocumentSummaryRow {
     pub id: ambre_core::DocumentId,
     pub owner_id: ambre_core::UserId,
-    pub doc_type: String,
+    pub doc_type: ambre_core::DocType,
     pub name_enc: Option<Vec<u8>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub role: ambre_core::Role,
@@ -50,7 +50,7 @@ pub async fn get_document(
         Some(r) => Ok(Some(DocumentRow {
             id: r.try_get::<PgId, _>("id")?.into(),
             owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
-            doc_type: r.try_get("doc_type")?,
+            doc_type: decode_doc_type(r.try_get("doc_type")?)?,
             name_enc: r.try_get("name_enc")?,
             created_at: r.try_get("created_at")?,
             updated_at: r.try_get("updated_at")?,
@@ -86,7 +86,7 @@ pub async fn list_documents_for_user(
             Ok(DocumentSummaryRow {
                 id: r.try_get::<PgId, _>("id")?.into(),
                 owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
-                doc_type: r.try_get("doc_type")?,
+                doc_type: decode_doc_type(r.try_get("doc_type")?)?,
                 name_enc: r.try_get("name_enc")?,
                 updated_at: r.try_get("updated_at")?,
                 role: decode_role(r.try_get("role")?)?,
@@ -111,17 +111,18 @@ pub async fn list_documents_for_user(
 pub async fn create_document(
     pool: &PgPool,
     owner_id: &ambre_core::UserId,
-    doc_type: &str,
+    doc_type: ambre_core::DocType,
     name_enc: Option<&[u8]>,
     document_id: Option<&ambre_core::DocumentId>,
 ) -> Result<(DocumentRow, bool), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
+    let doc_type = doc_type.as_str();
 
     let row_to_doc = |row: sqlx::postgres::PgRow| -> Result<DocumentRow, AppError> {
         Ok(DocumentRow {
             id: row.try_get::<PgId, _>("id")?.into(),
             owner_id: row.try_get::<PgId, _>("owner_id")?.into(),
-            doc_type: row.try_get("doc_type")?,
+            doc_type: decode_doc_type(row.try_get("doc_type")?)?,
             name_enc: row.try_get("name_enc")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,

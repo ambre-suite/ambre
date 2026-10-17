@@ -71,25 +71,15 @@ pub fn step(prev: Option<&Route>, cur: &Route) -> Option<Step> {
     })
 }
 
-/// URL slug for a document type (lowercased name). Inverse of [`slug_to_type`].
+/// URL slug for a document type: the one word of the set. Inverse of
+/// [`slug_to_type`].
 fn type_slug(doc_type: DocType) -> &'static str {
-    match doc_type {
-        DocType::Prose => "prose",
-        DocType::Trame => "trame",
-        DocType::Toile => "toile",
-        DocType::Murmure => "murmure",
-    }
+    doc_type.as_str()
 }
 
 /// Parse a path slug back into a [`DocType`].
 fn slug_to_type(slug: &str) -> Option<DocType> {
-    match slug {
-        "prose" => Some(DocType::Prose),
-        "trame" => Some(DocType::Trame),
-        "toile" => Some(DocType::Toile),
-        "murmure" => Some(DocType::Murmure),
-        _ => None,
-    }
+    slug.parse().ok()
 }
 
 /// Resolve the current route from `window.location.pathname`.

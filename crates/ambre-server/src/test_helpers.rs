@@ -345,6 +345,7 @@ pub async fn create_test_document(
     owner_id: ambre_core::UserId,
     doc_type: &str,
 ) -> ambre_core::DocumentId {
+    let doc_type = doc_type.parse().expect("a document type word");
     let (doc, _created) = db::create_document(pool, &owner_id, doc_type, None, None)
         .await
         .expect("failed to create test document");

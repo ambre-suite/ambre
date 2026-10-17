@@ -157,8 +157,8 @@ trusted-key store's job (`ambre-spec-key-verification.md`), and presence does no
 | Where | A bad row becomes | Why |
 |---|---|---|
 | the directory | skipped | a cursor under the wrong name is worse than no cursor (`SYNC-015`) |
-| the role | the read-only role | hiding an affordance the user has beats offering one the relay refuses (`SYNC-017`) |
-| the identifier, anywhere | the whole answer, refused when read | an identifier is parsed once, at the edge, so no row reaches the list with an invented one (`SYNC-038`, `SRV-179`) |
+| our own role, absent or not a document role | the read-only role | hiding an affordance the user has beats offering one the relay refuses (`SYNC-017`) |
+| the identifier or the role word, anywhere | the whole answer, refused when read | each is parsed once, at the edge, so no row reaches the list with an invented identity or a guessed role (`SYNC-038`, `SRV-179`, `SRV-180`) |
 
 **The signed membership log.** The relay stays the authority on access, and the log lets each
 client check what the relay serves.

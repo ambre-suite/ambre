@@ -128,6 +128,11 @@ row or route of the relay, and no type of the HTTP layer of Sync, holds a
 field named `id`, `*_id` or `*_ids` as a `String` or a `Uuid`. A serde field
 that holds a core identifier names its text adapter.
 
+**A closed set typed on the JSON wire** (`SRV-180`). A word held as a string
+is parsed again by whoever reads it, and three parsers of the document type
+disagreed on case and on a fallback. So the same rows, routes and types hold
+no `doc_type`, `role`, `kind` or `status` field as a `String`.
+
 **A walk reads no screen state** (`CANVAS-074`). The screen and the page draw
 one walk per application, so a walk that reached the screen would print a
 caret, a selection or a zoom on the page. A file that implements
@@ -537,6 +542,9 @@ CORE_ID = re.compile(
 )
 SERDE_DERIVE = re.compile(r"#\[derive\([^)]*\b(?:Serialize|Deserialize)\b")
 TEXT_ADAPTER = re.compile(r"#\[serde\([^\]]*\bwith\s*=\s*\"ambre_core::serde_id::")
+# The fields whose word belongs to a closed set, parsed once at the edge into
+# its enum (`SRV-180`).
+WIRE_CLOSED_NAME = re.compile(r"^(?:doc_type|role|kind|status)$")
 # A signal whose payload a reviewer accepts as a primitive, and why: free text
 # has no unit and no closed set, so a type of its own would name nothing.
 BARE_PAYLOAD_ACCEPTED = {
@@ -1828,6 +1836,9 @@ def check_wire_ids(errors: list[str]) -> int:
     A field named `id`, `*_id` or `*_ids` holds no `String`, `str` or `Uuid`.
     A field of a serde struct that holds a core identifier names its adapter
     in `ambre_core::serde_id`, since the identifier alone writes its bytes.
+
+    `SRV-180`: on the same files, a field named `doc_type`, `role`, `kind` or
+    `status` holds its enum, never a `String` or a `str`.
     """
     files = [p for d in WIRE_DIRS for p in sorted((ROOT / d).rglob("*.rs"))]
     files += [ROOT / f for f in WIRE_FILES if (ROOT / f).exists()]
@@ -1842,6 +1853,8 @@ def check_wire_ids(errors: list[str]) -> int:
                 errors.append(f"{rel}:{number}: the `{field}` field carries an identifier as `{untyped.group(1)}`")
             elif serde and CORE_ID.search(ty) and not adapted:
                 errors.append(f"{rel}:{number}: the `{field}` field writes its identifier as bytes, with no text adapter")
+            elif WIRE_CLOSED_NAME.match(field) and untyped and untyped.group(1) != "Uuid":
+                errors.append(f"{rel}:{number}: the `{field}` field carries a closed set as `{untyped.group(1)}`")
     return len(files)
 
 
@@ -2009,7 +2022,7 @@ def main() -> int:
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus files read for an identifier field of a primitive type, "
-        f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes, "
+        f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
@@ -2049,7 +2062,7 @@ def main() -> int:
             "holds the state a shell signal holds, no event feeds both a view "
             "field and the relay's signal, no bus field carries an identifier as "
             "a bare primitive, an identifier on the JSON wire takes its newtype "
-            "and its text adapter, a fixture "
+            "and its text adapter and a closed set its enum, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "

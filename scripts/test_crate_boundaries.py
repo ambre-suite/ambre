@@ -486,6 +486,27 @@ class CrateBoundaries(unittest.TestCase):
         self.assertEqual(len(errors), 1, errors)
         self.assertIn("the `user_id` field writes its identifier as bytes", errors[0])
 
+    def test_a_closed_set_held_as_text_on_the_wire_is_refused(self):
+        for rel, untyped in (
+            (f"{cb.WIRE_DIRS[1]}/documents.rs", "pub doc_type: String,"),
+            (cb.WIRE_FILES[0], "pub role: String,"),
+            (cb.WIRE_FILES[0], "pub status: Option<String>,"),
+            (f"{cb.WIRE_DIRS[0]}/channels.rs", "pub kind: &'static str,"),
+        ):
+            with self.subTest(rel=rel, field=untyped):
+                body = f"#[derive(Deserialize)]\npub struct Row {{\n    {untyped}\n}}\n"
+                errors = self.breach(rel, body)
+                self.assertTrue(any("carries a closed set as" in e for e in errors), errors)
+
+    def test_a_closed_set_held_as_its_enum_stays_free(self):
+        body = (
+            "#[derive(Deserialize)]\npub struct Row {\n"
+            "    pub doc_type: ambre_core::DocType,\n"
+            "    pub status: Option<ambre_core::SnapshotStatus>,\n"
+            "    pub display_name: String,\n}\n"
+        )
+        self.assertEqual(self.breach(cb.WIRE_FILES[0], body), [])
+
     def test_a_row_the_database_reads_needs_no_text_adapter(self):
         errors = self.breach(f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW.replace("UserId", "OrgId"))
         self.assertEqual(errors, [])

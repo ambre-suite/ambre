@@ -920,8 +920,7 @@ pub(crate) struct SnapshotMetadataResponse {
     /// `RequestMissing` on this to skip the already-replayed history.
     pub covered_seq: i64,
     /// `confirmed`, or `self` when only its author vouched for it (`SRV-128`).
-    #[serde(default)]
-    pub status: String,
+    pub status: ambre_core::SnapshotStatus,
     /// The author's signing key, hex. A `self` snapshot of this very user opens
     /// as it is.
     #[serde(default)]
@@ -1131,9 +1130,8 @@ pub(crate) struct RotateKeyEntry {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct RotateKeyResponse {
-    pub status: String,
+    pub status: ambre_core::RotationStatus,
 }
 
 #[derive(Deserialize)]
@@ -1157,9 +1155,10 @@ pub(crate) struct DocumentMemberEntry {
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
-    /// Kept as text: one unknown role reads viewer rather than failing the
-    /// whole list, and the signed log decides the role anyway (`SYNC-110`).
-    pub role: String,
+    /// The relay's column, which the signed log overrides (`SYNC-110`). An
+    /// unknown word refuses the whole answer when it is read (`SRV-180`).
+    #[serde(with = "ambre_core::serde_enums::role")]
+    pub role: ambre_core::Role,
     /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
     /// against it, which yields the log anchor (`SYNC-104`).
     #[serde(default)]

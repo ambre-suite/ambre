@@ -34,6 +34,15 @@ fn decode_role_opt(word: Option<String>) -> Result<Option<ambre_core::Role>, sql
     word.as_deref().map(decode_role).transpose()
 }
 
+/// A stored document type word, as a [`DocType`](ambre_core::DocType).
+///
+/// A word no build wrote is a decode error, as for [`decode_role`]
+/// (`SRV-180`).
+fn decode_doc_type(word: &str) -> Result<ambre_core::DocType, sqlx::Error> {
+    word.parse()
+        .map_err(|e: ambre_core::error::DocTypeError| sqlx::Error::Decode(Box::new(e)))
+}
+
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
@@ -106,7 +115,7 @@ mod tests {
         .await
         .expect("create user");
         let owner = user.id;
-        let (doc, created) = create_document(&pool, &owner, "trame", None, None)
+        let (doc, created) = create_document(&pool, &owner, ambre_core::DocType::Trame, None, None)
             .await
             .expect("create document");
         assert!(created);
@@ -174,7 +183,7 @@ mod tests {
         .await
         .expect("create user");
         let owner = user.id;
-        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+        let (doc, _) = create_document(&pool, &owner, ambre_core::DocType::Prose, None, None)
             .await
             .expect("create document");
         let document_id = doc.id;
@@ -244,7 +253,7 @@ mod tests {
         .await
         .expect("create user");
         let owner = user.id;
-        let (doc, _) = create_document(&pool, &owner, "prose", None, None)
+        let (doc, _) = create_document(&pool, &owner, ambre_core::DocType::Prose, None, None)
             .await
             .expect("create document");
         let document_id = doc.id;

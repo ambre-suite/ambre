@@ -35,26 +35,13 @@ fn parse_user_id(s: &str) -> Result<ambre_core::UserId, AppError> {
         .map_err(|_| AppError::NotFound { resource: "user" })
 }
 
-/// Maps the stored lowercase `doc_type` string to the typed enum the WS protocol
-/// carries. Returns `None` for an unknown value (the share still succeeds; only
-/// the live push is skipped).
-fn doc_type_from_str(s: &str) -> Option<ambre_core::DocType> {
-    match s {
-        "prose" => Some(ambre_core::DocType::Prose),
-        "trame" => Some(ambre_core::DocType::Trame),
-        "toile" => Some(ambre_core::DocType::Toile),
-        "murmure" => Some(ambre_core::DocType::Murmure),
-        _ => None,
-    }
-}
-
 /// What a route expects of the membership entry its request carries.
-pub(crate) struct Expected<'a> {
+pub(crate) struct Expected {
     pub act: ambre_protocol::MembershipAct,
     /// The member the change adds, removes or changes.
     pub member: ambre_core::UserId,
     /// The role the entry gives, `None` for a removal.
-    pub role: Option<&'a str>,
+    pub role: Option<Role>,
     /// The key the entry names, when the route knows it. That is the key an
     /// invite wraps, the key a revoke installs, or none for a role change.
     pub key: Option<Option<ambre_core::KeyId>>,
@@ -70,7 +57,7 @@ pub(crate) async fn checked_entry(
     auth: &auth::AuthSession,
     doc_id: ambre_core::DocumentId,
     text: Option<&str>,
-    expected: Expected<'_>,
+    expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
     use base64::Engine;
     use ed25519_dalek::{Signature, VerifyingKey};
@@ -91,9 +78,7 @@ pub(crate) async fn checked_entry(
         && entry.author == auth.user_id
         && entry.member == expected.member
         && entry.act == expected.act
-        && expected
-            .role
-            .is_none_or(|role| entry.role.to_string() == role)
+        && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
         && first == (entry.position == 0)
         && member_key.as_deref() == Some(entry.member_key.as_slice());
@@ -204,7 +189,7 @@ pub async fn invite_to_document(
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Invite,
         member: invitee_id,
-        role: Some(role.as_str()),
+        role: Some(role),
         // The entry names the key the copy wraps (`SYNC-123`).
         key: Some(Some(key_id)),
     };
@@ -228,7 +213,7 @@ pub async fn invite_to_document(
     // is the source of truth; a missed push self-heals on the next list fetch.
     if let Some(doc_type) = db::get_document(&state.db, &doc_id)
         .await?
-        .and_then(|d| doc_type_from_str(&d.doc_type))
+        .map(|d| d.doc_type)
     {
         let msg =
             crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
@@ -537,7 +522,7 @@ pub async fn rotate_document_key(
     // Tell every REMAINING member to re-fetch its freshly wrapped key. This is
     // a re-key signal, not a revocation.
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"rotated"})))
+    Ok(super::keys::RotatedResponse::rotated())
 }
 
 #[cfg(test)]

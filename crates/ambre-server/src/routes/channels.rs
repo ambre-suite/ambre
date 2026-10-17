@@ -22,7 +22,8 @@ use ambre_protocol::MembershipAct;
 pub struct ChannelDocumentJson {
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub document_id: ambre_core::DocumentId,
-    pub kind: &'static str,
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
 }
 
 /// `GET /api/channels/{id}/documents`: the documents the channel groups, with
@@ -48,14 +49,9 @@ pub async fn list_channel_documents(
         .ok_or(AppError::Forbidden)?;
     let json: Vec<_> = documents
         .into_iter()
-        .map(|d| {
-            let doc_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(
-                *d.document_id.as_bytes(),
-            ));
-            ChannelDocumentJson {
-                document_id: doc_id,
-                kind: d.kind.as_str(),
-            }
+        .map(|d| ChannelDocumentJson {
+            document_id: d.document_id,
+            kind: d.kind,
         })
         .collect();
     Ok(axum::Json(serde_json::json!({ "documents": json })))
@@ -159,7 +155,7 @@ async fn free_murmure_document(
 ) -> Result<db::DocumentRow, AppError> {
     let document = db::get_document(&state.db, document_id)
         .await?
-        .filter(|d| d.doc_type == "murmure")
+        .filter(|d| d.doc_type == ambre_core::DocType::Murmure)
         .ok_or(AppError::Forbidden)?;
     let held = db::channel_of_document(&state.db, document_id).await?;
     if held.is_some() && held != channel {
@@ -274,7 +270,7 @@ pub async fn create_direct_message(
         let expected = Expected {
             act,
             member,
-            role: Some(role.as_str()),
+            role: Some(role),
             key: Some(key),
         };
         let entry = checked_entry(&state, &auth, meta, Some(text), expected)
@@ -364,7 +360,7 @@ pub async fn join_channel(
         Expected {
             act: MembershipAct::SelfJoin,
             member: auth.user_id,
-            role: Some(role.as_str()),
+            role: Some(role),
             key: None,
         },
     )

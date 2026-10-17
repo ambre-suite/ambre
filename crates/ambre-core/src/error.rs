@@ -59,6 +59,9 @@ pub enum DocTypeError {
     /// The provided discriminant is not a valid document type.
     #[error("invalid document type discriminant: {0}")]
     InvalidDiscriminant(u8),
+    /// The provided word names no document type.
+    #[error("invalid document type: {0}")]
+    InvalidString(String),
 }
 
 /// Errors related to version byte operations.

@@ -583,7 +583,8 @@ impl SyncState {
                     .await
                     {
                         Ok(Some(meta)) => {
-                            let others = meta.status == "self" && meta.author_pubkey != own_key;
+                            let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
+                                && meta.author_pubkey != own_key;
                             let (start_id, start_covered) = match (others, &meta.reference) {
                                 (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
                                 (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
@@ -732,10 +733,8 @@ impl SyncState {
     ) -> Result<OpenedMembers, String> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
         let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
-        let role = crate::sharing::own_role(
-            resp.members.iter().map(|m| (m.user_id, m.role.as_str())),
-            my_user_id,
-        );
+        let role =
+            crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
             resp.members
                 .iter()

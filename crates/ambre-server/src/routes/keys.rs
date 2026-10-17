@@ -130,6 +130,21 @@ pub async fn get_master_keys(
     }))
 }
 
+/// What a key rotation answers, the master key's or a document's (`SRV-180`).
+#[derive(serde::Serialize)]
+pub struct RotatedResponse {
+    pub status: ambre_core::RotationStatus,
+}
+
+impl RotatedResponse {
+    /// The answer of a rotation that landed.
+    pub(crate) fn rotated() -> axum::Json<Self> {
+        axum::Json(Self {
+            status: ambre_core::RotationStatus::Rotated,
+        })
+    }
+}
+
 /// Request to rotate the master key after a passphrase change.
 /// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
 #[derive(serde::Deserialize)]
@@ -157,5 +172,5 @@ pub async fn rotate_master_keys(
         })?;
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
     tracing::info!(user_id = %s.user_id, "master key rotated");
-    Ok(axum::Json(serde_json::json!({"status":"rotated"})))
+    Ok(RotatedResponse::rotated())
 }
