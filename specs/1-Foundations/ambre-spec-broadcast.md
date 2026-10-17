@@ -48,6 +48,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 | `SRV-042` | `FAIL` | A wire message MUST be accepted only for a document this connection has subscribed to. | this spec section 3 | `ambre_server::ws::handler::message::access_tests::a_frame_for_an_unsubscribed_document_is_refused` -- a write, a presence sample and a replay, each refused before any store is touched | none | verified |
 | `SRV-043` | `FAIL` | A member removed while connected MUST stop being served within thirty seconds. | audit `H8`; this spec section 3 | `ambre_server::ws::handler::message::access_tests::a_member_removed_mid_session_is_no_longer_served` -- once the mark passes, the next write is refused and the subscription dropped | none | verified |
 | `SRV-183` | `FAIL` | A wire message refused with an answer MUST name its code from the set of `SRV-182` and the document it concerns, and carry no text. | this spec section 3; `ambre-spec-server.md`, `SRV-182` | `ambre_server::ws::handler::message::delta_size_cap_tests::each_write_refusal_names_its_code_and_its_document` -- an empty delta, a foreign key and a bad signature are each answered once, under their own code and document; `ambre_server::routes::tests::handler_tests::a_frame_that_does_not_decode_is_refused_for_no_document` -- on a live socket, a garbled frame is answered with a bad request naming no document; `ambre_protocol::tests::the_wire_layout_is_frozen_under_its_version` -- the digest covers every code word, so a new code moves the version; `ambre_sync::websocket::tests::a_socket_refusal_reaches_logic_with_its_status` -- the client reads the status from the code alone | none | verified |
+| `SRV-185` | `FAIL` | A delta refused before it is sequenced MUST be answered with a refusal that names that delta. | this spec section 3; `ambre-spec-sync.md`, `SYNC-155` | not built | unbuilt -- lands with the `A refused delta is reported and holds its document` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.4 An accepted wire message is fanned out
 
@@ -81,7 +82,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 22 `verified`, 3 `unimplemented`. What holds is what a handler test drives: the
+* **Verification.** 22 `verified`, 4 `unimplemented`. What holds is what a handler test drives: the
   two caps, the rate bucket, the presence expiry and its removal, and the channel gates. What is
   loose is everything about the connection rather than the message. Each needs a live socket, and
   two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).

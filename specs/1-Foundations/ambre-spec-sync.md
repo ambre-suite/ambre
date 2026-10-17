@@ -56,6 +56,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-026` | `ambre_bus::conduit::tests::a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low` -- the Main side asks once at each mark, never in between; `ambre_sync::websocket::tests::a_held_inbound_reopens_only_on_release_and_catches_up` -- no close, timer or renewal reopens a held socket, and the release pulls from the last sequence then sends the edit kept | none | verified |
 | `SYNC-153` | `POST` | Given a replay the relay stopped, the worker MUST ask again from its own cursor, and no sooner than the relay's throttle serves it. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-184`, `SRV-086`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires` -- nothing is sent before the timer, a stale timer asks nothing, and the live one asks from the document's cursor; `ambre_sync::websocket::tests::the_replay_retry_delay_doubles_up_to_its_budget` -- the first delay is the throttle window, and each later one doubles it | none | verified |
 | `SYNC-154` | `FAIL` | A replay stopped more times than its budget MUST reach the rest of the client as one error, and no retry MUST follow before the next reconnect. | this spec section 2; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_stopped_past_its_budget_reaches_logic_once` -- eight stops give one error and no retry, and a reopened socket counts from zero | none | verified |
+| `SYNC-157` | `FAIL` | A document whose first replay stops past its budget MUST reach the rest of the client as an open that failed, never as one still loading. | this spec section 2; `SYNC-154` | not built | unbuilt -- lands with the `A first replay that gives up ends the open` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-158` | `POST` | A stop that names a later delta than the stop before it MUST start its document's budget again. | this spec section 2; `SYNC-154`; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `A replay that moves on keeps its budget` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.4 A request is made
 
@@ -75,6 +77,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-136` | `FAIL` | A create whose answer names another document than the one the client minted MUST fail. | this spec section 2; `SYNC-068` | `ambre_sync::documents::tests::a_create_fails_on_a_foreign_answer` -- a foreign id and a malformed one each answer an error, and only the minted id is reported | none | verified |
 | `SYNC-069` | `FAIL` | A channel message sent with no open session of its document MUST be refused aloud, never dropped in silence. | this spec section 2 | `ambre_sync::updates::tests::an_update_for_a_document_with_no_session_is_refused_aloud` -- the update answers the Logic thread with an `UpdateRefused` warning, and reaches no socket | none | verified |
 | `SYNC-149` | `FAIL` | A channel message sent while the socket is down MUST reach the relay once it is back, or be refused aloud. | this spec section 2; `SYNC-069` | not built | unbuilt -- lands with the `ARCH P4` -- offline durability Story (`ambre-roadmap.md` E6) | unimplemented |
+| `SYNC-155` | `POST` | Given a delta the relay refused by name, the worker MUST drop it from the unconfirmed log and report its document as holding an edit the relay lacks. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-185` | not built | unbuilt -- lands with the `A refused delta is reported and holds its document` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-156` | `FAIL` | After a delta refused by name, the worker MUST send no further delta of its document before that document reopens. | this spec section 2; `SYNC-155`; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A refused delta is reported and holds its document` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.6 The session ends
 
@@ -89,7 +93,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 32 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 32 `verified`, 5 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
