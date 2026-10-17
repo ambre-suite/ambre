@@ -25,7 +25,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3 | `ambre_logic::channels::tests::marking_a_channel_read_moves_its_live_segments_and_clears_its_mark`; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further`; `ambre_murmure::channel_tests::the_final_segments_are_listed_loaded_or_not` -- the command moves the live segments to the last update delivered and the finals to their last number | partial -- no view sends the command when the latest message reaches the screen; lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | partial |
+| `MURMURE-115` | `POST` | Showing the latest message of a channel MUST move the read cursor to it. | this spec section 3; `MURMURE-470` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-470` | `POST` | Marking a channel read MUST move each of its read cursors to its latest message. | this spec section 3 | `ambre_logic::channels::tests::marking_a_channel_read_moves_its_live_segments_and_clears_its_mark`; `ambre_sync::updates::tests::a_read_reaches_the_last_update_delivered_and_no_further`; `ambre_murmure::channel_tests::the_final_segments_are_listed_loaded_or_not` -- the command moves the live segments to the last update delivered and the finals to their last number | none | verified |
 | `MURMURE-116` | `FRAME` | Moving a read cursor MUST NOT move the cursor of another member. | this spec section 3 | `ambre_server::routes::read_cursors::tests::marking_everything_read_moves_the_callers_cursors_alone`; `ambre_server::routes::read_cursors::tests::a_listed_move_touches_the_listed_documents_alone` -- another member's cursors stay where they were | none | verified |
 
 ### 1.3 Mark a message unread
@@ -46,7 +47,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `SRV-109` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- Logic hands the view one mark per channel | partial -- no sidebar draws the mark; lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | partial |
+| `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `MURMURE-471` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-471` | `POST` | The activity answer of the relay MUST reach the view as one mark per channel, before any count is known. | this spec section 3; `SRV-109` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- Logic hands the view one mark per channel | none | verified |
 | `MURMURE-120` | `POST` | A count MUST replace the activity mark once the loaded document gives it. | this spec section 3 | `ambre_logic::channels::tests::an_open_channel_counts_the_messages_past_its_cursor`; `ambre_murmure::unread_tests::a_snapshot_hands_on_the_numbers_its_writer_knew`; `ambre_murmure::unread_tests::a_message_known_only_from_a_snapshot_lies_within_its_horizon` -- an open channel whose cursors are known hands the view a count with each delta and each answer, and none before | none | verified |
 | `MURMURE-460` | `POST` | A count MUST replace the activity mark of a channel not loaded once the summaries give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- the answer reaches the view and no open reaches the Sync worker | none | verified |
@@ -55,9 +57,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 6`).
 * **Boundary.** the relay holds the read cursors and answers yes or no, never a count
   (`SRV-110`, `ZK-015`). The kind of each update stays sealed.
-* **Verification.** 9 `verified`, 2 `partial`, 1 `unimplemented`. The read cursor route tests
-  hold the relay rows against a real database. The engine, Logic and Sync unit tests hold the
-  client rows. The count of a channel not loaded waits on the light subscription.
+* **Verification.** 11 `verified`, 3 `unimplemented`. The read cursor route tests hold the relay
+  rows against a real database. The engine, Logic and Sync unit tests hold the client rows. The
+  count of a channel not loaded waits on the light subscription.
 
 ---
 
