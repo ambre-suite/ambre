@@ -138,6 +138,14 @@ pub enum UiEvent {
     },
 
     // -- Errors & warnings -----------------------------------------------------
+    /// A document could not open, and nothing of it is held. The UI ends its
+    /// loading screen and tells the user (`ambre-spec-message-bus.md`,
+    /// `BUS-030`).
+    DocumentOpenFailed {
+        document_id: DocumentId,
+        message: String,
+    },
+
     /// Authentication error (wrong passphrase, corrupted vault, network failure).
     AuthError { message: String },
 
@@ -188,6 +196,7 @@ impl UiEvent {
             | UiEvent::Presence { document_id, .. }
             | UiEvent::ConnectionStatus { document_id, .. }
             | UiEvent::DocumentReady { document_id, .. }
+            | UiEvent::DocumentOpenFailed { document_id, .. }
             | UiEvent::SyncWarning { document_id, .. }
             | UiEvent::MemberRevoked { document_id, .. } => Some(*document_id),
             _ => None,

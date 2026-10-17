@@ -247,7 +247,8 @@ pub enum LogicEvent {
     // -- Errors ----------------------------------------------------------------
     /// A document could not open: its wrapped key did not unwrap, or the
     /// session was not ready. Nothing of it is held. The Logic thread ends
-    /// the channel opening that asked for it, or reports an `AuthError`.
+    /// the channel or space opening that asked for it, or hands the failed open
+    /// to the UI.
     DocumentOpenFailed {
         document_id: DocumentId,
         message: String,

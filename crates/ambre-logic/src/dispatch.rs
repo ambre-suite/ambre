@@ -508,7 +508,10 @@ impl LogicState {
                 if !self.channel_document_failed(document_id, &message)
                     && !self.space_document_failed(document_id, &message)
                 {
-                    self.send_to_ui(UiEvent::AuthError { message });
+                    self.send_to_ui(UiEvent::DocumentOpenFailed {
+                        document_id,
+                        message,
+                    });
                 }
             }
             LogicEvent::AuthError { message } => {
@@ -2132,5 +2135,25 @@ mod tests {
         state.handle_logic_event(LogicEvent::UpdateRequired);
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(matches!(told.as_slice(), [UiEvent::UpdateRequired]));
+    }
+
+    /// A plain document that could not open reaches the UI as a failed open
+    /// naming it, and as no authentication error (`BUS-030`).
+    #[test]
+    fn a_failed_open_reaches_the_ui_naming_its_document() {
+        let (mut state, ui, _sync) = harness();
+        let failed = DocumentId::new();
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: failed,
+            message: "replay stopped".to_owned(),
+        });
+        let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        assert!(
+            matches!(
+                told.as_slice(),
+                [UiEvent::DocumentOpenFailed { document_id, .. }] if *document_id == failed
+            ),
+            "the failed open was told as {told:?}"
+        );
     }
 }
