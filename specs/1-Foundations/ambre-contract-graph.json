@@ -2322,6 +2322,7 @@
   {"edge": "cites-section", "from": "SRV-182", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
   {"edge": "cites-rule", "from": "SRV-182", "to": "SRV-180"},
   {"edge": "cites-rule", "from": "SRV-182", "to": "SRV-181"},
+  {"edge": "verified-by", "from": "SRV-182", "to": "ambre_core::status::tests::every_refusal_code_reads_and_writes_as_its_word_alone"},
   {"edge": "verified-by", "from": "SRV-182", "to": "ambre_core::status::tests::each_refusal_code_keeps_its_word"},
   {"edge": "verified-by", "from": "SRV-182", "to": "ambre_sync::http::tests::a_refusal_code_outside_the_set_reads_as_its_status"},
   {"edge": "cites-section", "from": "SRV-101", "section": "3", "to": "1-Foundations/ambre-spec-server.md"},
