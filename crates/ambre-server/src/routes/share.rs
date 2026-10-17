@@ -377,7 +377,7 @@ pub async fn revoke_and_rotate(
 /// closes the document. Targeted (not a doc broadcast): only the removed user
 /// learns they were removed, and no remaining member can mistake this for their
 /// own removal. Best-effort -- the membership row is the source of truth.
-async fn notify_removed(
+pub(super) async fn notify_removed(
     state: &AppState,
     doc_id: &ambre_core::DocumentId,
     target: &ambre_core::UserId,

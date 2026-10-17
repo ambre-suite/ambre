@@ -194,7 +194,7 @@ pub async fn delete_channel(
     pool: &PgPool,
     channel_id: &ambre_core::ChannelId,
     sweep_due: i64,
-) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+) -> Result<DeletedChannel, AppError> {
     let channel = id_to_uuid(*channel_id);
     let mut tx = pool.begin().await?;
     // `meta` first, as a removal locks it, so a delete racing the last
@@ -206,9 +206,29 @@ pub async fn delete_channel(
     .bind(channel)
     .fetch_optional(&mut *tx)
     .await?;
-    let deleted = delete_channel_in(&mut tx, channel, sweep_due).await?;
+    // Read under the lock on `meta`, which an added member waits for, so
+    // none joins between this list and the delete.
+    let members: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM document_members WHERE document_id = (SELECT document_id \
+         FROM channel_documents WHERE channel_id = $1 AND kind = 'meta')",
+    )
+    .bind(channel)
+    .fetch_all(&mut *tx)
+    .await?;
+    let documents = delete_channel_in(&mut tx, channel, sweep_due).await?;
     tx.commit().await?;
-    Ok(deleted)
+    Ok(DeletedChannel {
+        documents,
+        members: members.into_iter().map(uuid_row_to_id).collect(),
+    })
+}
+
+/// What [`delete_channel`] removed.
+pub struct DeletedChannel {
+    /// Every document the channel grouped, marked for deletion.
+    pub documents: Vec<ambre_core::DocumentId>,
+    /// The members of its `meta`, as the delete found them.
+    pub members: Vec<ambre_core::UserId>,
 }
 
 /// [`delete_channel`] inside `tx`.

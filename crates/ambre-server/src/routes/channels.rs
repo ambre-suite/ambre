@@ -324,8 +324,13 @@ pub async fn delete_channel(
     }
     let sweep_due = crate::deletion::sweep_due_stored(&state);
     let deleted = db::delete_channel(&state.db, &channel_id, sweep_due).await?;
-    tracing::info!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.len(), "channel deleted");
-    crate::deletion::empty_marked(&state, &deleted, sweep_due).await;
+    tracing::info!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.documents.len(), "channel deleted");
+    crate::deletion::empty_marked(&state, &deleted.documents, sweep_due).await;
+    // Every client of every member drops it, the owner's own included
+    // (`SRV-188`).
+    for member in &deleted.members {
+        super::share::notify_removed(&state, &meta_id.document_id(), member).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1475,6 +1480,63 @@ mod tests {
             matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
             "heard {notice:?}"
         );
+    }
+
+    /// `SRV-188`: a delete reaches the topic of each member of the channel,
+    /// the owner who asked it included. A member of the space outside the
+    /// channel hears nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_delete_reaches_every_member_of_its_channel(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (carol, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            join(&state, bob, channel.id, 9).await,
+            StatusCode::NO_CONTENT
+        );
+
+        let mut topics = Vec::new();
+        for member in [alice, bob, carol] {
+            let listener = rustis::client::Client::connect("redis://localhost:6379")
+                .await
+                .expect("redis");
+            topics.push(
+                listener
+                    .subscribe(format!("user:{member}"))
+                    .await
+                    .expect("subscribe"),
+            );
+        }
+        assert_eq!(
+            delete(&state, alice, channel.id).await,
+            StatusCode::NO_CONTENT
+        );
+
+        let mut outside = topics.pop().expect("carol's topic");
+        for mut stream in topics {
+            let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+                .await
+                .expect("the notice arrives")
+                .expect("a message")
+                .expect("readable");
+            let notice = decode_server_msg(heard.payload()).expect("decodes");
+            assert!(
+                matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == meta),
+                "heard {notice:?}"
+            );
+        }
+        let silent =
+            tokio::time::timeout(std::time::Duration::from_millis(300), outside.next()).await;
+        assert!(silent.is_err(), "a member outside the channel heard it");
     }
 
     /// An editor leaves a public channel, then its owner, the last member.

@@ -628,10 +628,10 @@ impl LogicState {
         });
     }
 
-    /// The relay removed this user from `document_id` (`SRV-187`). Is it the
-    /// `meta` of a channel held here? Then the user left it from another
-    /// client, and the channel goes as after a leave asked here. A leave
-    /// asked here ends on the notice, so an answer lost after it keeps
+    /// The relay removed this user from `document_id` (`SRV-187`,
+    /// `SRV-188`). Is it the `meta` of a channel held here? Then the user
+    /// left it from another client, or its owner deleted it. A leave or a
+    /// delete asked here ends on the notice, so an answer lost after it keeps
     /// nothing.
     pub(crate) fn channel_revoked(&mut self, document_id: DocumentId) {
         let meta = ambre_bus::MetaId::from_document(document_id);
@@ -651,6 +651,9 @@ impl LogicState {
         };
         if self.leaving.contains_key(&channel_id) {
             return self.channel_left(channel_id);
+        }
+        if self.deleting.contains_key(&channel_id) {
+            return self.channel_deleted(channel_id);
         }
         self.drop_channel(channel_id);
         self.send_to_ui(UiEvent::Channel {
@@ -1292,6 +1295,55 @@ mod tests {
         state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id: kept });
         assert!(drain(&sync).is_empty());
         assert!(state.channels.contains_key(&kept));
+    }
+
+    /// The relay's notice ends a delete asked here as its answer would: the
+    /// sessions end, the catalogue drops the entry and the view learns it.
+    /// The answer after it changes nothing. A channel this client did not
+    /// delete goes on the same notice, and the view learns it is gone.
+    #[test]
+    fn a_delete_ends_on_the_relays_notice() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        state.my_user_id = Some(me);
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (channel_id, meta, _) = public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (other, other_meta, _) = public_channel(&mut state, space_id, "general", &ui, &sync);
+        let removed = |document_id| LogicEvent::MemberRevoked {
+            document_id,
+            revoked_user_id: me,
+        };
+
+        state.handle_logic_command(LogicCommand::Space {
+            space_id,
+            command: SpaceCommand::DeleteChannel { channel_id },
+        });
+        let _ = (drain(&sync), drain(&ui));
+        state.handle_logic_event(removed(meta));
+        let sent = drain(&sync);
+        assert_eq!(updates_of(&sent, space_id.document_id()), 1, "unlisted");
+        assert!(!state.channels.contains_key(&channel_id));
+        let shown = drain(&ui);
+        assert!(shown.iter().any(|e| matches!(
+            e,
+            UiEvent::Space { event: SpaceEvent::ChannelDeleted { channel_id: id }, .. }
+                if *id == channel_id
+        )));
+        state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id });
+        assert!(drain(&sync).is_empty() && drain(&ui).is_empty());
+
+        state.handle_logic_event(removed(other_meta));
+        assert!(!state.channels.contains_key(&other));
+        assert_eq!(
+            updates_of(&drain(&sync), space_id.document_id()),
+            0,
+            "only the owner unlists"
+        );
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::Channel { channel_id: id, event: ambre_bus::MurmureEvent::Left }
+                if *id == other
+        )));
     }
 
     /// The relay refuses the delete: the view is told, and the channel, its
