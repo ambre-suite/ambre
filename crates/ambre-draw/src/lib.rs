@@ -11,6 +11,7 @@
 //
 // `kinetic` is the one kinetic scroll the applications share: pure arithmetic
 // over timed pointer positions, beside the drawing primitives they share.
+// `hit` is the trait each view's content hit-test implements.
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
 // No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core
@@ -21,6 +22,9 @@ pub mod types;
 pub use types::*;
 
 pub mod kinetic;
+
+pub mod hit;
+pub use hit::HitTest;
 
 pub mod peer;
 pub use peer::peer_color;

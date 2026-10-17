@@ -436,6 +436,42 @@ pub(crate) fn install_canvas_context_menu(
     });
 }
 
+/// Attach the file drop to a board's canvas: a file dropped on it reaches the
+/// board's importer at the point it landed. The canvas pointer is read here
+/// and in the host alone (`UI-THREAD-001`).
+pub(crate) fn install_board_file_drop(
+    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
+    toasts: Toasts,
+) {
+    Effect::new(move |_| {
+        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+            return;
+        };
+        // Without a `dragover` that prevents the default, the browser navigates
+        // away to the dropped file and the drop never fires.
+        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
+            e.prevent_default();
+        });
+        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
+        over.forget();
+
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+            e.prevent_default();
+            let Some(file) = e
+                .data_transfer()
+                .and_then(|dt| dt.files())
+                .and_then(|fs| fs.get(0))
+            else {
+                return;
+            };
+            let at = ambre_draw::Point::new(f64::from(e.offset_x()), f64::from(e.offset_y()));
+            toile_chrome::import_dropped_file(file, at, dropped, toasts);
+        });
+        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
+        cb.forget();
+    });
+}
+
 /// Whether a keyboard event targets an editable element: a text `<input>`, a
 /// `<textarea>`, or a contenteditable host. A bare tool chord must not steal
 /// such an event (`toile-tools`). The pure decision lives in

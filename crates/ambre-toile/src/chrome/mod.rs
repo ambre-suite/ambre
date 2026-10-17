@@ -21,7 +21,7 @@ pub use editing::EditingSurfaces;
 mod find;
 mod floatbar;
 mod handler;
-pub use handler::{ToileDialogs, ToileHandler, install_file_drop};
+pub use handler::{ToileDialogs, ToileHandler, import_dropped_file};
 mod menu;
 mod menu_bar;
 mod notify;

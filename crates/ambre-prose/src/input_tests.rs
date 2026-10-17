@@ -2,6 +2,8 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
+use ambre_draw::HitTest;
+
 use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent, TriState};
 use crate::input::{ProseInput, ProseKey};
 use crate::logic::ProseState;
@@ -896,8 +898,9 @@ fn select_all_spans_the_document_and_keeps_the_window() {
 
 // -- Hit-testing --------------------------------------------------------------
 
-/// `PROSE-UI-008`, `PROSE-UI-031`: a point drawn at an offset resolves back
-/// to it, at any zoom and any scroll, and the rig never paints a block.
+/// `PROSE-UI-008`, `PROSE-UI-031`, `UI-THREAD-001`: a point drawn at an offset
+/// resolves back to it through the shared hit-test, at any zoom and scroll.
+/// The rig never paints a block.
 #[test]
 fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
     let long = words(50);
@@ -910,7 +913,8 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
         rig.ui.scroll_by(scroll * zoom);
         for offset in [0, 9, 42, 120] {
             let (x, y) = rig.point_of(block, offset);
-            assert_eq!(rig.ui.hit_test(x, y), Some((block, offset)), "zoom {zoom}");
+            let hit = rig.ui.hit_test(f64::from(x), f64::from(y));
+            assert_eq!(hit, Some((block, offset)), "zoom {zoom}");
         }
     }
 }

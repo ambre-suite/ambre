@@ -2905,3 +2905,18 @@ fn a_busy_board_takes_no_input() {
     rig.click(50.0, 50.0);
     assert_eq!(rig.view.selection, [eid("a")]);
 }
+
+/// `UI-THREAD-001`: a canvas point reaches the element drawn there through the
+/// shared hit-test, at any zoom. An empty point hits nothing.
+#[test]
+fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
+    use ambre_draw::HitTest;
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    for zoom in [0.5, 1.0, 2.0] {
+        rig.view.cam.zoom = zoom;
+        let (x, y) = rig.screen(50.0, 50.0);
+        assert_eq!(rig.view.hit_test(x, y), Some(eid("a")), "zoom {zoom}");
+        let (x, y) = rig.screen(900.0, 600.0);
+        assert_eq!(rig.view.hit_test(x, y), None, "zoom {zoom}");
+    }
+}

@@ -201,6 +201,30 @@ class CrateBoundaries(unittest.TestCase):
         self.assertTrue(any("a page element draws" in e for e in errors), errors)
         self.assertEqual(self.breach("crates/ambre-canvas/src/host.rs", line), [])
 
+    def test_a_canvas_point_read_off_the_host_is_refused_and_the_host_is_not(self):
+        line = "fn drop(e: &DragEvent) { let x = e.offset_x(); }\n"
+        errors = self.breach("crates/ambre-toile/src/chrome/handler.rs", line)
+        self.assertTrue(any("a canvas point read off the host" in e for e in errors), errors)
+        for owner in ("crates/ambre-app/src/host/pointer.rs", cb.POINTER_OWNERS[1]):
+            errors = self.breach(owner, line)
+            self.assertFalse(any("a canvas point read off the host" in e for e in errors), (owner, errors))
+
+    def test_an_interface_component_that_hit_tests_is_refused_and_a_view_is_not(self):
+        line = "fn menu(v: &ToileView) { v.hit_test(x, y); }\n"
+        for rel in ("crates/ambre-toile/src/chrome/menu.rs", "crates/ambre-app/src/shell/app_root.rs"):
+            errors = self.breach(rel, line)
+            self.assertTrue(any("an interface component hit-tests content" in e for e in errors), (rel, errors))
+        for rel in ("crates/ambre-toile/src/ui/view.rs", "crates/ambre-app/src/host/pointer.rs"):
+            self.assertEqual(self.breach(rel, line), [], rel)
+
+    def test_a_page_point_beside_the_canvas_in_an_interface_file_is_refused(self):
+        text = 'fn at(e: &MouseEvent) {\n    let c = doc.get_element_by_id("ambre-canvas");\n    e.client_x();\n}\n'
+        errors = self.breach("crates/ambre-trame/src/chrome/handler.rs", text)
+        self.assertTrue(any("turns a page point into a canvas point" in e for e in errors), errors)
+        alone = "fn at(e: &MouseEvent) { e.client_x(); }\n"
+        self.assertEqual(self.breach("crates/ambre-trame/src/chrome/sheet_tabs.rs", alone), [])
+        self.assertEqual(self.breach("crates/ambre-trame/src/ui/view.rs", text), [])
+
     def test_a_storage_path_the_rule_does_not_name_is_refused(self):
         line = "fn keep() { window.local_storage(); }\n"
         errors = self.breach("crates/ambre-chrome/src/theme.rs", line)

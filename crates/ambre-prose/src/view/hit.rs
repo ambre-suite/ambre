@@ -5,6 +5,7 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
+use ambre_draw::HitTest;
 use loro::TreeID;
 
 use crate::events::{BlockId, block_id, tree_id};
@@ -119,6 +120,21 @@ pub(crate) struct NoteSlot {
     pub bottom: f32,
 }
 
+/// The block and the offset under a canvas point (`UI-THREAD-001`).
+///
+/// A point in a header or a footer lands in its text. Elsewhere, a point
+/// above the first block of a page lands on that block, and one below the
+/// last on the last. `None` for a layout with no page, or a page that shows
+/// no block.
+impl HitTest for ProseUiState {
+    type Target = (BlockId, u32);
+
+    fn hit_test(&self, x: f64, y: f64) -> Option<(BlockId, u32)> {
+        self.hit(x as f32, y as f32)
+            .map(|(block, offset, _)| (block, offset))
+    }
+}
+
 impl ProseUiState {
     /// The notes `page` draws at its foot, in the order of their ordinals,
     /// stacked up from the foot of the body. The one geometry the painter
@@ -224,20 +240,9 @@ impl ProseUiState {
         self.shaped.blocks_on(page)
     }
 
-    /// The block and the offset under a canvas point.
-    ///
-    /// A point in a header or a footer lands in its text. Elsewhere, a point
-    /// above the first block of a page lands on that block, and one below
-    /// the last on the last. `None` for a layout with no page, or a
-    /// page that shows no block.
-    #[must_use]
-    pub fn hit_test(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32)> {
-        self.hit(x_px, y_px)
-            .map(|(block, offset, _)| (block, offset))
-    }
-
-    /// The same, and whether the offset was read off a provisional run: it
-    /// then counts the document's code points already.
+    /// The block and the offset under a canvas point, and whether the offset
+    /// was read off a provisional run. [`HitTest`] gives the first two. A
+    /// provisional offset counts the document's code points already.
     ///
     /// A point in the paragraph a split opens lands in it once the document
     /// has named it, before a layout carries it (`PROSE-UI-214`).
@@ -308,6 +313,8 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
+    use ambre_draw::HitTest;
+
     use crate::events::block_id;
     use crate::ui::ProseUiState;
     use crate::view::tests::laid_out;
@@ -344,7 +351,7 @@ mod tests {
         assert_eq!(ui.runs.built(), 0);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
-            let hit = ui.hit_test(x, y);
+            let hit = ui.hit_test(f64::from(x), f64::from(y));
             let expected = block_id(ui.shaped.layout.blocks[far].block_id);
             assert_eq!(hit, Some((expected, offset)));
         }

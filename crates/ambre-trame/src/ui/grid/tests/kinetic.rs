@@ -23,3 +23,18 @@ fn a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell() {
     let (row, _) = state.drag_cell_at(400.0, 9_000.0).expect("an edge cell");
     assert!(row > 10);
 }
+
+/// `UI-THREAD-001`: a canvas point reaches a cell through the shared
+/// hit-test, under a scroll and a zoom. The header strips hit no cell.
+#[test]
+fn a_canvas_point_reaches_its_cell_through_the_shared_hit_test() {
+    use ambre_draw::HitTest;
+    let mut state = TrameUiState::new(800.0, 600.0);
+    state.scroll_by(10, 3);
+    assert!(state.set_zoom(2.0));
+    for (row, col) in [(10, 3), (12, 4)] {
+        let (x, y, w, h) = state.cell_pixel_rect(row, col).expect("visible");
+        assert_eq!(state.hit_test(x + w / 2.0, y + h / 2.0), Some((row, col)));
+    }
+    assert_eq!(state.hit_test(1.0, 1.0), None);
+}

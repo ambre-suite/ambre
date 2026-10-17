@@ -230,7 +230,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // (`toile-import-export`). Same reason the listener lives here: the canvas
     // belongs to the AppShell, not to the view that paints into it.
     if boot_is_toile {
-        toile_chrome::install_file_drop(toile_dropped_file, toasts);
+        install_board_file_drop(toile_dropped_file, toasts);
     }
 
     // Toile cursor feedback (toile-tools): reflect the active tool on the

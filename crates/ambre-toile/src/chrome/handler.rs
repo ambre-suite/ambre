@@ -155,39 +155,18 @@ impl CommandHandler for ToileHandler {
 }
 
 /// Bring a file dropped on the canvas onto the board, at the point it landed
-/// (`TOILE-IO-020`, `TOILE-IO-023`). The listener is installed once the canvas element
-/// exists, and lives as long as the page.
+/// (`TOILE-IO-020`, `TOILE-IO-023`).
 ///
 /// The drop point stays in CSS pixels, the logical space the canvas view works
-/// in, as the pointer path does.
-pub fn install_file_drop(dropped: RwSignal<Option<DroppedFile>>, toasts: Toasts) {
-    Effect::new(move |_| {
-        let Some(canvas) = document().get_element_by_id("ambre-canvas") else {
-            return;
-        };
-        // Without a `dragover` that prevents the default, the browser navigates
-        // away to the dropped file and the drop never fires.
-        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
-            e.prevent_default();
-        });
-        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
-        over.forget();
-
-        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
-            e.prevent_default();
-            let Some(file) = e
-                .data_transfer()
-                .and_then(|dt| dt.files())
-                .and_then(|fs| fs.get(0))
-            else {
-                return;
-            };
-            let at = Point::new(f64::from(e.offset_x()), f64::from(e.offset_y()));
-            read_file_into(file, Some(at), dropped, toasts);
-        });
-        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
-        cb.forget();
-    });
+/// in, as the pointer path does. The launcher listens on the canvas and reads
+/// the point, since the canvas pointer is read there alone (`UI-THREAD-001`).
+pub fn import_dropped_file(
+    file: web_sys::File,
+    at: Point,
+    dropped: RwSignal<Option<DroppedFile>>,
+    toasts: Toasts,
+) {
+    read_file_into(file, Some(at), dropped, toasts);
 }
 
 /// Open a transient `<input type="file">` for a board import (`TOILE-IO-020`).

@@ -617,6 +617,16 @@ pub struct ToileView {
     frame_now_ms: f64,
 }
 
+/// The topmost element under a canvas point, through the camera
+/// (`UI-THREAD-001`).
+impl ambre_draw::HitTest for ToileView {
+    type Target = ElementId;
+
+    fn hit_test(&self, x: f64, y: f64) -> Option<ElementId> {
+        self.element_at(self.cam.screen_to_world() * Point::new(x, y))
+    }
+}
+
 impl ToileView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -1563,6 +1573,11 @@ impl ToileView {
         super::hit::pick_floor(&self.cam)
     }
 
+    /// The topmost element under a world point.
+    fn element_at(&self, world: Point) -> Option<ElementId> {
+        hit_topmost(&self.display.nodes, world, self.pick())
+    }
+
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
@@ -1570,7 +1585,7 @@ impl ToileView {
         self.kinetic.stop();
         let screen = Point::new(x, y);
         let world = self.cam.screen_to_world() * screen;
-        let grabbable = hit_topmost(&self.display.nodes, world, self.pick()).is_some()
+        let grabbable = self.element_at(world).is_some()
             || self
                 .machine
                 .hover_handle(&self.selection, &self.display, &self.cam, screen)
@@ -1928,7 +1943,7 @@ impl ToileView {
     /// and starts no gesture.
     fn handle_right_click(&mut self, screen: Point) {
         let world = self.cam.screen_to_world() * screen;
-        match hit_topmost(&self.display.nodes, world, self.pick()) {
+        match self.element_at(world) {
             Some(hit) => {
                 let target = resolve_group_target(hit, &self.display, self.group_scope.as_ref());
                 if !self.selection.contains(&target) {
@@ -2789,7 +2804,7 @@ impl ToileView {
         // tool produced nothing of its own, for example a pen finish.
         if matches!(out, ToolOutcome::None)
             && self.machine.tool() == Tool::Select
-            && let Some(hit) = hit_topmost(&self.display.nodes, world, self.pick())
+            && let Some(hit) = self.element_at(world)
         {
             let target =
                 resolve_group_target(hit.clone(), &self.display, self.group_scope.as_ref());

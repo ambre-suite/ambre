@@ -304,6 +304,29 @@ DRAWING_OWNERS = (
     "crates/ambre-app/src/host/",
     "crates/ambre-chrome/src/app_shell.rs",
 )
+# A pointer read relative to the element it lands on, and the two files that
+# listen on the canvas (`UI-THREAD-001`). Elsewhere a canvas point has no use.
+POINTER_READ = re.compile(r"\b(?:offset|layer)_[xy]\(")
+POINTER_OWNERS = ("crates/ambre-app/src/host/", "crates/ambre-app/src/platform.rs")
+# A pointer read relative to the page, and the canvas named by its id: the two
+# halves of a canvas point an interface file would compute for itself.
+PAGE_POINT = re.compile(r"\b(?:client|page|screen)_[xy]\(")
+CANVAS_NAME = re.compile(r"\"\.?ambre-canvas\"")
+# What hit-testing content looks like: the shared trait, each view's own
+# resolver, and the camera inverse a resolver starts from.
+HIT_CALL = re.compile(
+    r"\b(?:hit_test|hit|cell_at|drag_cell_at|element_at|hit_topmost|place_at|marquee_hits"
+    r"|exact_hit|screen_to_doc|screen_to_world)\("
+)
+# The interface components, which never hit-test content: the shared toolkit,
+# each application's chrome, and the launcher outside the host.
+INTERFACE = (
+    "crates/ambre-chrome/src/",
+    "crates/ambre-trame/src/chrome/",
+    "crates/ambre-toile/src/chrome/",
+    "crates/ambre-prose/src/chrome/",
+    "crates/ambre-app/src/",
+)
 # The persistence paths `UI-THREAD-004` names: the local store, and the
 # sign-in's own state for one tab and for the development identity.
 STORAGE_OWNERS = (
@@ -826,11 +849,12 @@ def above_tests(path: Path) -> list[tuple[int, str]]:
 
 
 def check_ui_thread(errors: list[str]) -> int:
-    """`UI-THREAD-058`, `-002`, `-020`, `-050`, `-051`: what the UI thread may name.
+    """`UI-THREAD-058`, `-002`, `-020`, `-050`, `-051`, `-060`: what the UI thread may name.
 
     No CRDT and no engine state, no file conversion, no blocking wait, and no
     canvas or drawing context outside the surface (`TRAME-UI-001`,
-    `TRAME-IO-001`).
+    `TRAME-IO-001`). No canvas point read outside the two files that listen on
+    the canvas, and no content hit-test in an interface component.
     """
     files = sources(UI_THREAD)
     if not files:
@@ -838,7 +862,11 @@ def check_ui_thread(errors: list[str]) -> int:
         return 0
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
+        interface = rel.startswith(INTERFACE) and not rel.startswith(POINTER_OWNERS)
+        page_point = canvas_name = None
         for number, line in above_tests(path):
+            page_point = page_point or PAGE_POINT.search(line)
+            canvas_name = canvas_name or CANVAS_NAME.search(line)
             found = ENGINE.search(line)
             if found:
                 errors.append(f"{rel}:{number}: the UI thread holds the document: `{found.group(0)}`")
@@ -851,6 +879,17 @@ def check_ui_thread(errors: list[str]) -> int:
             found = DRAWING.search(line)
             if found and not rel.startswith(DRAWING_OWNERS):
                 errors.append(f"{rel}:{number}: a page element draws: `{found.group(0)}`")
+            found = POINTER_READ.search(line)
+            if found and not rel.startswith(POINTER_OWNERS):
+                errors.append(f"{rel}:{number}: a canvas point read off the host: `{found.group(0)}`")
+            found = HIT_CALL.search(line)
+            if found and rel.startswith(INTERFACE) and not rel.startswith(POINTER_OWNERS[0]):
+                errors.append(f"{rel}:{number}: an interface component hit-tests content: `{found.group(0)}`")
+        if interface and page_point and canvas_name:
+            errors.append(
+                f"{rel}: an interface component turns a page point into a canvas point: "
+                f"`{page_point.group(0)}` beside `{canvas_name.group(0)}`"
+            )
     return len(files)
 
 
@@ -1444,7 +1483,7 @@ def main() -> int:
         f"{pdf} Rust files read for the PDF back end, "
         f"{fonts} Rust files read for an embedded font, "
         f"{colors} renderer files read for a colour of their own, "
-        f"{ui_thread} UI-thread files read for the document, a wait or a drawing, "
+        f"{ui_thread} UI-thread files read for the document, a wait, a drawing or a hit-test, "
         f"{stores} client files read for a persistence path, "
         f"{subset} sources read for a compute pass or a storage buffer, "
         f"{widths} files read for a width spelled twice, "
@@ -1480,7 +1519,7 @@ def main() -> int:
             "workspace lints, the PDF back end is called from the Logic "
             "thread alone, the renderer holds no colour, no font is "
             "embedded in a binary, the UI thread holds no document, waits on "
-            "nothing and draws on the surface alone, browser storage is reached "
+            "nothing, draws and hit-tests on the surface alone, browser storage is reached "
             "from the named paths, no shader leaves the shared subset, the "
             "chrome's widths live in one stylesheet, one file renders the modal, "
             "a drag control debounces, a document is created unnamed, the worker "

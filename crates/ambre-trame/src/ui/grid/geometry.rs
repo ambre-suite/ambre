@@ -2,7 +2,18 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
+use ambre_draw::HitTest;
 use ambre_draw::kinetic::EdgeSpeed;
+
+/// The cell `(row, col)` under a canvas point (`UI-THREAD-001`): the grid's
+/// geometry answers, through [`TrameUiState::cell_at`].
+impl HitTest for TrameUiState {
+    type Target = (u32, u32);
+
+    fn hit_test(&self, x: f64, y: f64) -> Option<(u32, u32)> {
+        self.cell_at(x, y)
+    }
+}
 
 impl TrameUiState {
     /// Record a formula evaluation failure for `(row, col)` (from

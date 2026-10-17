@@ -28,7 +28,7 @@ application.
 | `UI-THREAD-049` | `INV` | The UI thread MUST NOT open a cryptography path. | `ambre-spec-zero-knowledge.md` (`ZK-002`); `ambre-spec-architecture.md`, `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync` and, for one host-only fixture hash, to `ambre-logic`. Every interface crate fails the job on the line that would add it, and the cipher, the passphrase derivation and the key agreement each carry a ban of their own | none | verified |
 | `UI-THREAD-021` | `INV` | A document snapshot the launcher carries to the local store MUST stay opaque bytes: the launcher MUST NOT decode one. | this spec section 2; `SYNC-011` | cargo-deny -- `deny.toml` allows `loro` in the four application crates alone, so `ambre-app`, which is the crate that carries a snapshot to the browser database, has no way to read it | none | verified |
 | `UI-THREAD-058` | `INV` | UI-thread code outside the surface, its host and the shell cell MUST NOT name a canvas, a drawing context or a `<canvas`. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py` refuses each of them in that code | none | verified |
-| `UI-THREAD-001` | `INV` | The drawing surface MUST own the content, the caret, the selections and content hit-testing. | this spec section 2 | none | unheld -- the canvas gate (`UI-THREAD-058`) does not see an element that hit-tests content from its own geometry, since it draws nothing; lands with the `The content hit-tested by the surface alone` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-001` | `INV` | The drawing surface MUST own the content, the caret, the selections and content hit-testing. | this spec section 2 | type-level -- `ambre_draw::HitTest` is the one way from a canvas point to content, and each application's surface implements it over its own layout; `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll`; `ambre_trame::ui::grid::tests::kinetic::a_canvas_point_reaches_its_cell_through_the_shared_hit_test`; `ambre_toile::ui::view::view_tests::a_canvas_point_reaches_its_element_through_the_shared_hit_test` -- a point reaches what is drawn there through the trait, under zoom and scroll; ci-gate -- `scripts/crate_boundaries.py` refuses a canvas-relative pointer read outside the host and the platform listeners, a content hit-test in an interface component, and an interface file that names the canvas beside a page-relative pointer read. The content, the caret and the selections are drawn, so `UI-THREAD-058` holds them | none | verified |
 | `UI-THREAD-048` | `INV` | The page elements MUST own everything the surface does not: their own focus, and their own accessibility. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_canvas::text_input::tests::only_the_spreadsheet_names_itself_a_cell` -- the focus carrier is a page element named by each kind of document; `ambre_toile::ui::a11y::tests::a_board_announces_its_selection`; `ambre_prose::view::a11y::tests::a_page_announces_the_block_at_the_caret`; `ambre_trame::ui::view::tests::the_active_cell_is_announced_by_reference_and_value` -- each application composes what the page element says of its surface. The other drawn states are `CHROME-029` | none | verified |
 | `UI-THREAD-002` | `INV` | The UI thread MUST NOT block on a queue, inbound or outbound. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- Trame's and Toile's senders are `try_send`, and neither has a blocking form in scope; `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame`; `::a_full_channel_holds_an_edit_rather_than_the_frame`; ci-gate -- `scripts/crate_boundaries.py` refuses a parking handle, a `.wait()`, a parked thread, an atomic wait or a `block_on` in UI-thread code, so a view added later cannot block either | none | verified |
 | `UI-THREAD-003` | `INV` | A piece of interface state MUST NOT be held twice: a value the dispatcher pushes into a signal MUST NOT also live in a view's own state. | this spec section 2 | none | unheld -- `UI-THREAD-059` refuses a second copy whose type is the payload's own, but a payload carried as a primitive or an identifier, such as the active sheet's name or the zoom, has a type a view field may hold for another reason, so no type read tells a copy apart; lands with the `A type of its own for each signal's payload` Story (`ambre-roadmap.md` E9) | untested |
@@ -52,10 +52,10 @@ application.
   names its four exceptions. The operating system clipboard is the other outbound surface and
   `ambre-spec-clipboard.md` fixes what it may carry; everything else leaves through the Sync thread,
   sealed (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 11 `verified`, 2 `untested`, 6 `unimplemented`. Two held rules rest on a
+* **Verification.** 12 `verified`, 1 `untested`, 6 `unimplemented`. Two held rules rest on a
   capability ban, which refuses the dependency instead of catching its use. Where no crate can be
   refused, a scan of the UI-thread source refuses the call. That covers a fetch, a storage call, a
-  wait, a drawing context and the engine in a view.
+  wait, a drawing context, a content hit-test and the engine in a view.
 ---
 
 ## 2. MODEL
@@ -75,6 +75,17 @@ The interface is composed **around** the surface, which costs one layout pass; t
 recomposes already rasterized layers at no per-frame cost. The one sensitive case is a floating
 element anchored to content that pans and zooms. That element is synchronized to the content's
 transform on every frame.
+
+A pointer crosses the boundary in one direction only. The host reads it relative to the canvas and
+asks the surface what is drawn there, through the one trait each application's surface implements.
+A page element never resolves a point to content: it receives what the surface resolved.
+
+```rust
+pub trait HitTest {
+    type Target;
+    fn hit_test(&self, x: f64, y: f64) -> Option<Self::Target>;
+}
+```
 
 | Direction | Carries |
 |---|---|
@@ -176,9 +187,9 @@ The user touches nothing here. What they see is whether the interface stays resp
 * **Nothing refuses the next exception to `UI-THREAD-004`.** The rule is written against what the
   launcher does, and no lint bans a fourth path. The first three were found by reading the crate,
   which is how a fifth will be found.
-* **Nothing refuses an interface component that hit-tests content.** A scan refuses a canvas
-  outside the surface (`UI-THREAD-058`), but an element that reads the content's geometry draws
-  nothing. `UI-THREAD-001` holds because nobody has written one.
+* **The hit-test scan reads one file at a time.** `UI-THREAD-001` refuses a page point and the
+  canvas named in one interface file. A page point carried to a second file, which then subtracts
+  the canvas position, passes. So does a canvas found by a selector other than its id.
 * **The blocking receive still compiles on this thread.** Each application types the rule for its
   own view and a view added tomorrow inherits nothing.
 * **No rule covers what the local store may hold.** The snapshot is opaque to this thread.
