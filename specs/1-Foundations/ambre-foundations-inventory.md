@@ -53,7 +53,7 @@
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 47 |  |
 | `server` | The one process every client talks to. | partial | 54 | 1 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 |  |
-| `ui` | The page's own thread. | partial | 19 | 1 |
+| `ui` | The page's own thread. | partial | 20 | 1 |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 17 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 18 implemented, 22 partial, 5 design-only. 953 contract rows, 4 loose.**
+**45 features: 18 implemented, 22 partial, 5 design-only. 954 contract rows, 4 loose.**
