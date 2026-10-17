@@ -118,7 +118,8 @@ pub enum SyncCommand {
 
     // -- Channel (control) -----------------------------------------------------
     /// List the documents a channel groups. Answered by
-    /// [`crate::LogicEvent::ChannelDocuments`], or by
+    /// [`crate::LogicEvent::ChannelDocuments`], by
+    /// [`crate::LogicEvent::ChannelRefused`], or by
     /// [`crate::LogicEvent::ChannelOpenFailed`]. Each document then opens
     /// through [`SyncCommand::OpenDocument`]: a channel has no session of its
     /// own (`SRV-102`).

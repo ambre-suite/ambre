@@ -297,6 +297,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::DocumentShared { .. } => "DocumentShared",
         LogicEvent::ChannelDocuments { .. } => "ChannelDocuments",
         LogicEvent::ChannelOpenFailed { .. } => "ChannelOpenFailed",
+        LogicEvent::ChannelRefused { .. } => "ChannelRefused",
         LogicEvent::ChannelActivity { .. } => "ChannelActivity",
         LogicEvent::ChannelCreated { .. } => "ChannelCreated",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
@@ -316,7 +317,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 23;
-const EVENT_VARIANTS: usize = 33;
+const EVENT_VARIANTS: usize = 34;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -530,6 +531,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             message: "gone".to_owned(),
         },
+        LogicEvent::ChannelRefused { channel_id: chan },
         LogicEvent::ChannelActivity {
             documents: vec![DocumentActivity {
                 channel_id: chan,

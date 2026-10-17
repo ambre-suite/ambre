@@ -188,11 +188,15 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         documents: Vec<ChannelDocument>,
     },
-    /// The relay refused the listing, or it could not be read.
+    /// The relay refused the listing for another cause, or it could not be
+    /// read.
     ChannelOpenFailed {
         channel_id: ChannelId,
         message: String,
     },
+    /// The relay refused the listing for want of membership: the user is no
+    /// member of the channel any more, or it is gone (`SRV-103`).
+    ChannelRefused { channel_id: ChannelId },
     /// The relay's activity answer, per segment and thread of every channel
     /// of the user (`SRV-109`), answering [`SyncCommand::FetchActivity`] and
     /// [`SyncCommand::MarkAllRead`](crate::SyncCommand::MarkAllRead).

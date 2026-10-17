@@ -57,6 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-153` | `POST` | Given a replay the relay stopped, the worker MUST ask again from its own cursor, and no sooner than the relay's throttle serves it. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-184`, `SRV-086`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires` -- nothing is sent before the timer, a stale timer asks nothing, and the live one asks from the document's cursor; `ambre_sync::websocket::tests::the_replay_retry_delay_doubles_up_to_its_budget` -- the first delay is the throttle window, and each later one doubles it | none | verified |
 | `SYNC-154` | `FAIL` | A replay stopped more times than its budget MUST reach the rest of the client as one error, and no retry MUST follow before the next reconnect. | this spec section 2; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_stopped_past_its_budget_reaches_logic_once` -- eight stops give one error and no retry, and a reopened socket counts from zero | none | verified |
 | `SYNC-157` | `FAIL` | A document whose first replay stops past its budget MUST reach the rest of the client as an open that failed, never as one still loading. | this spec section 2; `SYNC-154` | `ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open` -- six stops of a first replay give one failed open and no generic error, and the document is unsubscribed and let go | none | verified |
+| `SYNC-160` | `POST` | Given a resubscription the relay refuses for want of access, the worker MUST close the document and report its user removed from it. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-047` | not built | unbuilt -- lands with the `A document refused on a resubscription` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-158` | `POST` | A stop that names a later delta than the stop before it MUST start its document's budget again. | this spec section 2; `SYNC-154`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_that_moves_on_keeps_its_budget` -- twelve stops each past the last count one apiece, a stop at or before the last still counts, and a timer armed before a reset asks nothing | none | verified |
 
 ### 1.4 A request is made
@@ -94,7 +95,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 37 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 37 `verified`, 2 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -248,6 +249,10 @@ The worker has no surface of its own. What a user sees of it is five things.
   (`ambre-spec-key-rotation.md`, `SYNC-042`).
 * **An update sent while the socket is down is dropped.** It is logged, and nothing tells the view.
   A channel message shares the fate of any document update (`SYNC-149`).
+* **A refused resubscription keeps its document open.** A user removed while the socket was down
+  never hears the notice. The relay then refuses the document on the reopen, and the worker only
+  logs it (`SYNC-160`). It lands with the
+  `A document refused on a resubscription` Story (`ambre-roadmap.md` E5).
 * **Meetings are a log line each.** Four commands reach this worker and none does anything.
 * **A pending reconnect timer is not cancelled.** A second disconnect replaces the callback the
   timer will call, and the timer itself is not cleared. The first one then fires against a callback

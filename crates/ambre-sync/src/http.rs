@@ -266,13 +266,13 @@ struct RefusalBody {
 }
 
 /// The error a refused request reads as. `code` is the relay's error code,
-/// kept only with the status that may carry it. A 403 carries a setup still
-/// owed (`SYNC-134`), and a 409 a membership, a key or a log that moved
-/// under the request (`SYNC-143`, `SRV-104`).
+/// kept only with the status that may carry it. A 403 carries a want of
+/// access or a setup still owed (`SYNC-134`). A 409 carries a membership, a
+/// key or a log that moved under the request (`SYNC-143`, `SRV-104`).
 fn refusal(method: &str, url: &str, status: u16, code: Option<RefusalCode>) -> String {
-    use RefusalCode::{KeyChanged, LogMoved, MembersChanged, SetupRequired};
+    use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
     match (status, code) {
-        (403, Some(code @ SetupRequired))
+        (403, Some(code @ (SetupRequired | Forbidden)))
         | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => {
             format!("{method} {url}: {code}")
         }
@@ -290,6 +290,12 @@ fn ends_with_code(message: &str, code: RefusalCode) -> bool {
 /// setup still owed.
 pub(crate) fn is_setup_refusal(message: &str) -> bool {
     ends_with_code(message, RefusalCode::SetupRequired)
+}
+
+/// Whether `message` is the error of a request the relay refused for want of
+/// access to what it names.
+pub(crate) fn is_forbidden(message: &str) -> bool {
+    ends_with_code(message, RefusalCode::Forbidden)
 }
 
 /// Whether `message` is a rotation the relay refused because the members
@@ -1538,6 +1544,23 @@ mod tests {
         )));
         let crafted = "https://relay.example/api/users/search?q=: SETUP_REQUIRED";
         assert!(!is_setup_refusal(&refusal("GET", crafted, 500, None)));
+    }
+
+    /// Only a 403 carrying the forbidden code reads as a want of access. A
+    /// setup refusal, a bare 403 and another status do not.
+    #[test]
+    fn only_a_forbidden_refusal_reads_as_one() {
+        use RefusalCode::{Forbidden, SetupRequired};
+        let url = "https://relay.example/api/channels/c/documents";
+        assert!(is_forbidden(&refusal("GET", url, 403, Some(Forbidden))));
+        assert!(!is_forbidden(&refusal(
+            "GET",
+            url,
+            403,
+            Some(SetupRequired)
+        )));
+        assert!(!is_forbidden(&refusal("GET", url, 403, None)));
+        assert!(!is_forbidden(&refusal("GET", url, 404, Some(Forbidden))));
     }
 
     /// A 409 keeps the code of a membership or a key that moved, and no other

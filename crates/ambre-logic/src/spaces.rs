@@ -631,7 +631,8 @@ impl LogicState {
     /// The relay removed this user from `document_id` (`SRV-187`). Is it the
     /// `meta` of a channel held here? Then the user left it from another
     /// client, and the channel goes as after a leave asked here. A leave
-    /// asked here waits for its own answer.
+    /// asked here ends on the notice, so an answer lost after it keeps
+    /// nothing.
     pub(crate) fn channel_revoked(&mut self, document_id: DocumentId) {
         let meta = ambre_bus::MetaId::from_document(document_id);
         let open = self
@@ -649,7 +650,7 @@ impl LogicState {
             return;
         };
         if self.leaving.contains_key(&channel_id) {
-            return;
+            return self.channel_left(channel_id);
         }
         self.drop_channel(channel_id);
         self.send_to_ui(UiEvent::Channel {
@@ -1389,7 +1390,7 @@ mod tests {
     /// The relay tells this client its user left a channel,
     /// from another client. The channel goes with its sessions, and the view
     /// learns it. A removal of someone else, or from a document no channel
-    /// here holds, drops nothing.
+    /// here holds, drops nothing. A leave asked here ends on the notice.
     #[test]
     fn a_leave_from_another_client_drops_the_channel_here() {
         let (mut state, ui, sync) = harness();
@@ -1437,15 +1438,35 @@ mod tests {
             "the view was told {told:?}"
         );
 
-        // A leave asked here is dropped by its answer, not by the notice.
+        // A leave asked here ends on the notice. Its answer, lost after it,
+        // changes nothing.
         state.handle_logic_command(LogicCommand::Space {
             space_id,
             command: SpaceCommand::LeaveChannel { channel_id: kept },
         });
-        let _ = drain(&sync);
+        let _ = (drain(&sync), drain(&ui));
         state.handle_logic_event(revoked(kept_meta, me));
-        assert!(drain(&sync).is_empty());
-        assert!(state.channels.contains_key(&kept));
+        assert!(!state.channels.contains_key(&kept));
+        assert!(
+            drain(&sync)
+                .iter()
+                .all(|c| matches!(c, SyncCommand::CloseDocument { .. })),
+            "only sessions end"
+        );
+        let told = drain(&ui);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [UiEvent::Space { event: SpaceEvent::ChannelLeft { channel_id: id }, .. }, ..]
+                    if *id == kept
+            ),
+            "the view was told {told:?}"
+        );
+        state.handle_logic_event(LogicEvent::ChannelRequestFailed {
+            channel_id: kept,
+            message: "the answer was lost".to_owned(),
+        });
+        assert!(drain(&ui).is_empty(), "no failure shown for a leave done");
     }
 
     /// The relay refuses the leave: the view is told, and the channel and its

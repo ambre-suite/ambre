@@ -261,6 +261,20 @@ impl LogicState {
         });
     }
 
+    /// The relay refused the listing for want of membership. The user left
+    /// the channel, or it went, by a request whose answer never came back.
+    /// Nothing of it was held yet, so the view alone learns it is gone.
+    pub(crate) fn channel_refused(&mut self, channel_id: ChannelId) {
+        if self.opening.remove(&channel_id).is_none() {
+            return;
+        }
+        tracing::info!("Logic: channel {channel_id} refused its open");
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: MurmureEvent::Left,
+        });
+    }
+
     /// A document of a channel has all its bytes. Returns `false` when no
     /// channel, open or opening, asked for it.
     pub(crate) fn channel_document_ready(&mut self, document_id: DocumentId) -> bool {
@@ -1079,6 +1093,33 @@ mod tests {
             }]
         ));
         assert!(state.opening.is_empty());
+    }
+
+    /// A listing refused for want of membership drops the channel: the view
+    /// learns it is gone, not that it failed. A second refusal, or one for a
+    /// channel never opened, tells nothing.
+    #[test]
+    fn a_channel_the_relay_refuses_to_open_is_dropped() {
+        let (mut state, ui, sync) = harness();
+        let channel_id = ChannelId::new();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        let _ = drain(&sync);
+        state.handle_logic_event(LogicEvent::ChannelRefused { channel_id });
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::Channel {
+                channel_id: id,
+                event: MurmureEvent::Left,
+            }] if *id == channel_id
+        ));
+        assert!(state.opening.is_empty());
+        assert!(drain(&sync).is_empty(), "no session was open to end");
+
+        state.handle_logic_event(LogicEvent::ChannelRefused { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelRefused {
+            channel_id: ChannelId::new(),
+        });
+        assert!(drain(&ui).is_empty());
     }
 
     #[test]

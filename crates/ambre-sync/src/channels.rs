@@ -70,6 +70,12 @@ impl SyncState {
                     documents,
                 });
             }
+            Err(message) if http::is_forbidden(&message) => {
+                // No member of the channel any more: a leave or a delete
+                // whose answer was lost, or one from another client.
+                tracing::info!("Sync: channel {channel_id} refused its listing");
+                self.send_to_logic(LogicEvent::ChannelRefused { channel_id });
+            }
             Err(message) => {
                 tracing::warn!("Sync: listing channel {channel_id} failed: {message}");
                 self.send_to_logic(LogicEvent::ChannelOpenFailed {
@@ -975,6 +981,36 @@ mod tests {
         assert!(
             state.documents.contains_key(&meta),
             "no session closed here"
+        );
+    }
+
+    /// A listing the relay refuses for want of membership tells the Logic
+    /// thread the channel is refused. Any other failure stays a failure to
+    /// open.
+    #[test]
+    fn a_listing_refused_for_want_of_membership_reads_as_refused() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let channel_id = ChannelId::new();
+        let url = "GET https://relay.example/api/channels/c/documents";
+        for message in [
+            format!("{url}: {}", ambre_core::RefusalCode::Forbidden),
+            format!("{url}: HTTP 403"),
+            format!("{url}: HTTP 500"),
+        ] {
+            state.channel_listed(channel_id, false, Err(message));
+        }
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [
+                    LogicEvent::ChannelRefused { channel_id: a },
+                    LogicEvent::ChannelOpenFailed { channel_id: b, .. },
+                    LogicEvent::ChannelOpenFailed { channel_id: c, .. },
+                ] if [*a, *b, *c] == [channel_id; 3]
+            ),
+            "{events:?}"
         );
     }
 

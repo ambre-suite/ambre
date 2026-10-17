@@ -467,6 +467,7 @@ impl LogicState {
                     self.channel_open_failed(channel_id, message);
                 }
             }
+            LogicEvent::ChannelRefused { channel_id } => self.channel_refused(channel_id),
             LogicEvent::ChannelActivity { documents } => self.channel_activity(&documents),
             LogicEvent::ChannelCreated { channel_id, key } => {
                 self.channel_created(channel_id, key);
