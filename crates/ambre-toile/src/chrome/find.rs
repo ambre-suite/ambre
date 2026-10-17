@@ -34,12 +34,27 @@ pub struct FindQuery {
     pub backward: bool,
 }
 
-/// The Find panel. `state` is the open flag (Ctrl+F / the launcher sets it);
-/// `result` carries the last [`FindResults`] from Logic (drives the counter and
-/// the step origin). `on_find` emits every search / step request.
+/// Whether the Find panel shows. Ctrl+F opens it, and its close button or
+/// Escape closes it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FindPanelState {
+    #[default]
+    Closed,
+    Open,
+}
+
+impl FindPanelState {
+    pub fn is_open(self) -> bool {
+        self == Self::Open
+    }
+}
+
+/// The Find panel. `state` says whether it shows (Ctrl+F / the launcher sets
+/// it); `result` carries the last [`FindResults`] from Logic (drives the
+/// counter and the step origin). `on_find` emits every search / step request.
 #[component]
 pub fn FindPanel(
-    state: RwSignal<bool>,
+    state: RwSignal<FindPanelState>,
     result: RwSignal<Option<FindResults>>,
     on_find: Callback<FindQuery>,
 ) -> impl IntoView {
@@ -51,7 +66,7 @@ pub fn FindPanel(
 
     // Focus the field whenever the panel opens.
     Effect::new(move |_| {
-        if state.get()
+        if state.get().is_open()
             && let Some(input) = find_ref.get()
         {
             let _ = input.focus();
@@ -87,7 +102,7 @@ pub fn FindPanel(
         // Clear the query and emit so the canvas highlight is wiped, then hide.
         query.set(String::new());
         emit(None, false);
-        state.set(false);
+        state.set(FindPanelState::Closed);
         result.set(None);
     };
 
@@ -99,7 +114,7 @@ pub fn FindPanel(
     };
 
     move || {
-        state.get().then(|| {
+        state.get().is_open().then(|| {
             view! {
                 <div class="ambre-find-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
                     <div class="ambre-find-title">

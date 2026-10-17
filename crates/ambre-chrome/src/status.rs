@@ -21,6 +21,35 @@ use leptos::prelude::*;
 /// reads identically.
 pub const ZOOM_PRESETS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
+/// A zoom factor, `1.0` being 100%: finite and strictly positive, so a reader
+/// may divide by it. Each application builds it inside its own range.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct ZoomFactor(f64);
+
+impl ZoomFactor {
+    /// 100%.
+    pub const ONE: Self = Self(1.0);
+
+    /// `z` clamped into `lo ..= hi`. A NaN reads as 1, clamped the same way.
+    /// A bound that is not positive and finite is pulled back to one that is.
+    pub fn within(z: f64, lo: f64, hi: f64) -> Self {
+        let lo = if lo.is_finite() {
+            lo.max(f64::MIN_POSITIVE)
+        } else {
+            f64::MIN_POSITIVE
+        };
+        let hi = if hi.is_finite() { hi.max(lo) } else { lo };
+        let z = if z.is_nan() { 1.0 } else { z };
+        Self(z.clamp(lo, hi))
+    }
+
+    /// The factor as a number, `1.0` being 100%.
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
+
 /// The app-name caption pinned to the left of a status bar (for example "Trame",
 /// "Toile"): a dim, small label, styled by the shared `statusbar-label` class.
 #[component]
@@ -36,8 +65,9 @@ pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {
 #[component]
 pub fn ZoomChip(
     /// The live zoom factor (`1.0` = 100%). The menu sets it; the view mirrors it.
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ZoomFactor>,
     /// Preset factors offered by the menu, low-to-high. Defaults to [`ZOOM_PRESETS`].
+    /// The first and the last bound what the menu writes.
     #[prop(optional, into)]
     presets: Option<Vec<f64>>,
     /// Tooltip for the button (app-specific wording). Defaults to `"Zoom"`.
@@ -47,7 +77,11 @@ pub fn ZoomChip(
     // The preset menu is collapsed by default: only the readout shows.
     let show = RwSignal::new(false);
     // Stored so the (repeatable) `Show` child can iterate it without moving it.
-    let presets = StoredValue::new(presets.unwrap_or_else(|| ZOOM_PRESETS.to_vec()));
+    let presets = presets.unwrap_or_else(|| ZOOM_PRESETS.to_vec());
+    // The presets may run either way, so the range is their extremes.
+    let lo = presets.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = presets.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let presets = StoredValue::new(presets);
     let title = title.unwrap_or_else(|| "Zoom".to_owned());
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
     // An opened menu takes the focus, so the keys reach it (`CHROME-026`).
@@ -66,7 +100,7 @@ pub fn ZoomChip(
                 aria-expanded=move || crate::menu::aria_bool(show.get())
                 on:click=move |_| show.update(|v| *v = !*v)
             >
-                {move || format!("{:.0} %", zoom.get() * 100.0)}
+                {move || format!("{:.0} %", zoom.get().get() * 100.0)}
             </button>
             <Show when=move || show.get() fallback=|| ()>
                 <ul
@@ -86,7 +120,7 @@ pub fn ZoomChip(
                         .map(|z| {
                             let pct = format!("{:.0} %", z * 100.0);
                             // `selected` highlights the row matching the live zoom.
-                            let selected = move || (zoom.get() - z).abs() < f64::EPSILON;
+                            let selected = move || (zoom.get().get() - z).abs() < f64::EPSILON;
                             view! {
                                 <li role="none">
                                     <button
@@ -95,7 +129,7 @@ pub fn ZoomChip(
                                         class:selected=selected
                                         aria-checked=move || crate::menu::aria_bool(selected())
                                         on:click=move |_| {
-                                            zoom.set(z);
+                                            zoom.set(ZoomFactor::within(z, lo, hi));
                                             show.set(false);
                                         }
                                     >
@@ -158,5 +192,21 @@ pub fn PerfChip(
                     }
                 })}
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A zoom factor is built inside its range, so a reader can divide by it
+    /// (`UI-THREAD-060`).
+    #[test]
+    fn a_zoom_factor_is_clamped_where_it_is_built() {
+        assert_eq!(ZoomFactor::within(5.0, 0.5, 2.0).get(), 2.0);
+        assert_eq!(ZoomFactor::within(0.1, 0.5, 2.0).get(), 0.5);
+        assert_eq!(ZoomFactor::within(f64::NAN, 0.5, 2.0).get(), 1.0);
+        assert_eq!(ZoomFactor::within(f64::INFINITY, 0.5, 2.0).get(), 2.0);
+        assert!(ZoomFactor::within(0.0, -1.0, f64::INFINITY).get() > 0.0);
     }
 }

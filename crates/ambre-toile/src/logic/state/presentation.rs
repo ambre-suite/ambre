@@ -23,8 +23,8 @@ use crate::logic::interop::{PageSize, PdfPage};
 use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
 use crate::logic::command::{
-    DeckFrame, DeckView, PresencePayload, SlideChange, TextDelta, ToileError, ToileEvent,
-    ToileOutcome,
+    Broadcast, DeckFrame, DeckView, PresencePayload, PresentMode, SlideChange, SlidePosition,
+    TextDelta, ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::model::{ElementId, FrameId, NodeId};
 use crate::logic::text_merge::{Merge, merge_edits};
@@ -191,7 +191,7 @@ impl ToileState {
         let change = self.slide_change(None, 0);
         ToileOutcome::display_and_ephemeral(
             vec![
-                ToileEvent::PresentModeChanged(true),
+                ToileEvent::PresentModeChanged(PresentMode::Presenting),
                 ToileEvent::SlideChanged(change),
             ],
             self.slide_broadcast_frame(),
@@ -239,7 +239,11 @@ impl ToileState {
             None
         };
         ToileOutcome::display_and_ephemeral(
-            vec![ToileEvent::PresentBroadcastChanged(on)],
+            vec![ToileEvent::PresentBroadcastChanged(if on {
+                Broadcast::Broadcasting
+            } else {
+                Broadcast::Private
+            })],
             ephemeral,
         )
     }
@@ -281,11 +285,10 @@ impl ToileState {
         };
         let frame = order.get(to_idx).cloned();
         SlideChange {
-            index: to_idx,
+            position: SlidePosition::new(to_idx, order.len()),
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
             to_rect: order.get(to_idx).and_then(|f| self.element_rect(f)),
-            count: order.len(),
             notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
             frame,
             transition_ms: self.transition_ms(),
@@ -329,12 +332,12 @@ impl ToileState {
     /// is independent of present mode and left untouched.
     pub(super) fn exit_present(&mut self) -> ToileOutcome {
         self.present = false;
-        let mut display = vec![ToileEvent::PresentModeChanged(false)];
+        let mut display = vec![ToileEvent::PresentModeChanged(PresentMode::Editing)];
         if !self.broadcasting {
             return ToileOutcome::display_only(display);
         }
         self.broadcasting = false;
-        display.push(ToileEvent::PresentBroadcastChanged(false));
+        display.push(ToileEvent::PresentBroadcastChanged(Broadcast::Private));
         // Say so on the wire too: a presenter who left the mode is no longer
         // one to follow (`TOILE-UI-315`).
         ToileOutcome::display_and_ephemeral(display, silent_presence_frame())

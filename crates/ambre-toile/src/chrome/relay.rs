@@ -12,7 +12,10 @@
 // only sends it to the routed document.
 // ============================================================================
 
-use ambre_bus::app::toile::{ElementId, FindResults, StatsRequestKind, ToileCommand, ToileEvent};
+use ambre_bus::app::toile::{
+    Broadcast, ElementId, FindResults, PresentMode, SlidePosition, StatsRequestKind, ToileCommand,
+    ToileEvent,
+};
 use ambre_bus::{AppCommand, AppEvent, UiEvent, UserId};
 use leptos::prelude::*;
 
@@ -35,18 +38,16 @@ pub struct ToileRelay {
     pub find_result: RwSignal<Option<FindResults>>,
     /// The selection's count and bounds, for the status band.
     pub sel_stats: RwSignal<Option<SelStats>>,
-    /// The board is presenting, which shows the presenter panel.
-    pub present: RwSignal<bool>,
-    /// The slide on screen, zero-based.
-    pub presenter_index: RwSignal<usize>,
-    /// How many slides the deck holds.
-    pub presenter_count: RwSignal<usize>,
+    /// Whether the board is presenting, which shows the presenter panel.
+    pub present: RwSignal<PresentMode>,
+    /// The slide on screen and the deck's length.
+    pub presenter_slide: RwSignal<SlidePosition>,
     /// The speaker notes of the slide on screen.
     pub presenter_notes: RwSignal<String>,
     /// The frame those notes belong to.
     pub presenter_frame: RwSignal<Option<ElementId>>,
-    /// This client broadcasts its playback position.
-    pub broadcasting: RwSignal<bool>,
+    /// Whether this client broadcasts its playback position.
+    pub broadcasting: RwSignal<Broadcast>,
     /// The presenter this client follows, if any.
     pub following: RwSignal<Option<UserId>>,
     /// A peer presenting now, whom the user may follow.
@@ -101,10 +102,9 @@ impl ToileRelay {
                         .set(Some(SelStats::from_reply(s.count, s.bounds)));
                 }
             }
-            ToileEvent::PresentModeChanged(on) => self.present.set(*on),
+            ToileEvent::PresentModeChanged(mode) => self.present.set(*mode),
             ToileEvent::SlideChanged(c) => {
-                self.presenter_index.set(c.index);
-                self.presenter_count.set(c.count);
+                self.presenter_slide.set(c.position);
                 self.presenter_notes.set(c.notes.clone());
                 self.presenter_frame.set(c.frame.clone());
             }
@@ -117,7 +117,7 @@ impl ToileRelay {
                     self.presenter_notes.set(notes.clone());
                 }
             }
-            ToileEvent::PresentBroadcastChanged(on) => self.broadcasting.set(*on),
+            ToileEvent::PresentBroadcastChanged(b) => self.broadcasting.set(*b),
             ToileEvent::FollowingChanged(who) => self.following.set(*who),
             // The event is the whole live set (`PRESENCE-009`), so a presenter
             // who left it stops being offered to follow.

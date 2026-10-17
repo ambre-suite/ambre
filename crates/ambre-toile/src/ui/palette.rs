@@ -120,6 +120,11 @@ pub fn bind_tool_keys(keymap: &mut Keymap) {
 /// Falls back to `crosshair` if the data URI is unsupported.
 pub const STICKY_CURSOR: &str = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><rect x='4' y='4' width='18' height='18' fill='%23FEF08A' stroke='%23333333' stroke-width='1'/><path d='M17 22 L22 22 L22 17 Z' fill='%23E4CE5C'/></svg>\") 4 4, crosshair";
 
+/// A CSS `cursor` value the board view asks of the canvas element over the
+/// tool's own (`toile-tools`): a keyword, or an inlined SVG cursor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanvasCursor(pub Cow<'static, str>);
+
 /// The CSS `cursor` value for the canvas while `tool` is active (`toile-tools`,
 /// "Cursor feedback"). A note-shaped cursor while the Sticky tool is armed, and a
 /// crosshair for the other creation tools: a click visibly means "place here". A

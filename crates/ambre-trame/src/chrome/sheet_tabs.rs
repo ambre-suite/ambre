@@ -13,35 +13,36 @@
 // signals, mirrored from `TrameEvent::SheetList`.
 // ============================================================================
 
+use ambre_bus::{SheetId, SheetTab};
 use leptos::prelude::*;
 use leptos::web_sys;
 
 /// Reorder intent emitted on drop: move sheet `id` so it lands at `to_index`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReorderSheet {
-    pub id: String,
+    pub id: SheetId,
     pub to_index: usize,
 }
 
-/// The sheet-tab strip. `sheets` is `(id, name)` in display order, `active` the
-/// active sheet id; both mirror `TrameEvent::SheetList`. Each user action is
+/// The sheet-tab strip. `sheets` is in display order, `active` the active
+/// sheet id; both mirror `TrameEvent::SheetList`. Each user action is
 /// surfaced through its callback; the launcher owns the `TrameCommand` mapping.
 #[component]
 pub fn SheetTabs(
-    sheets: RwSignal<Vec<(String, String)>>,
-    active: RwSignal<String>,
-    on_activate: Callback<String>,
+    sheets: RwSignal<Vec<SheetTab>>,
+    active: RwSignal<SheetId>,
+    on_activate: Callback<SheetId>,
     on_create: Callback<()>,
-    on_rename: Callback<(String, String)>,
-    on_delete: Callback<String>,
+    on_rename: Callback<(SheetId, String)>,
+    on_delete: Callback<SheetId>,
     on_reorder: Callback<ReorderSheet>,
 ) -> impl IntoView {
     // Id of the tab being renamed in place, or `None`.
-    let renaming = RwSignal::new(None::<String>);
+    let renaming = RwSignal::new(None::<SheetId>);
     // Open per-tab context menu: `(sheet_id, client_x, client_y)`, or `None`.
-    let menu = RwSignal::new(None::<(String, f64, f64)>);
+    let menu = RwSignal::new(None::<(SheetId, f64, f64)>);
     // Id of the tab currently being dragged, or `None`.
-    let dragging = RwSignal::new(None::<String>);
+    let dragging = RwSignal::new(None::<SheetId>);
     // Index a drop would land on (the tab currently hovered during a drag).
     let drop_idx = RwSignal::new(None::<usize>);
 
@@ -54,7 +55,7 @@ pub fn SheetTabs(
     on_cleanup(move || menu_handle.remove());
 
     // Begin an in-place rename of `id`, closing any open menu first.
-    let start_rename = move |id: String| {
+    let start_rename = move |id: SheetId| {
         menu.set(None);
         renaming.set(Some(id));
     };
@@ -67,18 +68,18 @@ pub fn SheetTabs(
             .get()
             .into_iter()
             .enumerate()
-            .map(|(index, (id, name))| {
+            .map(|(index, SheetTab { id, name })| {
                 let is_active = {
                     let id = id.clone();
-                    move || active.get() == id
+                    move || active.with(|a| *a == id)
                 };
                 let is_renaming = {
                     let id = id.clone();
-                    move || renaming.get().as_deref() == Some(id.as_str())
+                    move || renaming.with(|r| r.as_ref() == Some(&id))
                 };
                 let is_dragging = {
                     let id = id.clone();
-                    move || dragging.get().as_deref() == Some(id.as_str())
+                    move || dragging.with(|d| d.as_ref() == Some(&id))
                 };
                 let is_drop = move || drop_idx.get() == Some(index);
 

@@ -51,10 +51,12 @@ pub use commands::{
     context_entries_for, init_command_states, mirror_event, new_doc_label, notify_event,
     status_label,
 };
-pub use find_replace::{FindMode, FindQuery, FindReplace, FindReplaceState, ReplaceRequest};
+pub use find_replace::{
+    FindMode, FindPosition, FindQuery, FindReplace, FindReplaceState, ReplaceRequest,
+};
 pub use formula_bar::FormulaBar;
 pub use handler::TrameHandler;
-pub use popovers::{FilterPopover, FilterPopoverState};
+pub use popovers::{FilterPopover, FilterPopoverState, SheetFilter};
 pub use relay::{TrameIntent, TrameRelay};
 pub use sheet_tabs::{ReorderSheet, SheetTabs};
 pub use sort_dialog::{SortApply, SortDialog, SortDialogState};

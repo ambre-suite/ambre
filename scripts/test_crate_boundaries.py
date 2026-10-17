@@ -95,7 +95,7 @@ def scratch(tmp: str) -> Path:
     for rel, holder in cb.SIGNAL_HOLDERS.items():
         path = root / rel
         held = path.read_text() if path.exists() else ""
-        body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<f64>,\n}}\n"
+        body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<ZoomFactor>,\n}}\n"
         write(root, rel, held + body)
     write(
         root,
@@ -148,6 +148,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_scroll_sources(errors)
             cb.check_composed_names(errors)
             cb.check_one_copy(errors)
+            cb.check_signal_types(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -820,6 +821,22 @@ class CrateBoundaries(unittest.TestCase):
     def test_a_signal_holder_holding_no_signal_is_an_error_not_a_pass(self):
         errors = self.breach("crates/ambre-toile/src/chrome/relay.rs", "pub struct ToileRelay {}\n")
         self.assertTrue(any("holds no signal" in e for e in errors), errors)
+
+    def test_a_signal_carrying_a_bare_primitive_is_refused(self):
+        for payload in ("f64", "Option<String>", "Vec<usize>", "(f64, f64)", "[String; 5]", "Option<Rc<bool>>"):
+            text = f"pub struct ToileRelay {{\n    pub mode: RwSignal<{payload}>,\n}}\n"
+            errors = self.breach("crates/ambre-toile/src/chrome/relay.rs", text)
+            self.assertTrue(any("`mode` signal carries a bare" in e for e in errors), (payload, errors))
+
+    def test_a_signal_carrying_a_type_of_its_own_or_accepted_text_stays_free(self):
+        text = (
+            "pub struct ToileRelay {\n"
+            "    pub present: RwSignal<PresentMode>,\n"
+            "    pub following: RwSignal<Option<ambre_bus::UserId>>,\n"
+            "    pub presenter_notes: RwSignal<String>,\n"
+            "}\n"
+        )
+        self.assertEqual(self.breach("crates/ambre-toile/src/chrome/relay.rs", text), [])
 
     def test_a_fixture_benchmark_reporting_a_frame_rate_is_refused(self):
         for line in ('c.bench_function("fixture_board_fps", |b| {});\n', "let frame_rate = 60.0 / t; // fixture\n"):

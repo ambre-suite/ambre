@@ -25,8 +25,8 @@
 )]
 
 use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, DocumentId, HAlign, TrameCommand, TrameEvent,
-    UiEvent, VAlign,
+    AppCommand, AppEvent, CellFormat, CellStyle, DocumentId, HAlign, SheetId, SheetTab,
+    TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
@@ -228,7 +228,7 @@ fn status_bar_renders_label_and_aggregates() {
             max: 3.0,
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
-        let zoom = RwSignal::new(1.0_f64);
+        let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
         view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
     });
 
@@ -240,6 +240,16 @@ fn status_bar_renders_label_and_aggregates() {
     container.remove();
 }
 
+/// The find counter is built from the reply's zero-based index, and an index
+/// past the matches focuses nothing (`UI-THREAD-060`).
+#[wasm_bindgen_test]
+fn a_find_position_counts_from_one_and_never_past_the_matches() {
+    assert_eq!(chrome::FindPosition::new(Some(0), 3).label(), "1/3");
+    assert_eq!(chrome::FindPosition::new(Some(2), 3).label(), "3/3");
+    assert_eq!(chrome::FindPosition::new(Some(3), 3).label(), "0/3");
+    assert_eq!(chrome::FindPosition::new(None, 0).label(), "0/0");
+}
+
 /// DOM test: the `FindReplace` panel mounts hidden when closed and, once opened
 /// in find mode, exposes the "Find" input without the replace-only field.
 #[wasm_bindgen_test]
@@ -247,7 +257,7 @@ fn find_replace_panel_opens_in_find_mode() {
     let doc = document();
     let container = mount_in_container(|| {
         let state = RwSignal::new(None::<FindReplaceState>);
-        let result = RwSignal::new(None::<(usize, usize)>);
+        let result = RwSignal::new(None::<chrome::FindPosition>);
         let noop_find = Callback::new(|_: FindQuery| {});
         let noop_replace = Callback::new(|_: ReplaceRequest| {});
         // Open the panel in find mode after the initial render so the closed ->
@@ -471,23 +481,24 @@ fn filter_entry_toggles_with_filter_state() {
 /// strip.
 #[wasm_bindgen_test]
 fn sheet_tabs_render_active_and_emit_intents() {
-    let activated = RwSignal::new(None::<String>);
+    let activated = RwSignal::new(None::<SheetId>);
     let created = RwSignal::new(0_u32);
 
     let container = mount_in_container(move || {
-        let sheets = RwSignal::new(vec![
-            ("s0".to_owned(), "One".to_owned()),
-            ("s1".to_owned(), "Two".to_owned()),
-        ]);
-        let active = RwSignal::new("s1".to_owned());
+        let tab = |id: &str, name: &str| SheetTab {
+            id: SheetId(id.to_owned()),
+            name: name.to_owned(),
+        };
+        let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
+        let active = RwSignal::new(SheetId("s1".to_owned()));
         view! {
             <SheetTabs
                 sheets=sheets
                 active=active
                 on_activate=Callback::new(move |id| activated.set(Some(id)))
                 on_create=Callback::new(move |()| created.update(|n| *n += 1))
-                on_rename=Callback::new(move |_: (String, String)| {})
-                on_delete=Callback::new(move |_: String| {})
+                on_rename=Callback::new(move |_: (SheetId, String)| {})
+                on_delete=Callback::new(move |_: SheetId| {})
                 on_reorder=Callback::new(move |_: ReorderSheet| {})
             />
         }
@@ -505,7 +516,7 @@ fn sheet_tabs_render_active_and_emit_intents() {
     // Clicking the first (inactive) tab emits `on_activate("s0")`.
     let first: web_sys::HtmlElement = tabs.item(0).unwrap().dyn_into().unwrap();
     first.click();
-    assert_eq!(activated.get_untracked().as_deref(), Some("s0"));
+    assert_eq!(activated.get_untracked(), Some(SheetId("s0".to_owned())));
 
     // Clicking the trailing "+" emits `on_create`.
     let add: web_sys::HtmlElement = doc
@@ -589,7 +600,7 @@ fn status_text(stats: Option<SelStats>) -> String {
     let container = mount_in_container(move || {
         let stats = RwSignal::new(stats);
         let perf = RwSignal::new(PerfSnapshot::default());
-        let zoom = RwSignal::new(1.0_f64);
+        let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
         view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
     });
     let text = container
@@ -699,9 +710,9 @@ fn relay() -> chrome::TrameRelay {
         sort_dialog: RwSignal::new(None),
         filter_popover: RwSignal::new(None),
         filter_values: RwSignal::new(Vec::new()),
-        filter_active: RwSignal::new(false),
+        filter_active: RwSignal::new(chrome::SheetFilter::Unfiltered),
         sheets: RwSignal::new(Vec::new()),
-        active_sheet: RwSignal::new(String::new()),
+        active_sheet: RwSignal::new(SheetId::default()),
         sel_stats: RwSignal::new(None),
         find_result: RwSignal::new(None),
     }

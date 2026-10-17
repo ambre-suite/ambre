@@ -122,7 +122,7 @@ pub struct ProseView {
     announced: Option<BlockId>,
     fatal: bool,
     /// The five figures as the status bar slot shows them.
-    figures: RwSignal<Option<[String; 5]>>,
+    figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     shown: Option<WordCount>,
     annotations: ProseSignals,
     /// The layout context the draft is shaped with.
@@ -143,7 +143,7 @@ impl ProseView {
         height: f64,
         text_input: TextInput,
         theme_ctl: ThemeControl,
-        figures: RwSignal<Option<[String; 5]>>,
+        figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
         annotations: ProseSignals,
         busy_pub: BusyPublisher,
         notices: NoticePublisher,

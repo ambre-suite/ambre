@@ -29,14 +29,15 @@
 use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
-    CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView, ElementId,
-    PresencePayload, PresenceUpdate, ToileCommand, ToileEvent,
+    Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
+    ElementId, PresencePayload, PresenceUpdate, PresentMode, SlidePosition, ToileCommand,
+    ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
-use ambre_chrome::{ToastHost, Toasts};
+use ambre_chrome::{ToastHost, Toasts, ZoomFactor};
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
@@ -60,7 +61,9 @@ fn document() -> web_sys::Document {
 }
 
 /// Mount `f` into a detached container appended to the body, returning it so the
-/// test can query and then drop it.
+/// test can query and then drop it. The mount lives as long as the test's
+/// owner. An effect it queued then dies with the test's signals, rather than
+/// reading a disposed one when a later test flushes the queue.
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
 where
     F: FnOnce() -> N + 'static,
@@ -69,13 +72,17 @@ where
     let container = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&container).unwrap();
     let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
-    mount_to(target, f).forget();
+    StoredValue::new_local(mount_to(target, f));
     container
 }
 
-fn mount_bar(stats: Option<SelStats>, zoom: f64, fps: f32) -> (web_sys::Element, RwSignal<f64>) {
+fn mount_bar(
+    stats: Option<SelStats>,
+    zoom: f64,
+    fps: f32,
+) -> (web_sys::Element, RwSignal<ZoomFactor>) {
     let stats = RwSignal::new(stats);
-    let zoom = RwSignal::new(zoom);
+    let zoom = RwSignal::new(ZoomFactor::within(zoom, 0.1, 10.0));
     let perf = RwSignal::new(PerfSnapshot {
         fps,
         ..PerfSnapshot::default()
@@ -358,7 +365,7 @@ fn tool_palette_click_switches_active_tool() {
 fn top_menu_bar_zoom_in_fires_command() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(1.0);
+    let zoom = RwSignal::new(ZoomFactor::ONE);
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
@@ -479,7 +486,7 @@ fn the_button_bars_announce_the_registry_labels() {
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
-    let zoom = RwSignal::new(1.0);
+    let zoom = RwSignal::new(ZoomFactor::ONE);
     let on_command = Callback::new(|_: CommandId| {});
     let menu_bar = mount_in_container(move || {
         view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
@@ -547,11 +554,18 @@ fn mount_presenter_follow(
     following: Option<UserId>,
     presenter_peer: Option<UserId>,
 ) -> (web_sys::Element, RwSignal<Option<PresenterIntent>>) {
-    let open = RwSignal::new(open);
-    let index = RwSignal::new(index);
-    let count = RwSignal::new(count);
+    let open = RwSignal::new(if open {
+        PresentMode::Presenting
+    } else {
+        PresentMode::Editing
+    });
+    let slide = RwSignal::new(SlidePosition::new(index, count));
     let notes = RwSignal::new(notes.to_owned());
-    let broadcasting = RwSignal::new(broadcasting);
+    let broadcasting = RwSignal::new(if broadcasting {
+        Broadcast::Broadcasting
+    } else {
+        Broadcast::Private
+    });
     let following = RwSignal::new(following);
     let presenter_peer = RwSignal::new(presenter_peer);
     let fired = RwSignal::new(None::<PresenterIntent>);
@@ -560,8 +574,7 @@ fn mount_presenter_follow(
         view! {
             <PresenterPanel
                 open=open
-                index=index
-                count=count
+                slide=slide
                 notes=notes
                 broadcasting=broadcasting
                 following=following
@@ -1167,7 +1180,7 @@ async fn a_dropped_comment_opens_its_composer_where_it_clicked() {
 /// and comes back when the presentation ends.
 #[wasm_bindgen_test]
 async fn the_editing_chrome_leaves_while_the_board_presents() {
-    let present = RwSignal::new(false);
+    let present = RwSignal::new(PresentMode::Editing);
     let active = RwSignal::new(Tool::Select);
     let root = mount_in_container(move || {
         view! {
@@ -1178,10 +1191,10 @@ async fn the_editing_chrome_leaves_while_the_board_presents() {
     });
     let shown = |root: &web_sys::Element| root.child_element_count() > 0;
     assert!(shown(&root), "the palette is mounted");
-    present.set(true);
+    present.set(PresentMode::Presenting);
     leptos::task::tick().await;
     assert!(!shown(&root), "a presentation unmounts the palette");
-    present.set(false);
+    present.set(PresentMode::Editing);
     leptos::task::tick().await;
     assert!(shown(&root), "the palette comes back");
     root.remove();
@@ -1192,12 +1205,11 @@ fn relay() -> ToileRelay {
     ToileRelay {
         find_result: RwSignal::new(None),
         sel_stats: RwSignal::new(None),
-        present: RwSignal::new(false),
-        presenter_index: RwSignal::new(0),
-        presenter_count: RwSignal::new(0),
+        present: RwSignal::new(PresentMode::Editing),
+        presenter_slide: RwSignal::new(SlidePosition::default()),
         presenter_notes: RwSignal::new(String::new()),
         presenter_frame: RwSignal::new(None),
-        broadcasting: RwSignal::new(false),
+        broadcasting: RwSignal::new(Broadcast::Private),
         following: RwSignal::new(None),
         presenter_peer: RwSignal::new(None),
     }

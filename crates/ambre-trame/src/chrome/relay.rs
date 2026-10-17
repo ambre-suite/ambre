@@ -12,11 +12,14 @@
 // only sends it to the routed document.
 // ============================================================================
 
-use ambre_bus::{AppCommand, AppEvent, FilterKind, StylePatch, TrameCommand, TrameEvent, UiEvent};
+use ambre_bus::{
+    AppCommand, AppEvent, FilterKind, SheetId, SheetTab, StylePatch, TrameCommand, TrameEvent,
+    UiEvent,
+};
 use leptos::prelude::*;
 
-use super::find_replace::{FindQuery, ReplaceRequest};
-use super::popovers::FilterPopoverState;
+use super::find_replace::{FindPosition, FindQuery, ReplaceRequest};
+use super::popovers::{FilterPopoverState, SheetFilter};
 use super::sheet_tabs::ReorderSheet;
 use super::sort_dialog::{SortApply, SortDialogState};
 use super::status::SelStats;
@@ -36,13 +39,13 @@ pub enum TrameIntent {
     /// Replace every match.
     ReplaceAll(ReplaceRequest),
     /// Show this sheet (`trame-sheets`).
-    ActivateSheet(String),
+    ActivateSheet(SheetId),
     /// Add a sheet after the last one.
     CreateSheet,
     /// Rename a sheet, as `(id, name)`.
-    RenameSheet(String, String),
+    RenameSheet(SheetId, String),
     /// Delete a sheet.
-    DeleteSheet(String),
+    DeleteSheet(SheetId),
     /// Move a sheet to another position.
     ReorderSheet(ReorderSheet),
 }
@@ -58,15 +61,15 @@ pub struct TrameRelay {
     /// The active column's distinct values (`trame-shared-filter`).
     pub filter_values: RwSignal<Vec<String>>,
     /// Whether the active sheet is filtered, which the context menu reads.
-    pub filter_active: RwSignal<bool>,
-    /// The sheet tabs, as `(id, name)` (`trame-sheets`).
-    pub sheets: RwSignal<Vec<(String, String)>>,
+    pub filter_active: RwSignal<SheetFilter>,
+    /// The sheet tabs, in strip order (`trame-sheets`).
+    pub sheets: RwSignal<Vec<SheetTab>>,
     /// The active sheet's id.
-    pub active_sheet: RwSignal<String>,
+    pub active_sheet: RwSignal<SheetId>,
     /// The aggregates of a multi-cell selection (`trame-status-bar`).
     pub sel_stats: RwSignal<Option<SelStats>>,
-    /// The find counter, as the focused match (one-based) and the total.
-    pub find_result: RwSignal<Option<(usize, usize)>>,
+    /// The find counter.
+    pub find_result: RwSignal<Option<FindPosition>>,
 }
 
 impl TrameRelay {
@@ -102,16 +105,18 @@ impl TrameRelay {
                 in_formulas: r.in_formulas,
                 all_sheets: r.all_sheets,
             },
-            TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
+            TrameIntent::ActivateSheet(SheetId(sheet_id)) => {
+                TrameCommand::ActivateSheet { sheet_id }
+            }
             TrameIntent::CreateSheet => TrameCommand::CreateSheet {
                 name: format!("Sheet{}", self.sheets.get_untracked().len() + 1),
             },
-            TrameIntent::RenameSheet(sheet_id, name) => {
+            TrameIntent::RenameSheet(SheetId(sheet_id), name) => {
                 TrameCommand::RenameSheet { sheet_id, name }
             }
-            TrameIntent::DeleteSheet(sheet_id) => TrameCommand::DeleteSheet { sheet_id },
+            TrameIntent::DeleteSheet(SheetId(sheet_id)) => TrameCommand::DeleteSheet { sheet_id },
             TrameIntent::ReorderSheet(req) => TrameCommand::MoveSheet {
-                sheet_id: req.id,
+                sheet_id: req.id.0,
                 to_index: req.to_index as u32,
             },
         })
@@ -151,11 +156,11 @@ impl TrameRelay {
             // way, and the flag follows.
             TrameEvent::FilterApplied { .. } => {
                 self.filter_popover.set(None);
-                self.filter_active.set(true);
+                self.filter_active.set(SheetFilter::Filtered);
             }
             TrameEvent::FilterCleared => {
                 self.filter_popover.set(None);
-                self.filter_active.set(false);
+                self.filter_active.set(SheetFilter::Unfiltered);
             }
             TrameEvent::SheetList { sheets, active } => {
                 self.sheets.set(sheets.clone());
@@ -181,11 +186,8 @@ impl TrameRelay {
             // The canvas moves the active cell onto the focused match off the
             // same event. Here only the counter is summarized.
             TrameEvent::FindResult { matches, active } => {
-                let total = matches.len();
-                self.find_result.set(match active {
-                    Some(i) if total > 0 => Some((*i + 1, total)),
-                    _ => Some((0, total)),
-                });
+                self.find_result
+                    .set(Some(FindPosition::new(*active, matches.len())));
             }
             _ => {}
         }

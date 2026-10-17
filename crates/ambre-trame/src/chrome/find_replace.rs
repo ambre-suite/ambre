@@ -51,12 +51,38 @@ pub struct ReplaceRequest {
     pub all_sheets: bool,
 }
 
-/// The find/replace panel. `result` carries `(active_1based, total)` of the last
-/// `FindResult` for the "k/n" counter (`None` = no search yet / no match).
+/// Where the last search left the counter: the focused match, counted from one,
+/// out of the matches found. The focus never passes the total, and reads 0 when
+/// no match is focused.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FindPosition {
+    focus: usize,
+    total: usize,
+}
+
+impl FindPosition {
+    /// The position a `FindResult` reports: `active` indexes its `total`
+    /// matches from zero. An index past the end focuses nothing.
+    pub fn new(active: Option<usize>, total: usize) -> Self {
+        let focus = match active {
+            Some(i) if i < total => i + 1,
+            _ => 0,
+        };
+        Self { focus, total }
+    }
+
+    /// The "k/n" counter.
+    pub fn label(self) -> String {
+        format!("{}/{}", self.focus, self.total)
+    }
+}
+
+/// The find/replace panel. `result` carries the position of the last
+/// `FindResult` for the "k/n" counter (`None` = no search yet).
 #[component]
 pub fn FindReplace(
     state: RwSignal<Option<FindReplaceState>>,
-    result: RwSignal<Option<(usize, usize)>>,
+    result: RwSignal<Option<FindPosition>>,
     on_find: Callback<FindQuery>,
     on_replace: Callback<ReplaceRequest>,
     on_replace_all: Callback<ReplaceRequest>,
@@ -183,11 +209,7 @@ pub fn FindReplace(
                             }
                         />
                         <span class="ambre-find-count">
-                            {move || match result.get() {
-                                Some((active, total)) if total > 0 => format!("{active}/{total}"),
-                                Some(_) => "0/0".to_string(),
-                                None => String::new(),
-                            }}
+                            {move || result.get().map(FindPosition::label).unwrap_or_default()}
                         </span>
                         <button class="ambre-find-next" aria-label="Find next" on:click=move |_| run_find()>
                             <Icon icon=icondata::AiArrowDownOutlined />

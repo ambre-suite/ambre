@@ -913,6 +913,69 @@ impl FrameSnapshot {
     }
 }
 
+/// Whether this viewer edits the board or presents it (`toile-presentation`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PresentMode {
+    /// The board is open for editing.
+    #[default]
+    Editing,
+    /// The board is in presentation (focus) mode.
+    Presenting,
+}
+
+impl PresentMode {
+    /// The board is in presentation mode.
+    pub fn is_presenting(self) -> bool {
+        self == Self::Presenting
+    }
+}
+
+/// Whether this viewer shares its slide position with its peers
+/// (`toile-presentation`, "Follow presenter").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Broadcast {
+    /// The position stays on this client.
+    #[default]
+    Private,
+    /// Each slide change travels to the peers.
+    Broadcasting,
+}
+
+impl Broadcast {
+    /// The position travels to the peers.
+    pub fn is_on(self) -> bool {
+        self == Self::Broadcasting
+    }
+}
+
+/// The slide on screen: a zero-based index into a deck of `count` slides.
+/// The index is below the count, and both read 0 on an empty deck.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SlidePosition {
+    index: usize,
+    count: usize,
+}
+
+impl SlidePosition {
+    /// Slide `index` of a deck of `count`, the index pulled back into the deck.
+    pub fn new(index: usize, count: usize) -> Self {
+        Self {
+            index: index.min(count.saturating_sub(1)),
+            count,
+        }
+    }
+
+    /// The zero-based index of the slide on screen.
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    /// How many slides the deck holds.
+    pub fn count(self) -> usize {
+        self.count
+    }
+}
+
 /// Payload of a [`ToileEvent::SlideChanged`]: everything the `toile-presentation` camera
 /// pass needs to glide to the new slide and Smart Animate its content
 /// (`toile-presentation`). The Logic thread owns the
@@ -921,8 +984,9 @@ impl FrameSnapshot {
 /// view state, never crosses the wire.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlideChange {
-    /// The new `0`-based active slide index.
-    pub index: usize,
+    /// The new active slide and the deck's length: the presenter panel's
+    /// `k / n` counter (`toile-presentation`).
+    pub position: SlidePosition,
     /// The previously active frame's children (empty on `EnterPresent`, or when
     /// the source frame is absent / dangling).
     pub from: FrameSnapshot,
@@ -932,9 +996,6 @@ pub struct SlideChange {
     /// when the slide has no resolvable frame (dangling id), leaving the camera
     /// where it is.
     pub to_rect: Option<Rect>,
-    /// Total number of slides in the deck: drives the presenter panel's `k / n`
-    /// counter (`toile-presentation`).
-    pub count: usize,
     /// The new active frame's element id, or `None` when the slide has no
     /// resolvable frame (dangling id / empty deck). The presenter panel uses it
     /// as the target of `EditNotes`.
@@ -1641,14 +1702,14 @@ pub enum ToileEvent {
     /// `toile-presentation` camera pass consumes to glide + Smart Animate. Local view state:
     /// emitted by the playback commands, never crosses the wire.
     SlideChanged(SlideChange),
-    /// The viewer entered (`true`) or left (`false`) presentation (focus) mode
+    /// The viewer entered or left presentation (focus) mode
     /// (`toile-presentation`). Local view state, like
     /// [`SlideChanged`](Self::SlideChanged).
-    PresentModeChanged(bool),
+    PresentModeChanged(PresentMode),
     /// This viewer's slide-position broadcast toggle changed
     /// (`toile-presentation`, "Follow presenter"): the presenter panel
     /// reflects it. Local view state.
-    PresentBroadcastChanged(bool),
+    PresentBroadcastChanged(Broadcast),
     /// This viewer's follow target changed (`toile-presentation`, "Follow
     /// presenter"). `Some(u)` = now following `u`, `None` = stopped following
     /// (for example after taking control with a manual navigation). Local view

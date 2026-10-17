@@ -21,6 +21,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::Closure;
 
+use super::find::FindPanelState;
 use crate::ui::Tool;
 use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts};
 use crate::ui::palette::tool_for_command;
@@ -72,8 +73,8 @@ impl Default for ToileDialogs {
 /// is too.
 #[derive(Clone, Copy)]
 pub struct ToileHandler {
-    /// The find panel is open.
-    pub find: RwSignal<bool>,
+    /// Whether the find panel shows.
+    pub find: RwSignal<FindPanelState>,
     /// The tool a chord arms.
     pub tool: RwSignal<Tool>,
     /// The id the canvas view resolves against its selection, next frame.
@@ -94,7 +95,7 @@ impl CommandHandler for ToileHandler {
         match id {
             PALETTE => return vec![ShellAction::OpenPalette],
             SAVE_SEALED_FILE => return vec![ShellAction::OpenSealedSave],
-            FIND => self.find.set(true),
+            FIND => self.find.set(FindPanelState::Open),
             // The file dialog is the board's (`TOILE-IO-020`): the board learns
             // of the file only once its bytes are read.
             IMPORT_FILE => open_import_picker(self.dropped, self.toasts),
@@ -137,7 +138,7 @@ impl CommandHandler for ToileHandler {
         }
         match id {
             PALETTE => return KeyRoute::Run(vec![ShellAction::OpenPalette]),
-            FIND => self.find.set(true),
+            FIND => self.find.set(FindPanelState::Open),
             // `ToileView::handle_key` decodes every other chord on the canvas.
             _ => {}
         }

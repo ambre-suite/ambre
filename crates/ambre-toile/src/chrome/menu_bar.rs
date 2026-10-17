@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_chrome::{ContextMenu, MenuEntry};
+use ambre_chrome::{ContextMenu, MenuEntry, ZoomFactor};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
@@ -86,7 +86,7 @@ fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl Into
 /// authoritative Undo/Redo availability the menu rows read (`UNDO-006`).
 #[component]
 pub fn TopMenuBar(
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ZoomFactor>,
     on_command: Callback<CommandId>,
     toggles: Toggles,
 ) -> impl IntoView {
@@ -159,7 +159,7 @@ pub fn TopMenuBar(
                 on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| on_command.run(ZOOM_RESET)
             >
-                {move || format!("{:.0}%", (zoom.get() * 100.0).round())}
+                {move || format!("{:.0}%", (zoom.get().get() * 100.0).round())}
             </button>
             {zoom_button(on_command, ZOOM_IN)}
             <span class="sep"></span>

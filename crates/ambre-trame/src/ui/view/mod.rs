@@ -295,7 +295,7 @@ pub struct TrameView {
     /// and applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the
     /// formula signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
-    zoom_sig: RwSignal<f64>,
+    zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// The token of the last edit session opened. Each session takes the next

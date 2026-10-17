@@ -231,7 +231,10 @@ fn a_peer_delete_of_the_sheet_being_read_leaves_the_reader_on_another() {
             _ => None,
         })
         .expect("the merge reports the sheet list");
-    assert_eq!(active, TEST_SHEET, "the reader lands on the tab before it");
+    assert_eq!(
+        active.0, TEST_SHEET,
+        "the reader lands on the tab before it"
+    );
     assert!(
         events
             .iter()

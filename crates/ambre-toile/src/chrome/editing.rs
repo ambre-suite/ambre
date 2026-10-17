@@ -6,14 +6,15 @@
 // and come back when it ends.
 // ============================================================================
 
+use ambre_bus::app::toile::PresentMode;
 use leptos::prelude::*;
 
-/// Mount `children` while `present` is false. The launcher wraps every
-/// editing surface of a board in it, so one signal hides them all.
+/// Mount `children` while the board is not presenting. The launcher wraps
+/// every editing surface of a board in it, so one signal hides them all.
 #[component]
-pub fn EditingSurfaces(present: RwSignal<bool>, children: ChildrenFn) -> impl IntoView {
+pub fn EditingSurfaces(present: RwSignal<PresentMode>, children: ChildrenFn) -> impl IntoView {
     view! {
-        <Show when=move || !present.get() fallback=|| ()>
+        <Show when=move || !present.get().is_presenting() fallback=|| ()>
             {children()}
         </Show>
     }

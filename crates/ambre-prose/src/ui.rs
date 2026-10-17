@@ -833,20 +833,45 @@ impl ProseUiState {
     }
 }
 
-/// The five figures as the shared status bar shows them (`PROSE-FEAT-040`).
+/// The five figures as the shared status bar shows them (`PROSE-FEAT-040`),
+/// each one labelled.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusFigures {
+    pub words: String,
+    pub characters: String,
+    pub with_spaces: String,
+    pub paragraphs: String,
+    pub pages: String,
+}
+
+impl StatusFigures {
+    /// The labels in the order the status bar shows them.
+    #[must_use]
+    pub fn labels(&self) -> [&str; 5] {
+        [
+            &self.words,
+            &self.characters,
+            &self.with_spaces,
+            &self.paragraphs,
+            &self.pages,
+        ]
+    }
+}
+
+/// The figures `count` reads as.
 ///
 /// Prose hands labels to the slot every application shares, and builds no bar
 /// of its own (`PROSE-FEAT-123`). The host renders them in that slot.
 #[must_use]
-pub fn status_figures(count: &WordCount) -> [String; 5] {
+pub fn status_figures(count: &WordCount) -> StatusFigures {
     let plural = |n: u32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
-    [
-        plural(count.words, "word", "words"),
-        plural(count.characters, "character", "characters"),
-        format!("{} with spaces", count.characters_with_spaces),
-        plural(count.paragraphs, "paragraph", "paragraphs"),
-        plural(count.pages, "page", "pages"),
-    ]
+    StatusFigures {
+        words: plural(count.words, "word", "words"),
+        characters: plural(count.characters, "character", "characters"),
+        with_spaces: format!("{} with spaces", count.characters_with_spaces),
+        paragraphs: plural(count.paragraphs, "paragraph", "paragraphs"),
+        pages: plural(count.pages, "page", "pages"),
+    }
 }
 
 #[cfg(test)]
@@ -887,7 +912,7 @@ mod tests {
             pages: 1,
         };
         assert_eq!(
-            super::status_figures(&count),
+            super::status_figures(&count).labels(),
             [
                 "12 words",
                 "1 character",

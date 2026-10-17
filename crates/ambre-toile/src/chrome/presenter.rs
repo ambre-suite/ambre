@@ -13,6 +13,7 @@
 // ============================================================================
 
 use ambre_bus::UserId;
+use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -42,18 +43,17 @@ pub enum PresenterIntent {
 }
 
 /// The presenter overlay panel. `open` is driven by `PresentModeChanged`;
-/// `index` / `count` drive the counter; `notes` is re-seeded on every slide
+/// `slide` drives the counter; `notes` is re-seeded on every slide
 /// change. `broadcasting` reflects the local broadcast toggle; `following` the
 /// active follow target; `presenter_peer` the latest peer seen broadcasting (it
 /// drives whether the Follow affordance is shown). `on_intent` emits navigation,
 /// note edits, and the broadcast / follow toggles ("Follow presenter").
 #[component]
 pub fn PresenterPanel(
-    open: RwSignal<bool>,
-    index: RwSignal<usize>,
-    count: RwSignal<usize>,
+    open: RwSignal<PresentMode>,
+    slide: RwSignal<SlidePosition>,
     notes: RwSignal<String>,
-    broadcasting: RwSignal<bool>,
+    broadcasting: RwSignal<Broadcast>,
     following: RwSignal<Option<UserId>>,
     presenter_peer: RwSignal<Option<UserId>>,
     on_intent: Callback<PresenterIntent>,
@@ -84,7 +84,7 @@ pub fn PresenterPanel(
     });
 
     move || {
-        open.get().then(|| {
+        open.get().is_presenting().then(|| {
             view! {
                 <div
                     class="ambre-presenter-panel"
@@ -99,7 +99,7 @@ pub fn PresenterPanel(
                             "Prev"
                         </button>
                         <span class="ambre-presenter-count">
-                            {move || slide_counter_label(index.get(), count.get())}
+                            {move || slide_counter_label(slide.get())}
                         </span>
                         <button
                             class="ambre-presenter-next"
@@ -119,10 +119,11 @@ pub fn PresenterPanel(
                         // styling reflects the current toggle.
                         <button
                             class="ambre-presenter-broadcast"
-                            class:active=move || broadcasting.get()
+                            class:active=move || broadcasting.get().is_on()
                             aria-label="Broadcast position"
                             on:click=move |_| {
-                                on_intent.run(PresenterIntent::ToggleBroadcast(!broadcasting.get()))
+                                let on = !broadcasting.get().is_on();
+                                on_intent.run(PresenterIntent::ToggleBroadcast(on))
                             }
                         >
                             "Broadcast"

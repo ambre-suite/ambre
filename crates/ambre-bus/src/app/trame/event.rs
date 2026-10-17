@@ -97,7 +97,7 @@ pub enum TrameEvent {
     /// scope is the current document session.
     UndoState { can_undo: bool, can_redo: bool },
 
-    /// The workbook's sheets, in tab-strip order: `(sheet_id, display_name)`.
+    /// The workbook's sheets, in tab-strip order.
     /// Emitted after any sheet-lifecycle command
     /// ([`CreateSheet`](super::TrameCommand::CreateSheet) /
     /// [`RenameSheet`](super::TrameCommand::RenameSheet) /
@@ -106,8 +106,8 @@ pub enum TrameEvent {
     /// the tab strip stays in sync (`trame-sheets`). `active`
     /// is the id of the sheet currently shown.
     SheetList {
-        sheets: Vec<(String, String)>,
-        active: String,
+        sheets: Vec<SheetTab>,
+        active: SheetId,
     },
 
     /// A command was rejected for a reason the user should see (for example deleting the
@@ -307,6 +307,19 @@ pub enum TrameEvent {
         from_user_id: UserId,
         description: String,
     },
+}
+
+/// Stable identity of a sheet, peer-scoped where it is minted
+/// (`{peer:016x}_{counter:08x}`). A rename leaves it unchanged
+/// (`trame-sheets`).
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct SheetId(pub String);
+
+/// One tab of the sheet strip: the sheet's id and its display name.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SheetTab {
+    pub id: SheetId,
+    pub name: String,
 }
 
 /// A single cell ready for display.

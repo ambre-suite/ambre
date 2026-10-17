@@ -100,8 +100,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         sel_stats,
         sel_stats_toile,
         present_toile,
-        presenter_index,
-        presenter_count,
+        presenter_slide,
         presenter_notes,
         presenter_frame,
         broadcasting_toile,
@@ -225,7 +224,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(
         ctx_menu,
-        Signal::derive(move || boot_is_toile && present_toile.get()),
+        Signal::derive(move || boot_is_toile && present_toile.get().is_presenting()),
     );
     // A file dropped on a board reaches the importer at the point it landed on
     // (`toile-import-export`). Same reason the listener lives here: the canvas
@@ -244,7 +243,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // A position-dependent override wins: a directional resize or grab
             // cursor over a selection edge or corner, or during a transform.
             // Otherwise the cursor is the pure function of the active tool.
-            let cursor = toile_cursor.get().unwrap_or_else(|| {
+            let cursor = toile_cursor.get().map(|c| c.0).unwrap_or_else(|| {
                 std::borrow::Cow::Borrowed(ambre_toile::ui::palette::cursor_css(
                     toile_active_tool.get(),
                 ))
@@ -347,7 +346,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         } else if boot_is_prose {
             ambre_prose::chrome::context_entries(prose_signals.history.get())
         } else {
-            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
+            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get().is_filtered())
         }
     });
 
@@ -555,7 +554,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             // Dev convention: a bare username maps to the
                             // deterministic `<username>@dev.local` email the dev
                             // login assigns (server resolves invitees by email).
-                            let invitee_email = if dev_mode.get_untracked() == Some(true)
+                            let invitee_email = if dev_mode
+                                .get_untracked()
+                                .is_some_and(landing::SignInMode::is_dev)
                                 && !raw.contains('@')
                             {
                                 format!("{raw}@dev.local")
@@ -582,7 +583,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         class="ambre-share-input"
                         aria-label="Invitee"
                         placeholder=move || {
-                            if dev_mode.get() == Some(true) {
+                            if dev_mode.get().is_some_and(landing::SignInMode::is_dev) {
                                 "username or email"
                             } else {
                                 "user@example.com"
@@ -680,8 +681,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         {boot_is_toile.then(|| view! {
             <toile_chrome::PresenterPanel
                 open=present_toile
-                index=presenter_index
-                count=presenter_count
+                slide=presenter_slide
                 notes=presenter_notes
                 broadcasting=broadcasting_toile
                 following=following_toile

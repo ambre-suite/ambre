@@ -44,8 +44,8 @@ pub use app::trame::{
     BORDER_EDGE_ALL, BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
     ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind,
-    FilterOp, GridRange, HAlign, SelectionKind, SortKey, StylePatch, TrameCommand, TrameEvent,
-    VAlign, ValidationKind, ValidationOnInvalid,
+    FilterOp, GridRange, HAlign, SelectionKind, SheetId, SheetTab, SortKey, StylePatch,
+    TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};
@@ -213,12 +213,14 @@ mod clipboard_tests {
         };
         let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let owner = std::path::Path::new("ambre-app/src/host/mod.rs");
+        // The browser belt reads the types the page wrote; it declares none.
+        let belt = crates.join("ambre-belt");
         let mut files = Vec::new();
         rust_files(&crates, &mut files);
         assert!(files.len() > 100, "the scan reads the workspace");
         let offenders: Vec<_> = files
             .iter()
-            .filter(|path| !path.ends_with(owner))
+            .filter(|path| !path.ends_with(owner) && !path.starts_with(&belt))
             .filter(|path| std::fs::read_to_string(path).is_ok_and(spells))
             .collect();
         assert!(

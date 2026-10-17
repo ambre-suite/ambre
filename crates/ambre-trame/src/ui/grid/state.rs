@@ -21,7 +21,7 @@ impl TrameUiState {
             dirty_cells: HashSet::new(),
             formula_errors: HashMap::new(),
             accepted_version: 0,
-            active_sheet: String::new(),
+            active_sheet: ambre_bus::SheetId::default(),
             next_version: 1,
             filtered_col: None,
             hidden_rows: Vec::new(),

@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_bus::{SheetId, SheetTab};
 
 /// `UnmergeActive` over a selection spanning several merges splits every one of
 /// them, not just the merge under the active cell. Regression: only the last
@@ -495,16 +496,19 @@ fn create_sheet_lists_and_isolates() {
     let TrameEvent::SheetList { sheets, active } = &evts.display[0] else {
         panic!("expected SheetList")
     };
-    assert_eq!(active, "s0", "active sheet unchanged by create");
+    assert_eq!(active.0, "s0", "active sheet unchanged by create");
     assert_eq!(sheets.len(), 2);
     assert_eq!(
         sheets[0],
-        ("s0".to_owned(), "Sheet1".to_owned()),
+        SheetTab {
+            id: SheetId("s0".to_owned()),
+            name: "Sheet1".to_owned()
+        },
         "default tab first"
     );
-    assert_eq!(sheets[1].1, "Data");
+    assert_eq!(sheets[1].name, "Data");
 
-    let s1 = sheets[1].0.clone();
+    let s1 = sheets[1].id.0.clone();
     // Write on the default sheet, switch to the new one: it is blank.
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -554,8 +558,14 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
     let Some(TrameEvent::SheetList { sheets, active }) = sheet_list else {
         panic!("first ScrollViewport must emit a SheetList");
     };
-    assert_eq!(active, "s0");
-    assert_eq!(sheets, &vec![("s0".to_owned(), "Sheet1".to_owned())]);
+    assert_eq!(active.0, "s0");
+    assert_eq!(
+        sheets,
+        &vec![SheetTab {
+            id: SheetId("s0".to_owned()),
+            name: "Sheet1".to_owned()
+        }]
+    );
 
     // The second scroll carries the viewport only -- no repeated SheetList.
     let second = state.handle_command(scroll());
@@ -727,11 +737,7 @@ fn rename_sheet_keeps_id_and_cells() {
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
         panic!()
     };
-    assert!(
-        sheets
-            .iter()
-            .any(|(id, name)| id == &s1 && name == "Renamed")
-    );
+    assert!(sheets.iter().any(|t| t.id.0 == s1 && t.name == "Renamed"));
     // The value survives the rename (same id, same container).
     assert_eq!(read_cell(&mut state, 0, 0), "v");
 }
@@ -752,8 +758,8 @@ fn move_sheet_reorders_tabs() {
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
         panic!()
     };
-    assert_eq!(sheets[0].0, b, "B moved to the front");
-    assert_eq!(sheets[1].0, "s0");
+    assert_eq!(sheets[0].id.0, b, "B moved to the front");
+    assert_eq!(sheets[1].id.0, "s0");
 }
 
 /// Deleting the last remaining sheet is rejected; the workbook keeps >= 1.
@@ -791,8 +797,8 @@ fn delete_active_sheet_falls_back() {
             _ => None,
         })
         .expect("SheetList emitted");
-    assert_eq!(list.1, "s0", "active fell back to the default sheet");
-    assert!(!list.0.iter().any(|(id, _)| id == &b), "deleted sheet gone");
+    assert_eq!(list.1.0, "s0", "active fell back to the default sheet");
+    assert!(!list.0.iter().any(|t| t.id.0 == b), "deleted sheet gone");
 }
 
 /// Ascending sort reorders whole rows by the key column; cells in other
@@ -866,8 +872,8 @@ fn tab_name(state: &TrameState, sheet_id: &str) -> String {
     match state.sheet_list_event() {
         TrameEvent::SheetList { sheets, .. } => sheets
             .into_iter()
-            .find(|(id, _)| id == sheet_id)
-            .map(|(_, name)| name)
+            .find(|t| t.id.0 == sheet_id)
+            .map(|t| t.name)
             .expect("the sheet is listed"),
         other => panic!("expected SheetList, got {other:?}"),
     }
@@ -876,7 +882,7 @@ fn tab_name(state: &TrameState, sheet_id: &str) -> String {
 /// Every label the strip shows, in order.
 fn tab_names(state: &TrameState) -> Vec<String> {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|(_, n)| n).collect(),
+        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|t| t.name).collect(),
         other => panic!("expected SheetList, got {other:?}"),
     }
 }

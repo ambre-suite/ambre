@@ -12,12 +12,13 @@
 // No DOM, no Loro: this stays in `ui` and is host-tested, like `ui::find`.
 // ============================================================================
 
-use crate::logic::command::TextDelta;
+use crate::logic::command::{SlidePosition, TextDelta};
 
 /// The presenter panel's slide counter, `1`-based for humans: `"3 / 10"`. An
-/// empty deck (`count == 0`) reads `"0 / 0"` rather than `"1 / 0"`.
-pub fn slide_counter_label(index: usize, count: usize) -> String {
-    let human = if count == 0 { 0 } else { index + 1 };
+/// empty deck reads `"0 / 0"` rather than `"1 / 0"`.
+pub fn slide_counter_label(slide: SlidePosition) -> String {
+    let count = slide.count();
+    let human = if count == 0 { 0 } else { slide.index() + 1 };
     format!("{human} / {count}")
 }
 
@@ -113,14 +114,23 @@ mod tests {
 
     #[test]
     fn counter_label_is_one_based() {
-        assert_eq!(slide_counter_label(0, 10), "1 / 10");
-        assert_eq!(slide_counter_label(2, 10), "3 / 10");
-        assert_eq!(slide_counter_label(9, 10), "10 / 10");
+        let label = |i, n| slide_counter_label(SlidePosition::new(i, n));
+        assert_eq!(label(0, 10), "1 / 10");
+        assert_eq!(label(2, 10), "3 / 10");
+        assert_eq!(label(9, 10), "10 / 10");
     }
 
     #[test]
     fn counter_label_empty_deck() {
-        assert_eq!(slide_counter_label(0, 0), "0 / 0");
+        assert_eq!(slide_counter_label(SlidePosition::new(0, 0)), "0 / 0");
+    }
+
+    /// A slide position keeps its index inside the deck (`UI-THREAD-060`).
+    #[test]
+    fn a_slide_position_stays_inside_its_deck() {
+        assert_eq!(SlidePosition::new(12, 10).index(), 9);
+        assert_eq!(SlidePosition::new(3, 0).index(), 0);
+        assert_eq!(slide_counter_label(SlidePosition::new(12, 10)), "10 / 10");
     }
 
     #[test]

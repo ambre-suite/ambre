@@ -48,7 +48,7 @@ pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 pub use crate::ui::embed::{AddressError, EmbedTarget, PlacedEmbed, normalize_web_address};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
 pub use crate::ui::link::{LinkEdit, ShellNav};
-pub use find::{FindPanel, FindQuery};
+pub use find::{FindPanel, FindPanelState, FindQuery};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested
 // in `ui::comments` (like `ui::find`); the launcher names them through

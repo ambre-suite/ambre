@@ -426,13 +426,17 @@ pub struct ToileView {
     /// and the chrome's cursor `Effect` prefers it over `cursor_css` when
     /// `Some`. Leptos signal, so wasm-only.
     #[cfg(target_arch = "wasm32")]
-    cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
-    /// Live zoom factor published to the DOM zoom control / status bar each frame
-    /// (`toile-menus` / `toile-status-bar`): `1.0` = 100%.
-    /// The view owns the camera, so it is the source; the chip mirrors it. Written
-    /// only on change. Wasm-only.
+    cursor: RwSignal<Option<super::palette::CanvasCursor>>,
+    /// Live zoom factor shared with the DOM zoom control and status bar
+    /// (`toile-menus` / `toile-status-bar`): `1.0` = 100%. The view publishes
+    /// the camera's zoom, and a preset the chip writes moves the camera.
+    /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ambre_chrome::ZoomFactor>,
+    /// The zoom this view last published. A signal reading anything else was
+    /// written by the chip, so the camera follows it. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    zoom_published: f64,
     /// Status-bar selection aggregates (`toile-status-bar`), shared with the
     /// DOM band. The view clears it to `None` on an empty selection: an
     /// empty-ids stats request would mean "whole board" to Logic. It must not
@@ -648,8 +652,8 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
-        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
-        #[cfg(target_arch = "wasm32")] zoom: RwSignal<f64>,
+        #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<super::palette::CanvasCursor>>,
+        #[cfg(target_arch = "wasm32")] zoom: RwSignal<ambre_chrome::ZoomFactor>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
         #[cfg(target_arch = "wasm32")] restyle: RwSignal<
@@ -744,6 +748,8 @@ impl ToileView {
             cursor,
             #[cfg(target_arch = "wasm32")]
             zoom,
+            #[cfg(target_arch = "wasm32")]
+            zoom_published: 1.0,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
             #[cfg(target_arch = "wasm32")]
@@ -1157,9 +1163,9 @@ impl ToileView {
             // content pass hides the grid while `present`. Leaving it drops any
             // in-flight transition so the board returns to its plain camera +
             // full-opacity content.
-            ToileEvent::PresentModeChanged(present) => {
-                self.present = present;
-                if present {
+            ToileEvent::PresentModeChanged(mode) => {
+                self.present = mode.is_presenting();
+                if self.present {
                     self.leave_editing();
                 } else {
                     self.transition = None;
@@ -2498,18 +2504,28 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn apply_active_tool(&mut self) {}
 
-    /// Publish the camera's current zoom to the shared `zoom` signal so the DOM
-    /// zoom control / status bar readout tracks pan/zoom
-    /// (`toile-tools`). Written only on change to avoid needless
-    /// reactive churn. Wasm-only; a host no-op keeps `update` cfg-agnostic.
+    /// Trade the zoom with the shared `zoom` signal (`toile-tools`). A value
+    /// the view did not publish is a preset the chip picked: the camera zooms
+    /// to it about the screen center. Then the camera's zoom is published, on
+    /// change only, so the readout tracks pan and zoom. Wasm-only; a host
+    /// no-op keeps `update` cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
-    fn publish_zoom(&self) {
-        if (self.zoom.get_untracked() - self.cam.zoom).abs() > f64::EPSILON {
-            self.zoom.set(self.cam.zoom);
+    fn publish_zoom(&mut self) {
+        let asked = self.zoom.get_untracked().get();
+        if (asked - self.zoom_published).abs() > f64::EPSILON {
+            self.cam.zoom_by_center(asked / self.cam.zoom);
+            self.needs_full = true;
+            self.queue_viewport();
+        }
+        let (lo, hi) = (super::viewport::MIN_ZOOM, super::viewport::MAX_ZOOM);
+        let shown = ambre_chrome::ZoomFactor::within(self.cam.zoom, lo, hi);
+        self.zoom_published = shown.get();
+        if self.zoom.get_untracked() != shown {
+            self.zoom.set(shown);
         }
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_zoom(&self) {}
+    fn publish_zoom(&mut self) {}
 
     /// Turn a menu `CommandId` into board mutation(s). `Paste` and `Select all`
     /// are UI-only intents serviced here (the same-session clipboard / local
@@ -2869,7 +2885,7 @@ impl ToileView {
     /// camera. Only `publish_cursor` (wasm) consumes it; kept compiled on the host
     /// so the mapping type-checks there too.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    fn cursor_at(&self, screen: Point) -> Option<std::borrow::Cow<'static, str>> {
+    fn cursor_at(&self, screen: Point) -> Option<super::palette::CanvasCursor> {
         // A single selected element rotates its handles, so the directional resize
         // cursor rotates with them (`toile-tools`).
         let theta = self
@@ -2877,15 +2893,18 @@ impl ToileView {
             .first()
             .map(|id| super::tool::element_rotation(&self.display, id))
             .unwrap_or(0.0);
-        if let Some(g) = self.machine.gesture_cursor() {
-            return Some(match g {
+        let css = if let Some(g) = self.machine.gesture_cursor() {
+            match g {
                 GestureCursor::Handle(h) => super::palette::resize_cursor(h, theta),
                 GestureCursor::Move => std::borrow::Cow::Borrowed("grabbing"),
-            });
-        }
-        self.machine
-            .hover_handle(&self.selection, &self.display, &self.cam, screen)
-            .map(|h| super::palette::resize_cursor(h, theta))
+            }
+        } else {
+            let h = self
+                .machine
+                .hover_handle(&self.selection, &self.display, &self.cam, screen)?;
+            super::palette::resize_cursor(h, theta)
+        };
+        Some(super::palette::CanvasCursor(css))
     }
 
     /// Release of a key the board held. `Space` is the only one: it arms the

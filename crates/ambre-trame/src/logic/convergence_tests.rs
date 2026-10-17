@@ -685,7 +685,7 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
 /// The tab order the strip shows: the ids of the `SheetList` event.
 fn tab_order(state: &TrameState) -> Vec<String> {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|(id, _)| id).collect(),
+        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|t| t.id.0).collect(),
         other => panic!("expected SheetList, got {other:?}"),
     }
 }

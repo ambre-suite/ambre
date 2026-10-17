@@ -234,11 +234,18 @@ impl TrameView {
 
         // Apply the latest grid zoom selected in the status-bar menu
         // (`trame-status-bar`). `set_zoom` is a no-op when unchanged; on a change it
-        // queues the viewport re-request flushed just below.
+        // queues the viewport re-request flushed just below. The signal is
+        // shared with Toile, whose range is wider. The grid writes its own
+        // clamp back, so the chip reads the zoom the grid shows.
         #[cfg(target_arch = "wasm32")]
         {
-            let z = self.zoom_sig.get_untracked();
-            self.set_zoom(z);
+            let asked = self.zoom_sig.get_untracked();
+            self.set_zoom(asked.get());
+            let [lo, .., hi] = TrameUiState::ZOOM_PRESETS;
+            let shown = ambre_chrome::ZoomFactor::within(self.state.zoom, lo, hi);
+            if shown != asked {
+                self.zoom_sig.set(shown);
+            }
         }
 
         // Advance any touchpad momentum coast before the viewport flush, so the

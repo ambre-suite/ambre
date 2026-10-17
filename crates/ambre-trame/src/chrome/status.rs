@@ -17,7 +17,7 @@
 // ============================================================================
 
 use ambre_canvas::PerfSnapshot;
-use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip, ZoomFactor};
 use leptos::prelude::*;
 
 use crate::chrome::commands::status_label;
@@ -54,7 +54,7 @@ fn fmt_num(v: f64) -> String {
 pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ZoomFactor>,
 ) -> impl IntoView {
     // The aggregates line, recomputed whenever the selection stats change.
     let aggregates = move || {

@@ -268,7 +268,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     assert!(
         !out.display.iter().any(|e| matches!(
             e,
-            TrameEvent::SheetList { active, .. } if *active != "s0"
+            TrameEvent::SheetList { active, .. } if active.0 != "s0"
         )),
         "the replace moved the user to another sheet"
     );

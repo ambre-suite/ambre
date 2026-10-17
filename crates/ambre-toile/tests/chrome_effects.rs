@@ -14,7 +14,9 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId};
+use ambre_bus::app::toile::{
+    Broadcast, DeckFrame, DeckView, ElementId, PresentMode, SlidePosition,
+};
 use ambre_toile::chrome::{DeckIntent, DeckPanel, PresenterIntent, PresenterPanel};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -43,11 +45,10 @@ async fn a_peer_note_write_keeps_the_caret() {
     let root = mount_in_container(move || {
         view! {
             <PresenterPanel
-                open=RwSignal::new(true)
-                index=RwSignal::new(0)
-                count=RwSignal::new(1)
+                open=RwSignal::new(PresentMode::Presenting)
+                slide=RwSignal::new(SlidePosition::new(0, 1))
                 notes=notes
-                broadcasting=RwSignal::new(false)
+                broadcasting=RwSignal::new(Broadcast::Private)
                 following=RwSignal::new(None)
                 presenter_peer=RwSignal::new(None)
                 on_intent=Callback::new(|_: PresenterIntent| {})

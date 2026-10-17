@@ -35,16 +35,17 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
+use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
-    Role, SyncCommand, UiEvent, UserId,
+    Role, SheetId, SheetTab, SyncCommand, UiEvent, UserId,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
     AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, StatusBar,
-    Tabs, ToastHost, Toasts, Toolbar,
+    Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -247,7 +248,7 @@ struct Wiring {
     /// tell the user's own row from the others (`SYNC-141`).
     me: RwSignal<Option<UserId>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
-    dev_mode: RwSignal<Option<bool>>,
+    dev_mode: RwSignal<Option<landing::SignInMode>>,
     /// The currently routed document, or `None` on the landing route. Read by
     /// every command trigger so it targets the active document.
     current_doc: RwSignal<Option<DocumentId>>,
@@ -264,9 +265,9 @@ struct Wiring {
     filter_values: RwSignal<Vec<String>>,
     /// Find/replace panel open state (`trame-find-replace`); `None` = closed.
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
-    /// Last `FindResult` summarized as `(active_1based, total)` for the panel's
-    /// "k/n" counter. Set by the per-frame relay on `TrameEvent::FindResult`.
-    find_result: RwSignal<Option<(usize, usize)>>,
+    /// Last `FindResult` summarized for the panel's "k/n" counter. Set by the
+    /// per-frame relay on `TrameEvent::FindResult`.
+    find_result: RwSignal<Option<trame_chrome::FindPosition>>,
     /// Whether the booted document is a Toile board. The chrome layer is still
     /// largely Trame-shaped; this gates the Toile-specific panels (the Find panel,
     /// `toile-find`) which replace their Trame equivalents. Cross-type
@@ -277,23 +278,22 @@ struct Wiring {
     boot_is_prose: bool,
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
-    prose_figures: RwSignal<Option<[String; 5]>>,
+    prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     /// The comment panel and the suggestion popover of the open Prose
     /// document (`PROSE-UI-050`, `PROSE-UI-052`). Published by the Prose view.
     prose_signals: host::ProseSignals,
     /// Toile Find panel open flag (`toile-find`); Ctrl+F sets it.
-    find_state_toile: RwSignal<bool>,
+    find_state_toile: RwSignal<toile_chrome::FindPanelState>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
     /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
     find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
     /// Presenter overlay panel open flag (`toile-presentation`). Driven by the
     /// relay on `ToileEvent::PresentModeChanged`; the panel is chrome, so its
     /// visibility lives here rather than canvas-side.
-    present_toile: RwSignal<bool>,
-    /// Active slide index / deck length feeding the presenter panel's `k / n`
+    present_toile: RwSignal<PresentMode>,
+    /// Active slide and deck length feeding the presenter panel's `k / n`
     /// counter. Set by the relay on the enriched `ToileEvent::SlideChanged`.
-    presenter_index: RwSignal<usize>,
-    presenter_count: RwSignal<usize>,
+    presenter_slide: RwSignal<SlidePosition>,
     /// Active slide's speaker notes, re-seeded on each slide change; the panel
     /// editor diffs against it and emits `EditNotes`.
     presenter_notes: RwSignal<String>,
@@ -304,7 +304,7 @@ struct Wiring {
     /// mirrors the local broadcast toggle, `following` the active follow target,
     /// and `presenter_peer` the latest peer seen broadcasting (drives the panel's
     /// Follow affordance).
-    broadcasting_toile: RwSignal<bool>,
+    broadcasting_toile: RwSignal<Broadcast>,
     following_toile: RwSignal<Option<ambre_bus::UserId>>,
     presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
     /// Toile right-click context-menu scope (`toile-menus`): the canvas view
@@ -319,7 +319,7 @@ struct Wiring {
     /// position-dependent CSS cursor: directional resize on a selection edge /
     /// corner, grab on the rotate handle, `grabbing` while moving. `None` falls
     /// back to the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
-    toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
+    toile_cursor: RwSignal<Option<ambre_toile::ui::palette::CanvasCursor>>,
     /// Toile style-inspector model (`toile-styles`): the selection's common
     /// `ElementStyle` + mixed-field mask, published by the canvas view. The DOM
     /// inspector reads it to render values and mixed-state. `None` hides it.
@@ -370,22 +370,22 @@ struct Wiring {
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
     /// Grid zoom factor (`1.0` = 100%, `trame-status-bar`): the status-bar menu
     /// writes it, the canvas view polls it each frame. Local view state, not synced.
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ZoomFactor>,
     /// Right-click context-menu scope (`trame-context-menu`): the view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     /// Whether the active sheet currently has a shared filter (`trame-shared-filter`):
     /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
     /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
-    filter_active: RwSignal<bool>,
+    filter_active: RwSignal<trame_chrome::SheetFilter>,
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
-    /// Sheet-tab strip model (`trame-sheets`): `(id, name)` in display order.
+    /// Sheet-tab strip model (`trame-sheets`), in display order.
     /// Mirrored from `TrameEvent::SheetList` by the per-frame relay; drives the
     /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
-    sheets: RwSignal<Vec<(String, String)>>,
+    sheets: RwSignal<Vec<SheetTab>>,
     /// Active sheet id, mirrored from `TrameEvent::SheetList`.
-    active_sheet: RwSignal<String>,
+    active_sheet: RwSignal<SheetId>,
     /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
     /// and the document-loading overlay. Set by the per-frame relay on
     /// `UiEvent::DocumentReady` / `ConnectionStatus`, and by the route poll on a
@@ -617,27 +617,26 @@ pub fn main() {
     // Presenter overlay panel signals (toile-presentation), mirrored from the
     // enriched `SlideChanged` + `PresentModeChanged` events by the per-frame
     // relay. Created here (like `sel_stats_toile`) and passed to the shell.
-    let present_toile = RwSignal::new(false);
-    let presenter_index = RwSignal::new(0usize);
-    let presenter_count = RwSignal::new(0usize);
+    let present_toile = RwSignal::new(PresentMode::Editing);
+    let presenter_slide = RwSignal::new(SlidePosition::default());
     let presenter_notes = RwSignal::new(String::new());
     let presenter_frame = RwSignal::new(None::<ambre_bus::app::toile::ElementId>);
     // "Follow presenter" role signals (toile-presentation), mirrored from the
     // `PresentBroadcastChanged` / `FollowingChanged` events and from a peer's
     // broadcasting presence. `presenter_peer_toile` is the latest peer seen
     // broadcasting a slide; it drives the panel's Follow affordance.
-    let broadcasting_toile = RwSignal::new(false);
+    let broadcasting_toile = RwSignal::new(Broadcast::Private);
     let following_toile = RwSignal::new(None::<ambre_bus::UserId>);
     let presenter_peer_toile = RwSignal::new(None::<ambre_bus::UserId>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Sheet-tab strip model (`trame-sheets`): mirrored from `TrameEvent::SheetList`
     // by the relay below and fed to the DOM `SheetTabs` slot (off the canvas now).
-    let sheets = RwSignal::new(Vec::<(String, String)>::new());
-    let active_sheet = RwSignal::new(String::new());
+    let sheets = RwSignal::new(Vec::<SheetTab>::new());
+    let active_sheet = RwSignal::new(SheetId::default());
     // Grid zoom factor selected in the status-bar menu (`trame-status-bar`),
     // polled by the canvas view each frame. Defaults to 100%.
-    let zoom = RwSignal::new(1.0_f64);
+    let zoom = RwSignal::new(ZoomFactor::ONE);
 
     // Context-menu scope (`trame-context-menu`): the view sets it per right-click
     // (cell vs header) before the DOM `contextmenu` listener opens the menu. The
@@ -646,7 +645,7 @@ pub fn main() {
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
     // Active-filter flag (`trame-shared-filter`), mirrored from the Logic thread's
     // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
-    let filter_active = RwSignal::new(false);
+    let filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
     // selection scope on each right-click. The DOM menu reads it to build its
@@ -662,7 +661,7 @@ pub fn main() {
     // Toile canvas cursor (`toile-tools`): the view publishes the
     // position-dependent cursor here (directional resize on a selection edge, grab
     // on the rotate handle). `None` falls back to the tool's base cursor.
-    let toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
+    let toile_cursor = RwSignal::new(None::<ambre_toile::ui::palette::CanvasCursor>);
     // Toile style inspector (`toile-styles`): the view publishes the selection's
     // common style into `toile_style_model`. It drains a whole-style edit from
     // `toile_restyle`, exactly like the context-menu pair above.
@@ -723,7 +722,7 @@ pub fn main() {
     let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
     let boot_is_prose = matches!(boot_doc_typed, Some((ambre_bus::DocType::Prose, _)));
     // The status bar slot the Prose view fills with its five figures.
-    let prose_figures = RwSignal::new(None::<[String; 5]>);
+    let prose_figures = RwSignal::new(None::<ambre_prose::ui::StatusFigures>);
     let prose_signals = host::ProseSignals::new();
     if boot_is_toile {
         toile_chrome::bind_keys(&mut keymap);
@@ -832,7 +831,8 @@ pub fn main() {
     let user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>> = Rc::new(RefCell::new(None));
     let docs_slot: Rc<RefCell<Option<RwSignal<Vec<DocItem>>>>> = Rc::new(RefCell::new(None));
     let members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>> = Rc::new(RefCell::new(None));
-    let devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>> = Rc::new(RefCell::new(None));
+    let devmode_slot: Rc<RefCell<Option<RwSignal<Option<landing::SignInMode>>>>> =
+        Rc::new(RefCell::new(None));
     let current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>> =
         Rc::new(RefCell::new(None));
     let relays_slot: Rc<RefCell<Option<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>>> =
@@ -879,8 +879,7 @@ pub fn main() {
         sel_stats,
         sel_stats_toile,
         present_toile,
-        presenter_index,
-        presenter_count,
+        presenter_slide,
         presenter_notes,
         presenter_frame,
         broadcasting_toile,
@@ -958,7 +957,9 @@ pub fn main() {
     // Learn whether the server enables dev login (drives the signed-out panel).
     // Unauthenticated, Main-thread fetch -- a pre-session concern.
     wasm_bindgen_futures::spawn_local(async move {
-        dev_mode.set(Some(fetch_dev_mode().await));
+        dev_mode.set(Some(landing::SignInMode::from_dev_flag(
+            fetch_dev_mode().await,
+        )));
     });
 
     // Keyboard: resolve registered chords and dispatch to the routed document.
@@ -1584,8 +1585,8 @@ pub fn main() {
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
-    let ch_toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
-    let ch_toile_zoom = RwSignal::new(1.0_f64);
+    let ch_toile_cursor = RwSignal::new(None::<ambre_toile::ui::palette::CanvasCursor>);
+    let ch_toile_zoom = RwSignal::new(ZoomFactor::ONE);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
@@ -1612,7 +1613,7 @@ pub fn main() {
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
-    let ch_tr_zoom = RwSignal::new(1.0_f64);
+    let ch_tr_zoom = RwSignal::new(ZoomFactor::ONE);
     let make_child_fn = move |document_id: DocumentId,
                               doc_type: ambre_bus::DocType,
                               size: ambre_draw::Size,

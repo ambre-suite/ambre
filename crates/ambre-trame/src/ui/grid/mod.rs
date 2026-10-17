@@ -523,7 +523,7 @@ pub struct TrameUiState {
     /// until the first one arrives. Tags the view's edit commands so they target
     /// the right sheet. The tab strip itself is DOM chrome (`SheetTabs`), fed by
     /// the same event -- the canvas only needs the active id, not the full list.
-    pub active_sheet: String,
+    pub active_sheet: ambre_bus::SheetId,
 
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
     next_version: u64,

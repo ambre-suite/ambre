@@ -481,6 +481,19 @@ ONE_COPY_ACCEPTED = {
         "the selection's common style, which the inspector shows; the restyle signal carries an edit"
     ),
 }
+# A signal whose payload a reviewer accepts as a primitive, and why: free text
+# has no unit and no closed set, so a type of its own would name nothing.
+BARE_PAYLOAD_ACCEPTED = {
+    "crates/ambre-app/src/lib.rs:Wiring.username": "free text: the display name the server reports",
+    "crates/ambre-app/src/lib.rs:Wiring.formula_ref": "free text: the reference label the formula bar shows",
+    "crates/ambre-app/src/lib.rs:Wiring.formula_text": "free text: the cell's raw text, as typed",
+    "crates/ambre-app/src/lib.rs:Wiring.filter_values": "free text: the column's distinct display values",
+    "crates/ambre-trame/src/chrome/relay.rs:TrameRelay.filter_values": (
+        "free text: the column's distinct display values"
+    ),
+    "crates/ambre-app/src/lib.rs:Wiring.presenter_notes": "free text: the speaker notes of the slide",
+    "crates/ambre-toile/src/chrome/relay.rs:ToileRelay.presenter_notes": "free text: the speaker notes of the slide",
+}
 
 # The two failure paths that reach the page with no queue: the panic hook of the
 # shared instance, and the error event of the Sync worker.
@@ -1514,6 +1527,44 @@ def check_one_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def bare_payload(ty: str) -> str | None:
+    """The primitive, tuple or array a payload carries once its wrappers are
+    peeled; `None` for a type of its own."""
+    ty = ty.strip().lstrip("&").strip()
+    generic = re.match(r"^([\w:]+)\s*<(.*)>$", ty)
+    if generic:
+        head = generic.group(1).split("::")[-1]
+        if head in TYPE_WRAPPERS:
+            return bare_payload(generic.group(2))
+        return head if head in PRIMITIVES else None
+    if ty.startswith(("(", "[")):
+        return ty
+    name = ty.split("::")[-1]
+    return name if name in PRIMITIVES else None
+
+
+def check_signal_types(errors: list[str]) -> int:
+    """`UI-THREAD-060`: no shell signal carries a bare primitive.
+
+    An identifier, a quantity with a unit or a closed set travels as a type of
+    its own, so two payloads of one shape cannot be swapped. Free text on the
+    accepted list stays a `String`.
+    """
+    held = 0
+    for rel, holder in SIGNAL_HOLDERS.items():
+        text = read(rel)
+        lines = [(number, code(line)) for number, line in enumerate(text.splitlines(), 1)]
+        for struct, number, field, ty in struct_fields(lines):
+            found = SIGNAL_FIELD.match(ty)
+            if struct != holder or not found:
+                continue
+            held += 1
+            bare = bare_payload(found.group(1))
+            if bare and f"{rel}:{holder}.{field}" not in BARE_PAYLOAD_ACCEPTED:
+                errors.append(f"{rel}:{number}: the `{field}` signal carries a bare `{bare}`, not a type of its own")
+    return held
+
+
 def check_bench_frame_rate(errors: list[str]) -> int:
     """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
     held = 0
@@ -1562,6 +1613,7 @@ def main() -> int:
     scrolls = check_scroll_sources(errors)
     composed = check_composed_names(errors)
     copies = check_one_copy(errors)
+    signal_types = check_signal_types(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
@@ -1597,6 +1649,7 @@ def main() -> int:
         f"{scrolls} application files read for a scroll with no model step, "
         f"{composed} Rust files read for a name composed outside its type, "
         f"{copies} view files read for a second copy of a signal's state, "
+        f"{signal_types} shell signals read for a bare primitive payload, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "

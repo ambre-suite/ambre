@@ -39,12 +39,12 @@ pub(crate) fn mount_shell(
     user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>>,
     docs_slot: Rc<RefCell<Option<RwSignal<Vec<DocItem>>>>>,
     members_slot: Rc<RefCell<Option<RwSignal<Vec<MemberInfo>>>>>,
-    devmode_slot: Rc<RefCell<Option<RwSignal<Option<bool>>>>>,
+    devmode_slot: Rc<RefCell<Option<RwSignal<Option<landing::SignInMode>>>>>,
     current_doc_slot: Rc<RefCell<Option<RwSignal<Option<DocumentId>>>>>,
     relays_slot: Rc<RefCell<Option<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>>>,
     boot_is_toile: bool,
     boot_is_prose: bool,
-    prose_figures: RwSignal<Option<[String; 5]>>,
+    prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     prose_signals: crate::host::ProseSignals,
     style_slot: Rc<RefCell<Option<trame_chrome::StyleState>>>,
     chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>>,
@@ -57,22 +57,21 @@ pub(crate) fn mount_shell(
     me: RwSignal<Option<UserId>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
-    present_toile: RwSignal<bool>,
-    presenter_index: RwSignal<usize>,
-    presenter_count: RwSignal<usize>,
+    present_toile: RwSignal<PresentMode>,
+    presenter_slide: RwSignal<SlidePosition>,
     presenter_notes: RwSignal<String>,
     presenter_frame: RwSignal<Option<ambre_bus::app::toile::ElementId>>,
-    broadcasting_toile: RwSignal<bool>,
+    broadcasting_toile: RwSignal<Broadcast>,
     following_toile: RwSignal<Option<ambre_bus::UserId>>,
     presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
-    zoom: RwSignal<f64>,
+    zoom: RwSignal<ZoomFactor>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
-    filter_active: RwSignal<bool>,
+    filter_active: RwSignal<trame_chrome::SheetFilter>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
-    toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
+    toile_cursor: RwSignal<Option<ambre_toile::ui::palette::CanvasCursor>>,
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
     toile_restyle: RwSignal<Option<ambre_bus::app::toile::ElementStyle>>,
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
@@ -83,8 +82,8 @@ pub(crate) fn mount_shell(
     toile_placed_embed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
     toile_set_link: RwSignal<Option<toile_chrome::LinkEdit>>,
     toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
-    sheets: RwSignal<Vec<(String, String)>>,
-    active_sheet: RwSignal<String>,
+    sheets: RwSignal<Vec<SheetTab>>,
+    active_sheet: RwSignal<SheetId>,
     commands_slot: Rc<RefCell<Option<CommandPath>>>,
 ) {
     leptos::mount::mount_to_body(move || {
@@ -112,15 +111,15 @@ pub(crate) fn mount_shell(
         *docs_slot.borrow_mut() = Some(docs);
         let members = RwSignal::new(Vec::<MemberInfo>::new());
         *members_slot.borrow_mut() = Some(members);
-        let dev_mode = RwSignal::new(None::<bool>);
+        let dev_mode = RwSignal::new(None::<landing::SignInMode>);
         *devmode_slot.borrow_mut() = Some(dev_mode);
         let current_doc = RwSignal::new(boot_doc);
         *current_doc_slot.borrow_mut() = Some(current_doc);
         let filter_popover = RwSignal::new(None::<trame_chrome::FilterPopoverState>);
         let filter_values = RwSignal::new(Vec::<String>::new());
         let find_state = RwSignal::new(None::<trame_chrome::FindReplaceState>);
-        let find_result = RwSignal::new(None::<(usize, usize)>);
-        let find_state_toile = RwSignal::new(false);
+        let find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
+        let find_state_toile = RwSignal::new(toile_chrome::FindPanelState::Closed);
         let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
         // The multi-column sort dialog (`trame-sort`), which Trame's relay
         // opens on the Logic thread's reply.
@@ -142,8 +141,7 @@ pub(crate) fn mount_shell(
             find_result: find_result_toile,
             sel_stats: sel_stats_toile,
             present: present_toile,
-            presenter_index,
-            presenter_count,
+            presenter_slide,
             presenter_notes,
             presenter_frame,
             broadcasting: broadcasting_toile,
@@ -244,8 +242,7 @@ pub(crate) fn mount_shell(
             sel_stats,
             sel_stats_toile,
             present_toile,
-            presenter_index,
-            presenter_count,
+            presenter_slide,
             presenter_notes,
             presenter_frame,
             broadcasting_toile,

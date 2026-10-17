@@ -5,7 +5,7 @@
 
 use super::*;
 use ambre_bus::UserId;
-use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, ShapeKind};
+use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use kurbo::Rect;
 
@@ -2602,7 +2602,7 @@ fn the_overlays_stack_peers_then_badges_then_pins() {
 fn a_presentation_keeps_the_badges() {
     let peer = UserId::new();
     let mut rig = a_shared_board(peer);
-    rig.answer(ToileEvent::PresentModeChanged(true));
+    rig.answer(ToileEvent::PresentModeChanged(PresentMode::Presenting));
     let (_, overlay) = paint_passes(&mut rig);
     let palette = rig.view.theme.palette();
     assert!(
@@ -2763,7 +2763,7 @@ fn a_presentation_takes_no_edit() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
     rig.click(50.0, 50.0);
     assert_eq!(rig.view.selection, [eid("a")]);
-    rig.answer(ToileEvent::PresentModeChanged(true));
+    rig.answer(ToileEvent::PresentModeChanged(PresentMode::Presenting));
     assert!(rig.view.selection.is_empty(), "the selection is dropped");
 
     rig.click(350.0, 50.0);
@@ -2777,7 +2777,7 @@ fn a_presentation_takes_no_edit() {
     assert!(rig.sent().is_empty(), "a presentation sent an edit");
     assert_eq!(rig.view.selection, [eid("a")], "the delete was refused");
 
-    rig.answer(ToileEvent::PresentModeChanged(false));
+    rig.answer(ToileEvent::PresentModeChanged(PresentMode::Editing));
     rig.key("Delete", false, false);
     assert!(matches!(
         rig.sent().as_slice(),
@@ -2793,7 +2793,7 @@ fn a_presentation_closes_the_open_editor() {
     rig.click(50.0, 50.0);
     rig.double_click(50.0, 50.0);
     rig.type_text("!");
-    rig.answer(ToileEvent::PresentModeChanged(true));
+    rig.answer(ToileEvent::PresentModeChanged(PresentMode::Presenting));
     rig.type_text("?");
     rig.paint();
     assert!(rig.view.editor.is_none(), "the editor closed");

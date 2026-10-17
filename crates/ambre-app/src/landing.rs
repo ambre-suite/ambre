@@ -46,6 +46,26 @@ pub struct DocItem {
     pub member_count: u32,
 }
 
+/// How the server lets a user sign in, as `/api/auth/config` reports it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SignInMode {
+    /// Dev login: a bare username, no identity provider.
+    Dev,
+    /// The OIDC provider.
+    Oidc,
+}
+
+impl SignInMode {
+    /// The mode for the server's `dev_mode` flag.
+    pub fn from_dev_flag(dev: bool) -> Self {
+        if dev { Self::Dev } else { Self::Oidc }
+    }
+
+    pub fn is_dev(self) -> bool {
+        self == Self::Dev
+    }
+}
+
 /// Reactive handles the launcher fills as auth state and the document list
 /// resolve. They are shared with the per-frame relay (session, document
 /// list) and the config fetch (`dev_mode`).
@@ -56,7 +76,7 @@ pub struct LandingSignals {
     /// Current user's display name once `SessionReady` arrives; `None` = signed out.
     pub username: RwSignal<Option<String>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
-    pub dev_mode: RwSignal<Option<bool>>,
+    pub dev_mode: RwSignal<Option<SignInMode>>,
     /// The app kind this page booted with (`lib.rs`, fixed per page load): drives
     /// the in-place-swap vs. hard-reload choice when opening/creating a document
     /// ([`route::needs_reload`]).
@@ -518,7 +538,7 @@ fn rel_time(updated_at_ms: u64) -> String {
 /// reports `dev_mode`, an OIDC button otherwise, and a neutral placeholder
 /// until `/api/auth/config` has answered.
 fn sign_in_panel(
-    dev_mode: RwSignal<Option<bool>>,
+    dev_mode: RwSignal<Option<SignInMode>>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> impl IntoView {
     move || match dev_mode.get() {
@@ -528,7 +548,7 @@ fn sign_in_panel(
             </div>
         }
         .into_any(),
-        Some(true) => {
+        Some(SignInMode::Dev) => {
             // Dev login: dispatch `DevLogin` to the live Logic thread (no reload).
             // The user (and derived keys) are created server-side on the fly; the
             // session reply flips `username`, revealing the document list.
@@ -571,7 +591,7 @@ fn sign_in_panel(
             }
             .into_any()
         }
-        Some(false) => {
+        Some(SignInMode::Oidc) => {
             // Ask the Sync worker for the provider's address; the reply sends
             // the browser there (`CHROME-095`). The page itself requests nothing.
             let to_logic = to_logic.clone();
@@ -787,7 +807,7 @@ mod tests {
         let owner = Owner::new();
         owner.set();
         let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(8);
-        let dev_mode = RwSignal::new(Some(false));
+        let dev_mode = RwSignal::new(Some(SignInMode::Oidc));
         let before = web_sys::window().unwrap().location().href().unwrap();
 
         let container = mount_in_container(move || sign_in_panel(dev_mode, tx));
@@ -922,7 +942,7 @@ mod tests {
                 .is_some()
         );
 
-        dev_mode.set(Some(true));
+        dev_mode.set(Some(SignInMode::Dev));
         tick().await;
         assert_eq!(
             routes(&container),

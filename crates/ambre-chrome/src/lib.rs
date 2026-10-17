@@ -62,5 +62,5 @@ pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_
 pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;
-pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip};
+pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip, ZoomFactor};
 pub use toast::{ToastHost, ToastKind, Toasts};

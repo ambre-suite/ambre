@@ -25,7 +25,7 @@
 
 use ambre_chrome::{
     AppShell, CommandStates, FONT_SIZES, FontSizeSelect, FormatToggle, Header, PerfChip,
-    PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip,
+    PerfDetail, StatusBar, ToastHost, ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
 };
 use ambre_commands::CommandId;
 use leptos::mount::mount_to;
@@ -169,12 +169,12 @@ fn app_shell_owns_the_named_canvas_cell() {
 async fn the_zoom_readout_follows_its_signal() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(1.25_f64);
+    let zoom = RwSignal::new(ZoomFactor::within(1.25, 0.5, 2.0));
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
 
-    zoom.set(2.0);
+    zoom.set(ZoomFactor::within(2.0, 0.5, 2.0));
     leptos::task::tick().await;
     assert_eq!(btn.text_content().as_deref(), Some("200 %"));
 
@@ -206,7 +206,7 @@ fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     owner.set();
     // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
     // is collapsed on mount (only the button shows).
-    let zoom = RwSignal::new(1.25_f64);
+    let zoom = RwSignal::new(ZoomFactor::within(1.25, 0.5, 2.0));
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
 
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
@@ -390,7 +390,7 @@ fn press(target: &web_sys::Element, key: &str) {
 async fn a_menu_trigger_reports_open_and_closed() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(1.0_f64);
+    let zoom = RwSignal::new(ZoomFactor::ONE);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
@@ -416,7 +416,7 @@ async fn a_menu_trigger_reports_open_and_closed() {
 async fn a_menu_is_operable_by_keyboard_alone() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(1.0_f64);
+    let zoom = RwSignal::new(ZoomFactor::ONE);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
@@ -457,7 +457,11 @@ async fn a_menu_is_operable_by_keyboard_alone() {
     // The presets run high to low, so the last one is the smallest.
     press(&menu, "Enter");
     leptos::task::tick().await;
-    assert_eq!(zoom.get_untracked(), 0.5, "Enter chose the focused preset");
+    assert_eq!(
+        zoom.get_untracked().get(),
+        0.5,
+        "Enter chose the focused preset"
+    );
     assert!(
         root.query_selector(".statusbar-zoom-menu")
             .unwrap()
@@ -477,7 +481,7 @@ async fn a_menu_is_operable_by_keyboard_alone() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(zoom.get_untracked(), 0.5, "Escape chose nothing");
+    assert_eq!(zoom.get_untracked().get(), 0.5, "Escape chose nothing");
     root.remove();
 }
 

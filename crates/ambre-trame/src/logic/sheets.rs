@@ -424,12 +424,15 @@ impl TrameState {
             .into_iter()
             .map(|id| {
                 let name = names.remove(&id).unwrap_or_else(|| id.clone());
-                (id, name)
+                SheetTab {
+                    id: SheetId(id),
+                    name,
+                }
             })
             .collect();
         TrameEvent::SheetList {
             sheets,
-            active: self.active_sheet.clone(),
+            active: SheetId(self.active_sheet.clone()),
         }
     }
 

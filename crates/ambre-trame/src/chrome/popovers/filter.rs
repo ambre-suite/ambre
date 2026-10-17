@@ -16,6 +16,21 @@ pub struct FilterPopoverState {
     pub y: f64,
 }
 
+/// Whether the active sheet is filtered (`trame-shared-filter`). The context
+/// menu offers "Clear filter" only on a filtered sheet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SheetFilter {
+    #[default]
+    Unfiltered,
+    Filtered,
+}
+
+impl SheetFilter {
+    pub fn is_filtered(self) -> bool {
+        self == Self::Filtered
+    }
+}
+
 /// The condition operators offered by the popover, paired with their labels.
 /// The `<select>` index maps back to the [`FilterOp`] on apply.
 const FILTER_OPS: &[(FilterOp, &str)] = &[

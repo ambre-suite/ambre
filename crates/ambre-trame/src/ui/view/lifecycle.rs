@@ -30,7 +30,7 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
-        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<f64>,
+        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
     ) -> Self {
         let theme = theme_ctl.get();
 

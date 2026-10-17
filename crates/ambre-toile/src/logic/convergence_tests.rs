@@ -14,8 +14,9 @@ use ambre_bus::UserId;
 use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
-    BoolOp, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
-    ReactionKind, StatsRequestKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
+    BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
+    PresentMode, Reaction, ReactionKind, StatsRequestKind, TextDelta, ToileCommand, ToileError,
+    ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
@@ -3287,7 +3288,7 @@ fn an_arrow_off_screen_is_culled() {
 
 fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<usize> {
     out.display.iter().find_map(|e| match e {
-        ToileEvent::SlideChanged(c) => Some(c.index),
+        ToileEvent::SlideChanged(c) => Some(c.position.index()),
         _ => None,
     })
 }
@@ -3469,7 +3470,7 @@ fn slide_change_carries_snapshots_and_fit_rect() {
     });
 
     let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
-    assert_eq!(change.index, 1);
+    assert_eq!(change.position.index(), 1);
     // `from` is slide 0, `to` is slide 1, each the engine's own frame snapshot.
     assert_eq!(change.from, st.frame_snapshot(&a));
     assert_eq!(change.to, st.frame_snapshot(&b));
@@ -3500,7 +3501,8 @@ fn slide_change_carries_count_frame_and_notes() {
 
     let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
     assert_eq!(
-        change.count, 2,
+        change.position.count(),
+        2,
         "the whole deck length drives the k / n counter"
     );
     assert_eq!(change.frame, Some(b.clone()), "the active slide's frame id");
@@ -3529,7 +3531,7 @@ fn enter_present_starts_from_empty_snapshot() {
     });
 
     let change = slide_change(&st.handle_command(ToileCommand::EnterPresent { focus: true }));
-    assert_eq!(change.index, 0);
+    assert_eq!(change.position.index(), 0);
     assert!(change.from.elements.is_empty(), "no source frame on entry");
     assert_eq!(change.to, st.frame_snapshot(&a));
     assert_eq!(change.to_rect, st.element_rect(&a));
@@ -3550,7 +3552,7 @@ fn present_mode_toggle_is_local() {
     assert!(
         out.display
             .iter()
-            .any(|e| matches!(e, ToileEvent::PresentModeChanged(true))),
+            .any(|e| matches!(e, ToileEvent::PresentModeChanged(PresentMode::Presenting))),
         "EnterPresent announces present mode"
     );
     assert_eq!(
@@ -3565,7 +3567,7 @@ fn present_mode_toggle_is_local() {
     assert!(
         out.display
             .iter()
-            .any(|e| matches!(e, ToileEvent::PresentModeChanged(false)))
+            .any(|e| matches!(e, ToileEvent::PresentModeChanged(PresentMode::Editing)))
     );
     assert!(!st.playback().0, "ExitPresent leaves present mode");
 }
@@ -3586,7 +3588,7 @@ fn leaving_the_presentation_stops_the_broadcast() {
     assert!(
         out.display
             .iter()
-            .any(|e| matches!(e, ToileEvent::PresentBroadcastChanged(false)))
+            .any(|e| matches!(e, ToileEvent::PresentBroadcastChanged(Broadcast::Private)))
     );
     let frame = out.ephemeral.expect("the peers hear it");
     let mut rx = ToileState::new();
@@ -3876,7 +3878,7 @@ fn follower_adopts_presenter_slide() {
     assert!(
         events
             .iter()
-            .any(|e| matches!(e, ToileEvent::SlideChanged(c) if c.index == 2)),
+            .any(|e| matches!(e, ToileEvent::SlideChanged(c) if c.position.index() == 2)),
         "adoption emits a SlideChanged so the camera glides"
     );
     assert_eq!(
@@ -4010,9 +4012,10 @@ fn present_broadcast_toggle_is_local() {
     let out = st.handle_command(ToileCommand::SetPresentBroadcast(true));
     assert!(out.update.is_none(), "the broadcast toggle is never CRDT");
     assert!(
-        out.display
-            .iter()
-            .any(|e| matches!(e, ToileEvent::PresentBroadcastChanged(true))),
+        out.display.iter().any(|e| matches!(
+            e,
+            ToileEvent::PresentBroadcastChanged(Broadcast::Broadcasting)
+        )),
         "the toggle is announced to the UI"
     );
     assert!(st.is_broadcasting());
