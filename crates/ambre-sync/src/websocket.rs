@@ -19,6 +19,17 @@ fn replay_retry_delay_ms(stop: u32) -> Option<u64> {
         .then(|| REPLAY_RETRY_BASE_MS << (stop - 1))
 }
 
+/// The stops of one document's replay since its budget last started.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ReplayStops {
+    /// The stops counted against the budget, from one.
+    count: u32,
+    /// The last delta the latest stop named.
+    after: Seq,
+    /// The ticket of the timer armed for the latest stop, if any.
+    ticket: u64,
+}
+
 /// The socket address. It carries no credential: the token travels in the
 /// socket's first frame, so no log line, proxy record or URL holds it
 /// (`SYNC-061`, `ambre-spec-session.md`, `SRV-031`).
@@ -268,14 +279,17 @@ impl SyncState {
     /// `delay_ms`. The closure runs once and frees itself, so several
     /// documents can wait at once.
     #[cfg(target_arch = "wasm32")]
-    fn arm_replay_timer(&self, document_id: DocumentId, stop: u32, delay_ms: u64) {
+    fn arm_replay_timer(&self, document_id: DocumentId, ticket: u64, delay_ms: u64) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
             return;
         };
         let cb = Closure::once_into_js(move || {
-            let _ = tx.send(SyncEvent::ReplayRetry { document_id, stop });
+            let _ = tx.send(SyncEvent::ReplayRetry {
+                document_id,
+                ticket,
+            });
         });
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
@@ -287,18 +301,32 @@ impl SyncState {
 
     /// Native: no timer. A host test sends [`SyncEvent::ReplayRetry`] itself.
     #[cfg(not(target_arch = "wasm32"))]
-    fn arm_replay_timer(&self, _document_id: DocumentId, _stop: u32, _delay_ms: u64) {}
+    fn arm_replay_timer(&self, _document_id: DocumentId, _ticket: u64, _delay_ms: u64) {}
 
     /// The relay stopped a replay. Ask again after a delay that doubles at
-    /// each stop (`SYNC-153`). Past the budget, report it once and wait for
-    /// the next reconnect (`SYNC-154`).
+    /// each stop (`SYNC-153`). A stop past the one before starts the budget
+    /// again (`SYNC-158`). Past the budget, report it once and wait for the
+    /// next reconnect (`SYNC-154`).
     fn replay_stopped(&mut self, document_id: DocumentId, after_seq: Seq) {
-        let stops = self.replay_stops.entry(document_id).or_insert(0);
-        *stops = stops.saturating_add(1);
-        let stop = *stops;
+        let stop = match self.replay_stops.get(&document_id) {
+            Some(last) if after_seq <= last.after => last.count.saturating_add(1),
+            _ => 1,
+        };
         tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
-        if let Some(delay_ms) = replay_retry_delay_ms(stop) {
-            self.arm_replay_timer(document_id, stop, delay_ms);
+        let delay = replay_retry_delay_ms(stop);
+        if delay.is_some() {
+            self.replay_ticket += 1;
+        }
+        self.replay_stops.insert(
+            document_id,
+            ReplayStops {
+                count: stop,
+                after: after_seq,
+                ticket: self.replay_ticket,
+            },
+        );
+        if let Some(delay_ms) = delay {
+            self.arm_replay_timer(document_id, self.replay_ticket, delay_ms);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
             self.send_to_logic(LogicEvent::ApiError {
                 id: None,
@@ -312,8 +340,12 @@ impl SyncState {
     /// A replay timer fired. A later stop or a reconnect since it was armed
     /// makes it stale. Otherwise ask again from the document's own cursor,
     /// which the delivered part of the replay already advanced (`SYNC-153`).
-    fn retry_replay(&mut self, document_id: DocumentId, stop: u32) {
-        if self.replay_stops.get(&document_id) != Some(&stop) {
+    fn retry_replay(&mut self, document_id: DocumentId, ticket: u64) {
+        let live = self
+            .replay_stops
+            .get(&document_id)
+            .is_some_and(|stops| stops.ticket == ticket && stops.count <= REPLAY_RETRY_LIMIT);
+        if !live {
             return;
         }
         let cursor = match self.documents.get(&document_id) {
@@ -486,7 +518,10 @@ impl SyncState {
                 let next = self.lifecycle.poll((self.clock)());
                 self.follow(next);
             }
-            SyncEvent::ReplayRetry { document_id, stop } => self.retry_replay(document_id, stop),
+            SyncEvent::ReplayRetry {
+                document_id,
+                ticket,
+            } => self.retry_replay(document_id, ticket),
             SyncEvent::SessionReady {
                 id,
                 user_id,
@@ -1689,10 +1724,31 @@ mod tests {
     }
 
     fn stopped(document_id: DocumentId) -> SyncEvent {
+        stopped_after(document_id, 3)
+    }
+
+    fn stopped_after(document_id: DocumentId, after: u64) -> SyncEvent {
         SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
             document_id,
-            after_seq: Seq(3),
+            after_seq: Seq(after),
         })
+    }
+
+    fn retry(document_id: DocumentId, ticket: u64) -> SyncEvent {
+        SyncEvent::ReplayRetry {
+            document_id,
+            ticket,
+        }
+    }
+
+    /// The ticket of the timer armed for the latest stop of `id`.
+    fn armed(state: &SyncState, id: DocumentId) -> u64 {
+        state.replay_stops[&id].ticket
+    }
+
+    /// The stops counted against the budget of `id`.
+    fn counted(state: &SyncState, id: DocumentId) -> u32 {
+        state.replay_stops[&id].count
     }
 
     fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
@@ -1708,17 +1764,12 @@ mod tests {
     fn a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires() {
         let (mut state, _rx, wire, id) = with_relay_document();
         state.handle_sync_event(stopped(id));
+        let first = armed(&state, id);
         assert!(sent(&wire).is_empty(), "no retry before the timer");
         state.handle_sync_event(stopped(id));
-        state.handle_sync_event(SyncEvent::ReplayRetry {
-            document_id: id,
-            stop: 1,
-        });
+        state.handle_sync_event(retry(id, first));
         assert!(sent(&wire).is_empty(), "a stale timer asks nothing");
-        state.handle_sync_event(SyncEvent::ReplayRetry {
-            document_id: id,
-            stop: 2,
-        });
+        state.handle_sync_event(retry(id, armed(&state, id)));
         let asked = sent(&wire);
         assert_eq!(asked.len(), 1);
         assert!(matches!(
@@ -1760,19 +1811,14 @@ mod tests {
             .filter(|e| matches!(e, LogicEvent::ApiError { code: 500, .. }))
             .count();
         assert_eq!(errors, 1);
-        state.handle_sync_event(SyncEvent::ReplayRetry {
-            document_id: id,
-            stop: 6,
-        });
+        state.handle_sync_event(retry(id, armed(&state, id)));
         assert!(sent(&wire).is_empty(), "no retry past the budget");
 
         state.handle_sync_event(SyncEvent::WsOpened);
         let _ = sent(&wire);
         state.handle_sync_event(stopped(id));
-        state.handle_sync_event(SyncEvent::ReplayRetry {
-            document_id: id,
-            stop: 1,
-        });
+        assert_eq!(counted(&state, id), 1);
+        state.handle_sync_event(retry(id, armed(&state, id)));
         assert!(matches!(
             sent(&wire)[..],
             [WsClientMsg::RequestMissing {
@@ -1780,6 +1826,31 @@ mod tests {
                 ..
             }]
         ));
+    }
+
+    /// `SYNC-158`: a stop past the one before starts the budget again, so a
+    /// replay that keeps moving on is never given up. A stop at the same
+    /// delta, or before it, still counts. A timer armed before the reset
+    /// asks nothing after it.
+    #[test]
+    fn a_replay_that_moves_on_keeps_its_budget() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        for after in 1..=12 {
+            state.handle_sync_event(stopped_after(id, after));
+            assert_eq!(counted(&state, id), 1, "stop after {after}");
+        }
+        assert_eq!(rx.try_iter().count(), 0, "a moving replay reports nothing");
+
+        let before_reset = armed(&state, id);
+        state.handle_sync_event(stopped_after(id, 12));
+        state.handle_sync_event(stopped_after(id, 11));
+        assert_eq!(counted(&state, id), 3);
+        state.handle_sync_event(stopped_after(id, 20));
+        assert_eq!(counted(&state, id), 1);
+        state.handle_sync_event(retry(id, before_reset));
+        assert!(sent(&wire).is_empty(), "a timer from before the reset");
+        state.handle_sync_event(retry(id, armed(&state, id)));
+        assert_eq!(sent(&wire).len(), 1);
     }
 
     /// `SRV-183`: a socket refusal reaches Logic with the status its code

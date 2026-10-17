@@ -2633,7 +2633,7 @@
   {"edge": "cites-section", "from": "SYNC-158", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-rule", "from": "SYNC-158", "to": "SYNC-154"},
   {"edge": "cites-document", "from": "SYNC-158", "section": "8", "to": "ambre-spec-budgets.md"},
-  {"edge": "lands-with", "from": "SYNC-158", "to": "A replay that moves on keeps its budget"},
+  {"edge": "verified-by", "from": "SYNC-158", "to": "ambre_sync::websocket::tests::a_replay_that_moves_on_keeps_its_budget"},
   {"edge": "cites-document", "from": "SYNC-062", "to": "ambre-spec-session.md"},
   {"edge": "cites-rule", "from": "SYNC-062", "to": "SRV-025"},
   {"edge": "verified-by", "from": "SYNC-062", "to": "ambre_sync::http::tests::a_refused_token_is_renewed_and_the_request_replayed_once"},
