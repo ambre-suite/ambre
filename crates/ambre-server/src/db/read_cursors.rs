@@ -7,8 +7,8 @@ use super::*;
 /// One channel document the caller reads, with what the register knows of it.
 #[derive(Debug)]
 pub struct ActivityRow {
-    pub channel_id: uuid::Uuid,
-    pub document_id: uuid::Uuid,
+    pub channel_id: ambre_core::ChannelId,
+    pub document_id: ambre_core::DocumentId,
     /// The caller's cursor on the document, 0 when it never wrote one.
     pub cursor: i64,
     /// The highest sequence number the register holds for the document: its
@@ -26,7 +26,7 @@ pub async fn set_read_cursor(
     document_id: &ambre_core::DocumentId,
     seq: i64,
 ) -> Result<(), AppError> {
-    set_read_cursors(pool, user_id, &[(id_to_uuid(*document_id), seq)]).await
+    set_read_cursors(pool, user_id, &[(*document_id, seq)]).await
 }
 
 /// Move several of the caller's cursors in one statement. Touches the
@@ -34,9 +34,12 @@ pub async fn set_read_cursor(
 pub async fn set_read_cursors(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-    cursors: &[(uuid::Uuid, i64)],
+    cursors: &[(ambre_core::DocumentId, i64)],
 ) -> Result<(), AppError> {
-    let (documents, seqs): (Vec<uuid::Uuid>, Vec<i64>) = cursors.iter().copied().unzip();
+    let (documents, seqs): (Vec<uuid::Uuid>, Vec<i64>) = cursors
+        .iter()
+        .map(|(document_id, seq)| (id_to_uuid(*document_id), *seq))
+        .unzip();
     sqlx::query(
         "INSERT INTO read_cursors (user_id, document_id, seq) \
          SELECT $1, d, s FROM UNNEST($2::uuid[], $3::bigint[]) AS t(d, s) \
@@ -82,8 +85,8 @@ pub async fn channel_activity(
     rows.into_iter()
         .map(|r| {
             Ok(ActivityRow {
-                channel_id: r.try_get("channel_id")?,
-                document_id: r.try_get("document_id")?,
+                channel_id: r.try_get::<PgId, _>("channel_id")?.into(),
+                document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 cursor: r.try_get("cursor")?,
                 durable_last: r.try_get("durable_last")?,
             })

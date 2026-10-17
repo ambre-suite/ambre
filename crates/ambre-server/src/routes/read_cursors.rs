@@ -91,7 +91,8 @@ pub async fn get_activity(
 /// every segment and thread of every channel of the caller moves.
 #[derive(serde::Deserialize, Default)]
 pub struct MarkReadRequest {
-    pub documents: Option<Vec<String>>,
+    #[serde(default, with = "ambre_core::serde_id::document_id::option_vec")]
+    pub documents: Option<Vec<ambre_core::DocumentId>>,
 }
 
 /// `POST /api/read-cursors/mark-read`: move the caller's cursors to the last
@@ -103,13 +104,10 @@ pub async fn mark_read(
     auth: auth::AuthSession,
     body: Option<Json<MarkReadRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let wanted: Option<std::collections::HashSet<uuid::Uuid>> =
-        body.and_then(|Json(req)| req.documents).map(|ids| {
-            ids.iter()
-                .filter_map(|id| uuid::Uuid::parse_str(id).ok())
-                .collect()
-        });
-    let cursors: Vec<(uuid::Uuid, i64)> = last_numbers(&state, &auth.user_id)
+    let wanted: Option<std::collections::HashSet<ambre_core::DocumentId>> = body
+        .and_then(|Json(req)| req.documents)
+        .map(|ids| ids.into_iter().collect());
+    let cursors: Vec<(ambre_core::DocumentId, i64)> = last_numbers(&state, &auth.user_id)
         .await?
         .into_iter()
         .filter(|(row, last)| *last > row.cursor)
@@ -447,7 +445,7 @@ mod tests {
         let (_, _, segments) = channel(&state, alice, &[], &[5, 2]).await;
         let (_, _, strangers) = channel(&state, eve, &[], &[8]).await;
         let body = MarkReadRequest {
-            documents: Some(vec![segments[0].to_string(), strangers[0].to_string()]),
+            documents: Some(vec![segments[0], strangers[0]]),
         };
         mark_read(State(state.clone()), session(alice, 1), Some(Json(body)))
             .await

@@ -7,9 +7,9 @@ use crate::payload::Payload;
 /// Row from `snapshots`.
 #[derive(Debug)]
 pub struct SnapshotRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::SnapshotId,
     #[allow(dead_code)]
-    pub document_id: uuid::Uuid,
+    pub document_id: ambre_core::DocumentId,
     #[allow(dead_code)]
     pub author_pubkey: Vec<u8>,
     #[allow(dead_code)]
@@ -61,8 +61,8 @@ const SNAPSHOT_COLUMNS: &str = "id, document_id, author_pubkey, parent_hash, \
 fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
     let status: String = r.try_get("status")?;
     Ok(SnapshotRow {
-        id: r.try_get("id")?,
-        document_id: r.try_get("document_id")?,
+        id: r.try_get::<PgId, _>("id")?.into(),
+        document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: r.try_get("author_pubkey")?,
         parent_hash: r.try_get("parent_hash")?,
         parent_snapshot_proof: r.try_get("parent_snapshot_proof")?,
@@ -78,12 +78,10 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
 /// hold a frame (`ZK-006`).
 pub struct UpdateRow {
     #[allow(dead_code)]
-    pub id: uuid::Uuid,
-    #[allow(dead_code)]
-    pub document_id: uuid::Uuid,
+    pub document_id: ambre_core::DocumentId,
     pub author_pubkey: Vec<u8>,
     #[allow(dead_code)]
-    pub snapshot_id: uuid::Uuid,
+    pub snapshot_id: ambre_core::SnapshotId,
     pub clock: i64,
     pub seq: i64,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
@@ -456,7 +454,7 @@ pub async fn get_updates_after(
 ) -> Result<Vec<UpdateRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
-        "SELECT id, document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
+        "SELECT document_id, author_pubkey, snapshot_id, clock, seq, s3_key, wire, batch_key, created_at FROM updates WHERE document_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3"
     )
     .bind(did)
     .bind(after_seq)
@@ -467,10 +465,9 @@ pub async fn get_updates_after(
     rows.into_iter()
         .map(|r| {
             Ok(UpdateRow {
-                id: r.try_get("id")?,
-                document_id: r.try_get("document_id")?,
+                document_id: r.try_get::<PgId, _>("document_id")?.into(),
                 author_pubkey: r.try_get("author_pubkey")?,
-                snapshot_id: r.try_get("snapshot_id")?,
+                snapshot_id: r.try_get::<PgId, _>("snapshot_id")?.into(),
                 clock: r.try_get("clock")?,
                 seq: r.try_get("seq")?,
                 s3_key: r.try_get("s3_key")?,
@@ -644,7 +641,8 @@ pub async fn document_holds_media(
 /// Snapshot compacted to be deleted (id + S3 key for cleanup).
 #[derive(Debug, sqlx::FromRow)]
 pub struct CompactSnapshot {
-    pub id: uuid::Uuid,
+    #[sqlx(try_from = "PgId")]
+    pub id: ambre_core::SnapshotId,
     pub s3_key: String,
 }
 
@@ -685,9 +683,12 @@ pub async fn find_compactable_snapshots(
 /// the `drop_updates_snapshot_fk` migration), so `snapshot_id` is now an opaque
 /// client-side correlation tag with no cascade. Superseded deltas are trimmed
 /// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.
-pub async fn delete_snapshot(pool: &PgPool, snapshot_id: uuid::Uuid) -> Result<(), AppError> {
+pub async fn delete_snapshot(
+    pool: &PgPool,
+    snapshot_id: &ambre_core::SnapshotId,
+) -> Result<(), AppError> {
     sqlx::query("DELETE FROM snapshots WHERE id = $1")
-        .bind(snapshot_id)
+        .bind(id_to_uuid(*snapshot_id))
         .execute(pool)
         .await?;
     Ok(())

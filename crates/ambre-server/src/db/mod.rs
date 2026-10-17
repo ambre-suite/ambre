@@ -34,15 +34,49 @@ fn decode_role_opt(word: Option<String>) -> Result<Option<ambre_core::Role>, sql
     word.as_deref().map(decode_role).transpose()
 }
 
-#[allow(dead_code)]
 fn uuid_to_core(u: uuid::Uuid) -> ambre_core::Uuid {
     ambre_core::Uuid::from_bytes(*u.as_bytes())
 }
 
-#[allow(dead_code)]
 fn uuid_row_to_id<T: From<ambre_core::Uuid>>(u: uuid::Uuid) -> T {
     T::from(uuid_to_core(u))
 }
+
+/// A stored identifier column. A row field reads it with
+/// `#[sqlx(try_from = "PgId")]`, so the row holds the core identifier itself.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgId(uuid::Uuid);
+
+/// A stored identifier column that may be `NULL`, read with
+/// `#[sqlx(try_from = "PgOptId")]`.
+#[derive(sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct PgOptId(Option<uuid::Uuid>);
+
+macro_rules! pg_id {
+    ($($id:ty),* $(,)?) => {$(
+        impl From<PgId> for $id {
+            fn from(PgId(u): PgId) -> Self {
+                uuid_row_to_id(u)
+            }
+        }
+
+        impl From<PgOptId> for Option<$id> {
+            fn from(PgOptId(u): PgOptId) -> Self {
+                u.map(uuid_row_to_id)
+            }
+        }
+    )*};
+}
+
+pg_id!(
+    ambre_core::DocumentId,
+    ambre_core::UserId,
+    ambre_core::ChannelId,
+    ambre_core::SnapshotId,
+    ambre_core::OrgId,
+);
 
 pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
     let core_uuid: ambre_core::Uuid = id.into();
@@ -52,11 +86,6 @@ pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Bridge a stored `uuid::Uuid` (FK columns) back to a typed core id.
-    fn core_id<T: From<ambre_core::Uuid>>(id: uuid::Uuid) -> T {
-        ambre_core::Uuid::from_bytes(*id.as_bytes()).into()
-    }
 
     /// `covered_seq` survives the insert and both read paths. This is the value a
     /// client gates its post-open `RequestMissing` on, so a silent reset to 0
@@ -76,12 +105,12 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
+        let owner = user.id;
         let (doc, created) = create_document(&pool, &owner, "trame", None, None)
             .await
             .expect("create document");
         assert!(created);
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
 
         let author = [5u8; 32];
         let clocks = serde_json::json!({});
@@ -106,7 +135,7 @@ mod tests {
             .await
             .expect("query latest")
             .expect("snapshot exists");
-        assert_eq!(latest.id, id_to_uuid(sid));
+        assert_eq!(latest.id, sid);
         assert_eq!(latest.s3_key, "s3/key/snap");
         assert_eq!(latest.covered_seq, 1500);
 
@@ -144,11 +173,11 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
+        let owner = user.id;
         let (doc, _) = create_document(&pool, &owner, "prose", None, None)
             .await
             .expect("create document");
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
         let author = [5u8; 32];
         let snap = ambre_core::SnapshotId::new();
 
@@ -214,11 +243,11 @@ mod tests {
         )
         .await
         .expect("create user");
-        let owner: ambre_core::UserId = core_id(user.id);
+        let owner = user.id;
         let (doc, _) = create_document(&pool, &owner, "prose", None, None)
             .await
             .expect("create document");
-        let document_id: ambre_core::DocumentId = core_id(doc.id);
+        let document_id = doc.id;
         let author = [5u8; 32];
         let snap = ambre_core::SnapshotId::new();
 

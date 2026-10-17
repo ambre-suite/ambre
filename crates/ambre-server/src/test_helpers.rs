@@ -94,7 +94,7 @@ pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId 
     )
     .await
     .expect("failed to create test user");
-    ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()))
+    user.id
 }
 
 /// Like the state given, with another S3 client.
@@ -348,8 +348,7 @@ pub async fn create_test_document(
     let (doc, _created) = db::create_document(pool, &owner_id, doc_type, None, None)
         .await
         .expect("failed to create test document");
-    let doc_id =
-        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let doc_id = doc.id;
     db::add_document_member(
         pool,
         &doc_id,

@@ -25,7 +25,8 @@ pub struct CreateOrgRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateOrgResponse {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::org_id")]
+    pub id: ambre_core::OrgId,
     pub name: String,
     pub org_pubkey: String,
     pub shamir_threshold: i16,
@@ -34,7 +35,7 @@ pub struct CreateOrgResponse {
 
 fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
     CreateOrgResponse {
-        id: org.id.to_string(),
+        id: org.id,
         name: org.name.clone(),
         org_pubkey: hex::encode(&org.org_pubkey),
         shamir_threshold: org.shamir_threshold,
@@ -75,10 +76,8 @@ pub struct OrgMemberResponse {
 }
 
 fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
-    let user_id =
-        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*m.user_id.as_bytes()));
     OrgMemberResponse {
-        user_id,
+        user_id: m.user_id,
         email: m.email.clone(),
         display_name: m.display_name.clone(),
         role: m.role,
@@ -116,14 +115,14 @@ fn org_role_valid(role: Role) -> Result<Role, AppError> {
     }
 }
 
-fn parse_org_id(s: &str) -> Result<uuid::Uuid, AppError> {
-    uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound {
+fn parse_org_id(s: &str) -> Result<ambre_core::OrgId, AppError> {
+    ambre_core::OrgId::parse_str(s).map_err(|_| AppError::NotFound {
         resource: "organization",
     })
 }
 
-fn parse_user_id_str(s: &str) -> Result<uuid::Uuid, AppError> {
-    uuid::Uuid::parse_str(s).map_err(|_| AppError::NotFound { resource: "user" })
+fn parse_user_id_str(s: &str) -> Result<ambre_core::UserId, AppError> {
+    ambre_core::UserId::parse_str(s).map_err(|_| AppError::NotFound { resource: "user" })
 }
 
 /// Validates the escrow parameters at org creation.
@@ -152,8 +151,8 @@ fn validate_shamir_params(threshold: i16, total: i16) -> Result<(), AppError> {
 
 async fn require_org_role(
     pool: &sqlx::PgPool,
-    org_id: uuid::Uuid,
-    user_id: uuid::Uuid,
+    org_id: &ambre_core::OrgId,
+    user_id: &ambre_core::UserId,
     allowed_roles: &[Role],
 ) -> Result<db::OrgMembershipRow, AppError> {
     let m = db::get_org_member(pool, org_id, user_id)
@@ -174,9 +173,7 @@ pub async fn create_org(
     Json(req): Json<CreateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let owner_uid = ambre_core::Uuid::parse_str(&session.user_id.to_string())
-        .map_err(|_| AppError::Unauthorized)?;
-    let owner_id = ambre_core::UserId::from_uuid(owner_uid);
+    let owner_id = session.user_id;
 
     validate_shamir_params(req.shamir_threshold, req.shamir_total)?;
 
@@ -215,11 +212,7 @@ pub async fn list_orgs(
     auth: auth::AuthSession,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
-    let uid = ambre_core::Uuid::parse_str(&session.user_id.to_string())
-        .map_err(|_| AppError::Unauthorized)?;
-    let user_id = ambre_core::UserId::from_uuid(uid);
-
-    let orgs = db::list_user_organizations(&state.db, &user_id).await?;
+    let orgs = db::list_user_organizations(&state.db, &session.user_id).await?;
     let resp: Vec<CreateOrgResponse> = orgs.iter().map(org_to_response).collect();
     Ok(axum::Json(resp))
 }
@@ -232,18 +225,18 @@ pub async fn get_org(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
 
     // Must be a member to view.
     require_org_role(
         &state.db,
-        org_id,
-        uid,
+        &org_id,
+        &uid,
         &[Role::Owner, Role::Admin, Role::Member],
     )
     .await?;
 
-    let org = db::get_organization(&state.db, org_id)
+    let org = db::get_organization(&state.db, &org_id)
         .await?
         .ok_or(AppError::NotFound {
             resource: "organization",
@@ -260,11 +253,11 @@ pub async fn update_org(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
 
-    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
+    require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
 
-    let org = db::update_organization(&state.db, org_id, &req.name)
+    let org = db::update_organization(&state.db, &org_id, &req.name)
         .await?
         .ok_or(AppError::NotFound {
             resource: "organization",
@@ -280,11 +273,11 @@ pub async fn delete_org(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
 
-    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
+    require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
 
-    let deleted = db::delete_organization(&state.db, org_id).await?;
+    let deleted = db::delete_organization(&state.db, &org_id).await?;
     if !deleted {
         return Err(AppError::NotFound {
             resource: "organization",
@@ -302,11 +295,11 @@ pub async fn add_member(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
 
-    let caller = require_org_role(&state.db, org_id, uid, &[Role::Owner, Role::Admin]).await?;
+    let caller = require_org_role(&state.db, &org_id, &uid, &[Role::Owner, Role::Admin]).await?;
 
-    let member_user_id = uuid::Uuid::from_bytes(*req.user_id.as_bytes());
+    let member_user_id = req.user_id;
 
     // `add_org_member` upserts (ON CONFLICT DO UPDATE SET role), so this handler
     // is also the role-change path. Two clamps keep it from being an escalation
@@ -321,7 +314,7 @@ pub async fn add_member(
     if granted_rank > caller_rank {
         return Err(AppError::Forbidden);
     }
-    if let Some(existing) = db::get_org_member(&state.db, org_id, member_user_id).await? {
+    if let Some(existing) = db::get_org_member(&state.db, &org_id, &member_user_id).await? {
         let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
@@ -339,8 +332,8 @@ pub async fn add_member(
 
     db::add_org_member(
         &state.db,
-        org_id,
-        member_user_id,
+        &org_id,
+        &member_user_id,
         role,
         share_enc.as_deref(),
     )
@@ -360,17 +353,17 @@ pub async fn list_members(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
 
     require_org_role(
         &state.db,
-        org_id,
-        uid,
+        &org_id,
+        &uid,
         &[Role::Owner, Role::Admin, Role::Member],
     )
     .await?;
 
-    let members = db::list_org_members(&state.db, org_id).await?;
+    let members = db::list_org_members(&state.db, &org_id).await?;
     let resp: Vec<OrgMemberResponse> = members.iter().map(member_to_response).collect();
     Ok(axum::Json(resp))
 }
@@ -383,23 +376,23 @@ pub async fn remove_member(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
     let target_uid = parse_user_id_str(&target_uid)?;
 
     // Owner or admin can remove. Members cannot remove others.
-    let caller = require_org_role(&state.db, org_id, uid, &[Role::Owner, Role::Admin]).await?;
+    let caller = require_org_role(&state.db, &org_id, &uid, &[Role::Owner, Role::Admin]).await?;
 
     // Same rank clamp as `add_member`. A caller may only remove a member at or
     // below their own rank, so an admin can never remove (or lock out) the owner.
     let caller_rank = org_role_rank(caller.role).ok_or(AppError::Forbidden)?;
-    if let Some(existing) = db::get_org_member(&state.db, org_id, target_uid).await? {
+    if let Some(existing) = db::get_org_member(&state.db, &org_id, &target_uid).await? {
         let target_rank = org_role_rank(existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
             return Err(AppError::Forbidden);
         }
     }
 
-    let removed = db::remove_org_member(&state.db, org_id, target_uid).await?;
+    let removed = db::remove_org_member(&state.db, &org_id, &target_uid).await?;
     if !removed {
         return Err(AppError::NotFound {
             resource: "organization member",
@@ -417,17 +410,17 @@ pub async fn update_member_role(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let uid = parse_user_id_str(&session.user_id.to_string())?;
+    let uid = session.user_id;
     let target_uid = parse_user_id_str(&target_uid)?;
 
-    require_org_role(&state.db, org_id, uid, &[Role::Owner]).await?;
+    require_org_role(&state.db, &org_id, &uid, &[Role::Owner]).await?;
 
     // Validate the role before hitting the DB. An unknown value then returns a
     // clean 409, instead of surfacing the `role IN (...)` CHECK violation as a
     // raw 500.
     let role = org_role_valid(req.role)?;
 
-    db::update_org_member_role(&state.db, org_id, target_uid, role).await?;
+    db::update_org_member_role(&state.db, &org_id, &target_uid, role).await?;
     Ok(axum::Json(serde_json::json!({ "status": "updated" })))
 }
 
@@ -452,27 +445,27 @@ pub async fn recover_master_key(
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let org_id = parse_org_id(&org_id)?;
-    let caller_uid = parse_user_id_str(&session.user_id.to_string())?;
+    let caller_uid = session.user_id;
     let target_uid = parse_user_id_str(&target_uid)?;
 
-    require_org_role(&state.db, org_id, caller_uid, &[Role::Owner]).await?;
+    require_org_role(&state.db, &org_id, &caller_uid, &[Role::Owner]).await?;
 
     // Verify target user is a member of this org.
-    db::get_org_member(&state.db, org_id, target_uid)
+    db::get_org_member(&state.db, &org_id, &target_uid)
         .await?
         .ok_or(AppError::NotFound {
             resource: "organization member",
         })?;
 
     // Get the target user's encrypted org master key.
-    let org_master_key_enc = db::get_user_org_master_key_enc(&state.db, target_uid)
+    let org_master_key_enc = db::get_user_org_master_key_enc(&state.db, &target_uid)
         .await?
         .ok_or(AppError::NotFound {
             resource: "org master key",
         })?;
 
     // Log the recovery.
-    db::log_org_recovery(&state.db, org_id, target_uid, caller_uid, None).await?;
+    db::log_org_recovery(&state.db, &org_id, &target_uid, &caller_uid, None).await?;
 
     Ok(axum::Json(serde_json::json!({
         "status": "recovered",
@@ -560,7 +553,7 @@ mod tests {
     #[test]
     fn org_to_response_formats_correctly() {
         let org = db::OrganizationRow {
-            id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
             org_pubkey: vec![0u8; 32],
             shamir_threshold: 3,
@@ -568,7 +561,7 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
         let resp = org_to_response(&org);
-        assert_eq!(resp.id, "00000000-0000-0000-0000-000000000001");
+        assert_eq!(resp.id.to_string(), "00000000-0000-0000-0000-000000000001");
         assert_eq!(resp.name, "Test Org");
         assert_eq!(resp.shamir_threshold, 3);
         assert_eq!(resp.shamir_total, 5);
@@ -578,7 +571,7 @@ mod tests {
     #[test]
     fn member_to_response_with_share() {
         let member = db::OrgMemberRow {
-            user_id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             email: "user@test.com".into(),
             display_name: "Test User".into(),
             role: Role::Admin,
@@ -599,7 +592,7 @@ mod tests {
     #[test]
     fn member_to_response_without_share() {
         let member = db::OrgMemberRow {
-            user_id: uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+            user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
             email: "other@test.com".into(),
             display_name: "Other User".into(),
             role: Role::Member,
@@ -1025,8 +1018,8 @@ mod tests {
             }
             let kept = crate::db::get_org_member(
                 &state.db,
-                org_id.parse().unwrap(),
-                owner_uid.parse().unwrap(),
+                &ambre_core::OrgId::parse_str(&org_id).unwrap(),
+                &ambre_core::UserId::parse_str(&owner_uid).unwrap(),
             )
             .await
             .unwrap()

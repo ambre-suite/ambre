@@ -77,6 +77,31 @@ WALKS = {
 }
 
 
+# A route DTO whose identifiers reach JSON as their text, one adapter spread
+# over lines as rustfmt writes it, and a row the database reads.
+WIRE_ROUTE = (
+    "#[derive(Deserialize)]\n"
+    "pub(crate) struct RevokeRequest {\n"
+    '    #[serde(with = "ambre_core::serde_id::user_id")]\n'
+    "    pub user_id: UserId,\n"
+    "    #[serde(\n"
+    "        default,\n"
+    '        with = "ambre_core::serde_id::user_id::vec"\n'
+    "    )]\n"
+    "    pub members: Vec<UserId>,\n"
+    "    pub link: String,\n"
+    "}\n"
+)
+WIRE_ROW = (
+    "#[derive(sqlx::FromRow)]\n"
+    "pub struct UserRow {\n"
+    '    #[sqlx(try_from = "PgId")]\n'
+    "    pub id: UserId,\n"
+    "    pub oidc_subject: Option<String>,\n"
+    "}\n"
+)
+
+
 def scratch(tmp: str) -> Path:
     """A minimal tree that passes every check."""
     root = Path(tmp)
@@ -163,6 +188,8 @@ def scratch(tmp: str) -> Path:
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
     write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
+    write(root, f"{cb.WIRE_DIRS[0]}/share.rs", WIRE_ROUTE)
+    write(root, f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW)
     for rel, text in WALKS.items():
         write(root, rel, text)
     return root
@@ -201,6 +228,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
+            cb.check_wire_ids(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -440,6 +468,27 @@ class CrateBoundaries(unittest.TestCase):
             write(root, "crates/ambre-canvas/src/fonts.rs", 'static F: &[u8] = include_bytes!("NotoSans.ttf");\n')
             errors = self.run_checks(root)
         self.assertTrue(any("a font embedded in the binary" in e for e in errors), errors)
+
+    def test_an_identifier_held_as_text_on_the_wire_is_refused(self):
+        for rel, untyped in (
+            (f"{cb.WIRE_DIRS[0]}/share.rs", "pub user_id: String,"),
+            (f"{cb.WIRE_DIRS[1]}/users.rs", "pub id: uuid::Uuid,"),
+            (cb.WIRE_FILES[0], "pub document_ids: Option<Vec<String>>,"),
+        ):
+            with self.subTest(rel=rel):
+                body = f"#[derive(sqlx::FromRow)]\npub struct Row {{\n    {untyped}\n}}\n"
+                errors = self.breach(rel, body)
+                self.assertTrue(any("carries an identifier as" in e for e in errors), errors)
+
+    def test_an_identifier_written_as_bytes_on_the_wire_is_refused(self):
+        bare = WIRE_ROUTE.replace('    #[serde(with = "ambre_core::serde_id::user_id")]\n', "")
+        errors = self.breach(f"{cb.WIRE_DIRS[0]}/share.rs", bare)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("the `user_id` field writes its identifier as bytes", errors[0])
+
+    def test_a_row_the_database_reads_needs_no_text_adapter(self):
+        errors = self.breach(f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW.replace("UserId", "OrgId"))
+        self.assertEqual(errors, [])
 
     def test_the_real_tree_is_clean(self):
         self.assertEqual(self.run_checks(cb.ROOT), [])

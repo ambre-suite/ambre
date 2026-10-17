@@ -500,14 +500,14 @@ mod tests {
         assert_eq!(row.role, ambre_core::Role::Editor);
         assert_eq!(row.doc_key_enc, [6u8; 32], "the key sealed on `meta`");
 
-        let listed: Vec<uuid::Uuid> = list_document_members(&pool, &segment)
+        let listed: Vec<ambre_core::UserId> = list_document_members(&pool, &segment)
             .await
             .expect("query")
             .into_iter()
             .map(|m| m.user_id)
             .collect();
         assert_eq!(listed.len(), 2, "the segment lists the members of `meta`");
-        assert!(listed.contains(&id_to_uuid(bob)));
+        assert!(listed.contains(&bob));
     }
 
     /// `SRV-103`: membership reaches no document of another channel, and a
@@ -556,7 +556,7 @@ mod tests {
             "a stray row on a segment must not open it"
         );
         let listed = list_document_members(&pool, &segment).await.expect("query");
-        assert!(listed.iter().all(|m| m.user_id != id_to_uuid(eve)));
+        assert!(listed.iter().all(|m| m.user_id != eve));
     }
 
     /// A channel with no `meta` opens none of its documents, even to the

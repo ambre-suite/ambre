@@ -187,6 +187,11 @@ define_id! {
     SnapshotId
 }
 
+define_id! {
+    /// Identifies an organization, minted by the relay when one is created.
+    OrgId
+}
+
 impl SnapshotId {
     /// The genesis snapshot of a document: a deterministic id every client agrees
     /// on without a server round-trip, reusing the document's own bytes.

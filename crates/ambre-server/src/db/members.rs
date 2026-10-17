@@ -7,13 +7,13 @@ use super::*;
 #[derive(Debug)]
 pub struct MemberRow {
     #[allow(dead_code)]
-    pub document_id: uuid::Uuid,
+    pub document_id: ambre_core::DocumentId,
     #[allow(dead_code)]
-    pub user_id: uuid::Uuid,
+    pub user_id: ambre_core::UserId,
     pub role: ambre_core::Role,
     pub doc_key_enc: Vec<u8>,
     #[allow(dead_code)]
-    pub invited_by: Option<uuid::Uuid>,
+    pub invited_by: Option<ambre_core::UserId>,
 }
 
 /// What a removal posted alone did, decided inside its transaction.
@@ -35,7 +35,7 @@ pub enum Removed {
 /// can then locate its own entry and unwrap the key, or rewrap on rotation.
 #[derive(Debug)]
 pub struct MemberWithUserRow {
-    pub user_id: uuid::Uuid,
+    pub user_id: ambre_core::UserId,
     pub email: String,
     /// Whether the member's email was provider-verified vs self-asserted at
     /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
@@ -47,7 +47,7 @@ pub struct MemberWithUserRow {
     pub exchange_pubkey: Vec<u8>,
     pub doc_key_enc: Vec<u8>,
     #[allow(dead_code)]
-    pub invited_by: Option<uuid::Uuid>,
+    pub invited_by: Option<ambre_core::UserId>,
     /// Exchange public key of the member who wrapped `doc_key_enc` (the inviter,
     /// or the member themselves for a self-wrap at creation). The recipient needs
     /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
@@ -301,11 +301,11 @@ pub async fn get_document_member(
 
     match row {
         Some(r) => Ok(Some(MemberRow {
-            document_id: r.try_get("document_id")?,
-            user_id: r.try_get("user_id")?,
+            document_id: r.try_get::<PgId, _>("document_id")?.into(),
+            user_id: r.try_get::<PgId, _>("user_id")?.into(),
             role: decode_role(r.try_get("role")?)?,
             doc_key_enc: r.try_get("doc_key_enc")?,
-            invited_by: r.try_get("invited_by")?,
+            invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
         })),
         None => Ok(None),
     }
@@ -336,7 +336,7 @@ pub async fn list_document_members(
     rows.into_iter()
         .map(|r| {
             Ok(MemberWithUserRow {
-                user_id: r.try_get("user_id")?,
+                user_id: r.try_get::<PgId, _>("user_id")?.into(),
                 email: r.try_get("email")?,
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
@@ -344,7 +344,7 @@ pub async fn list_document_members(
                 signing_pubkey: r.try_get("signing_pubkey")?,
                 exchange_pubkey: r.try_get("exchange_pubkey")?,
                 doc_key_enc: r.try_get("doc_key_enc")?,
-                invited_by: r.try_get("invited_by")?,
+                invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
                 wrapper_exchange_pubkey: r.try_get("wrapper_exchange_pubkey")?,
             })
         })

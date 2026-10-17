@@ -32,7 +32,7 @@ impl SyncState {
             let url = format!("{url_scheme}://{api_base}/api/channels/{channel_id}/documents");
             let result = http::get_json_auth::<http::ChannelDocumentsResponse>(&url, auth)
                 .await
-                .and_then(|resp| channel_documents(&resp.documents));
+                .map(|resp| channel_documents(&resp.documents));
             let _ = tx.send(SyncEvent::ChannelListed {
                 channel_id,
                 self_join,
@@ -195,7 +195,7 @@ impl SyncState {
                         doc_type: DocType::Murmure,
                         name_enc: None,
                         doc_key_enc,
-                        document_id: Some(document_id.to_string()),
+                        document_id: Some(document_id),
                         entry: Some(entry),
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
@@ -207,10 +207,10 @@ impl SyncState {
                 }
                 let body = http::CreateChannelRequest {
                     public,
-                    channel_id: channel_id.to_string(),
-                    space_id: space_id.to_string(),
-                    meta_id: meta.to_string(),
-                    segment_id: segment.to_string(),
+                    channel_id,
+                    space_id,
+                    meta_id: meta,
+                    segment_id: segment,
                 };
                 http::post_json_auth_ok(&format!("{base}/channels"), &body, auth).await
             }
@@ -349,8 +349,7 @@ impl SyncState {
                     auth,
                 )
                 .await?;
-                ChannelId::parse_str(&answer.channel_id)
-                    .map_err(|_| format!("bad channel id {:?}", answer.channel_id))
+                Ok(answer.channel_id)
             }
             .await;
             let _ = tx.send(SyncEvent::DirectMessageOpened {
@@ -399,7 +398,7 @@ impl SyncState {
             if !finals.is_empty() {
                 let url = format!("{url_scheme}://{api_base}/api/read-cursors/mark-read");
                 let body = http::MarkReadRequest {
-                    documents: Some(finals.iter().map(ToString::to_string).collect()),
+                    documents: Some(finals.iter().map(SegmentId::document_id).collect()),
                 };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth).await {
                     tracing::warn!("Sync: read cursors of the final segments not moved: {e}");
@@ -454,7 +453,7 @@ impl SyncState {
             let url = format!("{url_scheme}://{api_base}/api/activity");
             let result = http::get_json_auth::<http::ActivityResponse>(&url, auth)
                 .await
-                .and_then(|resp| activity_of(&resp.documents));
+                .map(|resp| activity_of(&resp.documents));
             let _ = tx.send(SyncEvent::ActivityFetched { result });
         });
     }
@@ -569,7 +568,7 @@ pub(crate) fn self_join_entry(
     if head.length == 0 {
         return Ok(None);
     }
-    let meta = DocumentId::parse_str(&head.meta_id).map_err(|e| format!("join head: {e}"))?;
+    let meta = head.meta_id.document_id();
     let last = head
         .last
         .as_ref()
@@ -647,18 +646,18 @@ pub(crate) fn direct_message_request(
         .iter()
         .map(|(m, _)| {
             wrap(&m.exchange_pub_key).map(|doc_key_enc| http::DirectMemberJson {
-                user_id: m.user_id.to_string(),
+                user_id: m.user_id,
                 doc_key_enc,
             })
         })
         .collect::<Result<_, _>>()?;
     Ok(http::CreateDirectMessageRequest {
-        channel_id: channel_id.to_string(),
-        meta_id: meta.to_string(),
-        segment_id: segment.to_string(),
+        channel_id,
+        meta_id: meta,
+        segment_id: segment,
         members,
         doc_key_enc: wrap(own_pub.as_bytes())?,
-        key_id: hex::encode(key.id().as_array()),
+        key_id: key.id(),
         entries,
     })
 }
@@ -677,43 +676,29 @@ pub(crate) fn check_pinned(member: &DirectMember, served_hex: &str) -> Result<()
     }
 }
 
-/// Parse the activity answer. One row the client cannot read fails the whole
-/// answer, as a listing does.
-pub(crate) fn activity_of(
-    entries: &[http::ActivityEntry],
-) -> Result<Vec<DocumentActivity>, String> {
+/// The activity answer, as the bus carries it. One row the client cannot
+/// read refused the whole answer when it was read, as a listing does.
+pub(crate) fn activity_of(entries: &[http::ActivityEntry]) -> Vec<DocumentActivity> {
     entries
         .iter()
-        .map(|e| {
-            let channel_id = ChannelId::parse_str(&e.channel_id)
-                .map_err(|_| format!("bad channel id {:?}", e.channel_id))?;
-            let document_id = DocumentId::parse_str(&e.document_id)
-                .map_err(|_| format!("bad document id {:?}", e.document_id))?;
-            Ok(DocumentActivity {
-                channel_id,
-                document_id,
-                active: e.active,
-                read: e.read,
-            })
+        .map(|e| DocumentActivity {
+            channel_id: e.channel_id,
+            document_id: e.document_id,
+            active: e.active,
+            read: e.read,
         })
         .collect()
 }
 
-/// Parse the listing the relay answered. One row the client cannot read
-/// fails the whole listing: a channel opened on part of its documents would
-/// show a history with holes.
-pub(crate) fn channel_documents(
-    entries: &[http::ChannelDocumentEntry],
-) -> Result<Vec<ChannelDocument>, String> {
+/// The listing the relay answered, as the bus carries it. One row the client
+/// cannot read refused the whole listing when it was read. A channel opened
+/// on part of its documents would show a history with holes.
+pub(crate) fn channel_documents(entries: &[http::ChannelDocumentEntry]) -> Vec<ChannelDocument> {
     entries
         .iter()
-        .map(|e| {
-            let document_id = DocumentId::parse_str(&e.document_id)
-                .map_err(|_| format!("bad document id {:?}", e.document_id))?;
-            Ok(ChannelDocument {
-                document_id,
-                kind: e.kind,
-            })
+        .map(|e| ChannelDocument {
+            document_id: e.document_id,
+            kind: e.kind,
         })
         .collect()
 }
@@ -723,20 +708,24 @@ mod tests {
     use super::*;
     use ambre_bus::Role;
 
-    fn entry(document_id: &str, kind: ChannelDocumentKind) -> http::ChannelDocumentEntry {
-        http::ChannelDocumentEntry {
-            document_id: document_id.to_owned(),
-            kind,
-        }
+    /// The listing as the relay writes it: each row's id as its text.
+    fn listing(rows: &[(&str, &str)]) -> Result<Vec<ChannelDocument>, serde_json::Error> {
+        let documents: Vec<_> = rows
+            .iter()
+            .map(|(id, kind)| serde_json::json!({ "document_id": id, "kind": kind }))
+            .collect();
+        let body = serde_json::json!({ "documents": documents });
+        serde_json::from_value::<http::ChannelDocumentsResponse>(body)
+            .map(|resp| channel_documents(&resp.documents))
     }
 
     #[test]
     fn a_listing_parses_into_its_documents_in_order() {
         let meta = DocumentId::new();
         let segment = DocumentId::new();
-        let parsed = channel_documents(&[
-            entry(&meta.to_string(), ChannelDocumentKind::Meta),
-            entry(&segment.to_string(), ChannelDocumentKind::Segment),
+        let parsed = listing(&[
+            (&meta.to_string(), "meta"),
+            (&segment.to_string(), "segment"),
         ])
         .expect("parse");
         assert_eq!(
@@ -758,31 +747,32 @@ mod tests {
     fn one_unreadable_row_fails_the_whole_listing() {
         let meta = DocumentId::new().to_string();
         // Bad document_id causes an error
-        assert!(
-            channel_documents(&[
-                entry(&meta, ChannelDocumentKind::Meta),
-                entry("nope", ChannelDocumentKind::Segment)
-            ])
-            .is_err()
-        );
+        assert!(listing(&[(&meta, "meta"), ("nope", "segment")]).is_err());
         // Single valid entry succeeds
-        assert!(channel_documents(&[entry(&meta, ChannelDocumentKind::Meta)]).is_ok());
+        assert!(listing(&[(&meta, "meta")]).is_ok());
     }
 
-    fn activity(channel_id: &str, document_id: &str, active: bool) -> http::ActivityEntry {
-        http::ActivityEntry {
-            channel_id: channel_id.to_owned(),
-            document_id: document_id.to_owned(),
-            active,
-            read: Seq(7),
-        }
+    /// The activity answer as the relay writes it: one row.
+    fn activity(
+        channel_id: &str,
+        document_id: &str,
+        active: bool,
+    ) -> Result<Vec<DocumentActivity>, serde_json::Error> {
+        let row = serde_json::json!({
+            "channel_id": channel_id,
+            "document_id": document_id,
+            "active": active,
+            "read": 7,
+        });
+        let body = serde_json::json!({ "documents": [row] });
+        serde_json::from_value::<http::ActivityResponse>(body)
+            .map(|resp| activity_of(&resp.documents))
     }
 
     #[test]
     fn an_activity_answer_parses_into_its_documents() {
         let (channel, segment) = (ChannelId::new(), DocumentId::new());
-        let parsed =
-            activity_of(&[activity(&channel.to_string(), &segment.to_string(), true)]).expect("ok");
+        let parsed = activity(&channel.to_string(), &segment.to_string(), true).expect("ok");
         assert_eq!(
             parsed,
             [DocumentActivity {
@@ -793,7 +783,7 @@ mod tests {
             }]
         );
         let bad = activity(&channel.to_string(), "nope", false);
-        assert!(activity_of(&[bad]).is_err(), "one bad row fails the answer");
+        assert!(bad.is_err(), "one bad row fails the answer");
     }
 
     /// An anchor of meta's log, as the creator's `Create` entry would give it.
@@ -1065,7 +1055,7 @@ mod tests {
 
         assert_eq!(body.entries.len(), members.len() + 2);
         let (own_key, root) = unwrap_from(&alice, &alice, &body.doc_key_enc).expect("own wrap");
-        assert_eq!(body.key_id, hex::encode(own_key.id().as_array()));
+        assert_eq!(body.key_id, own_key.id());
         let entries = membership_log::decode(&body.entries);
         let log = membership_log::Log::walk(
             meta.document_id(),

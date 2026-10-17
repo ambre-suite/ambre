@@ -363,7 +363,7 @@ async fn compact_once(state: &state::AppState) {
                     );
                 }
 
-                if let Err(e) = db::delete_snapshot(&state.db, snap.id).await {
+                if let Err(e) = db::delete_snapshot(&state.db, &snap.id).await {
                     tracing::error!(
                         snapshot_id = %snap.id,
                         error = %e,

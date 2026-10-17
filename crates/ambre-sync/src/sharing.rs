@@ -209,7 +209,7 @@ pub(crate) fn build_invite_request(
         doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor).map_err(|e| e.to_string())?,
         // The relay refuses the copy if a rotation replaced this key
         // between the read and the post (`SYNC-143`).
-        key_id: hex::encode(doc_key.id().as_array()),
+        key_id: doc_key.id(),
         entry,
     })
 }
@@ -234,7 +234,7 @@ pub(crate) fn rotate_entries_for(
                 .and_then(|peer| wrap_anchored_b64(my_xk, &peer, new_doc_key, anchor).ok());
             match wrapped {
                 Some(doc_key_enc) => Some(http::RotateKeyEntry {
-                    user_id: m.user_id.clone(),
+                    user_id: m.user_id,
                     doc_key_enc,
                 }),
                 None => {
@@ -248,24 +248,20 @@ pub(crate) fn rotate_entries_for(
 }
 
 /// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
-/// from any members response, given each entry's `(user_id, signing_pub_key)` as
-/// raw strings (`ambre-spec-membership.md`). Both the open path and the
-/// member-list path feed it, hence the string-pair input rather than one of the
-/// two entry structs.
+/// from any members response, given each entry's `(user_id, signing_pub_key)`
+/// (`ambre-spec-membership.md`). Both the open path and the member-list path
+/// feed it, hence the pair input rather than one of the two entry structs. The
+/// identifier was parsed when the response was read, so only the key can fail.
 ///
-/// An entry whose id or key does not parse is skipped rather than failing the
-/// whole response. A member we cannot key on costs that one peer's cursor, while
-/// refusing everything would cost the document its presence entirely. Unlike
-/// [`map_members`], nothing is invented for a bad row. A fabricated id here
-/// would attribute a cursor to the wrong person, which is what keying presence
-/// on the canonical `UserId` prevents.
+/// An entry whose key does not parse is skipped rather than failing the whole
+/// response. A member we cannot key on costs that one peer's cursor, while
+/// refusing everything would cost the document its presence entirely.
 pub(crate) fn presence_directory<'a>(
-    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+    entries: impl IntoIterator<Item = (UserId, &'a str)>,
 ) -> Vec<([u8; 32], UserId)> {
     entries
         .into_iter()
         .filter_map(|(user_id, signing_pub_key)| {
-            let user_id = UserId::parse_str(user_id).ok()?;
             let key: [u8; 32] = hex::decode(signing_pub_key).ok()?.try_into().ok()?;
             Some((key, user_id))
         })
@@ -275,13 +271,13 @@ pub(crate) fn presence_directory<'a>(
 /// Picks this client's own role out of a members response, given `(user_id,
 /// role)` pairs and our canonical `UserId` (architecture).
 ///
-/// Every failure path -- no session id, no row for us, an unparsable id, an
-/// unknown role string -- yields `Role::Viewer`. That is the safe direction for
-/// a UX gate. It hides affordances we may in fact have, whereas guessing
-/// `Owner` would offer edits the server then rejects. A document we genuinely
-/// own always has a well-formed row saying so.
+/// Every failure path -- no session id, no row for us, an unknown role string --
+/// yields `Role::Viewer`. That is the safe direction for a UX gate. It hides
+/// affordances we may in fact have, whereas guessing `Owner` would offer edits
+/// the server then rejects. A document we genuinely own always has a
+/// well-formed row saying so.
 pub(crate) fn own_role<'a>(
-    entries: impl IntoIterator<Item = (&'a str, &'a str)>,
+    entries: impl IntoIterator<Item = (UserId, &'a str)>,
     my_user_id: Option<UserId>,
 ) -> Role {
     let Some(me) = my_user_id else {
@@ -289,35 +285,31 @@ pub(crate) fn own_role<'a>(
     };
     entries
         .into_iter()
-        .find(|(user_id, _)| UserId::parse_str(user_id).is_ok_and(|id| id == me))
+        .find(|(user_id, _)| *user_id == me)
         .and_then(|(_, role)| role.parse().ok())
         .filter(|role: &Role| role.is_valid_for_document())
         .unwrap_or(Role::Viewer)
 }
 
 /// Maps server member entries into bus `MemberInfo` (plaintext name/email,
-/// parsed role). Unknown roles fall back to viewer. A row whose id does not
-/// parse is left out and logged. An invented id names a person nothing can act
-/// on, and a revoke aimed at it addresses nobody (`SYNC-038`).
+/// parsed role). Unknown roles fall back to viewer. Each identifier was parsed
+/// when the response was read, so a malformed one refused the whole answer
+/// there. An invented id would name a person nothing can act on (`SYNC-038`).
 ///
 /// Each row carries what `log` says of it. A verified row shows the role of
 /// its latest valid entry, whatever the relay's row says (`SYNC-110`).
 pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>, log: &Log) -> Vec<MemberInfo> {
     entries
         .into_iter()
-        .filter_map(|m| {
-            let Ok(user_id) = UserId::parse_str(&m.user_id) else {
-                tracing::warn!("Sync: member row with a malformed id left out of the list");
-                return None;
-            };
-            let (standing, logged) = log.standing(user_id);
-            Some(MemberInfo {
-                user_id,
+        .map(|m| {
+            let (standing, logged) = log.standing(m.user_id);
+            MemberInfo {
+                user_id: m.user_id,
                 display_name: m.display_name,
                 email: m.email,
                 role: logged.unwrap_or_else(|| m.role.parse().unwrap_or(Role::Viewer)),
                 standing,
-            })
+            }
         })
         .collect()
 }
@@ -452,14 +444,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
     }
     // The invitation's entry names the invitee by identity and signing key.
-    let Ok(invitee_id) = UserId::parse_str(&invitee.id) else {
-        return api_error(
-            logic_tx,
-            "InviteToDocument",
-            502,
-            "the server named the invitee with a malformed identifier".into(),
-        );
-    };
+    let invitee_id = invitee.id;
     let invitee_key = match decode_signing_pubkey(&invitee.signing_pubkey) {
         Ok(key) => key,
         Err(e) => return api_error(logic_tx, "InviteToDocument", 500, e),
@@ -524,19 +509,10 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     };
     match posted {
         Ok(resp) => {
-            let Ok(user_id) = UserId::parse_str(&resp.user_id) else {
-                return api_error(
-                    logic_tx,
-                    "InviteToDocument",
-                    502,
-                    "the share landed, but the server named the member with a malformed identifier"
-                        .into(),
-                );
-            };
             let _ = event_tx.send(SyncEvent::InviteSent {
                 id: p.id,
                 document_id: p.document_id,
-                user_id,
+                user_id: resp.user_id,
                 display_name: resp.display_name,
             });
         }
@@ -600,18 +576,10 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     // The pin is filed under this id. An invented one would make the invitee
     // new on every invitation, and a substituted key would read as a first
     // contact (`CHROME-074`).
-    let Ok(user_id) = UserId::parse_str(&invitee.id) else {
-        return api_error(
-            logic_tx,
-            "FetchInviteeKey",
-            502,
-            "the server named the user with a malformed identifier".into(),
-        );
-    };
     let _ = event_tx.send(SyncEvent::InviteeKeyReady {
         id: p.id,
         document_id: p.document_id,
-        user_id,
+        user_id: invitee.id,
         display_name: invitee.display_name.clone(),
         email: invitee.email.clone(),
         exchange_pub_key,
@@ -689,7 +657,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         let (removed, staying): (Vec<_>, Vec<_>) = resp
             .members
             .into_iter()
-            .partition(|m| UserId::parse_str(&m.user_id).ok() == Some(p.user_id));
+            .partition(|m| m.user_id == p.user_id);
         let entry = match removed.first().map(|m| {
             let draft = Draft {
                 document: p.document_id,
@@ -708,7 +676,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         };
         let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &staying);
         let body = http::RevokeRequest {
-            user_id: p.user_id.to_string(),
+            user_id: p.user_id,
             keys,
             members: staying.into_iter().map(|m| m.user_id).collect(),
             link: link.1.clone(),
@@ -824,7 +792,7 @@ async fn leave_document<H: ShareHttp>(
         let role = resp
             .members
             .iter()
-            .find(|m| UserId::parse_str(&m.user_id).ok() == Some(me))
+            .find(|m| m.user_id == me)
             .and_then(|m| m.role.parse().ok())
             .unwrap_or(Role::Viewer);
         let draft = Draft {
@@ -870,7 +838,7 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
     let listed = http
         .get_json::<http::ChannelDocumentsResponse>(&url)
         .await?;
-    let meta = crate::channels::channel_documents(&listed.documents)?
+    let meta = crate::channels::channel_documents(&listed.documents)
         .into_iter()
         .find(|d| d.kind == ChannelDocumentKind::Meta)
         .ok_or("the channel has no meta document")?
@@ -939,11 +907,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
             }
         };
         let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
-        let Some(target) = resp
-            .members
-            .iter()
-            .find(|m| UserId::parse_str(&m.user_id).ok() == Some(p.user_id))
-        else {
+        let Some(target) = resp.members.iter().find(|m| m.user_id == p.user_id) else {
             return api_error(
                 logic_tx,
                 "UpdateDocumentMemberRole",
@@ -1110,7 +1074,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let signing_keys = presence_directory(
                 resp.members
                     .iter()
-                    .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+                    .map(|m| (m.user_id, m.signing_pub_key.as_str())),
             );
             // Each row carries what the log says of it (`SYNC-108`).
             let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, p.self_join);
@@ -1149,7 +1113,7 @@ mod tests {
 
     fn member(uid: &str, pub_hex: &str) -> http::DocumentMemberEntry {
         http::DocumentMemberEntry {
-            user_id: uid.to_string(),
+            user_id: UserId::parse_str(uid).expect("a test id"),
             display_name: "Member".into(),
             email: "m@test.local".into(),
             signing_pub_key: String::new(),
@@ -1249,24 +1213,43 @@ mod tests {
         // are wrapped (`SYNC-043`).
         assert_eq!(unwrapped.len(), 1);
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].user_id, "11111111-1111-1111-1111-111111111111");
-        assert_eq!(entries[1].user_id, "33333333-3333-3333-3333-333333333333");
+        let id = |s| UserId::parse_str(s).unwrap();
+        assert_eq!(
+            entries[0].user_id,
+            id("11111111-1111-1111-1111-111111111111")
+        );
+        assert_eq!(
+            entries[1].user_id,
+            id("33333333-3333-3333-3333-333333333333")
+        );
         // Member A can unwrap its own rotated entry.
         assert!(unwrap_b64(&a_xk, &my_pub, &entries[0].doc_key_enc).is_ok());
     }
 
     #[test]
-    fn map_members_parses_roles_and_drops_invented_ids() {
-        let entries = vec![member("44444444-4444-4444-4444-444444444444", "ab"), {
-            let mut m = member("not-a-uuid", "ab");
-            m.role = "bogus".into();
-            m
-        }];
+    fn map_members_parses_roles_and_refuses_malformed_ids() {
+        let row = |user_id: &str| {
+            serde_json::json!({
+                "user_id": user_id,
+                "display_name": "Member",
+                "email": "m@test.local",
+                "signing_pub_key": "",
+                "exchange_pub_key": "ab",
+                "doc_key_enc": "",
+                "role": "editor",
+            })
+        };
+        // An unparsable id refuses the row when it is read, so nothing is
+        // left to replace by an invented one (`SYNC-038`).
+        let read = |user_id| serde_json::from_value::<http::DocumentMemberEntry>(row(user_id));
+        assert!(read("not-a-uuid").is_err());
+        let sound = read("44444444-4444-4444-4444-444444444444").expect("a sound row");
         let none = Log::walk(DocumentId::new(), None, &[], membership_log::no_self_join);
-        let mapped = map_members(entries, &none);
-        // An unparsable id is left out, never replaced by an invented one
-        // (`SYNC-038`).
-        assert_eq!(mapped.len(), 1);
+        let mapped = map_members(vec![sound], &none);
+        assert_eq!(
+            mapped[0].user_id,
+            UserId::parse_str("44444444-4444-4444-4444-444444444444").unwrap()
+        );
         assert_eq!(mapped[0].role, Role::Editor);
         let bogus_role = map_members(
             vec![{
@@ -1775,7 +1758,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(req.key_id, hex::encode(doc_key.id().as_array()));
+        assert_eq!(req.key_id, doc_key.id());
     }
 
     /// `SYNC-143`: an invitation the relay refused for a key that changed is
@@ -2009,8 +1992,9 @@ mod tests {
         ));
     }
 
-    /// A malformed identifier from the server stops the key verification: no
-    /// key is pinned under an invented id (`CHROME-074`).
+    /// A malformed identifier from the server stops the key verification. The
+    /// search answer is refused when read, so no key is pinned under an
+    /// invented id (`CHROME-074`).
     #[tokio::test]
     async fn fetch_invitee_key_refuses_a_malformed_id() {
         let (_invitee_xk, invitee_pub_hex) = keypair(2);
@@ -2022,7 +2006,7 @@ mod tests {
         assert!(erx.try_recv().is_err(), "no key to pin");
         assert!(matches!(
             lrx.try_recv().expect("ApiError"),
-            LogicEvent::ApiError { code: 502, .. }
+            LogicEvent::ApiError { code: 500, .. }
         ));
     }
 
@@ -2127,44 +2111,37 @@ mod tests {
 
     #[test]
     fn presence_directory_maps_valid_entries() {
-        let uid = "11111111-1111-1111-1111-111111111111";
+        let uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let key_hex = "aa".repeat(32);
         let dir = presence_directory([(uid, key_hex.as_str())]);
 
-        assert_eq!(dir, vec![([0xaa; 32], UserId::parse_str(uid).unwrap())]);
+        assert_eq!(dir, vec![([0xaa; 32], uid)]);
     }
 
     #[test]
     fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
-        // Unlike `map_members` (display-only, degrades with a fresh id), a bad row
-        // here must vanish. A fabricated id would attribute a cursor to the wrong
-        // person, which is what keying presence on the canonical UserId prevents.
-        let good_uid = "11111111-1111-1111-1111-111111111111";
+        // A bad row must vanish. A fabricated id would attribute a cursor to
+        // the wrong person, which is what keying presence on the UserId
+        // prevents. A malformed id never gets here: the answer was refused.
+        let good_uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let good_key = "bb".repeat(32);
         let short_key = "bb".repeat(31); // 31 bytes: not a valid Ed25519 key
         let dir = presence_directory([
-            ("not-a-uuid", good_key.as_str()),
             (good_uid, "zz-not-hex"),
             (good_uid, short_key.as_str()),
             (good_uid, good_key.as_str()),
         ]);
 
-        assert_eq!(
-            dir,
-            vec![([0xbb; 32], UserId::parse_str(good_uid).unwrap())]
-        );
+        assert_eq!(dir, vec![([0xbb; 32], good_uid)]);
     }
 
     // -- Own role (architecture) -----------------------------------------
 
     #[test]
     fn own_role_reads_our_own_row() {
-        let me = "11111111-1111-1111-1111-111111111111";
-        let other = "22222222-2222-2222-2222-222222222222";
-        let role = own_role(
-            [(other, "owner"), (me, "viewer")],
-            Some(UserId::parse_str(me).unwrap()),
-        );
+        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+        let role = own_role([(other, "owner"), (me, "viewer")], Some(me));
 
         // Our own row wins: a peer being owner says nothing about our access.
         assert_eq!(role, Role::Viewer);
@@ -2173,31 +2150,23 @@ mod tests {
     #[test]
     fn own_role_falls_back_to_viewer_when_unresolvable() {
         let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let me_str = me.to_string();
-        let other = "22222222-2222-2222-2222-222222222222";
+        let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
 
         // No session id yet.
         assert_eq!(own_role([(other, "owner")], None), Role::Viewer);
         // No row for us in the response.
         assert_eq!(own_role([(other, "owner")], Some(me)), Role::Viewer);
         // Our row carries a role string this client does not know.
-        assert_eq!(
-            own_role([(me_str.as_str(), "wizard")], Some(me)),
-            Role::Viewer
-        );
+        assert_eq!(own_role([(me, "wizard")], Some(me)), Role::Viewer);
         // A valid role that is not a document role (channel / org side).
-        assert_eq!(
-            own_role([(me_str.as_str(), "admin")], Some(me)),
-            Role::Viewer
-        );
+        assert_eq!(own_role([(me, "admin")], Some(me)), Role::Viewer);
     }
 
     #[test]
     fn own_role_reads_writable_roles() {
         let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let me_str = me.to_string();
         for (wire, expected) in [("owner", Role::Owner), ("editor", Role::Editor)] {
-            assert_eq!(own_role([(me_str.as_str(), wire)], Some(me)), expected);
+            assert_eq!(own_role([(me, wire)], Some(me)), expected);
             assert!(expected.can_write_document());
         }
     }

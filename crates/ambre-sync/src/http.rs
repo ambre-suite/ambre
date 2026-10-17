@@ -493,14 +493,12 @@ pub(crate) async fn download_snapshot(
     url_scheme: &str,
     api_base: &str,
     document_id: ambre_core::DocumentId,
-    snapshot_id: &str,
+    snapshot_id: ambre_core::SnapshotId,
     auth: AuthContext,
 ) -> Option<Vec<u8>> {
     let url =
         format!("{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url");
-    let body = SnapshotDownloadUrlRequest {
-        snapshot_id: snapshot_id.to_owned(),
-    };
+    let body = SnapshotDownloadUrlRequest { snapshot_id };
     let resp = post_json_auth::<_, SnapshotDownloadUrlResponse>(&url, &body, auth)
         .await
         .ok()?;
@@ -599,7 +597,8 @@ pub(crate) struct SetupAccountRequest {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct SetupAccountResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     pub access_expires_in: u64,
@@ -614,7 +613,8 @@ pub(crate) struct DevLoginRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct DevLoginResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
@@ -638,7 +638,8 @@ pub(crate) struct ProviderCallbackRequest {
 /// The relay's answer to a provider return: who signed in, and their tokens.
 #[derive(Deserialize)]
 pub(crate) struct ProviderCallbackResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     pub access_token: SecretToken,
@@ -680,7 +681,8 @@ pub(crate) struct StoreMasterKeysResponse {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct AuthMeResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub email: String,
 }
@@ -693,7 +695,8 @@ pub(crate) struct ChannelDocumentsResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct ChannelDocumentEntry {
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     /// `meta`, `segment`, `amendments` or `thread`.
     #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
     pub kind: ambre_core::ChannelDocumentKind,
@@ -708,8 +711,10 @@ pub(crate) struct ActivityResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct ActivityEntry {
-    pub channel_id: String,
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     pub active: bool,
     /// The caller's own cursor. A relay that predates it answers none, which
     /// reads as nothing read.
@@ -727,8 +732,11 @@ pub(crate) struct ReadCursorRequest {
 /// number, or every one when absent.
 #[derive(Serialize)]
 pub(crate) struct MarkReadRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub documents: Option<Vec<String>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::document_id::option_vec"
+    )]
+    pub documents: Option<Vec<ambre_core::DocumentId>>,
 }
 
 #[derive(Deserialize)]
@@ -738,7 +746,8 @@ pub(crate) struct DocumentListResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentEntry {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub id: ambre_core::DocumentId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
     #[serde(default)]
@@ -765,8 +774,11 @@ pub(crate) struct CreateDocumentRequest {
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<String>,
     pub doc_key_enc: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub document_id: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "ambre_core::serde_id::document_id::option"
+    )]
+    pub document_id: Option<ambre_core::DocumentId>,
     /// The first entry of the membership log, as `membership_log::encode`
     /// writes it (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -778,17 +790,22 @@ pub(crate) struct CreateDocumentRequest {
 pub(crate) struct CreateChannelRequest {
     /// A public channel, which its catalogue lists, or a private one.
     pub public: bool,
-    pub channel_id: String,
-    pub space_id: String,
-    pub meta_id: String,
-    pub segment_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id")]
+    pub space_id: ambre_core::SpaceId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
 }
 
 /// One member of a direct message, other than the caller, and the channel
 /// key wrapped for them.
 #[derive(Serialize)]
 pub(crate) struct DirectMemberJson {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub doc_key_enc: String,
 }
 
@@ -796,14 +813,18 @@ pub(crate) struct DirectMemberJson {
 /// `members`, which the relay creates or finds.
 #[derive(Serialize)]
 pub(crate) struct CreateDirectMessageRequest {
-    pub channel_id: String,
-    pub meta_id: String,
-    pub segment_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub segment_id: ambre_core::SegmentId,
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
     pub doc_key_enc: String,
-    /// The hex identifier of the channel key.
-    pub key_id: String,
+    /// The identifier of the channel key, in hex.
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
     /// The log of `meta`: its `Create`, one editor `Invite` per member in
     /// the order of `members`, then the caller's own `ChangeRole` to editor.
     pub entries: Vec<String>,
@@ -813,7 +834,8 @@ pub(crate) struct CreateDirectMessageRequest {
 /// already held its members.
 #[derive(Deserialize)]
 pub(crate) struct DirectMessageResponse {
-    pub channel_id: String,
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
     #[allow(dead_code)]
     pub created: bool,
 }
@@ -832,7 +854,8 @@ pub(crate) struct JoinChannelRequest {
 #[derive(Deserialize)]
 pub(crate) struct JoinHeadResponse {
     /// The document whose log the self-join extends: the channel's meta.
-    pub meta_id: String,
+    #[serde(with = "ambre_core::serde_id::meta_id")]
+    pub meta_id: ambre_core::MetaId,
     /// The role the relay grants the self-join, which the entry must name.
     pub role: ambre_bus::Role,
     /// The number of entries, the position the self-join takes.
@@ -845,7 +868,8 @@ pub(crate) struct JoinHeadResponse {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct CreateDocumentResponse {
-    pub document_id: String,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub document_id: ambre_core::DocumentId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
 }
@@ -870,7 +894,8 @@ pub(crate) struct MembersResponse {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct MemberEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub signing_pub_key: String,
     pub exchange_pub_key: String,
     pub doc_key_enc: String,
@@ -887,7 +912,8 @@ pub(crate) struct MemberEntry {
 /// its S3 key (mirrors the server's `SnapshotResponse`).
 #[derive(Deserialize)]
 pub(crate) struct SnapshotMetadataResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     #[allow(dead_code)]
     pub s3_key: String,
     /// Highest delta `seq` folded into the snapshot: the open path gates its
@@ -909,7 +935,8 @@ pub(crate) struct SnapshotMetadataResponse {
 /// The reference snapshot named beside a `self` one (`SRV-131`).
 #[derive(Deserialize)]
 pub(crate) struct ReferenceSnapshot {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub covered_seq: i64,
 }
 
@@ -932,7 +959,8 @@ pub(crate) struct SnapshotUploadUrlResponse {
 /// Mirrors the server's `CreateSnapshotRequest`.
 #[derive(Serialize)]
 pub(crate) struct CreateSnapshotRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub author_pubkey: String,
     pub parent_hash: Option<String>,
     pub parent_snapshot_proof: Option<String>,
@@ -944,13 +972,15 @@ pub(crate) struct CreateSnapshotRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct CreateSnapshotResponse {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 /// Body of `POST /api/documents/{id}/snapshot/download-url`.
 #[derive(Serialize)]
 pub(crate) struct SnapshotDownloadUrlRequest {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
 }
 
 #[derive(Deserialize)]
@@ -965,7 +995,8 @@ pub(crate) struct UserSearchResult {
 
 #[derive(Deserialize)]
 pub(crate) struct UserInfoEntry {
-    pub id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub id: ambre_core::UserId,
     pub email: String,
     pub display_name: String,
     /// The key an invitation's entry names for the invitee (`SYNC-132`).
@@ -987,7 +1018,8 @@ pub(crate) struct InviteRequest {
     pub role: ambre_core::Role,
     pub doc_key_enc: String,
     /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
-    pub key_id: String,
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
     /// The entry the inviter signs for this invitation (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
@@ -1012,7 +1044,8 @@ pub(crate) struct RoleChangeRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct InviteResponse {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
 }
 
@@ -1020,7 +1053,8 @@ pub(crate) struct InviteResponse {
 pub(crate) struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the rotation read, wrapped for or not (`SYNC-143`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link to the key this rotation replaces, as [`encode_link`] writes
     /// it (`SYNC-118`).
     pub link: String,
@@ -1030,10 +1064,12 @@ pub(crate) struct RotateKeyRequest {
 /// stays, applied by the relay in one transaction (`SYNC-126`).
 #[derive(Serialize)]
 pub(crate) struct RevokeRequest {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the revoke read and keeps, wrapped for or not (`SYNC-143`).
-    pub members: Vec<String>,
+    #[serde(with = "ambre_core::serde_id::user_id::vec")]
+    pub members: Vec<ambre_core::UserId>,
     /// The link to the key this revoke replaces (`SYNC-118`).
     pub link: String,
     /// The entry the owner signs for this revoke (`SYNC-132`).
@@ -1089,7 +1125,8 @@ pub(crate) async fn fetch_key_links(
 
 #[derive(Serialize)]
 pub(crate) struct RotateKeyEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub doc_key_enc: String,
 }
 
@@ -1112,7 +1149,8 @@ pub(crate) struct DocumentMembersResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentMemberEntry {
-    pub user_id: String,
+    #[serde(with = "ambre_core::serde_id::user_id")]
+    pub user_id: ambre_core::UserId,
     pub display_name: String,
     pub email: String,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).

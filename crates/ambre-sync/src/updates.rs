@@ -192,9 +192,7 @@ impl SyncState {
             let dl_url = format!(
                 "{url_scheme}://{api_base}/api/documents/{document_id}/snapshot/download-url"
             );
-            let body = http::SnapshotDownloadUrlRequest {
-                snapshot_id: snapshot_id.to_string(),
-            };
+            let body = http::SnapshotDownloadUrlRequest { snapshot_id };
             let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
                 &dl_url, &body, auth,
             )
@@ -587,8 +585,8 @@ impl SyncState {
                         Ok(Some(meta)) => {
                             let others = meta.status == "self" && meta.author_pubkey != own_key;
                             let (start_id, start_covered) = match (others, &meta.reference) {
-                                (false, _) => (Some(meta.snapshot_id.clone()), meta.covered_seq),
-                                (true, Some(r)) => (Some(r.snapshot_id.clone()), r.covered_seq),
+                                (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
+                                (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
                                 (true, None) => (None, 0),
                             };
                             if others {
@@ -596,20 +594,15 @@ impl SyncState {
                                     url_scheme,
                                     &api_base,
                                     doc_id,
-                                    &meta.snapshot_id,
+                                    meta.snapshot_id,
                                     auth.clone(),
                                 )
                                 .await;
-                                held_snapshot = SnapshotId::parse_str(&meta.snapshot_id)
-                                    .ok()
-                                    .zip(blob)
-                                    .map(|(snapshot_id, blob)| HeldSnapshot {
-                                        snapshot_id,
-                                        covered_seq: Seq(
-                                            u64::try_from(meta.covered_seq).unwrap_or(0)
-                                        ),
-                                        blob,
-                                    });
+                                held_snapshot = blob.map(|blob| HeldSnapshot {
+                                    snapshot_id: meta.snapshot_id,
+                                    covered_seq: Seq(u64::try_from(meta.covered_seq).unwrap_or(0)),
+                                    blob,
+                                });
                             }
                             // The local copy already folds in the relay's
                             // snapshot: no download, and the replay starts
@@ -617,14 +610,14 @@ impl SyncState {
                             let resumed = resume.filter(|horizon| {
                                 light::resumes(*horizon, u64::try_from(start_covered).unwrap_or(0))
                             });
-                            let payload = match (&start_id, resumed) {
+                            let payload = match (start_id, resumed) {
                                 (Some(id), None) => {
                                     http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
                                         .await
                                 }
                                 _ => None,
                             };
-                            let snap_id = start_id.and_then(|id| SnapshotId::parse_str(&id).ok());
+                            let snap_id = start_id;
                             // Only gate on the covered seq if the blob actually
                             // downloaded; otherwise a failed fetch would skip
                             // history that was never applied (data loss).
@@ -740,15 +733,13 @@ impl SyncState {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)?;
         let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
         let role = crate::sharing::own_role(
-            resp.members
-                .iter()
-                .map(|m| (m.user_id.as_str(), m.role.as_str())),
+            resp.members.iter().map(|m| (m.user_id, m.role.as_str())),
             my_user_id,
         );
         let signing_keys = crate::sharing::presence_directory(
             resp.members
                 .iter()
-                .map(|m| (m.user_id.as_str(), m.signing_pub_key.as_str())),
+                .map(|m| (m.user_id, m.signing_pub_key.as_str())),
         );
         Ok(OpenedMembers {
             doc_key,
@@ -1185,7 +1176,7 @@ impl SyncState {
                 doc_type,
                 name_enc: None,
                 doc_key_enc,
-                document_id: Some(document_id.to_string()),
+                document_id: Some(document_id),
                 entry: Some(entry),
             };
             match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
@@ -1385,7 +1376,7 @@ pub(crate) async fn upload_snapshot(
     // The presigned link is its own credential: no session token goes there.
     http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
-        snapshot_id: SnapshotId::new().to_string(),
+        snapshot_id: SnapshotId::new(),
         author_pubkey,
         parent_hash: None,
         parent_snapshot_proof: None,
@@ -1400,8 +1391,7 @@ pub(crate) async fn upload_snapshot(
         auth,
     )
     .await?;
-    let snapshot_id =
-        SnapshotId::parse_str(&created.snapshot_id).map_err(|e| format!("bad snapshot_id: {e}"))?;
+    let snapshot_id = created.snapshot_id;
     // The author's own confirmation makes it `self` (`AUTHOR-021`).
     if let Err(e) = send_vouch(
         transport,
@@ -1490,7 +1480,7 @@ mod tests {
         let holder_pub = x25519_dalek::PublicKey::from(holder).to_bytes();
         let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
         http::MemberEntry {
-            user_id: uid.to_string(),
+            user_id: uid,
             signing_pub_key: hex::encode([uid.as_bytes()[0]; 32]),
             exchange_pub_key: hex::encode(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)

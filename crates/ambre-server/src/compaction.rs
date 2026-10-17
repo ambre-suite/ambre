@@ -229,10 +229,10 @@ mod db_tests {
             .unwrap();
         let newer = snapshot(&state, &doc, &CAROL, 3).await;
         let dropped = db::find_compactable_snapshots(&state.db, 1).await.unwrap();
-        let ids: Vec<uuid::Uuid> = dropped.into_iter().map(|s| s.id).collect();
-        assert!(!ids.contains(&db::id_to_uuid(reference)));
-        assert!(!ids.contains(&db::id_to_uuid(own)));
-        assert!(!ids.contains(&db::id_to_uuid(newer)));
+        let ids: Vec<ambre_core::SnapshotId> = dropped.into_iter().map(|s| s.id).collect();
+        assert!(!ids.contains(&reference));
+        assert!(!ids.contains(&own));
+        assert!(!ids.contains(&newer));
     }
 
     /// `SRV-038`: the writer is asked once the history past the served

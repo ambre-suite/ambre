@@ -100,9 +100,10 @@ pub struct CreateDirectMessageRequest {
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
     pub doc_key_enc: String,
-    /// The hex identifier of the channel key, which the creation and every
+    /// The identifier of the channel key, in hex, which the creation and every
     /// invite of the log name.
-    pub key_id: String,
+    #[serde(with = "ambre_core::serde_id::key_id")]
+    pub key_id: ambre_core::KeyId,
     /// The log of `meta`, signed by the caller. In order, it holds its
     /// `Create`, one editor `Invite` per member in the order of `members`,
     /// then the caller's own `ChangeRole` to editor.
@@ -202,11 +203,10 @@ pub async fn create_channel(
     if new.is_public && !space_role.can_write_document() {
         return Err(AppError::Forbidden);
     }
-    let caller = uuid::Uuid::from_bytes(*ambre_core::Uuid::from(auth.user_id).as_bytes());
     for document_id in [meta, segment] {
         let document = free_murmure_document(&state, &document_id, Some(new.channel_id)).await?;
         let role = db::member_role(&state.db, &document_id, &auth.user_id).await?;
-        if document.owner_id != caller || role != Some(Role::Owner) {
+        if document.owner_id != auth.user_id || role != Some(Role::Owner) {
             return Err(AppError::Forbidden);
         }
     }
@@ -259,7 +259,7 @@ pub async fn create_direct_message(
     for member in &req.members {
         keys.push((member.user_id, decode(&member.doc_key_enc)?));
     }
-    let key_id = super::share::parse_key_id(&req.key_id)?;
+    let key_id = req.key_id;
     let meta = req.meta_id.document_id();
     let others: Vec<_> = req.members.iter().map(|m| m.user_id).collect();
     let mut entries = Vec::with_capacity(req.entries.len());
@@ -540,7 +540,7 @@ mod tests {
         )
         .await
         .expect("user");
-        UserId::from_uuid(ambre_core::Uuid::from_bytes(*row.id.as_bytes()))
+        row.id
     }
 
     async fn document(state: &AppState, owner: UserId) -> DocumentId {
@@ -659,19 +659,15 @@ mod tests {
             .expect("query")
     }
 
-    async fn member_ids(state: &AppState, document: DocumentId) -> Vec<uuid::Uuid> {
-        let mut ids: Vec<uuid::Uuid> = db::list_document_members(&state.db, &document)
+    async fn member_ids(state: &AppState, document: DocumentId) -> Vec<UserId> {
+        let mut ids: Vec<UserId> = db::list_document_members(&state.db, &document)
             .await
             .expect("query")
             .into_iter()
             .map(|m| m.user_id)
             .collect();
-        ids.sort();
+        ids.sort_by_key(|id| *id.as_bytes());
         ids
-    }
-
-    fn uuid_of(id: UserId) -> uuid::Uuid {
-        uuid::Uuid::from_bytes(*ambre_core::Uuid::from(id).as_bytes())
     }
 
     // --- The Murmure spaces spec: a space is a document, its creator the owner ---
@@ -691,7 +687,7 @@ mod tests {
                 doc_type: ambre_core::DocType::Murmure,
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
-                document_id: Some(space.to_string()),
+                document_id: Some(space),
                 entry: Some(signed_entry(
                     space,
                     0,
@@ -704,7 +700,7 @@ mod tests {
         .await;
         assert_eq!(status(answer), StatusCode::OK);
         assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
-        assert_eq!(member_ids(&state, space).await, [uuid_of(alice)]);
+        assert_eq!(member_ids(&state, space).await, [alice]);
     }
 
     // --- Registering a public channel ---
@@ -733,10 +729,7 @@ mod tests {
             .expect("query");
         assert_eq!(listed.len(), 2);
         assert_eq!(member_ids(&state, space.document_id()).await, space_members);
-        assert_eq!(
-            member_ids(&state, channel.meta.document_id()).await,
-            [uuid_of(bob)]
-        );
+        assert_eq!(member_ids(&state, channel.meta.document_id()).await, [bob]);
         assert_eq!(
             register(&state, bob, space, &channel).await,
             StatusCode::NO_CONTENT,
@@ -833,7 +826,7 @@ mod tests {
             .expect("query")
             .expect("the join reaches the segment");
         assert_eq!(row.doc_key_enc, [9; 48]);
-        assert_eq!(row.invited_by, Some(uuid_of(bob)));
+        assert_eq!(row.invited_by, Some(bob));
     }
 
     /// `SRV-177`: a self-join tells the connections subscribed to `meta` that
@@ -1252,10 +1245,7 @@ mod tests {
         assert_eq!(held.space_id, Some(space));
         assert!(!held.is_public);
         assert_eq!(held.meta_id, Some(channel.meta));
-        assert_eq!(
-            member_ids(&state, channel.meta.document_id()).await,
-            [uuid_of(vera)]
-        );
+        assert_eq!(member_ids(&state, channel.meta.document_id()).await, [vera]);
         assert_eq!(
             role_on(&state, channel.meta.document_id(), vera).await,
             Some(Role::Owner)
@@ -1520,7 +1510,7 @@ mod tests {
             db::Removed::Owed
         );
         assert!(exists(&state, meta).await);
-        assert_eq!(member_ids(&state, meta).await, [uuid_of(bob)]);
+        assert_eq!(member_ids(&state, meta).await, [bob]);
     }
 
     // --- Direct messages (`SRV-175`, `SRV-176`) ---
@@ -1560,7 +1550,7 @@ mod tests {
                 })
                 .collect(),
             doc_key_enc: key(1),
-            key_id: hex::encode(DIRECT_KEY.as_array()),
+            key_id: DIRECT_KEY,
             entries,
         }
     }

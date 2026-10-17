@@ -67,10 +67,10 @@ pub use fixtures::{
     seeded_document_id,
 };
 pub use id::{
-    CategoryId, ChannelId, DocumentId, MeetingId, MessageId, MetaId, SegmentId, SnapshotId,
+    CategoryId, ChannelId, DocumentId, MeetingId, MessageId, MetaId, OrgId, SegmentId, SnapshotId,
     SpaceId, UserId,
 };
-pub use key_id::{KEY_ID_LEN, KeyId};
+pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use public_key::PublicKey;
 pub use role::Role;
 pub use schema::{

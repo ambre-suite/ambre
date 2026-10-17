@@ -108,7 +108,7 @@ pub async fn setup_account(
         &epk,
     )
     .await?;
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     let signing_pubkey =
         ambre_core::PublicKey::from_slice(&spk).map_err(|e| AppError::Conflict {
             detail: e.to_string(),
@@ -144,7 +144,7 @@ pub async fn me(
     let u = db::get_user(&state.db, &s.user_id)
         .await?
         .ok_or(AppError::NotFound { resource: "user" })?;
-    let uid = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
+    let uid = u.id;
     Ok(axum::Json(MeResponse {
         user_id: uid,
         email: u.email,
@@ -226,10 +226,8 @@ pub async fn list_documents(
     let json: Vec<_> = docs
         .into_iter()
         .map(|d| {
-            let doc_id =
-                ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*d.id.as_bytes()));
-            let owner_id =
-                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*d.owner_id.as_bytes()));
+            let doc_id = d.id;
+            let owner_id = d.owner_id;
             let doc_type = match d.doc_type.to_lowercase().as_str() {
                 "prose" => ambre_core::DocType::Prose,
                 "trame" => ambre_core::DocType::Trame,
@@ -271,8 +269,8 @@ pub struct CreateDocumentRequest {
     pub doc_key_enc: String,
     /// Optional client-generated document id (lazy creation). When present the
     /// server materializes the row under this id idempotently.
-    #[serde(default)]
-    pub document_id: Option<String>,
+    #[serde(default, with = "ambre_core::serde_id::document_id::option")]
+    pub document_id: Option<ambre_core::DocumentId>,
     /// The first entry of the membership log, signed by the creator
     /// (`SYNC-132`).
     #[serde(default)]
@@ -304,7 +302,7 @@ pub async fn create_document(
                 })
         })
         .transpose()?;
-    let client_id = req.document_id.as_deref().map(parse_doc_id).transpose()?;
+    let client_id = req.document_id;
     let doc_type_str = req.doc_type.name().to_lowercase();
     let (doc, created) = db::create_document(
         &state.db,
@@ -314,13 +312,11 @@ pub async fn create_document(
         client_id.as_ref(),
     )
     .await?;
-    let doc_id =
-        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
+    let doc_id = doc.id;
     // Only the call that actually created the row (or an idempotent retry by the
     // same owner) registers the owner membership. A foreign caller hitting an
     // existing id never gains ownership.
-    let owner_uuid =
-        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    let owner_uuid = doc.owner_id;
     // A foreign caller who supplied an id that already exists and belongs to
     // someone else must not learn it exists, nor its `doc_type`. Answer 404 as if
     // the id were free-but-unowned-by-them, instead of echoing back the row. The
@@ -408,10 +404,8 @@ pub async fn get_document(
             resource: "document",
         });
     }
-    let doc_id_typed =
-        ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(*doc.id.as_bytes()));
-    let owner_id_typed =
-        ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
+    let doc_id_typed = doc.id;
+    let owner_id_typed = doc.owner_id;
     let doc_type = match doc.doc_type.to_lowercase().as_str() {
         "prose" => ambre_core::DocType::Prose,
         "trame" => ambre_core::DocType::Trame,
@@ -530,8 +524,7 @@ pub async fn search_users(
     let json: Vec<_> = users
         .into_iter()
         .map(|u| {
-            let user_id =
-                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*u.id.as_bytes()));
+            let user_id = u.id;
             UserInfoJson {
                 id: user_id,
                 email: u.email,
@@ -613,8 +606,7 @@ pub async fn list_document_members(
     let json: Vec<_> = members
         .into_iter()
         .map(|m| {
-            let user_id =
-                ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*m.user_id.as_bytes()));
+            let user_id = m.user_id;
             MemberInfoJson {
                 user_id,
                 email: m.email,

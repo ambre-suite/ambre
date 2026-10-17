@@ -122,6 +122,12 @@ Rust line outside that file spells it above its tests.
 two strings swap without a compile error. So no field of `ambre-bus` named
 `id`, `*_id` or `*_ids` carries a bare string or integer above its tests.
 
+**An identifier typed on the JSON wire** (`SRV-179`). The core identifier
+writes its bytes through serde, so a JSON field held it as a string. So no
+row or route of the relay, and no type of the HTTP layer of Sync, holds a
+field named `id`, `*_id` or `*_ids` as a `String` or a `Uuid`. A serde field
+that holds a core identifier names its text adapter.
+
 **A walk reads no screen state** (`CANVAS-074`). The screen and the page draw
 one walk per application, so a walk that reached the screen would print a
 caret, a selection or a zoom on the page. A file that implements
@@ -520,6 +526,17 @@ SCREEN_STATE = re.compile(
 # (`BUS-029`).
 BUS = "crates/ambre-bus/src"
 BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
+# The relay's rows and routes and the HTTP layer of Sync, whose identifiers
+# each take their newtype and reach JSON as their text (`SRV-179`).
+WIRE_DIRS = ("crates/ambre-server/src/routes", "crates/ambre-server/src/db")
+WIRE_FILES = ("crates/ambre-sync/src/http.rs",)
+WIRE_ID_NAME = re.compile(r"^(?:\w+_)?ids?$")
+WIRE_UNTYPED = re.compile(r"\b(String|str|Uuid)\b")
+CORE_ID = re.compile(
+    r"\b(?:Document|User|Channel|Space|Meta|Segment|Category|Meeting|Snapshot|Org|Key)Id\b"
+)
+SERDE_DERIVE = re.compile(r"#\[derive\([^)]*\b(?:Serialize|Deserialize)\b")
+TEXT_ADAPTER = re.compile(r"#\[serde\([^\]]*\bwith\s*=\s*\"ambre_core::serde_id::")
 # A signal whose payload a reviewer accepts as a primitive, and why: free text
 # has no unit and no closed set, so a type of its own would name nothing.
 BARE_PAYLOAD_ACCEPTED = {
@@ -1769,6 +1786,65 @@ def check_bus_ids(errors: list[str]) -> int:
     return len(files)
 
 
+def wire_fields(lines: list[tuple[int, str]]) -> list[tuple[int, str, str, bool, bool]]:
+    """Each named field of each braced struct: the line, the field, its type,
+    whether the struct derives a serde trait, and whether the field's own
+    attributes name an identifier's text adapter. An attribute spread over
+    lines is read whole."""
+    fields: list[tuple[int, str, str, bool, bool]] = []
+    serde, inside = False, False
+    attrs: list[str] = []
+    pending = ""
+    for number, line in lines:
+        stripped = line.strip()
+        if pending or stripped.startswith("#["):
+            pending += stripped
+            if pending.count("[") <= pending.count("]"):
+                attrs.append(pending)
+                pending = ""
+            continue
+        if STRUCT_OPEN.match(line):
+            serde = any(SERDE_DERIVE.search(a) for a in attrs)
+            inside, attrs = True, []
+            continue
+        if not inside:
+            attrs = []
+            continue
+        if stripped.startswith("}"):
+            inside, attrs = False, []
+            continue
+        found = STRUCT_FIELD.match(line)
+        if found:
+            adapted = any(TEXT_ADAPTER.search(a) for a in attrs)
+            fields.append((number, found.group(1), found.group(2).strip(), serde, adapted))
+        attrs = []
+    return fields
+
+
+def check_wire_ids(errors: list[str]) -> int:
+    """`SRV-179`: an identifier of the relay's rows and routes, or of the HTTP
+    layer of Sync, takes its newtype and reaches JSON as its text.
+
+    A field named `id`, `*_id` or `*_ids` holds no `String`, `str` or `Uuid`.
+    A field of a serde struct that holds a core identifier names its adapter
+    in `ambre_core::serde_id`, since the identifier alone writes its bytes.
+    """
+    files = [p for d in WIRE_DIRS for p in sorted((ROOT / d).rglob("*.rs"))]
+    files += [ROOT / f for f in WIRE_FILES if (ROOT / f).exists()]
+    if not files:
+        errors.append(f"{WIRE_DIRS[0]}: gone from the tree, so the wire identifier boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, field, ty, serde, adapted in wire_fields(above_tests(path)):
+            untyped = WIRE_UNTYPED.search(ty)
+            if WIRE_ID_NAME.match(field) and untyped:
+                errors.append(f"{rel}:{number}: the `{field}` field carries an identifier as `{untyped.group(1)}`")
+            elif serde and CORE_ID.search(ty) and not adapted:
+                errors.append(f"{rel}:{number}: the `{field}` field writes its identifier as bytes, with no text adapter")
+    return len(files)
+
+
 def check_bench_frame_rate(errors: list[str]) -> int:
     """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
     held = 0
@@ -1893,6 +1969,7 @@ def main() -> int:
     event_copies = check_one_event_copy(errors)
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
+    wire_ids = check_wire_ids(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
@@ -1932,6 +2009,7 @@ def main() -> int:
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus files read for an identifier field of a primitive type, "
+        f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
@@ -1970,7 +2048,8 @@ def main() -> int:
             "composes a document's name, no view "
             "holds the state a shell signal holds, no event feeds both a view "
             "field and the relay's signal, no bus field carries an identifier as "
-            "a bare primitive, a fixture "
+            "a bare primitive, an identifier on the JSON wire takes its newtype "
+            "and its text adapter, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "

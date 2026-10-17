@@ -119,8 +119,7 @@ impl SyncState {
                             .await
                         {
                             Ok(me) => {
-                                let user_id = UserId::parse_str(&me.user_id)
-                                    .unwrap_or_else(|_| UserId::new());
+                                let user_id = me.user_id;
                                 let _ = tx.send(SyncEvent::SessionReady {
                                     id,
                                     user_id,
@@ -211,8 +210,7 @@ impl SyncState {
                 };
                 match http::post_json::<_, http::DevLoginResponse>(&url, &body).await {
                     Ok(resp) => {
-                        let user_id =
-                            UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new());
+                        let user_id = resp.user_id;
                         let _ = tx.send(SyncEvent::SessionReady {
                             id,
                             user_id,
@@ -352,7 +350,7 @@ impl SyncState {
             };
             let _ = tx.send(SyncEvent::ProviderSignedIn {
                 id,
-                user_id: UserId::parse_str(&resp.user_id).unwrap_or_else(|_| UserId::new()),
+                user_id: resp.user_id,
                 display_name: resp.display_name,
                 email: resp.email,
                 keys_stored: !keys.setup_owed(),

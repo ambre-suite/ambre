@@ -6,8 +6,8 @@ use super::*;
 /// Row returned by `SELECT * FROM documents`.
 #[derive(Debug)]
 pub struct DocumentRow {
-    pub id: uuid::Uuid,
-    pub owner_id: uuid::Uuid,
+    pub id: ambre_core::DocumentId,
+    pub owner_id: ambre_core::UserId,
     pub doc_type: String,
     pub name_enc: Option<Vec<u8>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -17,8 +17,8 @@ pub struct DocumentRow {
 /// Document joined with the caller's membership row.
 #[derive(Debug)]
 pub struct DocumentSummaryRow {
-    pub id: uuid::Uuid,
-    pub owner_id: uuid::Uuid,
+    pub id: ambre_core::DocumentId,
+    pub owner_id: ambre_core::UserId,
     pub doc_type: String,
     pub name_enc: Option<Vec<u8>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -48,8 +48,8 @@ pub async fn get_document(
 
     match row {
         Some(r) => Ok(Some(DocumentRow {
-            id: r.try_get("id")?,
-            owner_id: r.try_get("owner_id")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
+            owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
             doc_type: r.try_get("doc_type")?,
             name_enc: r.try_get("name_enc")?,
             created_at: r.try_get("created_at")?,
@@ -84,8 +84,8 @@ pub async fn list_documents_for_user(
     rows.into_iter()
         .map(|r| {
             Ok(DocumentSummaryRow {
-                id: r.try_get("id")?,
-                owner_id: r.try_get("owner_id")?,
+                id: r.try_get::<PgId, _>("id")?.into(),
+                owner_id: r.try_get::<PgId, _>("owner_id")?.into(),
                 doc_type: r.try_get("doc_type")?,
                 name_enc: r.try_get("name_enc")?,
                 updated_at: r.try_get("updated_at")?,
@@ -119,8 +119,8 @@ pub async fn create_document(
 
     let row_to_doc = |row: sqlx::postgres::PgRow| -> Result<DocumentRow, AppError> {
         Ok(DocumentRow {
-            id: row.try_get("id")?,
-            owner_id: row.try_get("owner_id")?,
+            id: row.try_get::<PgId, _>("id")?.into(),
+            owner_id: row.try_get::<PgId, _>("owner_id")?.into(),
             doc_type: row.try_get("doc_type")?,
             name_enc: row.try_get("name_enc")?,
             created_at: row.try_get("created_at")?,

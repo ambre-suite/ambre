@@ -6,7 +6,7 @@ use super::*;
 /// Row returned by `SELECT * FROM users`.
 #[derive(Debug)]
 pub struct UserRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::UserId,
     #[allow(dead_code)]
     pub oidc_provider: Option<String>,
     #[allow(dead_code)]
@@ -28,7 +28,7 @@ pub struct UserRow {
 /// Projection of `users` for search results (no key material).
 #[derive(Debug)]
 pub struct UserInfoRow {
-    pub id: uuid::Uuid,
+    pub id: ambre_core::UserId,
     pub email: String,
     /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
@@ -54,7 +54,7 @@ pub async fn get_user(
 
     match row {
         Some(r) => Ok(Some(UserRow {
-            id: r.try_get("id")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
@@ -97,7 +97,7 @@ pub async fn get_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User
 
     match row {
         Some(r) => Ok(Some(UserRow {
-            id: r.try_get("id")?,
+            id: r.try_get::<PgId, _>("id")?.into(),
             oidc_provider: r.try_get("oidc_provider")?,
             oidc_subject: r.try_get("oidc_subject")?,
             email: r.try_get("email")?,
@@ -141,7 +141,7 @@ pub async fn create_user(
     tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
 
     Ok(UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -212,7 +212,7 @@ pub async fn upsert_user_from_oidc(
 
     let inserted: bool = row.try_get("inserted")?;
     let user = UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -267,7 +267,7 @@ pub async fn dev_upsert_user(
     }
 
     Ok(UserRow {
-        id: row.try_get("id")?,
+        id: row.try_get::<PgId, _>("id")?.into(),
         oidc_provider: row.try_get("oidc_provider")?,
         oidc_subject: row.try_get("oidc_subject")?,
         email: row.try_get("email")?,
@@ -304,7 +304,7 @@ pub async fn search_users(pool: &PgPool, query: &str) -> Result<Vec<UserInfoRow>
     rows.into_iter()
         .map(|r| {
             Ok(UserInfoRow {
-                id: r.try_get("id")?,
+                id: r.try_get::<PgId, _>("id")?.into(),
                 email: r.try_get("email")?,
                 email_verified: r.try_get("email_verified")?,
                 display_name: r.try_get("display_name")?,
@@ -407,13 +407,10 @@ mod tests {
         assert_eq!(resolved.id, oidc.id);
 
         // The squatter row survives but its email was unbound to a sentinel.
-        let squatter_now = get_user(
-            &pool,
-            &ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*squatter.id.as_bytes())),
-        )
-        .await
-        .expect("query")
-        .expect("squatter row still exists");
+        let squatter_now = get_user(&pool, &squatter.id)
+            .await
+            .expect("query")
+            .expect("squatter row still exists");
         assert_ne!(
             squatter_now.email.to_lowercase(),
             "alice@example.com",

@@ -84,7 +84,7 @@ pub async fn dev_login(
     let user =
         db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
 
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.
     let signing_pubkey = account_session_key(&user)?
         .ok_or_else(|| AppError::Internal("dev account stored no signing key".into()))?;
@@ -246,7 +246,7 @@ pub async fn oidc_callback(
         db::upsert_user_from_oidc(&state.db, &provider, &oidc_subject, &email, &display_name)
             .await?;
 
-    let user_id = ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
+    let user_id = user.id;
     let signing_pubkey = account_session_key(&user)?;
 
     let tokens = auth::issue_session(&state, user_id, signing_pubkey).await?;
@@ -282,7 +282,7 @@ mod tests {
 
     fn provider_row(signing_pubkey: Option<Vec<u8>>) -> db::UserRow {
         db::UserRow {
-            id: uuid::Uuid::new_v4(),
+            id: ambre_core::UserId::new(),
             oidc_provider: Some("google".into()),
             oidc_subject: Some("subject".into()),
             email: "a@example.com".into(),

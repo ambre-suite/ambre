@@ -46,7 +46,8 @@ pub struct SnapshotResponse {
 /// The reference snapshot named beside a self-confirmed one (`SRV-131`).
 #[derive(serde::Serialize)]
 pub struct ReferenceSnapshot {
-    pub snapshot_id: String,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
     pub covered_seq: i64,
 }
 
@@ -69,13 +70,12 @@ pub async fn get_snapshot_metadata(
         db::SnapshotStatus::SelfConfirmed => db::get_reference_snapshot(&state.db, &doc_id)
             .await?
             .map(|r| ReferenceSnapshot {
-                snapshot_id: r.id.to_string(),
+                snapshot_id: r.id,
                 covered_seq: r.covered_seq,
             }),
         _ => None,
     };
-    let snap_id =
-        ambre_core::SnapshotId::from_uuid(ambre_core::Uuid::from_bytes(*snap.id.as_bytes()));
+    let snap_id = snap.id;
     Ok(axum::Json(SnapshotResponse {
         snapshot_id: snap_id,
         s3_key: snap.s3_key,

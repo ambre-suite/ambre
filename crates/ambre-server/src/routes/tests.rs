@@ -1584,9 +1584,7 @@ mod handler_tests {
         .unwrap();
         assert!(user.master_key_enc.is_none());
         assert!(user.signing_pubkey.is_none() && user.exchange_pubkey.is_none());
-        let user_id =
-            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-        let tokens = crate::auth::issue_session(&state, user_id, None)
+        let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
         let setup = format!("Bearer {}", tokens.access_token);
@@ -1699,7 +1697,7 @@ mod handler_tests {
              VALUES ($1, $2, 'viewer', $3)",
         )
         .bind(uuid::Uuid::parse_str(&doc_id).unwrap())
-        .bind(keyless.id)
+        .bind(crate::db::id_to_uuid(keyless.id))
         .bind(vec![9u8; 32])
         .execute(&state.db)
         .await
@@ -1710,7 +1708,7 @@ mod handler_tests {
             "UPDATE users SET master_key_enc = $2, master_key_salt = $3, \
              signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1",
         )
-        .bind(keyless.id)
+        .bind(crate::db::id_to_uuid(keyless.id))
         .bind(vec![1u8; 56])
         .bind(vec![2u8; 16])
         .bind(vec![5u8; 32])
@@ -1745,7 +1743,7 @@ mod handler_tests {
             .await
             .unwrap();
         let half = sqlx::query("UPDATE users SET signing_pubkey = $2 WHERE id = $1")
-            .bind(user.id)
+            .bind(crate::db::id_to_uuid(user.id))
             .bind(vec![5u8; 32])
             .execute(&pool)
             .await;
@@ -1763,9 +1761,7 @@ mod handler_tests {
             crate::db::upsert_user_from_oidc(&state.db, "google", "sub-4", "d@example.com", "D")
                 .await
                 .unwrap();
-        let user_id =
-            ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*user.id.as_bytes()));
-        let tokens = crate::auth::issue_session(&state, user_id, None)
+        let tokens = crate::auth::issue_session(&state, user.id, None)
             .await
             .unwrap();
         assert_eq!(first_close_code(state, &tokens.access_token).await, 4403);
