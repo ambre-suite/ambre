@@ -852,6 +852,10 @@ async fn the_open_sort_dialog_is_modal() {
 
 /// `TRAME-UI-153`: cancel, the close button and the backdrop each close the
 /// dialog and none of them sorts.
+///
+/// Each path ends in the native `close` event, which the browser queues as a
+/// task of its own source: a timer tick does not order after it, so the test
+/// awaits the event itself before it reads the snapshot.
 #[wasm_bindgen_test]
 async fn closing_the_sort_dialog_sorts_nothing() {
     for selector in [
@@ -867,12 +871,22 @@ async fn closing_the_sort_dialog_sorts_nothing() {
         }));
         let (root, emitted) = sort_dialog(state);
         settle().await;
+        let dialog = root
+            .query_selector("dialog.ambre-sort-modal")
+            .unwrap()
+            .unwrap();
+        let closed = js_sys::Promise::new(&mut |resolve, _| {
+            dialog
+                .add_event_listener_with_callback("close", &resolve)
+                .unwrap();
+        });
         root.query_selector(selector)
             .unwrap()
             .unwrap_or_else(|| panic!("{selector}"))
             .dyn_into::<web_sys::HtmlElement>()
             .unwrap()
             .click();
+        wasm_bindgen_futures::JsFuture::from(closed).await.unwrap();
         settle().await;
         assert_eq!(state.get_untracked(), None, "{selector}");
         assert_eq!(emitted.get_untracked(), None, "{selector}");
