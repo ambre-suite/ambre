@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, RequestId, RestEvent, Role,
-    SealedChannelKey, SnapshotId, UserId,
+    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, MemberInfo, RequestId,
+    RestEvent, Role, SealedChannelKey, SnapshotId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -111,11 +111,14 @@ pub enum LogicEvent {
         user_id: UserId,
     },
 
-    /// The relay said the members of an open document changed: someone joined,
-    /// left, or took another role (`SRV-177`). It carries no row. A view that
-    /// shows the members asks for them again, and that answer also makes a new
-    /// member's samples resolve (`SYNC-037`).
-    MembersChanged { document_id: DocumentId },
+    /// Sync read the members of an open document again, on the relay's word
+    /// that they changed (`SRV-177`) or on a subscription (`SYNC-150`). The
+    /// one answer that rebuilt the directory (`SYNC-037`) serves a view too,
+    /// which asks for nothing more (`SYNC-151`).
+    MembersChanged {
+        document_id: DocumentId,
+        members: Vec<MemberInfo>,
+    },
 
     /// Initial hydration of a freshly opened document is complete. The Sync thread has
     /// fetched members and the latest snapshot (if any), and emitted it ahead of this

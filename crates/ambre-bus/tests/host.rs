@@ -22,8 +22,8 @@
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId,
-    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, RequestId, RestCommand,
-    RestEvent, Role, SelectionKind, SyncCommand, TrameCommand, UserId,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, MemberInfo, MemberStanding,
+    RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -478,7 +478,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             user_id: user,
         },
-        LogicEvent::MembersChanged { document_id: doc },
+        LogicEvent::MembersChanged {
+            document_id: doc,
+            members: vec![MemberInfo {
+                user_id: user,
+                display_name: "Ada".into(),
+                email: "ada@example.org".into(),
+                role: Role::Editor,
+                standing: MemberStanding::Verified,
+            }],
+        },
         LogicEvent::DocumentReady {
             document_id: doc,
             role: Role::Viewer,

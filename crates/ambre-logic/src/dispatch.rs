@@ -339,10 +339,13 @@ impl LogicState {
                 }
             }
 
-            LogicEvent::MembersChanged { document_id } => {
+            LogicEvent::MembersChanged {
+                document_id,
+                members,
+            } => {
                 // Only a space shows its members live today; any other
                 // document reads them when its view asks.
-                self.space_members_changed(document_id);
+                self.space_members_changed(document_id, members);
             }
 
             LogicEvent::SnapshotNeeded { document_id } => {

@@ -2050,30 +2050,72 @@ mod tests {
         );
     }
 
-    /// The relay's word that the members of an open document changed reaches
-    /// the Logic thread, which asks for the rows again. A document not open
-    /// here has no view to refresh, so the word stops at Sync.
+    /// The rows a `MembersChanged` event hands Logic, if one was sent.
+    fn rows_handed(events: &[LogicEvent]) -> Option<Vec<UserId>> {
+        events.iter().find_map(|e| match e {
+            LogicEvent::MembersChanged { members, .. } => {
+                Some(members.iter().map(|m| m.user_id).collect())
+            }
+            _ => None,
+        })
+    }
+
+    fn listed(user_id: UserId) -> MemberInfo {
+        MemberInfo {
+            user_id,
+            display_name: "Carol".into(),
+            email: "carol@example.org".into(),
+            role: Role::Editor,
+            standing: ambre_bus::MemberStanding::Verified,
+        }
+    }
+
+    /// Holds `SYNC-151`: the relay's word that the members changed costs one
+    /// listing. Its answer reaches Logic with the rows, so a view asks for
+    /// nothing more. A crossed older answer hands nothing on, and a document
+    /// not open here lists nothing.
     #[test]
-    fn a_change_of_members_of_an_open_document_reaches_logic() {
+    fn a_change_of_members_costs_one_listing_whose_rows_reach_logic() {
         let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
-        assert!(
-            drain(&rx).iter().any(|e| matches!(
-                e,
-                LogicEvent::MembersChanged { document_id } if *document_id == doc
-            )),
-            "the change reaches Logic"
+        assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
+        assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
+
+        let carol = UserId::new();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            members: vec![listed(carol)],
+            signing_keys: vec![([2u8; 32], carol)],
+        });
+        let events = drain(&rx);
+        assert_eq!(
+            rows_handed(&events),
+            Some(vec![carol]),
+            "the rows reach Logic"
+        );
+        assert!(!events.iter().any(|e| matches!(e, LogicEvent::Rest { .. })));
+
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: 1,
+            document_id: doc,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+        });
+        assert_eq!(
+            rows_handed(&drain(&rx)),
+            None,
+            "a crossed answer hands nothing"
         );
 
+        let elsewhere = DocumentId::new();
         state.handle_ws_message(WsServerMsg::MembersChanged {
-            document_id: DocumentId::new(),
+            document_id: elsewhere,
         });
-        assert!(
-            !drain(&rx)
-                .iter()
-                .any(|e| matches!(e, LogicEvent::MembersChanged { .. })),
-            "a document not open here is not reported"
-        );
+        assert_eq!(state.documents[&doc].directory_asked, 1);
+        assert_eq!(rows_handed(&drain(&rx)), None, "a document not open here");
     }
 
     /// Closing a document ends its session here. Its state goes, with the
@@ -2142,22 +2184,18 @@ mod tests {
 
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
         assert_eq!(state.documents[&doc].directory_asked, 1, "one listing");
-        assert!(
-            drain(&rx).iter().any(|e| matches!(
-                e,
-                LogicEvent::MembersChanged { document_id } if *document_id == doc
-            )),
-            "an open view reads the members too"
-        );
+        drain(&rx);
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
             asked: 1,
             document_id: doc,
-            members: Vec::new(),
+            members: vec![listed(carol)],
             signing_keys: vec![([3u8; 32], carol)],
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(keys.get(&[3u8; 32]), Some(&carol), "the newcomer resolves");
+        let handed = rows_handed(&drain(&rx));
+        assert_eq!(handed, Some(vec![carol]), "an open view gets the rows too");
 
         let local = DocumentId::new();
         state.documents.insert(

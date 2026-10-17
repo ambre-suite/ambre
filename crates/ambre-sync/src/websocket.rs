@@ -790,20 +790,29 @@ impl SyncState {
                 // is not open locally has no session to refresh -- the next open
                 // rebuilds the directory from scratch. An answer older than the
                 // directory held changes nothing (`SYNC-037`).
-                if let Some(doc_state) = self.documents.get_mut(&document_id)
-                    && asked > doc_state.directory_held
-                {
-                    doc_state.directory_held = asked;
-                    doc_state.set_signing_keys(signing_keys);
-                }
-                if let Some(id) = id {
-                    self.reply(
+                let fresh = match self.documents.get_mut(&document_id) {
+                    Some(doc_state) if asked > doc_state.directory_held => {
+                        doc_state.directory_held = asked;
+                        doc_state.set_signing_keys(signing_keys);
+                        true
+                    }
+                    _ => false,
+                };
+                match id {
+                    Some(id) => self.reply(
                         id,
                         RestEvent::DocumentMembers {
                             document_id,
                             members,
                         },
-                    );
+                    ),
+                    // A refresh no view asked for: the view takes its rows
+                    // from this answer rather than asking again (`SYNC-151`).
+                    None if fresh => self.send_to_logic(LogicEvent::MembersChanged {
+                        document_id,
+                        members,
+                    }),
+                    None => {}
                 }
             }
             SyncEvent::UserSearchReady { id, users } => {
@@ -906,7 +915,6 @@ impl SyncState {
                     .is_some_and(|doc| doc.server_created)
                 {
                     self.handle_list_document_members(None, document_id);
-                    self.send_to_logic(LogicEvent::MembersChanged { document_id });
                 }
                 self.send_to_logic(LogicEvent::ConnectionStatus {
                     document_id,
@@ -1090,11 +1098,10 @@ impl SyncState {
                 // Only an open document holds a directory and a view; the next
                 // open reads the rows from scratch. The directory is read
                 // again here, whatever application holds the document, so a
-                // newcomer's samples resolve (`SYNC-037`). A view that shows
-                // the members asks for them on its own.
+                // newcomer's samples resolve (`SYNC-037`). Its answer reaches
+                // the view too, which asks for nothing more (`SYNC-151`).
                 if self.documents.contains_key(&document_id) {
                     self.handle_list_document_members(None, document_id);
-                    self.send_to_logic(LogicEvent::MembersChanged { document_id });
                 }
             }
 

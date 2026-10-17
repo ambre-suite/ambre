@@ -9,8 +9,8 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelId, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand, SpaceEvent,
-    SpaceId, Timestamp,
+    ChannelId, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand,
+    SpaceEvent, SpaceId, Timestamp,
 };
 use ambre_murmure::{
     ChannelState, ChannelType, Listing, Roster, SpaceState, is_presence_sample, presence_sample,
@@ -402,10 +402,15 @@ impl LogicState {
         });
     }
 
-    /// The relay says the members of a document changed. Returns `false` when
-    /// no space, open or opening, holds it. An open space asks for its rows
-    /// again; an opening one asks once it is live.
-    pub(crate) fn space_members_changed(&mut self, document_id: DocumentId) -> bool {
+    /// Sync read the members of a document again and hands their rows on.
+    /// Returns `false` when no space, open or opening, holds it. An open space
+    /// takes the rows and asks for nothing (`SYNC-151`); an opening one asks
+    /// once it is live.
+    pub(crate) fn space_members_changed(
+        &mut self,
+        document_id: DocumentId,
+        members: Vec<MemberInfo>,
+    ) -> bool {
         let space_id = SpaceId::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
             return true;
@@ -413,13 +418,15 @@ impl LogicState {
         if !self.spaces.contains_key(&space_id) {
             return false;
         }
-        self.ask_members(space_id);
+        // Sync read these rows after the change that prompted them, and a
+        // later change hands rows again. They outrank any listing this
+        // thread asked before them, whose answer may predate the change.
+        self.set_space_rows(space_id, RequestId::next(), members);
         true
     }
 
     /// The relay answered the member listing of a space: its rows become the
-    /// member list. An answer older than the rows already held is dropped, so
-    /// two listings that cross on the way leave the newer rows.
+    /// member list.
     pub(crate) fn space_members_answered(
         &mut self,
         space_id: SpaceId,
@@ -430,14 +437,21 @@ impl LogicState {
             tracing::warn!("Logic: the members of space {space_id} could not be listed");
             return;
         };
+        self.set_space_rows(space_id, id, members);
+    }
+
+    /// The rows of `from` become the member list of a space. Rows older than
+    /// those already held are dropped, so two listings that cross on the way
+    /// leave the newer rows.
+    fn set_space_rows(&mut self, space_id: SpaceId, from: RequestId, members: Vec<MemberInfo>) {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
         // Request ids only grow, so a lower one was asked earlier.
-        if space.rows_from.is_some_and(|newer| newer.0 > id.0) {
+        if space.rows_from.is_some_and(|newer| newer.0 > from.0) {
             return;
         }
-        space.rows_from = Some(id);
+        space.rows_from = Some(from);
         space.roster.set_members(
             members
                 .into_iter()
@@ -1630,9 +1644,8 @@ mod tests {
         assert_eq!(opened, 0, "the list opens no document");
     }
 
-    /// The relay's word that the members changed asks for the rows again
-    /// while the space is open. A newcomer joins the list, and a member who
-    /// left drops out of it. A listing a later one superseded changes nothing.
+    /// Each change of members Sync hands on replaces the rows of an open
+    /// space. A newcomer joins the list, and a member who left drops out.
     #[test]
     fn a_change_of_members_while_the_space_is_open_reads_the_rows_again() {
         let (mut state, ui, sync) = harness();
@@ -1643,30 +1656,15 @@ mod tests {
             &sync,
             vec![member(alice, "Alice"), member(bob, "Bob")],
         );
-        let changed = LogicEvent::MembersChanged {
+        let changed = |members| LogicEvent::MembersChanged {
             document_id: space_id.document_id(),
+            members,
         };
-        state.handle_logic_event(changed.clone());
-        let (older, listed) = member_request(&drain(&sync)).expect("a member listing");
-        assert_eq!(listed, space_id.document_id());
-        state.handle_logic_event(changed);
-        let (newer, _) = member_request(&drain(&sync)).expect("a second listing");
-        let answer = |id, members| LogicEvent::Rest {
-            id,
-            evt: RestEvent::DocumentMembers {
-                document_id: space_id.document_id(),
-                members,
-            },
-        };
-
-        state.handle_logic_event(answer(
-            newer,
-            vec![member(alice, "Alice"), member(carol, "Carol")],
-        ));
-        state.handle_logic_event(answer(
-            older,
-            vec![member(alice, "Alice"), member(bob, "Bob")],
-        ));
+        state.handle_logic_event(changed(vec![member(alice, "Alice")]));
+        state.handle_logic_event(changed(vec![
+            member(alice, "Alice"),
+            member(carol, "Carol"),
+        ]));
         let members = last_members(&drain(&ui)).expect("a member list");
         let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
         assert_eq!(ids, [alice, carol]);
@@ -1674,8 +1672,51 @@ mod tests {
         // A document no space holds asks for nothing.
         state.handle_logic_event(LogicEvent::MembersChanged {
             document_id: DocumentId::new(),
+            members: Vec::new(),
         });
         assert!(member_request(&drain(&sync)).is_none());
+        assert!(last_members(&drain(&ui)).is_none());
+    }
+
+    /// Holds `SYNC-151`: the rows a change of members hands on become the
+    /// list of an open space. It asks the relay for nothing more. A listing the space asked before them, answered after, changes
+    /// nothing.
+    #[test]
+    fn a_change_of_members_hands_the_rows_and_costs_the_space_no_request() {
+        let (mut state, ui, sync) = harness();
+        let (alice, carol) = (UserId::new(), UserId::new());
+        let space_id = SpaceId::new();
+        let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: 1,
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        ready(&mut state, space_id.document_id(), Role::Editor);
+        let (asked, _) = member_request(&drain(&sync)).expect("the open's listing");
+        let _ = drain(&ui);
+
+        state.handle_logic_event(LogicEvent::MembersChanged {
+            document_id: space_id.document_id(),
+            members: vec![member(alice, "Alice"), member(carol, "Carol")],
+        });
+        assert!(member_request(&drain(&sync)).is_none(), "no request");
+        let members = last_members(&drain(&ui)).expect("a member list");
+        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        assert_eq!(ids, [alice, carol]);
+
+        state.handle_logic_event(LogicEvent::Rest {
+            id: asked,
+            evt: RestEvent::DocumentMembers {
+                document_id: space_id.document_id(),
+                members: vec![member(alice, "Alice")],
+            },
+        });
+        assert!(
+            last_members(&drain(&ui)).is_none(),
+            "the older rows stay out"
+        );
     }
 
     /// A sample turns its member online, and gets this user's sample back
