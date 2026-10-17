@@ -692,9 +692,9 @@ struct LogicState {
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
     spaces: HashMap<ambre_bus::SpaceId, spaces::OpenSpace>,
-    /// Spaces on their way to open, with the payloads that arrived before
-    /// their document was ready.
-    space_opening: HashMap<ambre_bus::SpaceId, Vec<Vec<u8>>>,
+    /// Spaces on their way to open, with the payloads and the member rows
+    /// that arrived before their document was ready.
+    space_opening: HashMap<ambre_bus::SpaceId, spaces::Opening>,
     /// Public channels the relay is creating, until it answers.
     creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
     /// Self-joins the relay has not answered yet, with their space.
@@ -703,10 +703,6 @@ struct LogicState {
     deleting: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
     /// Channel leaves the relay has not answered yet, with their space.
     leaving: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
-    /// Member listings of a space this thread asked the relay for, until it
-    /// answers. The answer becomes the member list of that space, and never
-    /// reaches the view as a service event.
-    member_requests: HashMap<RequestId, ambre_bus::SpaceId>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -808,7 +804,6 @@ impl LogicState {
             joining: HashMap::new(),
             deleting: HashMap::new(),
             leaving: HashMap::new(),
-            member_requests: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
             murmure_identities: HashMap::new(),

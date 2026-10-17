@@ -107,7 +107,6 @@ impl LogicState {
                         self.space_opening.clear();
                         self.creating.clear();
                         self.joining.clear();
-                        self.member_requests.clear();
                         self.direct.clear();
                         self.unsent.clear();
                         self.murmure_identities.clear();
@@ -232,12 +231,6 @@ impl LogicState {
                 // application here, and never reaches the engine, which knows
                 // nothing of the seal.
                 if self.resolve_pending_seal(id, &evt) {
-                    return;
-                }
-                // The member rows of a space this thread asked for become its
-                // member list (the Murmure members spec).
-                if let Some(space_id) = self.member_requests.remove(&id) {
-                    self.space_members_answered(space_id, id, evt);
                     return;
                 }
                 // A response to a request this Logic thread issued on behalf of a

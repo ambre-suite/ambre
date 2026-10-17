@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-440` | `INV` | The member list of a space MUST hold the members of the space document, and no one else. | this spec section 3; `MURMURE-031`; `SRV-168` | `ambre_murmure::members::tests::the_list_holds_the_member_rows_and_no_one_else` -- a sample from a user outside the rows adds no one; `ambre_logic::spaces::tests::the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else` -- the relay's rows become the list; `ambre_logic::spaces::tests::a_change_of_members_while_the_space_is_open_reads_the_rows_again` -- a join and a leave while the space is open; `::a_change_of_members_hands_the_rows_and_costs_the_space_no_request` -- a stale listing changes nothing; `ambre_sync::updates::tests::a_change_of_members_costs_one_listing_whose_rows_reach_logic` -- the rows the relay's word reads reach Logic | none | verified |
+| `MURMURE-440` | `INV` | The member list of a space MUST hold the members of the space document, and no one else. | this spec section 3; `MURMURE-031`; `SRV-168` | `ambre_murmure::members::tests::the_list_holds_the_member_rows_and_no_one_else` -- a sample from a user outside the rows adds no one; `ambre_logic::spaces::tests::the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else` -- the relay's rows become the list; `ambre_logic::spaces::tests::a_change_of_members_while_the_space_is_open_reads_the_rows_again` -- a join and a leave while the space is open; `::a_change_of_members_hands_the_rows_and_costs_the_space_no_request` -- the new rows replace the old, and nothing is asked; `ambre_sync::updates::tests::a_change_of_members_costs_one_listing_whose_rows_reach_logic` -- the rows the relay's word reads reach Logic | none | verified |
 | `MURMURE-441` | `OBS` | The member list MUST show each member by display name and avatar. | this spec section 3; `PROFILE-001` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-442` | `OBS` | The member list MUST mark each member as online or offline. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-443` | `OBS` | Each presence state MUST differ from the others in shape as well as in colour. | this spec section 3; `ambre-spec-accessibility.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -34,6 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-448` | `POST` | Opening a space MUST show the member as online to the other members of the space. | this spec section 3 | `ambre_logic::spaces::tests::opening_a_space_sends_this_users_presence_on_its_document_alone` -- the open sends the sample at once; `ambre_logic::spaces::tests::a_sample_shows_its_member_online_and_a_newcomer_is_answered_once` -- the sample turns its member online on the other side | none | verified |
 | `MURMURE-449` | `FRAME` | Opening a space MUST NOT show the member as online to a user outside the space. | this spec section 3; `MURMURE-123`; `ZK-005` | `ambre_logic::spaces::tests::opening_a_space_sends_this_users_presence_on_its_document_alone` -- the sample goes on the space document alone, whose key only its members hold | none | verified |
+| `MURMURE-472` | `FRAME` | Opening a space MUST NOT ask the relay for its members beyond the readings the document open and its subscription make. | this spec section 3; `SYNC-150`; `SYNC-151` | `ambre_logic::spaces::tests::an_opening_space_asks_for_no_rows_and_shows_the_last_ones_sync_read` -- no listing leaves the space, and the last rows read during the open show once it is open; `ambre_sync::updates::tests::a_subscription_reads_the_members_a_change_during_the_open_left_out` -- the subscription's reading reaches the space | none | verified |
 
 ### 1.3 Open the member list
 
@@ -70,7 +71,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   (`ambre-spec-budgets.md section 8`). Each picture costs the avatar row of its section 6.
 * **Boundary.** the presence sample is sealed under the key of the space document (`ZK-005`). The
   relay learns the member list and the display names it already holds (`ZK-018`).
-* **Verification.** 10 `verified`, 10 `unimplemented`. The engine and the Logic thread hold the
+* **Verification.** 11 `verified`, 10 `unimplemented`. The engine and the Logic thread hold the
   list, the presence and the filter. The view rows wait on the Murmure layout.
 
 ---
@@ -96,6 +97,9 @@ follows `ambre-spec-profile.md`.
 The relay says when the rows change (`SRV-177`). Sync reads them
 once and hands them to an open space, which asks for nothing more (`SYNC-151`). Of two readings
 that cross, the later one stands.
+
+The space asks for no rows of its own (`MURMURE-472`): it keeps the reading the subscription
+makes (`SYNC-150`), even while it opens.
 
 **Presence in a space.** Each client that holds a space open sends one presence sample on the space
 document, once per refresh period of `ambre-spec-budgets.md section 8`. The sample is an ephemeral
@@ -132,7 +136,7 @@ state for a user who does not see the colour.
 the member reads it (`ambre-spec-user-settings.md`). A connection copies it into its sample.
 
 **Code.** `ambre-murmure` holds the sample, the roster with its expiry, the order and the filter.
-`ambre-logic` sends the sample, asks the relay for the member rows, and hands the view the list.
+`ambre-logic` sends the sample, takes the member rows Sync reads, and hands the view the list.
 
 ---
 
