@@ -296,6 +296,15 @@ pub struct TrameView {
     /// formula signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
     zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
+    /// The active sheet, the filter flag and the find counter, published for
+    /// the chrome. The view keeps each of them, so it alone writes these
+    /// signals (`UI-THREAD-003`). Browser-only, like the formula signals.
+    #[cfg(target_arch = "wasm32")]
+    active_sheet: RwSignal<ambre_bus::SheetId>,
+    #[cfg(target_arch = "wasm32")]
+    filter_active: RwSignal<crate::chrome::SheetFilter>,
+    #[cfg(target_arch = "wasm32")]
+    find_result: RwSignal<Option<crate::chrome::FindPosition>>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
     /// The token of the last edit session opened. Each session takes the next

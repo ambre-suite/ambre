@@ -72,9 +72,11 @@ impl TrameView {
             }
             // The active sheet may have changed (switch, or delete fallback
             // decided by the Logic thread); adopt it so edits target the right
-            // sheet. The DOM `SheetTabs` strip mirrors the same event for the UI;
-            // a separate DataReset re-fetches the viewport.
+            // sheet. The tab strip reads it from here (`UI-THREAD-003`). A
+            // separate DataReset re-fetches the viewport.
             TrameEvent::SheetList { active, .. } => {
+                #[cfg(target_arch = "wasm32")]
+                self.active_sheet.set(active.clone());
                 self.state.active_sheet = active;
                 self.needs_full = true;
             }
@@ -103,20 +105,31 @@ impl TrameView {
                     .announce("Some formatting in this workbook could not be read.");
             }
             // Shared filter (`trame-shared-filter`): track the filtered column for the funnel
-            // badge. The accompanying DataReset re-fetches the collapsed rows.
+            // badge, and publish the flag the context menu reads. The
+            // accompanying DataReset re-fetches the collapsed rows.
             TrameEvent::FilterApplied { col, .. } => {
                 self.state.filtered_col = Some(col);
+                #[cfg(target_arch = "wasm32")]
+                self.filter_active.set(crate::chrome::SheetFilter::Filtered);
                 self.needs_full = true;
             }
             TrameEvent::FilterCleared => {
                 self.state.filtered_col = None;
+                #[cfg(target_arch = "wasm32")]
+                self.filter_active
+                    .set(crate::chrome::SheetFilter::Unfiltered);
                 self.needs_full = true;
             }
             // Find & Replace (`trame-find-replace`): highlight the match set and jump the
             // active cell onto the focused match. That reuses the navigation path, so an
             // off-screen match scrolls into view. An empty set clears the highlight
-            // without moving the cursor.
+            // without moving the cursor. The panel's counter is published here.
             TrameEvent::FindResult { matches, active } => {
+                #[cfg(target_arch = "wasm32")]
+                self.find_result.set(Some(crate::chrome::FindPosition::new(
+                    active,
+                    matches.len(),
+                )));
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;
                 if let Some(i) = active

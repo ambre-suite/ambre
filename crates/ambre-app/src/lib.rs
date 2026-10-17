@@ -265,8 +265,8 @@ struct Wiring {
     filter_values: RwSignal<Vec<String>>,
     /// Find/replace panel open state (`trame-find-replace`); `None` = closed.
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
-    /// Last `FindResult` summarized for the panel's "k/n" counter. Set by the
-    /// per-frame relay on `TrameEvent::FindResult`.
+    /// Last `FindResult` summarized for the panel's "k/n" counter. Published
+    /// by the Trame view, which keeps the match set.
     find_result: RwSignal<Option<trame_chrome::FindPosition>>,
     /// Whether the booted document is a Toile board. The chrome layer is still
     /// largely Trame-shaped; this gates the Toile-specific panels (the Find panel,
@@ -285,11 +285,11 @@ struct Wiring {
     /// Toile Find panel open flag (`toile-find`); Ctrl+F sets it.
     find_state_toile: RwSignal<toile_chrome::FindPanelState>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
-    /// step origin. Set by the per-frame relay on `ToileEvent::FindResults`.
+    /// step origin. Published by the board view, which keeps the hits.
     find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
-    /// Presenter overlay panel open flag (`toile-presentation`). Driven by the
-    /// relay on `ToileEvent::PresentModeChanged`; the panel is chrome, so its
-    /// visibility lives here rather than canvas-side.
+    /// Presenter overlay panel open flag (`toile-presentation`). Published by
+    /// the board view on `ToileEvent::PresentModeChanged`, as the mode it
+    /// adopted.
     present_toile: RwSignal<PresentMode>,
     /// Active slide and deck length feeding the presenter panel's `k / n`
     /// counter. Set by the relay on the enriched `ToileEvent::SlideChanged`.
@@ -375,8 +375,8 @@ struct Wiring {
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     /// Whether the active sheet currently has a shared filter (`trame-shared-filter`):
-    /// mirrored from `TrameEvent::FilterApplied`/`FilterCleared`. Drives the
-    /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
+    /// published by the Trame view on `TrameEvent::FilterApplied`/`FilterCleared`.
+    /// Drives the context menu's dynamic filter entry (Filter by column XOR Remove filter).
     filter_active: RwSignal<trame_chrome::SheetFilter>,
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
@@ -384,7 +384,7 @@ struct Wiring {
     /// Mirrored from `TrameEvent::SheetList` by the per-frame relay; drives the
     /// DOM `SheetTabs` slot (the tabs no longer live on the canvas).
     sheets: RwSignal<Vec<SheetTab>>,
-    /// Active sheet id, mirrored from `TrameEvent::SheetList`.
+    /// Active sheet id, published by the Trame view on `TrameEvent::SheetList`.
     active_sheet: RwSignal<SheetId>,
     /// Chrome status indicator (`-chrome.md` 2.G): drives the header sync label
     /// and the document-loading overlay. Set by the per-frame relay on
@@ -614,9 +614,13 @@ pub fn main() {
     // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
     // selection so the band shows only the zoom chip.
     let sel_stats_toile = RwSignal::new(None::<toile_chrome::SelStats>);
-    // Presenter overlay panel signals (toile-presentation), mirrored from the
-    // enriched `SlideChanged` + `PresentModeChanged` events by the per-frame
-    // relay. Created here (like `sel_stats_toile`) and passed to the shell.
+    // The find counters of both applications. The view keeps the match set,
+    // so it alone writes them (`UI-THREAD-003`).
+    let find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
+    let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
+    // Presenter overlay panel signals (toile-presentation). The board view
+    // publishes the mode; the per-frame relay fills the slide signals from the
+    // enriched `SlideChanged`. Created here and passed to the shell.
     let present_toile = RwSignal::new(PresentMode::Editing);
     let presenter_slide = RwSignal::new(SlidePosition::default());
     let presenter_notes = RwSignal::new(String::new());
@@ -643,8 +647,8 @@ pub fn main() {
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
-    // Active-filter flag (`trame-shared-filter`), mirrored from the Logic thread's
-    // FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
+    // Active-filter flag (`trame-shared-filter`), published by the view on the
+    // Logic thread's FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
     let filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
@@ -878,6 +882,8 @@ pub fn main() {
         me,
         sel_stats,
         sel_stats_toile,
+        find_result,
+        find_result_toile,
         present_toile,
         presenter_slide,
         presenter_notes,
@@ -1614,6 +1620,11 @@ pub fn main() {
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
     let ch_tr_zoom = RwSignal::new(ZoomFactor::ONE);
+    let ch_tr_active_sheet = RwSignal::new(SheetId::default());
+    let ch_tr_filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
+    let ch_tr_find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
+    let ch_toile_present = RwSignal::new(PresentMode::Editing);
+    let ch_toile_find_result = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
     let make_child_fn = move |document_id: DocumentId,
                               doc_type: ambre_bus::DocType,
                               size: ambre_draw::Size,
@@ -1656,6 +1667,8 @@ pub fn main() {
                 ch_toile_placed_embed,
                 ch_toile_set_link,
                 ch_toile_followed_link,
+                ch_toile_present,
+                ch_toile_find_result,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1679,6 +1692,9 @@ pub fn main() {
                 ch_tr_sel_stats,
                 ch_tr_ctx_scope,
                 ch_tr_zoom,
+                ch_tr_active_sheet,
+                ch_tr_filter_active,
+                ch_tr_find_result,
             )),
         }
     };
@@ -1732,6 +1748,8 @@ pub fn main() {
                     toile_placed_embed,
                     toile_set_link,
                     toile_followed_link,
+                    present_toile,
+                    find_result_toile,
                 ))
             } else {
                 AppView::Trame(TrameView::new(
@@ -1754,6 +1772,9 @@ pub fn main() {
                     sel_stats,
                     ctx_scope,
                     zoom,
+                    active_sheet,
+                    filter_active,
+                    find_result,
                 ))
             }
         },

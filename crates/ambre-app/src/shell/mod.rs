@@ -57,6 +57,8 @@ pub(crate) fn mount_shell(
     me: RwSignal<Option<UserId>>,
     sel_stats: RwSignal<Option<trame_chrome::SelStats>>,
     sel_stats_toile: RwSignal<Option<toile_chrome::SelStats>>,
+    find_result: RwSignal<Option<trame_chrome::FindPosition>>,
+    find_result_toile: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
     present_toile: RwSignal<PresentMode>,
     presenter_slide: RwSignal<SlidePosition>,
     presenter_notes: RwSignal<String>,
@@ -118,9 +120,7 @@ pub(crate) fn mount_shell(
         let filter_popover = RwSignal::new(None::<trame_chrome::FilterPopoverState>);
         let filter_values = RwSignal::new(Vec::<String>::new());
         let find_state = RwSignal::new(None::<trame_chrome::FindReplaceState>);
-        let find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
         let find_state_toile = RwSignal::new(toile_chrome::FindPanelState::Closed);
-        let find_result_toile = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
         // The multi-column sort dialog (`trame-sort`), which Trame's relay
         // opens on the Logic thread's reply.
         let sort_dialog = RwSignal::new(None::<trame_chrome::SortDialogState>);
@@ -131,16 +131,11 @@ pub(crate) fn mount_shell(
             sort_dialog,
             filter_popover,
             filter_values,
-            filter_active,
             sheets,
-            active_sheet,
             sel_stats,
-            find_result,
         };
         let toile_relay = toile_chrome::ToileRelay {
-            find_result: find_result_toile,
             sel_stats: sel_stats_toile,
-            present: present_toile,
             presenter_slide,
             presenter_notes,
             presenter_frame,

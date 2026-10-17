@@ -31,6 +31,9 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
         #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
+        #[cfg(target_arch = "wasm32")] active_sheet: RwSignal<ambre_bus::SheetId>,
+        #[cfg(target_arch = "wasm32")] filter_active: RwSignal<crate::chrome::SheetFilter>,
+        #[cfg(target_arch = "wasm32")] find_result: RwSignal<Option<crate::chrome::FindPosition>>,
     ) -> Self {
         let theme = theme_ctl.get();
 
@@ -70,6 +73,12 @@ impl TrameView {
             formula_action,
             #[cfg(target_arch = "wasm32")]
             zoom_sig,
+            #[cfg(target_arch = "wasm32")]
+            active_sheet,
+            #[cfg(target_arch = "wasm32")]
+            filter_active,
+            #[cfg(target_arch = "wasm32")]
+            find_result,
             editor: None,
             edit_session: 0,
             pending_commit: None,

@@ -4,9 +4,9 @@
 // sheet (`ARCH-018`).
 //
 // The launcher hands every event from the Logic thread here and names no
-// variant. The sheet tabs, the status band, the filter popover, the sort dialog
-// and the find counter read the signals this fills. The canvas view gets the
-// same events on its own queue.
+// variant. The sheet tabs, the status band, the filter popover and the sort
+// dialog read the signals this fills. The canvas view gets the same events on
+// its own queue, and publishes what it keeps of them (`UI-THREAD-003`).
 //
 // The other way, a panel's intent becomes a `TrameCommand` here. The launcher
 // only sends it to the routed document.
@@ -18,8 +18,8 @@ use ambre_bus::{
 };
 use leptos::prelude::*;
 
-use super::find_replace::{FindPosition, FindQuery, ReplaceRequest};
-use super::popovers::{FilterPopoverState, SheetFilter};
+use super::find_replace::{FindQuery, ReplaceRequest};
+use super::popovers::FilterPopoverState;
 use super::sheet_tabs::ReorderSheet;
 use super::sort_dialog::{SortApply, SortDialogState};
 use super::status::SelStats;
@@ -60,16 +60,12 @@ pub struct TrameRelay {
     pub filter_popover: RwSignal<Option<FilterPopoverState>>,
     /// The active column's distinct values (`trame-shared-filter`).
     pub filter_values: RwSignal<Vec<String>>,
-    /// Whether the active sheet is filtered, which the context menu reads.
-    pub filter_active: RwSignal<SheetFilter>,
-    /// The sheet tabs, in strip order (`trame-sheets`).
+    /// The sheet tabs, in strip order (`trame-sheets`). The active sheet, the
+    /// filter flag and the find counter are the view's to publish: it keeps
+    /// each of them (`UI-THREAD-003`).
     pub sheets: RwSignal<Vec<SheetTab>>,
-    /// The active sheet's id.
-    pub active_sheet: RwSignal<SheetId>,
     /// The aggregates of a multi-cell selection (`trame-status-bar`).
     pub sel_stats: RwSignal<Option<SelStats>>,
-    /// The find counter.
-    pub find_result: RwSignal<Option<FindPosition>>,
 }
 
 impl TrameRelay {
@@ -153,19 +149,12 @@ impl TrameRelay {
                 });
             }
             // A filter took effect, or was cleared: the popover closes either
-            // way, and the flag follows.
-            TrameEvent::FilterApplied { .. } => {
+            // way. The view publishes the flag.
+            TrameEvent::FilterApplied { .. } | TrameEvent::FilterCleared => {
                 self.filter_popover.set(None);
-                self.filter_active.set(SheetFilter::Filtered);
             }
-            TrameEvent::FilterCleared => {
-                self.filter_popover.set(None);
-                self.filter_active.set(SheetFilter::Unfiltered);
-            }
-            TrameEvent::SheetList { sheets, active } => {
-                self.sheets.set(sheets.clone());
-                self.active_sheet.set(active.clone());
-            }
+            // The view publishes the active sheet it adopts.
+            TrameEvent::SheetList { sheets, .. } => self.sheets.set(sheets.clone()),
             // The view clears the band on a single cell. The Logic thread's
             // totals fill it here.
             TrameEvent::SelectionStats {
@@ -183,12 +172,6 @@ impl TrameRelay {
                 min: *min,
                 max: *max,
             })),
-            // The canvas moves the active cell onto the focused match off the
-            // same event. Here only the counter is summarized.
-            TrameEvent::FindResult { matches, active } => {
-                self.find_result
-                    .set(Some(FindPosition::new(*active, matches.len())));
-            }
             _ => {}
         }
     }

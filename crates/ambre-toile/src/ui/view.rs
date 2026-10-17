@@ -505,6 +505,13 @@ pub struct ToileView {
     /// or the document (`TOILE-065`, `TOILE-114`). Write-only from here.
     #[cfg(target_arch = "wasm32")]
     followed_link: RwSignal<Option<super::link::ShellNav>>,
+    /// The present mode and the find results, published for the chrome. The
+    /// view keeps both, so it alone writes these signals (`UI-THREAD-003`).
+    /// Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+    #[cfg(target_arch = "wasm32")]
+    find_result: RwSignal<Option<ambre_bus::app::toile::FindResults>>,
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
@@ -667,6 +674,10 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
         #[cfg(target_arch = "wasm32")] set_link: RwSignal<Option<super::link::LinkEdit>>,
         #[cfg(target_arch = "wasm32")] followed_link: RwSignal<Option<super::link::ShellNav>>,
+        #[cfg(target_arch = "wasm32")] present_mode: RwSignal<ambre_bus::app::toile::PresentMode>,
+        #[cfg(target_arch = "wasm32")] find_result: RwSignal<
+            Option<ambre_bus::app::toile::FindResults>,
+        >,
     ) -> Self {
         if !embedded {
             text_input.name_content(ambre_canvas::ContentKind::Board);
@@ -772,6 +783,10 @@ impl ToileView {
             set_link,
             #[cfg(target_arch = "wasm32")]
             followed_link,
+            #[cfg(target_arch = "wasm32")]
+            present_mode,
+            #[cfg(target_arch = "wasm32")]
+            find_result,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -997,7 +1012,10 @@ impl ToileView {
             // Find results (`toile-find`): stash the highlight set, and request
             // the focus element's geometry so the camera can recenter on it.
             // The reply may concern an off-screen match absent from `display`.
+            // The panel's counter and step origin are published here.
             ToileEvent::FindResults(fr) => {
+                #[cfg(target_arch = "wasm32")]
+                self.find_result.set(Some(fr.clone()));
                 self.find_hits = fr.hits;
                 self.find_focus = fr.focus.clone();
                 if let Some(focus) = fr.focus {
@@ -1162,8 +1180,11 @@ impl ToileView {
             // Present (focus) mode toggled (`toile-presentation`): the
             // content pass hides the grid while `present`. Leaving it drops any
             // in-flight transition so the board returns to its plain camera +
-            // full-opacity content.
+            // full-opacity content. The mode is published for the presenter
+            // panel and the editing surfaces.
             ToileEvent::PresentModeChanged(mode) => {
+                #[cfg(target_arch = "wasm32")]
+                self.present_mode.set(mode);
                 self.present = mode.is_presenting();
                 if self.present {
                     self.leave_editing();

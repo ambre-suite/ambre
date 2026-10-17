@@ -1203,9 +1203,7 @@ async fn the_editing_chrome_leaves_while_the_board_presents() {
 /// A relay over fresh signals, as the launcher builds one.
 fn relay() -> ToileRelay {
     ToileRelay {
-        find_result: RwSignal::new(None),
         sel_stats: RwSignal::new(None),
-        present: RwSignal::new(PresentMode::Editing),
         presenter_slide: RwSignal::new(SlidePosition::default()),
         presenter_notes: RwSignal::new(String::new()),
         presenter_frame: RwSignal::new(None),

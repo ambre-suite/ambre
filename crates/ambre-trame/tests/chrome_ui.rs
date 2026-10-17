@@ -710,11 +710,8 @@ fn relay() -> chrome::TrameRelay {
         sort_dialog: RwSignal::new(None),
         filter_popover: RwSignal::new(None),
         filter_values: RwSignal::new(Vec::new()),
-        filter_active: RwSignal::new(chrome::SheetFilter::Unfiltered),
         sheets: RwSignal::new(Vec::new()),
-        active_sheet: RwSignal::new(SheetId::default()),
         sel_stats: RwSignal::new(None),
-        find_result: RwSignal::new(None),
     }
 }
 

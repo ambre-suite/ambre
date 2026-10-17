@@ -231,6 +231,7 @@ PDF_CALL = re.compile(r"\bkrilla\b|\bambre_pdf\b|\bKrillaSurface\b")
 RENDERER = "crates/ambre-canvas/src/render"
 COLOR_LITERAL = re.compile(r"\bColor::(?:[A-Z][A-Z0-9_]*\b|from_rgba?8\b|from_rgb\b|new\b)")
 TESTS_START = re.compile(r"^\s*#\[cfg\(test\)\]")
+INLINE_MODULE = re.compile(r"^\s*(?:pub(?:\([a-z]+\))?\s+)?mod\s+\w+\s*\{")
 
 # What embedding a font looks like: an include macro naming a font file.
 FONT_EMBED = re.compile(r"\binclude_bytes!\s*\([^)]*\.(?:ttf|otf|ttc|woff2?)\b", re.IGNORECASE)
@@ -493,6 +494,35 @@ BARE_PAYLOAD_ACCEPTED = {
     ),
     "crates/ambre-app/src/lib.rs:Wiring.presenter_notes": "free text: the speaker notes of the slide",
     "crates/ambre-toile/src/chrome/relay.rs:ToileRelay.presenter_notes": "free text: the speaker notes of the slide",
+}
+# Each application's relay, keyed by the prefix of its event type. A view
+# that keeps what an event says publishes it; the relay fills the rest.
+EVENT_RELAYS = {
+    "Trame": "crates/ambre-trame/src/chrome/relay.rs",
+    "Toile": "crates/ambre-toile/src/chrome/relay.rs",
+}
+EVENT_ARM = re.compile(r"^(\s*)(?:\|\s*)?(?:Trame|Toile)Event::\w+\b")
+EVENT_VARIANT = re.compile(r"\b(Trame|Toile)Event::(\w+)\b")
+SIGNAL_WRITE = re.compile(r"\bself\s*\.\s*(\w+)\s*\.\s*(?:set|update)\(")
+VIEW_STORE = re.compile(r"\bself\.((?:\w+\.)*\w+)\s*[-+*/|&^]?=(?!=)")
+# A flag that asks for a repaint holds no state the event carries.
+REPAINT_FLAGS = {"needs_full", "data_dirty"}
+# An event whose view arm keeps a field while the relay writes a signal, the
+# two holding different parts of it, and why.
+ONE_EVENT_COPY_ACCEPTED = {
+    "TrameEvent::SheetList -> sheets": "the view keeps the active sheet alone; the tab list is the strip's",
+    "TrameEvent::FilterApplied -> filter_popover": (
+        "the view keeps the filtered column and publishes the flag; the popover is chrome alone"
+    ),
+    "TrameEvent::FilterCleared -> filter_popover": (
+        "the view keeps the filtered column and publishes the flag; the popover is chrome alone"
+    ),
+    "ToileEvent::SelectionStats -> sel_stats": (
+        "the relay takes the band's reply alone; the view takes the bounds of a fit or a find focus"
+    ),
+    "ToileEvent::SlideChanged -> presenter_slide": "the view keeps the glide; the panel keeps the slide's position",
+    "ToileEvent::SlideChanged -> presenter_notes": "the view keeps the glide; the panel keeps the speaker notes",
+    "ToileEvent::SlideChanged -> presenter_frame": "the view keeps the glide; the panel keeps the notes' frame",
 }
 
 # The two failure paths that reach the page with no queue: the panic hook of the
@@ -817,8 +847,9 @@ def check_renderer_colors(errors: list[str]) -> int:
         return 0
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            if TESTS_START.match(line):
+        text = path.read_text().splitlines()
+        for number, line in enumerate(text, 1):
+            if opens_test_module(text, number - 1):
                 break
             found = COLOR_LITERAL.search(code(line))
             if found:
@@ -878,16 +909,31 @@ def declared_for_tests(path: Path) -> bool:
         path = declaring
 
 
+def opens_test_module(lines: list[str], index: int) -> bool:
+    """Whether line `index` is a `#[cfg(test)]` on an inline module. The same
+    attribute on a statement, a function or a module declared elsewhere opens
+    nothing, and the code after it is still the file's own."""
+    if not TESTS_START.match(lines[index]):
+        return False
+    for line in lines[index + 1 :]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#[", "//")):
+            continue
+        return bool(INLINE_MODULE.match(line))
+    return False
+
+
 def above_tests(path: Path) -> list[tuple[int, str]]:
     """Each numbered line of the file above its test module, comments removed.
     A file whose module is declared for the tests has no such line."""
     if declared_for_tests(path):
         return []
+    text = path.read_text().splitlines()
     lines: list[tuple[int, str]] = []
-    for number, line in enumerate(path.read_text().splitlines(), 1):
-        if TESTS_START.match(line):
+    for index, line in enumerate(text):
+        if opens_test_module(text, index):
             break
-        lines.append((number, code(line)))
+        lines.append((index + 1, code(line)))
     return lines
 
 
@@ -1527,6 +1573,82 @@ def check_one_copy(errors: list[str]) -> int:
     return len(files)
 
 
+def event_arms(lines: list[tuple[int, str]]) -> list[tuple[list[str], list[tuple[int, str]]]]:
+    """Each match arm on an application event: the event types it names, as
+    `TrameEvent::SheetList`, and its numbered lines, the pattern included."""
+    arms = []
+    index = 0
+    while index < len(lines):
+        found = EVENT_ARM.match(lines[index][1])
+        if not found:
+            index += 1
+            continue
+        indent = len(found.group(1))
+        body = [lines[index]]
+        index += 1
+        while index < len(lines):
+            line = lines[index][1]
+            depth = len(line) - len(line.lstrip())
+            closing = line.lstrip().startswith(("}", ")", "|"))
+            if line.strip() and (depth < indent or (depth == indent and not closing)):
+                break
+            body.append(lines[index])
+            index += 1
+        # The pattern runs to the arrow; a variant named past it is a value.
+        pattern = []
+        for _, line in body:
+            pattern.append(line.split("=>", 1)[0])
+            if "=>" in line:
+                break
+        variants = [f"{app}Event::{name}" for app, name in EVENT_VARIANT.findall(" ".join(pattern))]
+        arms.append((variants, body))
+    return arms
+
+
+def check_one_event_copy(errors: list[str]) -> int:
+    """`UI-THREAD-003`: no event feeds both a view field and a shell signal.
+
+    A view that keeps what an event says publishes it into the signal itself,
+    so the relay writes no signal off an event a view arm stores from. Two
+    writers would agree until one frame wrote only one of them.
+    """
+    written: dict[str, list[tuple[str, str]]] = {}
+    arms = 0
+    for app, rel in EVENT_RELAYS.items():
+        lines = [(number, code(line)) for number, line in enumerate(read(rel).splitlines(), 1)]
+        found = event_arms(lines)
+        if not found:
+            errors.append(f"{rel}: no arm on a `{app}Event`, so no relay write is read")
+            continue
+        for variants, body in found:
+            arms += 1
+            # Joined, as a call chain may put `.set(` on the next line.
+            signals = [m.group(1) for m in SIGNAL_WRITE.finditer(" ".join(line for _, line in body))]
+            for variant in variants:
+                for signal in signals:
+                    written.setdefault(variant, []).append((signal, f"{rel}:{body[0][0]}"))
+    for path in sources(VIEW_STATE):
+        rel = path.relative_to(ROOT).as_posix()
+        for variants, body in event_arms(above_tests(path)):
+            stores = [
+                (number, m.group(1))
+                for number, line in body
+                for m in VIEW_STORE.finditer(line)
+                if m.group(1) not in REPAINT_FLAGS
+            ]
+            if not stores:
+                continue
+            number, field = stores[0]
+            for variant in variants:
+                for signal, at in written.get(variant, []):
+                    if f"{variant} -> {signal}" in ONE_EVENT_COPY_ACCEPTED:
+                        continue
+                    errors.append(
+                        f"{rel}:{number}: `{variant}` sets `self.{field}` here, and {at} writes the `{signal}` signal off it"
+                    )
+    return arms
+
+
 def bare_payload(ty: str) -> str | None:
     """The primitive, tuple or array a payload carries once its wrappers are
     peeled; `None` for a type of its own."""
@@ -1613,6 +1735,7 @@ def main() -> int:
     scrolls = check_scroll_sources(errors)
     composed = check_composed_names(errors)
     copies = check_one_copy(errors)
+    event_copies = check_one_event_copy(errors)
     signal_types = check_signal_types(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
@@ -1649,6 +1772,7 @@ def main() -> int:
         f"{scrolls} application files read for a scroll with no model step, "
         f"{composed} Rust files read for a name composed outside its type, "
         f"{copies} view files read for a second copy of a signal's state, "
+        f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
@@ -1685,7 +1809,8 @@ def main() -> int:
             "relay logs no payload, one file holds the kinetic model, a drawing "
             "primitive takes geometry and paint alone, one file "
             "composes a document's name, no view "
-            "holds the state a shell signal holds, a fixture "
+            "holds the state a shell signal holds, no event feeds both a view "
+            "field and the relay's signal, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "

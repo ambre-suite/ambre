@@ -4,17 +4,17 @@
 // board (`ARCH-018`).
 //
 // The launcher hands every event from the Logic thread here and names no
-// variant. The find panel, the status band and the presenter panel read the
-// signals this fills. The canvas view gets the same events on its own queue,
-// for the highlight, the camera glide and the overlay pass.
+// variant. The status band and the presenter panel read the signals this
+// fills. The canvas view gets the same events on its own queue, for the
+// highlight, the camera glide and the overlay pass. It publishes what it keeps
+// of them, the find results and the present mode (`UI-THREAD-003`).
 //
 // The other way, a panel's intent becomes a `ToileCommand` here. The launcher
 // only sends it to the routed document.
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    Broadcast, ElementId, FindResults, PresentMode, SlidePosition, StatsRequestKind, ToileCommand,
-    ToileEvent,
+    Broadcast, ElementId, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, UiEvent, UserId};
 use leptos::prelude::*;
@@ -34,12 +34,10 @@ pub enum ToileIntent {
 /// The chrome signals Toile's events fill. Each is `Copy`, so the relay is too.
 #[derive(Clone, Copy)]
 pub struct ToileRelay {
-    /// The find panel's counter and step origin (`toile-find`).
-    pub find_result: RwSignal<Option<FindResults>>,
-    /// The selection's count and bounds, for the status band.
+    /// The selection's count and bounds, for the status band. The find
+    /// results and the present mode are the view's to publish: it keeps both
+    /// (`UI-THREAD-003`).
     pub sel_stats: RwSignal<Option<SelStats>>,
-    /// Whether the board is presenting, which shows the presenter panel.
-    pub present: RwSignal<PresentMode>,
     /// The slide on screen and the deck's length.
     pub presenter_slide: RwSignal<SlidePosition>,
     /// The speaker notes of the slide on screen.
@@ -92,7 +90,6 @@ impl ToileRelay {
             return;
         };
         match te {
-            ToileEvent::FindResults(fr) => self.find_result.set(Some(fr.clone())),
             // A fit or a find focus also answers `SelectionStats`, and its
             // bounds belong to that request. Only the band's own request
             // updates the band (`TOILE-UI-108`).
@@ -102,7 +99,6 @@ impl ToileRelay {
                         .set(Some(SelStats::from_reply(s.count, s.bounds)));
                 }
             }
-            ToileEvent::PresentModeChanged(mode) => self.present.set(*mode),
             ToileEvent::SlideChanged(c) => {
                 self.presenter_slide.set(c.position);
                 self.presenter_notes.set(c.notes.clone());

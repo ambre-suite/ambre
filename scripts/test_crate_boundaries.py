@@ -32,6 +32,36 @@ def write(root: Path, rel: str, text: str) -> None:
     path.write_text(text)
 
 
+def read_back(root: Path, rel: str) -> str:
+    path = root / rel
+    return path.read_text() if path.exists() else ""
+
+
+# What each relay writes off an event: one arm per line shape the gate reads.
+TRAME_ABSORB = (
+    "fn absorb(&self, te: &TrameEvent) {\n"
+    "    match te {\n"
+    "        TrameEvent::SheetList { sheets, active } => {\n"
+    "            self.sheets.set(sheets.clone());\n"
+    "            self.active_sheet.set(active.clone());\n"
+    "        }\n"
+    "        TrameEvent::FilterApplied { .. } | TrameEvent::FilterCleared => self.filter_popover.set(None),\n"
+    "        _ => {}\n"
+    "    }\n"
+    "}\n"
+)
+TOILE_ABSORB = (
+    "fn absorb(&self, te: &ToileEvent) {\n"
+    "    match te {\n"
+    "        ToileEvent::FindResults(fr) => self\n"
+    "            .find_result\n"
+    "            .set(Some(fr.clone())),\n"
+    "        _ => {}\n"
+    "    }\n"
+    "}\n"
+)
+
+
 def scratch(tmp: str) -> Path:
     """A minimal tree that passes every check."""
     root = Path(tmp)
@@ -97,6 +127,8 @@ def scratch(tmp: str) -> Path:
         held = path.read_text() if path.exists() else ""
         body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<ZoomFactor>,\n}}\n"
         write(root, rel, held + body)
+    write(root, cb.EVENT_RELAYS["Trame"], read_back(root, cb.EVENT_RELAYS["Trame"]) + TRAME_ABSORB)
+    write(root, cb.EVENT_RELAYS["Toile"], read_back(root, cb.EVENT_RELAYS["Toile"]) + TOILE_ABSORB)
     write(
         root,
         cb.PAGE,
@@ -148,6 +180,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_scroll_sources(errors)
             cb.check_composed_names(errors)
             cb.check_one_copy(errors)
+            cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
@@ -836,7 +869,60 @@ class CrateBoundaries(unittest.TestCase):
             "    pub presenter_notes: RwSignal<String>,\n"
             "}\n"
         )
-        self.assertEqual(self.breach("crates/ambre-toile/src/chrome/relay.rs", text), [])
+        self.assertEqual(self.breach("crates/ambre-toile/src/chrome/relay.rs", text + TOILE_ABSORB), [])
+
+    def test_a_view_storing_what_the_relay_writes_off_the_event_is_refused(self):
+        cases = (
+            (
+                "crates/ambre-trame/src/ui/view/frame.rs",
+                "TrameEvent::SheetList { active, .. } => {\n    self.state.active_sheet = active;\n}\n",
+                "`TrameEvent::SheetList` sets `self.state.active_sheet` here, and",
+            ),
+            # The relay arm names two events; `.set(` sits lines below the
+            # receiver.
+            (
+                "crates/ambre-trame/src/ui/view/frame.rs",
+                "TrameEvent::FilterCleared => {\n    self.state.filtered_col = None;\n}\n",
+                "writes the `filter_popover` signal off it",
+            ),
+            (
+                "crates/ambre-toile/src/ui/view.rs",
+                "ToileEvent::FindResults(fr) => {\n    self.find_hits += fr.hits;\n    self.needs_full = true;\n}\n",
+                "writes the `find_result` signal off it",
+            ),
+        )
+        for rel, arm, needle in cases:
+            text = f"impl V {{\n    fn dispatch(&mut self, te: E) {{\n        match te {{\n{arm}        }}\n    }}\n}}\n"
+            errors = self.breach(rel, text)
+            if "filter_popover" in needle:
+                self.assertEqual(errors, [], "the popover pair is accepted")
+                continue
+            self.assertTrue(any(needle in e for e in errors), (arm, errors))
+
+    def test_a_view_arm_keeping_nothing_or_under_test_stays_free(self):
+        for text in (
+            # A repaint flag holds nothing the event carries.
+            "fn d(&mut self) {\n    match te {\n        TrameEvent::SheetList { .. } => {\n"
+            "            self.needs_full = true;\n        }\n    }\n}\n",
+            # A comparison is no store; an event the relay ignores is free.
+            "fn d(&mut self) {\n    match te {\n        TrameEvent::SheetList { active, .. } => {\n"
+            "            let same = self.state.active_sheet == active;\n        }\n"
+            "        TrameEvent::DataReset => {\n            self.state.cache = None;\n        }\n    }\n}\n",
+            "pub struct Plain;\n#[cfg(test)]\nmod tests {\n    fn d(&mut self) {\n        match te {\n"
+            "            TrameEvent::SheetList { active, .. } => {\n                self.state.active_sheet = active;\n"
+            "            }\n        }\n    }\n}\n",
+        ):
+            self.assertEqual(self.breach("crates/ambre-trame/src/ui/view/frame.rs", text), [], text)
+
+    def test_a_relay_with_no_event_arm_is_an_error_not_a_pass(self):
+        text = "struct ToileRelay {\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n}\n"
+        errors = self.breach(cb.EVENT_RELAYS["Toile"], text)
+        self.assertTrue(any("no arm on a `ToileEvent`" in e for e in errors), errors)
+
+    def test_a_test_attribute_on_a_statement_does_not_end_the_read(self):
+        text = "fn f() {\n    #[cfg(test)]\n    let x = 1;\n}\npub struct BoardView {\n    stats: SelStats,\n}\n"
+        errors = self.breach("crates/ambre-toile/src/ui/view.rs", text)
+        self.assertTrue(any("`sel_stats` signal already holds" in e for e in errors), errors)
 
     def test_a_fixture_benchmark_reporting_a_frame_rate_is_refused(self):
         for line in ('c.bench_function("fixture_board_fps", |b| {});\n', "let frame_rate = 60.0 / t; // fixture\n"):
