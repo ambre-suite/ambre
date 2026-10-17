@@ -275,21 +275,18 @@ impl SyncState {
     #[cfg(not(target_arch = "wasm32"))]
     fn arm_reconnect_timer(&mut self, _delay_ms: u64) {}
 
-    /// Asks the worker's timers for a [`SyncEvent::ReplayRetry`] in
-    /// `delay_ms`. The closure runs once and frees itself, so several
-    /// documents can wait at once.
+    /// Asks the worker's timers for `event` in `delay_ms`, such as a
+    /// [`SyncEvent::ReplayRetry`]. The closure runs once and frees itself, so
+    /// several documents can wait at once.
     #[cfg(target_arch = "wasm32")]
-    fn arm_replay_timer(&self, document_id: DocumentId, ticket: u64, delay_ms: u64) {
+    pub(crate) fn arm_event_timer(&self, event: SyncEvent, delay_ms: u64) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
             return;
         };
         let cb = Closure::once_into_js(move || {
-            let _ = tx.send(SyncEvent::ReplayRetry {
-                document_id,
-                ticket,
-            });
+            let _ = tx.send(event);
         });
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
@@ -299,9 +296,9 @@ impl SyncState {
         }
     }
 
-    /// Native: no timer. A host test sends [`SyncEvent::ReplayRetry`] itself.
+    /// Native: no timer. A host test sends the event itself.
     #[cfg(not(target_arch = "wasm32"))]
-    fn arm_replay_timer(&self, _document_id: DocumentId, _ticket: u64, _delay_ms: u64) {}
+    pub(crate) fn arm_event_timer(&self, _event: SyncEvent, _delay_ms: u64) {}
 
     /// The relay stopped a replay. Ask again after a delay that doubles at
     /// each stop (`SYNC-153`). A stop past the one before starts the budget
@@ -326,7 +323,11 @@ impl SyncState {
             },
         );
         if let Some(delay_ms) = delay {
-            self.arm_replay_timer(document_id, self.replay_ticket, delay_ms);
+            let retry = SyncEvent::ReplayRetry {
+                document_id,
+                ticket: self.replay_ticket,
+            };
+            self.arm_event_timer(retry, delay_ms);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
             let message = format!("replay of {document_id:?} stopped {stop} times");
             // A first replay given up is an open that failed: no ready would
@@ -538,6 +539,10 @@ impl SyncState {
                 document_id,
                 ticket,
             } => self.retry_replay(document_id, ticket),
+            SyncEvent::ResendRetry {
+                document_id,
+                ticket,
+            } => self.resend_failed(document_id, ticket),
             SyncEvent::SessionReady {
                 id,
                 user_id,

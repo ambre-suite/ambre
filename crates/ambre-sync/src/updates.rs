@@ -2,6 +2,22 @@ use super::*;
 use crate::rekey::SentFrame;
 use ambre_protocol::messages::Signature;
 
+/// The delay before Sync sends again the first delta the relay failed to
+/// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
+const RESEND_RETRY_BASE_MS: u64 = 1_000;
+
+/// The failures Sync sends again after. One more holds the document
+/// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
+const RESEND_RETRY_LIMIT: u32 = 5;
+
+/// The delay before sending again after the `failure`-th failure since the
+/// last echo, counted from one. Past the budget there is none.
+fn resend_retry_delay_ms(failure: u32) -> Option<u64> {
+    (1..=RESEND_RETRY_LIMIT)
+        .contains(&failure)
+        .then(|| RESEND_RETRY_BASE_MS << (failure - 1))
+}
+
 impl SyncState {
     // -- Causal quarantine (`ambre-spec-delta-order.md`) ------------
 
@@ -1090,18 +1106,87 @@ impl SyncState {
         signature: Signature,
         code: ambre_core::RefusalCode,
     ) {
+        if code == ambre_core::RefusalCode::InternalError {
+            self.handle_delta_failed(document_id, signature);
+            return;
+        }
+        self.hold_refused(document_id, &signature, &code.to_string());
+    }
+
+    /// Drops the delta signed `signature` and every later one, and holds the
+    /// document. The first hold is reported (`SYNC-155`, `SYNC-156`).
+    fn hold_refused(&mut self, document_id: DocumentId, signature: &Signature, cause: &str) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        if !doc_state.rekey.delta_refused(&signature) {
+        if !doc_state.rekey.delta_refused(signature) {
             return;
         }
-        tracing::warn!("[Sync] delta refused doc={document_id} code={code}");
+        tracing::warn!("[Sync] delta refused doc={document_id}: {cause}");
         self.send_to_logic(LogicEvent::SyncWarning {
             document_id,
             code: SyncWarningCode::EditRefused,
-            message: format!("the relay refused an edit: {code}"),
+            message: format!("the relay refused an edit: {cause}"),
         });
+    }
+
+    /// The relay failed to sequence our delta signed `signature` through a
+    /// fault of its own (`SRV-186`). It leaves again after a delay that
+    /// doubles at each failure since the last echo. Past the budget the
+    /// document holds it, as for a refusal (`SYNC-159`).
+    fn handle_delta_failed(&mut self, document_id: DocumentId, signature: Signature) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let ticket = self.resend_ticket + 1;
+        let Some(failure) = doc_state.rekey.failed(&signature, ticket) else {
+            // A delta this log forgot: answer, so the fence never stands.
+            self.ws_send(&WsClientMsg::ClockResync {
+                document_id,
+                signature,
+            });
+            return;
+        };
+        self.resend_ticket = ticket;
+        match resend_retry_delay_ms(failure) {
+            Some(delay_ms) => {
+                tracing::warn!("[Sync] delta failed doc={document_id} (failure {failure})");
+                let retry = SyncEvent::ResendRetry {
+                    document_id,
+                    ticket,
+                };
+                self.arm_event_timer(retry, delay_ms);
+            }
+            None => {
+                let cause = format!("sequencing failed {failure} times");
+                self.hold_refused(document_id, &signature, &cause);
+            }
+        }
+    }
+
+    /// A resend timer fired. Unless a later failure or a refusal made it
+    /// stale, the answer lifts the relay's fence (`SRV-169`). Then the failed
+    /// delta and every later one leave again from its own clock, which the
+    /// relay never took (`SYNC-159`).
+    pub(crate) fn resend_failed(&mut self, document_id: DocumentId, ticket: u64) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let Some((signature, clock, bodies)) = doc_state.rekey.resend_failed(ticket) else {
+            return;
+        };
+        doc_state.local_clock = clock.saturating_sub(1);
+        tracing::info!(
+            "[Sync] resend doc={document_id}, {} delta(s) leave again from {clock}",
+            bodies.len()
+        );
+        self.ws_send(&WsClientMsg::ClockResync {
+            document_id,
+            signature,
+        });
+        for body in bodies {
+            self.send_body(document_id, body);
+        }
     }
 
     /// Installs `new_key` as the document's current key, then sends what the
@@ -2941,6 +3026,103 @@ mod tests {
         state.documents.insert(doc, reopened);
         state.handle_send_update(doc, b"d".to_vec());
         assert_eq!(signatures(&drain_ws(&ws_rx)).len(), 1);
+    }
+
+    /// The relay failed to sequence the delta signed `signature`.
+    fn fail_sequencing(state: &mut SyncState, doc: DocumentId, signature: Signature) -> u64 {
+        state.handle_ws_message(WsServerMsg::DeltaRefused {
+            document_id: doc,
+            signature,
+            code: ambre_core::RefusalCode::InternalError,
+        });
+        state.resend_ticket
+    }
+
+    /// `SYNC-159`: a delta the relay failed to sequence waits for its timer.
+    /// Then the answer lifts the fence, and the delta leaves again at its own
+    /// clock with the one sent behind it. A stale timer sends nothing.
+    #[test]
+    fn a_delta_the_relay_failed_to_sequence_leaves_again_with_every_later_one() {
+        let (mut state, rx, doc, key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        state.handle_send_update(doc, b"b".to_vec());
+        let sent = signatures(&drain_ws(&ws_rx));
+        let _ = drain(&rx);
+
+        let ticket = fail_sequencing(&mut state, doc, sent[0]);
+        assert!(
+            drain_ws(&ws_rx).is_empty(),
+            "a failed delta left before its timer"
+        );
+        state.handle_sync_event(SyncEvent::ResendRetry {
+            document_id: doc,
+            ticket: ticket + 1,
+        });
+        assert!(drain_ws(&ws_rx).is_empty(), "a stale timer sent a delta");
+
+        state.handle_sync_event(SyncEvent::ResendRetry {
+            document_id: doc,
+            ticket,
+        });
+        let mut msgs = drain_ws(&ws_rx);
+        assert!(
+            matches!(msgs.first(), Some(WsClientMsg::ClockResync { signature, .. }) if *signature == sent[0]),
+            "the answer leaves first: {msgs:?}"
+        );
+        let resent = opened_updates(msgs.split_off(1), &[&key]);
+        assert_eq!(
+            resent,
+            vec![(1, key.id(), b"a".to_vec()), (2, key.id(), b"b".to_vec())]
+        );
+        assert_eq!(state.documents[&doc].rekey.unconfirmed(), 2);
+        assert!(
+            drain(&rx).is_empty(),
+            "a failure within the budget was reported"
+        );
+    }
+
+    /// `SYNC-159`: a delta that keeps failing waits longer each time, and past
+    /// the budget the document holds it, reported once as a refused edit.
+    #[test]
+    fn a_delta_failing_past_the_budget_holds_its_document() {
+        assert_eq!(resend_retry_delay_ms(1), Some(RESEND_RETRY_BASE_MS));
+        assert_eq!(resend_retry_delay_ms(2), Some(2 * RESEND_RETRY_BASE_MS));
+        assert_eq!(resend_retry_delay_ms(RESEND_RETRY_LIMIT + 1), None);
+
+        let (mut state, rx, doc, _key, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        let mut signature = signatures(&drain_ws(&ws_rx))[0];
+        let _ = drain(&rx);
+        for _ in 0..RESEND_RETRY_LIMIT {
+            let ticket = fail_sequencing(&mut state, doc, signature);
+            state.handle_sync_event(SyncEvent::ResendRetry {
+                document_id: doc,
+                ticket,
+            });
+            signature = signatures(&drain_ws(&ws_rx))[0];
+        }
+        assert!(drain(&rx).is_empty());
+
+        fail_sequencing(&mut state, doc, signature);
+        let rekey = &state.documents[&doc].rekey;
+        assert!(rekey.holds_refused() && rekey.unconfirmed() == 0);
+        let told = drain(&rx);
+        assert!(
+            matches!(
+                told.as_slice(),
+                [LogicEvent::SyncWarning {
+                    code: SyncWarningCode::EditRefused,
+                    ..
+                }]
+            ),
+            "the held delta was told as {told:?}"
+        );
     }
 
     /// `SYNC-148`: the echo of another session's delta, under this user's key

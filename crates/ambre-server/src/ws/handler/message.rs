@@ -86,6 +86,25 @@ impl ClockFences {
         self.0.insert(document_id, signature);
     }
 
+    /// Raises the fence when `answer` names a delta that took no clock: one
+    /// refused for its clock, or one the relay failed to sequence. The deltas
+    /// behind it would land ahead of it once sent again (`SRV-169`, `SRV-186`).
+    pub(crate) fn raise_for(&mut self, answer: &WsServerMsg) {
+        match answer {
+            WsServerMsg::ClockRefused {
+                document_id,
+                signature,
+                ..
+            }
+            | WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
+                ..
+            } => self.raise(*document_id, *signature),
+            _ => {}
+        }
+    }
+
     /// Whether the socket drops this document's deltas.
     pub(crate) fn holds(&self, document_id: &DocumentId) -> bool {
         self.0.contains_key(document_id)
@@ -114,8 +133,9 @@ impl ClockFences {
 ///
 /// The client acts on a refused clock. So the refusal names the delta by its
 /// signature, and carries the expected and the received clock (`SRV-037`).
-/// A store failure reaches the client as one generic message, and its name and
-/// text stay in the log (`SRV-081`, `SRV-020`).
+/// A store failure names the delta with a bare internal code, so the author
+/// sends it again (`SRV-186`). The store's name and text stay in the log
+/// (`SRV-081`, `SRV-020`).
 ///
 /// A document that owes a rotation refuses the frame for its key. The refusal
 /// names the key and the clock, so the author seals that frame again under the
@@ -138,7 +158,7 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
         AppError::NotFound { .. } => refusal(Some(*doc_id), RefusalCode::NotFound),
         _ => {
             tracing::error!("clock validation failed doc={doc_id}: {e}");
-            refusal(Some(*doc_id), RefusalCode::InternalError)
+            delta_refusal(update, RefusalCode::InternalError)
         }
     }
 }
@@ -381,12 +401,9 @@ pub(crate) async fn handle_update(
                 s
             }
             Err(e) => {
-                if matches!(e, AppError::ClockMismatch { .. }) {
-                    conn.clock_fences.raise(doc_id, update.signature);
-                }
-                let _ = outbound_tx
-                    .send(Payload::server_msg(&update_refusal(&update, &e)))
-                    .await;
+                let answer = update_refusal(&update, &e);
+                conn.clock_fences.raise_for(&answer);
+                let _ = outbound_tx.send(Payload::server_msg(&answer)).await;
                 return;
             }
         };
@@ -2217,11 +2234,37 @@ mod refusal_tests {
         let doc = update.public_data.document_id;
         assert!(matches!(
             update_refusal(&update, &cause),
-            WsServerMsg::Error {
-                document_id: Some(d),
+            WsServerMsg::DeltaRefused {
+                document_id,
+                signature,
                 code: RefusalCode::InternalError,
-            } if d == doc
+            } if document_id == doc && signature == update.signature
         ));
+    }
+
+    /// `SRV-186`: a delta the relay failed to sequence is named, and fences
+    /// the socket like a refused clock. A refusal that took a clock's place
+    /// for another cause raises nothing.
+    #[test]
+    fn a_delta_the_relay_failed_to_sequence_is_named_and_fences_the_socket() {
+        let update = seq_update(3).update;
+        let doc = update.public_data.document_id;
+        let failed = update_refusal(&update, &AppError::Redis("down".into()));
+        let mut fences = ClockFences::default();
+        fences.raise_for(&failed);
+        assert!(fences.holds(&doc), "the failed delta fences its document");
+        fences.answer(doc, &update.signature);
+        assert!(!fences.holds(&doc), "the author's answer lifts it");
+
+        let deleted = AppError::NotFound {
+            resource: "document",
+        };
+        fences.raise_for(&update_refusal(&update, &deleted));
+        fences.raise_for(&update_refusal(&update, &AppError::RotationOwed));
+        assert!(
+            !fences.holds(&doc),
+            "a deleted document or an owed key fences nothing"
+        );
     }
 
     /// `SRV-096`: a subscription refused on a store failure answers without the

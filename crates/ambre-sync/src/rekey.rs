@@ -73,6 +73,11 @@ pub(crate) struct Rekey {
     /// The relay refused a delta by name. It holds an edit this client made,
     /// so no later delta leaves until the document reopens (`SYNC-156`).
     refused: bool,
+    /// The delta the relay failed to sequence, waiting for its resend, and
+    /// the ticket of the timer armed for it (`SYNC-159`).
+    failed: Option<(Signature, u64)>,
+    /// Sequencing failures since the relay last echoed a delta of this log.
+    failures: u32,
 }
 
 impl Rekey {
@@ -94,6 +99,7 @@ impl Rekey {
             return;
         };
         self.sent.drain(..=at);
+        self.failures = 0;
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
         }
@@ -105,11 +111,41 @@ impl Rekey {
     /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no delta here
     /// carries that signature: a refusal of a delta already sent again.
     pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<Vec<u8>>> {
+        self.take_from(signature).map(|(_, bodies)| bodies)
+    }
+
+    /// The relay failed to sequence the delta signed `signature` through a
+    /// fault of its own (`SYNC-159`). It stays in the log, to leave again
+    /// once the timer `ticket` fires. Returns the failures counted since the
+    /// last echo, or `None` when no delta here carries that signature.
+    pub(crate) fn failed(&mut self, signature: &Signature, ticket: u64) -> Option<u32> {
+        self.position(signature)?;
+        self.failed = Some((*signature, ticket));
+        self.failures = self.failures.saturating_add(1);
+        Some(self.failures)
+    }
+
+    /// The timer `ticket` fired. Returns the failed delta's signature and
+    /// clock, with its body and every later body, to send again from that
+    /// clock. `None` when a later failure or a refusal made the timer stale.
+    pub(crate) fn resend_failed(&mut self, ticket: u64) -> Option<(Signature, u64, Vec<Vec<u8>>)> {
+        let (signature, armed) = self.failed?;
+        if armed != ticket {
+            return None;
+        }
+        self.failed = None;
+        let (clock, bodies) = self.take_from(&signature)?;
+        Some((signature, clock, bodies))
+    }
+
+    /// Takes the delta signed `signature` and every later one out of the log.
+    /// Returns its clock and their bodies, in order.
+    fn take_from(&mut self, signature: &Signature) -> Option<(u64, Vec<Vec<u8>>)> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
         }
-        Some(self.sent.drain(at..).map(|f| f.payload).collect())
+        Some((from, self.sent.drain(at..).map(|f| f.payload).collect()))
     }
 
     /// The relay refused the delta signed `signature` before sequencing it
@@ -121,6 +157,7 @@ impl Rekey {
             self.sent.truncate(at);
         }
         self.refused_from = None;
+        self.failed = None;
         !std::mem::replace(&mut self.refused, true)
     }
 
