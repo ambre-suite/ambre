@@ -765,7 +765,7 @@ pub fn main() {
         let fonts_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let faces = ambre_canvas::fonts::fetch_base_font_faces().await;
-            let _ = fonts_tx.try_send(LogicCommand::LoadFonts { faces });
+            host::send_faces(&fonts_tx, faces);
         });
     }
 

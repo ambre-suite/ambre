@@ -15,6 +15,7 @@ mod app_root;
 mod commands;
 #[cfg(test)]
 mod narrow;
+pub(crate) mod prose_status;
 mod share;
 mod sync_badge;
 use app_root::AppRoot;

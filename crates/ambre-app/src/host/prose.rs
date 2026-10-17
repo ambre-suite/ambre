@@ -916,4 +916,70 @@ mod tests {
             }
         }
     }
+
+    /// `PROSE-FEAT-040`: the page's count reaches the status bar slot every
+    /// application shares, as its five figures, after one frame.
+    #[wasm_bindgen_test]
+    async fn the_page_count_reaches_the_shared_status_slot() {
+        use crate::shell::prose_status::ProseFigures;
+        use leptos::mount::mount_to;
+        use leptos::wasm_bindgen::JsCast;
+
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let cell = document.create_element("div").expect("a cell");
+        let slot = document.create_element("div").expect("a slot");
+        let body = document.body().expect("a body");
+        body.append_child(&cell).expect("attached");
+        body.append_child(&slot).expect("attached");
+        let figures = RwSignal::new(None);
+        let target: web_sys::HtmlElement = slot.clone().dyn_into().expect("an element");
+        mount_to(target, move || view! { <ProseFigures figures=figures /> }).forget();
+
+        let (to_logic, _queue) = ambre_bus::conduit::local(4);
+        let (_to_ui, from_logic) = ambre_bus::conduit::local(4);
+        let mut view = ProseView::new(
+            DocumentId::new(),
+            to_logic,
+            from_logic,
+            800.0,
+            600.0,
+            TextInput::create(&document, &cell),
+            ThemeControl::new(Theme::Dark),
+            figures,
+            ProseSignals::new(),
+            BusyPublisher::new(),
+            NoticePublisher::new(),
+        );
+        // The count as the page state holds it once the Logic thread's event
+        // is applied. Decoding that event is Prose's own, and tested there.
+        view.state.word_count = WordCount {
+            words: 12,
+            characters: 60,
+            characters_with_spaces: 71,
+            paragraphs: 1,
+            pages: 2,
+        };
+        view.update();
+        leptos::task::tick().await;
+
+        let stats = slot.query_selector_all(".stat").expect("a query");
+        let shown: Vec<String> = (0..stats.length())
+            .filter_map(|i| stats.item(i))
+            .filter_map(|n| n.text_content())
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                "12 words",
+                "60 characters",
+                "71 with spaces",
+                "1 paragraph",
+                "2 pages"
+            ]
+        );
+        cell.remove();
+        slot.remove();
+    }
 }

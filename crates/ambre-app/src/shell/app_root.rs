@@ -4,6 +4,7 @@
 // this tree by the per-frame route poll in `main`.
 
 use super::super::*;
+use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
@@ -478,21 +479,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 {if boot_is_prose {
                     // The five figures of the Prose document
                     // (`PROSE-FEAT-040`), in the shared status band.
-                    view! {
-                        <ambre_chrome::StatusLabel label="Prose" />
-                        <span class="statusbar-stats">
-                            {move || {
-                                prose_figures.get().map(|figures| {
-                                    figures
-                                        .into_iter()
-                                        .map(|figure| view! { <span class="stat">{figure}</span> })
-                                        .collect_view()
-                                })
-                            }}
-                        </span>
-                        <span class="spacer"></span>
-                    }
-                    .into_any()
+                    view! { <ProseFigures figures=prose_figures /> }.into_any()
                 } else if boot_is_toile {
                     // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.

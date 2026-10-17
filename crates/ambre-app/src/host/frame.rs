@@ -41,6 +41,18 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
     remap_with(ev, |p| view.embed_to_child_space(p))
 }
 
+/// Ship font faces to the Logic thread, which measures on a context of its own
+/// and cannot fetch. The base faces at boot leave through here, and so does
+/// each script face fetched later: a late face travels the base path
+/// (`CANVAS-068`). A full channel drops the faces rather than stall the frame;
+/// the next fetch is a fresh delivery. Whether they were sent.
+pub(crate) fn send_faces(
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    faces: Vec<Vec<u8>>,
+) -> bool {
+    to_logic.try_send(LogicCommand::LoadFonts { faces }).is_ok()
+}
+
 /// [`remap_for_child`] with the board's mapping supplied, so the rewrite is
 /// tested without a live view.
 fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Option<InputEvent> {
@@ -485,12 +497,8 @@ impl FrameHost {
         if !new_faces.is_empty() {
             // The same face, to the Logic thread. It measures Prose pages on a
             // sealed context and cannot fetch, so a script it never receives
-            // paginates into tofu (`CANVAS-068`, `PROSE-115`). A full channel
-            // drops the face rather than stall the frame; the next lazy fetch
-            // is a fresh delivery.
-            let _ = self
-                .to_logic
-                .try_send(LogicCommand::LoadFonts { faces: new_faces });
+            // paginates into tofu (`CANVAS-068`, `PROSE-115`).
+            send_faces(&self.to_logic, new_faces);
             if let Some((w, h)) = self.gpu.as_ref().map(|g| g.size.logical()) {
                 self.view.resize(w, h);
             }
@@ -702,7 +710,8 @@ impl FrameHost {
 
 #[cfg(test)]
 mod tests {
-    use super::{paint_children, reconcile_children, remap_with};
+    use super::{paint_children, reconcile_children, remap_with, send_faces};
+    use ambre_bus::LogicCommand;
     use ambre_bus::app::toile::ElementId;
     use ambre_bus::{DocType, DocumentId};
     use ambre_canvas::InputEvent;
@@ -893,5 +902,23 @@ mod tests {
             ]
         );
         assert_eq!((surface.clip_depth(), surface.transform_depth()), (0, 0));
+    }
+
+    /// `CANVAS-068`: a face fetched after boot reaches the Logic thread as the
+    /// load a base face is, with its bytes intact. A full channel drops it
+    /// rather than wait.
+    #[wasm_bindgen_test]
+    fn a_late_face_reaches_the_logic_thread_as_a_base_face_does() {
+        let (to_logic, from_ui) = ambre_bus::conduit::local(1);
+        assert!(send_faces(&to_logic, vec![vec![1, 2, 3]]));
+        assert!(
+            !send_faces(&to_logic, vec![vec![4]]),
+            "a full channel took the face"
+        );
+        match from_ui.try_recv() {
+            Ok(LogicCommand::LoadFonts { faces }) => assert_eq!(faces, [vec![1, 2, 3]]),
+            other => panic!("not a font load: {other:?}"),
+        }
+        assert!(from_ui.try_recv().is_err(), "the dropped face arrived");
     }
 }

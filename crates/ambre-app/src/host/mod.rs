@@ -62,6 +62,7 @@ mod prose;
 mod run;
 mod web_embed;
 
+pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
 pub use prose::{ProseSignals, ProseView};
 
