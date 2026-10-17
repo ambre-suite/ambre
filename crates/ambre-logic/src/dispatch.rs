@@ -483,6 +483,9 @@ impl LogicState {
                 channel_id,
                 message,
             } => self.channel_request_failed(channel_id, message),
+            LogicEvent::SpaceChannels { space_id, channels } => {
+                self.space_channels(space_id, &channels);
+            }
 
             // -- Meetings (participant push) -----------------------------------
             LogicEvent::MeetingParticipantJoined {

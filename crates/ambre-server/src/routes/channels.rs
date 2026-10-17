@@ -57,6 +57,33 @@ pub async fn list_channel_documents(
     Ok(super::DocumentRows::json(json))
 }
 
+/// The public channels of a space, as the listing answers them.
+#[derive(serde::Serialize)]
+pub struct SpaceChannelsJson {
+    #[serde(with = "ambre_core::serde_id::channel_id::vec")]
+    pub channels: Vec<ambre_core::ChannelId>,
+}
+
+/// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
+/// in the space, to a member of the space document alone (`SRV-189`).
+///
+/// An unknown space and a space the caller is no member of answer the same
+/// 403. A private channel is never listed: the catalogue lists none.
+pub async fn list_space_channels(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(space_id): Path<String>,
+) -> Result<axum::Json<SpaceChannelsJson>, AppError> {
+    let space_id = ambre_core::Uuid::parse_str(&space_id)
+        .map(ambre_core::SpaceId::from_uuid)
+        .map_err(|_| AppError::Forbidden)?;
+    db::get_document_member(&state.db, &space_id.document_id(), &auth.user_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
+    let channels = db::list_space_public_channels(&state.db, &space_id).await?;
+    Ok(axum::Json(SpaceChannelsJson { channels }))
+}
+
 /// The body of a channel registration. Every id is one the client generated,
 /// and both documents already exist on the relay.
 #[derive(serde::Deserialize)]
@@ -1183,6 +1210,43 @@ mod tests {
             StatusCode::NO_CONTENT
         );
         channel
+    }
+
+    /// A member of a space lists the channels the relay holds public in it.
+    /// A private one, a deleted one and one of another space stay out. A
+    /// stranger to the space, and a malformed id, get a 403.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_of_a_space_lists_the_public_channels_it_holds(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let mallory = user(&state, "mallory@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Viewer)]).await;
+        let other = self::space(&state, alice, &[]).await;
+        let mut held = vec![
+            public_channel(&state, alice, space).await.id,
+            public_channel(&state, alice, space).await.id,
+        ];
+        held.sort_by_key(|id| *id.as_bytes());
+        private_channel(&state, alice, space).await;
+        public_channel(&state, alice, other).await;
+        let gone = public_channel(&state, alice, space).await;
+        assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
+
+        let list = |who: UserId, id: String| {
+            list_space_channels(State(state.clone()), session(who), Path(id))
+        };
+        let listed = list(bob, space.to_string()).await.expect("listed").0;
+        assert_eq!(listed.channels, held);
+        assert_eq!(
+            status(list(mallory, space.to_string()).await),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            status(list(bob, "not-a-space".into()).await),
+            StatusCode::FORBIDDEN
+        );
     }
 
     async fn delete(state: &Arc<AppState>, who: UserId, channel: ChannelId) -> StatusCode {

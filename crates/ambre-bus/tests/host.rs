@@ -265,6 +265,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
         SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
+        SyncCommand::ListSpaceChannels { .. } => "ListSpaceChannels",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
         SyncCommand::MarkRead { .. } => "MarkRead",
@@ -305,6 +306,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
         LogicEvent::ChannelLeft { .. } => "ChannelLeft",
         LogicEvent::ChannelRequestFailed { .. } => "ChannelRequestFailed",
+        LogicEvent::SpaceChannels { .. } => "SpaceChannels",
         LogicEvent::MeetingParticipantJoined { .. } => "MeetingParticipantJoined",
         LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
         LogicEvent::DocumentOpenFailed { .. } => "DocumentOpenFailed",
@@ -316,8 +318,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 23;
-const EVENT_VARIANTS: usize = 34;
+const SYNC_VARIANTS: usize = 24;
+const EVENT_VARIANTS: usize = 35;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -414,6 +416,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
+        SyncCommand::ListSpaceChannels { space_id: space },
         SyncCommand::CreateDirectMessage {
             channel_id: chan,
             meta,
@@ -554,6 +557,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::ChannelRequestFailed {
             channel_id: chan,
             message: "refused".to_owned(),
+        },
+        LogicEvent::SpaceChannels {
+            space_id: space,
+            channels: vec![chan],
         },
         LogicEvent::MeetingParticipantJoined {
             meeting_id: MeetingId::new(),

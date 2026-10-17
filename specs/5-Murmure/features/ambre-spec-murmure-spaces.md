@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-247` | `POST` | Deleting a public channel MUST remove its entry from the catalogue. | this spec section 3; `MURMURE-243` | `ambre_murmure::space_tests::unlisting_a_channel_removes_its_entry_and_leaves_the_others` -- the entry and its sealed key go, a peer replaying the delta lists it no more; `ambre_logic::spaces::tests::a_deleted_channel_leaves_the_client_and_the_catalogue_once_the_relay_answers` -- the owner's client writes that delta once the relay answers | none | verified |
-| `MURMURE-466` | `FAIL` | Given a catalogue entry whose channel the relay no longer holds, the client of a space admin MUST remove the entry. | this spec section 3; `MURMURE-247` | not built | unbuilt -- lands with the `A catalogue entry with no channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-466` | `FAIL` | Given a catalogue entry whose channel the relay no longer holds, the client of a space admin MUST remove the entry. | this spec section 3; `MURMURE-247`, `SRV-189` | `ambre_logic::spaces::tests::an_admin_unlists_an_entry_whose_channel_the_relay_no_longer_holds` -- an entry the answer lacks goes, one listed since the ask stays, and a viewer asks nothing; `ambre_sync::channels::tests::a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing` -- the answer reaches the Logic thread | none | verified |
 | `MURMURE-248` | `POST` | Deleting a space MUST delete every channel of the space, then the space document. | this spec section 3; `SRV-143` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -84,7 +84,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 13 `verified`, 18 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 14 `verified`, 17 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The leave,
   the delete, the guest and the retention are unbuilt.
 
@@ -112,7 +112,8 @@ member with the viewer role reads it, and the relay refuses a write from them (`
 
 **An entry can outlive its channel.** The owner's client unlists a deleted channel only once the
 relay answers (`MURMURE-247`). A closed tab loses that write, and so does an owner who is a viewer
-of the space. Any space admin then removes an entry whose channel the relay no longer holds
+of the space. So each time the space goes live, a space admin's client asks the relay which
+channels it holds (`SRV-189`). It removes an entry listed at the ask and absent from the answer
 (`MURMURE-466`).
 
 **A self-join, in steps.**
@@ -186,5 +187,3 @@ and accepts a self-join.
 * **Built.** A new space, the catalogue, the public channel it lists, and a self-join without its
   signed entry.
 * **Not built.** The signed join entry, the guest, the leave, the delete of a space and the retention.
-* **An entry with no channel stays.** A join on it gets a 403, until the
-  `A catalogue entry with no channel` Story (`ambre-roadmap.md` E5) lands `MURMURE-466`.

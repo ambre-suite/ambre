@@ -713,6 +713,14 @@ pub(crate) struct ChannelDocumentEntry {
     pub kind: ambre_core::ChannelDocumentKind,
 }
 
+/// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
+/// in a space.
+#[derive(Deserialize)]
+pub(crate) struct SpaceChannelsResponse {
+    #[serde(with = "ambre_core::serde_id::channel_id::vec")]
+    pub channels: Vec<ambre_core::ChannelId>,
+}
+
 /// `GET /api/activity`: per segment and thread of every channel of the
 /// caller, whether it holds something past the caller's cursor.
 #[derive(Deserialize)]

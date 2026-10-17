@@ -22,6 +22,10 @@ pub(crate) struct OpenSpace {
     state: SpaceState,
     role: Role,
     roster: Roster,
+    /// The catalogue entries as they stood when this client asked the relay
+    /// which channels it holds. Only these may be unlisted on its answer:
+    /// an entry listed since names a channel the relay held by then.
+    checked: Option<Vec<ChannelId>>,
 }
 
 /// A space on its way to open, with what arrived before its document was
@@ -62,6 +66,7 @@ impl LogicState {
                 state,
                 role: Role::Owner,
                 roster: Roster::new(self.my_user_id),
+                checked: None,
             },
         );
         self.send_to_sync(SyncCommand::OpenDocument {
@@ -148,6 +153,7 @@ impl LogicState {
                         state,
                         role,
                         roster,
+                        checked: None,
                     },
                 );
                 // The identity landed while the space was opening.
@@ -383,6 +389,58 @@ impl LogicState {
     /// which reads them once its subscription holds (`SYNC-150`).
     fn space_live(&mut self, space_id: SpaceId) {
         self.send_presence(space_id);
+        self.check_catalogue(space_id);
+    }
+
+    /// Ask the relay which channels it holds as public in the space. A space
+    /// admin then drops an entry that outlived its channel (the Murmure
+    /// spaces spec). A viewer writes no catalogue, and an empty one has
+    /// nothing to drop.
+    fn check_catalogue(&mut self, space_id: SpaceId) {
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return;
+        };
+        let listed: Vec<ChannelId> = space
+            .state
+            .catalogue()
+            .iter()
+            .map(|entry| entry.channel_id)
+            .collect();
+        if space.role == Role::Viewer || listed.is_empty() {
+            return;
+        }
+        space.checked = Some(listed);
+        self.send_to_sync(SyncCommand::ListSpaceChannels { space_id });
+    }
+
+    /// The relay's channels of the space. Unlist each entry checked when
+    /// this client asked and absent from the answer: its channel is gone.
+    pub(crate) fn space_channels(&mut self, space_id: SpaceId, channels: &[ChannelId]) {
+        let Some(space) = self.spaces.get_mut(&space_id) else {
+            return;
+        };
+        let Some(checked) = space.checked.take() else {
+            return;
+        };
+        let mut deltas = Vec::new();
+        for channel_id in checked.into_iter().filter(|id| !channels.contains(id)) {
+            match space.state.unlist_channel(channel_id) {
+                Ok(Some(delta)) => deltas.push(delta),
+                Ok(None) => {}
+                Err(error) => tracing::warn!("Logic: unlisting {channel_id} failed: {error}"),
+            }
+        }
+        if deltas.is_empty() {
+            return;
+        }
+        for payload in deltas {
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id: space_id.document_id(),
+                payload,
+                summary: None,
+            });
+        }
+        self.show_catalogue(space_id);
     }
 
     /// Send this user's presence sample on the space document, and on no
@@ -1295,6 +1353,62 @@ mod tests {
         state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id: kept });
         assert!(drain(&sync).is_empty());
         assert!(state.channels.contains_key(&kept));
+    }
+
+    /// A space admin's client asks the relay which channels it holds each
+    /// time the space goes live. It unlists an entry the answer lacks, but
+    /// never one listed since it asked. A viewer asks nothing.
+    #[test]
+    fn an_admin_unlists_an_entry_whose_channel_the_relay_no_longer_holds() {
+        let (mut state, ui, sync) = harness();
+        let space_id = created_space(&mut state, &ui, &sync);
+        let (gone, ..) = public_channel(&mut state, space_id, "budget", &ui, &sync);
+        let (kept, ..) = public_channel(&mut state, space_id, "general", &ui, &sync);
+
+        ready(&mut state, space_id.document_id(), Role::Editor);
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(
+            c,
+            SyncCommand::ListSpaceChannels { space_id: s } if *s == space_id
+        )));
+        // Another admin lists a channel after the relay's read.
+        let (late, ..) = public_channel(&mut state, space_id, "late", &ui, &sync);
+
+        state.handle_logic_event(LogicEvent::SpaceChannels {
+            space_id,
+            channels: vec![kept],
+        });
+        assert_eq!(updates_of(&drain(&sync), space_id.document_id()), 1);
+        let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");
+        let mut listed: Vec<ChannelId> = catalogue.iter().map(|e| e.channel_id).collect();
+        listed.sort_by_key(|id| *id.as_bytes());
+        let mut expected = [kept, late];
+        expected.sort_by_key(|id| *id.as_bytes());
+        assert_eq!(listed, expected, "{gone} goes, and only it");
+
+        // An answer nobody here asked for unlists nothing.
+        state.handle_logic_event(LogicEvent::SpaceChannels {
+            space_id,
+            channels: Vec::new(),
+        });
+        assert!(drain(&sync).is_empty());
+
+        let (mut viewer, ui, sync) = harness();
+        let payload = state.spaces[&space_id].state.snapshot().expect("snapshot");
+        viewer.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        viewer.grant_identity(space_id.document_id());
+        viewer.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: 1,
+            payload,
+        });
+        ready(&mut viewer, space_id.document_id(), Role::Viewer);
+        assert!(
+            !drain(&sync)
+                .iter()
+                .any(|c| matches!(c, SyncCommand::ListSpaceChannels { .. }))
+        );
+        assert_eq!(last_catalogue(&drain(&ui)).expect("shown").1.len(), 2);
     }
 
     /// The relay's notice ends a delete asked here as its answer would: the

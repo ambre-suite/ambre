@@ -177,6 +177,12 @@ pub enum SyncCommand {
         segment: SegmentId,
         members: Vec<DirectMember>,
     },
+    /// List the channels the relay holds as public in a space (`SRV-189`).
+    /// Answered by [`crate::LogicEvent::SpaceChannels`]; a failure is logged
+    /// and answers nothing, since the next open of the space asks again.
+    ListSpaceChannels {
+        space_id: SpaceId,
+    },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket

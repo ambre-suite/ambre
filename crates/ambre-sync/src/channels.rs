@@ -472,6 +472,41 @@ impl SyncState {
             Err(message) => tracing::warn!("Sync: activity answer failed: {message}"),
         }
     }
+
+    /// List the channels the relay holds as public in a space (`SRV-189`),
+    /// so a space admin can drop an entry whose channel is gone.
+    pub(crate) fn handle_list_space_channels(&self, space_id: SpaceId) {
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::warn!("Sync: no relay on this transport, no channels of a space");
+            return;
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let url = format!("{url_scheme}://{api_base}/api/spaces/{space_id}/channels");
+            let result = http::get_json_auth::<http::SpaceChannelsResponse>(&url, auth)
+                .await
+                .map(|resp| resp.channels);
+            let _ = tx.send(SyncEvent::SpaceChannelsListed { space_id, result });
+        });
+    }
+
+    /// The answer of
+    /// [`handle_list_space_channels`](Self::handle_list_space_channels), on
+    /// the Sync loop. A failure answers nothing: the catalogue stays as it is.
+    pub(crate) fn space_channels_listed(
+        &self,
+        space_id: SpaceId,
+        result: Result<Vec<ChannelId>, String>,
+    ) {
+        match result {
+            Ok(channels) => self.send_to_logic(LogicEvent::SpaceChannels { space_id, channels }),
+            Err(message) => {
+                tracing::warn!("Sync: listing the channels of space {space_id} failed: {message}");
+            }
+        }
+    }
 }
 
 fn no_relay() -> String {
@@ -1009,6 +1044,29 @@ mod tests {
                     LogicEvent::ChannelOpenFailed { channel_id: b, .. },
                     LogicEvent::ChannelOpenFailed { channel_id: c, .. },
                 ] if [*a, *b, *c] == [channel_id; 3]
+            ),
+            "{events:?}"
+        );
+    }
+
+    /// The relay's listing of a space's public channels decodes to their ids
+    /// and reaches the Logic thread. A failed listing answers nothing.
+    #[test]
+    fn a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing() {
+        let (sink, rx) = LogicSink::channel();
+        let state = SyncState::new(sink, String::new(), None);
+        let space_id = SpaceId::new();
+        let channel_id = ChannelId::new();
+        let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
+        let answer: http::SpaceChannelsResponse = serde_json::from_str(&body).expect("decodes");
+        state.space_channels_listed(space_id, Ok(answer.channels));
+        state.space_channels_listed(space_id, Err("HTTP 500".into()));
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [LogicEvent::SpaceChannels { space_id: s, channels }]
+                    if *s == space_id && *channels == [channel_id]
             ),
             "{events:?}"
         );

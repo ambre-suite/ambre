@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, MemberInfo, RequestId,
-    RestEvent, Role, SealedChannelKey, SnapshotId, UserId,
+    RestEvent, Role, SealedChannelKey, SnapshotId, SpaceId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -234,6 +234,12 @@ pub enum LogicEvent {
     ChannelRequestFailed {
         channel_id: ChannelId,
         message: String,
+    },
+    /// The channels the relay holds as public in the space, answering
+    /// [`SyncCommand::ListSpaceChannels`](crate::SyncCommand::ListSpaceChannels).
+    SpaceChannels {
+        space_id: SpaceId,
+        channels: Vec<ChannelId>,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------

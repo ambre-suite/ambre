@@ -137,6 +137,10 @@ pub fn api_router(
             axum::routing::get(list_channel_documents),
         )
         .route(
+            "/spaces/{id}/channels",
+            axum::routing::get(list_space_channels),
+        )
+        .route(
             "/channels/{id}/join",
             axum::routing::post(join_channel).get(join_channel_head),
         )

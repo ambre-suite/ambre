@@ -351,6 +351,12 @@ enum SyncEvent {
         requested: ChannelId,
         result: Result<ChannelId, String>,
     },
+    /// The answer to a listing of a space's public channels
+    /// (`SyncCommand::ListSpaceChannels`).
+    SpaceChannelsListed {
+        space_id: ambre_bus::SpaceId,
+        result: Result<Vec<ChannelId>, String>,
+    },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
@@ -1302,6 +1308,9 @@ impl SyncState {
                 segment,
                 members,
             } => self.handle_create_direct_message(channel_id, (meta, segment), members),
+            SyncCommand::ListSpaceChannels { space_id } => {
+                self.handle_list_space_channels(space_id)
+            }
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

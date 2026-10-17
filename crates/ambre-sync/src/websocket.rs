@@ -776,6 +776,9 @@ impl SyncState {
                 self.channel_listed(channel_id, self_join, result);
             }
             SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
+            SyncEvent::SpaceChannelsListed { space_id, result } => {
+                self.space_channels_listed(space_id, result);
+            }
             SyncEvent::ChannelCreated { channel_id, result } => {
                 self.channel_answered(
                     channel_id,

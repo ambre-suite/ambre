@@ -98,6 +98,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-106` | `FAIL` | Given a channel the relay does not hold as public, a self-join MUST be refused. | this spec section 3 | `ambre_server::routes::channels::tests::a_self_join_of_a_channel_not_held_public_is_refused` -- database tier | none | verified |
 | `SRV-107` | `POST` | An accepted self-join MUST store the entry the joining member signed, beside the new member row. | this spec section 3; `SYNC-106` | `ambre_server::routes::channels::tests::an_accepted_self_join_stores_the_entry_the_member_signed` -- the entry lands at the end of meta's log beside the row; `::a_self_join_of_a_logged_meta_without_an_entry_adds_no_member` -- a logged meta refuses a join with no entry | none | verified |
 | `SRV-108` | `FRAME` | A self-join MUST NOT grant a role above editor. | this spec section 3 | `ambre_server::routes::channels::tests::a_self_join_grants_no_role_above_editor` -- database tier | none | verified |
+| `SRV-189` | `POST` | A listing of a space MUST answer the channels the relay holds as public in it, and no other, to a member of the space alone. | this spec section 3; `ZK-015`; `5-Murmure/features/ambre-spec-murmure-spaces.md` | `ambre_server::routes::channels::tests::a_member_of_a_space_lists_the_public_channels_it_holds` -- a private, a deleted and another space's channel stay out, and a stranger gets a 403, database tier | none | verified |
 
 ### 1.6 A client asks for activity
 
@@ -133,7 +134,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 55 `verified`, 1 `qa-manual`, 10 `unimplemented`. A request test drives what
+* **Verification.** 56 `verified`, 1 `qa-manual`, 10 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -345,13 +346,13 @@ group needs a token.
 | content | the snapshot record, the delta page, and the presigned links | `ambre-spec-sequencer.md`, `ambre-spec-object-store.md` |
 | media | the two presigned links and the confirmation | `ambre-spec-object-store.md` |
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
-| channels | the documents a channel groups, listed to a member alone; a public or private channel registered in its space; a direct message, created or found; a self-join; the owner's delete | this document, `5-Murmure/features/ambre-spec-murmure-spaces.md` and `5-Murmure/features/ambre-spec-murmure-channels.md` |
+| channels | the documents a channel groups, listed to a member alone; the public channels of a space, listed to its members; a public or private channel registered in its space; a direct message, created or found; a self-join; the owner's delete | this document, `5-Murmure/features/ambre-spec-murmure-spaces.md` and `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | read cursors | a cursor, the activity answer, marking read | this document, and `ambre-spec-murmure-unread.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
-**What the surface does not carry.** Meetings have no route at all. Of the channel routes, the
-listing, the activity answer, the registration of a channel, the direct message, the signed
-self-join and the delete are built. The retention of a space is designed and unbuilt (`SRV-111`
+**What the surface does not carry.** Meetings have no route at all. Of the channel routes, these
+are built: two listings, the activity answer, a registration, the direct message, the signed
+self-join and the delete. The retention of a space is designed and unbuilt (`SRV-111`
 and `SRV-112`).
 
 **The last number of a document.** The activity answer compares the caller's cursor with the

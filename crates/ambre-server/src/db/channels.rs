@@ -85,6 +85,19 @@ pub async fn get_channel(
     .transpose()
 }
 
+/// The channels the relay holds as public in `space`, by identifier.
+pub async fn list_space_public_channels(
+    pool: &PgPool,
+    space: &ambre_core::SpaceId,
+) -> Result<Vec<ambre_core::ChannelId>, AppError> {
+    let ids: Vec<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM channels WHERE space_id = $1 AND is_public ORDER BY id")
+            .bind(id_to_uuid(*space))
+            .fetch_all(pool)
+            .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// The channel a document belongs to, or `None` for a document outside
 /// every channel.
 pub async fn channel_of_document(
