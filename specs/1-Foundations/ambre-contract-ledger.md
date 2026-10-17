@@ -27,9 +27,9 @@
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 734 | 418 | 816 | 609 |  | 2577 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` | 2 |  |  |  |  | 2 |
+| `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
-| `qa-manual` |  |  |  |  |  | 0 |
+| `qa-manual` | 2 |  |  |  |  | 2 |
 | `unimplemented` | 219 | 55 | 29 | 109 | 439 | 851 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT

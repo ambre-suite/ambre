@@ -86,10 +86,13 @@ more, and asserts identical final states once every delta has been exchanged.
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**No obstacle.** No row claims a gap that cannot close today, so the table carries its header alone.
+**The two obstacles.** Each holds one row today: the frame on the phone, and the page a deployment
+serves.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
+| `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
+| `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
