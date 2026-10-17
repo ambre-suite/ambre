@@ -20,8 +20,9 @@ fn draft(text: &str) -> MessageDraft {
 /// A channel just created, and a second member opened from its documents
 /// with no number known.
 fn pair() -> (ChannelState, ChannelState) {
-    let alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let bob = open_from(&alice, None);
     (alice, bob)
 }
@@ -98,8 +99,9 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
 
 #[test]
 fn the_authors_own_message_is_numbered_by_its_echo_and_never_counts() {
-    let mut alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let me = UserId::new();
     let segment = alice.active_id();
     let sent = alice.send(&draft("mine"), me, NOW).expect("send");
@@ -160,8 +162,9 @@ fn a_snapshot_row_past_its_horizon_is_no_number() {
 
 #[test]
 fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
-    let mut alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let segment = alice.active_id();
     alice.send(&draft("one"), UserId::new(), NOW).expect("send");
     let id = alice.messages(segment).expect("messages")[0].id;

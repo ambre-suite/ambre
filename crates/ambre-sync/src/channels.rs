@@ -154,8 +154,12 @@ impl SyncState {
             let documents = [meta.document_id(), segment.document_id()]
                 .into_iter()
                 .map(|document_id| {
-                    let (doc_key_enc, entry) =
-                        crate::sharing::creation(document_id, &channel_key, &exchange_key, &author)?;
+                    let (doc_key_enc, entry) = crate::sharing::creation(
+                        document_id,
+                        &channel_key,
+                        &exchange_key,
+                        &author,
+                    )?;
                     Ok((document_id, doc_key_enc, entry))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
@@ -165,7 +169,12 @@ impl SyncState {
                         .first()
                         .and_then(|(_, _, entry)| digest_of(entry))
                         .ok_or("meta's first entry does not decode")?;
-                    Some(seal_channel_key(channel_id, &channel_key, &space_key, meta_anchor)?)
+                    Some(seal_channel_key(
+                        channel_id,
+                        &channel_key,
+                        &space_key,
+                        meta_anchor,
+                    )?)
                 }
                 None => None,
             };
@@ -454,7 +463,7 @@ impl SyncState {
     /// loop. A failure leaves the marks the view holds, and says so in the log.
     pub(crate) fn activity_fetched(&self, result: Result<Vec<DocumentActivity>, String>) {
         match result {
-            Ok(documents) => self.send_to_logic(LogicEvent::Activity { documents }),
+            Ok(documents) => self.send_to_logic(LogicEvent::ChannelActivity { documents }),
             Err(message) => tracing::warn!("Sync: activity answer failed: {message}"),
         }
     }
@@ -544,9 +553,8 @@ pub(crate) fn join_key(
 ) -> Result<(String, KeyId), String> {
     let (key, anchor) = unseal_channel_key(channel_id, sealed, space_key)?;
     let own_pub = x25519_dalek::PublicKey::from(exchange_key);
-    let wrapped =
-        crate::sharing::wrap_anchored_b64(exchange_key, own_pub.as_bytes(), &key, anchor)
-            .map_err(|e| format!("wrap the channel key: {e}"))?;
+    let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, own_pub.as_bytes(), &key, anchor)
+        .map_err(|e| format!("wrap the channel key: {e}"))?;
     Ok((wrapped, key.id()))
 }
 
@@ -615,7 +623,9 @@ pub(crate) fn direct_message_request(
         let draft = membership_log::Draft {
             document,
             member,
-            member_key: *signing_keys.get(&member).ok_or("a member has no signing key")?,
+            member_key: *signing_keys
+                .get(&member)
+                .ok_or("a member has no signing key")?,
             act,
             role,
             key: (act != ambre_protocol::MembershipAct::ChangeRole).then(|| key.id()),
@@ -805,8 +815,7 @@ mod tests {
         };
         let own_pub = x25519_dalek::PublicKey::from(exchange_key);
         let (key, anchor) =
-            ambre_crypto::ecdh::unwrap_anchored(exchange_key, own_pub.as_bytes(), &wrapped)
-                .ok()?;
+            ambre_crypto::ecdh::unwrap_anchored(exchange_key, own_pub.as_bytes(), &wrapped).ok()?;
         assert_eq!(anchor, Some(ANCHOR.0), "every wrap carries meta's anchor");
         Some(key)
     }
@@ -818,8 +827,7 @@ mod tests {
         creator: &StaticSecret,
     ) -> (SealedChannelKey, String) {
         let channel_key = DocumentKey::generate();
-        let sealed =
-            seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
+        let sealed = seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
         let own_pub = x25519_dalek::PublicKey::from(creator);
         let own = crate::sharing::wrap_anchored_b64(
             creator,
@@ -1036,7 +1044,14 @@ mod tests {
         let invited: Vec<_> = members
             .iter()
             .zip(5u8..)
-            .map(|(m, seed)| (m, SigningKey::from_bytes(&[seed; 32]).verifying_key().to_bytes()))
+            .map(|(m, seed)| {
+                (
+                    m,
+                    SigningKey::from_bytes(&[seed; 32])
+                        .verifying_key()
+                        .to_bytes(),
+                )
+            })
             .collect();
         let meta = MetaId::new();
         let body = direct_message_request(

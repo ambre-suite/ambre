@@ -98,7 +98,7 @@ names the style's, and the blob's own bytes decide the image's.
   removes for good each hidden block whose session reads as ended, with its subtree and bodies. The
   removal is a delta of the client's session, sent after the snapshot, and never a step of its undo.
 * A session runs when it is the client's own, or when the user the registry names for it has a
-  session open here. Each session sends a presence frame once the document is ready, and answers
+  session open here. Each session sends a presence sample once the document is ready, and answers
   each newcomer once, so a silent one is known. A user leaves on the relay's word alone
   (`PRESENCE-014`), which waits for the last of that user's sessions (`PRESENCE-015`).
 * A block's body is a **root** Text container whose name joins the tag `t` and the tree id with `:`

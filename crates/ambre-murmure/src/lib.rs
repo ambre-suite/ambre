@@ -18,10 +18,13 @@ mod members;
 mod opening;
 pub mod schema;
 mod sequence;
+mod session;
 mod space;
 
 #[cfg(test)]
 mod channel_tests;
+#[cfg(test)]
+mod schema_reading;
 #[cfg(test)]
 mod schema_shape;
 #[cfg(test)]

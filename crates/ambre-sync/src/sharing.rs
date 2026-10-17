@@ -139,18 +139,9 @@ pub(crate) fn served_log_under(
     )
 }
 
-/// Walks the entries a members answer serves from `anchor`, under the rule
-/// documents apply to self-joins (`SYNC-106`).
-pub(crate) fn walk_served(
-    document_id: DocumentId,
-    anchor: Option<EntryDigest>,
-    texts: &[String],
-) -> Log {
-    walk_served_under(document_id, anchor, texts, membership_log::no_self_join)
-}
-
-/// [`walk_served`], under the self-join rule of the application that owns the
-/// document: a public channel's `meta` admits one, any other log none.
+/// Walks the entries a members answer serves from `anchor`, under the
+/// self-join rule of the application that owns the document (`SYNC-106`). A
+/// public channel's `meta` admits one, any other log none.
 pub(crate) fn walk_served_under(
     document_id: DocumentId,
     anchor: Option<EntryDigest>,
@@ -1813,10 +1804,12 @@ mod tests {
     /// rotation.
     #[tokio::test]
     async fn leaving_a_channel_posts_this_users_removal_on_its_meta() {
-        let (my_xk, _) = keypair(1);
-        let author = author();
-        let me = author.user_id;
-        let meta = DocumentId::new();
+        let owner = Peer::new(1);
+        let bob = Peer::new(2);
+        let mut logged = Logged::new(&owner);
+        logged.invite(&owner, &bob, Role::Editor);
+        let me = bob.author.user_id;
+        let meta = logged.document_id;
         let channel_id = ChannelId::new();
         let listing = serde_json::json!({ "documents": [
             { "document_id": DocumentId::new().to_string(), "kind": "segment" },
@@ -1824,15 +1817,15 @@ mod tests {
         ]});
         let http = FakeHttp::new(vec![
             Ok(listing),
-            Ok(serde_json::json!({ "members": [] })),
+            Ok(logged.answer()),
             Ok(serde_json::json!({ "status": "left" })),
         ]);
         let params = ChannelLeaveParams {
             channel_id,
-            author,
+            author: same(&bob.author),
             url_scheme: "https",
             api_base: "api.test".into(),
-            exchange_key: my_xk,
+            exchange_key: bob.xk.clone(),
         };
         assert_eq!(leave_channel_task(&http, params).await, Ok(()));
 
@@ -1866,10 +1859,7 @@ mod tests {
             exchange_key: keypair(1).0,
         };
         let http = FakeHttp::new(vec![Err("404".into())]);
-        assert_eq!(
-            leave_channel_task(&http, params()).await,
-            Err("404".into())
-        );
+        assert_eq!(leave_channel_task(&http, params()).await, Err("404".into()));
 
         let no_meta = serde_json::json!({ "documents": [
             { "document_id": DocumentId::new().to_string(), "kind": "segment" },
@@ -2318,7 +2308,12 @@ mod tests {
         fn walk(&self, more: &[&str]) -> Log {
             let mut texts = self.log.clone();
             texts.extend(more.iter().map(|text| text.to_string()));
-            walk_served(self.document_id, Some(self.anchor), &texts)
+            walk_served_under(
+                self.document_id,
+                Some(self.anchor),
+                &texts,
+                membership_log::no_self_join,
+            )
         }
 
         /// `owner` invites `peer`: the entry joins the log and the row joins
@@ -2596,8 +2591,8 @@ mod tests {
         );
     }
 
-    /// Holds `SYNC-106` at the list: a self-join verifies only in a log the
-    /// caller walks under the public-channel rule, the meta of a channel a
+    /// Holds `SYNC-106` at the list. A self-join verifies only in a log the
+    /// caller walks under the public-channel rule: the meta of a channel a
     /// catalogue lists.
     #[tokio::test]
     async fn the_member_list_admits_a_self_join_only_in_a_marked_log() {

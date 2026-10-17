@@ -110,6 +110,8 @@ impl LogicState {
                         self.member_requests.clear();
                         self.direct.clear();
                         self.unsent.clear();
+                        self.murmure_identities.clear();
+                        self.murmure_waiting.clear();
                         self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
@@ -466,7 +468,7 @@ impl LogicState {
                     self.channel_open_failed(channel_id, message);
                 }
             }
-            LogicEvent::Activity { documents } => self.channel_activity(&documents),
+            LogicEvent::ChannelActivity { documents } => self.channel_activity(&documents),
             LogicEvent::ChannelCreated { channel_id, key } => {
                 self.channel_created(channel_id, key);
             }
@@ -1746,9 +1748,9 @@ mod tests {
     /// fails the build here until it is listed.
     fn relayed_requests(doc: DocumentId) -> Vec<RestCommand> {
         use ambre_bus::rest::{SecretBytes, SecretString};
-        use ambre_bus::{ChannelId, MeetingId, Role, UserId};
+        use ambre_bus::{MeetingId, Role, UserId};
         let secret = || SecretBytes::new(b"pass".to_vec());
-        let (user, channel, meeting) = (UserId::new(), ChannelId::new(), MeetingId::new());
+        let (user, meeting) = (UserId::new(), MeetingId::new());
         let all = vec![
             RestCommand::Unlock {
                 passphrase: secret(),
@@ -1818,35 +1820,6 @@ mod tests {
                 sealed: vec![1],
                 passphrase: secret(),
             },
-            RestCommand::ListChannels,
-            RestCommand::CreateChannel {
-                name: "c".to_owned(),
-            },
-            RestCommand::DeleteChannel {
-                channel_id: channel,
-            },
-            RestCommand::InviteToChannel {
-                channel_id: channel,
-                invitee_email: "a@b.c".to_owned(),
-                role: Role::Editor,
-            },
-            RestCommand::RevokeFromChannel {
-                channel_id: channel,
-                user_id: user,
-            },
-            RestCommand::ListChannelMembers {
-                channel_id: channel,
-            },
-            RestCommand::UpdateChannelMemberRole {
-                channel_id: channel,
-                user_id: user,
-                role: Role::Viewer,
-            },
-            RestCommand::UpdateReadCursor {
-                channel_id: channel,
-                last_seq: 1,
-            },
-            RestCommand::GetUnreadCounts,
             RestCommand::CreateMeeting {
                 name: "m".to_owned(),
             },
@@ -1890,15 +1863,6 @@ mod tests {
                 | RestCommand::DownloadMedia { .. }
                 | RestCommand::SealDocFile { .. }
                 | RestCommand::OpenDocFile { .. }
-                | RestCommand::ListChannels
-                | RestCommand::CreateChannel { .. }
-                | RestCommand::DeleteChannel { .. }
-                | RestCommand::InviteToChannel { .. }
-                | RestCommand::RevokeFromChannel { .. }
-                | RestCommand::ListChannelMembers { .. }
-                | RestCommand::UpdateChannelMemberRole { .. }
-                | RestCommand::UpdateReadCursor { .. }
-                | RestCommand::GetUnreadCounts
                 | RestCommand::CreateMeeting { .. }
                 | RestCommand::JoinMeeting { .. }
                 | RestCommand::LeaveMeeting { .. }

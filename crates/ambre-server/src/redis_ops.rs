@@ -636,7 +636,7 @@ pub async fn user_broadcast(
 }
 
 /// Tells every connection subscribed to a document that its members changed
-/// (`SRV-178`). The message names the document alone, which the topic already
+/// (`SRV-177`). The message names the document alone, which the topic already
 /// names. Best-effort, like every broadcast: the member rows stay the source of
 /// truth, and a client reads them again at its next open.
 pub async fn members_changed(redis: &Client, document_id: &ambre_core::DocumentId) {

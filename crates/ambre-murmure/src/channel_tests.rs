@@ -99,7 +99,9 @@ fn peer_of(state: &ChannelState) -> ChannelState {
             .expect("active"),
     )]);
     let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
-    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments).expect("peer")
+    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify()
 }
 
 /// The roots a document holds. Loro reports every root it was ever asked
@@ -445,8 +447,9 @@ fn bytes_the_crdt_engine_refuses_never_reach_the_header_check() {
 
 #[test]
 fn a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author() {
-    let mut state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let alice = UserId::new();
     let first = state.send(&draft("hello"), alice, NOW).expect("send");
     let second = state.send(&draft("again"), alice, NOW).expect("send");
@@ -465,8 +468,9 @@ fn a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author() {
 
 #[test]
 fn a_sent_message_carries_a_content_summary_with_its_mentions() {
-    let mut state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let (bob, carol) = (UserId::new(), UserId::new());
     let with_mentions = MessageDraft {
         text: "@bob @carol @bob @channel".to_owned(),
@@ -492,8 +496,9 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
 
 #[test]
 fn sending_a_message_changes_no_other_message() {
-    let mut state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     state.send(&draft("one"), UserId::new(), NOW).expect("send");
     state.send(&draft("two"), UserId::new(), NOW).expect("send");
     let list = state
@@ -515,8 +520,9 @@ fn sending_a_message_changes_no_other_message() {
 
 #[test]
 fn a_sent_delta_brings_a_peer_to_the_same_messages() {
-    let mut alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let mut bob = peer_of(&alice);
     let sent = alice
         .send(&draft("hi bob"), UserId::new(), NOW)
@@ -537,8 +543,9 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
 
 #[test]
 fn the_body_lives_in_a_text_and_no_map_holds_it() {
-    let mut state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     state
         .send(&draft("the body"), UserId::new(), NOW)
         .expect("send");
@@ -564,8 +571,9 @@ fn the_body_lives_in_a_text_and_no_map_holds_it() {
 
 #[test]
 fn two_peers_typing_in_one_message_keep_both_texts() {
-    let mut alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let mut bob = peer_of(&alice);
     let sent = alice
         .send(&draft("base"), UserId::new(), NOW)
@@ -574,9 +582,21 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
         .expect("apply");
 
     let segment = alice.active_id();
-    let type_into = |state: &ChannelState, at: usize, text: &str| -> Vec<u8> {
+    let known = |state: &ChannelState| {
+        state
+            .doc(segment.document_id())
+            .expect("segment")
+            .oplog_vv()
+    };
+    let (alice_knew, bob_knew) = (known(&alice), known(&bob));
+    // What the other peer lacks, so a peer's registry entry rides with its
+    // first edit (`AUTHOR-009`).
+    let type_into = |state: &ChannelState,
+                     other_knew: &loro::VersionVector,
+                     at: usize,
+                     text: &str|
+     -> Vec<u8> {
         let doc = state.doc(segment.document_id()).expect("segment");
-        let before = doc.oplog_vv();
         let Some(ValueOrContainer::Container(Container::Map(message))) =
             doc.get_list(MESSAGES).get(0)
         else {
@@ -589,10 +609,10 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
         };
         content.insert(at, text).expect("type");
         doc.commit();
-        doc.export(ExportMode::updates(&before)).expect("delta")
+        doc.export(ExportMode::updates(other_knew)).expect("delta")
     };
-    let from_alice = type_into(&alice, 0, "A:");
-    let from_bob = type_into(&bob, 4, ":B");
+    let from_alice = type_into(&alice, &bob_knew, 0, "A:");
+    let from_bob = type_into(&bob, &alice_knew, 4, ":B");
     alice
         .apply_remote(segment.document_id(), &from_bob)
         .expect("apply");
@@ -652,13 +672,16 @@ fn second_member(state: &ChannelState) -> ChannelState {
             .expect("segment"),
     )]);
     let meta_bytes = state.export_all(meta.document_id()).expect("meta");
-    ChannelState::open(state.channel_id(), meta, &meta_bytes, &segments).expect("open")
+    ChannelState::open(state.channel_id(), meta, &meta_bytes, &segments)
+        .expect("open")
+        .identify()
 }
 
 #[test]
 fn a_name_one_member_sets_reaches_every_member() {
-    let mut alice =
-        ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW).expect("create");
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+        .expect("create")
+        .identify();
     let mut bob = second_member(&alice);
 
     let named = alice.name_direct(Some("  trip  ")).expect("name");
@@ -690,7 +713,8 @@ fn a_name_one_member_sets_reaches_every_member() {
 #[test]
 fn clearing_a_name_removes_its_key() {
     let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, Some("trip"), NOW)
-        .expect("create");
+        .expect("create")
+        .identify();
     let mut bob = second_member(&alice);
     let meta = alice.meta_id().document_id();
 
@@ -723,8 +747,9 @@ fn only_a_direct_message_takes_a_name_from_a_member() {
 
 #[test]
 fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
-    let mut state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     let doc = state.doc(state.active_id().document_id()).expect("active");
     doc.get_list(MESSAGES).push("not a message").expect("push");
     doc.commit();

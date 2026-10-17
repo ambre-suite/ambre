@@ -887,6 +887,16 @@ impl SyncState {
         // (`SYNC-112`). A document opened with no identity has written nothing
         // the Logic thread would send.
         let Some(nonce) = self.session_nonces.get(&document_id) else {
+            if !self.documents.contains_key(&document_id) {
+                // No session of this document: the update cannot reach the
+                // relay, so the refusal is said aloud (`SYNC-069`).
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: SyncWarningCode::UpdateRefused,
+                    message: "update for a document with no open session".into(),
+                });
+                return;
+            }
             tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
             return;
         };
@@ -1475,7 +1485,7 @@ mod tests {
         holder: &x25519_dalek::StaticSecret,
         wrapper: &x25519_dalek::StaticSecret,
         doc_key: &DocumentKey,
-        role: &str,
+        role: ambre_core::Role,
     ) -> http::MemberEntry {
         let holder_pub = x25519_dalek::PublicKey::from(holder).to_bytes();
         let wrapper_pub = x25519_dalek::PublicKey::from(wrapper).to_bytes();
@@ -1485,7 +1495,7 @@ mod tests {
             exchange_pub_key: hex::encode(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
-            role: role.into(),
+            role,
             wrapper_exchange_pub_key: hex::encode(wrapper_pub),
         }
     }
@@ -1501,8 +1511,8 @@ mod tests {
         let doc_key = DocumentKey::generate();
         let resp = http::MembersResponse {
             members: vec![
-                member_row(me, &my_xk, &peer_xk, &doc_key, "editor"),
-                member_row(peer, &peer_xk, &peer_xk, &doc_key, "owner"),
+                member_row(me, &my_xk, &peer_xk, &doc_key, ambre_core::Role::Editor),
+                member_row(peer, &peer_xk, &peer_xk, &doc_key, ambre_core::Role::Owner),
             ],
             rotation_owed: true,
             log: Vec::new(),
@@ -1529,7 +1539,13 @@ mod tests {
         let me = UserId::new();
         let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
-        let mut row = member_row(me, &my_xk, &peer_xk, &DocumentKey::generate(), "editor");
+        let mut row = member_row(
+            me,
+            &my_xk,
+            &peer_xk,
+            &DocumentKey::generate(),
+            ambre_core::Role::Editor,
+        );
         let mut raw = base64::engine::general_purpose::URL_SAFE
             .decode(&row.doc_key_enc)
             .unwrap();
@@ -2916,7 +2932,7 @@ mod tests {
         let doc_key = DocumentKey::generate();
         // The row `wrapper` wrapped, its wrapper field rewritten to `named`.
         let unwrapped = |wrapper: &x25519_dalek::StaticSecret, named: Option<String>| {
-            let mut row = member_row(me, &my_xk, wrapper, &doc_key, "editor");
+            let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
             if let Some(named) = named {
                 row.wrapper_exchange_pub_key = named;
             }

@@ -91,7 +91,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **CRDT containers.** none. The member rows of the space document are the relay's table
 (`MURMURE-031`, `ambre-spec-membership.md`). The display name comes with each row, and the avatar
-follows `ambre-spec-profile.md`. The relay says when the rows change (`SRV-178`), and an open
+follows `ambre-spec-profile.md`. The relay says when the rows change (`SRV-177`), and an open
 space reads them again; of two readings that cross, the later one stands.
 
 **Presence in a space.** Each client that holds a space open sends one presence sample on the space

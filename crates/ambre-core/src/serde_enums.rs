@@ -12,6 +12,11 @@ use crate::{ChannelDocumentKind, DocType, Role};
 pub mod doc_type {
     use super::*;
 
+    /// Writes the document type as its lowercase name.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
     pub fn serialize<S>(doc_type: &DocType, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -20,6 +25,11 @@ pub mod doc_type {
         serializer.serialize_str(&lowercase)
     }
 
+    /// Reads the document type from its name, in any case.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a string, or a name no document type has.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<DocType, D::Error>
     where
         D: Deserializer<'de>,
@@ -39,6 +49,11 @@ pub mod doc_type {
 pub mod role {
     use super::*;
 
+    /// Writes the role as its lowercase name.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
     pub fn serialize<S>(role: &Role, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -46,6 +61,11 @@ pub mod role {
         serializer.serialize_str(format!("{}", role).to_lowercase().as_str())
     }
 
+    /// Reads the role from its name.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a string, or a name no role has.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Role, D::Error>
     where
         D: Deserializer<'de>,
@@ -59,6 +79,11 @@ pub mod role {
 pub mod channel_document_kind {
     use super::*;
 
+    /// Writes the kind as its lowercase name.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
     pub fn serialize<S>(kind: &ChannelDocumentKind, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -66,6 +91,11 @@ pub mod channel_document_kind {
         serializer.serialize_str(kind.as_str())
     }
 
+    /// Reads the kind from its lowercase name.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a string, or a name no kind has.
     pub fn deserialize<'de, D>(deserializer: D) -> Result<ChannelDocumentKind, D::Error>
     where
         D: Deserializer<'de>,

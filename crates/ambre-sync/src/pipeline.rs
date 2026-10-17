@@ -502,7 +502,7 @@ pub fn update_frame(
         .map(|update| SealedFrame(WsClientMsg::Update(update)))
 }
 
-/// Seals `payload` into an ephemeral frame, through [`seal_ephemeral`].
+/// Seals `payload` into an ephemeral, through [`seal_ephemeral`].
 ///
 /// # Errors
 ///

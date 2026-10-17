@@ -1021,7 +1021,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x06);
+        assert_eq!(bytes[0], 0x07);
     }
 
     #[test]
@@ -1624,9 +1624,17 @@ mod access_tests {
         let owner = create_test_user(pool, "owner@ambre.app").await;
         let editor = create_test_user(pool, "editor@ambre.app").await;
         let doc_id = create_test_document(pool, owner, "toile").await;
-        db::add_document_member(pool, &doc_id, &editor, "editor", &[5u8; 32], &owner, None)
-            .await
-            .unwrap();
+        db::add_document_member(
+            pool,
+            &doc_id,
+            &editor,
+            ambre_core::Role::Editor,
+            &[5u8; 32],
+            &owner,
+            None,
+        )
+        .await
+        .unwrap();
         (doc_id, editor)
     }
 
@@ -1760,7 +1768,7 @@ mod access_tests {
         assert!(!removed.doc_subscriptions.contains(&doc_id));
     }
 
-    /// `SRV-089`: a presence frame is recorded, and takes no sequence number,
+    /// `SRV-089`: a presence sample is recorded, and takes no sequence number,
     /// no clock and no place in the pending list or the delta index.
     #[sqlx::test]
     #[cfg_attr(

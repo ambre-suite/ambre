@@ -88,7 +88,7 @@ pub struct UpdateRow {
     pub seq: i64,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
     pub s3_key: Option<String>,
-    /// The sealed frame itself, for a delta in the hot tail (`SRV-148`).
+    /// The sealed envelope itself, for a delta in the hot tail (`SRV-148`).
     pub wire: Option<Payload>,
     /// The batch object that holds the frame (`SRV-151`).
     pub batch_key: Option<String>,
@@ -314,7 +314,7 @@ pub async fn insert_update(
     Ok(())
 }
 
-/// Inserts a delta with its sealed frame in the row, unless the document's
+/// Inserts a delta with its sealed envelope in the row, unless the document's
 /// inline tail is at `cap` (`SRV-148`, `SRV-150`). The count and the insert
 /// are one statement. Two writers racing at the cap may each see room, so the
 /// tail can pass it by the writers in flight at once.
@@ -362,7 +362,7 @@ pub async fn insert_inline_update(
     })
 }
 
-/// Puts the sealed frame of delta `seq` in its index row, the fallback when
+/// Puts the sealed envelope of delta `seq` in its index row, the fallback when
 /// its object can never be queued (`SRV-034`). The row drops the object key it
 /// pointed at, since a delta has one home. A row already holding its frame or
 /// pointing at a batch is left as it is. Returns whether a row took it.

@@ -1,7 +1,7 @@
 // ambre-server/src/payload.rs
 // The one type the relay holds a payload in, and every form a payload takes.
 
-//! A payload is the bytes of a sealed frame: a delta, an ephemeral, a message
+//! A payload is the bytes of a sealed envelope: a delta, an ephemeral, a message
 //! to a client, a batch of deltas, a pending entry. The relay stores and
 //! forwards them, and never logs one (`ZK-006`, `SRV-001`).
 //!
@@ -86,7 +86,7 @@ impl Payload {
         Self(message.payload().to_vec())
     }
 
-    /// A batch: each delta's number and its sealed frame, unchanged
+    /// A batch: each delta's number and its sealed envelope, unchanged
     /// (`SRV-153`).
     pub fn batch(frames: &[(i64, Payload)]) -> Result<Self, postcard::Error> {
         let frames: Vec<(i64, &[u8])> = frames.iter().map(|(s, f)| (*s, f.0.as_slice())).collect();

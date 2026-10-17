@@ -23,6 +23,16 @@ pub(crate) struct ReadCursor {
     pub(crate) active: bool,
 }
 
+/// A command that writes a channel or a space document, held until that
+/// document may be written (`AUTHOR-026`).
+#[derive(Debug)]
+pub(crate) enum HeldCommand {
+    /// A command of an open channel.
+    Channel(ChannelId, MurmureCommand),
+    /// A command of an open space.
+    Space(ambre_bus::SpaceId, ambre_bus::SpaceCommand),
+}
+
 /// The unread count of an open channel, `None` when a part of it is unknown
 /// (the Murmure unread spec). Unknown is a held segment with no cursor yet,
 /// or a final segment not loaded that may hold unread messages.
@@ -61,7 +71,7 @@ impl LogicState {
     /// Hand the view the count of an open channel, once it is known.
     fn emit_count(&self, channel_id: ChannelId) {
         if let Some(mark) = self.counted(channel_id) {
-            self.send_to_ui(UiEvent::Activity {
+            self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
             });
         }
@@ -85,25 +95,118 @@ impl LogicState {
     }
 
     /// Hold a channel the relay just created, and open the session of its two
-    /// documents. Their whole content leaves as their first update once the
-    /// Sync worker holds each session.
+    /// documents. Each is written again under its PeerID once its identity
+    /// lands. Its whole content leaves as its first update once the Sync
+    /// worker holds the document.
     pub(crate) fn hold_created(&mut self, channel: ChannelState) {
         for document_id in [
             channel.meta_id().document_id(),
             channel.active_id().document_id(),
         ] {
-            match channel.export_all(document_id) {
-                Ok(export) => {
-                    self.unsent.insert(document_id, export);
-                }
-                Err(error) => tracing::warn!("Logic: export of {document_id} failed: {error}"),
-            }
             self.send_to_sync(SyncCommand::OpenDocument {
                 document_id,
                 doc_type: DocType::Murmure,
             });
         }
         self.channels.insert(channel.channel_id(), channel);
+    }
+
+    /// Note the session identity Sync issued for a channel or a space
+    /// document. An open channel or space holding it adopts it (`AUTHOR-002`). An identity no channel or space expects is
+    /// stale, and dropped.
+    pub(crate) fn adopt_murmure_session(
+        &mut self,
+        document_id: DocumentId,
+        peer: u64,
+        entry: Vec<u8>,
+    ) {
+        let space = ambre_bus::SpaceId::from_document(document_id);
+        let expected = self.channels.values().any(|c| c.holds(document_id))
+            || self
+                .opening
+                .values()
+                .flatten()
+                .any(|o| o.expects(document_id))
+            || self.spaces.contains_key(&space)
+            || self.space_opening.contains_key(&space);
+        if !expected {
+            return;
+        }
+        self.murmure_identities.insert(document_id, (peer, entry));
+        self.settle_murmure_session(document_id);
+    }
+
+    /// Adopt the identity waiting for `document_id` when an open channel or
+    /// space now holds it, then run the commands that waited on it.
+    ///
+    /// A document this client created comes back whole, written under its
+    /// PeerID: its first update, sent once the Sync worker holds it.
+    pub(crate) fn settle_murmure_session(&mut self, document_id: DocumentId) {
+        let Some((peer, entry)) = self.murmure_identities.get(&document_id).cloned() else {
+            return;
+        };
+        let adopted =
+            if let Some(channel) = self.channels.values_mut().find(|c| c.holds(document_id)) {
+                channel.adopt_session(document_id, peer, entry)
+            } else if let Some(adopted) = self.adopt_space_session(document_id, peer, entry) {
+                adopted
+            } else {
+                // Its channel or its space is still opening.
+                return;
+            };
+        self.murmure_identities.remove(&document_id);
+        match adopted {
+            Ok(Some(first)) => {
+                self.unsent.insert(document_id, first);
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!("Logic: identity of {document_id} refused: {error}"),
+        }
+        self.release_waiting(document_id);
+    }
+
+    /// Whether a command may write `document_id` now: its identity landed,
+    /// and a document this client created has left whole. A delta sent
+    /// before that first update would reach a relay that holds no document.
+    pub(crate) fn murmure_writable(&self, document_id: DocumentId, identified: bool) -> bool {
+        identified && !self.unsent.contains_key(&document_id)
+    }
+
+    /// Hold a command until `document_id` may be written. Past the cap the
+    /// command is dropped and logged, so the ones held keep their order.
+    pub(crate) fn wait_for_session(&mut self, document_id: DocumentId, command: HeldCommand) {
+        let waiting = self.murmure_waiting.entry(document_id).or_default();
+        if waiting.len() >= HELD_EDITS_LIMIT {
+            tracing::warn!("Logic: too many edits wait on {document_id}; dropped");
+            return;
+        }
+        waiting.push(command);
+    }
+
+    /// Run, in their order, the commands that waited on `document_id`. One
+    /// that still cannot write waits again.
+    pub(crate) fn release_waiting(&mut self, document_id: DocumentId) {
+        for waiting in self
+            .murmure_waiting
+            .remove(&document_id)
+            .unwrap_or_default()
+        {
+            match waiting {
+                HeldCommand::Channel(channel_id, command) => {
+                    self.handle_channel_command(channel_id, command);
+                }
+                HeldCommand::Space(space_id, command) => {
+                    self.handle_space_command(space_id, command);
+                }
+            }
+        }
+    }
+
+    /// Forget what waited on a document whose session ended.
+    pub(crate) fn forget_murmure_session(&mut self, document_id: DocumentId) {
+        self.murmure_identities.remove(&document_id);
+        self.murmure_waiting.remove(&document_id);
+        self.unsent.remove(&document_id);
     }
 
     /// Drop a channel, open or opening, and end the session of each of its
@@ -119,6 +222,7 @@ impl LogicState {
         };
         for document_id in documents {
             self.channel_ledgers.remove(&document_id);
+            self.forget_murmure_session(document_id);
             self.send_to_sync(SyncCommand::CloseDocument { document_id });
         }
     }
@@ -216,7 +320,12 @@ impl LogicState {
                         Err(error) => tracing::warn!("Logic: segment {segment}: {error}"),
                     }
                 }
+                let documents = state.document_ids();
                 self.channels.insert(channel_id, *state);
+                // Each identity landed while the channel was opening.
+                for document_id in documents {
+                    self.settle_murmure_session(document_id);
+                }
                 self.emit_count(channel_id);
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
@@ -254,6 +363,7 @@ impl LogicState {
     fn end_opening(&mut self, channel_id: ChannelId, message: String) {
         if let Some(Some(opening)) = self.opening.remove(&channel_id) {
             for document_id in opening.document_ids() {
+                self.forget_murmure_session(document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
         }
@@ -285,7 +395,11 @@ impl LogicState {
     ) {
         let space = ambre_bus::SpaceId::from_document(document_id);
         let held = self.channels.values().any(|c| c.holds(document_id))
-            || self.opening.values().flatten().any(|o| o.expects(document_id))
+            || self
+                .opening
+                .values()
+                .flatten()
+                .any(|o| o.expects(document_id))
             || self.spaces.contains_key(&space)
             || self.space_opening.contains_key(&space);
         if held {
@@ -308,6 +422,25 @@ impl LogicState {
     ) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             tracing::warn!("Logic: command for channel {channel_id}, which is not open; dropped");
+            return;
+        };
+        // A write before its document may be written waits: under any other
+        // PeerID it would never travel (`AUTHOR-026`, `AUTHOR-029`).
+        let target = match &command {
+            MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
+            MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
+            MurmureCommand::LoadOlder { .. }
+            | MurmureCommand::MarkRead
+            | MurmureCommand::MarkUnread { .. } => None,
+        };
+        if let Some(document_id) = target {
+            let identified = channel.identified(document_id);
+            if !self.murmure_writable(document_id, identified) {
+                return self
+                    .wait_for_session(document_id, HeldCommand::Channel(channel_id, command));
+            }
+        }
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
         match command {
@@ -386,7 +519,7 @@ impl LogicState {
                     active: false,
                     unread: None,
                 });
-                self.send_to_ui(UiEvent::Activity {
+                self.send_to_ui(UiEvent::ChannelActivity {
                     channels: vec![mark],
                 });
             }
@@ -486,7 +619,7 @@ impl LogicState {
                 *mark = counted;
             }
         }
-        self.send_to_ui(UiEvent::Activity { channels });
+        self.send_to_ui(UiEvent::ChannelActivity { channels });
     }
 
     /// Apply remote payloads to the channel that holds `document_id`
@@ -535,11 +668,17 @@ impl LogicState {
         true
     }
 
-    /// Hold an open channel, as the staged open does, for a test that needs
-    /// one without the relay's round trips.
+    /// Hold an open channel, as the staged open does, without the relay's
+    /// round trips. Each document is under its session identity, and the
+    /// relay already holds it.
     #[cfg(test)]
     pub(crate) fn hold_channel(&mut self, channel: ChannelState) {
+        let documents = channel.document_ids();
         self.channels.insert(channel.channel_id(), channel);
+        for document_id in documents {
+            self.grant_identity(document_id);
+            self.unsent.remove(&document_id);
+        }
     }
 }
 
@@ -650,13 +789,76 @@ mod tests {
         assert!(ui.try_recv().is_err());
     }
 
+    /// A message sent before its segment's identity lands waits. It leaves
+    /// once the segment went up whole, after that first update, and both are
+    /// written under the session's PeerID alone (`AUTHOR-026`, `AUTHOR-029`).
+    #[test]
+    fn a_message_before_the_identity_waits_then_leaves_under_it() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let _ = drain(&ui);
+        let channel_id = ChannelId::new();
+        let channel =
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let active = channel.active_id().document_id();
+        state.hold_created(channel);
+        let _ = drain(&sync);
+
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: send("early", Vec::new()),
+        });
+        assert!(
+            drain(&sync).is_empty(),
+            "nothing leaves before the identity"
+        );
+        assert!(drain(&ui).is_empty(), "nothing is written either");
+
+        let peer = state.grant_identity(active);
+        assert!(
+            drain(&sync).is_empty(),
+            "nothing leaves before the Sync worker holds the document"
+        );
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: active,
+            role: ambre_bus::Role::Owner,
+        });
+        let sent = drain(&sync);
+        let [
+            SyncCommand::SendUpdate {
+                document_id: first_to,
+                payload: first,
+                summary: None,
+            },
+            SyncCommand::SendUpdate {
+                document_id: message_to,
+                payload: message,
+                summary: Some(_),
+            },
+        ] = sent.as_slice()
+        else {
+            panic!("the whole segment, then the message, got {sent:?}");
+        };
+        assert_eq!((*first_to, *message_to), (active, active));
+        assert!(crate::authored_by(first, peer));
+        assert!(crate::authored_by(message, peer));
+        assert!(drain(&ui).iter().any(|e| matches!(
+            e,
+            UiEvent::Channel { event: MurmureEvent::Messages { messages, .. }, .. }
+                if messages.len() == 1 && messages[0].text == "early"
+        )));
+    }
+
     #[test]
     fn a_remote_delta_reaches_the_channel_that_holds_its_document() {
         let (mut alice, _, alice_sync) = harness();
         signed_in(&mut alice, UserId::new());
         let channel_id = ChannelId::new();
-        let original =
-            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        alice.hold_channel(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
+        // Bob copies the documents as they leave alice: under her PeerIDs.
+        let original = &alice.channels[&channel_id];
         let active = original.active_id();
         let segments = std::collections::HashMap::from([(
             active,
@@ -667,7 +869,6 @@ mod tests {
             .expect("meta");
         let copy =
             ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
-        alice.hold_channel(original);
         let (mut bob, bob_ui, _) = harness();
         bob.hold_channel(copy);
 
@@ -733,8 +934,9 @@ mod tests {
     /// A channel as the relay stores it: one message in its active segment.
     fn stored_channel() -> (ChannelId, ChannelState) {
         let channel_id = ChannelId::new();
-        let mut channel =
-            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let mut channel = crate::identified(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
         channel
             .send(
                 &MessageDraft {
@@ -765,7 +967,7 @@ mod tests {
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: DocumentId) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot(document_id).expect("snapshot"),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -981,7 +1183,7 @@ mod tests {
         assert_eq!(*live, [active]);
         assert!(finals.is_empty());
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
-        let [UiEvent::Activity { channels }] = shown.as_slice() else {
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
             panic!("one activity event, got {shown:?}");
         };
         assert_eq!(
@@ -1005,7 +1207,7 @@ mod tests {
             read: Seq::ZERO,
         };
 
-        state.handle_logic_event(LogicEvent::Activity {
+        state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: vec![
                 entry(busy, false),
                 entry(quiet, false),
@@ -1015,7 +1217,7 @@ mod tests {
         });
 
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
-        let [UiEvent::Activity { channels }] = shown.as_slice() else {
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
             panic!("one activity event, got {shown:?}");
         };
         assert_eq!(
@@ -1069,8 +1271,9 @@ mod tests {
 
     fn members() -> Members {
         let channel_id = ChannelId::new();
-        let alice =
-            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
+        let alice = crate::identified(
+            ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
+        );
         let active = alice.active_id();
         let segments = std::collections::HashMap::from([(
             active,
@@ -1108,14 +1311,13 @@ mod tests {
                 .expect("send");
             self.bob.handle_logic_event(LogicEvent::RemoteUpdate {
                 document_id: sent.segment.document_id(),
-                seq: Seq(seq),
-                payload: sent.delta,
+                delta: crate::remote_delta(seq, sent.delta),
             });
         }
 
         /// The relay's activity answer: Bob's cursor on the active segment.
         fn answer(&mut self, read: u64) {
-            self.bob.handle_logic_event(LogicEvent::Activity {
+            self.bob.handle_logic_event(LogicEvent::ChannelActivity {
                 documents: vec![DocumentActivity {
                     channel_id: self.channel_id,
                     document_id: self.active.document_id(),
@@ -1131,7 +1333,7 @@ mod tests {
             drain(&self.bob_ui)
                 .into_iter()
                 .filter_map(|e| match e {
-                    UiEvent::Activity { channels } => Some(channels),
+                    UiEvent::ChannelActivity { channels } => Some(channels),
                     _ => None,
                 })
                 .flatten()

@@ -172,7 +172,7 @@ pub enum LogicCommand {
 
     /// Ask which channels hold something new, for the sidebar at start
     /// (the Murmure unread spec). Loads no document: answered by
-    /// [`crate::UiEvent::Activity`].
+    /// [`crate::UiEvent::ChannelActivity`].
     FetchActivity,
 
     /// Mark every channel read (the Murmure unread spec).

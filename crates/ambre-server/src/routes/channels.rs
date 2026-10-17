@@ -215,7 +215,7 @@ pub async fn create_channel(
 }
 
 /// `POST /api/channels/direct`: open the direct message of the caller and
-/// `members`, created when none holds exactly them (`SRV-176`, `SRV-177`).
+/// `members`, created when none holds exactly them (`SRV-175`, `SRV-176`).
 ///
 /// The new channel belongs to no space, and every member is an editor of its
 /// `meta`, the caller included, so nobody owns it. The log records why: the
@@ -494,9 +494,7 @@ mod tests {
 
     /// The length of `document`'s log.
     async fn log_length(state: &AppState, document: DocumentId) -> u64 {
-        let log = db::membership_log(&state.db, &document)
-            .await
-            .expect("log");
+        let log = db::membership_log(&state.db, &document).await.expect("log");
         u64::try_from(log.len()).expect("length")
     }
 
@@ -837,7 +835,7 @@ mod tests {
         assert_eq!(row.invited_by, Some(uuid_of(bob)));
     }
 
-    /// `SRV-178`: a self-join tells the connections subscribed to `meta` that
+    /// `SRV-177`: a self-join tells the connections subscribed to `meta` that
     /// its members changed. A caller already a member changes no row, and
     /// nothing is said.
     #[sqlx::test]
@@ -1524,7 +1522,7 @@ mod tests {
         assert_eq!(member_ids(&state, meta).await, [uuid_of(bob)]);
     }
 
-    // --- Direct messages (`SRV-176`, `SRV-177`) ---
+    // --- Direct messages (`SRV-175`, `SRV-176`) ---
 
     /// The request of `creator` for a direct message with `others`, under
     /// fresh ids. Its log creates `meta`, invites each member as an editor,
@@ -1536,7 +1534,15 @@ mod tests {
             .zip(0u64..)
             .map(|((member, act, role), position)| {
                 let key = (act != MembershipAct::ChangeRole).then_some(DIRECT_KEY);
-                authored_entry(meta.document_id(), position, member, act, role, key, creator)
+                authored_entry(
+                    meta.document_id(),
+                    position,
+                    member,
+                    act,
+                    role,
+                    key,
+                    creator,
+                )
             })
             .collect();
         let key = |byte: u8| base64::engine::general_purpose::URL_SAFE.encode([byte; 48]);
@@ -1611,7 +1617,7 @@ mod tests {
             .expect("count")
     }
 
-    /// `SRV-176`: a direct message belongs to no space and is not public.
+    /// `SRV-175`: a direct message belongs to no space and is not public.
     /// Every member is an editor of its `meta`, the creator included, so it
     /// has no owner, and nobody deletes it for the others.
     #[sqlx::test]
@@ -1645,7 +1651,7 @@ mod tests {
         assert!(exists(&state, meta).await);
     }
 
-    /// `SRV-176`: the relay stores, for each member, the key wrapped for
+    /// `SRV-175`: the relay stores, for each member, the key wrapped for
     /// that member, and reads none of them.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1666,7 +1672,7 @@ mod tests {
         }
     }
 
-    /// `SRV-177`: a request for a set of members that already has a direct
+    /// `SRV-176`: a request for a set of members that already has a direct
     /// message answers it, from either side. It writes nothing: no channel,
     /// no document, no member.
     #[sqlx::test]
@@ -1706,7 +1712,7 @@ mod tests {
         assert_eq!(direct_messages(&state).await, 2);
     }
 
-    /// `SRV-177`: two requests racing for one set of members create one
+    /// `SRV-176`: two requests racing for one set of members create one
     /// direct message, and both answer it.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1724,7 +1730,7 @@ mod tests {
         assert_eq!(direct_messages(&state).await, 1);
     }
 
-    /// `SRV-176`: a log that leaves the creator an owner, or a request that
+    /// `SRV-175`: a log that leaves the creator an owner, or a request that
     /// names the caller as a member, is refused, and nothing is written.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

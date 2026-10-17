@@ -101,7 +101,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 |---|---|---|---|---|---|---|
 | `TOILE-UI-087` | `POST` | The Present menu entry MUST enter presentation mode on the first slide. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` | none | verified |
 | `TOILE-UI-319` | `POST` | Every panel control MUST resolve to the local command it names. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_nav_buttons_fire_intents`; `ambre_toile::tests::chrome_ui::presenter_broadcast_button_fires_toggle`; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` | none | verified |
-| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::leaving_the_presentation_stops_the_broadcast` -- after the exit the viewer is not broadcasting, says so, and its presence frame names no slide | none | verified |
+| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::leaving_the_presentation_stops_the_broadcast` -- after the exit the viewer is not broadcasting, says so, and its presence sample names no slide | none | verified |
 | `TOILE-FEAT-095` | `FRAME` | Entering or leaving presentation mode MUST NOT write to the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
 
 * **Budget.** the transition frame under 4 ms at 500 elements, the slide-transition row of

@@ -13,7 +13,7 @@
 
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
-    SchemaVerdict, migrate_schema, verdict,
+    SchemaVerdict, migrate_schema, migration_peer, verdict,
 };
 use ambre_core::{ChannelId, DocumentId, SpaceId};
 use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
@@ -24,7 +24,7 @@ use crate::error::MurmureError;
 ///
 /// Raise it in the commit that changes a key or a value type, and append the
 /// new section to `schema/shapes.txt`.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 1;
 
 /// The root map every Murmure document carries (`MURMURE-001`).
 pub(crate) const HEADER: &str = "header";
@@ -75,22 +75,8 @@ pub(crate) const MESSAGE_CONTENT: &str = "content";
 ///
 /// A document with no version reads as 0 (`SCHEMA-005`). No Murmure document
 /// was ever written without one, so the walk finds no step from 0 and
-/// refuses it.
-///
-/// `1 -> 2` adds the space document. A channel document keeps its layout, so
-/// the step stamps the number and changes nothing else.
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: 1,
-    to: 2,
-    apply: stamp_step,
-}];
-
-/// A migration step that only stamps the current version.
-fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
-    doc.get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION))
-        .map_err(|e| e.to_string())
-}
+/// refuses it. Version 1 is the first layout, so no step exists yet.
+pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The document kinds this build writes and reads.
 ///
@@ -387,7 +373,15 @@ fn import_current(payloads: &[&[u8]], document_id: DocumentId) -> Result<LoroDoc
             }
             .into());
         }
-        SchemaVerdict::Older => migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?,
+        SchemaVerdict::Older => {
+            // Every peer migrates one document under one identity, derived
+            // from its heads, so two peers write the same operations
+            // (`AUTHOR-024`). No write of this session can land before its
+            // own PeerID replaces it (`AUTHOR-029`).
+            let heads = doc.oplog_frontiers();
+            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))?;
+            migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &doc)?;
+        }
     }
     Ok(doc)
 }

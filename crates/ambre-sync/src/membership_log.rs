@@ -24,8 +24,8 @@ pub(crate) fn no_self_join(_: &MembershipEntry) -> bool {
     false
 }
 
-/// The rule the `meta` of a public channel applies, once a catalogue this
-/// client holds lists the channel: a member joins alone, at no role above
+/// The rule the `meta` of a public channel applies once a catalogue this
+/// client holds lists the channel. A member joins alone, at no role above
 /// editor (the Murmure spaces spec, `SRV-108`). The catalogue is the
 /// admission; the relay checks the space membership behind it.
 pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
@@ -445,7 +445,10 @@ pub(crate) mod tests {
             Role::Editor,
         );
         let view = Log::walk(DOC, anchor(&log), &log, |_| true);
-        assert_eq!(view.standing(dave.id), (MemberStanding::Verified, Some(Role::Editor)));
+        assert_eq!(
+            view.standing(dave.id),
+            (MemberStanding::Verified, Some(Role::Editor))
+        );
         assert_eq!(view.standing(alice.id).0, MemberStanding::Revoked);
     }
 

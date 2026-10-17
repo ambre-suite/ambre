@@ -12,6 +12,11 @@ macro_rules! define_serde_adapter {
         pub mod $name {
             use super::*;
 
+            /// Writes the identifier as its hyphenated UUID string.
+            ///
+            /// # Errors
+            ///
+            /// Whatever `serializer` refuses.
             pub fn serialize<S>(id: &$id_type, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: Serializer,
@@ -19,6 +24,11 @@ macro_rules! define_serde_adapter {
                 serializer.serialize_str(&id.to_string())
             }
 
+            /// Reads the identifier from a UUID string.
+            ///
+            /// # Errors
+            ///
+            /// A value that is not a string, or a string that is not a UUID.
             pub fn deserialize<'de, D>(deserializer: D) -> Result<$id_type, D::Error>
             where
                 D: Deserializer<'de>,

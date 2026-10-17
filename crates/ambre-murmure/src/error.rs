@@ -72,6 +72,11 @@ pub enum MurmureError {
     #[error("document {0} is not an older segment of this channel")]
     NotOlder(DocumentId),
 
+    /// The Sync worker has not issued the PeerID of the document yet, and an
+    /// operation under any other never travels (`AUTHOR-029`).
+    #[error("document {0} has no session identity yet")]
+    NoSession(DocumentId),
+
     /// Loro refused a write or an export. Carries its message, because the
     /// Loro error types are not `Eq`.
     #[error("the CRDT engine refused the operation: {0}")]

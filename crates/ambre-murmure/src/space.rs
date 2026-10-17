@@ -17,6 +17,7 @@ use crate::schema::{
     self, CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, ChannelType, ENTRY_CATEGORY,
     ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, SPACE, SPACE_NAME,
 };
+use crate::session::Session;
 
 /// A public channel the catalogue is asked to list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,13 @@ pub struct Listing<'a> {
 pub struct SpaceState {
     space_id: SpaceId,
     doc: LoroDoc,
+    /// The PeerID this session writes the document under. `None` until the
+    /// Sync worker issues it, and nothing is written before (`AUTHOR-029`).
+    session: Option<Session>,
+    /// The name and the creation time of a space created here, written again
+    /// under its PeerID once the session lands. `None` for a space the relay
+    /// served.
+    created: Option<(String, Timestamp)>,
 }
 
 impl SpaceState {
@@ -45,16 +53,21 @@ impl SpaceState {
     /// space (`MURMURE-031`). Creating the document on the relay makes its
     /// creator the owner (`MURMURE-035`).
     ///
+    /// The space reads at once. Its document is written again under its
+    /// PeerID when its session lands, and only then does it leave
+    /// ([`SpaceState::adopt_session`]).
+    ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses a write.
     pub fn create(space_id: SpaceId, name: &str, now: Timestamp) -> Result<Self, MurmureError> {
         let doc = LoroDoc::new();
-        schema::write_space_header(&doc, space_id, now.0)?;
-        if !name.is_empty() {
-            doc.get_map(SPACE).insert(SPACE_NAME, name)?;
-        }
-        doc.commit();
-        Ok(Self { space_id, doc })
+        write_created(&doc, space_id, name, now)?;
+        Ok(Self {
+            space_id,
+            doc,
+            session: None,
+            created: Some((name.to_owned(), now)),
+        })
     }
 
     /// Open a space from the payloads of its document: a snapshot, then a
@@ -65,7 +78,58 @@ impl SpaceState {
     /// [`MurmureError::ForeignSpace`] for a document of another space.
     pub fn open(space_id: SpaceId, payloads: &[&[u8]]) -> Result<Self, MurmureError> {
         let doc = schema::admit_space(payloads, space_id)?;
-        Ok(Self { space_id, doc })
+        Ok(Self {
+            space_id,
+            doc,
+            session: None,
+            created: None,
+        })
+    }
+
+    /// Write the document under the PeerID the Sync worker issued for this
+    /// session, with its registry entry (`AUTHOR-002`, `AUTHOR-009`).
+    ///
+    /// A space created here is written again from scratch under it, and its
+    /// whole content returns: the first update, which creates it on the
+    /// relay. A space the relay served returns nothing: its entry rides with
+    /// its first delta. The same identity issued twice changes nothing.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    pub fn adopt_session(
+        &mut self,
+        peer: u64,
+        entry: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        if self.session.map(Session::peer) == Some(peer) {
+            return Ok(None);
+        }
+        let Some((name, now)) = &self.created else {
+            self.session = Some(Session::adopt(&self.doc, peer, entry)?);
+            return Ok(None);
+        };
+        let doc = LoroDoc::new();
+        let mut session = Session::adopt(&doc, peer, entry)?;
+        write_created(&doc, self.space_id, name, *now)?;
+        let first = session.export(&doc)?;
+        self.doc = doc;
+        self.session = Some(session);
+        self.created = None;
+        Ok(Some(first))
+    }
+
+    /// This space under a fresh PeerID, as the Sync worker would issue it.
+    #[cfg(test)]
+    pub(crate) fn identify(mut self) -> Self {
+        let peer = crate::session::next_peer();
+        self.adopt_session(peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        self
+    }
+
+    /// Whether this session may write the document: its PeerID landed.
+    pub fn identified(&self) -> bool {
+        self.session.is_some()
     }
 
     /// The space this state holds.
@@ -125,14 +189,14 @@ impl SpaceState {
         name: &str,
         position: u32,
     ) -> Result<Vec<u8>, MurmureError> {
-        let before = self.doc.oplog_vv();
+        self.writable()?;
         let entry = self
             .doc
             .get_map(CATEGORIES)
             .ensure_mergeable_map(&category_id.to_string())?;
         entry.insert(CATEGORY_NAME, name)?;
         entry.insert(CATEGORY_POSITION, i64::from(position))?;
-        self.commit_since(&before)
+        self.export()
     }
 
     /// List a public channel in the catalogue, and return the delta.
@@ -154,7 +218,7 @@ impl SpaceState {
         if channel.channel_type() != Some(ChannelType::Public) {
             return Err(MurmureError::NotPublic(channel_id));
         }
-        let before = self.doc.oplog_vv();
+        self.writable()?;
         let entry = self
             .doc
             .get_map(CATALOGUE)
@@ -170,7 +234,7 @@ impl SpaceState {
         }
         entry.insert(ENTRY_POSITION, i64::from(listing.position))?;
         entry.insert(ENTRY_KEY, listing.key.as_bytes().to_vec())?;
-        self.commit_since(&before)
+        self.export()
     }
 
     /// Remove the entry of a deleted channel from the catalogue, and return
@@ -188,9 +252,9 @@ impl SpaceState {
         if catalogue.get(&key).is_none() {
             return Ok(None);
         }
-        let before = self.doc.oplog_vv();
+        self.writable()?;
         catalogue.delete(&key)?;
-        self.commit_since(&before).map(Some)
+        self.export().map(Some)
     }
 
     /// The sealed key of a listed channel, which a self-join hands the Sync
@@ -251,10 +315,27 @@ impl SpaceState {
         found
     }
 
-    /// Commit the pending writes, and export what they added.
-    fn commit_since(&self, before: &VersionVector) -> Result<Vec<u8>, MurmureError> {
-        self.doc.commit();
-        Ok(self.doc.export(ExportMode::updates(before))?)
+    /// Refuse a write before the PeerID landed, so nothing is written under
+    /// another (`AUTHOR-029`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NoSession`] before the Sync worker issued it.
+    fn writable(&self) -> Result<(), MurmureError> {
+        if self.session.is_none() {
+            return Err(MurmureError::NoSession(self.document_id()));
+        }
+        Ok(())
+    }
+
+    /// Commit the pending writes, and export what this session wrote since
+    /// its last export.
+    fn export(&mut self) -> Result<Vec<u8>, MurmureError> {
+        let document_id = self.document_id();
+        let session = self
+            .session
+            .as_mut()
+            .ok_or(MurmureError::NoSession(document_id))?;
+        session.export(&self.doc)
     }
 
     /// The document itself, for the shape belt.
@@ -262,6 +343,24 @@ impl SpaceState {
     pub(crate) fn doc(&self) -> &LoroDoc {
         &self.doc
     }
+}
+
+/// Write the content of a space created here into `doc`, and commit it.
+///
+/// # Errors
+/// [`MurmureError::Crdt`] when Loro refuses a write.
+fn write_created(
+    doc: &LoroDoc,
+    space_id: SpaceId,
+    name: &str,
+    now: Timestamp,
+) -> Result<(), MurmureError> {
+    schema::write_space_header(doc, space_id, now.0)?;
+    if !name.is_empty() {
+        doc.get_map(SPACE).insert(SPACE_NAME, name)?;
+    }
+    doc.commit();
+    Ok(())
 }
 
 /// The map under `key`, or `None` when it is absent or not a map.

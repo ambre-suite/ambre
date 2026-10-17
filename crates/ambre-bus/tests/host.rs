@@ -200,7 +200,10 @@ fn sync_command_roundtrips_through_postcard() {
         payload: vec![3, 4],
         nonce: ambre_core::SessionNonce([5; 16]),
     });
-    roundtrip_sync(&SyncCommand::OpenChannel { channel_id: chan });
+    roundtrip_sync(&SyncCommand::OpenChannel {
+        channel_id: chan,
+        self_join: true,
+    });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
 
@@ -257,10 +260,17 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::SendEphemeral { .. } => "SendEphemeral",
         SyncCommand::Reconnect { .. } => "Reconnect",
         SyncCommand::OpenChannel { .. } => "OpenChannel",
-        SyncCommand::CloseChannel { .. } => "CloseChannel",
-        SyncCommand::SendChannelEphemeral { .. } => "SendChannelEphemeral",
+        SyncCommand::CreateChannel { .. } => "CreateChannel",
+        SyncCommand::JoinChannel { .. } => "JoinChannel",
+        SyncCommand::DeleteChannel { .. } => "DeleteChannel",
+        SyncCommand::LeaveChannel { .. } => "LeaveChannel",
+        SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
+        SyncCommand::MarkRead { .. } => "MarkRead",
+        SyncCommand::MoveReadCursors { .. } => "MoveReadCursors",
+        SyncCommand::MarkAllRead => "MarkAllRead",
+        SyncCommand::FetchActivity => "FetchActivity",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -276,6 +286,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::PendingSnapshot { .. } => "PendingSnapshot",
         LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
         LogicEvent::PeerLeft { .. } => "PeerLeft",
+        LogicEvent::MembersChanged { .. } => "MembersChanged",
         LogicEvent::DocumentReady { .. } => "DocumentReady",
         LogicEvent::ConnectionStatus { .. } => "ConnectionStatus",
         LogicEvent::Activity { .. } => "Activity",
@@ -284,11 +295,18 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::SnapshotNeeded { .. } => "SnapshotNeeded",
         LogicEvent::MemberRevoked { .. } => "MemberRevoked",
         LogicEvent::DocumentShared { .. } => "DocumentShared",
-        LogicEvent::ChannelRemoteEphemeral { .. } => "ChannelRemoteEphemeral",
-        LogicEvent::ChannelConnectionStatus { .. } => "ChannelConnectionStatus",
-        LogicEvent::ChannelSnapshotNeeded { .. } => "ChannelSnapshotNeeded",
+        LogicEvent::ChannelDocuments { .. } => "ChannelDocuments",
+        LogicEvent::ChannelOpenFailed { .. } => "ChannelOpenFailed",
+        LogicEvent::ChannelActivity { .. } => "ChannelActivity",
+        LogicEvent::ChannelCreated { .. } => "ChannelCreated",
+        LogicEvent::ChannelJoined { .. } => "ChannelJoined",
+        LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
+        LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
+        LogicEvent::ChannelLeft { .. } => "ChannelLeft",
+        LogicEvent::ChannelRequestFailed { .. } => "ChannelRequestFailed",
         LogicEvent::MeetingParticipantJoined { .. } => "MeetingParticipantJoined",
         LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
+        LogicEvent::DocumentOpenFailed { .. } => "DocumentOpenFailed",
         LogicEvent::AuthError { .. } => "AuthError",
         LogicEvent::ApiError { .. } => "ApiError",
         LogicEvent::SetupRequired => "SetupRequired",
@@ -297,20 +315,27 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 16;
-const EVENT_VARIANTS: usize = 25;
+const SYNC_VARIANTS: usize = 23;
+const EVENT_VARIANTS: usize = 33;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
 /// samples cover each name exactly once.
 #[test]
 fn every_envelope_variant_roundtrips_through_postcard() {
-    use ambre_bus::{MeetingId, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict};
+    use ambre_bus::{
+        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MeetingId, MetaId,
+        SealedChannelKey, SegmentId, Seq, SignedDelta, SnapshotId, SnapshotPurpose,
+        SnapshotVerdict, SpaceId,
+    };
     use ambre_core::SessionNonce;
     use std::collections::BTreeSet;
 
     let doc = DocumentId::new();
     let chan = ChannelId::new();
+    let space = SpaceId::new();
+    let meta = MetaId::from_document(DocumentId::new());
+    let segment = SegmentId::from_document(DocumentId::new());
     let user = UserId::new();
     let snapshot = SnapshotId::genesis(doc);
     let delta = SignedDelta {
@@ -370,14 +395,44 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             payload: vec![5],
         },
         SyncCommand::Reconnect { document_id: doc },
-        SyncCommand::OpenChannel { channel_id: chan },
-        SyncCommand::CloseChannel { channel_id: chan },
-        SyncCommand::SendChannelEphemeral {
+        SyncCommand::OpenChannel {
             channel_id: chan,
-            payload: vec![7],
+            self_join: false,
+        },
+        SyncCommand::CreateChannel {
+            channel_id: chan,
+            space_id: space,
+            meta,
+            segment,
+            public: true,
+        },
+        SyncCommand::JoinChannel {
+            channel_id: chan,
+            space_id: space,
+            key: SealedChannelKey::from_bytes(vec![6; 3]),
+        },
+        SyncCommand::DeleteChannel { channel_id: chan },
+        SyncCommand::LeaveChannel { channel_id: chan },
+        SyncCommand::CreateDirectMessage {
+            channel_id: chan,
+            meta,
+            segment,
+            members: vec![DirectMember {
+                user_id: user,
+                exchange_pub_key: [7; 32],
+            }],
         },
         SyncCommand::HoldInbound,
         SyncCommand::ReleaseInbound,
+        SyncCommand::MarkRead {
+            live: vec![segment],
+            finals: Vec::new(),
+        },
+        SyncCommand::MoveReadCursors {
+            cursors: vec![(segment, Seq(4))],
+        },
+        SyncCommand::MarkAllRead,
+        SyncCommand::FetchActivity,
         SyncCommand::Shutdown,
     ];
     let events = [
@@ -423,6 +478,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             user_id: user,
         },
+        LogicEvent::MembersChanged { document_id: doc },
         LogicEvent::DocumentReady {
             document_id: doc,
             role: Role::Viewer,
@@ -454,15 +510,40 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             doc_type: DocType::Trame,
         },
-        LogicEvent::ChannelRemoteEphemeral {
+        LogicEvent::ChannelDocuments {
             channel_id: chan,
-            payload: vec![2],
+            documents: vec![ChannelDocument {
+                document_id: segment.document_id(),
+                kind: ChannelDocumentKind::Segment,
+            }],
         },
-        LogicEvent::ChannelConnectionStatus {
+        LogicEvent::ChannelOpenFailed {
             channel_id: chan,
-            connected: true,
+            message: "gone".to_owned(),
         },
-        LogicEvent::ChannelSnapshotNeeded { channel_id: chan },
+        LogicEvent::ChannelActivity {
+            documents: vec![DocumentActivity {
+                channel_id: chan,
+                document_id: segment.document_id(),
+                active: true,
+                read: Seq(2),
+            }],
+        },
+        LogicEvent::ChannelCreated {
+            channel_id: chan,
+            key: Some(SealedChannelKey::from_bytes(vec![1; 2])),
+        },
+        LogicEvent::ChannelJoined { channel_id: chan },
+        LogicEvent::DirectMessageOpened {
+            requested: chan,
+            channel_id: ChannelId::new(),
+        },
+        LogicEvent::ChannelDeleted { channel_id: chan },
+        LogicEvent::ChannelLeft { channel_id: chan },
+        LogicEvent::ChannelRequestFailed {
+            channel_id: chan,
+            message: "refused".to_owned(),
+        },
         LogicEvent::MeetingParticipantJoined {
             meeting_id: MeetingId::new(),
             user_id: user,
@@ -470,6 +551,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::MeetingParticipantLeft {
             meeting_id: MeetingId::new(),
             user_id: user,
+        },
+        LogicEvent::DocumentOpenFailed {
+            document_id: doc,
+            message: "unwrap".to_owned(),
         },
         LogicEvent::AuthError {
             message: "expired".to_owned(),

@@ -112,7 +112,7 @@ pub enum LogicEvent {
     },
 
     /// The relay said the members of an open document changed: someone joined,
-    /// left, or took another role (`SRV-178`). It carries no row. A view that
+    /// left, or took another role (`SRV-177`). It carries no row. A view that
     /// shows the members asks for them again, and that answer also makes a new
     /// member's samples resolve (`SYNC-037`).
     MembersChanged { document_id: DocumentId },
@@ -147,9 +147,7 @@ pub enum LogicEvent {
     /// A released document turned into a light subscription: the relay
     /// acknowledged every frame this client sent of it (`RESID-009`). Its
     /// local copy holds nothing the relay lacks (`RESID-019`).
-    Released {
-        document_id: DocumentId,
-    },
+    Released { document_id: DocumentId },
 
     /// Non-fatal warning, such as a quarantine overflow or a decrypt failure.
     SyncWarning {
@@ -197,7 +195,7 @@ pub enum LogicEvent {
     /// [`SyncCommand::MarkAllRead`](crate::SyncCommand::MarkAllRead).
     ///
     /// [`SyncCommand::FetchActivity`]: crate::SyncCommand::FetchActivity
-    Activity { documents: Vec<DocumentActivity> },
+    ChannelActivity { documents: Vec<DocumentActivity> },
     /// The relay holds the new channel, answering
     /// [`SyncCommand::CreateChannel`](crate::SyncCommand::CreateChannel).
     /// `key` is the channel key sealed under the space key, for the catalogue

@@ -2,9 +2,8 @@
 //! (`features/ambre-spec-murmure-spaces.md`).
 
 use ambre_bus::{SealedChannelKey, Timestamp, Topic};
-use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY};
 use ambre_core::{CategoryId, ChannelId, SpaceId};
-use loro::{ExportMode, LoroDoc, LoroValue, ValueOrContainer};
+use loro::{LoroDoc, LoroValue};
 
 use crate::schema::{HEADER, HEADER_KIND, HEADER_SPACE, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
@@ -69,7 +68,9 @@ fn a_new_space_is_one_document_that_holds_no_member() {
 #[test]
 fn a_space_reopens_from_its_payloads() {
     let space_id = SpaceId::new();
-    let mut space = SpaceState::create(space_id, "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(space_id, "Acme", NOW)
+        .expect("create")
+        .identify();
     let first = space.export_all().expect("export");
     let public = channel(ChannelType::Public, "general");
     let delta = space
@@ -120,7 +121,9 @@ fn a_channel_document_is_no_space() {
 /// unopened: the engine has no key to open it with.
 #[test]
 fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+        .expect("create")
+        .identify();
     let category = CategoryId::new();
     space.put_category(category, "Teams", 1).expect("category");
     let public = channel(ChannelType::Public, "budget");
@@ -150,7 +153,9 @@ fn a_listed_channel_carries_its_name_topic_category_position_and_key() {
 
 #[test]
 fn an_unset_topic_and_category_are_absent_keys() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+        .expect("create")
+        .identify();
     let public = channel(ChannelType::Public, "general");
     space
         .list_channel(
@@ -183,7 +188,9 @@ fn a_channel_the_catalogue_does_not_list_has_no_key() {
 /// direct message never enters it, and the refusal writes nothing.
 #[test]
 fn the_catalogue_refuses_a_private_channel_and_a_direct_message() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+        .expect("create")
+        .identify();
     let before = space.version();
     for channel_type in [ChannelType::Private, ChannelType::Direct] {
         let closed = channel(channel_type, "board");
@@ -202,7 +209,9 @@ fn the_catalogue_refuses_a_private_channel_and_a_direct_message() {
 /// channel moves, and the space holds no member list for it.
 #[test]
 fn listing_a_channel_writes_the_space_document_alone() {
-    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(SpaceId::new(), "Acme", NOW)
+        .expect("create")
+        .identify();
     let public = channel(ChannelType::Public, "general");
     let meta_before = public
         .export_all(public.meta_id().document_id())
@@ -227,7 +236,7 @@ fn listing_a_channel_writes_the_space_document_alone() {
     );
     assert_eq!(
         root_names(space.doc()),
-        ["channels", "header", "meta", "space"]
+        ["channels", "header", "meta", "peers", "space"]
     );
 }
 
@@ -239,7 +248,9 @@ fn listing_a_channel_writes_the_space_document_alone() {
 #[test]
 fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
     let space_id = SpaceId::new();
-    let mut space = SpaceState::create(space_id, "Acme", NOW).expect("create");
+    let mut space = SpaceState::create(space_id, "Acme", NOW)
+        .expect("create")
+        .identify();
     let first = space.export_all().expect("export");
     let (gone, kept) = (
         channel(ChannelType::Public, "budget"),
@@ -271,37 +282,4 @@ fn unlisting_a_channel_removes_its_entry_and_leaves_the_others() {
     let before = space.version();
     assert_eq!(space.unlist_channel(gone.channel_id()), Ok(None));
     assert_eq!(space.version(), before, "an absent entry writes nothing");
-}
-
-// --- MURMURE-020: the bump that brought the space document ---
-
-/// A channel document of version 1 opens under version 2: the step stamps
-/// the number and leaves the layout alone.
-#[test]
-fn a_channel_document_of_version_one_opens_stamped_to_the_current_version() {
-    let public = channel(ChannelType::Public, "general");
-    let old = LoroDoc::new();
-    old.import(
-        &public
-            .snapshot(public.meta_id().document_id())
-            .expect("snapshot"),
-    )
-    .expect("import");
-    old.get_map(SCHEMA_META_MAP)
-        .insert(SCHEMA_VERSION_KEY, 1_i64)
-        .expect("downgrade");
-    old.commit();
-    let admitted = crate::schema::admit(
-        &old.export(ExportMode::Snapshot).expect("export"),
-        crate::DocumentKind::Meta,
-        public.channel_id(),
-        public.meta_id().document_id(),
-    )
-    .expect("a version 1 document opens");
-    assert_eq!(read_version(&admitted), Ok(SCHEMA_VERSION));
-    let channel_map = admitted.get_map(crate::schema::CHANNEL);
-    assert!(matches!(
-        channel_map.get(crate::schema::CHANNEL_NAME),
-        Some(ValueOrContainer::Value(LoroValue::String(_)))
-    ));
 }

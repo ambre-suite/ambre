@@ -296,7 +296,7 @@ pub async fn add_channel_member_if_absent(
 }
 
 /// A direct message to create: its documents, its members, and the log of
-/// its `meta` (`SRV-176`).
+/// its `meta` (`SRV-175`).
 pub struct NewDirectMessage<'a> {
     pub channel_id: ambre_core::ChannelId,
     pub meta_id: ambre_core::MetaId,
@@ -315,12 +315,12 @@ pub enum DirectMessage {
     /// The relay made the direct message the request named.
     Created,
     /// A direct message of exactly these members was there already, so
-    /// nothing was written (`SRV-177`).
+    /// nothing was written (`SRV-176`).
     Existing(ambre_core::ChannelId),
 }
 
 /// Find the direct message of exactly `new.members`, or create it in one
-/// transaction (`SRV-176`, `SRV-177`).
+/// transaction (`SRV-175`, `SRV-176`).
 ///
 /// An advisory lock on the sorted member set holds the lookup and the
 /// creation together. So two concurrent requests for one set meet there, and

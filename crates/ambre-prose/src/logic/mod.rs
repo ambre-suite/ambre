@@ -140,7 +140,7 @@ pub struct ProseState {
     /// word alone (`PRESENCE-014`). Apart from `presence`, which drops a caret
     /// it cannot place.
     live: std::collections::HashSet<UserId>,
-    /// This session's last presence frame, re-sent to a newcomer.
+    /// This session's last presence sample, re-sent to a newcomer.
     last_frame: Option<Vec<u8>>,
     /// Whether a newcomer has not heard from this session yet.
     owe_greeting: bool,

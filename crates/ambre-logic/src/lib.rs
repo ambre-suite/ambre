@@ -45,11 +45,11 @@ mod replay;
 mod residency;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
+mod spaces;
 /// What the local store holds, and which copies leave it (`RESID-002`).
 pub mod store_ledger;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
-mod spaces;
 
 /// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
@@ -563,8 +563,7 @@ impl LogicState {
     /// The session identity Sync would issue for `document_id`, under a PeerID
     /// no other call of this test binary hands out.
     pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> u64 {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
-        let peer = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let peer = test_peer();
         self.handle_logic_event(LogicEvent::SessionIdentity {
             document_id,
             peer,
@@ -573,6 +572,26 @@ impl LogicState {
         });
         peer
     }
+}
+
+/// A PeerID no other call of this test binary hands out.
+#[cfg(test)]
+fn test_peer() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `channel` with every document under a session identity of its own, as
+/// another client writing it would hold it.
+#[cfg(test)]
+fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::ChannelState {
+    for document_id in channel.document_ids() {
+        let peer = test_peer();
+        channel
+            .adopt_session(document_id, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+    }
+    channel
 }
 
 /// How many deltas a document's local log holds before the next save folds
@@ -694,6 +713,13 @@ struct LogicState {
     /// The whole content of a document this client created, sent as its first
     /// update once the Sync worker holds its session.
     unsent: HashMap<DocumentId, Vec<u8>>,
+    /// The session identity Sync issued for a channel or a space document
+    /// that no open channel or space holds yet, adopted once one does
+    /// (`AUTHOR-002`).
+    murmure_identities: HashMap<DocumentId, (u64, Vec<u8>)>,
+    /// The channel and space commands that write a document whose session
+    /// identity has not landed, in the order they came (`AUTHOR-026`).
+    murmure_waiting: HashMap<DocumentId, Vec<channels::HeldCommand>>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
@@ -785,6 +811,8 @@ impl LogicState {
             member_requests: HashMap::new(),
             direct: HashMap::new(),
             unsent: HashMap::new(),
+            murmure_identities: HashMap::new(),
+            murmure_waiting: HashMap::new(),
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),
@@ -1019,6 +1047,23 @@ pub fn run(
 #[cfg(test)]
 fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
     ambre_bus::conduit::to_main(4096, &Doorbell::new())
+}
+
+/// A delta the relay delivers at `seq`, signed under the one PeerID its
+/// operations carry, as Sync would hand it over.
+#[cfg(test)]
+fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
+    let peer = loro::LoroDoc::decode_import_blob_meta(&payload, false)
+        .ok()
+        .and_then(|meta| meta.partial_end_vv.keys().next().copied())
+        .unwrap_or_default();
+    ambre_bus::SignedDelta {
+        seq,
+        payload,
+        nonce: ambre_core::SessionNonce([0; 16]),
+        peer,
+        user: None,
+    }
 }
 
 /// `ARCH-009`: a Logic thread that cannot bind its doorbell says so to the

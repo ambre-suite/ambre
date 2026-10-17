@@ -187,7 +187,7 @@ pub async fn invite_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
-    role: &str,
+    role: ambre_core::Role,
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
     key_id: &ambre_core::KeyId,
@@ -218,7 +218,7 @@ async fn upsert_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
-    role: &str,
+    role: ambre_core::Role,
     doc_key_enc: &[u8],
     invited_by: &ambre_core::UserId,
 ) -> Result<(), AppError> {
@@ -362,7 +362,7 @@ pub async fn list_document_members(
 /// share one transaction with the target row locked so two concurrent removals
 /// cannot both see two owners.
 ///
-/// The `meta` of a channel that is not public is the one exception: its last
+/// The `meta` of a channel that is not public is the one exception. Its last
 /// member leaves, owner or not, and the channel goes with it (`SRV-142`). Each
 /// of its documents is marked for its delete, at `sweep_due`, in the same
 /// transaction. An owner who leaves other members behind is still refused.
@@ -514,7 +514,7 @@ pub async fn rotation_owed(
 /// `channel` is the channel whose `meta` the document is, with its public
 /// flag. When the member is the last of a channel, the last-owner check does
 /// not hold. A channel that is not public is answered for its delete
-/// (`SRV-142`); a public one stays with its documents (`SRV-174`).
+/// (`SRV-142`); a public one stays with its documents (`SRV-173`).
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: uuid::Uuid,
@@ -533,12 +533,11 @@ async fn delete_member(
     // count holds until the commit.
     let empties_channel = match channel {
         Some(_) if current_role.is_some() => {
-            let members: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM document_members WHERE document_id = $1",
-            )
-            .bind(document_id)
-            .fetch_one(&mut **tx)
-            .await?;
+            let members: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE document_id = $1")
+                    .bind(document_id)
+                    .fetch_one(&mut **tx)
+                    .await?;
             members == 1
         }
         _ => false,
@@ -548,7 +547,7 @@ async fn delete_member(
         _ => None,
     };
     // A public channel outlives its last member: the space reads its key in
-    // the catalogue, so the next member joins it alone (`SRV-174`).
+    // the catalogue, so the next member joins it alone (`SRV-173`).
     if current_role == Some(ambre_core::Role::Owner) && !empties_channel {
         ensure_not_last_owner(tx, document_id).await?;
     }
@@ -558,7 +557,7 @@ async fn delete_member(
         .bind(user_id)
         .execute(&mut **tx)
         .await?;
-    super::read_cursors::delete_read_cursors_of(&mut **tx, document_id, user_id).await?;
+    super::read_cursors::delete_read_cursors_of(tx, document_id, user_id).await?;
     Ok(empties_private)
 }
 

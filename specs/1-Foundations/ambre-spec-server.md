@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-100` | `FAIL` | A wire message that does not decode MUST be refused as a typed error, never a panic, on either side of the socket. | this spec section 3; `ARCH-006` | `ambre_protocol::tests::a_wire_message_that_does_not_decode_is_a_typed_error`; cargo-fuzz -- `fuzz/fuzz_targets/wire_decode.rs`, run by the CI `fuzz` job | none | verified |
-| `SRV-179` | `FAIL` | Given a request body that does not decode, an unknown word of a closed set included, the relay MUST answer `409`. | this spec section 3 | none | fails -- the routes take the framework's own JSON extractor, which answers `422` to such a body, the code that means a signature that does not verify. `ambre_server::routes::tests::handler_tests::invalid_doc_type_is_rejected`, `::update_member_role_changes_role` and `ambre_server::routes::orgs::tests::integration::update_member_role_rejects_invalid_role` fail on it; lands with the `A body that does not decode answers 409` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-178` | `FAIL` | Given a request body that does not decode, an unknown word of a closed set included, the relay MUST answer `409`. | this spec section 3 | none | fails -- the routes take the framework's own JSON extractor, which answers `422` to such a body, the code that means a signature that does not verify. `ambre_server::routes::tests::handler_tests::invalid_doc_type_is_rejected`, `::update_member_role_changes_role` and `ambre_server::routes::orgs::tests::integration::update_member_role_rejects_invalid_role` fail on it; lands with the `A body that does not decode answers 409` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-101` | `FAIL` | A panic while serving one request or one socket MUST end that request or that socket alone, and the relay MUST keep serving the others. | this spec section 3; `ARCH-028` | `ambre_server::ws::pubsub_hub::tests::a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out` -- the hub panics on one socket's request, refuses that request alone, and fans out to the others after its restart; `ambre_server::routes::tests::handler_tests::a_panicking_socket_ends_alone_and_its_peer_hears_it_leave` -- the socket: it closes, its peer hears it leave, and the peer is still answered; `ambre_server::supervise::tests::a_panicking_handler_answers_a_generic_error_and_the_router_keeps_serving` -- the request; `::a_panicking_unit_of_work_leaves_the_next_one_running` -- the wrapper the flusher, the compaction and the socket loop each run under | none | verified |
 | `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- four store failures, one status and one message for all of them; `::oidc_error_is_infrastructure_level` -- the provider | none | verified |
 | `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message; `ambre_server::ws::handler::message::refusal_tests::a_refused_subscription_carries_no_store_text` -- the socket path, where a store failure answers a generic 500 | none | verified |
@@ -77,12 +77,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
 | `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | `ambre_server::routes::read_cursors::tests::a_removal_deletes_the_read_cursors_of_the_member_removed` -- a removal from the `meta` deletes the cursors on every document of the channel, and another member's cursor stays | none | verified |
 | `SRV-142` | `POST` | Deleting a channel MUST delete every document it groups. | this spec section 3; `SRV-017` | `ambre_server::routes::channels::tests::deleting_a_channel_deletes_its_documents_and_their_objects` -- database tier, with the objects swept from a fake store | none | verified |
-| `SRV-174` | `POST` | The last member of a public channel MUST be able to leave it, owner or not, and the relay MUST keep the channel and its documents. | this spec section 3; `SRV-145` | `ambre_server::routes::channels::tests::the_last_member_leaves_a_public_channel_for_the_next_to_join` -- database tier, an editor then the owner leave, the channel and its documents stay with no delete begun, and a member of the space joins it | none | verified |
-| `SRV-175` | `POST` | The last owner of a public channel MUST be able to leave it while other members stay, and an owner of its space MUST then be able to delete it. | this spec section 3; `SRV-174`, `MURMURE-244` | not built | unbuilt -- lands with the `A public channel without an owner` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-173` | `POST` | The last member of a public channel MUST be able to leave it, owner or not, and the relay MUST keep the channel and its documents. | this spec section 3; `SRV-145` | `ambre_server::routes::channels::tests::the_last_member_leaves_a_public_channel_for_the_next_to_join` -- database tier, an editor then the owner leave, the channel and its documents stay with no delete begun, and a member of the space joins it | none | verified |
+| `SRV-174` | `POST` | The last owner of a public channel MUST be able to leave it while other members stay, and an owner of its space MUST then be able to delete it. | this spec section 3; `SRV-173`, `MURMURE-244` | not built | unbuilt -- lands with the `A public channel without an owner` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-143` | `POST` | Deleting a space MUST delete every channel of that space. | this spec section 3; `SRV-142` | not built | unbuilt -- lands with the `Leaving and deleting a space` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-176` | `POST` | A direct message MUST be created whole in one transaction, in no space, with an editor row for each member and no owner, and only from a log that says so. | this spec section 3; `SRV-104` | `ambre_server::routes::channels::tests::a_direct_message_has_no_space_and_no_owner` -- database tier, an editor row per member; `ambre_server::routes::channels::tests::each_member_holds_the_key_wrapped_for_them` -- each row holds its own wrap; `ambre_server::routes::channels::tests::a_direct_message_with_an_owner_is_refused` -- a log that keeps an owner writes nothing | none | verified |
-| `SRV-177` | `FRAME` | A direct message request MUST NOT create a second direct message for a set of members that already holds one. | this spec section 3; `SRV-176` | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` -- database tier, the existing one answers; `ambre_server::routes::channels::tests::racing_requests_create_one_direct_message` -- two racing requests create one | none | verified |
-| `SRV-178` | `POST` | A change of the members of a document MUST reach every connection subscribed to it, naming the document alone. | this spec section 3; `MURMURE-440` | `ambre_server::routes::tests::handler_tests::a_change_of_members_reaches_the_subscribers_of_the_document` -- database tier, an invitation, a change of role and a removal each publish it on the topic of the document; `ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_meta` -- a self-join that adds a row publishes it, and one that adds none is silent | none | verified |
+| `SRV-175` | `POST` | A direct message MUST be created whole in one transaction, in no space, with an editor row for each member and no owner, and only from a log that says so. | this spec section 3; `SRV-104` | `ambre_server::routes::channels::tests::a_direct_message_has_no_space_and_no_owner` -- database tier, an editor row per member; `ambre_server::routes::channels::tests::each_member_holds_the_key_wrapped_for_them` -- each row holds its own wrap; `ambre_server::routes::channels::tests::a_direct_message_with_an_owner_is_refused` -- a log that keeps an owner writes nothing | none | verified |
+| `SRV-176` | `FRAME` | A direct message request MUST NOT create a second direct message for a set of members that already holds one. | this spec section 3; `SRV-175` | `ambre_server::routes::channels::tests::the_same_members_reach_the_same_direct_message` -- database tier, the existing one answers; `ambre_server::routes::channels::tests::racing_requests_create_one_direct_message` -- two racing requests create one | none | verified |
+| `SRV-177` | `POST` | A change of the members of a document MUST reach every connection subscribed to it, naming the document alone. | this spec section 3; `MURMURE-440` | `ambre_server::routes::tests::handler_tests::a_change_of_members_reaches_the_subscribers_of_the_document` -- database tier, an invitation, a change of role and a removal each publish it on the topic of the document; `ambre_server::routes::channels::tests::a_self_join_tells_the_subscribers_of_meta` -- a self-join that adds a row publishes it, and one that adds none is silent | none | verified |
 
 ### 1.5 A member joins a public channel alone
 
@@ -127,11 +127,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 47 `verified`, 1 `failing`, 1 `qa-manual`, 11 `unimplemented`. What holds is
-  what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping
-  and the origin list. The delete holds too, and so does the payload type no log line can name.
-  The process rules are loose; a deployment's isolation is read by hand. The failure is a body that
-  does not decode, which answers `422`.
+* **Verification.** 48 `verified`, 1 `failing`, 1 `qa-manual`, 10 `unimplemented`. A request test
+  drives what holds: the roles, the rank clamps, the signature gate, the error mapping, the origin
+  list and the delete. No log line can name the payload type. A deployment's isolation is read by
+  hand. The failure is a body that does
+  not decode, which answers `422`.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -215,29 +215,29 @@ the set `ZK-015` names.
 
 A space is a document like any other, so its members are its member rows. A direct message is a
 channel with no space. It arrives whole in one request: both documents, an editor row for each
-member, and the log of `meta` that grants exactly those rows (`SRV-176`). The client signs that log
+member, and the log of `meta` that grants exactly those rows (`SRV-175`). The client signs that log
 and the relay checks it act by act. Both follow one sequence, `ownerless_log` in `ambre-protocol`,
 so the two sides cannot drift apart.
 
 The segment of a direct message holds no row of its own, since every document of a channel reads
 the rows of `meta`. A direct message has no owner, so `SRV-011` never applies to it.
 
-Two direct messages never hold the same members (`SRV-177`). The request takes a transaction lock
+Two direct messages never hold the same members (`SRV-176`). The request takes a transaction lock
 keyed by the sorted set of members. It then looks for a channel with no space whose rows on `meta`
 are exactly that set. A racing request waits on the lock and finds the first one's channel. The
 lock is advisory and lasts the transaction, so no table holds the set.
 
-A change of the member rows of a document is said on the topic of that document (`SRV-178`). An
+A change of the member rows of a document is said on the topic of that document (`SRV-177`). An
 invitation says it, as do a change of role, a removal and a self-join that adds a row. The message
 names the document alone, which the topic already names, so a subscriber learns no row from it. A
 client that shows the members reads them again. A removal that deletes the channel says nothing,
 since no member stays to hear it.
 
 A public channel outlives its last member. The space reads its key in the catalogue, so the next
-member joins it alone, and the last one leaves owner or not (`SRV-174`). A private channel goes
+member joins it alone, and the last one leaves owner or not (`SRV-173`). A private channel goes
 with its last member instead (`SRV-142`), each of its documents deleted as a deleted document is
 (`SRV-165`). The last owner of a public channel leaves it too, while others stay. An owner of the
-space document then stands in for it, as it does for the whole space (`SRV-175`). An editor of the
+space document then stands in for it, as it does for the whole space (`SRV-174`). An editor of the
 space does not, so a catalogue writer deletes no channel.
 
 A document with no name stores nothing rather than a placeholder. The listing returns each sealed

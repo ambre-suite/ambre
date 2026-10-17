@@ -158,7 +158,10 @@ impl OpeningChannel {
     }
 
     fn meta_ready(&mut self) -> Result<Opening, MurmureError> {
-        let payloads: Vec<&[u8]> = self.payloads[&self.meta_id]
+        let payloads: Vec<&[u8]> = self
+            .payloads
+            .get(&self.meta_id)
+            .ok_or(MurmureError::NotHeld(self.meta_id))?
             .iter()
             .map(Vec::as_slice)
             .collect();

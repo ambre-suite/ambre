@@ -46,7 +46,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-010` | `POST` | A reopened document MUST start from its local snapshot and replay only the deltas after it. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_logic::residency::tests::a_reopen_starts_from_the_local_copy` -- Sync opens only once the local copy landed, and the ledger resumes at the horizon; `ambre_sync::light::tests::a_reopen_resumes_after_the_horizon_it_holds` -- the open skips a relay snapshot that folds in nothing past the horizon | none | verified |
 | `RESID-011` | `POST` | A reopened document MUST replace the counters its summaries produced with the counts it holds. | this spec section 3 | `ambre_logic::residency::tests::a_reopen_starts_from_the_local_copy` -- the reopen sends the badge back to empty counters | none | verified |
 | `RESID-012` | `FAIL` | Given a local snapshot that fails to open, the client MUST fetch the document from the relay. | this spec section 3; `SYNC-012` | `ambre_logic::residency::tests::a_reopen_with_no_usable_copy_fetches_from_the_relay` -- a missing copy and a refused one each drop the light subscription before the open | none | verified |
-| `RESID-013` | `FRAME` | Reopening a document MUST NOT move its read cursor. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-013` | `FRAME` | Reopening a document MUST NOT move its read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Channels in the residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Count activity in the background
 

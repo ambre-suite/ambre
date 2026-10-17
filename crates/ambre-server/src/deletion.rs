@@ -37,11 +37,7 @@ pub fn sweep_due_stored(state: &AppState) -> i64 {
 /// Empties documents whose delete a transaction already marked, as a deleted
 /// channel marks each of its documents (`SRV-142`). A document that fails
 /// keeps its mark, and the pass finishes it (`SRV-165`).
-pub async fn empty_marked(
-    state: &AppState,
-    documents: &[ambre_core::DocumentId],
-    sweep_due: i64,
-) {
+pub async fn empty_marked(state: &AppState, documents: &[ambre_core::DocumentId], sweep_due: i64) {
     let sweep_due = u64::try_from(sweep_due).unwrap_or(0);
     for doc in documents {
         if let Err(e) = empty_document(state, doc, sweep_due).await {

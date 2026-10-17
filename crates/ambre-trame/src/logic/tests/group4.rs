@@ -836,7 +836,7 @@ fn shared_filter_condition_greater_than() {
 }
 
 /// A selection stays on the peer that made it (`TRAME-UI-130`). Moving it,
-/// widening it and adding a rectangle write no delta and send no presence frame.
+/// widening it and adding a rectangle write no delta and send no presence sample.
 #[test]
 fn a_selection_reaches_no_peer() {
     let mut state = TrameState::new();

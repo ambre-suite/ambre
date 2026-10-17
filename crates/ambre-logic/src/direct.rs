@@ -161,6 +161,30 @@ mod tests {
                 event: DirectMessageEvent::Opened { channel_id: id },
             } if *requested == channel_id && *id == channel_id
         )));
+
+        // Each document leaves once its identity landed and the Sync worker
+        // holds it: whole, and written under its own PeerID alone.
+        for document_id in [meta.document_id(), segment.document_id()] {
+            let peer = state.grant_identity(document_id);
+            assert!(drain(&sync_rx).is_empty(), "nothing leaves before ready");
+            state.handle_logic_event(LogicEvent::DocumentReady {
+                document_id,
+                role: ambre_bus::Role::Owner,
+            });
+            let sent = drain(&sync_rx);
+            let [
+                SyncCommand::SendUpdate {
+                    document_id: up,
+                    payload,
+                    summary: None,
+                },
+            ] = sent.as_slice()
+            else {
+                panic!("one whole upload, got {sent:?}");
+            };
+            assert_eq!(*up, document_id);
+            assert!(crate::authored_by(payload, peer), "only {peer:#x} wrote it");
+        }
     }
 
     /// The relay held a direct message of these members already: it opens,
@@ -221,6 +245,11 @@ mod tests {
         state.handle_logic_event(LogicEvent::DirectMessageOpened {
             requested: channel_id,
             channel_id,
+        });
+        state.grant_identity(meta.document_id());
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: meta.document_id(),
+            role: ambre_bus::Role::Owner,
         });
         drain(&sync_rx);
         drain(&ui_rx);

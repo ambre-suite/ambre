@@ -3015,8 +3015,8 @@ mod handler_tests {
     }
 
     /// `SRV-088`: a removal tells the person removed, on their own topic. The
-    /// document's topic and the member who stays learn only that a key is
-    /// owed, which names nobody.
+    /// document's topic and the member who stays learn only that the members
+    /// changed and that a key is owed. Neither names anybody.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_removal_reaches_the_person_removed_alone(pool: sqlx::PgPool) {
@@ -3084,7 +3084,10 @@ mod handler_tests {
         ));
         assert!(matches!(
             heard.remove(&topics[0]).unwrap_or_default().as_slice(),
-            [WsServerMsg::KeyRotationRequired { .. }]
+            [
+                WsServerMsg::MembersChanged { .. },
+                WsServerMsg::KeyRotationRequired { .. }
+            ]
         ));
         assert!(
             heard.is_empty(),
@@ -3575,7 +3578,7 @@ mod handler_tests {
 
     /// The next message the relay published on `stream`, decoded. Panics past
     /// a second, so a missing broadcast fails the test rather than hanging it.
-    async fn next_server_msg(
+    async fn next_broadcast(
         stream: &mut rustis::client::PubSubStream,
     ) -> ambre_protocol::ws::WsServerMsg {
         use futures_util::StreamExt;
@@ -3587,7 +3590,7 @@ mod handler_tests {
         ambre_protocol::ws::decode_server_msg(msg.payload()).expect("a server message")
     }
 
-    /// SRV-178: an invitation, a change of role and a removal each tell the
+    /// SRV-177: an invitation, a change of role and a removal each tell the
     /// connections subscribed to the document that its members changed. The
     /// message names the document alone.
     #[sqlx::test]
@@ -3599,7 +3602,7 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let owner = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &owner).await;
-        let document_id = DocumentId::parse_str(&doc_id).expect("a document id");
+        let document_id = ambre_core::DocumentId::parse_str(&doc_id).expect("a document id");
         // A connection of its own: a subscriber sharing the relay's client
         // would desynchronise its replies (see `PubSubHub`).
         let subscriber = rustis::client::Client::connect("redis://localhost:6379")
@@ -3614,22 +3617,20 @@ mod handler_tests {
 
         setup_named(&app, "joiner@test.com", 93).await;
         invite(&app, &owner, &doc_id, "joiner@test.com", "viewer").await;
-        assert!(changed(next_server_msg(&mut stream).await));
+        assert!(changed(next_broadcast(&mut stream).await));
 
         let joiner_id = doc_user_id(&state, "joiner@test.com").await;
         assert_eq!(
             patch_role_status(&app, &owner, &doc_id, &joiner_id, "editor").await,
             StatusCode::OK
         );
-        assert!(changed(next_server_msg(&mut stream).await));
+        assert!(changed(next_broadcast(&mut stream).await));
 
         assert_eq!(
             revoke_status(&app, &owner, &doc_id, &joiner_id).await,
             StatusCode::OK
         );
-        // The removal tells the members who stay that a rotation is owed too;
-        // the change of members comes first.
-        assert!(changed(next_server_msg(&mut stream).await));
+        assert!(changed(next_broadcast(&mut stream).await));
     }
 
     /// The links a member reads back, oldest first.

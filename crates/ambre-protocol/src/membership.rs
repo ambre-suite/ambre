@@ -40,7 +40,7 @@ pub enum MembershipAct {
 pub struct EntryDigest(pub [u8; 32]);
 
 /// The acts of a log that leaves every member an editor and no owner, in
-/// order: `creator` creates the document as its owner, invites each of
+/// order. `creator` creates the document as its owner, invites each of
 /// `members` as an editor, then lowers its own role to editor.
 ///
 /// The writer signs these acts and the relay expects them, so both read the

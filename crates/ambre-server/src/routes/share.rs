@@ -203,7 +203,7 @@ pub async fn invite_to_document(
     let expected = Expected {
         act: ambre_protocol::MembershipAct::Invite,
         member: invitee_id,
-        role: Some(&req.role),
+        role: Some(role.as_str()),
         // The entry names the key the copy wraps (`SYNC-123`).
         key: Some(Some(key_id)),
     };
@@ -236,7 +236,7 @@ pub async fn invite_to_document(
             });
         let _ = crate::redis_ops::user_broadcast(&state.redis, &invitee_id, &msg).await;
     }
-    // The members who hold the document open read the rows again (`SRV-178`).
+    // The members who hold the document open read the rows again (`SRV-177`).
     crate::redis_ops::members_changed(&state.redis, &doc_id).await;
     Ok(axum::Json(InviteResponse {
         user_id: invitee_id,
@@ -292,7 +292,7 @@ pub async fn revoke_from_document(
             }
         };
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
-    // The members who stay read the rows again (`SRV-178`), unless no one stays.
+    // The members who stay read the rows again (`SRV-177`), unless no one stays.
     if !matches!(removed, db::Removed::ChannelDeleted(_)) {
         crate::redis_ops::members_changed(&state.redis, &doc_id).await;
     }

@@ -1171,8 +1171,7 @@ impl SyncState {
             // (`SYNC-117`). It counts only when a writer the log names
             // signed it (`SYNC-121`).
             let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
-            let log =
-                crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
+            let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, self_join);
             let links = crate::chain::signed_by_writers(links, log.signers());
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,

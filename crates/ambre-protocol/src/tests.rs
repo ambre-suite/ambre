@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (6, "48119f86bf38225f347ae0afc20d3abe");
+const FROZEN_LAYOUT: (u8, &str) = (7, "3187c014aa3db324ae5eb36ccf7141fe");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -277,7 +277,6 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
 fn client_samples() -> Vec<crate::ws::WsClientMsg> {
     use crate::ws::WsClientMsg as C;
     let doc = DocumentId::from_bytes([1; 16]);
-    let channel = ambre_core::ChannelId::from_bytes([2; 16]);
     vec![
         C::Subscribe { document_id: doc },
         C::Unsubscribe { document_id: doc },
@@ -286,20 +285,6 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::RequestMissing {
             document_id: doc,
             after_seq: Seq(3),
-        },
-        C::SubscribeChannel {
-            channel_id: channel,
-        },
-        C::UnsubscribeChannel {
-            channel_id: channel,
-        },
-        C::ChannelUpdate {
-            channel_id: channel,
-            update: sample_update(30),
-        },
-        C::ChannelEphemeral {
-            channel_id: channel,
-            ephemeral: sample_ephemeral(40),
         },
         C::Authenticate {
             token: crate::ws::AccessToken::new("t".into()),
@@ -315,7 +300,6 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
 fn server_samples() -> Vec<crate::ws::WsServerMsg> {
     use crate::ws::WsServerMsg as S;
     let doc = DocumentId::from_bytes([1; 16]);
-    let channel = ambre_core::ChannelId::from_bytes([2; 16]);
     vec![
         S::Subscribed { document_id: doc },
         S::Update {
@@ -346,18 +330,6 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             document_id: doc,
             doc_type: ambre_core::DocType::Toile,
         },
-        S::ChannelSubscribed {
-            channel_id: channel,
-        },
-        S::ChannelUpdate {
-            channel_id: channel,
-            seq: Seq(8),
-            update: sample_update(80),
-        },
-        S::ChannelEphemeral {
-            channel_id: channel,
-            ephemeral: sample_ephemeral(90),
-        },
         S::Error {
             code: 9,
             message: "m".into(),
@@ -373,6 +345,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             expected: Clock(13),
             signature: Signature([14; 64]),
         },
+        S::MembersChanged { document_id: doc },
     ]
 }
 
@@ -514,7 +487,7 @@ fn the_relay_reads_only_the_listed_fields() {
         commitment_tag: _,
         signature: _,
     } = ephemeral;
-    // An ephemeral frame shows its document, its sender, its key identifier
+    // An ephemeral shows its document, its sender, its key identifier
     // and its counter, and nothing else.
     let EphemeralPublicData {
         document_id,

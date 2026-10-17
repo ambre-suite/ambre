@@ -202,10 +202,10 @@ pub enum SyncCommand {
     },
     /// Move every read cursor of the user to its document's last number
     /// (the Murmure unread spec), then answer with a fresh
-    /// [`crate::LogicEvent::Activity`].
+    /// [`crate::LogicEvent::ChannelActivity`].
     MarkAllRead,
     /// Ask the relay which channel documents hold something past the user's
-    /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::Activity`].
+    /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::ChannelActivity`].
     FetchActivity,
 
     // -- Lifecycle -------------------------------------------------------------

@@ -848,13 +848,7 @@ impl SyncDocumentState {
 /// Whether a client frame carries a sealed payload, which only the seal may
 /// build (`SYNC-001`).
 fn carries_payload(msg: &WsClientMsg) -> bool {
-    matches!(
-        msg,
-        WsClientMsg::Update(_)
-            | WsClientMsg::Ephemeral(_)
-            | WsClientMsg::ChannelUpdate { .. }
-            | WsClientMsg::ChannelEphemeral { .. }
-    )
+    matches!(msg, WsClientMsg::Update(_) | WsClientMsg::Ephemeral(_))
 }
 
 pub struct SyncState {
@@ -1132,12 +1126,7 @@ impl SyncState {
                 let _ = tx.send(wire);
                 return;
             }
-            if self.inbound_held
-                && matches!(
-                    msg,
-                    WsClientMsg::Update(_) | WsClientMsg::ChannelUpdate { .. }
-                )
-            {
+            if self.inbound_held && matches!(msg, WsClientMsg::Update(_)) {
                 // A hold is ours, not the network's: keep the edit for the
                 // reopen rather than lose it (`SYNC-059`).
                 self.held_outbox.borrow_mut().push(wire);

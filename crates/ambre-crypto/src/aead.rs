@@ -100,8 +100,8 @@ pub fn seal_document_key(
 /// Seals `inner` as [`seal_document_key`] does, with the anchor of the
 /// document's membership log sealed beside it, as a wrap carries it
 /// (`SYNC-104`). A member who takes a channel key from its catalogue learns
-/// where the channel's log starts from the member who sealed it, never from
-/// the relay alone.
+/// where the channel's log starts from the member who sealed it. The relay
+/// alone never tells it.
 ///
 /// # Errors
 ///
@@ -124,7 +124,7 @@ pub fn seal_anchored_key(
 /// # Errors
 ///
 /// [`CryptoError::AeadFailed`] for a wrong key, a wrong `aad` or a modified
-/// ciphertext, and [`CryptoError::InvalidKeyLength`] for a plaintext that is
+/// ciphertext. [`CryptoError::InvalidKeyLength`] for a plaintext that is
 /// neither a key nor a key and an anchor.
 pub fn open_document_key(
     nonce: &[u8; NONCE_LEN],

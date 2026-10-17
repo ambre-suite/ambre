@@ -108,7 +108,7 @@ pub enum UiEvent {
     /// Which channels hold something new: the relay's answer at start, or a
     /// channel just read (the Murmure unread spec). A channel absent here keeps the
     /// mark the view last drew for it.
-    Activity { channels: Vec<ChannelActivity> },
+    ChannelActivity { channels: Vec<ChannelActivity> },
 
     /// What an open space tells its view: its catalogue, and the outcome of
     /// a creation or a join.

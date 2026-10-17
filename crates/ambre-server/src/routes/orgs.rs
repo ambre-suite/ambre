@@ -1030,7 +1030,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-            assert_eq!(kept.role, "owner");
+            assert_eq!(kept.role, ambre_core::Role::Owner);
         }
 
         /// POST a key recovery as `auth`, returning the response status.

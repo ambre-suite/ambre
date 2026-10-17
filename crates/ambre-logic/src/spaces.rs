@@ -38,8 +38,9 @@ pub(crate) struct Creating {
 
 impl LogicState {
     /// Create a space: one new document, whose creator the relay makes its
-    /// owner on the first upload. Its whole content leaves once the Sync
-    /// worker holds the session.
+    /// owner on the first upload. It is written again under its PeerID once
+    /// its identity lands, and its whole content leaves once the Sync worker
+    /// holds the document.
     pub(crate) fn create_space(&mut self, space_id: SpaceId, name: &str, now: Timestamp) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
@@ -48,12 +49,6 @@ impl LogicState {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
         };
-        match state.export_all() {
-            Ok(export) => {
-                self.unsent.insert(state.document_id(), export);
-            }
-            Err(error) => return self.space_open_failed(space_id, error.to_string()),
-        }
         let document_id = state.document_id();
         self.spaces.insert(
             space_id,
@@ -93,7 +88,7 @@ impl LogicState {
         self.deleting.retain(|_, s| *s != space_id);
         self.leaving.retain(|_, s| *s != space_id);
         self.member_requests.retain(|_, s| *s != space_id);
-        self.unsent.remove(&space_id.document_id());
+        self.forget_murmure_session(space_id.document_id());
         if held || opening {
             self.send_to_sync(SyncCommand::CloseDocument {
                 document_id: space_id.document_id(),
@@ -102,8 +97,8 @@ impl LogicState {
     }
 
     /// Send the whole content of a document this client created, once the
-    /// Sync worker holds its session: the first update creates it on the
-    /// relay.
+    /// Sync worker holds it: the first update creates it on the relay. The
+    /// commands that waited on it follow.
     pub(crate) fn flush_unsent(&mut self, document_id: DocumentId) {
         if let Some(payload) = self.unsent.remove(&document_id) {
             self.send_to_sync(SyncCommand::SendUpdate {
@@ -111,7 +106,20 @@ impl LogicState {
                 payload,
                 summary: None,
             });
+            self.release_waiting(document_id);
         }
+    }
+
+    /// Adopt a session identity on the open space whose document it names.
+    /// `None` when no open space holds that document.
+    pub(crate) fn adopt_space_session(
+        &mut self,
+        document_id: DocumentId,
+        peer: u64,
+        entry: Vec<u8>,
+    ) -> Option<Result<Option<Vec<u8>>, ambre_murmure::MurmureError>> {
+        let space = self.spaces.get_mut(&SpaceId::from_document(document_id))?;
+        Some(space.state.adopt_session(peer, entry))
     }
 
     /// The document of a space is ready. Returns `false` when no space asked
@@ -139,10 +147,13 @@ impl LogicState {
                         rows_from: None,
                     },
                 );
+                // The identity landed while the space was opening.
+                self.settle_murmure_session(document_id);
                 self.show_catalogue(space_id);
                 self.space_live(space_id);
             }
             Err(error) => {
+                self.forget_murmure_session(document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
                 self.space_open_failed(space_id, error.to_string());
             }
@@ -157,6 +168,7 @@ impl LogicState {
         if self.space_opening.remove(&space_id).is_none() && !self.spaces.contains_key(&space_id) {
             return false;
         }
+        self.forget_murmure_session(document_id);
         self.space_open_failed(space_id, message.to_owned());
         true
     }
@@ -237,8 +249,33 @@ impl LogicState {
 
     /// Run one command on an open space (`BUS-027`).
     pub(crate) fn handle_space_command(&mut self, space_id: SpaceId, command: SpaceCommand) {
-        let Some(space) = self.spaces.get_mut(&space_id) else {
+        let Some(space) = self.spaces.get(&space_id) else {
             tracing::warn!("Logic: command for space {space_id}, which is not open; dropped");
+            return;
+        };
+        // A write before the document may be written waits: under any other
+        // PeerID it would never travel (`AUTHOR-026`, `AUTHOR-029`). Creating
+        // a public channel and deleting one write the catalogue on the relay's
+        // answer, so they wait too. A refused write would leave the relay
+        // holding a channel no catalogue lists. A viewer's write is refused
+        // at once, below, and waits on nothing.
+        let document_id = space_id.document_id();
+        let writes = matches!(
+            command,
+            SpaceCommand::AddCategory { .. }
+                | SpaceCommand::CreatePublicChannel { .. }
+                | SpaceCommand::DeleteChannel { .. }
+        );
+        if writes
+            && space.role != Role::Viewer
+            && !self.murmure_writable(document_id, space.state.identified())
+        {
+            return self.wait_for_session(
+                document_id,
+                crate::channels::HeldCommand::Space(space_id, command),
+            );
+        }
+        let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
         let admin = space.role != Role::Viewer;
@@ -713,9 +750,42 @@ mod tests {
             name: "Acme".to_owned(),
             now: NOW,
         });
+        state.grant_identity(space_id.document_id());
         ready(state, space_id.document_id(), Role::Owner);
         let _ = (drain(ui), drain(sync));
         space_id
+    }
+
+    /// The space document opened from `stored`, ready under `role` and under
+    /// a session identity, and the channels drained.
+    fn opened_space(
+        state: &mut LogicState,
+        stored: &SpaceState,
+        role: Role,
+        ui: &Receiver<UiEvent>,
+        sync: &Receiver<SyncCommand>,
+    ) {
+        let space_id = stored.space_id();
+        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
+        // The Sync worker issues the identity as it opens the document.
+        state.grant_identity(space_id.document_id());
+        state.handle_logic_event(LogicEvent::RemoteSnapshot {
+            document_id: space_id.document_id(),
+            covered_seq: 1,
+            payload: stored.snapshot().expect("snapshot"),
+        });
+        ready(state, space_id.document_id(), role);
+        let _ = (drain(ui), drain(sync));
+    }
+
+    /// `space` under a session identity of its own, as another client
+    /// writing it would hold it.
+    fn identified_space(mut space: SpaceState) -> SpaceState {
+        let peer = crate::test_peer();
+        space
+            .adopt_session(peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        space
     }
 
     // --- The client side of a new space ---
@@ -743,6 +813,12 @@ mod tests {
             Some((Some("Acme".to_owned()), Vec::new()))
         );
 
+        let peer = state.grant_identity(space_id.document_id());
+        assert_eq!(
+            updates_of(&drain(&sync), space_id.document_id()),
+            0,
+            "nothing leaves before the Sync worker holds the document"
+        );
         ready(&mut state, space_id.document_id(), Role::Owner);
         let sent: Vec<SyncCommand> = drain(&sync)
             .into_iter()
@@ -759,6 +835,10 @@ mod tests {
             panic!("one whole upload, got {sent:?}");
         };
         assert_eq!(*document_id, space_id.document_id());
+        assert!(
+            crate::authored_by(payload, peer),
+            "the upload is written under the session's PeerID alone"
+        );
         let reopened = SpaceState::open(space_id, &[payload]).expect("the upload is the space");
         assert_eq!(reopened.name().as_deref(), Some("Acme"));
         assert!(
@@ -778,7 +858,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot().expect("snapshot"),
         });
         assert!(
@@ -882,8 +962,10 @@ mod tests {
         let space = &state.spaces[&space_id].state;
         assert_eq!(space.sealed_key(channel_id), Ok(sealed(7)));
 
-        ready(&mut state, meta, Role::Owner);
-        ready(&mut state, segment, Role::Owner);
+        for document_id in [meta, segment] {
+            state.grant_identity(document_id);
+            ready(&mut state, document_id, Role::Owner);
+        }
         let sent = drain(&sync);
         assert_eq!(
             (updates_of(&sent, meta), updates_of(&sent, segment)),
@@ -902,7 +984,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(&mut state, space_id.document_id(), Role::Viewer);
@@ -974,14 +1056,7 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let space_id = SpaceId::new();
         let stored = SpaceState::create(space_id, "Acme", NOW).expect("create");
-        state.handle_logic_command(LogicCommand::OpenSpace { space_id });
-        state.handle_logic_event(LogicEvent::RemoteSnapshot {
-            document_id: space_id.document_id(),
-            covered_seq: Seq(1),
-            payload: stored.snapshot().expect("snapshot"),
-        });
-        ready(&mut state, space_id.document_id(), Role::Viewer);
-        let _ = (drain(&ui), drain(&sync));
+        opened_space(&mut state, &stored, Role::Viewer, &ui, &sync);
         let channel_id = ChannelId::new();
 
         state.handle_logic_command(LogicCommand::Space {
@@ -1016,8 +1091,10 @@ mod tests {
         });
         let sent = drain(&sync);
         assert_eq!(updates_of(&sent, space_id.document_id()), 0);
-        ready(&mut state, meta, Role::Owner);
-        ready(&mut state, segment, Role::Owner);
+        for document_id in [meta, segment] {
+            state.grant_identity(document_id);
+            ready(&mut state, document_id, Role::Owner);
+        }
         let sent = drain(&sync);
         assert_eq!(updates_of(&sent, space_id.document_id()), 0);
         assert_eq!(
@@ -1043,7 +1120,8 @@ mod tests {
     #[test]
     fn a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue() {
         let space_id = SpaceId::new();
-        let mut alice = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let mut alice =
+            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
         let listed =
             ChannelState::create(ChannelId::new(), ChannelType::Public, Some("general"), NOW)
                 .expect("channel");
@@ -1064,7 +1142,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: alice.snapshot().expect("snapshot"),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
@@ -1136,8 +1214,10 @@ mod tests {
             channel.meta_id().document_id(),
             channel.active_id().document_id(),
         );
-        ready(state, meta, Role::Owner);
-        ready(state, segment, Role::Owner);
+        for document_id in [meta, segment] {
+            state.grant_identity(document_id);
+            ready(state, document_id, Role::Owner);
+        }
         let _ = (drain(ui), drain(sync));
         (channel_id, meta, segment)
     }
@@ -1345,14 +1425,14 @@ mod tests {
     #[test]
     fn a_remote_catalogue_delta_reaches_the_open_space() {
         let space_id = SpaceId::new();
-        let mut alice = SpaceState::create(space_id, "Acme", NOW).expect("create");
+        let mut alice =
+            identified_space(SpaceState::create(space_id, "Acme", NOW).expect("create"));
         let first = alice.export_all().expect("export");
         let (mut bob, ui, sync) = harness();
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: space_id.document_id(),
-            seq: Seq(1),
-            payload: first,
+            delta: crate::remote_delta(1, first),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
         let _ = (drain(&ui), drain(&sync));
@@ -1373,8 +1453,7 @@ mod tests {
             .expect("list");
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: space_id.document_id(),
-            seq: Seq(2),
-            payload: delta,
+            delta: crate::remote_delta(2, delta),
         });
         let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");
         assert_eq!(catalogue.len(), 1);
@@ -1440,7 +1519,7 @@ mod tests {
             display_name: name.to_owned(),
             email: format!("{name}@example.org"),
             role: Role::Editor,
-            verified: true,
+            standing: ambre_bus::MemberStanding::Verified,
         }
     }
 
@@ -1457,7 +1536,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot().expect("snapshot"),
         });
         ready(state, space_id.document_id(), Role::Editor);
@@ -1496,7 +1575,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot().expect("snapshot"),
         });
         assert!(
@@ -1521,7 +1600,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: Seq(1),
+            covered_seq: 1,
             payload: stored.snapshot().expect("snapshot"),
         });
         let _ = drain(&sync);

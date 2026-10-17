@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-119` | `POST` | The sidebar MUST show the activity answer of the relay before any count is known. | this spec section 3; `MURMURE-471` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-471` | `POST` | The activity answer of the relay MUST reach the view as one mark per channel, before any count is known. | this spec section 3; `SRV-109` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- Logic hands the view one mark per channel | none | verified |
 | `MURMURE-120` | `POST` | A count MUST replace the activity mark once the loaded document gives it. | this spec section 3 | `ambre_logic::channels::tests::an_open_channel_counts_the_messages_past_its_cursor`; `ambre_murmure::unread_tests::a_snapshot_hands_on_the_numbers_its_writer_knew`; `ambre_murmure::unread_tests::a_message_known_only_from_a_snapshot_lies_within_its_horizon` -- an open channel whose cursors are known hands the view a count with each delta and each answer, and none before | none | verified |
-| `MURMURE-460` | `POST` | A count MUST replace the activity mark of a channel not loaded once the summaries give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-460` | `POST` | A count MUST replace the activity mark of a channel not loaded once the summaries give it. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Channels in the residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- the answer reaches the view and no open reaches the Sync worker | none | verified |
 
 * **Budget.** the counters cost a light subscription per channel not held
@@ -124,7 +124,7 @@ truncated frame never imports.
 
 | Part | Where |
 |---|---|
-| the cursor table | `crates/ambre-server/migrations/20260930000000_read_cursors.sql` |
+| the cursor table | `crates/ambre-server/migrations/20261010010000_read_cursors.sql` |
 | the cursor queries | `crates/ambre-server/src/db/read_cursors.rs` |
 | the cursor, activity and mark read routes | `crates/ambre-server/src/routes/read_cursors.rs` |
 | the requests and the last number delivered | `crates/ambre-sync/src/channels.rs` |
@@ -160,8 +160,8 @@ so the relay moves its cursor to its own last number, and the client need not lo
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No count of a channel not loaded.** The sealed summaries need the light subscription of the
-  `Document residency` Story (`ambre-roadmap.md` E5), `MURMURE-460`.
+* **No count of a channel not loaded.** Sync does not hand the sealed summaries to the Logic
+  thread yet: the `Channels in the residency` Story (`ambre-roadmap.md` E5), `MURMURE-460`.
 * **No view.** No sidebar draws the mark or the count, and no message list sends mark read or
   mark unread.
 * **A snapshot from a member who knows no number.** Its messages read as bounded by its horizon,

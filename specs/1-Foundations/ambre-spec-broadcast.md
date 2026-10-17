@@ -80,7 +80,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 19 `verified`, 5 `unimplemented`. What holds is what a handler test drives: the
+* **Verification.** 21 `verified`, 3 `unimplemented`. What holds is what a handler test drives: the
   two caps, the rate bucket, the presence expiry and its removal, and the channel gates. What is
   loose is everything about the connection rather than the message. Each needs a live socket, and
   two tests alone open one, each to see it refused (`ambre-spec-testing.md section 9`).

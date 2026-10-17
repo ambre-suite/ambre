@@ -43,6 +43,10 @@ impl Version {
     /// Version 6 - a refused clock names its delta, and the author answers it.
     pub const V6: Self = Self(6);
 
+    /// Version 7 - a channel travels as its documents, and a change of
+    /// members is announced.
+    pub const V7: Self = Self(7);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

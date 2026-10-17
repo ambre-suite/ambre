@@ -594,7 +594,8 @@ impl LogicState {
         nonce: SessionNonce,
     ) {
         let Some(doc) = self.docs.get(&document_id) else {
-            return;
+            // A channel or a space document is no entry of `docs`.
+            return self.adopt_murmure_session(document_id, peer, entry);
         };
         if doc.identity == Some(peer) {
             return;

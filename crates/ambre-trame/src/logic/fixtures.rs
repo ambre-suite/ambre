@@ -426,15 +426,15 @@ fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
 /// Panics when the event is absent or names no such sheet. A generator drives
 /// commands it chose itself, so a missing reply is a defect here rather than
 /// a runtime condition (`FixtureGen::build`).
-fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> String {
+fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> SheetId {
     outcome
         .display
         .iter()
         .find_map(|event| match event {
             TrameEvent::SheetList { sheets, .. } => sheets
                 .iter()
-                .find(|(_, label)| label == name)
-                .map(|(id, _)| id.clone()),
+                .find(|tab| tab.name == name)
+                .map(|tab| tab.id.clone()),
             _ => None,
         })
         .unwrap_or_else(|| panic!("CreateSheet must report the sheet it minted: {name}"))

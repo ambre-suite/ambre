@@ -13,30 +13,75 @@
 //! [`every_declared_key_appears_in_the_shape`] reads `schema.rs` and demands a
 //! line for every key it declares, so a key no scenario reaches cannot drop
 //! out of the freeze unseen.
+//!
+//! **The scenario is fixed.** Its PeerIDs, its registry entries and its
+//! author are constants, so the reading belt in `schema_reading.rs` can
+//! freeze the values the same scenario stores.
+//!
+//! The same file holds the two `AUTHOR-024` belts. Murmure writes no
+//! scaffolding under a shared identity: a document is written once, by the
+//! peer that creates it, under its session. The scaffold belt freezes that
+//! answer. The migration belt freezes what each step writes, and the registry
+//! holds no step yet.
 
 use std::collections::BTreeSet;
 
 use ambre_bus::{MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
+use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
+use ambre_core::schema::{migration_peer, step_fingerprint};
 use ambre_core::{CategoryId, ChannelId, SpaceId, UserId};
-use loro::{Container, LoroDoc, LoroValue, ValueOrContainer};
+use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
-use crate::schema::{DocumentKind, SCHEMA_VERSION};
+use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
 use crate::{ChannelState, ChannelType, Listing, SpaceState};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/shapes.txt");
 
+/// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
+const SCAFFOLD: &str = include_str!("../schema/scaffold.txt");
+
+/// What each migration step writes, one section per `SCHEMA_VERSION`.
+const STEPS: &str = include_str!("../schema/migrations.txt");
+
 /// The source the key declarations are read from.
-const SCHEMA_SOURCE: &str = include_str!("schema.rs");
+pub(crate) const SCHEMA_SOURCE: &str = include_str!("schema.rs");
 
 /// The segment a list index collapses to.
-const ANY: &str = "*";
+pub(crate) const ANY: &str = "*";
 
 /// The segment an identifier key collapses to.
-const ID: &str = "{id}";
+pub(crate) const ID: &str = "{id}";
+
+/// The PeerIDs the scenario's documents are written under.
+pub(crate) const META_PEER: u64 = 0x11;
+pub(crate) const SEGMENT_PEER: u64 = 0x12;
+pub(crate) const SPACE_PEER: u64 = 0x13;
+
+/// The user who writes every document of the scenario.
+pub(crate) const AUTHOR: UserId = UserId::from_bytes([0xa1; 16]);
+
+/// The registry entry the scenario's session carries: its author, a fixed
+/// nonce and a fixed signature, so the stored bytes are the same each run.
+pub(crate) fn entry() -> Vec<u8> {
+    PeerEntry {
+        user: AUTHOR,
+        nonce: SessionNonce([0x5a; SESSION_NONCE_LEN]),
+        signature: [0xc3; ENTRY_SIGNATURE_LEN],
+    }
+    .to_bytes()
+}
 
 /// The maps keyed by an identifier, whose keys are values and not schema.
-const KEYED_BY_ID: [&str; 2] = ["space:categories", "space:channels"];
+/// The PeerID registry each document carries is one of them
+/// (`ambre-spec-op-authorship.md section 3`).
+pub(crate) const KEYED_BY_ID: [&str; 5] = [
+    "meta:peers",
+    "segment:peers",
+    "space:categories",
+    "space:channels",
+    "space:peers",
+];
 
 /// The declared `&str` constants that are stored values, not keys.
 const NOT_SCHEMA_KEYS: [&str; 0] = [];
@@ -120,7 +165,7 @@ impl Shape {
 
 /// A channel that reaches every key the schema declares: a name, and a
 /// message in the active segment.
-fn channel_of_every_key() -> ChannelState {
+pub(crate) fn channel_of_every_key() -> ChannelState {
     let mut state = ChannelState::create(
         ChannelId::new(),
         ChannelType::Public,
@@ -128,13 +173,19 @@ fn channel_of_every_key() -> ChannelState {
         Timestamp(1_700_000_000_000),
     )
     .expect("create");
+    for (id, peer) in [
+        (state.meta_id().document_id(), META_PEER),
+        (state.active_id().document_id(), SEGMENT_PEER),
+    ] {
+        state.adopt_session(id, peer, entry()).expect("adopt");
+    }
     state
         .send(
             &MessageDraft {
                 text: "hello".to_owned(),
                 mentions: vec![MentionTarget::Channel],
             },
-            UserId::new(),
+            AUTHOR,
             Timestamp(1_700_000_000_001),
         )
         .expect("send");
@@ -143,9 +194,10 @@ fn channel_of_every_key() -> ChannelState {
 
 /// A space that reaches every key the schema declares: a name, a category,
 /// and a listed channel with a topic and a category.
-fn space_of_every_key(channel: &ChannelState) -> SpaceState {
+pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     let mut space =
         SpaceState::create(SpaceId::new(), "Acme", Timestamp(1_700_000_000_000)).expect("create");
+    space.adopt_session(SPACE_PEER, entry()).expect("adopt");
     let category = CategoryId::new();
     space.put_category(category, "Teams", 0).expect("category");
     let topic = Topic::new("everything").expect("a topic");
@@ -184,12 +236,17 @@ fn render(shape: &Shape) -> String {
     out
 }
 
-/// The section of the freeze that names this version, if any.
+/// The section of the shape freeze that names this version, if any.
 fn frozen_section(version: u32) -> Option<String> {
+    section_of(FROZEN, version)
+}
+
+/// The section of a frozen text that names this version, if any.
+pub(crate) fn section_of(frozen: &str, version: u32) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
     let mut inside = false;
-    for line in FROZEN.lines() {
+    for line in frozen.lines() {
         if line.starts_with("== ") {
             if inside {
                 break;
@@ -206,7 +263,7 @@ fn frozen_section(version: u32) -> Option<String> {
 }
 
 /// Every `const NAME: &str = "literal";` the schema source declares.
-fn declared_string_consts(source: &str) -> Vec<String> {
+pub(crate) fn declared_string_consts(source: &str) -> Vec<String> {
     let mut found = Vec::new();
     for line in source.lines() {
         let Some((_, rest)) = line.trim_start().split_once("const ") else {
@@ -239,6 +296,114 @@ fn the_shape_a_build_writes_is_the_shape_frozen_for_its_version() {
         "the shape this build writes is not the shape frozen for \
          SCHEMA_VERSION {SCHEMA_VERSION}. A key or a value type moved, so raise \
          SCHEMA_VERSION and freeze the new shape as its own section (`MURMURE-020`)."
+    );
+}
+
+/// Who wrote one document of the scenario: its session alone, or the other
+/// identities its operations carry, as hex.
+fn writers(kind: DocumentKind, doc: &LoroDoc, session: u64) -> String {
+    let mut others: Vec<String> = doc
+        .oplog_vv()
+        .keys()
+        .copied()
+        .filter(|peer| *peer != session)
+        .map(|peer| format!("{peer:016x}"))
+        .collect();
+    others.sort();
+    if others.is_empty() {
+        format!("{}: its session alone\n", kind.as_str())
+    } else {
+        format!("{}: its session and {}\n", kind.as_str(), others.join(" "))
+    }
+}
+
+/// Every build of one version writes the same scaffolding (`AUTHOR-024`).
+/// Murmure's answer is that it writes none: every operation of a document
+/// is its session's, so no other build can write it under another identity.
+/// A scaffolding written under a shared identity moves a line.
+#[test]
+fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
+    let channel = channel_of_every_key();
+    let space = space_of_every_key(&channel);
+    let written = [
+        writers(
+            DocumentKind::Meta,
+            channel.doc(channel.meta_id().document_id()).expect("held"),
+            META_PEER,
+        ),
+        writers(
+            DocumentKind::Segment,
+            channel
+                .doc(channel.active_id().document_id())
+                .expect("held"),
+            SEGMENT_PEER,
+        ),
+        writers(DocumentKind::Space, space.doc(), SPACE_PEER),
+    ]
+    .concat();
+    assert_eq!(
+        section_of(SCAFFOLD, SCHEMA_VERSION).as_deref(),
+        Some(written.as_str()),
+        "the identities this build writes a document under are not the ones \
+         frozen for SCHEMA_VERSION {SCHEMA_VERSION} in `schema/scaffold.txt`. \
+         Another build of that version writes it otherwise, and a delta that \
+         waits on it never applies. Raise SCHEMA_VERSION and append a section."
+    );
+}
+
+/// The canonical document of the version a step leaves: that version's
+/// layout, holding what the step rewrites. Each step reads its own, so a step
+/// added later never moves what an earlier one writes.
+fn canonical(from: u32) -> LoroDoc {
+    panic!("the step from version {from} has no canonical document: write one here")
+}
+
+/// Each step of the registry, run as the gate runs it on its canonical
+/// document. One line per step: `from -> to` and what it wrote.
+fn steps_written() -> Vec<String> {
+    MIGRATIONS
+        .iter()
+        .map(|step| {
+            let stored = canonical(step.from)
+                .export(ExportMode::Snapshot)
+                .expect("a snapshot");
+            let doc = LoroDoc::new();
+            doc.import(&stored).expect("the snapshot imports");
+            let heads = doc.oplog_frontiers();
+            doc.set_peer_id(migration_peer(heads.iter().map(|id| (id.peer, id.counter))))
+                .expect("the migration identity");
+            let before = doc.oplog_vv();
+            (step.apply)(&doc).expect("the step runs on its canonical document");
+            let written = doc
+                .export(ExportMode::updates(&before))
+                .expect("the step's writes export");
+            format!(
+                "{} -> {} {:016x}",
+                step.from,
+                step.to,
+                step_fingerprint(&written)
+            )
+        })
+        .collect()
+}
+
+/// Every build of one version runs each migration step alike (`AUTHOR-024`).
+/// Version 1 runs none, and its section is empty. The first step lands with
+/// a raised version, its canonical document and a section of its own.
+#[test]
+fn each_migration_step_writes_what_its_version_froze() {
+    let listed: String = steps_written()
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert_eq!(
+        section_of(STEPS, SCHEMA_VERSION).as_deref(),
+        Some(listed.as_str()),
+        "a migration step this build runs writes other operations than the \
+         ones frozen for SCHEMA_VERSION {SCHEMA_VERSION} in \
+         `schema/migrations.txt`. A peer on another build of that version \
+         migrates the same document another way. Restore the step, or raise \
+         SCHEMA_VERSION and append a section."
     );
 }
 

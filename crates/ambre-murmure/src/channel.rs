@@ -22,6 +22,7 @@ use crate::schema::{
     SEGMENT_STATE, SEGMENTS, SegmentState,
 };
 use crate::sequence::{self, Order, Position, Sequence};
+use crate::session::Session;
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -29,6 +30,82 @@ use crate::sequence::{self, Order, Position, Sequence};
 struct Held {
     id: DocumentId,
     doc: LoroDoc,
+    /// The PeerID this session writes the document under. `None` until the
+    /// Sync worker issues it, and nothing is written before (`AUTHOR-029`).
+    session: Option<Session>,
+    /// What a document created here holds, written again under its PeerID
+    /// once the session lands. `None` for a document the relay served.
+    created: Option<Created>,
+}
+
+impl Held {
+    /// A document the relay served, with no session yet.
+    fn served(id: DocumentId, doc: LoroDoc) -> Self {
+        Self {
+            id,
+            doc,
+            session: None,
+            created: None,
+        }
+    }
+
+    /// The session this document writes under.
+    ///
+    /// # Errors
+    /// [`MurmureError::NoSession`] before the Sync worker issued it.
+    fn session(&mut self) -> Result<(&LoroDoc, &mut Session), MurmureError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or(MurmureError::NoSession(self.id))?;
+        Ok((&self.doc, session))
+    }
+}
+
+/// The content of a document this client created. It is written at once, so
+/// the channel reads before its sessions land. It is written again from
+/// scratch under the PeerID of its session: the first write never travels.
+#[derive(Debug, Clone)]
+enum Created {
+    /// The `meta` document, listing the first active segment.
+    Meta {
+        channel_type: ChannelType,
+        name: Option<String>,
+        active: SegmentId,
+        now: Timestamp,
+    },
+    /// The first active segment, which holds no message yet.
+    Segment { now: Timestamp },
+}
+
+impl Created {
+    /// Write this content into `doc`, and commit it.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses a write.
+    fn write(&self, doc: &LoroDoc, channel_id: ChannelId) -> Result<(), MurmureError> {
+        match self {
+            Self::Meta {
+                channel_type,
+                name,
+                active,
+                now,
+            } => {
+                schema::write_header(doc, DocumentKind::Meta, channel_id, now.0)?;
+                let channel = doc.get_map(CHANNEL);
+                channel.insert(CHANNEL_TYPE, channel_type.as_str())?;
+                if let Some(name) = name {
+                    channel.insert(CHANNEL_NAME, name.as_str())?;
+                }
+                push_segment_entry(doc, *active, *now, SegmentState::Active)?;
+            }
+            Self::Segment { now } => {
+                schema::write_header(doc, DocumentKind::Segment, channel_id, now.0)?;
+            }
+        }
+        doc.commit();
+        Ok(())
+    }
 }
 
 /// What a sent message produced: the delta to hand the Sync worker, its
@@ -84,6 +161,10 @@ impl ChannelState {
     ///
     /// `name` stays absent when `None`, never an empty string (`MURMURE-018`).
     ///
+    /// The channel reads at once. Each document is written again under its
+    /// PeerID when its session lands, and only then does it leave
+    /// ([`ChannelState::adopt_session`]).
+    ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses a write.
     pub fn create(
@@ -92,30 +173,108 @@ impl ChannelState {
         name: Option<&str>,
         now: Timestamp,
     ) -> Result<Self, MurmureError> {
-        let meta = Held {
-            id: DocumentId::new(),
-            doc: LoroDoc::new(),
+        let active_id = DocumentId::new();
+        let created = |id: DocumentId, created: Created| -> Result<Held, MurmureError> {
+            let doc = LoroDoc::new();
+            created.write(&doc, channel_id)?;
+            Ok(Held {
+                created: Some(created),
+                ..Held::served(id, doc)
+            })
         };
-        let active = Held {
-            id: DocumentId::new(),
-            doc: LoroDoc::new(),
-        };
-        schema::write_header(&meta.doc, DocumentKind::Meta, channel_id, now.0)?;
-        let channel = meta.doc.get_map(CHANNEL);
-        channel.insert(CHANNEL_TYPE, channel_type.as_str())?;
-        if let Some(name) = name {
-            channel.insert(CHANNEL_NAME, name)?;
-        }
-        push_segment_entry(
-            &meta.doc,
-            SegmentId::from_document(active.id),
-            now,
-            SegmentState::Active,
+        let meta = created(
+            DocumentId::new(),
+            Created::Meta {
+                channel_type,
+                name: name.map(str::to_owned),
+                active: SegmentId::from_document(active_id),
+                now,
+            },
         )?;
-        meta.doc.commit();
-        schema::write_header(&active.doc, DocumentKind::Segment, channel_id, now.0)?;
-        active.doc.commit();
+        let active = created(active_id, Created::Segment { now })?;
         Ok(Self::assemble(channel_id, meta, active, None))
+    }
+
+    /// Write `document_id` under the PeerID the Sync worker issued for this
+    /// session, with its registry entry (`AUTHOR-002`, `AUTHOR-009`).
+    ///
+    /// A document created here is written again from scratch under it, and
+    /// its whole content returns: the first update, which creates it on the
+    /// relay. A document the relay served returns nothing: its entry rides
+    /// with its first delta. An older segment is final and writes nothing, so
+    /// it takes no entry. The same identity issued twice changes nothing.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a document the channel does not hold,
+    /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    pub fn adopt_session(
+        &mut self,
+        document_id: DocumentId,
+        peer: u64,
+        entry: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, MurmureError> {
+        let channel_id = self.channel_id;
+        let Some(held) = self.held_mut(document_id) else {
+            return if self.holds(document_id) {
+                Ok(None)
+            } else {
+                Err(MurmureError::NotHeld(document_id))
+            };
+        };
+        if held.session.map(Session::peer) == Some(peer) {
+            return Ok(None);
+        }
+        let Some(created) = &held.created else {
+            held.session = Some(Session::adopt(&held.doc, peer, entry)?);
+            return Ok(None);
+        };
+        let doc = LoroDoc::new();
+        let mut session = Session::adopt(&doc, peer, entry)?;
+        created.write(&doc, channel_id)?;
+        let first = session.export(&doc)?;
+        held.doc = doc;
+        held.session = Some(session);
+        held.created = None;
+        Ok(Some(first))
+    }
+
+    /// This channel with every live document under a fresh PeerID, as the
+    /// Sync worker would issue them.
+    #[cfg(test)]
+    pub(crate) fn identify(mut self) -> Self {
+        let ids: Vec<DocumentId> = self.live().map(|held| held.id).collect();
+        for id in ids {
+            let peer = crate::session::next_peer();
+            self.adopt_session(id, peer, peer.to_le_bytes().to_vec())
+                .expect("adopt");
+        }
+        self
+    }
+
+    /// Whether this session may write `document_id`: its PeerID landed.
+    pub fn identified(&self, document_id: DocumentId) -> bool {
+        self.live()
+            .any(|held| held.id == document_id && held.session.is_some())
+    }
+
+    /// The live documents: `meta`, the active segment and the one being
+    /// closed.
+    fn live(&self) -> impl Iterator<Item = &Held> {
+        [Some(&self.meta), Some(&self.active), self.closing.as_ref()]
+            .into_iter()
+            .flatten()
+    }
+
+    /// The live document of that identifier, to write it.
+    fn held_mut(&mut self, document_id: DocumentId) -> Option<&mut Held> {
+        [
+            Some(&mut self.meta),
+            Some(&mut self.active),
+            self.closing.as_mut(),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|held| held.id == document_id)
     }
 
     /// A channel of these documents, each already admitted.
@@ -148,10 +307,10 @@ impl ChannelState {
         segments: &HashMap<SegmentId, Vec<u8>>,
     ) -> Result<Self, MurmureError> {
         let meta_id = meta_id.document_id();
-        let meta = Held {
-            id: meta_id,
-            doc: schema::admit(meta_bytes, DocumentKind::Meta, channel_id, meta_id)?,
-        };
+        let meta = Held::served(
+            meta_id,
+            schema::admit(meta_bytes, DocumentKind::Meta, channel_id, meta_id)?,
+        );
         let live = live_segments(&meta.doc, channel_id)?;
         let admit_live = |segment: SegmentId| -> Result<Held, MurmureError> {
             let id = segment.document_id();
@@ -159,7 +318,7 @@ impl ChannelState {
                 .get(&segment)
                 .ok_or(MurmureError::SegmentMissing(id))?;
             let doc = schema::admit(bytes, DocumentKind::Segment, channel_id, id)?;
-            Ok(Held { id, doc })
+            Ok(Held::served(id, doc))
         };
         let active = admit_live(live.active)?;
         let closing = live.closing.map(admit_live).transpose()?;
@@ -188,14 +347,11 @@ impl ChannelState {
             let payloads = segments.get(&id).ok_or(MurmureError::SegmentMissing(id))?;
             let doc =
                 schema::admit_all(&borrowed(payloads), DocumentKind::Segment, channel_id, id)?;
-            Ok(Held { id, doc })
+            Ok(Held::served(id, doc))
         };
         let active = admit_live(live.active)?;
         let closing = live.closing.map(admit_live).transpose()?;
-        let meta = Held {
-            id: meta_id,
-            doc: meta_doc,
-        };
+        let meta = Held::served(meta_id, meta_doc);
         let mut state = Self::assemble(channel_id, meta, active, closing);
         for (document_id, mut sequence) in sequences {
             // Only a held segment keeps its numbers: `meta` has no message,
@@ -230,32 +386,31 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotDirect`] for any other channel: a public channel's
     /// name lives in its catalogue too. [`MurmureError::Crdt`] when Loro
-    /// refuses a write or the export.
+    /// refuses a write or the export. [`MurmureError::NoSession`] before the
+    /// PeerID of `meta` landed.
     pub fn name_direct(&mut self, name: Option<&str>) -> Result<Named, MurmureError> {
         if self.channel_type() != Some(ChannelType::Direct) {
             return Err(MurmureError::NotDirect(self.channel_id));
         }
+        let meta = self.meta_id();
         let name = name.map(str::trim).filter(|n| !n.is_empty());
-        let doc = &self.meta.doc;
-        let before = doc.oplog_vv();
+        let (doc, session) = self.meta.session()?;
         let channel = doc.get_map(CHANNEL);
         match name {
             Some(name) => channel.insert(CHANNEL_NAME, name)?,
             None if channel.get(CHANNEL_NAME).is_some() => channel.delete(CHANNEL_NAME)?,
             None => {}
         }
-        doc.commit();
         Ok(Named {
-            meta: self.meta_id(),
-            delta: doc.export(ExportMode::updates(&before))?,
+            meta,
+            delta: session.export(doc)?,
             event: MurmureEvent::Named {
                 name: name.map(str::to_owned),
             },
         })
     }
 
-    /// Every operation of one held document, as one Loro update: the first
-    /// payload the relay receives for a channel just created.
+    /// Every operation of one held document, as one Loro update.
     ///
     /// # Errors
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold,
@@ -309,9 +464,7 @@ impl ChannelState {
 
     /// The document of that identifier, among every one the channel holds.
     pub(crate) fn doc(&self, document_id: DocumentId) -> Option<&LoroDoc> {
-        [Some(&self.meta), Some(&self.active), self.closing.as_ref()]
-            .into_iter()
-            .flatten()
+        self.live()
             .find(|held| held.id == document_id)
             .map(|held| &held.doc)
             .or_else(|| self.loaded.get(&SegmentId::from_document(document_id)))
@@ -438,14 +591,16 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    /// [`MurmureError::NoSession`] before the PeerID of the active segment
+    /// landed.
     pub fn send(
         &mut self,
         draft: &MessageDraft,
         author: UserId,
         now: Timestamp,
     ) -> Result<Sent, MurmureError> {
-        let doc = &self.active.doc;
-        let before = doc.oplog_vv();
+        let segment = self.active_id();
+        let (doc, session) = self.active.session()?;
         let id = MessageId::new();
         let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
         message.insert(MESSAGE_ID, id.to_string())?;
@@ -455,9 +610,7 @@ impl ChannelState {
         // (`MURMURE-004`, `MURMURE-005`).
         let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
         content.insert(0, &draft.text)?;
-        doc.commit();
-        let delta = doc.export(ExportMode::updates(&before))?;
-        let segment = self.active_id();
+        let delta = session.export(doc)?;
         Ok(Sent {
             segment,
             delta,

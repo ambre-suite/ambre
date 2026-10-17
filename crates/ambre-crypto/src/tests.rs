@@ -593,8 +593,8 @@ fn a_sealed_document_key_opens_under_no_other_key_or_aad() {
     assert_eq!(moved.err(), Some(CryptoError::AeadFailed));
 }
 
-/// Holds `SYNC-104` for a key sealed under another: the anchor of the log
-/// comes back with the key, a bare seal carries none, and a plaintext with a
+/// Holds `SYNC-104` for a key sealed under another. The anchor of the log
+/// comes back with the key, and a bare seal carries none. A plaintext with a
 /// partial anchor is refused rather than read as a key.
 #[test]
 fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
