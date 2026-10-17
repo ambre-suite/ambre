@@ -440,7 +440,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     });
     let s2 = second_sheet_id(&a);
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     a.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -448,7 +448,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     a.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -473,7 +473,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     // `new()`. An incremental delta would leave that op as a dangling
     // dep.
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
         name: "Data".to_owned(),
     });
     a.apply_remote(&b.export_snapshot());
@@ -516,7 +516,7 @@ fn create_sheet_lists_and_isolates() {
         text: "on_s0".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s1.clone(),
+        sheet_id: SheetId(s1.clone()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "", "new sheet starts empty");
     // Write here, switch back: each sheet keeps its own value.
@@ -527,7 +527,7 @@ fn create_sheet_lists_and_isolates() {
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
 }
@@ -589,7 +589,9 @@ fn cross_sheet_formula_evaluates_end_to_end() {
     let s2 = second_sheet_id(&state);
 
     // Put 5 into Sheet2!A1.
-    state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: SheetId(s2),
+    });
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
         col: 0,
@@ -598,7 +600,7 @@ fn cross_sheet_formula_evaluates_end_to_end() {
 
     // Back on Sheet1, B1 references it.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -626,7 +628,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     });
     let s2 = second_sheet_id(&base);
     base.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     base.handle_command(TrameCommand::SetCellText {
         row: 1,
@@ -647,7 +649,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // Cross-sheet reader on Sheet1 (read while Sheet1 is the active tab, so the
     // masked cell lives on a *non-active* sheet).
     base.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     base.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -665,7 +667,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
 
     // Peer A merges Sheet2!A1:A2 (both empty on its side).
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     a.handle_command(TrameCommand::MergeCells {
         row: 0,
@@ -678,7 +680,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // Peer B concurrently writes Sheet2!A2, then receives A's merge -> A2 is
     // masked (covered + non-empty), and stays the active tab.
     b.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     b.handle_command(TrameCommand::SetCellText {
         row: 1,
@@ -698,7 +700,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
 
     // Switch to Sheet1: the cross-sheet reader now targets a *non-active* sheet.
     b.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     let target_inactive = read_cell(&mut b, 0, 1);
 
@@ -722,7 +724,7 @@ fn rename_sheet_keeps_id_and_cells() {
     });
     let s1 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s1.clone(),
+        sheet_id: SheetId(s1.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -731,7 +733,7 @@ fn rename_sheet_keeps_id_and_cells() {
     });
 
     let evts = state.handle_command(TrameCommand::RenameSheet {
-        sheet_id: s1.clone(),
+        sheet_id: SheetId(s1.clone()),
         name: "Renamed".to_owned(),
     });
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
@@ -752,7 +754,7 @@ fn move_sheet_reorders_tabs() {
     let b = second_sheet_id(&state);
     // Order is [s0, B]; move B to the front.
     let evts = state.handle_command(TrameCommand::MoveSheet {
-        sheet_id: b.clone(),
+        sheet_id: SheetId(b.clone()),
         to_index: 0,
     });
     let TrameEvent::SheetList { sheets, .. } = &evts.display[0] else {
@@ -767,7 +769,7 @@ fn move_sheet_reorders_tabs() {
 fn delete_last_sheet_rejected() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     assert!(matches!(evts.display[0], TrameEvent::Error { .. }));
     assert!(evts.update.is_none());
@@ -783,11 +785,11 @@ fn delete_active_sheet_falls_back() {
     });
     let b = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: b.clone(),
+        sheet_id: SheetId(b.clone()),
     });
 
     let evts = state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: b.clone(),
+        sheet_id: SheetId(b.clone()),
     });
     let list = evts
         .display
@@ -820,7 +822,7 @@ fn sort_range_ascending_moves_whole_rows() {
         });
     }
     let evts = state.handle_command(TrameCommand::SortRange {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         row_start: 0,
         row_end: 2,
         col_start: 0,
@@ -855,7 +857,7 @@ fn sort_range_descending_keeps_header() {
         });
     }
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         row_start: 0,
         row_end: 3,
         col_start: 0,
@@ -900,7 +902,7 @@ fn created_sheet_never_repeats_a_name() {
     }
     let first_added = second_sheet_id(&state);
     state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: first_added,
+        sheet_id: SheetId(first_added),
     });
     state.handle_command(TrameCommand::CreateSheet {
         name: "Sheet3".to_owned(),
@@ -917,7 +919,7 @@ fn rename_to_a_taken_name_is_refused() {
     });
     let data = second_sheet_id(&state);
     let evts = state.handle_command(TrameCommand::RenameSheet {
-        sheet_id: data.clone(),
+        sheet_id: SheetId(data.clone()),
         name: "Sheet1".to_owned(),
     });
     assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
@@ -938,11 +940,11 @@ fn concurrent_duplicate_names_read_apart() {
         .expect("a snapshot this build wrote reads back at the current schema");
     let two = second_sheet_id(&a);
     a.handle_command(TrameCommand::RenameSheet {
-        sheet_id: two.clone(),
+        sheet_id: SheetId(two.clone()),
         name: "Budget".to_owned(),
     });
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         name: "Budget".to_owned(),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
@@ -962,7 +964,7 @@ fn rename_to_a_blank_name_is_refused() {
     let mut state = TrameState::new();
     for blank in ["", "   "] {
         let evts = state.handle_command(TrameCommand::RenameSheet {
-            sheet_id: "s0".to_owned(),
+            sheet_id: SheetId("s0".to_owned()),
             name: blank.to_owned(),
         });
         assert!(matches!(&evts.display[..], [TrameEvent::Error { .. }]));
@@ -987,7 +989,7 @@ fn deleted_sheet_leaves_no_data() {
     });
     let gone = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: gone.clone(),
+        sheet_id: SheetId(gone.clone()),
     });
     for (row, text) in ["a", "b"].iter().enumerate() {
         state.handle_command(TrameCommand::SetCellText {
@@ -998,18 +1000,18 @@ fn deleted_sheet_leaves_no_data() {
     }
     state.handle_command(TrameCommand::ResizeCol {
         version: 1,
-        sheet_id: gone.clone(),
+        sheet_id: SheetId(gone.clone()),
         col: 0,
         width_px: 120.0,
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: 2,
-        sheet_id: gone.clone(),
+        sheet_id: SheetId(gone.clone()),
         row: 0,
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: gone.clone(),
+        sheet_id: SheetId(gone.clone()),
         col: 0,
         kind: ambre_bus::FilterKind::Values(vec!["a".to_owned()]),
     });
@@ -1027,7 +1029,7 @@ fn deleted_sheet_leaves_no_data() {
     }
 
     state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: gone.clone(),
+        sheet_id: SheetId(gone.clone()),
     });
     for name in [
         cells_map_name(&gone),

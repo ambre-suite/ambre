@@ -147,6 +147,7 @@ def scratch(tmp: str) -> Path:
     write(root, f"{cb.PROTOCOL}/lib.rs", "pub struct Update {\n    pub seq: u64,\n}\n")
     write(root, "crates/ambre-trame/src/logic/mod.rs", "fn h(&mut self) -> Outcome { Outcome::default() }\n")
     write(root, cb.CARGO_CONFIG, '[unstable]\nbuild-std = ["std", "panic_abort"]\n')
+    write(root, f"{cb.BUS}/lib.rs", "pub struct SheetId(pub String);\npub enum C {\n    Go { sheet_id: SheetId },\n}\n")
     return root
 
 
@@ -182,6 +183,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_one_copy(errors)
             cb.check_one_event_copy(errors)
             cb.check_signal_types(errors)
+            cb.check_bus_ids(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -870,6 +872,33 @@ class CrateBoundaries(unittest.TestCase):
             "}\n"
         )
         self.assertEqual(self.breach("crates/ambre-toile/src/chrome/relay.rs", text + TOILE_ABSORB), [])
+
+    def test_a_bus_identifier_of_a_primitive_type_is_refused(self):
+        for text in (
+            "pub enum C {\n    Rename { sheet_id: String, name: String },\n}\n",
+            "pub enum C {\n    Remove {\n        sheet_id: SheetId,\n        id: String,\n    },\n}\n",
+            "pub struct S {\n    pub target_sheet_id: Option<String>,\n}\n",
+            "pub struct S {\n    pub row_ids: Vec<u64>,\n}\n",
+        ):
+            errors = self.breach(f"{cb.BUS}/app/trame/command.rs", text)
+            self.assertTrue(any("carries an identifier as a bare" in e for e in errors), (text, errors))
+
+    def test_a_bus_identifier_of_its_own_type_a_parameter_or_a_test_stays_free(self):
+        text = (
+            "pub enum C {\n    Go { sheet_id: SheetId, map: HashMap<String, u32> },\n    U { user_id: ambre_core::UserId },\n}\n"
+            "pub fn go(sheet_id: &str) {}\n"
+            "#[cfg(test)]\nmod tests {\n    struct T {\n        id: u32,\n    }\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.BUS}/app/trame/command.rs", text), [])
+
+    def test_a_bus_crate_gone_from_the_tree_is_an_error_not_a_pass(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = scratch(tmp)
+            (root / cb.BUS / "lib.rs").unlink()
+            errors = self.run_checks(root)
+        self.assertTrue(any("identifier boundary reads nothing" in e for e in errors), errors)
 
     def test_a_view_storing_what_the_relay_writes_off_the_event_is_refused(self):
         cases = (

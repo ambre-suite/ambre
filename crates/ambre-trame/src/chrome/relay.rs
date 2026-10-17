@@ -101,18 +101,16 @@ impl TrameRelay {
                 in_formulas: r.in_formulas,
                 all_sheets: r.all_sheets,
             },
-            TrameIntent::ActivateSheet(SheetId(sheet_id)) => {
-                TrameCommand::ActivateSheet { sheet_id }
-            }
+            TrameIntent::ActivateSheet(sheet_id) => TrameCommand::ActivateSheet { sheet_id },
             TrameIntent::CreateSheet => TrameCommand::CreateSheet {
                 name: format!("Sheet{}", self.sheets.get_untracked().len() + 1),
             },
-            TrameIntent::RenameSheet(SheetId(sheet_id), name) => {
+            TrameIntent::RenameSheet(sheet_id, name) => {
                 TrameCommand::RenameSheet { sheet_id, name }
             }
-            TrameIntent::DeleteSheet(SheetId(sheet_id)) => TrameCommand::DeleteSheet { sheet_id },
+            TrameIntent::DeleteSheet(sheet_id) => TrameCommand::DeleteSheet { sheet_id },
             TrameIntent::ReorderSheet(req) => TrameCommand::MoveSheet {
-                sheet_id: req.id.0,
+                sheet_id: req.id,
                 to_index: req.to_index as u32,
             },
         })

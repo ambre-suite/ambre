@@ -51,7 +51,7 @@ const DEFAULT: &str = crate::logic::DEFAULT_SHEET;
 
 fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> TrameOutcome {
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: DEFAULT.to_owned(),
+        sheet_id: SheetId(DEFAULT.to_owned()),
         row_start: rows.0,
         row_end: rows.1,
         col_start: 0,
@@ -64,7 +64,7 @@ fn sort(state: &mut TrameState, rows: (u32, u32), col: u32, ascending: bool) -> 
 
 fn filter(state: &mut TrameState, col: u32, kind: FilterKind) -> TrameOutcome {
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: DEFAULT.to_owned(),
+        sheet_id: SheetId(DEFAULT.to_owned()),
         col,
         kind,
     })
@@ -371,7 +371,7 @@ fn a_filter_and_its_clear_keep_every_cell() {
     assert_eq!(cells(&state), before, "the apply");
     assert_eq!(read_cell(&mut state, 1, 2), total);
     state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: DEFAULT.to_owned(),
+        sheet_id: SheetId(DEFAULT.to_owned()),
     });
     assert!(!is_filtered(&mut state, 0, 0));
     assert_eq!(cells(&state), before, "the clear");
@@ -466,7 +466,7 @@ fn a_sort_of_fewer_than_two_rows_changes_nothing() {
     let before = state.doc.len_ops();
     for (row_end, has_header) in [(0, false), (1, true)] {
         let out = state.handle_command(TrameCommand::SortRange {
-            sheet_id: DEFAULT.to_owned(),
+            sheet_id: SheetId(DEFAULT.to_owned()),
             row_start: 0,
             row_end,
             col_start: 0,

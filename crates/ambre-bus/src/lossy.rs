@@ -93,7 +93,7 @@ mod tests {
             TrameCommand::MoveColumn { from: 0, to: 3 },
             TrameCommand::ResizeCol {
                 version: 1,
-                sheet_id: "s1".to_string(),
+                sheet_id: crate::SheetId("s1".to_string()),
                 col: 0,
                 width_px: 120.0,
             },

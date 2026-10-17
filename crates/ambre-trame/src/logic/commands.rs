@@ -173,13 +173,13 @@ impl TrameState {
                 sheet_id,
                 col,
                 width_px,
-            } => self.resize_col(&sheet_id, col, width_px),
+            } => self.resize_col(&sheet_id.0, col, width_px),
             TrameCommand::ResizeRow {
                 version: _,
                 sheet_id,
                 row,
                 height_px,
-            } => self.resize_row(&sheet_id, row, height_px),
+            } => self.resize_row(&sheet_id.0, row, height_px),
             // -- Parameterless structural intents (grid context menu). Geometry
             // comes from the tracked active cell / selection (`SetActiveCell`).
             TrameCommand::InsertRowAbove => self.insert_axis(self.active.0, Axis::Row),
@@ -214,11 +214,13 @@ impl TrameState {
             TrameCommand::Redo => self.apply_history(false),
             TrameCommand::DefineName { name, reference } => self.define_name(&name, &reference),
             TrameCommand::DeleteName { name } => self.delete_name(&name),
-            TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id),
+            TrameCommand::ActivateSheet { sheet_id } => self.activate_sheet(&sheet_id.0),
             TrameCommand::CreateSheet { name } => self.create_sheet(&name),
-            TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
-            TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
-            TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),
+            TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id.0, &name),
+            TrameCommand::MoveSheet { sheet_id, to_index } => {
+                self.move_sheet(&sheet_id.0, to_index)
+            }
+            TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id.0),
             TrameCommand::SortRange {
                 sheet_id,
                 row_start,
@@ -229,7 +231,14 @@ impl TrameState {
                 ascending,
                 has_header,
             } => self.sort_range(
-                &sheet_id, row_start, row_end, col_start, col_end, sort_col, ascending, has_header,
+                &sheet_id.0,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+                sort_col,
+                ascending,
+                has_header,
             ),
             TrameCommand::SortRangeMulti {
                 sheet_id,
@@ -240,14 +249,20 @@ impl TrameState {
                 sort_keys,
                 has_header,
             } => self.sort_range_multi(
-                &sheet_id, row_start, row_end, col_start, col_end, &sort_keys, has_header,
+                &sheet_id.0,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+                &sort_keys,
+                has_header,
             ),
             TrameCommand::ApplyFilter {
                 sheet_id,
                 col,
                 kind,
-            } => self.apply_filter(&sheet_id, col, kind),
-            TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id),
+            } => self.apply_filter(&sheet_id.0, col, kind),
+            TrameCommand::ClearFilter { sheet_id } => self.clear_filter(&sheet_id.0),
             // Parameterless siblings: geometry resolved against the tracked active
             // cell / active sheet (`trame-shared-filter`), like the sorts above.
             TrameCommand::RequestActiveColumnValues => self.active_column_values(),
@@ -280,7 +295,7 @@ impl TrameState {
                 src,
                 dest,
                 mode,
-            } => self.fill_range(&sheet_id, src, dest, mode),
+            } => self.fill_range(&sheet_id.0, src, dest, mode),
 
             TrameCommand::FindNext {
                 query,
@@ -313,7 +328,7 @@ impl TrameState {
                 data,
                 delimiter,
                 has_header,
-                target_sheet_id,
+                target_sheet_id.map(|s| s.0),
                 start_row,
                 start_col,
             ),
@@ -321,7 +336,7 @@ impl TrameState {
                 sheet_id,
                 delimiter,
                 range,
-            } => self.export_csv(&sheet_id, delimiter, range),
+            } => self.export_csv(&sheet_id.0, delimiter, range),
             TrameCommand::ExportActiveSheetCsv => {
                 let sheet = self.active_sheet.clone();
                 self.export_csv(&sheet, None, None)

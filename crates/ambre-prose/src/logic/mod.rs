@@ -628,7 +628,7 @@ impl ProseState {
                 parent_id.map(tree_id),
                 after_id.map(tree_id),
                 &init,
-                style_id.as_deref(),
+                style_id.as_ref().map(|s| s.0.as_str()),
             ),
             ProseCommand::DeleteBlock { block_id } => self.delete_block(&tree_id(block_id)),
             ProseCommand::MoveBlock {
@@ -641,7 +641,7 @@ impl ProseState {
                 after_id.map(tree_id),
             ),
             ProseCommand::SetBlockStyle { block_id, style_id } => {
-                self.set_block_style(&tree_id(block_id), &style_id)
+                self.set_block_style(&tree_id(block_id), &style_id.0)
             }
             ProseCommand::SetHeadingLevel { block_id, level } => {
                 self.set_heading_level(&tree_id(block_id), level)

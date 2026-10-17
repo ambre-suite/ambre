@@ -63,6 +63,12 @@ impl fmt::Display for BlockId {
     }
 }
 
+/// The name of a paragraph style a block carries, built-in or user-defined
+/// (`ambre-spec-prose-schema.md`). The tree stores the name itself, so the
+/// newtype exists only to keep it apart from the other strings of a command.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StyleId(pub String);
+
 // =============================================================================
 // Block model (`ambre-spec-prose-schema.md section 3`)
 // =============================================================================
@@ -723,7 +729,7 @@ pub enum ProseCommand {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
         init: BlockInit,
-        style_id: Option<String>,
+        style_id: Option<StyleId>,
     },
     DeleteBlock {
         block_id: BlockId,
@@ -735,7 +741,7 @@ pub enum ProseCommand {
     },
     SetBlockStyle {
         block_id: BlockId,
-        style_id: String,
+        style_id: StyleId,
     },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
     /// `None` takes the level away, and the block becomes a paragraph

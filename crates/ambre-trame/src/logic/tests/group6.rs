@@ -27,7 +27,7 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
 
     // Drag the handle down: source is the whole merge, dest snapped to A6.
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: state.active_sheet.clone(),
+        sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
             row: 0,
             col: 0,
@@ -79,7 +79,7 @@ fn fill_merged_series_increments_per_block() {
 
     // Ctrl-drag down to A6: Series, so each block master grows by +1.
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: state.active_sheet.clone(),
+        sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
             row: 0,
             col: 0,
@@ -136,7 +136,7 @@ fn fill_multi_merged_source_continues_pattern() {
 
     // Drag the two-block source (A1:A4) down to A8 -> two more blocks.
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: state.active_sheet.clone(),
+        sheet_id: SheetId(state.active_sheet.clone()),
         src: GridRange {
             row: 0,
             col: 0,
@@ -286,7 +286,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     });
     let s2 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -294,7 +294,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -310,7 +310,9 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     assert_eq!(read_cell(&mut state, 2, 0), "banana");
     assert_eq!(read_cell(&mut state, 0, 1), "grape");
     assert_eq!(read_cell(&mut state, 5, 5), "");
-    state.handle_command(TrameCommand::ActivateSheet { sheet_id: s2 });
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: SheetId(s2),
+    });
     assert_eq!(read_cell(&mut state, 0, 0), "apple", "out of scope");
 }
 
@@ -458,7 +460,7 @@ fn replace_all_spans_sheets() {
     });
     let s2 = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: 0,
@@ -466,7 +468,7 @@ fn replace_all_spans_sheets() {
         text: "foo".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -480,7 +482,7 @@ fn replace_all_spans_sheets() {
     assert_eq!(replaced_count(&out), 2);
     assert_eq!(read_cell(&mut state, 0, 0), "bar");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: s2.clone(),
+        sheet_id: SheetId(s2.clone()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "bar", "other sheet rewritten");
 
@@ -488,7 +490,7 @@ fn replace_all_spans_sheets() {
     state.handle_command(TrameCommand::Undo);
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
 }
@@ -562,7 +564,7 @@ fn csv_import_export_roundtrip() {
     });
     let (sheet_id, _, _) = import_result(&out);
     let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id,
+        sheet_id: SheetId(sheet_id),
         delimiter: None,
         range: None,
     });

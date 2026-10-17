@@ -129,7 +129,7 @@ impl Op {
             Op::MoveRow { from, to } => TrameCommand::MoveRow { from, to },
             Op::MoveColumn { from, to } => TrameCommand::MoveColumn { from, to },
             Op::Sort { ascending } => TrameCommand::SortRange {
-                sheet_id: SHEET.to_owned(),
+                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
                 row_start: 0,
                 row_end: ROWS - 1,
                 col_start: 0,
@@ -151,7 +151,7 @@ impl Op {
             },
             Op::Unmerge { row, col } => TrameCommand::UnmergeCells { row, col },
             Op::Filter { op, value } => TrameCommand::ApplyFilter {
-                sheet_id: SHEET.to_owned(),
+                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
                 col: 0,
                 kind: FilterKind::Condition {
                     op,
@@ -159,10 +159,10 @@ impl Op {
                 },
             },
             Op::ClearFilter => TrameCommand::ClearFilter {
-                sheet_id: SHEET.to_owned(),
+                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
             },
             Op::Fill => TrameCommand::FillRange {
-                sheet_id: SHEET.to_owned(),
+                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
                 src: GridRange {
                     row: 0,
                     col: 0,
@@ -710,11 +710,11 @@ fn concurrent_tab_moves_converge_on_one_order() {
     assert_eq!(ids.len(), 3);
 
     a.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ids[2].clone(),
+        sheet_id: ambre_bus::SheetId(ids[2].clone()),
         to_index: 0,
     });
     b.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ids[0].clone(),
+        sheet_id: ambre_bus::SheetId(ids[0].clone()),
         to_index: 2,
     });
 

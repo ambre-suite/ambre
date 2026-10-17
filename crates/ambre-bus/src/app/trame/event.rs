@@ -233,7 +233,7 @@ pub enum TrameEvent {
     /// A personal filter view was persisted to local storage
     /// ([`SaveFilterView`](super::TrameCommand::SaveFilterView),
     /// `trame-shared-filter`). `view_id` is its stable local id.
-    FilterViewSaved { view_id: String },
+    FilterViewSaved { view_id: FilterViewId },
 
     /// The sheet's conditional-formatting rules changed
     /// ([`AddCondFormat`](super::TrameCommand::AddCondFormat) /
@@ -284,7 +284,7 @@ pub enum TrameEvent {
     /// populated region. `rows` / `cols` are the dimensions actually written;
     /// `sheet_id` is the (possibly freshly created) target sheet.
     ImportComplete {
-        sheet_id: String,
+        sheet_id: SheetId,
         rows: u32,
         cols: u32,
     },
@@ -314,6 +314,16 @@ pub enum TrameEvent {
 /// (`trame-sheets`).
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct SheetId(pub String);
+
+/// Stable local identity of a personal filter view, minted where the view is
+/// saved and never shared (`trame-shared-filter`).
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct FilterViewId(pub String);
+
+/// Stable identity of one conditional-formatting rule on a sheet, which an
+/// update or a removal names (`trame-cell-styles`).
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct CondFormatId(pub String);
 
 /// One tab of the sheet strip: the sheet's id and its display name.
 #[derive(Clone, PartialEq, Eq, Debug)]

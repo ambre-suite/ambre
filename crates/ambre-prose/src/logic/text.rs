@@ -469,7 +469,7 @@ mod tests {
         let (mut state, ids) = document_of(&["one", "two"]);
         state.handle_command(ProseCommand::SetBlockStyle {
             block_id: ids[0],
-            style_id: "quote".to_owned(),
+            style_id: ambre_bus::app::prose::StyleId("quote".to_owned()),
         });
         state.handle_command(ProseCommand::DeleteRange {
             anchor: (ids[0], 3),

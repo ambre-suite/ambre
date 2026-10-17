@@ -442,7 +442,7 @@ fn a_stored_value_moving_moves_the_reading() {
     // value column can show it.
     moved.handle_command(TrameCommand::ResizeCol {
         version: 0,
-        sheet_id: super::schema::DEFAULT_SHEET.to_owned(),
+        sheet_id: ambre_bus::SheetId(super::schema::DEFAULT_SHEET.to_owned()),
         col: 0,
         width_px: 90.0,
     });

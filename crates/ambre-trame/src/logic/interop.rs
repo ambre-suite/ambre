@@ -118,7 +118,7 @@ impl TrameState {
         outcome.display.push(self.sheet_list_event());
         outcome.display.push(self.style_state_event());
         outcome.display.push(TrameEvent::ImportComplete {
-            sheet_id,
+            sheet_id: SheetId(sheet_id),
             rows,
             cols,
         });

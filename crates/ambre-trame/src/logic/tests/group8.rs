@@ -86,7 +86,7 @@ fn a_sort_keeps_the_range_and_moves_the_cell() {
     set(&mut state, 4, 2, "=A1");
     assert_eq!(read_cell(&mut state, 4, 1), "4");
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         row_start: 0,
         row_end: 2,
         col_start: 0,

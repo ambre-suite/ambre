@@ -25,7 +25,7 @@ fn range(row: u32, col: u32, row_end: u32, col_end: u32) -> GridRange {
 }
 
 fn fill(state: &mut TrameState, src: GridRange, dest: GridRange) -> TrameOutcome {
-    let sheet_id = state.active_sheet.clone();
+    let sheet_id = SheetId(state.active_sheet.clone());
     state.handle_command(TrameCommand::FillRange {
         sheet_id,
         src,
@@ -176,14 +176,16 @@ fn a_fill_on_another_sheet_touches_nothing() {
     });
     let other = second_sheet_id(&state);
     let out = state.handle_command(TrameCommand::FillRange {
-        sheet_id: other.clone(),
+        sheet_id: SheetId(other.clone()),
         src: range(0, 0, 0, 0),
         dest: range(0, 0, 3, 0),
         mode: FillMode::Auto,
     });
     assert!(out.update.is_none(), "the fill wrote somewhere");
     assert_eq!(read_cell(&mut state, 1, 0), "");
-    state.handle_command(TrameCommand::ActivateSheet { sheet_id: other });
+    state.handle_command(TrameCommand::ActivateSheet {
+        sheet_id: SheetId(other),
+    });
     assert_eq!(read_cell(&mut state, 1, 0), "");
 }
 
@@ -249,11 +251,11 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     });
     let other = second_sheet_id(&state);
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: other.clone(),
+        sheet_id: SheetId(other.clone()),
     });
     set(&mut state, 0, 0, "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {

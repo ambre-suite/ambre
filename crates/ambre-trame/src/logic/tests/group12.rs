@@ -23,7 +23,7 @@ fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<String>) 
         data: data.to_vec(),
         delimiter: None,
         has_header: false,
-        target_sheet_id,
+        target_sheet_id: target_sheet_id.map(SheetId),
         start_row: 0,
         start_col: 0,
     })
@@ -117,7 +117,7 @@ fn a_paste_and_a_fill_leave_a_name_in_place() {
         text: "=SUM(TOTAL)*A1".to_owned(),
     });
     state.handle_command(TrameCommand::FillRange {
-        sheet_id: crate::logic::DEFAULT_SHEET.to_owned(),
+        sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
         src: crate::GridRange {
             row: 0,
             col: 2,
@@ -251,7 +251,7 @@ fn a_csv_export_writes_nothing() {
     for cmd in [
         TrameCommand::ExportActiveSheetCsv,
         TrameCommand::ExportCsv {
-            sheet_id: crate::logic::DEFAULT_SHEET.to_owned(),
+            sheet_id: SheetId(crate::logic::DEFAULT_SHEET.to_owned()),
             delimiter: Some(b';'),
             range: None,
         },

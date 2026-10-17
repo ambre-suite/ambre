@@ -201,7 +201,7 @@ pub enum TrameCommand {
     /// super::TrameEvent::ViewportData
     ResizeCol {
         version: u64,
-        sheet_id: String,
+        sheet_id: SheetId,
         col: u32,
         width_px: f32,
     },
@@ -209,7 +209,7 @@ pub enum TrameCommand {
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
         version: u64,
-        sheet_id: String,
+        sheet_id: SheetId,
         row: u32,
         height_px: f32,
     },
@@ -381,7 +381,7 @@ pub enum TrameCommand {
     /// otherwise. Replies with a [`DataReset`](super::TrameEvent::DataReset). A no-op when
     /// `dest == src`.
     FillRange {
-        sheet_id: String,
+        sheet_id: SheetId,
         src: GridRange,
         dest: GridRange,
         mode: FillMode,
@@ -465,7 +465,7 @@ pub enum TrameCommand {
     /// (`trame-sheets`). A no-op if the id is unknown.
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
-    ActivateSheet { sheet_id: String },
+    ActivateSheet { sheet_id: SheetId },
 
     /// Add a new sheet named `name`. Mints a peer-scoped stable `sheet_id`
     /// (`{peer:016x}_{counter:08x}`), so concurrent creates on two peers never collide. The
@@ -477,12 +477,12 @@ pub enum TrameCommand {
     /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
     /// is untouched, so same-name references keep resolving; cross-sheet formula
     /// text bound to the old display name is the known MVP gap (`trame-sheets`).
-    RenameSheet { sheet_id: String, name: String },
+    RenameSheet { sheet_id: SheetId, name: String },
 
     /// Move `sheet_id` to position `to_index` in the tab strip (one
     /// `LoroMovableList` move op). Pure presentation: never touches a reference
     /// (`trame-sheets`). A no-op if the id is unknown or already at that position.
-    MoveSheet { sheet_id: String, to_index: u32 },
+    MoveSheet { sheet_id: SheetId, to_index: u32 },
 
     /// Sort the rows of the rectangular range `[row_start..=row_end] x
     /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
@@ -498,7 +498,7 @@ pub enum TrameCommand {
     ///
     /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortRange {
-        sheet_id: String,
+        sheet_id: SheetId,
         row_start: u32,
         row_end: u32,
         col_start: u32,
@@ -515,7 +515,7 @@ pub enum TrameCommand {
     /// remaining sheet (a workbook always keeps >= 1). If the active sheet is
     /// deleted, the active sheet falls back to a neighbour. Cross-sheet formulas
     /// targeting the gone id resolve to `#REF!`.
-    DeleteSheet { sheet_id: String },
+    DeleteSheet { sheet_id: SheetId },
 
     /// Apply a shared filter to column `col` of `sheet_id` (`trame-shared-filter`). The
     /// filter is stored in the document CRDT (`filters_{sheet}` + `filter_hidden_{sheet}`),
@@ -533,7 +533,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied). A no-op for a
     /// non-active sheet or a virtual (never-materialized) column.
     ApplyFilter {
-        sheet_id: String,
+        sheet_id: SheetId,
         /// Grid column the filter is applied to (0-based).
         col: u32,
         kind: FilterKind,
@@ -544,7 +544,7 @@ pub enum TrameCommand {
     /// delta (`trame-shared-filter`). Replies with
     /// [`TrameEvent::FilterCleared`](super::TrameEvent::FilterCleared). A no-op
     /// when no filter is active.
-    ClearFilter { sheet_id: String },
+    ClearFilter { sheet_id: SheetId },
 
     /// Import CSV bytes into the workbook (`trame-import-export`). All conversion happens
     /// in the Logic thread (Zero-Knowledge): the bytes never leave the client. When
@@ -564,7 +564,7 @@ pub enum TrameCommand {
         /// When `true` the first record is treated as a header row and skipped.
         has_header: bool,
         /// Target sheet; `None` creates a new "CSV Import" sheet.
-        target_sheet_id: Option<String>,
+        target_sheet_id: Option<SheetId>,
         start_row: u32,
         start_col: u32,
     },
@@ -585,7 +585,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete)
     /// carrying the file bytes for the UI Thread to download.
     ExportCsv {
-        sheet_id: String,
+        sheet_id: SheetId,
         delimiter: Option<u8>,
         range: Option<GridRange>,
     },
@@ -636,7 +636,7 @@ pub enum TrameCommand {
     /// [`TrameEvent::FilterViewSaved`](super::TrameEvent::FilterViewSaved).
     SaveFilterView {
         name: String,
-        sheet_id: String,
+        sheet_id: SheetId,
         /// Grid column the personal view filters on (0-based).
         filter_col: u32,
         kind: FilterKind,
@@ -646,7 +646,7 @@ pub enum TrameCommand {
     /// from local storage, recomputes its hidden rows against the current doc state, and
     /// re-sends the viewport without them. A purely local view change, no CRDT delta. A
     /// no-op if `view_id` is unknown.
-    ActivateFilterView { view_id: String },
+    ActivateFilterView { view_id: FilterViewId },
 
     /// Sort the rows of a range by several keys in decreasing priority
     /// (`trame-sort`, multi-column sort). Like
@@ -654,7 +654,7 @@ pub enum TrameCommand {
     /// comparison over `sort_keys`. Realized as `LoroMovableList` move ops on
     /// `rows_{sheet}`; references follow the data (`trame-formula-engine`).
     SortRangeMulti {
-        sheet_id: String,
+        sheet_id: SheetId,
         row_start: u32,
         row_end: u32,
         col_start: u32,
@@ -673,7 +673,7 @@ pub enum TrameCommand {
     /// Replies with
     /// [`TrameEvent::CondFormatsUpdated`](super::TrameEvent::CondFormatsUpdated).
     AddCondFormat {
-        sheet_id: String,
+        sheet_id: SheetId,
         range: GridRange,
         rule: CondFormatKind,
         style: CondStyle,
@@ -684,8 +684,8 @@ pub enum TrameCommand {
     /// A no-op if no
     /// rule with that id exists.
     UpdateCondFormat {
-        sheet_id: String,
-        id: String,
+        sheet_id: SheetId,
+        id: CondFormatId,
         range: GridRange,
         rule: CondFormatKind,
         style: CondStyle,
@@ -694,7 +694,7 @@ pub enum TrameCommand {
 
     /// Remove the conditional-formatting rule `id` from `sheet_id`
     /// (`trame-cell-styles`). A no-op if it does not exist.
-    RemoveCondFormat { sheet_id: String, id: String },
+    RemoveCondFormat { sheet_id: SheetId, id: CondFormatId },
 
     /// Attach a data-validation rule to `range` of `sheet_id` (`trame-cell-editing`).
     /// Stored in `validations_{sheet}`, and checked before a local edit commits. `Reject`
@@ -702,7 +702,7 @@ pub enum TrameCommand {
     /// indicator only. Validations are an input aid, not a CRDT integrity barrier (a remote
     /// delta can still violate them).
     AddValidation {
-        sheet_id: String,
+        sheet_id: SheetId,
         range: GridRange,
         kind: ValidationKind,
         on_invalid: ValidationOnInvalid,
@@ -712,7 +712,7 @@ pub enum TrameCommand {
     /// Remove the validation rule covering `range` on `sheet_id`
     /// (`trame-cell-editing`). A no-op
     /// if none is attached there.
-    RemoveValidation { sheet_id: String, range: GridRange },
+    RemoveValidation { sheet_id: SheetId, range: GridRange },
 
     /// Protect `range` of `sheet_id` so only `allowed_user_ids` (plus the owner)
     /// may edit it (`trame-cell-editing`, Post-MVP). Soft
@@ -720,7 +720,7 @@ pub enum TrameCommand {
     /// cannot. Empty `allowed_user_ids` means owner-only. Identified by stable
     /// [`UserId`](crate::UserId), not `pub_key` (survives key rotation).
     SetProtection {
-        sheet_id: String,
+        sheet_id: SheetId,
         range: GridRange,
         allowed_user_ids: Vec<UserId>,
         description: String,
@@ -729,7 +729,7 @@ pub enum TrameCommand {
     /// Remove the protection covering `range` on `sheet_id`
     /// (`trame-cell-editing`). A no-op if
     /// none is set there.
-    RemoveProtection { sheet_id: String, range: GridRange },
+    RemoveProtection { sheet_id: SheetId, range: GridRange },
 }
 
 impl TrameCommand {

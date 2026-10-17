@@ -117,6 +117,10 @@ one above its tests.
 **One composed name** (`CHROME-080`). The placeholder of an unnamed document
 is spelled in `composed.rs` alone, whose type converts to no `String`. So no
 Rust line outside that file spells it above its tests.
+
+**An identifier typed on the bus** (`BUS-029`). Two identifiers carried as
+two strings swap without a compile error. So no field of `ambre-bus` named
+`id`, `*_id` or `*_ids` carries a bare string or integer above its tests.
 """
 
 from __future__ import annotations
@@ -482,6 +486,10 @@ ONE_COPY_ACCEPTED = {
         "the selection's common style, which the inspector shows; the restyle signal carries an edit"
     ),
 }
+# The bus crate, whose identifier fields each carry a type of their own
+# (`BUS-029`).
+BUS = "crates/ambre-bus/src"
+BUS_ID_FIELD = re.compile(r"\b((?:\w+_)?ids?)\s*:\s*(?!:)")
 # A signal whose payload a reviewer accepts as a primitive, and why: free text
 # has no unit and no closed set, so a type of its own would name nothing.
 BARE_PAYLOAD_ACCEPTED = {
@@ -1687,6 +1695,50 @@ def check_signal_types(errors: list[str]) -> int:
     return held
 
 
+def typed_fields(line: str) -> list[tuple[str, str]]:
+    """Each `name: Type` pair a declaration line holds, inline variants
+    included. A comma inside angle brackets stays in the type."""
+    pairs = []
+    for found in BUS_ID_FIELD.finditer(line):
+        depth, end = 0, found.end()
+        while end < len(line):
+            ch = line[end]
+            depth += {"<": 1, ">": -1}.get(ch, 0)
+            if depth == 0 and ch in ",}":
+                break
+            end += 1
+        pairs.append((found.group(1), line[found.end() : end]))
+    return pairs
+
+
+def check_bus_ids(errors: list[str]) -> int:
+    """`BUS-029`: no message field of `ambre-bus` carries an identifier as a
+    bare primitive.
+
+    A field named `id`, `*_id` or `*_ids` takes a type of its own above the
+    tests, so a sheet id passed where a name goes does not compile. A function
+    parameter is not a message field, and its line is skipped.
+    """
+    files = sorted((ROOT / BUS).rglob("*.rs"))
+    if not files:
+        errors.append(f"{BUS}: gone from the tree, so the identifier boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        text = path.read_text().splitlines()
+        for number, raw in enumerate(text, 1):
+            if opens_test_module(text, number - 1):
+                break
+            line = code(raw)
+            if re.search(r"\b(?:fn|let)\b", line):
+                continue
+            for field, ty in typed_fields(line):
+                bare = bare_payload(ty)
+                if bare:
+                    errors.append(f"{rel}:{number}: the `{field}` field carries an identifier as a bare `{bare}`")
+    return len(files)
+
+
 def check_bench_frame_rate(errors: list[str]) -> int:
     """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
     held = 0
@@ -1737,6 +1789,7 @@ def main() -> int:
     copies = check_one_copy(errors)
     event_copies = check_one_event_copy(errors)
     signal_types = check_signal_types(errors)
+    bus_ids = check_bus_ids(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
@@ -1774,6 +1827,7 @@ def main() -> int:
         f"{copies} view files read for a second copy of a signal's state, "
         f"{event_copies} relay arms read for an event a view also keeps, "
         f"{signal_types} shell signals read for a bare primitive payload, "
+        f"{bus_ids} bus files read for an identifier field of a primitive type, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "
@@ -1810,7 +1864,8 @@ def main() -> int:
             "primitive takes geometry and paint alone, one file "
             "composes a document's name, no view "
             "holds the state a shell signal holds, no event feeds both a view "
-            "field and the relay's signal, a fixture "
+            "field and the relay's signal, no bus field carries an identifier as "
+            "a bare primitive, a fixture "
             "benchmark reports no frame rate, the page "
             "loads two instances and shares no worker, neither the Logic runtime "
             "nor the worker reaches the rendering, and the worker redeclares no "

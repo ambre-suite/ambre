@@ -4,7 +4,7 @@
 use super::{TrameOutcome, TrameState, col_to_alpha};
 use crate::model::Uid;
 use crate::{SortKey, TrameCommand, TrameEvent};
-use ambre_bus::{FilterKind, FilterOp};
+use ambre_bus::{FilterKind, FilterOp, SheetId};
 
 const TEST_SHEET: &str = "s0";
 
@@ -179,7 +179,7 @@ fn import_result(out: &TrameOutcome) -> (String, u32, u32) {
                 sheet_id,
                 rows,
                 cols,
-            } => Some((sheet_id.clone(), *rows, *cols)),
+            } => Some((sheet_id.0.clone(), *rows, *cols)),
             _ => None,
         })
         .expect("expected ImportComplete")

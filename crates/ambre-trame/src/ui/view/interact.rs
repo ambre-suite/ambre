@@ -46,7 +46,7 @@ impl TrameView {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeCol {
             version,
-            sheet_id: self.state.active_sheet.0.clone(),
+            sheet_id: self.state.active_sheet.clone(),
             col,
             width_px: width,
         };
@@ -64,7 +64,7 @@ impl TrameView {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeRow {
             version,
-            sheet_id: self.state.active_sheet.0.clone(),
+            sheet_id: self.state.active_sheet.clone(),
             row,
             height_px: height,
         };
@@ -236,7 +236,7 @@ impl TrameView {
             FillMode::Auto
         };
         let cmd = TrameCommand::FillRange {
-            sheet_id: self.state.active_sheet.0.clone(),
+            sheet_id: self.state.active_sheet.clone(),
             src: GridRange {
                 row: sr1,
                 col: sc1,

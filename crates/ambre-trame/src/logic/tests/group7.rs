@@ -43,7 +43,7 @@ fn csv_export_evaluates_formulas() {
         text: "=A1*3".to_owned(),
     });
     let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         delimiter: None,
         range: None,
     });
@@ -75,7 +75,7 @@ fn autofill_series_survives_incremental_delta_replay() {
     // Autofill A1 down to A4: Auto mode on a single number -> 1,2,3,4.
     let u2 = author
         .handle_command(TrameCommand::FillRange {
-            sheet_id: "s0".to_owned(),
+            sheet_id: SheetId("s0".to_owned()),
             src: GridRange {
                 row: 0,
                 col: 0,
@@ -275,7 +275,7 @@ fn resize_col_round_trips_through_viewport() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::ResizeCol {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 1,
         width_px: 150.0,
     });
@@ -299,7 +299,7 @@ fn resize_row_round_trips_and_clamps_to_minimum() {
     // A sub-minimum request is pinned to MIN_ROW_HEIGHT (12.0).
     state.handle_command(TrameCommand::ResizeRow {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         row: 2,
         height_px: 1.0,
     });
@@ -312,7 +312,7 @@ fn resize_survives_snapshot_roundtrip() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::ResizeCol {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         width_px: 200.0,
     });
@@ -333,13 +333,13 @@ fn concurrent_resize_of_same_col_converges_lww() {
     let mut b = TrameState::new();
     a.handle_command(TrameCommand::ResizeCol {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         width_px: 120.0,
     });
     b.handle_command(TrameCommand::ResizeCol {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         width_px: 300.0,
     });
@@ -456,7 +456,7 @@ fn find_matches_the_formatted_value() {
 fn csv_export_writes_the_formatted_value() {
     let mut state = percent_sheet();
     let out = state.handle_command(TrameCommand::ExportCsv {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         delimiter: None,
         range: None,
     });
@@ -472,7 +472,7 @@ fn import_reports_unreadable_records() {
         data: b"a,b\n\xff\xfe,c\nd,e\n".to_vec(),
         delimiter: None,
         has_header: false,
-        target_sheet_id: Some("s0".to_owned()),
+        target_sheet_id: Some(SheetId("s0".to_owned())),
         start_row: 0,
         start_col: 0,
     });
@@ -494,7 +494,7 @@ fn export_with_nothing_to_write_says_so() {
     let mut state = TrameState::new();
     for sheet_id in ["s0", "nope"] {
         let out = state.handle_command(TrameCommand::ExportCsv {
-            sheet_id: sheet_id.to_owned(),
+            sheet_id: SheetId(sheet_id.to_owned()),
             delimiter: None,
             range: None,
         });

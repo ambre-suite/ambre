@@ -52,7 +52,7 @@ fn filtered_column_edit_is_one_undo_item() {
     seed_col_a(&mut state, &["1", "2", "3"]);
     // Hide every row whose column-A value is < 3 -> rows 0 and 1 hidden.
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: "s0".to_owned(),
+        sheet_id: SheetId("s0".to_owned()),
         col: 0,
         kind: FilterKind::Condition {
             op: FilterOp::Gte,
@@ -720,18 +720,18 @@ fn deleted_line_leaves_no_formatting() {
     }
     state.handle_command(TrameCommand::ResizeRow {
         version: 1,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         row: 1,
         height_px: 40.0,
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: 2,
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         width_px: 150.0,
     });
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
         col: 0,
         kind: FilterKind::Values(vec!["0".to_owned(), "2".to_owned()]),
     });
@@ -746,7 +746,7 @@ fn deleted_line_leaves_no_formatting() {
     assert_eq!(len(&state, row_heights_map_name(TEST_SHEET)), 0);
     assert_eq!(len(&state, filter_hidden_map_name(TEST_SHEET)), 0);
     state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: TEST_SHEET.to_owned(),
+        sheet_id: SheetId(TEST_SHEET.to_owned()),
     });
     state.handle_command(TrameCommand::DeleteColumn { at: 0 });
     assert_eq!(len(&state, col_widths_map_name(TEST_SHEET)), 0);
