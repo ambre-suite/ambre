@@ -229,6 +229,7 @@ class CrateBoundaries(unittest.TestCase):
             cb.check_signal_types(errors)
             cb.check_bus_ids(errors)
             cb.check_wire_ids(errors)
+            cb.check_typed_answers(errors)
             cb.check_bench_frame_rate(errors)
             cb.check_instances(errors)
             cb.check_thread_reach(errors)
@@ -506,6 +507,26 @@ class CrateBoundaries(unittest.TestCase):
             "    pub display_name: String,\n}\n"
         )
         self.assertEqual(self.breach(cb.WIRE_FILES[0], body), [])
+
+    def test_an_answer_built_with_json_is_refused(self):
+        """Holds `SRV-181`: a route, the refusal and a middleware each answer
+        with a type."""
+        body = 'fn answer() -> Json<Value> {\n    Json(serde_json::json!({ "status": "revoked" }))\n}\n'
+        for rel in (
+            f"{cb.ANSWER_SOURCES[0]}/share.rs",
+            cb.ANSWER_SOURCES[1],
+            f"{cb.ANSWER_SOURCES[2]}/rate_limit.rs",
+        ):
+            with self.subTest(rel=rel):
+                errors = self.breach(rel, body)
+                self.assertEqual(errors, [f"{rel}:2: an answer built with `json!`; give it a type"])
+
+    def test_json_in_the_tests_of_a_route_stays_free(self):
+        body = (
+            "fn answer() -> Json<Done> { Done::json(WriteStatus::Revoked) }\n\n"
+            "#[cfg(test)]\nmod tests {\n    fn body() { let _ = serde_json::json!({}); }\n}\n"
+        )
+        self.assertEqual(self.breach(f"{cb.ANSWER_SOURCES[0]}/share.rs", body), [])
 
     def test_a_row_the_database_reads_needs_no_text_adapter(self):
         errors = self.breach(f"{cb.WIRE_DIRS[1]}/users.rs", WIRE_ROW.replace("UserId", "OrgId"))

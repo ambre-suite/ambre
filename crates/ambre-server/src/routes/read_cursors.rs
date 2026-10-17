@@ -84,7 +84,7 @@ pub async fn get_activity(
             }
         })
         .collect();
-    Ok(axum::Json(serde_json::json!({ "documents": json })))
+    Ok(super::DocumentRows::json(json))
 }
 
 /// The body of a move to the last number: the documents to move. When absent,

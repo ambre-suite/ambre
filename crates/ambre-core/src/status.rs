@@ -65,6 +65,35 @@ pub enum RotationStatus {
     Rotated,
 }
 
+/// What a write of the relay answers when its outcome is the whole answer,
+/// or rides beside the data it returns (`SRV-181`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WriteStatus {
+    /// The session is closed on the relay.
+    LoggedOut,
+    /// The document holds its new name.
+    Renamed,
+    /// The document or the organization is gone.
+    Deleted,
+    /// The member holds the new role.
+    RoleUpdated,
+    /// The master key material is stored.
+    Stored,
+    /// The media is recorded against its document.
+    Confirmed,
+    /// The organization holds the new member.
+    Added,
+    /// The organization no longer holds the member.
+    Removed,
+    /// The organization member holds the new role.
+    Updated,
+    /// The member no longer reads the document.
+    Revoked,
+    /// The organization's copy of a master key is handed back.
+    Recovered,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +129,30 @@ mod tests {
             RotationStatus::Rotated
         );
         assert!(serde_json::from_value::<RotationStatus>(serde_json::json!("done")).is_err());
+    }
+
+    /// Holds `SRV-181`: each write status keeps the word the relay answered
+    /// before it was typed, and reads back from it alone.
+    #[test]
+    fn each_write_status_keeps_its_word() {
+        use WriteStatus::*;
+        for (status, word) in [
+            (LoggedOut, "logged_out"),
+            (Renamed, "renamed"),
+            (Deleted, "deleted"),
+            (RoleUpdated, "role_updated"),
+            (Stored, "stored"),
+            (Confirmed, "confirmed"),
+            (Added, "added"),
+            (Removed, "removed"),
+            (Updated, "updated"),
+            (Revoked, "revoked"),
+            (Recovered, "recovered"),
+        ] {
+            let json = serde_json::to_value(status).unwrap();
+            assert_eq!(json, serde_json::json!(word));
+            assert_eq!(serde_json::from_value::<WriteStatus>(json).unwrap(), status);
+        }
+        assert!(serde_json::from_value::<WriteStatus>(serde_json::json!("done")).is_err());
     }
 }

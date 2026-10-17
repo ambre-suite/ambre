@@ -164,7 +164,15 @@ pub async fn media_confirm_upload(
         &key,
     )
     .await?;
-    Ok(axum::Json(
-        serde_json::json!({"status":"confirmed","content_hash":req.content_hash}),
-    ))
+    Ok(axum::Json(MediaConfirmed {
+        status: ambre_core::WriteStatus::Confirmed,
+        content_hash: req.content_hash,
+    }))
+}
+
+/// The answer of a media confirmation, naming the media it recorded.
+#[derive(serde::Serialize)]
+pub struct MediaConfirmed {
+    pub status: ambre_core::WriteStatus,
+    pub content_hash: String,
 }

@@ -79,6 +79,6 @@ pub use schema::{
     SchemaVerdict, migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use seq::Seq;
-pub use status::{RotationStatus, SnapshotStatus, StatusError};
+pub use status::{RotationStatus, SnapshotStatus, StatusError, WriteStatus};
 pub use uuid::Uuid;
 pub use version::Version;

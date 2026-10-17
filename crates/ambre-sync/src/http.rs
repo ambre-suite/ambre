@@ -1146,6 +1146,25 @@ pub(crate) struct RotateKeyResponse {
     pub status: ambre_core::RotationStatus,
 }
 
+/// The answer of a relay write that returns its outcome (`SRV-181`). A field
+/// beside the status, such as a confirmed media's hash, is not read.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WriteAnswer {
+    pub status: ambre_core::WriteStatus,
+}
+
+impl WriteAnswer {
+    /// Whether the relay answered the outcome of the write it was asked.
+    /// Another word of the set answers some other write.
+    pub(crate) fn expect(self, asked: ambre_core::WriteStatus) -> Result<(), String> {
+        if self.status == asked {
+            Ok(())
+        } else {
+            Err(format!("answered {:?}, not {asked:?}", self.status))
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub(crate) struct DocumentMembersResponse {
     pub members: Vec<DocumentMemberEntry>,
@@ -1445,6 +1464,18 @@ mod tests {
         );
         assert_eq!(transport.calls().len(), 5, "one request per answer");
         assert!(transport.calls().iter().all(|(_, called)| called == url));
+    }
+
+    /// Holds `SRV-181`: a write answer reads the relay's typed body, beside
+    /// any other field. Only the outcome of the write asked passes.
+    #[test]
+    fn a_write_answer_passes_the_outcome_asked_alone() {
+        use ambre_core::WriteStatus::{Confirmed, Revoked};
+        let read = |body| serde_json::from_value::<WriteAnswer>(body).unwrap();
+        let confirmed = serde_json::json!({ "status": "confirmed", "content_hash": "ab" });
+        assert_eq!(read(confirmed.clone()).expect(Confirmed), Ok(()));
+        let error = read(confirmed).expect(Revoked).unwrap_err();
+        assert_eq!(error, "answered Confirmed, not Revoked");
     }
 
     /// Holds `SYNC-152`: an answer naming a word this build does not know

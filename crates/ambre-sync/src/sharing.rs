@@ -683,10 +683,11 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             entry,
         };
         match http
-            .post_json::<_, serde_json::Value>(&revoke_url, &body)
+            .post_json::<_, http::WriteAnswer>(&revoke_url, &body)
             .await
+            .and_then(|answer| answer.expect(ambre_core::WriteStatus::Revoked))
         {
-            Ok(_) => break unwrapped,
+            Ok(()) => break unwrapped,
             // A member joined between the read and the post, or another
             // entry took the place of this one, and the relay changed
             // nothing. The next try reads them again (`SYNC-143`).

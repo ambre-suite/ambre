@@ -289,13 +289,13 @@ pub async fn revoke_from_document(
         db::Removed::Kept => {
             restore_debt_mirror(&state, &doc_id).await;
             notify_removed(&state, &doc_id, &target).await;
-            return Ok(axum::Json(serde_json::json!({"status":"revoked"})));
+            return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
         }
         // Nobody is left to tell (`SRV-142`).
         db::Removed::ChannelDeleted(documents) => {
             tracing::info!(document_id = %doc_id, "last member left, channel deleted");
             crate::deletion::empty_marked(&state, &documents, sweep_due).await;
-            return Ok(axum::Json(serde_json::json!({"status":"revoked"})));
+            return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
         }
     }
 
@@ -303,7 +303,7 @@ pub async fn revoke_from_document(
     // Every member who stays learns of the debt as it learns of a new key. It
     // re-reads the member list, which now says a rotation is owed.
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Revoked))
 }
 
 /// Request to remove a member and rotate the key in one step
@@ -368,7 +368,7 @@ pub async fn revoke_and_rotate(
 
     notify_removed(&state, &doc_id, &target).await;
     notify_rotation(&state, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"revoked"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Revoked))
 }
 
 /// Notifies the removed user directly on their personal topic so their client
@@ -464,7 +464,13 @@ pub async fn list_key_links(
         .iter()
         .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
         .collect();
-    Ok(axum::Json(serde_json::json!({ "links": links })))
+    Ok(axum::Json(KeyLinksResponse { links }))
+}
+
+/// Every link of a document, each in URL-safe base64, oldest first.
+#[derive(serde::Serialize)]
+pub struct KeyLinksResponse {
+    pub links: Vec<String>,
 }
 
 /// Request to rotate the Document Key after revoking a member.

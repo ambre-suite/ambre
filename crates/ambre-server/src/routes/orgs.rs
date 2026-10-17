@@ -283,7 +283,7 @@ pub async fn delete_org(
             resource: "organization",
         });
     }
-    Ok(axum::Json(serde_json::json!({ "status": "deleted" })))
+    Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
 }
 
 /// `POST /organizations/{id}/members`
@@ -341,7 +341,7 @@ pub async fn add_member(
 
     Ok((
         axum::http::StatusCode::CREATED,
-        axum::Json(serde_json::json!({ "status": "added" })),
+        super::Done::json(ambre_core::WriteStatus::Added),
     ))
 }
 
@@ -398,7 +398,7 @@ pub async fn remove_member(
             resource: "organization member",
         });
     }
-    Ok(axum::Json(serde_json::json!({ "status": "removed" })))
+    Ok(super::Done::json(ambre_core::WriteStatus::Removed))
 }
 
 /// `PATCH /organizations/{id}/members/{uid}`
@@ -421,7 +421,7 @@ pub async fn update_member_role(
     let role = org_role_valid(req.role)?;
 
     db::update_org_member_role(&state.db, &org_id, &target_uid, role).await?;
-    Ok(axum::Json(serde_json::json!({ "status": "updated" })))
+    Ok(super::Done::json(ambre_core::WriteStatus::Updated))
 }
 
 /// `POST /organizations/{id}/recover/{uid}`
@@ -467,10 +467,18 @@ pub async fn recover_master_key(
     // Log the recovery.
     db::log_org_recovery(&state.db, &org_id, &target_uid, &caller_uid, None).await?;
 
-    Ok(axum::Json(serde_json::json!({
-        "status": "recovered",
-        "master_key_enc": hex::encode(&org_master_key_enc),
-    })))
+    Ok(axum::Json(RecoveredResponse {
+        status: ambre_core::WriteStatus::Recovered,
+        master_key_enc: hex::encode(&org_master_key_enc),
+    }))
+}
+
+/// The answer of a recovery: the organization's copy of the master key, in
+/// hex.
+#[derive(serde::Serialize)]
+pub struct RecoveredResponse {
+    pub status: ambre_core::WriteStatus,
+    pub master_key_enc: String,
 }
 
 #[cfg(test)]

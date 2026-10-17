@@ -157,14 +157,25 @@ impl IntoResponse for AppError {
 
         let message = self.caller_message();
 
-        (
-            status,
-            axum::Json(serde_json::json!({
-                "error": code,
-                "message": message,
-            })),
-        )
-            .into_response()
+        (status, ErrorBody::json(code, message)).into_response()
+    }
+}
+
+/// The body of every refusal: the code a client matches, and a message for
+/// a person (`SRV-181`).
+#[derive(serde::Serialize)]
+pub(crate) struct ErrorBody {
+    pub error: &'static str,
+    pub message: String,
+}
+
+impl ErrorBody {
+    /// The refusal under `code`.
+    pub(crate) fn json(code: &'static str, message: impl Into<String>) -> axum::Json<Self> {
+        axum::Json(Self {
+            error: code,
+            message: message.into(),
+        })
     }
 }
 

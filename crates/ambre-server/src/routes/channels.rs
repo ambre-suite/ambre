@@ -54,7 +54,7 @@ pub async fn list_channel_documents(
             kind: d.kind,
         })
         .collect();
-    Ok(axum::Json(serde_json::json!({ "documents": json })))
+    Ok(super::DocumentRows::json(json))
 }
 
 /// The body of a channel registration. Every id is one the client generated,

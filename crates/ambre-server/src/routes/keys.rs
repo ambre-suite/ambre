@@ -86,12 +86,23 @@ pub async fn store_master_keys(
     let tokens = auth::issue_session(&state, s.user_id, Some(new_signing_pubkey)).await?;
     tracing::info!(user_id = %s.user_id, "master key stored");
 
-    Ok(axum::Json(serde_json::json!({
-        "status": "stored",
-        "access_token": tokens.access_token,
-        "refresh_token": tokens.refresh_token,
-        "access_expires_in": tokens.access_expires_in,
-    })))
+    Ok(axum::Json(KeysStoredResponse {
+        status: ambre_core::WriteStatus::Stored,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        access_expires_in: tokens.access_expires_in,
+    }))
+}
+
+/// The answer of a first key store: the fresh token pair, bound to the new
+/// signing key.
+#[derive(serde::Serialize)]
+pub struct KeysStoredResponse {
+    pub status: ambre_core::WriteStatus,
+    pub access_token: String,
+    pub refresh_token: String,
+    /// Access-token lifetime in seconds.
+    pub access_expires_in: u64,
 }
 
 /// Response containing the full key material for the authenticated user.

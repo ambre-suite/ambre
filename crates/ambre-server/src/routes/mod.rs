@@ -1,3 +1,4 @@
+mod answers;
 mod auth;
 mod channels;
 mod documents;
@@ -11,6 +12,7 @@ mod sync;
 #[cfg(test)]
 mod tests;
 
+pub use answers::*;
 pub use auth::*;
 pub use channels::*;
 pub use documents::*;

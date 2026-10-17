@@ -133,6 +133,10 @@ is parsed again by whoever reads it, and three parsers of the document type
 disagreed on case and on a fallback. So the same rows, routes and types hold
 no `doc_type`, `role`, `kind` or `status` field as a `String`.
 
+**An answer of the relay is a type** (`SRV-181`). A body built with `json!`
+escapes both checks above, and a renamed field changes the wire unseen. So
+no route, refusal or middleware of the relay builds one above its tests.
+
 **A walk reads no screen state** (`CANVAS-074`). The screen and the page draw
 one walk per application, so a walk that reached the screen would print a
 caret, a selection or a zoom on the page. A file that implements
@@ -542,6 +546,14 @@ CORE_ID = re.compile(
 )
 SERDE_DERIVE = re.compile(r"#\[derive\([^)]*\b(?:Serialize|Deserialize)\b")
 TEXT_ADAPTER = re.compile(r"#\[serde\([^\]]*\bwith\s*=\s*\"ambre_core::serde_id::")
+# Where the relay builds what it answers: each answer is a type, never a body
+# built ad hoc (`SRV-181`).
+ANSWER_SOURCES = (
+    "crates/ambre-server/src/routes",
+    "crates/ambre-server/src/error.rs",
+    "crates/ambre-server/src/middleware",
+)
+AD_HOC_BODY = re.compile(r"\bjson!\s*[\(\[\{]")
 # The fields whose word belongs to a closed set, parsed once at the edge into
 # its enum (`SRV-180`).
 WIRE_CLOSED_NAME = re.compile(r"^(?:doc_type|role|kind|status)$")
@@ -1858,6 +1870,22 @@ def check_wire_ids(errors: list[str]) -> int:
     return len(files)
 
 
+def check_typed_answers(errors: list[str]) -> int:
+    """`SRV-181`: a route, a refusal or a middleware of the relay answers with
+    a type. A body built with `json!` escapes the closed-set and identifier
+    checks above, so no line outside the tests builds one."""
+    files = sources(ANSWER_SOURCES)
+    if not files:
+        errors.append(f"{ANSWER_SOURCES[0]}: gone from the tree, so the typed answer boundary reads nothing")
+        return 0
+    for path in files:
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in above_tests(path):
+            if AD_HOC_BODY.search(line):
+                errors.append(f"{rel}:{number}: an answer built with `json!`; give it a type")
+    return len(files)
+
+
 def check_bench_frame_rate(errors: list[str]) -> int:
     """`FIXTURE-024`: a benchmark that loads a fixture names no frame rate."""
     held = 0
@@ -1983,6 +2011,7 @@ def main() -> int:
     signal_types = check_signal_types(errors)
     bus_ids = check_bus_ids(errors)
     wire_ids = check_wire_ids(errors)
+    answers = check_typed_answers(errors)
     benches = check_bench_frame_rate(errors)
     instances = check_instances(errors)
     reach = check_thread_reach(errors)
@@ -2023,6 +2052,7 @@ def main() -> int:
         f"{signal_types} shell signals read for a bare primitive payload, "
         f"{bus_ids} bus files read for an identifier field of a primitive type, "
         f"{wire_ids} relay and HTTP files read for an identifier untyped or written as bytes or a closed set held as text, "
+        f"{answers} relay files read for an answer built with `json!`, "
         f"{benches} fixture benchmarks read for a frame rate, "
         f"{instances} files read for a third instance or a shared worker, "
         f"{reach} manifests read for a thread reaching the rendering, "

@@ -181,7 +181,7 @@ pub async fn logout(
         }
     }
     tracing::debug!(user_id = %auth.user_id, "logout");
-    Ok(axum::Json(serde_json::json!({ "status": "logged_out" })))
+    Ok(super::Done::json(ambre_core::WriteStatus::LoggedOut))
 }
 
 // -- List Documents ------------------------------------------------
@@ -440,7 +440,7 @@ pub async fn rename_document(
         })?;
     db::rename_document(&state.db, &doc_id, &name_enc).await?;
     tracing::debug!(document_id = %doc_id, by = %s.user_id, "document renamed");
-    Ok(axum::Json(serde_json::json!({"status":"renamed"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Renamed))
 }
 
 pub async fn delete_document(
@@ -460,7 +460,7 @@ pub async fn delete_document(
     // finishes it (`SRV-165`).
     crate::deletion::delete_document(&state, &doc_id).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
-    Ok(axum::Json(serde_json::json!({"status":"deleted"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
 }
 
 // -- Users ---------------------------------------------------------
@@ -617,9 +617,21 @@ pub async fn list_document_members(
         .iter()
         .map(|bytes| base64::engine::general_purpose::URL_SAFE.encode(bytes))
         .collect();
-    Ok(axum::Json(
-        serde_json::json!({"members":json,"rotation_owed":rotation_owed,"log":log}),
-    ))
+    Ok(axum::Json(MembersResponse {
+        members: json,
+        rotation_owed,
+        log,
+    }))
+}
+
+/// The members of a document, with what a client checks them against.
+#[derive(serde::Serialize)]
+pub struct MembersResponse {
+    pub members: Vec<MemberInfoJson>,
+    /// Whether a member with write access must rotate before it sends.
+    pub rotation_owed: bool,
+    /// The signed membership entries, each in URL-safe base64.
+    pub log: Vec<String>,
 }
 
 /// Request body for changing a member's role.
@@ -665,7 +677,7 @@ pub async fn update_document_member_role(
     db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     crate::redis_ops::members_changed(&state.redis, &doc_id).await;
-    Ok(axum::Json(serde_json::json!({"status":"role_updated"})))
+    Ok(super::Done::json(ambre_core::WriteStatus::RoleUpdated))
 }
 
 #[cfg(test)]
