@@ -1,6 +1,23 @@
 use super::*;
 use crate::rekey::Refusal;
+use ambre_core::RefusalCode;
 use ambre_protocol::ws::AccessToken;
+
+/// The delay before Sync asks again for the first stopped replay of a
+/// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
+const REPLAY_RETRY_BASE_MS: u64 = 1_000;
+
+/// The stops Sync asks again after. One more reaches Logic as an error
+/// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
+const REPLAY_RETRY_LIMIT: u32 = 5;
+
+/// The delay before asking again after the `stop`-th stop of one replay,
+/// counted from one. Past the budget there is none (`SYNC-154`).
+fn replay_retry_delay_ms(stop: u32) -> Option<u64> {
+    (1..=REPLAY_RETRY_LIMIT)
+        .contains(&stop)
+        .then(|| REPLAY_RETRY_BASE_MS << (stop - 1))
+}
 
 /// The socket address. It carries no credential: the token travels in the
 /// socket's first frame, so no log line, proxy record or URL holds it
@@ -82,6 +99,9 @@ impl SyncState {
     /// (after a network drop or a silent reauth). Local-only documents are not
     /// subscribed here -- they subscribe after lazy creation materializes them.
     pub(crate) fn resubscribe_all(&mut self) {
+        // Each replay below starts afresh, so its stops count from zero
+        // (`SYNC-154`).
+        self.replay_stops.clear();
         for (doc_id, last_seq) in self
             .documents
             .iter()
@@ -244,6 +264,71 @@ impl SyncState {
     #[cfg(not(target_arch = "wasm32"))]
     fn arm_reconnect_timer(&mut self, _delay_ms: u64) {}
 
+    /// Asks the worker's timers for a [`SyncEvent::ReplayRetry`] in
+    /// `delay_ms`. The closure runs once and frees itself, so several
+    /// documents can wait at once.
+    #[cfg(target_arch = "wasm32")]
+    fn arm_replay_timer(&self, document_id: DocumentId, stop: u32, delay_ms: u64) {
+        use wasm_bindgen::JsCast;
+
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let cb = Closure::once_into_js(move || {
+            let _ = tx.send(SyncEvent::ReplayRetry { document_id, stop });
+        });
+        if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
+            let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
+                cb.unchecked_ref(),
+                i32::try_from(delay_ms).unwrap_or(i32::MAX),
+            );
+        }
+    }
+
+    /// Native: no timer. A host test sends [`SyncEvent::ReplayRetry`] itself.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn arm_replay_timer(&self, _document_id: DocumentId, _stop: u32, _delay_ms: u64) {}
+
+    /// The relay stopped a replay. Ask again after a delay that doubles at
+    /// each stop (`SYNC-153`). Past the budget, report it once and wait for
+    /// the next reconnect (`SYNC-154`).
+    fn replay_stopped(&mut self, document_id: DocumentId, after_seq: Seq) {
+        let stops = self.replay_stops.entry(document_id).or_insert(0);
+        *stops = stops.saturating_add(1);
+        let stop = *stops;
+        tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
+        if let Some(delay_ms) = replay_retry_delay_ms(stop) {
+            self.arm_replay_timer(document_id, stop, delay_ms);
+        } else if stop == REPLAY_RETRY_LIMIT + 1 {
+            self.send_to_logic(LogicEvent::ApiError {
+                id: None,
+                request: "websocket".into(),
+                code: RefusalCode::InternalError.status(),
+                message: format!("replay of {document_id:?} stopped {stop} times"),
+            });
+        }
+    }
+
+    /// A replay timer fired. A later stop or a reconnect since it was armed
+    /// makes it stale. Otherwise ask again from the document's own cursor,
+    /// which the delivered part of the replay already advanced (`SYNC-153`).
+    fn retry_replay(&mut self, document_id: DocumentId, stop: u32) {
+        if self.replay_stops.get(&document_id) != Some(&stop) {
+            return;
+        }
+        let cursor = match self.documents.get(&document_id) {
+            Some(doc) if doc.server_created => Some(doc.last_seq),
+            Some(_) => None,
+            None => self.light_cursor(document_id),
+        };
+        if let Some(after_seq) = cursor {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
+        }
+    }
+
     /// Silently renews the access token after a WS auth rejection (close
     /// [`WS_CLOSE_UNAUTHORIZED`]) and signals the outcome via
     /// [`SyncEvent::Reauthenticated`]. Runs the refresh off the select loop so it
@@ -401,6 +486,7 @@ impl SyncState {
                 let next = self.lifecycle.poll((self.clock)());
                 self.follow(next);
             }
+            SyncEvent::ReplayRetry { document_id, stop } => self.retry_replay(document_id, stop),
             SyncEvent::SessionReady {
                 id,
                 user_id,
@@ -1131,15 +1217,20 @@ impl SyncState {
                 });
             }
 
-            WsServerMsg::Error { code, message } => {
-                tracing::error!("Sync: server error {code}: {message}");
+            WsServerMsg::Error { document_id, code } => {
+                tracing::error!("Sync: socket refusal {code} for {document_id:?}");
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
                     request: "websocket".into(),
-                    code,
-                    message,
+                    code: code.status(),
+                    message: format!("socket refusal {code} for {document_id:?}"),
                 });
             }
+
+            WsServerMsg::ReplayStopped {
+                document_id,
+                after_seq,
+            } => self.replay_stopped(document_id, after_seq),
         }
     }
 }
@@ -1227,15 +1318,16 @@ impl SyncState {
 
 #[cfg(test)]
 mod tests {
-    use super::socket_address;
+    use super::{replay_retry_delay_ms, socket_address};
     use crate::http::{SecretToken, TokenPair};
     use crate::{
         LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState, WS_CLOSE_SETUP_REQUIRED,
         WS_CLOSE_UNAUTHORIZED,
     };
     use ambre_bus::DocType;
-    use ambre_core::DocumentId;
+    use ambre_core::{DocumentId, RefusalCode, Seq};
     use ambre_crypto::{DocumentKey, MasterSeed};
+    use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
 
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
@@ -1577,5 +1669,129 @@ mod tests {
     fn session_tokens_wipe_on_drop() {
         fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
         wipes_on_drop::<SecretToken>();
+    }
+
+    /// A worker holding one relay document at seq 7, and its socket's wire.
+    fn with_relay_document() -> (
+        SyncState,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+        ambre_bus::conduit::Receiver<Vec<u8>>,
+        DocumentId,
+    ) {
+        let (mut state, rx) = with_open_document();
+        let id = *state.documents.keys().next().unwrap();
+        let doc = state.documents.get_mut(&id).unwrap();
+        doc.server_created = true;
+        doc.last_seq = Seq(7);
+        let (tx, wire) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(tx);
+        (state, rx, wire, id)
+    }
+
+    fn stopped(document_id: DocumentId) -> SyncEvent {
+        SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
+            document_id,
+            after_seq: Seq(3),
+        })
+    }
+
+    fn sent(wire: &ambre_bus::conduit::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
+        wire.try_iter()
+            .map(|bytes| decode_client_msg(&bytes).expect("decode"))
+            .collect()
+    }
+
+    /// `SYNC-153`: a stopped replay is asked again from the document's own
+    /// cursor once its timer fires, and not before. A timer a later stop
+    /// replaced asks nothing.
+    #[test]
+    fn a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires() {
+        let (mut state, _rx, wire, id) = with_relay_document();
+        state.handle_sync_event(stopped(id));
+        assert!(sent(&wire).is_empty(), "no retry before the timer");
+        state.handle_sync_event(stopped(id));
+        state.handle_sync_event(SyncEvent::ReplayRetry {
+            document_id: id,
+            stop: 1,
+        });
+        assert!(sent(&wire).is_empty(), "a stale timer asks nothing");
+        state.handle_sync_event(SyncEvent::ReplayRetry {
+            document_id: id,
+            stop: 2,
+        });
+        let asked = sent(&wire);
+        assert_eq!(asked.len(), 1);
+        assert!(matches!(
+            asked[0],
+            WsClientMsg::RequestMissing { document_id, after_seq: Seq(7) } if document_id == id
+        ));
+    }
+
+    /// `SYNC-153`: the delay starts at 1 s and doubles. Five stops wait 31 s
+    /// in all, and a sixth arms no timer (`ambre-spec-budgets.md` section 8).
+    #[test]
+    fn the_replay_retry_delay_doubles_up_to_its_budget() {
+        let delays: Vec<Option<u64>> = (0..=6).map(replay_retry_delay_ms).collect();
+        assert_eq!(
+            delays,
+            [
+                None,
+                Some(1_000),
+                Some(2_000),
+                Some(4_000),
+                Some(8_000),
+                Some(16_000),
+                None
+            ]
+        );
+        assert_eq!(delays.iter().flatten().sum::<u64>(), 31_000);
+    }
+
+    /// `SYNC-154`: past its budget a stopped replay reaches Logic as one
+    /// error, and its timer asks nothing. A reopened socket counts afresh.
+    #[test]
+    fn a_replay_stopped_past_its_budget_reaches_logic_once() {
+        let (mut state, rx, wire, id) = with_relay_document();
+        for _ in 0..8 {
+            state.handle_sync_event(stopped(id));
+        }
+        let errors = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::ApiError { code: 500, .. }))
+            .count();
+        assert_eq!(errors, 1);
+        state.handle_sync_event(SyncEvent::ReplayRetry {
+            document_id: id,
+            stop: 6,
+        });
+        assert!(sent(&wire).is_empty(), "no retry past the budget");
+
+        state.handle_sync_event(SyncEvent::WsOpened);
+        let _ = sent(&wire);
+        state.handle_sync_event(stopped(id));
+        state.handle_sync_event(SyncEvent::ReplayRetry {
+            document_id: id,
+            stop: 1,
+        });
+        assert!(matches!(
+            sent(&wire)[..],
+            [WsClientMsg::RequestMissing {
+                after_seq: Seq(7),
+                ..
+            }]
+        ));
+    }
+
+    /// `SRV-183`: a socket refusal reaches Logic with the status its code
+    /// answers.
+    #[test]
+    fn a_socket_refusal_reaches_logic_with_its_status() {
+        let (mut state, rx, _wire, id) = with_relay_document();
+        state.handle_sync_event(SyncEvent::WsMessage(WsServerMsg::Error {
+            document_id: Some(id),
+            code: RefusalCode::PayloadTooLarge,
+        }));
+        let told: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(matches!(told[..], [LogicEvent::ApiError { code: 413, .. }]));
     }
 }

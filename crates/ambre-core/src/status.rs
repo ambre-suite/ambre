@@ -218,6 +218,33 @@ closed_words! {
     }
 }
 
+impl RefusalCode {
+    /// The HTTP status a refusal under this code answers. A socket refusal
+    /// carries the code alone, and Sync reads its status from here.
+    #[must_use]
+    pub const fn status(self) -> u16 {
+        match self {
+            Self::Unauthorized => 401,
+            Self::Forbidden | Self::SetupRequired => 403,
+            Self::NotFound => 404,
+            Self::Conflict
+            | Self::ClockMismatch
+            | Self::RotationOwed
+            | Self::MembersChanged
+            | Self::KeyChanged
+            | Self::LogMoved
+            | Self::SnapshotRequired
+            | Self::CompactionLockHeld => 409,
+            Self::InvalidSignature => 422,
+            Self::UnknownProvider | Self::BadRequest => 400,
+            Self::PayloadTooLarge => 413,
+            Self::RateLimited => 429,
+            Self::InternalError => 500,
+            Self::RateLimiterUnavailable => 503,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

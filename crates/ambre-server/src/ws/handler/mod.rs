@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
-use ambre_core::{DocumentId, UserId};
+use ambre_core::{DocumentId, RefusalCode, UserId};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
@@ -238,11 +238,8 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             let client_msg = match frame.client_msg() {
                 Ok(m) => m,
                 Err(e) => {
-                    let err = Payload::server_msg(&WsServerMsg::Error {
-                        code: 400,
-                        message: format!("decode error: {e:?}"),
-                    });
-                    let _ = outbound_tx.send(err).await;
+                    let detail = format!("decode error: {e:?}");
+                    refuse(&outbound_tx, None, RefusalCode::BadRequest, &detail).await;
                     continue;
                 }
             };
@@ -254,11 +251,8 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             // message before any handler (and any durable write) runs. The token costs
             // no Redis round-trip; it lives entirely on `conn`.
             if !conn.msg_bucket.try_consume(Instant::now()) {
-                let err = Payload::server_msg(&WsServerMsg::Error {
-                    code: 429,
-                    message: "message rate limit exceeded".into(),
-                });
-                let _ = outbound_tx.send(err).await;
+                let detail = "message rate limit exceeded";
+                refuse(&outbound_tx, None, RefusalCode::RateLimited, detail).await;
                 continue;
             }
 

@@ -47,6 +47,10 @@ impl Version {
     /// members is announced.
     pub const V7: Self = Self(7);
 
+    /// Version 8 - a socket refusal names its code from a closed set, and a
+    /// stopped replay names the last delta it delivered.
+    pub const V8: Self = Self(8);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

@@ -54,6 +54,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-064` | `POST` | The reconnect delay MUST grow while no wire message arrives. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_grows_while_no_frame_arrives` -- each close doubles the wait up to its cap; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the worker reopens only once its clock reaches the wait | none | verified |
 | `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound wire message, and never on a bare open. | this spec section 2 | `ambre_sync::lifecycle::tests::the_wait_resets_on_a_frame_alone` -- a reopen with no frame keeps the wait growing, and a frame resets it; `ambre_sync::websocket::tests::a_dropped_socket_reopens_on_the_clock_and_a_frame_resets_the_wait` -- the same through the worker, after an open with no frame | none | verified |
 | `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-026` | `ambre_bus::conduit::tests::a_backlog_holds_its_source_at_the_high_mark_and_releases_it_at_the_low` -- the Main side asks once at each mark, never in between; `ambre_sync::websocket::tests::a_held_inbound_reopens_only_on_release_and_catches_up` -- no close, timer or renewal reopens a held socket, and the release pulls from the last sequence then sends the edit kept | none | verified |
+| `SYNC-153` | `POST` | Given a replay the relay stopped, the worker MUST ask again from its own cursor, and no sooner than the relay's throttle serves it. | this spec section 2; `ambre-spec-sequencer.md`, `SRV-184`, `SRV-086`; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_stopped_replay_is_asked_again_from_the_cursor_when_its_timer_fires` -- nothing is sent before the timer, a stale timer asks nothing, and the live one asks from the document's cursor; `ambre_sync::websocket::tests::the_replay_retry_delay_doubles_up_to_its_budget` -- the first delay is the throttle window, and each later one doubles it | none | verified |
+| `SYNC-154` | `FAIL` | A replay stopped more times than its budget MUST reach the rest of the client as one error, and no retry MUST follow before the next reconnect. | this spec section 2; `ambre-spec-budgets.md section 8` | `ambre_sync::websocket::tests::a_replay_stopped_past_its_budget_reaches_logic_once` -- eight stops give one error and no retry, and a reopened socket counts from zero | none | verified |
 
 ### 1.4 A request is made
 
@@ -87,7 +89,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 30 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 32 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -145,6 +147,7 @@ first frame and never in the address (`SRV-031`, `SYNC-061`).
 | the Main side asks for a hold | close, and keep each edit sealed meanwhile; reopen on the release alone (`SYNC-059`) |
 | any other close, or a socket error | back off and reopen (`SYNC-064`) |
 | the socket opens | resubscribe every document, and pull what was missed (`SYNC-033`) |
+| the relay stops a replay | ask again from the document's cursor after a growing delay, and report it once past the budget (`SYNC-153`, `SYNC-154`) |
 | a wire message arrives | reset the delay: only a wire message proves the connection is live (`SYNC-064`) |
 
 **Why a bare open is not proof.** A refused upgrade still completes, then closes immediately. A

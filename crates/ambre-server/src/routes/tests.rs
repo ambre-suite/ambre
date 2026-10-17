@@ -1832,7 +1832,48 @@ mod handler_tests {
         };
         let answer = ambre_protocol::ws::decode_server_msg(&bytes).unwrap();
         assert!(
-            matches!(answer, WsServerMsg::Error { code: 403, .. }),
+            matches!(
+                answer,
+                WsServerMsg::Error {
+                    code: ambre_core::RefusalCode::Forbidden,
+                    ..
+                }
+            ),
+            "{answer:?}"
+        );
+    }
+
+    /// `SRV-183`: a frame that does not decode concerns no document, and its
+    /// refusal names none. The socket stays open.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_frame_that_does_not_decode_is_refused_for_no_document(pool: sqlx::PgPool) {
+        use futures_util::SinkExt;
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let auth = setup_and_get_auth(&app).await;
+        let token = auth.trim_start_matches("Bearer ");
+        let mut socket = open_socket(state, "").await;
+        socket
+            .send(Message::Binary(authenticate(token).into()))
+            .await
+            .unwrap();
+        let mut garbage = encode_client_msg(&WsClientMsg::Subscribe {
+            document_id: ambre_core::DocumentId::new(),
+        });
+        garbage[1] = 0xff;
+        socket.send(Message::Binary(garbage.into())).await.unwrap();
+        let answer = next_server_msg(&mut socket).await;
+        assert!(
+            matches!(
+                answer,
+                Some(WsServerMsg::Error {
+                    document_id: None,
+                    code: ambre_core::RefusalCode::BadRequest,
+                })
+            ),
             "{answer:?}"
         );
     }
@@ -2042,7 +2083,11 @@ mod handler_tests {
                 None => break None,
             }
         };
-        assert_eq!(answer, Some(403), "the socket is still answered");
+        assert_eq!(
+            answer,
+            Some(ambre_core::RefusalCode::Forbidden),
+            "the socket is still answered"
+        );
     }
 
     /// The next message the server sends on `socket`, or `None` once the

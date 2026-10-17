@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (7, "3187c014aa3db324ae5eb36ccf7141fe");
+const FROZEN_LAYOUT: (u8, &str) = (8, "22b3cf269d91fe8cea311aed8def2bad");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -331,8 +331,8 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             doc_type: ambre_core::DocType::Toile,
         },
         S::Error {
-            code: 9,
-            message: "m".into(),
+            document_id: Some(doc),
+            code: ambre_core::RefusalCode::Forbidden,
         },
         S::KeyRefused {
             document_id: doc,
@@ -346,6 +346,10 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             signature: Signature([14; 64]),
         },
         S::MembersChanged { document_id: doc },
+        S::ReplayStopped {
+            document_id: doc,
+            after_seq: Seq(15),
+        },
     ]
 }
 
@@ -375,6 +379,10 @@ fn assert_one_per_variant<T: serde::de::DeserializeOwned>(frames: &[Vec<u8>]) {
 /// `SRV-166`: the wire layout cannot move under an unchanged version byte. The
 /// digest covers one frame of every message variant. When it moves, the
 /// version moves with it, and the digest is frozen again under the new byte.
+///
+/// It covers the word of every refusal code too (`SRV-183`). An older peer
+/// cannot read a code it does not hold, so a new code moves the version. That
+/// peer is then sent to an update rather than left with a frame it drops.
 #[test]
 fn the_wire_layout_is_frozen_under_its_version() {
     use crate::ws::{WsClientMsg, WsServerMsg, encode_client_msg, encode_server_msg};
@@ -387,6 +395,11 @@ fn the_wire_layout_is_frozen_under_its_version() {
     for frame in client.iter().chain(&server) {
         hasher.update((frame.len() as u64).to_le_bytes());
         hasher.update(frame);
+    }
+    for code in ambre_core::RefusalCode::ALL {
+        let word = code.as_str();
+        hasher.update((word.len() as u64).to_le_bytes());
+        hasher.update(word);
     }
     let digest = hex::encode(&hasher.finalize()[..16]);
     let (version, frozen) = FROZEN_LAYOUT;

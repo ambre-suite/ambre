@@ -80,13 +80,14 @@ sequence has already moved.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-040` | `POST` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` -- a document with no rows still emits one `MissingUpdates`, which is what releases the client's loading overlay; `ambre_server::ws::handler::message::delivery_tests::a_replay_over_a_broken_index_is_still_answered` -- an index that cannot be read is answered with a retryable refusal, not silence | none | verified |
-| `SRV-041` | `POST` | A replay MUST deliver every delta the caller asked for that the relay holds, wherever it holds it. | this spec section 3 | `ambre_server::ws::handler::message::refusal_tests::a_replay_page_stops_at_the_first_unreadable_delta` -- a page ends at the first delta the relay cannot read, and a retryable refusal names it; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- deltas in their rows and in a batch object; `ambre_server::ws::handler::message::delivery_tests::a_page_read_out_of_order_is_sent_in_order` -- deltas still pending, missed by the object store | none | verified |
+| `SRV-040` | `POST` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` -- a document with no rows still emits one `MissingUpdates`, which is what releases the client's loading overlay; `ambre_server::ws::handler::message::delivery_tests::a_replay_over_a_broken_index_is_still_answered` -- an index that cannot be read is answered with a stop naming the caller's own cursor, not silence | none | verified |
+| `SRV-041` | `POST` | A replay MUST deliver every delta the caller asked for that the relay holds, wherever it holds it. | this spec section 3 | `ambre_server::ws::handler::message::refusal_tests::a_replay_page_stops_at_the_first_unreadable_delta` -- a page ends at the first delta the relay cannot read, and the replay stops there; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- deltas in their rows and in a batch object; `ambre_server::ws::handler::message::delivery_tests::a_page_read_out_of_order_is_sent_in_order` -- deltas still pending, missed by the object store | none | verified |
 | `SRV-084` | `POST` | A replay MUST deliver its deltas in the order of their numbers. | this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_page_read_out_of_order_is_sent_in_order` -- the object store holds each read so the three finish in reverse order, and the page still carries them by number | none | verified |
 | `SRV-155` | `POST` | A replay MUST read the inline deltas from the index, and fetch each batch object it needs once. | this spec section 3; `SRV-148`, `SRV-151` | `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- six deltas, four of them moved, replay from their rows and one read of the batch | none | verified |
 | `SRV-075` | `FRAME` | A page of the delta index served over a request MUST NOT exceed the cap the relay declares. | audit `M16`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_delta_page_never_exceeds_the_declared_cap` -- over 1,005 rows, a limit of 5,000 is served a thousand, and a limit of zero or below is served one | none | verified |
 | `SRV-085` | `FAIL` | A replay MUST be refused, and answered with nothing, when the caller's membership no longer holds. | this spec section 3; `ambre-spec-membership.md` | `ambre_server::ws::handler::message::access_tests::a_replay_after_a_removal_is_answered_with_nothing` -- a membership removed mid-session, then a replay asked past the mark: no update comes back | none | verified |
 | `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_second_replay_inside_the_window_is_answered_with_nothing` -- the first call is served, and the same call at once after it sends nothing | none | verified |
+| `SRV-184` | `POST` | A replay that stops before its end MUST name the last delta it delivered. | this spec section 3; `ambre-spec-sync.md`, `SYNC-153` | `ambre_server::ws::handler::message::delivery_tests::a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered` -- three deltas, the second lost: the first is delivered and the stop names it; `ambre_server::ws::handler::message::delivery_tests::a_replay_over_a_broken_index_is_still_answered` -- nothing delivered, so the stop names the caller's cursor | none | verified |
 
 ### 1.6 A segment is finalized
 
@@ -111,9 +112,9 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 38 `verified`, 9 `unimplemented`. What holds is the ordering, where each
-  delta lives, and the replay. The recovery paths are driven through real failures: a register
-  that refuses inserts, a queue that refuses pushes, an index that cannot be read.
+* **Verification.** 39 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
+  lives, and the replay. The recovery paths are driven through real failures: a register that
+  refuses inserts, a queue that refuses pushes, an index that cannot be read.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -254,7 +255,8 @@ horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
    delta it names (`SRV-155`). Fall back to the map for what has not flushed yet, and re-sort the
    page by number;
 5. send one answer per page, and one empty answer when the first page is empty (`SRV-040`);
-6. on an index that cannot be read, send a retryable refusal naming where the replay stopped.
+6. on an index or a delta that cannot be read, stop, and name the last delta delivered
+   (`SRV-184`). The caller asks again from there (`ambre-spec-sync.md`, `SYNC-153`).
 
 **Why the first empty page still answers.** A client treats the arrival of a replay as the end of
 its hydration, so silence leaves a document loading for ever. A later empty page simply ends the
@@ -329,15 +331,13 @@ sees is how long a document takes to open.
   asks on reconnect for the deltas past the last number it holds. Once the trim has passed that
   number, the replay stops at the first missing delta, and nothing sends the client to the
   snapshot instead (`SRV-041`). No rule says what it should do.
-* **A lost delta cannot be replayed.** A page stops at the first delta the relay cannot read, and a
-  retryable refusal names it. Nothing restores a delta the object store lost after accepting it,
-  so every retry meets the same gap. `SRV-041` binds what the relay holds, and no rule says what
-  a client does with a hole that never closes.
+* **A lost delta cannot be replayed.** A page stops at the first delta the relay cannot read, and
+  names the last one before it. Nothing restores a delta the object store lost after accepting it,
+  so every retry meets the same gap. The client gives up after its budget (`SYNC-154`), and no
+  rule says what it does with a hole that never closes.
 * **The dead-letter list is written and never read.** It holds the whole signed delta, so a replay
   is possible (`SRV-082`). Nothing drains it, counts it or exposes it over a route, so that replay
   is an operator reading the ephemeral store by hand.
-* **The client does not act on a replay refusal.** It logs the retryable refusal and waits for the
-  next reconnect to ask again. No rule says it should retry sooner.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.

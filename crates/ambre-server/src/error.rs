@@ -111,6 +111,35 @@ impl AppError {
         )
     }
 
+    /// The code a refusal of this error names, on the request path and on the
+    /// socket alike (`SRV-182`, `SRV-183`). Every variant chooses one.
+    pub(crate) fn code(&self) -> RefusalCode {
+        match self {
+            AppError::Unauthorized | AppError::SessionExpired => RefusalCode::Unauthorized,
+            AppError::Forbidden => RefusalCode::Forbidden,
+            AppError::SetupRequired => RefusalCode::SetupRequired,
+            AppError::NotFound { .. } => RefusalCode::NotFound,
+            AppError::Conflict { .. } => RefusalCode::Conflict,
+            AppError::ClockMismatch { .. } => RefusalCode::ClockMismatch,
+            AppError::RotationOwed => RefusalCode::RotationOwed,
+            AppError::MembersChanged => RefusalCode::MembersChanged,
+            AppError::KeyChanged => RefusalCode::KeyChanged,
+            AppError::LogMoved => RefusalCode::LogMoved,
+            AppError::InvalidSignature => RefusalCode::InvalidSignature,
+            AppError::SnapshotRequired => RefusalCode::SnapshotRequired,
+            AppError::CompactionLockHeld => RefusalCode::CompactionLockHeld,
+            AppError::UnknownProvider(_) => RefusalCode::UnknownProvider,
+            AppError::BadRequest(_) => RefusalCode::BadRequest,
+            AppError::PayloadTooLarge(_) => RefusalCode::PayloadTooLarge,
+            AppError::Database(_)
+            | AppError::Redis(_)
+            | AppError::S3(_)
+            | AppError::Internal(_)
+            | AppError::Decode(_)
+            | AppError::Oidc(_) => RefusalCode::InternalError,
+        }
+    }
+
     /// The text a caller reads, on the request path and on the socket alike.
     /// An infrastructure error says only that the server failed, and its cause
     /// stays in the log (`SRV-096`).
@@ -125,40 +154,9 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, code) = match &self {
-            AppError::Unauthorized | AppError::SessionExpired => {
-                (StatusCode::UNAUTHORIZED, RefusalCode::Unauthorized)
-            }
-            AppError::Forbidden => (StatusCode::FORBIDDEN, RefusalCode::Forbidden),
-            AppError::SetupRequired => (StatusCode::FORBIDDEN, RefusalCode::SetupRequired),
-            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, RefusalCode::NotFound),
-            AppError::Conflict { .. } => (StatusCode::CONFLICT, RefusalCode::Conflict),
-            AppError::ClockMismatch { .. } => (StatusCode::CONFLICT, RefusalCode::ClockMismatch),
-            AppError::RotationOwed => (StatusCode::CONFLICT, RefusalCode::RotationOwed),
-            AppError::MembersChanged => (StatusCode::CONFLICT, RefusalCode::MembersChanged),
-            AppError::KeyChanged => (StatusCode::CONFLICT, RefusalCode::KeyChanged),
-            AppError::LogMoved => (StatusCode::CONFLICT, RefusalCode::LogMoved),
-            AppError::InvalidSignature => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                RefusalCode::InvalidSignature,
-            ),
-            AppError::SnapshotRequired => (StatusCode::CONFLICT, RefusalCode::SnapshotRequired),
-            AppError::CompactionLockHeld => (StatusCode::CONFLICT, RefusalCode::CompactionLockHeld),
-            AppError::UnknownProvider(_) => (StatusCode::BAD_REQUEST, RefusalCode::UnknownProvider),
-            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, RefusalCode::BadRequest),
-            AppError::PayloadTooLarge(_) => {
-                (StatusCode::PAYLOAD_TOO_LARGE, RefusalCode::PayloadTooLarge)
-            }
-            AppError::Database(_)
-            | AppError::Redis(_)
-            | AppError::S3(_)
-            | AppError::Internal(_)
-            | AppError::Decode(_)
-            | AppError::Oidc(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                RefusalCode::InternalError,
-            ),
-        };
+        let code = self.code();
+        let status =
+            StatusCode::from_u16(code.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
 
         // Log by severity. A 5xx is a genuine server fault (Redis/DB/S3/...) and
         // must be loud. A 4xx is client-caused (bad auth, not found, conflict)

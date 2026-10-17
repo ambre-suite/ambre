@@ -10,7 +10,7 @@
 use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{DocType, DocumentId, KeyId, PublicKey, SnapshotId};
+use ambre_core::{DocType, DocumentId, KeyId, PublicKey, RefusalCode, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -153,8 +153,13 @@ pub enum WsServerMsg {
         doc_type: DocType,
     },
 
-    /// Error (may be global or scoped to a document).
-    Error { code: u16, message: String },
+    /// A refused wire message, named by its code alone (`SRV-183`). It names
+    /// the document it concerns, and none for a frame that does not decode or
+    /// a connection over its rate. The detail stays in the relay's log.
+    Error {
+        document_id: Option<DocumentId>,
+        code: RefusalCode,
+    },
 
     /// A delta refused for its key: the document owes a rotation, and every key
     /// it held is one a departed member holds too (`ambre-spec-server.md`,
@@ -183,6 +188,15 @@ pub enum WsServerMsg {
     ///
     /// Appended last, so the wire tags of the variants above do not move.
     MembersChanged { document_id: DocumentId },
+
+    /// A replay ended before its end: the relay could not read its index or
+    /// a delta (`ambre-spec-sequencer.md`, `SRV-184`). The pages sent before
+    /// it stand, and `after_seq` is the last delta they delivered. The client
+    /// asks again from there (`SYNC-153`).
+    ReplayStopped {
+        document_id: DocumentId,
+        after_seq: Seq,
+    },
 }
 
 // ---------------------------------------------------------------------------

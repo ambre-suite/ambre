@@ -139,6 +139,14 @@ impl SyncState {
             .collect()
     }
 
+    /// The cursor one light subscription resumes after, if the relay holds it.
+    pub(crate) fn light_cursor(&self, document_id: DocumentId) -> Option<Seq> {
+        self.light
+            .get(&document_id)
+            .filter(|light| light.on_relay)
+            .map(|light| light.seen)
+    }
+
     /// The kind of a document held as a light subscription.
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn light_doc_type(&self, document_id: DocumentId) -> Option<DocType> {

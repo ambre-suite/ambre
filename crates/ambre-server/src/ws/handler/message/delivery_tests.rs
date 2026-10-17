@@ -166,8 +166,9 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
     forget(&state, doc_id).await;
 }
 
-/// `SRV-040`: an index that cannot be read under a replay still answers it,
-/// with a refusal the client may retry.
+/// `SRV-040`, `SRV-184`: an index that cannot be read under a replay still
+/// answers it. The stop names the cursor the replay started past, since no
+/// page was delivered.
 #[sqlx::test]
 #[cfg_attr(
     not(feature = "db"),
@@ -188,9 +189,64 @@ async fn a_replay_over_a_broken_index_is_still_answered(pool: sqlx::PgPool) {
         .map(|f| decode_server_msg(f).unwrap())
         .collect();
     assert!(
-        matches!(sent.as_slice(), [WsServerMsg::Error { code: 503, .. }]),
+        matches!(
+            sent.as_slice(),
+            [WsServerMsg::ReplayStopped { document_id, after_seq: Seq(0) }] if *document_id == doc_id
+        ),
         "sent {sent:?}"
     );
+    forget(&state, doc_id).await;
+}
+
+/// `SRV-184`: a delta whose object is lost stops the replay behind the deltas
+/// before it, and the stop names the last of them.
+#[sqlx::test]
+#[cfg_attr(
+    not(feature = "db"),
+    ignore = "needs postgres+redis; run with --features db"
+)]
+async fn a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered(pool: sqlx::PgPool) {
+    let stub = S3Stub::spawn([]).await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[56u8; 32]);
+    let (state, mut conn, doc_id) = writer(pool.clone(), &stub, &key).await;
+    let (tx, _rx) = mpsc::channel::<Payload>(8);
+    for clock in 1..=3 {
+        handle_update(
+            &state,
+            &mut conn,
+            signed_update(&key, doc_id, clock, 16),
+            &tx,
+        )
+        .await;
+    }
+    // Delta 2 lives in an object the store no longer holds.
+    sqlx::query(
+        "UPDATE updates SET wire = NULL, s3_key = 'lost' WHERE document_id = $1 AND seq = 2",
+    )
+    .bind(uuid::Uuid::from_bytes(*doc_id.as_uuid().as_bytes()))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let frames = replay(&state, &mut conn, doc_id).await;
+    let sent: Vec<_> = frames
+        .iter()
+        .map(|f| decode_server_msg(f).unwrap())
+        .collect();
+    match sent.as_slice() {
+        [
+            WsServerMsg::MissingUpdates { updates, .. },
+            WsServerMsg::ReplayStopped {
+                document_id,
+                after_seq,
+            },
+        ] => {
+            let seqs: Vec<u64> = updates.iter().map(|u| u.seq.0).collect();
+            assert_eq!(seqs, [1], "delta 3 waits behind the lost one");
+            assert_eq!((*document_id, *after_seq), (doc_id, Seq(1)));
+        }
+        other => panic!("expected a page then a stop, got {other:?}"),
+    }
     forget(&state, doc_id).await;
 }
 

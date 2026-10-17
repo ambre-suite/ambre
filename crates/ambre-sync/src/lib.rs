@@ -210,6 +210,13 @@ enum SyncEvent {
     /// Fired by a backoff timer scheduled after a disconnect: time to attempt a
     /// fresh WebSocket connection (see [`schedule_reconnect`](SyncState::schedule_reconnect)).
     ReconnectNow,
+    /// Fired by the timer armed when the relay stopped a replay: ask again
+    /// from the document's cursor (`SYNC-153`). A later stop or a reconnect
+    /// makes the timer stale.
+    ReplayRetry {
+        document_id: DocumentId,
+        stop: u32,
+    },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
     WsOpened,
@@ -919,6 +926,9 @@ pub struct SyncState {
     /// Updates sealed while the socket is held closed, as wire frames in order.
     /// Sent once it reopens, so a hold loses no edit of this user.
     held_outbox: RefCell<Vec<Vec<u8>>>,
+    /// How many times the relay stopped each document's replay since the
+    /// socket last opened. Cleared on every open (`SYNC-153`, `SYNC-154`).
+    replay_stops: HashMap<DocumentId, u32>,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1008,6 +1018,7 @@ impl SyncState {
             update_owed: false,
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
+            replay_stops: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             mock_ws_tx: None,

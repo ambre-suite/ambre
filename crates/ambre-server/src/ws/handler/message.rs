@@ -4,6 +4,25 @@
 
 use super::*;
 
+/// The answer to a refused wire message: its code and its document alone
+/// (`SRV-183`). The detail reaches the log at debug, never the wire.
+pub(crate) fn refusal(document_id: Option<DocumentId>, code: RefusalCode) -> WsServerMsg {
+    WsServerMsg::Error { document_id, code }
+}
+
+/// Sends [`refusal`] and logs `detail`, which holds no content (`SRV-170`).
+pub(crate) async fn refuse(
+    outbound_tx: &mpsc::Sender<Payload>,
+    document_id: Option<DocumentId>,
+    code: RefusalCode,
+    detail: &str,
+) {
+    tracing::debug!(?document_id, %code, detail, "wire message refused");
+    let _ = outbound_tx
+        .send(Payload::server_msg(&refusal(document_id, code)))
+        .await;
+}
+
 /// Orders a replay page and keeps the run of deltas before the first one that
 /// could not be read. Returns that run and the unreadable seq, if any, so the
 /// page never carries a hole the caller cannot see (`SRV-041`).
@@ -90,16 +109,10 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
             signature: update.signature,
         },
         // The document is being deleted (`SRV-017`).
-        AppError::NotFound { .. } => WsServerMsg::Error {
-            code: 404,
-            message: e.to_string(),
-        },
+        AppError::NotFound { .. } => refusal(Some(*doc_id), RefusalCode::NotFound),
         _ => {
             tracing::error!("clock validation failed doc={doc_id}: {e}");
-            WsServerMsg::Error {
-                code: 500,
-                message: "Internal server error".into(),
-            }
+            refusal(Some(*doc_id), RefusalCode::InternalError)
         }
     }
 }
@@ -109,15 +122,12 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
 pub(crate) fn subscribe_refusal(document_id: DocumentId, e: &AppError) -> WsServerMsg {
     if e.is_infrastructure() {
         tracing::error!("subscribe access check failed doc={document_id}: {e}");
-        return WsServerMsg::Error {
-            code: 500,
-            message: e.caller_message(),
-        };
+        return refusal(Some(document_id), RefusalCode::InternalError);
     }
-    WsServerMsg::Error {
-        code: 403,
-        message: e.caller_message(),
-    }
+    // One answer whatever the cause, so a refusal never tells a stranger the
+    // document exists (`SRV-005`).
+    tracing::debug!("subscribe refused doc={document_id}: {e}");
+    refusal(Some(document_id), RefusalCode::Forbidden)
 }
 
 pub(crate) async fn handle_subscribe(
@@ -245,11 +255,13 @@ pub(crate) async fn handle_update(
 ) {
     let doc_id = update.public_data.document_id;
     if !conn.doc_subscriptions.contains(&doc_id) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "not subscribed".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        refuse(
+            outbound_tx,
+            Some(doc_id),
+            RefusalCode::Forbidden,
+            "not subscribed",
+        )
+        .await;
         return;
     }
 
@@ -261,14 +273,17 @@ pub(crate) async fn handle_update(
     // the hot path.
     let cipher_len = update.ciphertext.len();
     if cipher_len > state.config.delta_max_bytes {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 413,
-            message: format!(
-                "delta ciphertext {} bytes exceeds max {}",
-                cipher_len, state.config.delta_max_bytes
-            ),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!(
+            "delta ciphertext {} bytes exceeds max {}",
+            cipher_len, state.config.delta_max_bytes
+        );
+        refuse(
+            outbound_tx,
+            Some(doc_id),
+            RefusalCode::PayloadTooLarge,
+            &detail,
+        )
+        .await;
         return;
     }
 
@@ -276,11 +291,8 @@ pub(crate) async fn handle_update(
     // ciphertext, zero clock) before any DB/Redis work. Cheap, and it keeps the
     // durable index and the per-author clock hash free of no-op entries.
     if let Err(e) = update.validate() {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 400,
-            message: format!("invalid update: {e}"),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!("invalid update: {e}");
+        refuse(outbound_tx, Some(doc_id), RefusalCode::BadRequest, &detail).await;
         return;
     }
 
@@ -290,11 +302,8 @@ pub(crate) async fn handle_update(
     // helper drops the subscription so subsequent messages are rejected without a
     // DB hit; tell this client its access was revoked.
     if !membership_still_valid(state, conn, doc_id).await {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "document access revoked".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "document access revoked";
+        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -305,11 +314,8 @@ pub(crate) async fn handle_update(
     // capability is cached at Subscribe and refreshed by `membership_still_valid`
     // above, so this is a map lookup, not a DB hit.
     if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "read-only role cannot write to this document".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "read-only role cannot write to this document";
+        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
         return;
     }
 
@@ -323,19 +329,19 @@ pub(crate) async fn handle_update(
     // forged identity. Reject the mismatch before the signature check so the
     // clock hash only ever sees known keys.
     if author_pubkey != conn.signing_pubkey {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 403,
-            message: "author key does not match session identity".into(),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = "author key does not match session identity";
+        refuse(outbound_tx, Some(doc_id), RefusalCode::Forbidden, detail).await;
         return;
     }
     if let Err(e) = verify_update_signature(&author_pubkey, &update) {
-        let err = Payload::server_msg(&WsServerMsg::Error {
-            code: 401,
-            message: format!("invalid signature: {e}"),
-        });
-        let _ = outbound_tx.send(err).await;
+        let detail = format!("invalid signature: {e}");
+        refuse(
+            outbound_tx,
+            Some(doc_id),
+            RefusalCode::InvalidSignature,
+            &detail,
+        )
+        .await;
         return;
     }
 
@@ -655,12 +661,12 @@ pub(crate) async fn handle_request_missing(
             Ok(u) => u,
             Err(e) => {
                 // An accepted request is always answered (`SRV-040`). The pages
-                // already sent stand, and a retryable refusal names where the
-                // replay stopped, so the client asks again from there.
+                // already sent stand, and the stop names the last delta they
+                // delivered, so the client asks again from there (`SRV-184`).
                 tracing::error!(error = %e, "failed to get updates after seq");
-                let msg = Payload::server_msg(&WsServerMsg::Error {
-                    code: 503,
-                    message: format!("replay incomplete after delta {cursor}, retry later"),
+                let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+                    document_id,
+                    after_seq: ambre_protocol::messages::Seq(cursor as u64),
                 });
                 let _ = outbound_tx.send(msg).await;
                 return;
@@ -748,6 +754,10 @@ pub(crate) async fn handle_request_missing(
 
         let fetched = futures_util::future::join_all(fetches).await;
         let (seq_updates, unreadable) = contiguous_prefix(fetched);
+        // The last delta this page delivers, or the cursor it started past.
+        let delivered = seq_updates
+            .last()
+            .map_or(ambre_protocol::messages::Seq(cursor as u64), |u| u.seq);
 
         let msg = Payload::server_msg(&WsServerMsg::MissingUpdates {
             document_id,
@@ -757,9 +767,10 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         if let Some(seq) = unreadable {
-            let msg = Payload::server_msg(&WsServerMsg::Error {
-                code: 503,
-                message: format!("replay incomplete: delta {seq} could not be read, retry later"),
+            tracing::warn!(seq, "replay stopped at a delta it could not read");
+            let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
+                document_id,
+                after_seq: delivered,
             });
             let _ = outbound_tx.send(msg).await;
             return;
@@ -834,7 +845,8 @@ pub(crate) async fn verify_document_access(
 
 #[cfg(test)]
 mod postcard_tests {
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use super::refusal;
+    use ambre_core::{DocumentId, PublicKey, RefusalCode, SnapshotId};
     use ambre_protocol::messages::{
         Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
         Update,
@@ -1001,15 +1013,13 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_error() {
-        let msg = WsServerMsg::Error {
-            code: 409,
-            message: "conflict".into(),
-        };
+        let doc = DocumentId::from_bytes([3u8; 16]);
+        let msg = refusal(Some(doc), RefusalCode::Conflict);
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         match decoded {
-            WsServerMsg::Error { code, message } => {
-                assert_eq!(code, 409);
-                assert_eq!(message, "conflict");
+            WsServerMsg::Error { document_id, code } => {
+                assert_eq!(document_id, Some(doc));
+                assert_eq!(code, RefusalCode::Conflict);
             }
             _ => panic!("expected Error variant"),
         }
@@ -1021,7 +1031,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x07);
+        assert_eq!(bytes[0], 0x08);
     }
 
     #[test]
@@ -1414,6 +1424,46 @@ mod delta_size_cap_tests {
         }
     }
 
+    /// `SRV-183`: each refusal of the write path answers its code and its
+    /// document, and the frame carries nothing else to leak.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn each_write_refusal_names_its_code_and_its_document() {
+        let Some(state) = test_state(1024).await else {
+            return;
+        };
+        let doc_id = DocumentId::new();
+        let session_key = PublicKey::from_array([1u8; 32]);
+        let mut empty = update_with(session_key.clone(), doc_id, 16);
+        empty.ciphertext = Ciphertext(Vec::new());
+        let cases = [
+            (empty, RefusalCode::BadRequest),
+            (
+                update_with(PublicKey::from_array([2u8; 32]), doc_id, 16),
+                RefusalCode::Forbidden,
+            ),
+            (
+                update_with(session_key.clone(), doc_id, 16),
+                RefusalCode::InvalidSignature,
+            ),
+        ];
+        for (update, expected) in cases {
+            let mut conn = conn_with(session_key.clone(), doc_id);
+            let (tx, mut rx) = mpsc::channel::<Payload>(8);
+            handle_update(&state, &mut conn, update, &tx).await;
+            let reply = rx.try_recv().expect("a refusal");
+            let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
+            assert!(
+                matches!(
+                    decoded,
+                    WsServerMsg::Error { document_id: Some(d), code } if d == doc_id && code == expected
+                ),
+                "expected {expected}, got {decoded:?}"
+            );
+            assert!(rx.try_recv().is_err(), "one answer per refusal");
+        }
+    }
+
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn oversized_delta_writes_no_pending() {
@@ -1441,7 +1491,10 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error { code: 413, .. }
+            ambre_protocol::ws::WsServerMsg::Error {
+                code: RefusalCode::PayloadTooLarge,
+                document_id: Some(d),
+            } if d == doc_id
         ));
 
         let _ = state.redis.del([&pending_key]).await;
@@ -1481,7 +1534,10 @@ mod delta_size_cap_tests {
         let decoded = ambre_protocol::ws::decode_server_msg(reply.expose_bytes()).unwrap();
         assert!(matches!(
             decoded,
-            ambre_protocol::ws::WsServerMsg::Error { code: 403, .. }
+            ambre_protocol::ws::WsServerMsg::Error {
+                code: RefusalCode::Forbidden,
+                ..
+            }
         ));
 
         let _ = state.redis.del([&pending_key]).await;
@@ -1657,7 +1713,10 @@ mod access_tests {
         handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
         assert!(matches!(
             replies(&mut rx).as_slice(),
-            [WsServerMsg::Error { code: 403, .. }]
+            [WsServerMsg::Error {
+                code: RefusalCode::Forbidden,
+                ..
+            }]
         ));
         let eph =
             super::ephemeral_binding_tests::signed_ephemeral(&signing_key, &key, doc_id, vec![1]);
@@ -1705,8 +1764,13 @@ mod access_tests {
         let mut conn = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         match replies(&mut rx).as_slice() {
-            [WsServerMsg::Error { code: 403, message }] => {
-                assert_eq!(message, "document access revoked");
+            [
+                WsServerMsg::Error {
+                    code: RefusalCode::Forbidden,
+                    document_id: Some(d),
+                },
+            ] => {
+                assert_eq!(*d, doc_id);
             }
             other => panic!("expected a revocation, got {other:?}"),
         }
@@ -2131,15 +2195,15 @@ mod refusal_tests {
     #[test]
     fn a_store_failure_reaches_the_client_without_its_name_or_text() {
         let cause = AppError::Redis("clock validation failed: ERR connection refused".into());
-        let WsServerMsg::Error { code, message } = update_refusal(&seq_update(1).update, &cause)
-        else {
-            panic!("expected an error frame");
-        };
-        assert_eq!(code, 500);
-        assert_eq!(message, "Internal server error");
-        for leaked in ["Redis", "redis", "refused", "clock validation"] {
-            assert!(!message.contains(leaked), "{message}");
-        }
+        let update = seq_update(1).update;
+        let doc = update.public_data.document_id;
+        assert!(matches!(
+            update_refusal(&update, &cause),
+            WsServerMsg::Error {
+                document_id: Some(d),
+                code: RefusalCode::InternalError,
+            } if d == doc
+        ));
     }
 
     /// `SRV-096`: a subscription refused on a store failure answers without the
@@ -2150,15 +2214,29 @@ mod refusal_tests {
         let cause = AppError::Database(sqlx::Error::Protocol(
             "relation \"document_members\" does not exist".into(),
         ));
-        let WsServerMsg::Error { code, message } = subscribe_refusal(doc, &cause) else {
-            panic!("expected an error frame");
+        let code_of = |answer: WsServerMsg| match answer {
+            WsServerMsg::Error {
+                document_id: Some(d),
+                code,
+            } if d == doc => Some(code),
+            _ => None,
         };
-        assert_eq!((code, message.as_str()), (500, "Internal server error"));
-
-        let WsServerMsg::Error { code, .. } = subscribe_refusal(doc, &AppError::Forbidden) else {
-            panic!("expected an error frame");
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &cause)),
+            Some(RefusalCode::InternalError)
+        );
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &AppError::Forbidden)),
+            Some(RefusalCode::Forbidden)
+        );
+        let unseen = AppError::NotFound {
+            resource: "document",
         };
-        assert_eq!(code, 403);
+        assert_eq!(
+            code_of(subscribe_refusal(doc, &unseen)),
+            Some(RefusalCode::Forbidden),
+            "a document the caller cannot see answers as one it may not join"
+        );
     }
 
     /// `SRV-123`: a frame refused while a rotation is owed is answered by name.
@@ -2498,7 +2576,7 @@ mod channel_gate_tests {
         }
     }
 
-    fn error_code(frame: &Payload) -> Option<u16> {
+    fn error_code(frame: &Payload) -> Option<RefusalCode> {
         match ambre_protocol::ws::decode_server_msg(frame.expose_bytes()).ok()? {
             WsServerMsg::Error { code, .. } => Some(code),
             _ => None,
@@ -2522,7 +2600,10 @@ mod channel_gate_tests {
 
         handle_subscribe(&state, &mut conn, segment, &tx).await;
 
-        assert_eq!(error_code(&rx.try_recv().expect("a reply")), Some(403));
+        assert_eq!(
+            error_code(&rx.try_recv().expect("a reply")),
+            Some(RefusalCode::Forbidden)
+        );
         assert!(!conn.doc_subscriptions.contains(&segment));
     }
 
@@ -2572,7 +2653,10 @@ mod channel_gate_tests {
 
         handle_update(&state, &mut conn, update_on(session_key, segment), &tx).await;
 
-        assert_eq!(error_code(&rx.try_recv().expect("a reply")), Some(403));
+        assert_eq!(
+            error_code(&rx.try_recv().expect("a reply")),
+            Some(RefusalCode::Forbidden)
+        );
         let pending: usize = state.redis.llen(&pending_key).await.expect("llen");
         assert_eq!(pending, 0, "a viewer's delta must not be pushed");
         let _ = state.redis.del([&pending_key]).await;
