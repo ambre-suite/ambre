@@ -103,14 +103,21 @@ pub struct Sidebar {
 }
 
 impl Sidebar {
-    /// Take the channels of the user, whole. Returns the spaces they name
-    /// for the first time, which the view opens to read their catalogue.
-    pub fn set_member_channels(&mut self, channels: Vec<MemberChannel>) -> Vec<SpaceId> {
+    /// Take the channels and the spaces of the user, whole. Returns the
+    /// spaces named for the first time, which the view opens to read their
+    /// catalogue. A space with no channel of the user is one of them.
+    pub fn set_member_channels(
+        &mut self,
+        channels: Vec<MemberChannel>,
+        spaces: &[SpaceId],
+    ) -> Vec<SpaceId> {
+        let named = channels.iter().filter_map(|channel| match channel.place {
+            ChannelPlace::Public(space) | ChannelPlace::Private(space) => Some(space),
+            ChannelPlace::Direct => None,
+        });
         let mut fresh = Vec::new();
-        for channel in &channels {
-            if let ChannelPlace::Public(space) | ChannelPlace::Private(space) = channel.place
-                && !self.spaces.contains(&space)
-            {
+        for space in named.chain(spaces.iter().copied()) {
+            if !self.spaces.contains(&space) {
                 self.spaces.push(space);
                 fresh.push(space);
             }
@@ -341,19 +348,22 @@ mod tests {
         let private = ChannelId::new();
         let direct = ChannelId::new();
         let mut sidebar = Sidebar::default();
-        let fresh = sidebar.set_member_channels(vec![
-            leads_m,
-            MemberChannel {
-                channel_id: direct,
-                place: ChannelPlace::Direct,
-            },
-            sales_m,
-            MemberChannel {
-                channel_id: private,
-                place: ChannelPlace::Private(space),
-            },
-            general_m,
-        ]);
+        let fresh = sidebar.set_member_channels(
+            vec![
+                leads_m,
+                MemberChannel {
+                    channel_id: direct,
+                    place: ChannelPlace::Direct,
+                },
+                sales_m,
+                MemberChannel {
+                    channel_id: private,
+                    place: ChannelPlace::Private(space),
+                },
+                general_m,
+            ],
+            &[space],
+        );
         assert_eq!(fresh, vec![space], "the space is opened once");
         let team = CategoryId::new();
         sidebar.set_catalogue(
@@ -401,7 +411,7 @@ mod tests {
         );
         assert!(
             sidebar
-                .set_member_channels(sidebar.members.clone())
+                .set_member_channels(sidebar.members.clone(), &[space])
                 .is_empty()
         );
     }
@@ -414,7 +424,7 @@ mod tests {
         let (general, general_m) = public(space);
         let random = ChannelId::new();
         let mut sidebar = Sidebar::default();
-        sidebar.set_member_channels(vec![general_m]);
+        sidebar.set_member_channels(vec![general_m], &[space]);
         sidebar.set_catalogue(
             space,
             None,
@@ -436,16 +446,54 @@ mod tests {
         );
         assert_eq!(sidebar.listed_in(ChannelId::new()), None);
 
-        sidebar.set_member_channels(vec![
-            general_m,
-            MemberChannel {
-                channel_id: random,
-                place: ChannelPlace::Public(space),
-            },
-        ]);
+        sidebar.set_member_channels(
+            vec![
+                general_m,
+                MemberChannel {
+                    channel_id: random,
+                    place: ChannelPlace::Public(space),
+                },
+            ],
+            &[space],
+        );
         let sections = sidebar.sections();
         assert_eq!(sections.len(), 1, "nothing is left to join");
         assert_eq!(names(&sections[0]), ["general", "random"]);
+    }
+
+    /// A space with no channel of the user still opens, and its public
+    /// channels show to join. A space named twice opens once
+    /// (`MURMURE-486`).
+    #[test]
+    fn a_space_with_no_channel_of_the_user_shows_its_channels_to_join() {
+        let (space, other) = (SpaceId::new(), SpaceId::new());
+        let (general, general_m) = public(other);
+        let random = ChannelId::new();
+        let mut sidebar = Sidebar::default();
+        let fresh = sidebar.set_member_channels(vec![general_m], &[space, other]);
+        assert_eq!(fresh, vec![other, space], "each space opens once");
+        sidebar.set_catalogue(
+            space,
+            None,
+            Vec::new(),
+            vec![listed(random, "random", None, 0)],
+        );
+        sidebar.set_catalogue(
+            other,
+            None,
+            Vec::new(),
+            vec![listed(general, "general", None, 0)],
+        );
+        let sections = sidebar.sections();
+        assert_eq!(names(&sections[0]), ["general"]);
+        assert_eq!(sections[1].group, SidebarGroup::ToJoin);
+        assert_eq!(names(&sections[1]), ["random"]);
+        assert_eq!(sidebar.listed_in(random), Some(space));
+        assert!(
+            sidebar
+                .set_member_channels(vec![general_m], &[space, other])
+                .is_empty()
+        );
     }
 
     /// The relay's mark shows before any count, and a count replaces it once
@@ -457,7 +505,7 @@ mod tests {
         let (a, a_m) = public(space);
         let (b, b_m) = public(space);
         let mut sidebar = Sidebar::default();
-        sidebar.set_member_channels(vec![a_m, b_m]);
+        sidebar.set_member_channels(vec![a_m, b_m], &[space]);
         let answer =
             |channel_id, active, unread: Option<u32>, mentions: Option<u32>| ChannelActivity {
                 channel_id,

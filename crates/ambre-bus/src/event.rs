@@ -386,9 +386,13 @@ pub enum LogicEvent {
         space_id: SpaceId,
         channels: Vec<ChannelId>,
     },
-    /// Every channel this user is a member of, answering
+    /// Every channel and every space this user is a member of, answering
     /// [`SyncCommand::ListMemberChannels`](crate::SyncCommand::ListMemberChannels).
-    MemberChannels { channels: Vec<crate::MemberChannel> },
+    /// A space lists here with no channel of the user in it.
+    MemberChannels {
+        channels: Vec<crate::MemberChannel>,
+        spaces: Vec<SpaceId>,
+    },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// Another participant joined the meeting.

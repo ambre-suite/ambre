@@ -29,6 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar | none | verified |
 | `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the mounted shell holds no status bar, formula bar or tab strip | none | verified |
+| `MURMURE-486` | `OBS` | A space the user joined no channel of MUST show its channels to join. | this spec section 3; `MURMURE-164`; `ambre-spec-server.md`, `SRV-216` | `ambre_murmure::sidebar::tests::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- a listed space with no channel is opened once, and its catalogue fills the section to join; `ambre_app::shell::murmure_regions::a_space_with_no_channel_of_the_user_shows_its_channels_to_join` -- the shell opens the space once and draws its channels to join alone | none | verified |
 
 ### 1.2 Select a channel
 
@@ -56,7 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 13 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
+* **Verification.** 14 `verified`, 6 `unimplemented`. The regions, the back control, the rows of
   the shell and the sidebar entries are built. The message list and the split view are not.
 
 ---
@@ -165,8 +166,10 @@ in a cell of its own (`MURMURE-421`).
 * **A private channel or a direct message not open shows no name.** Its name is in its `meta`
   document, which learning of it never fetches (`MURMURE-475`). It lands with the
   `The names of channels not open` Story (`ambre-roadmap.md` E5).
-* **A space where the user joined no channel is not shown.** The client learns its spaces from its
-  channels alone. It lands with the `The spaces of a user` Story (`ambre-roadmap.md` E5).
+* **A space left stays in the sidebar.** The sidebar adds the spaces of each listing and drops none.
+  It lands with the `A space left leaves the sidebar` Story (`ambre-roadmap.md` E5).
+* **A space made before the relay knew spaces, and with no channel, is not listed.** Only dev data
+  holds one: the relay learns a space at its creation, or from its channels.
 * **The id of a Murmure route names nothing yet.** A page opens on the channel list. A link to a
   channel or a message lands with the `A link to a message` Story (`ambre-roadmap.md` E5).
 * **The personal order of the sidebar is not here.** Groups, order, mute, hide and bookmarks are

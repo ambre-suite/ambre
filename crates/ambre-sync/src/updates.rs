@@ -832,7 +832,16 @@ impl SyncState {
         });
     }
 
+    /// Open a new space as a document, marked so its lazy creation tells
+    /// the relay it is a space (`SYNC-170`).
+    pub(crate) fn handle_create_space(&mut self, space_id: ambre_bus::SpaceId) {
+        let document_id = space_id.document_id();
+        self.new_spaces.insert(document_id);
+        self.handle_open_document(document_id, DocType::Murmure);
+    }
+
     pub(crate) fn handle_close_document(&mut self, document_id: DocumentId) {
+        self.new_spaces.remove(&document_id);
         if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
         }
@@ -1331,6 +1340,9 @@ impl SyncState {
             return;
         };
         doc_state.creating = true;
+        // A space is marked so on its creation, so each member lists it
+        // (`SYNC-170`).
+        let space = self.new_spaces.contains(&document_id);
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
@@ -1356,6 +1368,7 @@ impl SyncState {
                 doc_key_enc,
                 document_id: Some(document_id),
                 entry: Some(entry),
+                space,
             };
             match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth).await {
                 Ok(_) => {

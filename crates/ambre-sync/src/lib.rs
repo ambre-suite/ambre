@@ -435,7 +435,7 @@ enum SyncEvent {
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
         asked: u32,
-        result: Result<Vec<ambre_bus::MemberChannel>, String>,
+        result: Result<(Vec<ambre_bus::MemberChannel>, Vec<ambre_bus::SpaceId>), String>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
@@ -1049,6 +1049,9 @@ pub struct SyncState {
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
     member_channels_asked: u32,
+    /// The documents of spaces this client created and the relay does not
+    /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
+    new_spaces: HashSet<DocumentId>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
@@ -1142,6 +1145,7 @@ impl SyncState {
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             member_channels_asked: 0,
+            new_spaces: HashSet::new(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1468,6 +1472,7 @@ impl SyncState {
                 self.handle_list_space_channels(space_id)
             }
             SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
+            SyncCommand::CreateSpace { space_id } => self.handle_create_space(space_id),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

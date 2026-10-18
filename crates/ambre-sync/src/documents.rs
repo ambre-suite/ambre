@@ -169,6 +169,7 @@ impl SyncState {
                     doc_key_enc,
                     document_id: Some(document_id),
                     entry: Some(entry),
+                    space: false,
                 };
                 match http::post_json_auth::<_, http::CreateDocumentResponse>(&url, &body, auth)
                     .await

@@ -727,10 +727,25 @@ pub(crate) struct SpaceChannelsResponse {
     pub channels: Vec<ambre_core::ChannelId>,
 }
 
-/// `GET /api/channels`: every channel the caller is a member of.
+/// `GET /api/channels`: every channel the caller is a member of, and every
+/// space.
 #[derive(Deserialize)]
 pub(crate) struct MemberChannelsResponse {
     pub channels: Vec<MemberChannelEntry>,
+    #[serde(with = "ambre_core::serde_id::space_id::vec")]
+    pub spaces: Vec<ambre_core::SpaceId>,
+}
+
+impl MemberChannelsResponse {
+    /// The answer as the bus carries it: the channels, then the spaces.
+    pub(crate) fn into_listing(self) -> (Vec<ambre_bus::MemberChannel>, Vec<ambre_core::SpaceId>) {
+        let channels = self
+            .channels
+            .into_iter()
+            .map(MemberChannelEntry::into_member_channel)
+            .collect();
+        (channels, self.spaces)
+    }
 }
 
 /// One channel of [`MemberChannelsResponse`]: its space, none for a direct
@@ -841,6 +856,9 @@ pub(crate) struct CreateDocumentRequest {
     /// writes it (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
+    /// The document is a Murmure space, which its members list.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub space: bool,
 }
 
 /// `POST /api/channels`: a channel of a space, with its first two documents.

@@ -95,6 +95,31 @@ pub async fn get_channel(
     .transpose()
 }
 
+/// Hold `space` as a space. A second registration changes nothing.
+pub async fn register_space(pool: &PgPool, space: &ambre_core::SpaceId) -> Result<(), AppError> {
+    sqlx::query("INSERT INTO spaces (id) VALUES ($1) ON CONFLICT DO NOTHING")
+        .bind(id_to_uuid(*space))
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Every space whose document holds a row of `user`, by identifier
+/// (`SRV-216`).
+pub async fn list_member_spaces(
+    pool: &PgPool,
+    user: &ambre_core::UserId,
+) -> Result<Vec<ambre_core::SpaceId>, AppError> {
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT s.id FROM spaces s JOIN document_members m ON m.document_id = s.id \
+         WHERE m.user_id = $1 ORDER BY s.id",
+    )
+    .bind(id_to_uuid(*user))
+    .fetch_all(pool)
+    .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// The channels the relay holds as public in `space`, by identifier.
 pub async fn list_space_public_channels(
     pool: &PgPool,
@@ -1915,7 +1940,8 @@ mod tests {
     /// key. An amendments document names the
     /// segment it amends, and the snapshot, reach and time of its fold. The
     /// cursor table holds a member, a
-    /// document and a number. Nothing else: no name, no member and no key. A
+    /// document and a number, and the space table a document alone.
+    /// Nothing else: no name, no member and no key. A
     /// column added here widens what the relay learns, so it fails this test
     /// before it ships.
     #[sqlx::test]
@@ -1923,7 +1949,8 @@ mod tests {
     async fn the_channel_tables_hold_only_what_the_relay_may_learn(pool: PgPool) {
         let columns: Vec<(String, String)> = sqlx::query_as(
             "SELECT table_name::text, column_name::text FROM information_schema.columns \
-             WHERE table_schema = current_schema() AND (table_name LIKE 'channel%' OR table_name = 'read_cursors') \
+             WHERE table_schema = current_schema() \
+             AND (table_name LIKE 'channel%' OR table_name IN ('read_cursors', 'spaces')) \
              ORDER BY table_name, column_name",
         )
         .fetch_all(&pool)
@@ -1958,6 +1985,7 @@ mod tests {
                 ("read_cursors", "document_id"),
                 ("read_cursors", "seq"),
                 ("read_cursors", "user_id"),
+                ("spaces", "id"),
             ]
         );
     }

@@ -946,6 +946,7 @@ impl SyncState {
                 );
             }
             SyncEvent::DocumentMaterialized { document_id } => {
+                self.new_spaces.remove(&document_id);
                 let pending = match self.documents.get_mut(&document_id) {
                     Some(doc_state) => {
                         doc_state.server_created = true;

@@ -288,6 +288,12 @@ pub enum SyncCommand {
     /// [`crate::LogicEvent::MemberChannels`]; a failure is logged and answers
     /// nothing, since the next share of a Murmure document asks again.
     ListMemberChannels,
+    /// Open a new space, as [`SyncCommand::OpenDocument`] does for its
+    /// document. Its lazy creation marks it a space, so each member lists it
+    /// (`SYNC-170`).
+    CreateSpace {
+        space_id: SpaceId,
+    },
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket

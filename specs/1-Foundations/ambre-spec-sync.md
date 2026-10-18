@@ -89,6 +89,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | `SYNC-166` | `FAIL` | A registration of amendments that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-201`, `SRV-202`; `SYNC-163` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_amendments_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
 | `SYNC-169` | `FAIL` | A thread registration that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-213`, `SRV-214`; `SYNC-166` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
+| `SYNC-170` | `POST` | The lazy creation of a document MUST mark it a space when, and only when, the client made it as a new space. | `ambre-spec-server.md`, `SRV-216` | `ambre_sync::channels::tests::a_new_space_is_created_as_a_space` -- the space's creation is marked, another document's is not, a space closed before its upload is forgotten, and a materialized one leaves no trace | none | verified |
 
 ### 1.6 The session ends
 
@@ -103,7 +104,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 45 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 46 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

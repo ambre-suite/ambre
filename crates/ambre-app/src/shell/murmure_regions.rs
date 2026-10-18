@@ -184,7 +184,10 @@ impl Acme {
             channel_id,
             place: public,
         }));
-        UiEvent::MemberChannels { channels }
+        UiEvent::MemberChannels {
+            channels,
+            spaces: vec![self.space],
+        }
     }
 
     fn catalogue(&self) -> UiEvent {
@@ -594,6 +597,29 @@ async fn a_channel_to_join_is_joined_then_shown() {
             .contains(&"Channels to join".to_owned()),
         "nothing is left to join"
     );
+}
+
+/// A space the user joined no channel of opens for its catalogue, and its
+/// channels show to join (`MURMURE-486`).
+#[wasm_bindgen_test]
+async fn a_space_with_no_channel_of_the_user_shows_its_channels_to_join() {
+    let acme = Acme::new();
+    let frame = Frame::with(1025, MurmureRelay::new()).await;
+    let alone = UiEvent::MemberChannels {
+        channels: Vec::new(),
+        spaces: vec![acme.space],
+    };
+    let opened = frame.absorb(alone.clone()).await;
+    assert!(
+        matches!(opened[..], [LogicCommand::OpenSpace { space_id }] if space_id == acme.space),
+        "{opened:?}"
+    );
+    assert!(frame.absorb(acme.catalogue()).await.is_empty());
+    assert_eq!(frame.texts(".murmure-section-title"), ["Channels to join"]);
+    let mut names = frame.texts(".murmure-entry-name");
+    names.sort();
+    assert_eq!(names, ["general", "random", "sales"]);
+    assert!(frame.absorb(alone).await.is_empty(), "it opens once");
 }
 
 /// A public channel the user left moves among those to join, and a pane

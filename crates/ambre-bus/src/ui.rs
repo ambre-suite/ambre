@@ -110,9 +110,13 @@ pub enum UiEvent {
     /// mark the view last drew for it.
     ChannelActivity { channels: Vec<ChannelActivity> },
 
-    /// Every channel this user is a member of, whole. It comes at start, and
-    /// again each time the relay adds the user to one. None of them is open.
-    MemberChannels { channels: Vec<MemberChannel> },
+    /// Every channel and every space this user is a member of, whole. It
+    /// comes at start, and again each time the relay adds the user to one.
+    /// None of them is open.
+    MemberChannels {
+        channels: Vec<MemberChannel>,
+        spaces: Vec<SpaceId>,
+    },
 
     /// The answer to [`crate::LogicCommand::SearchMessages`]: one entry per
     /// open channel, each stating the segments it covered. A query with no

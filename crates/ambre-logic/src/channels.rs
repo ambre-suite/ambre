@@ -2618,19 +2618,25 @@ mod tests {
                 place: ambre_bus::ChannelPlace::Direct,
             },
         ];
+        let spaces = vec![ambre_bus::SpaceId::new()];
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: channels.clone(),
+            spaces: spaces.clone(),
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(
-            matches!(shown.as_slice(), [UiEvent::MemberChannels { channels: c }] if *c == channels),
+            matches!(
+                shown.as_slice(),
+                [UiEvent::MemberChannels { channels: c, spaces: s }] if *c == channels && *s == spaces
+            ),
             "got {shown:?}"
         );
         assert!(
             drain(&sync).is_empty(),
-            "learning of a channel opens nothing"
+            "learning of a channel or a space opens nothing"
         );
         assert!(state.channels.is_empty(), "no channel state is held");
+        assert!(state.spaces.is_empty(), "no space state is held");
     }
 
     #[test]

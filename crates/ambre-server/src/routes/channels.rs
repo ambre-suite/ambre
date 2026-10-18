@@ -95,14 +95,19 @@ pub struct MemberChannelJson {
 #[derive(serde::Serialize)]
 pub struct MemberChannelsJson {
     pub channels: Vec<MemberChannelJson>,
+    /// Every space of the caller, a space with no channel of theirs included.
+    #[serde(with = "ambre_core::serde_id::space_id::vec")]
+    pub spaces: Vec<ambre_core::SpaceId>,
 }
 
 /// `GET /api/channels`: every channel the caller is a member of, by its
-/// `meta` row, with its space and whether it is public (`SRV-191`).
+/// `meta` row, with its space and whether it is public (`SRV-191`). Beside
+/// them, every space whose document holds a row of the caller (`SRV-216`).
 pub async fn list_member_channels(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
 ) -> Result<axum::Json<MemberChannelsJson>, AppError> {
+    let spaces = db::list_member_spaces(&state.db, &auth.user_id).await?;
     let channels = db::list_member_channels(&state.db, &auth.user_id)
         .await?
         .into_iter()
@@ -112,7 +117,7 @@ pub async fn list_member_channels(
             public: row.is_public,
         })
         .collect();
-    Ok(axum::Json(MemberChannelsJson { channels }))
+    Ok(axum::Json(MemberChannelsJson { channels, spaces }))
 }
 
 /// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
@@ -1206,27 +1211,92 @@ mod tests {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
         let space = DocumentId::new();
+        let answer = create_as(&state, alice, space, ambre_core::DocType::Murmure, true).await;
+        assert_eq!(answer, StatusCode::OK);
+        assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
+        assert_eq!(member_ids(&state, space).await, [alice]);
+    }
+
+    /// `who` creates `document` of `doc_type`, marked a space or not.
+    async fn create_as(
+        state: &Arc<AppState>,
+        who: UserId,
+        document: DocumentId,
+        doc_type: ambre_core::DocType,
+        space: bool,
+    ) -> StatusCode {
         let answer = crate::routes::create_document(
             State(state.clone()),
-            session(alice),
+            session(who),
             Json(crate::routes::CreateDocumentRequest {
-                doc_type: ambre_core::DocType::Murmure,
+                doc_type,
                 name_enc: None,
                 doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([1u8; 48]),
-                document_id: Some(space),
+                document_id: Some(document),
                 entry: Some(signed_entry(
-                    space,
+                    document,
                     0,
-                    alice,
+                    who,
                     MembershipAct::Create,
                     Role::Owner,
                 )),
+                space,
             }),
         )
         .await;
-        assert_eq!(status(answer), StatusCode::OK);
-        assert_eq!(role_on(&state, space, alice).await, Some(Role::Owner));
-        assert_eq!(member_ids(&state, space).await, [alice]);
+        status(answer)
+    }
+
+    /// The spaces `who` lists.
+    async fn spaces_of(state: &Arc<AppState>, who: UserId) -> Vec<SpaceId> {
+        list_member_channels(State(state.clone()), session(who))
+            .await
+            .expect("listed")
+            .0
+            .spaces
+    }
+
+    /// `SRV-216`: a member of a space lists it, with no channel of theirs in
+    /// it. A Murmure document not created as a space is never listed, and a
+    /// stranger lists nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_user_lists_every_space_they_are_a_member_of(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let (space, other) = (DocumentId::new(), DocumentId::new());
+        let murmure = ambre_core::DocType::Murmure;
+        assert_eq!(
+            create_as(&state, alice, space, murmure, true).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            create_as(&state, alice, other, murmure, false).await,
+            StatusCode::OK
+        );
+        grant(&state, space, bob, Role::Viewer).await;
+        grant(&state, other, bob, Role::Viewer).await;
+
+        let space = SpaceId::from_document(space);
+        assert_eq!(spaces_of(&state, alice).await, [space]);
+        assert_eq!(spaces_of(&state, bob).await, [space]);
+        assert_eq!(spaces_of(&state, carol).await, []);
+    }
+
+    /// `SRV-217`: a document of another kind marked a space is refused, and
+    /// neither created nor listed.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn only_a_murmure_document_is_a_space(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let prose = DocumentId::new();
+        let answer = create_as(&state, alice, prose, ambre_core::DocType::Prose, true).await;
+        assert_eq!(answer, StatusCode::BAD_REQUEST);
+        assert_eq!(member_ids(&state, prose).await, []);
+        assert_eq!(spaces_of(&state, alice).await, []);
     }
 
     // --- Registering a public channel ---

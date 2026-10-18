@@ -213,6 +213,7 @@ impl SyncState {
                         doc_key_enc,
                         document_id: Some(document_id),
                         entry: Some(entry),
+                        space: false,
                     };
                     http::post_json_auth::<_, http::CreateDocumentResponse>(
                         &format!("{base}/documents"),
@@ -713,12 +714,7 @@ impl SyncState {
             let url = format!("{url_scheme}://{api_base}/api/channels");
             let result = http::get_json_auth::<http::MemberChannelsResponse>(&url, auth)
                 .await
-                .map(|resp| {
-                    resp.channels
-                        .into_iter()
-                        .map(http::MemberChannelEntry::into_member_channel)
-                        .collect()
-                });
+                .map(http::MemberChannelsResponse::into_listing);
             let _ = tx.send(SyncEvent::MemberChannelsListed { asked, result });
         });
     }
@@ -730,13 +726,15 @@ impl SyncState {
     pub(crate) fn member_channels_listed(
         &self,
         asked: u32,
-        result: Result<Vec<MemberChannel>, String>,
+        result: Result<(Vec<MemberChannel>, Vec<SpaceId>), String>,
     ) {
         if asked != self.member_channels_asked {
             return;
         }
         match result {
-            Ok(channels) => self.send_to_logic(LogicEvent::MemberChannels { channels }),
+            Ok((channels, spaces)) => {
+                self.send_to_logic(LogicEvent::MemberChannels { channels, spaces });
+            }
             Err(message) => {
                 tracing::warn!("Sync: listing the channels of the user failed: {message}");
             }
@@ -1383,35 +1381,31 @@ pub(crate) mod tests {
     }
 
     /// The relay's listing of the user's channels decodes to their places
-    /// and reaches the Logic thread. A failed listing answers nothing, nor
-    /// does one a later listing overtook.
+    /// and reaches the Logic thread, with every space of the user. A failed
+    /// listing answers nothing, nor does one a later listing overtook.
     #[test]
     fn a_listing_of_the_users_channels_forwards_their_places() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, String::new(), None);
         state.handle_list_member_channels();
         state.handle_list_member_channels();
-        let space = SpaceId::new();
+        let (space, bare) = (SpaceId::new(), SpaceId::new());
         let (public, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
         let body = format!(
             r#"{{"channels":[
                 {{"channel_id":"{public}","space_id":"{space}","public":true}},
                 {{"channel_id":"{private}","space_id":"{space}","public":false}},
-                {{"channel_id":"{direct}","space_id":null,"public":false}}]}}"#
+                {{"channel_id":"{direct}","space_id":null,"public":false}}],
+                "spaces":["{space}","{bare}"]}}"#
         );
         let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
-        let channels = answer
-            .channels
-            .into_iter()
-            .map(http::MemberChannelEntry::into_member_channel)
-            .collect();
-        state.member_channels_listed(1, Ok(Vec::new()));
-        state.member_channels_listed(2, Ok(channels));
+        state.member_channels_listed(1, Ok((Vec::new(), Vec::new())));
+        state.member_channels_listed(2, Ok(answer.into_listing()));
         state.member_channels_listed(2, Err("HTTP 500".into()));
         let events: Vec<_> = rx
             .try_iter()
             .filter_map(|e| match e {
-                LogicEvent::MemberChannels { channels } => Some(channels),
+                LogicEvent::MemberChannels { channels, spaces } => Some((channels, spaces)),
                 _ => None,
             })
             .collect();
@@ -1429,7 +1423,52 @@ pub(crate) mod tests {
                 place: ambre_bus::ChannelPlace::Direct,
             },
         ];
-        assert_eq!(events, vec![expected], "the latest listing alone");
+        assert_eq!(
+            events,
+            vec![(expected, vec![space, bare])],
+            "the latest listing alone"
+        );
+    }
+
+    /// `SYNC-170`: a space this client creates is marked until the relay
+    /// holds it, and its lazy creation tells the relay it is a space. Any
+    /// other document says nothing of it, and a closed space drops its mark.
+    #[test]
+    fn a_new_space_is_created_as_a_space() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        let (space, gone) = (SpaceId::new(), SpaceId::new());
+        let other = DocumentId::new();
+        state.handle_command(SyncCommand::CreateSpace { space_id: space });
+        state.handle_command(SyncCommand::CreateSpace { space_id: gone });
+        state.handle_command(SyncCommand::OpenDocument {
+            document_id: other,
+            doc_type: DocType::Murmure,
+        });
+        state.handle_command(SyncCommand::CloseDocument {
+            document_id: gone.document_id(),
+        });
+        let body = |state: &SyncState, document_id: DocumentId| {
+            let request = http::CreateDocumentRequest {
+                doc_type: DocType::Murmure,
+                name_enc: None,
+                doc_key_enc: String::new(),
+                document_id: Some(document_id),
+                entry: Some(String::new()),
+                space: state.new_spaces.contains(&document_id),
+            };
+            serde_json::to_value(request).expect("encodes")
+        };
+        assert_eq!(body(&state, space.document_id())["space"], true);
+        assert!(body(&state, other).get("space").is_none(), "not a space");
+        assert!(
+            body(&state, gone.document_id()).get("space").is_none(),
+            "closed"
+        );
+        state.handle_sync_event(SyncEvent::DocumentMaterialized {
+            document_id: space.document_id(),
+        });
+        assert!(state.new_spaces.is_empty(), "the relay holds it");
     }
 
     /// A meta a catalogue lists walks under the word of its open space. Any

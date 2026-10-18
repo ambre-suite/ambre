@@ -890,6 +890,7 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(successor),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;
@@ -944,6 +945,7 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(p.amendments),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;
@@ -999,6 +1001,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
         doc_key_enc,
         document_id: Some(p.thread),
         entry: Some(entry),
+        space: false,
     };
     http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
         .await?;

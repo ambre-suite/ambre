@@ -62,7 +62,6 @@ impl LogicState {
             Ok(state) => state,
             Err(error) => return self.space_open_failed(space_id, error.to_string()),
         };
-        let document_id = state.document_id();
         self.spaces.insert(
             space_id,
             OpenSpace {
@@ -73,10 +72,8 @@ impl LogicState {
                 roles: Vec::new(),
             },
         );
-        self.send_to_sync(SyncCommand::OpenDocument {
-            document_id,
-            doc_type: DocType::Murmure,
-        });
+        // Sync tells the relay it is a space, so each member lists it.
+        self.send_to_sync(SyncCommand::CreateSpace { space_id });
         self.show_catalogue(space_id);
     }
 
@@ -991,7 +988,7 @@ mod tests {
 
     /// A new space shows at once. Its whole document is its first update,
     /// sent once the Sync worker holds the session. That upload makes its
-    /// creator the owner on the relay.
+    /// creator the owner on the relay, and marks the document a space.
     #[test]
     fn a_new_space_shows_at_once_and_uploads_whole_once_its_session_is_ready() {
         let (mut state, ui, sync) = harness();
@@ -1004,8 +1001,7 @@ mod tests {
         let sent = drain(&sync);
         assert!(matches!(
             sent.as_slice(),
-            [SyncCommand::OpenDocument { document_id, doc_type: DocType::Murmure }]
-                if *document_id == space_id.document_id()
+            [SyncCommand::CreateSpace { space_id: s }] if *s == space_id
         ));
         assert_eq!(
             last_catalogue(&drain(&ui)),

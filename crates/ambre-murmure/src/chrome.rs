@@ -110,9 +110,9 @@ impl MurmureRelay {
     /// open for its catalogue, the channels to list again after a join.
     pub fn absorb(&self, ev: &UiEvent) -> Vec<LogicCommand> {
         match ev {
-            UiEvent::MemberChannels { channels } => self
+            UiEvent::MemberChannels { channels, spaces } => self
                 .sidebar
-                .try_update(|s| s.set_member_channels(channels.clone()))
+                .try_update(|s| s.set_member_channels(channels.clone(), spaces))
                 .unwrap_or_default()
                 .into_iter()
                 .map(|space_id| LogicCommand::OpenSpace { space_id })
