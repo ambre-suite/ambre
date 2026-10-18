@@ -10,7 +10,8 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, SegmentId, Timestamp,
+    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, MurmureEvent, SegmentId,
+    Timestamp,
 };
 
 impl LogicState {
@@ -108,7 +109,7 @@ impl LogicState {
             });
             return;
         }
-        let Some(closing) = channel.closing_id() else {
+        let Some(closing) = channel.finalizing_id() else {
             return;
         };
         let covered = self
@@ -157,8 +158,10 @@ impl LogicState {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
+        // A segment finalized again is final in `meta` already.
         let meta = match channel.mark_final(segment) {
-            Ok(meta) => meta,
+            Ok(Some(meta)) => meta,
+            Ok(None) => return,
             Err(error) => {
                 tracing::warn!("Logic: final mark of {segment} on {channel_id} refused: {error}");
                 return;
@@ -191,6 +194,38 @@ impl LogicState {
         } else {
             channel.finalize_failed(segment);
         }
+    }
+
+    /// A member reported the snapshot of `document_id` as false, and the relay
+    /// dropped it. The view names its author and the reporter. A final
+    /// snapshot dropped is finalized again by this copy when it holds the
+    /// segment (the Murmure segments spec).
+    pub(crate) fn snapshot_dropped(
+        &mut self,
+        document_id: DocumentId,
+        author: Option<UserId>,
+        reporter: Option<UserId>,
+        refinalize: bool,
+    ) {
+        let Some((&channel_id, channel)) = self
+            .channels
+            .iter_mut()
+            .find(|(_, channel)| channel.holds(document_id))
+        else {
+            return;
+        };
+        let segment = SegmentId::from_document(document_id);
+        if refinalize {
+            channel.refinalize(segment);
+        }
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: MurmureEvent::SnapshotDropped {
+                segment,
+                author,
+                reporter,
+            },
+        });
     }
 
     /// The relay refused deltas of `document_id` for its lock. The segment

@@ -316,6 +316,12 @@ pub(crate) fn is_log_moved(message: &str) -> bool {
     ends_with_code(message, RefusalCode::LogMoved)
 }
 
+/// Whether `message` is a request the relay refused with a bare 409: the state
+/// it names moved past what the request expects.
+pub(crate) fn is_conflict(message: &str) -> bool {
+    message.ends_with(": HTTP 409")
+}
+
 /// Closes the error of an answer that names a word of a closed set this build
 /// does not know.
 const UNKNOWN_WORD: &str = "UNKNOWN_WORD";
@@ -1651,6 +1657,27 @@ mod tests {
         )));
         assert!(!is_forbidden(&refusal("GET", url, 403, None)));
         assert!(!is_forbidden(&refusal("GET", url, 404, Some(Forbidden))));
+    }
+
+    /// A 409 with no code of its own reads as a conflict, and no other status
+    /// or code does.
+    #[test]
+    fn a_bare_409_reads_as_a_conflict() {
+        let url = "https://relay.example/api/channels/c/segments/s/lease";
+        assert!(is_conflict(&refusal("POST", url, 409, None)));
+        assert!(is_conflict(&refusal(
+            "POST",
+            url,
+            409,
+            Some(RefusalCode::Conflict)
+        )));
+        assert!(!is_conflict(&refusal(
+            "POST",
+            url,
+            409,
+            Some(RefusalCode::LogMoved)
+        )));
+        assert!(!is_conflict(&refusal("POST", url, 500, None)));
     }
 
     /// A 409 keeps the code of a membership or a key that moved, and no other

@@ -320,6 +320,16 @@ impl LogicState {
                 );
             }
 
+            // A report dropped a snapshot (the Murmure segments spec).
+            LogicEvent::SnapshotDropped {
+                document_id,
+                author,
+                reporter,
+                refinalize,
+            } => {
+                self.snapshot_dropped(document_id, author, reporter, refinalize);
+            }
+
             // Sync derived the PeerID from the signer; Logic compares it with
             // every operation the delta carries (`AUTHOR-012`).
             LogicEvent::RemoteUpdate { document_id, delta } => {

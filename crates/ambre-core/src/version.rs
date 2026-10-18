@@ -55,6 +55,10 @@ impl Version {
     /// signature.
     pub const V9: Self = Self(9);
 
+    /// Version 10 - a snapshot a report dropped is announced, with its
+    /// author and its reporter.
+    pub const V10: Self = Self(10);
+
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
     ///
     /// # Errors

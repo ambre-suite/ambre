@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3530 rows: 2835 shipped, of which 2 loose. 695 unbuilt.**
+**3531 rows: 2838 shipped, of which 2 loose. 693 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 810 | 418 | 816 | 609 | 180 | 2833 |
+| `verified` | 811 | 418 | 816 | 609 | 182 | 2836 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 200 | 55 | 29 | 109 | 302 | 695 |
+| `unimplemented` | 200 | 55 | 29 | 109 | 300 | 693 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -69,7 +69,7 @@
 | `ambre-spec-residency.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
-| `ambre-spec-sequencer.md` | 54 | 53 | 53 |  | 1 |
+| `ambre-spec-sequencer.md` | 55 | 54 | 54 |  | 1 |
 | `ambre-spec-server.md` | 71 | 65 | 64 | 1 | 6 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 43 | 42 | 42 |  | 1 |
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-messages.md` | 22 | 15 | 15 |  | 7 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
-| `ambre-spec-murmure-segments.md` | 25 | 18 | 18 |  | 7 |
+| `ambre-spec-murmure-segments.md` | 25 | 20 | 20 |  | 5 |
 | `ambre-spec-murmure-spaces.md` | 33 | 28 | 28 |  | 5 |
 | `ambre-spec-murmure-typing-presence.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-murmure-unread.md` | 15 | 13 | 13 |  | 2 |
@@ -273,7 +273,7 @@
 | `ambre-spec-residency.md` | RESID-001..021 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
-| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..199 |
+| `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..200 |
 | `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..165 |

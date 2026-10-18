@@ -357,6 +357,14 @@ pub enum MurmureEvent {
     /// Nothing was sent: the view asks the author, then sends it again
     /// confirmed (`MURMURE-231`).
     ConfirmChannelMention { members: usize },
+    /// A member reported the snapshot of `segment` as false, and the relay
+    /// dropped it. The view names its author and the reporter; `None` for a
+    /// key no member holds any more (`MURMURE-239`).
+    SnapshotDropped {
+        segment: SegmentId,
+        author: Option<UserId>,
+        reporter: Option<UserId>,
+    },
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).

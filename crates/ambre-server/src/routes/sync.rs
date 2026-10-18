@@ -152,8 +152,9 @@ pub async fn report_snapshot(
     if snap.status != db::SnapshotStatus::Pending {
         return Ok(axum::http::StatusCode::NO_CONTENT);
     }
-    if let Some(key) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
+    if let Some(dropped) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
         tracing::info!(document_id = %doc_id, snapshot_id = %snap_id, "snapshot reported, dropped");
+        let key = dropped.s3_key;
         if let Err(e) = state
             .s3
             .delete_object()
@@ -164,6 +165,18 @@ pub async fn report_snapshot(
         {
             tracing::warn!(s3_key = %key, error = %e, "reported snapshot: S3 delete failed");
         }
+        // Every member sees who sealed it and who reported it (the Murmure
+        // segments spec).
+        let shown = crate::payload::Payload::server_msg(
+            &ambre_protocol::ws::WsServerMsg::SnapshotDropped {
+                document_id: doc_id,
+                snapshot_id: snap_id,
+                author: ambre_core::PublicKey::from_array(author),
+                reporter: auth.signing_pubkey,
+                refinalize: dropped.refinalize,
+            },
+        );
+        let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &shown).await;
         let ask = crate::payload::Payload::server_msg(
             &ambre_protocol::ws::WsServerMsg::SnapshotRequired {
                 document_id: doc_id,

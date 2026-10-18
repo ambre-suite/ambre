@@ -3254,6 +3254,78 @@ mod tests {
         assert_eq!(state.channels[&channel_id].closing_id(), None);
     }
 
+    /// Ask, take and commit the lease of `segment` at the horizon 1.
+    fn finalize_at_one(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        now: Timestamp,
+    ) {
+        command(state, channel_id, MurmureCommand::Tick { now });
+        assert_eq!(finalizes(sync), [(segment, None)], "the lease is asked");
+        state.handle_logic_event(LogicEvent::FinalizeLeaseAnswered {
+            channel_id,
+            segment,
+            answer: LeaseAnswer::Granted {
+                lease: LeaseId::new(),
+                horizon: 1,
+                expires_in: 30_000,
+            },
+        });
+        command(state, channel_id, MurmureCommand::Tick { now });
+        assert_eq!(finalizes(sync), [(segment, Some(1))]);
+        state.handle_logic_event(LogicEvent::SegmentFinalized {
+            channel_id,
+            segment,
+        });
+    }
+
+    /// A report dropped the final snapshot of a segment. The view names who
+    /// sealed it and who reported it, and this client seals the segment
+    /// again with no `meta` delta (the Murmure segments spec).
+    #[test]
+    fn a_dropped_final_snapshot_is_shown_and_sealed_again() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut state, &sync);
+        state.record_channel_seq(closing.document_id(), 1, None);
+        finalize_at_one(&mut state, &sync, channel_id, closing, NOW);
+        drain(&sync);
+        drain(&ui);
+
+        let (author, reporter) = (UserId::new(), UserId::new());
+        let dropped = |state: &mut LogicState, refinalize| {
+            state.handle_logic_event(LogicEvent::SnapshotDropped {
+                document_id: closing.document_id(),
+                author: Some(author),
+                reporter: Some(reporter),
+                refinalize,
+            });
+        };
+        dropped(&mut state, false);
+        let shown = channel_events(&ui);
+        assert!(
+            matches!(
+                shown.as_slice(),
+                [(_, MurmureEvent::SnapshotDropped { segment, author: Some(a), reporter: Some(r) })]
+                    if *segment == closing && *a == author && *r == reporter
+            ),
+            "the view was told {shown:?}"
+        );
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
+        assert!(finalizes(&sync).is_empty(), "another member seals it");
+
+        dropped(&mut state, true);
+        finalize_at_one(&mut state, &sync, channel_id, closing, at(2));
+        assert!(
+            !drain(&sync)
+                .iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "meta marks it final already"
+        );
+        assert_eq!(state.channels[&channel_id].finalizing_id(), None);
+    }
+
     /// A message the relay refused for the lock leaves again for the active
     /// segment, and the view moves it there (the Murmure segments spec).
     #[test]

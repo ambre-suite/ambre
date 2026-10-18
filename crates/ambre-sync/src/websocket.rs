@@ -845,7 +845,12 @@ impl SyncState {
                     segment,
                     answer,
                 }),
-                Err(message) => self.finalize_failed(channel_id, segment, false, &message),
+                // A segment no longer closing, or whose snapshot another
+                // member sealed again, needs no lease from this client.
+                Err(message) => {
+                    let withdrawn = crate::http::is_conflict(&message);
+                    self.finalize_failed(channel_id, segment, withdrawn, &message);
+                }
             },
             SyncEvent::SegmentFinalized {
                 channel_id,
@@ -1218,6 +1223,32 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::PeerLeft {
                     document_id,
                     user_id,
+                });
+            }
+
+            WsServerMsg::SnapshotDropped {
+                document_id,
+                author,
+                reporter,
+                refinalize,
+                ..
+            } => {
+                // Both keys resolve as a cursor's does: the member list names
+                // the user.
+                let Some(doc_state) = self.documents.get(&document_id) else {
+                    return;
+                };
+                // The author of the dropped snapshot would seal it again, so
+                // it leaves the segment to another member.
+                let own = self
+                    .signing_key
+                    .as_ref()
+                    .is_some_and(|key| key.verifying_key().to_bytes() == *author.as_array());
+                self.send_to_logic(LogicEvent::SnapshotDropped {
+                    document_id,
+                    author: doc_state.resolve_ephemeral_author(*author.as_array()),
+                    reporter: doc_state.resolve_ephemeral_author(*reporter.as_array()),
+                    refinalize: refinalize && !own,
                 });
             }
 

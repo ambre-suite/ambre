@@ -218,23 +218,52 @@ pub async fn confirm_snapshot(
     status.as_deref().map(parse_status).transpose()
 }
 
-/// Drops a snapshot nobody confirmed yet, and returns its object key for the
-/// caller to delete (`SRV-133`). A confirmed one stays, and so does every
-/// delta (`SRV-135`).
+/// A snapshot a report dropped.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DroppedSnapshot {
+    /// Its object key, for the caller to delete.
+    pub s3_key: String,
+    /// Whether it was the final snapshot of a segment, which is then to be
+    /// finalized again.
+    pub refinalize: bool,
+}
+
+/// Drops a snapshot nobody confirmed yet (`SRV-133`). A confirmed one stays,
+/// and so does every delta (`SRV-135`).
+///
+/// A final snapshot takes its finalization with it, in the same transaction.
+/// The segment stays `final` and locked, and a new lease finalizes it again
+/// at the same horizon (the Murmure segments spec).
 pub async fn drop_pending_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
-) -> Result<Option<String>, AppError> {
+) -> Result<Option<DroppedSnapshot>, AppError> {
+    let (sid, did) = (id_to_uuid(*snapshot_id), id_to_uuid(*document_id));
+    let mut tx = pool.begin().await?;
     let key: Option<String> = sqlx::query_scalar(
         "DELETE FROM snapshots WHERE id = $1 AND document_id = $2 AND status = 'pending' \
          RETURNING s3_key",
     )
-    .bind(id_to_uuid(*snapshot_id))
-    .bind(id_to_uuid(*document_id))
-    .fetch_optional(pool)
+    .bind(sid)
+    .bind(did)
+    .fetch_optional(&mut *tx)
     .await?;
-    Ok(key)
+    let Some(s3_key) = key else {
+        return Ok(None);
+    };
+    let refinalize = sqlx::query(
+        "UPDATE channel_documents SET final_snapshot = NULL, finalized_at = NULL \
+         WHERE document_id = $1 AND final_snapshot = $2",
+    )
+    .bind(did)
+    .bind(sid)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected()
+        == 1;
+    tx.commit().await?;
+    Ok(Some(DroppedSnapshot { s3_key, refinalize }))
 }
 
 /// The highest delta a served snapshot of the document folds in, 0 with none.

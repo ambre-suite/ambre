@@ -240,7 +240,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (9, "95e89274573e0163da080cc80c4f4644");
+const FROZEN_LAYOUT: (u8, &str) = (10, "3770e4435fde3baa46f828fbf610d334");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -354,6 +354,13 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
             document_id: doc,
             signature: Signature([16; 64]),
             code: ambre_core::RefusalCode::PayloadTooLarge,
+        },
+        S::SnapshotDropped {
+            document_id: doc,
+            snapshot_id: SnapshotId::from_bytes([17; 16]),
+            author: PublicKey::from_array([18; 32]),
+            reporter: PublicKey::from_array([19; 32]),
+            refinalize: true,
         },
     ]
 }

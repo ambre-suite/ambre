@@ -208,6 +208,19 @@ pub enum WsServerMsg {
         signature: Signature,
         code: RefusalCode,
     },
+
+    /// A pending snapshot a member reported, which the relay dropped
+    /// (`ambre-spec-sequencer.md`, `SRV-133`). Broadcast on the document
+    /// topic. It names the keys of its author and of its reporter, which the
+    /// client resolves as it does for a cursor. `refinalize` says it was the
+    /// final snapshot of a segment, which a member then finalizes again.
+    SnapshotDropped {
+        document_id: DocumentId,
+        snapshot_id: SnapshotId,
+        author: PublicKey,
+        reporter: PublicKey,
+        refinalize: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------

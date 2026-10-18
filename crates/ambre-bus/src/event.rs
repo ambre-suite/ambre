@@ -89,6 +89,17 @@ pub enum LogicEvent {
         purpose: SnapshotPurpose,
     },
 
+    /// A snapshot the relay dropped on a member's report. It names its author
+    /// and its reporter, each `None` for a key no member holds.
+    /// `refinalize` says it was the final snapshot of a segment, which
+    /// a member then finalizes again (the Murmure segments spec).
+    SnapshotDropped {
+        document_id: DocumentId,
+        author: Option<UserId>,
+        reporter: Option<UserId>,
+        refinalize: bool,
+    },
+
     /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id` is the
     /// sender's canonical `UserId`, resolved from the authenticated `pub_key` against the
     /// document's member list before delivery. Presence is therefore keyed by a spoof-proof

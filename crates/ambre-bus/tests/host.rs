@@ -298,6 +298,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
         LogicEvent::RemoteSnapshot { .. } => "RemoteSnapshot",
         LogicEvent::PendingSnapshot { .. } => "PendingSnapshot",
+        LogicEvent::SnapshotDropped { .. } => "SnapshotDropped",
         LogicEvent::RemoteEphemeral { .. } => "RemoteEphemeral",
         LogicEvent::PeerLeft { .. } => "PeerLeft",
         LogicEvent::MembersChanged { .. } => "MembersChanged",
@@ -340,7 +341,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 30;
-const EVENT_VARIANTS: usize = 43;
+const EVENT_VARIANTS: usize = 44;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -517,6 +518,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             covered_seq: 31,
             payload: vec![4],
             purpose: SnapshotPurpose::Open,
+        },
+        LogicEvent::SnapshotDropped {
+            document_id: doc,
+            author: Some(user),
+            reporter: None,
+            refinalize: true,
         },
         LogicEvent::RemoteEphemeral {
             document_id: doc,

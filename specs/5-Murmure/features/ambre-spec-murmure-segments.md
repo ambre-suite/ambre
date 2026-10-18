@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: CHANNEL SEGMENTS AND FINALIZATION
 **Type:** Vertical (feature)
-**Implementation:** partial -- a segment closes, finalizes and is confirmed; no refinalization yet.
+**Implementation:** partial -- a segment closes, finalizes, is confirmed and finalizes again.
 
 > A channel grows for years and still opens fast. Its history is cut into segments. A full segment
 > closes, stays open to edits for a day, then becomes one immutable snapshot another member checks.
@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-062` | `INV` | A message sent live, and younger than the grace period, MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_murmure::finalizing_tests::a_closing_segment_asks_for_its_lease_as_the_relay_says` -- the client asks no earlier than the relay's deferral, which holds the grace period (`SRV-199`); `ambre_logic::channels::tests::a_closing_segment_finalizes_once_its_horizon_is_in` -- the ticks within the deferral ask nothing | none | verified |
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | `ambre_murmure::finalizing_tests::the_lease_holder_seals_a_shallow_snapshot_at_the_horizon` -- a body deleted before the seal is in the full export, never in the snapshot | none | verified |
 | `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | `ambre_server::compaction::tests::a_segment_is_asked_before_its_250th_delta` -- a segment past its snapshot is asked for a compaction before its 250th delta | none | verified |
-| `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A dropped final snapshot is finalized again` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | `ambre_logic::channels::tests::a_dropped_final_snapshot_is_shown_and_sealed_again` -- the view is told the segment, the author and the reporter; `ambre_sync::updates::tests::a_dropped_snapshot_names_its_author_and_reporter` -- both keys of the relay's push resolve to users | none | verified |
 | `MURMURE-435` | `INV` | Every Murmure document MUST take the delta order and the quarantine of the document plane. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_sync::updates::tests::a_murmure_document_takes_the_quarantine_and_the_delta_order` -- the deltas of a Murmure document wait for their parent snapshot, then leave in clock order | none | verified |
 
 ### 1.2 Close the active segment
@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-071` | `POST` | A confirming client MUST rebuild the state from the deltas and compare it with the snapshot before it confirms. | this spec section 3; `SRV-118` | `ambre_murmure::finalizing_tests::a_member_holding_the_deltas_confirms_the_final_snapshot` -- a member holding every delta matches the snapshot, and one short of the horizon leaves it unchecked; `ambre_logic::channels::tests::a_segment_snapshot_is_checked_against_the_held_state` -- the Logic thread answers the verdict, and a gap below the horizon leaves it unchecked | none | verified |
 | `MURMURE-072` | `FAIL` | Given a snapshot that differs from the deltas, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | `ambre_murmure::finalizing_tests::a_final_snapshot_at_odds_with_the_deltas_is_refused` -- a planted message, a dropped delta and unreadable bytes are each a mismatch; `ambre_sync::updates::tests::a_checked_snapshot_is_confirmed_or_reported_to_the_relay` -- a mismatch is reported, never confirmed | none | verified |
-| `MURMURE-238` | `POST` | A dropped final snapshot MUST let another member client finalize the segment again. | this spec section 3; `SRV-133`, `SRV-134` | not built | unbuilt -- lands with the `A dropped final snapshot is finalized again` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-238` | `POST` | A dropped final snapshot MUST let another member client finalize the segment again. | this spec section 3; `SRV-133`, `SRV-200` | `ambre_murmure::finalizing_tests::a_dropped_final_snapshot_is_sealed_again_by_another_member` -- a member holding the final segment takes the lease, seals it at the horizon and writes no `meta`, and stops once refused; `ambre_logic::channels::tests::a_dropped_final_snapshot_is_shown_and_sealed_again` -- the drop asks the lease and the commit again; `ambre_sync::updates::tests::a_dropped_snapshot_names_its_author_and_reporter` -- the author leaves it to another member | none | verified |
 | `MURMURE-153` | `FRAME` | Confirming a finalization MUST NOT change the snapshot or the deltas. | this spec section 3 | `ambre_murmure::finalizing_tests::a_member_holding_the_deltas_confirms_the_final_snapshot` -- the check leaves the copy's version, its messages and the snapshot bytes as they were | none | verified |
 
 ### 1.5 Edit a message of a locked segment
@@ -78,12 +78,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 18 `verified`, 7 `unimplemented`. The engine tests hold the close on one peer
+* **Verification.** 20 `verified`, 5 `unimplemented`. The engine tests hold the close on one peer
   and on two, the byte bound, and the fetch again of a successor. They hold the lease, the shallow
-  snapshot, the final mark, the message the lock refused and the check of a final snapshot. The
-  Logic tests hold the close, each fetch of a remote successor, the finalization driven by the tick
-  and the verdict. The Sync tests hold the lease, the upload, the commit, the report and the
-  quarantine.
+  snapshot, the final mark, the lock's refusal, the check of a final snapshot and the seal again.
+  The Logic tests hold the close, each remote successor, the tick, the verdict and the drop. The
+  Sync tests hold the lease, the upload, the commit, the report, the drop and the quarantine.
 
 ---
 
@@ -126,9 +125,16 @@ until another member confirms it, as any snapshot does (`SRV-126`, `AUTHOR-016`)
 4. Another member client confirms, and the deltas go (`SRV-118`). A segment nobody opens again
    keeps its deltas: about 1.8 MB beside a 0.6 MB snapshot, for 5000 messages.
 
-**A mismatch** drops the snapshot, and the deltas stay (`SRV-133`). Another member finalizes
-again (`MURMURE-238`). Every member sees who sealed the snapshot and who refused it
+**A mismatch** drops the snapshot, and the deltas stay (`SRV-133`). A final snapshot takes its
+finalization with it, and the segment stays locked at its horizon (`SRV-200`). Another member
+finalizes again (`MURMURE-238`). Every member sees who sealed the snapshot and who refused it
 (`MURMURE-239`). A member who refuses honest snapshots is named just as plainly.
+
+**A finalization again.** Every member holding the segment as a final one asks for its lease. The
+author of the dropped snapshot does not: it would seal the same state. The relay grants one lease
+at a time, with no grace period, since the horizon is fixed already. The holder seals and commits
+as before, and writes nothing to `meta`, which names the segment `final` already. Every other
+member's lease request is then refused, and that member stops.
 
 **Delta order.** A segment, a thread, `meta` and the amendments document are documents of the
 plane. Each takes the order and the quarantine of `ambre-spec-delta-order.md` (`MURMURE-435`). A
@@ -182,7 +188,7 @@ member who seals a false one cannot purge the deltas (`SRV-118`).
 
 **Code.** `ChannelState::wants_close`, `close_into`, `successor_to_open` and `successor_to_retry`,
 in `crates/ambre-murmure/src/channel/closing.rs`. `ChannelState::lease_to_ask`, `final_snapshot`,
-`mark_final` and `settle_final` are in `crates/ambre-murmure/src/channel/finalizing.rs`.
+`mark_final`, `settle_final` and `refinalize` are in `crates/ambre-murmure/src/channel/finalizing.rs`.
 `ChannelState::relocate_locked` is in `crates/ambre-murmure/src/channel/relocating.rs`, and
 `ChannelState::check_snapshot` in `crates/ambre-murmure/src/channel/confirming.rs`. The Logic side
 is `crates/ambre-logic/src/segments.rs`, and the verdict `check_channel_snapshot` in
@@ -222,9 +228,8 @@ The segments have no control of their own. A user meets them only as a channel t
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A dropped final snapshot is not finalized again.** The segment stays `final` with its deltas,
-  and nobody is shown who sealed or refused it. The `A dropped final snapshot is finalized again`
-  Story (`ambre-roadmap.md` E5) carries both.
+* **A dropped final snapshot is sealed again only by a member holding the segment open.** A member
+  who loads it later reads its deltas, and waits for the next seal.
 * **No amendment or re-finalization exists.** A channel refuses a second close while the first is
   still `closing`.
 * **A final snapshot carries no search index.** The index lands with the `Search on a new device`

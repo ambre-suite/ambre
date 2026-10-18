@@ -376,7 +376,7 @@ pub async fn take_finalize_lease(
     let document = id_to_uuid(segment.document_id());
     let mut tx = pool.begin().await?;
     let row: Option<LeaseRow> = sqlx::query_as(
-        "SELECT d.state, d.horizon, \
+        "SELECT d.state, d.horizon, d.final_snapshot, \
            CEIL(EXTRACT(EPOCH FROM GREATEST(COALESCE(d.closed_at, now()), \
              COALESCE((SELECT max(u.created_at) FROM updates u \
                        WHERE u.document_id = d.document_id), '-infinity')) \
@@ -393,13 +393,14 @@ pub async fn take_finalize_lease(
     let Some(LeaseRow {
         state: Some(state),
         horizon,
+        final_snapshot,
         grace_left_ms,
         lease_left_ms,
     }) = row
     else {
         return Err(not_closing());
     };
-    if state != "closing" {
+    if !finalizable(&state, final_snapshot) {
         return Err(not_closing());
     }
     let wait = |ms: i64| FinalizeLease::Wait {
@@ -452,6 +453,7 @@ pub async fn take_finalize_lease(
 struct LeaseRow {
     state: Option<String>,
     horizon: Option<i64>,
+    final_snapshot: Option<uuid::Uuid>,
     grace_left_ms: i64,
     lease_left_ms: Option<i64>,
 }
@@ -465,6 +467,12 @@ struct CommitRow {
     live: bool,
     horizon: Option<i64>,
     final_snapshot: Option<uuid::Uuid>,
+}
+
+/// Whether a segment takes a lease and a commit: it is closing, or a report
+/// dropped its final snapshot (the Murmure segments spec).
+fn finalizable(state: &str, final_snapshot: Option<uuid::Uuid>) -> bool {
+    state == "closing" || (state == "final" && final_snapshot.is_none())
 }
 
 /// The refusal of a lease or a commit on a segment that is not closing.
@@ -516,7 +524,7 @@ pub async fn commit_finalization(
     if state == "final" && final_snapshot == Some(snapshot_id) {
         return Ok(());
     }
-    if state != "closing" {
+    if !finalizable(&state, final_snapshot) {
         return Err(not_closing());
     }
     if held != Some(lease_id) || !live {

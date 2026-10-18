@@ -2296,6 +2296,53 @@ mod tests {
         );
     }
 
+    /// A dropped snapshot names its author and its reporter as users. Each
+    /// member but the author finalizes the segment again when the relay asks.
+    #[test]
+    fn a_dropped_snapshot_names_its_author_and_reporter() {
+        let (mut state, rx, doc, _key, signing_key, snapshot) = setup();
+        let author = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let reporter = PublicKey::from_array([7u8; 32]);
+        let (alice, bob) = (UserId::new(), UserId::new());
+        let keys = &mut state
+            .documents
+            .get_mut(&doc)
+            .expect("document")
+            .signing_keys;
+        keys.insert(*author.as_array(), alice);
+        keys.insert(*reporter.as_array(), bob);
+        let dropped = |state: &mut SyncState| {
+            state.handle_ws_message(WsServerMsg::SnapshotDropped {
+                document_id: doc,
+                snapshot_id: snapshot,
+                author: author.clone(),
+                reporter: reporter.clone(),
+                refinalize: true,
+            });
+        };
+        dropped(&mut state);
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::SnapshotDropped { document_id, author: Some(a), reporter: Some(r), refinalize: true }
+                    if *document_id == doc && *a == alice && *r == bob
+            )),
+            "both keys resolve, and this member finalizes again"
+        );
+        state.signing_key = Some(signing_key);
+        dropped(&mut state);
+        assert!(
+            drain(&rx).iter().any(|e| matches!(
+                e,
+                LogicEvent::SnapshotDropped {
+                    refinalize: false,
+                    ..
+                }
+            )),
+            "the author leaves the segment to another member"
+        );
+    }
+
     /// The rows a `MembersChanged` event hands Logic, if one was sent.
     fn rows_handed(events: &[LogicEvent]) -> Option<Vec<UserId>> {
         events.iter().find_map(|e| match e {

@@ -199,7 +199,7 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
     let snapshot = alice.final_snapshot(NOW, 2).expect("export").expect("in");
 
-    let meta = alice.mark_final(closing).expect("mark");
+    let meta = alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
     assert_eq!(alice.final_segments(), vec![closing]);
     assert_eq!(alice.messages(closing).expect("held"), before);
@@ -227,6 +227,52 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
         panic!("messages");
     };
     assert_eq!(messages, before, "finalizing changes no message");
+}
+
+// --- MURMURE-238 ---
+
+/// The relay dropped the final snapshot Alice sealed, and Bob holds the
+/// segment as a final one. He asks for its lease and seals it again at the
+/// horizon. He sends no `meta` delta: the segment is final there already.
+#[test]
+fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
+    let (mut alice, closing) = closed_with(&["one", "two"]);
+    let mut bob = peer_of(&alice);
+    assert_eq!(alice.lease_to_ask(NOW), Some(closing));
+    alice.lease_granted(closing, LeaseId::new(), 2, LEASE_MS);
+    alice.final_snapshot(NOW, 2).expect("export").expect("in");
+    let meta = alice.mark_final(closing).expect("mark").expect("a delta");
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.settle_final(), Some(closing));
+
+    assert!(
+        !bob.refinalize(SegmentId::new()),
+        "a segment he does not hold"
+    );
+    assert!(bob.refinalize(closing));
+    assert_eq!(bob.finalizing_id(), Some(closing));
+    assert_eq!(bob.lease_to_ask(NOW), Some(closing));
+    let lease = LeaseId::new();
+    bob.lease_granted(closing, lease, 2, LEASE_MS);
+    let snapshot = bob.final_snapshot(NOW, 2).expect("export").expect("in");
+    assert_eq!((snapshot.segment, snapshot.lease), (closing, lease));
+    assert!(holds(&snapshot.payload, "two"));
+    assert_eq!(
+        bob.mark_final(closing).expect("mark"),
+        None,
+        "meta holds it"
+    );
+    assert_eq!(bob.finalizing_id(), None);
+    assert_eq!(bob.final_segments(), vec![closing]);
+
+    // Another member sealed it first: the relay refuses his lease, and he
+    // stops.
+    assert!(bob.refinalize(closing));
+    assert_eq!(bob.lease_to_ask(at(1)), Some(closing));
+    bob.finalize_withdrawn(closing);
+    assert_eq!(bob.finalizing_id(), None);
+    assert_eq!(bob.lease_to_ask(at(3_600_000)), None);
 }
 
 /// Alice's channel of two-message segments, and Bob's copy of it holding

@@ -74,6 +74,7 @@ sequence has already moved.
 | `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | `ambre_server::compaction::db_tests::the_keep_pass_holds_the_reference_and_the_latest_self` -- a keep of one still holds the reference and the latest snapshot its author confirmed alone, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 | `SRV-133` | `POST` | A mismatch report MUST drop the pending snapshot it names. | this spec section 3; `AUTHOR-023` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the row and its object go, and a confirmed snapshot outlives a report | none | verified |
 | `SRV-134` | `POST` | After a drop, the relay MUST ask a member client other than the author of the dropped snapshot for the next one. | this spec section 3; `SRV-038` | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the reporter's own topic hears the request | none | verified |
+| `SRV-200` | `POST` | A report that drops the final snapshot of a segment MUST clear its finalization in the same transaction, and keep its lock and its horizon. | this spec section 3; `SRV-114`; `5-Murmure/features/ambre-spec-murmure-segments.md` | `ambre_server::routes::channels::tests::a_dropped_final_snapshot_is_finalized_again` -- database tier, another snapshot's drop changes nothing, the final one's grants a lease at the same horizon at once, and the new commit holds | none | verified |
 | `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | `ambre_server::routes::tests::a_signed_report_drops_a_pending_snapshot_alone` -- the three deltas the snapshot covered all stay | none | verified |
 
 ### 1.5 A client asks for what it missed
@@ -131,8 +132,9 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 53 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
-  lives, the replay, the close of a segment, the relay's half of its finalization and the purge. The recovery
+* **Verification.** 54 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
+  lives, the replay, the close of a segment, its finalization, the purge and the finalization again.
+  The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
 ---
@@ -240,6 +242,10 @@ another member (`SRV-134`). The trim
 removes every delta at or below the lowest horizon of the snapshots the document still keeps
 (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent, and never the reference nor the latest snapshot its author confirmed alone (`SRV-131`).
+
+**A dropped snapshot** is announced on the document's topic, with its author and its reporter. A final
+snapshot takes its finalization with it, and the segment keeps its lock and its horizon
+(`SRV-200`).
 
 **What triggers it.** Every thirty-second delta, the relay compares the document's number with the
 horizon of its latest served snapshot. Past the threshold of `ambre-spec-budgets.md section 6`, it

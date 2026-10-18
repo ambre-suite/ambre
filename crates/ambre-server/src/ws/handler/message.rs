@@ -1076,7 +1076,7 @@ mod postcard_tests {
             document_id: DocumentId::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes[0], 0x09);
+        assert_eq!(bytes[0], 0x0A);
     }
 
     #[test]

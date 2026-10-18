@@ -65,10 +65,27 @@ pub struct FinalSnapshot {
 }
 
 impl ChannelState {
-    /// The step of the closing segment `segment`, started at its first read.
-    /// `None` for a segment that is not the closing one.
+    /// The segment this client finalizes now: a final one whose snapshot a
+    /// report dropped, or else the closing one.
+    pub fn finalizing_id(&self) -> Option<SegmentId> {
+        self.refinalizing.or_else(|| self.closing_id())
+    }
+
+    /// A report dropped the final snapshot of `segment`: finalize it again,
+    /// at the horizon the relay already holds (`MURMURE-238`). `false` for a
+    /// segment this copy does not hold as a final one: another member does it.
+    pub fn refinalize(&mut self, segment: SegmentId) -> bool {
+        let held = self.loaded.contains_key(&segment) && self.final_segments().contains(&segment);
+        if held && self.refinalizing.is_none() {
+            self.refinalizing = Some(segment);
+        }
+        self.refinalizing == Some(segment)
+    }
+
+    /// The step of the segment `segment`, started at its first read. `None`
+    /// for a segment this client does not finalize now.
     fn finalize_step(&mut self, segment: SegmentId) -> Option<&mut Finalizing> {
-        if self.closing_id() != Some(segment) {
+        if self.finalizing_id() != Some(segment) {
             return None;
         }
         if self.finalizing.as_ref().map(|f| f.segment) != Some(segment) {
@@ -85,7 +102,7 @@ impl ChannelState {
     /// (`MURMURE-067`). The first tick past the close asks at once: the
     /// relay answers how long the grace period still runs (`SRV-199`).
     pub fn lease_to_ask(&mut self, now: Timestamp) -> Option<SegmentId> {
-        let segment = self.closing_id()?;
+        let segment = self.finalizing_id()?;
         let finalizing = self.finalize_step(segment)?;
         match &mut finalizing.step {
             Step::Due { after, at } => {
@@ -152,16 +169,22 @@ impl ChannelState {
     }
 
     /// This copy of `segment` holds an edit the relay refused: it never
-    /// finalizes the segment, and leaves it to another member.
+    /// finalizes the segment, and leaves it to another member. A segment
+    /// finalized again is withdrawn once another member finalized it first.
     pub fn finalize_withdrawn(&mut self, segment: SegmentId) {
+        if self.refinalizing == Some(segment) {
+            self.refinalizing = None;
+            self.finalizing = None;
+            return;
+        }
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.step = Step::Withdrawn;
         }
     }
 
-    /// The final snapshot of the closing segment, once this client holds its
-    /// lease and every delta up to the horizon. `covered` is the last delta
-    /// it holds with no gap below it.
+    /// The final snapshot of [`ChannelState::finalizing_id`], once this client
+    /// holds its lease and every delta up to the horizon. `covered` is the
+    /// last delta of that segment it holds with no gap below it.
     ///
     /// The snapshot is shallow: it holds the state, and no text deleted
     /// before it (`MURMURE-063`). Its messages read as in the segment
@@ -177,7 +200,7 @@ impl ChannelState {
         now: Timestamp,
         covered: u64,
     ) -> Result<Option<FinalSnapshot>, MurmureError> {
-        let Some(segment) = self.closing_id() else {
+        let Some(segment) = self.finalizing_id() else {
             return Ok(None);
         };
         let Some(finalizing) = self.finalize_step(segment) else {
@@ -220,13 +243,19 @@ impl ChannelState {
     ///
     /// The segment is held as a final one from here, with every message it
     /// read before (`MURMURE-070`). The closing slot is free for the next
-    /// close.
+    /// close. A segment finalized again is final in `meta` already, so
+    /// nothing is sent (`MURMURE-238`).
     ///
     /// # Errors
-    /// - [`MurmureError::NotHeld`]: `segment` is not the closing segment.
+    /// - [`MurmureError::NotHeld`]: this client does not finalize `segment`.
     /// - [`MurmureError::NoSession`]: the PeerID of `meta` has not landed.
     /// - [`MurmureError::Crdt`]: Loro refused a write.
-    pub fn mark_final(&mut self, segment: SegmentId) -> Result<Vec<u8>, MurmureError> {
+    pub fn mark_final(&mut self, segment: SegmentId) -> Result<Option<Vec<u8>>, MurmureError> {
+        if self.refinalizing == Some(segment) {
+            self.refinalizing = None;
+            self.finalizing = None;
+            return Ok(None);
+        }
         if self.closing_id() != Some(segment) {
             return Err(MurmureError::NotHeld(segment.document_id()));
         }
@@ -234,7 +263,7 @@ impl ChannelState {
         record_final(doc, segment)?;
         let meta = session.export(doc)?;
         self.hold_final();
-        Ok(meta)
+        Ok(Some(meta))
     }
 
     /// The closing segment another member finalized, once `meta` names it
@@ -253,9 +282,13 @@ impl ChannelState {
         Some(segment)
     }
 
-    /// Move the closing segment among the final ones.
+    /// Move the closing segment among the final ones. A segment finalized
+    /// again keeps its step.
     fn hold_final(&mut self) {
-        self.finalizing = None;
+        let closing = self.closing_id();
+        if self.finalizing.as_ref().map(|f| f.segment) == closing {
+            self.finalizing = None;
+        }
         if let Some(held) = self.closing.take() {
             self.loaded
                 .insert(SegmentId::from_document(held.id), held.doc);

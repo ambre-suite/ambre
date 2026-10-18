@@ -183,6 +183,9 @@ pub struct ChannelState {
     successor_retry: Option<closing::Retry>,
     /// The finalization of the closing segment, as this client drives it.
     finalizing: Option<finalizing::Finalizing>,
+    /// A final segment whose final snapshot a report dropped, finalized again
+    /// before the closing one.
+    refinalizing: Option<SegmentId>,
 }
 
 impl ChannelState {
@@ -332,6 +335,7 @@ impl ChannelState {
             successor_session: None,
             successor_retry: None,
             finalizing: None,
+            refinalizing: None,
         }
     }
 

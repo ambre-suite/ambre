@@ -3136,6 +3136,74 @@ mod tests {
         forget_store(&state, &channel).await;
     }
 
+    /// A report dropped the final snapshot of a segment: its finalization
+    /// goes with it. Another writer takes the lease at the same horizon at
+    /// once, and commits a new snapshot (the Murmure segments spec).
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_dropped_final_snapshot_is_finalized_again(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 2).await;
+        let segment = channel.segment.document_id();
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let held = lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let sealed = snapshot(&state, segment, 2).await;
+        assert_eq!(
+            finalize(&state, alice, &channel, held.lease_id, sealed).await,
+            StatusCode::NO_CONTENT
+        );
+
+        let other = snapshot(&state, segment, 2).await;
+        let ignored = db::drop_pending_snapshot(&state.db, &segment, &other)
+            .await
+            .expect("drop")
+            .expect("pending");
+        assert!(
+            !ignored.refinalize,
+            "another snapshot leaves the segment final"
+        );
+        assert_eq!(
+            lease(&state, bob, &channel).await.err(),
+            Some(StatusCode::CONFLICT)
+        );
+
+        let dropped = db::drop_pending_snapshot(&state.db, &segment, &sealed)
+            .await
+            .expect("drop")
+            .expect("pending");
+        assert!(dropped.refinalize);
+        let (word, finalized): (String, bool) = sqlx::query_as(
+            "SELECT state, finalized_at IS NOT NULL FROM channel_documents WHERE document_id = $1",
+        )
+        .bind(uuid_of_doc(segment))
+        .fetch_one(&state.db)
+        .await
+        .expect("row");
+        assert_eq!((word.as_str(), finalized), ("final", false), "still locked");
+
+        let again = lease(&state, bob, &channel).await.expect("lease");
+        let again = again.lease.expect("no grace period this time");
+        assert_eq!(again.horizon, 2);
+        let resealed = snapshot(&state, segment, 2).await;
+        assert_eq!(
+            finalize(&state, bob, &channel, again.lease_id, resealed).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            lease(&state, alice, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "finalized again, it takes no lease"
+        );
+        forget_store(&state, &channel).await;
+    }
+
     /// `SRV-118`: the deltas of a final segment stay while only its author
     /// vouched for the final snapshot. Another member's confirmation purges
     /// them all.
