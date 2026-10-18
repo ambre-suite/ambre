@@ -272,7 +272,7 @@ impl ChannelState {
         let identity = self.successor_session.take();
         let document_id = segment.document_id();
         let doc = schema::admit_with(DocumentKind::Segment, self.channel_id, document_id, |doc| {
-            delta::import_arrivals(doc, arrivals, document_id)
+            delta::import_arrivals(doc, arrivals, document_id, delta::Rules::Segment)
         })?;
         if let Some(sequence) = self.sequences.get_mut(&document_id) {
             sequence.resolve(&doc);

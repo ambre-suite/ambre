@@ -239,6 +239,23 @@ pub enum LogicEvent {
         closing: SegmentId,
         message: String,
     },
+    /// The relay registered `amendments` for the locked `segment`, answering
+    /// [`SyncCommand::CreateAmendments`](crate::SyncCommand::CreateAmendments).
+    /// A registration that lost its race names the winner's, and the Sync
+    /// worker deleted its own (`SRV-202`).
+    AmendmentsLinked {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        amendments: DocumentId,
+    },
+    /// The relay refused the creation or the registration of `amendments`
+    /// for `segment`, or never answered it.
+    AmendmentsLinkFailed {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        amendments: DocumentId,
+        message: String,
+    },
     /// The relay's answer to
     /// [`SyncCommand::TakeFinalizeLease`](crate::SyncCommand::TakeFinalizeLease).
     FinalizeLeaseAnswered {

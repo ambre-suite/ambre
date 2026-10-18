@@ -27,6 +27,8 @@ mod space;
 mod watchers;
 
 #[cfg(test)]
+mod amending_tests;
+#[cfg(test)]
 mod authorship_tests;
 #[cfg(test)]
 mod channel_tests;
@@ -50,8 +52,8 @@ mod space_tests;
 mod unread_tests;
 
 pub use channel::{
-    ChannelState, Closed, FINALIZE_RETRY_MS, FinalSnapshot, Named, SEGMENT_BYTES, SEGMENT_MESSAGES,
-    SUCCESSOR_RETRY_MS, Sent,
+    ChangeTarget, ChannelState, Closed, FINALIZE_RETRY_MS, FinalSnapshot, Linked, Named, Relocated,
+    Replay, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Sent,
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;

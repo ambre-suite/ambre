@@ -1,7 +1,7 @@
 //! Why the engine refused a document, a delta or a command.
 
 use ambre_core::schema::SchemaError;
-use ambre_core::{ChannelId, DocumentId, MessageId, SpaceId};
+use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, SpaceId};
 use thiserror::Error;
 
 use crate::delta::Refusal;
@@ -86,6 +86,16 @@ pub enum MurmureError {
     /// A final segment changes through its amendments alone, never in place.
     #[error("segment {0} is final")]
     Final(DocumentId),
+
+    /// A change of a locked segment before the channel holds its amendments
+    /// document, which the change waits for.
+    #[error("segment {0} has no amendments document held")]
+    NoAmendments(SegmentId),
+
+    /// The header of an amendments document names another segment than the
+    /// one it was opened for (`MURMURE-013`).
+    #[error("amendments document {0} names another segment")]
+    ForeignSegment(DocumentId),
 
     /// The segment holds no message of that identifier.
     #[error("no message {0} in the segment")]

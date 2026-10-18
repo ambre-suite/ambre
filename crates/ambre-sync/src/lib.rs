@@ -368,6 +368,14 @@ enum SyncEvent {
         closing: ambre_bus::SegmentId,
         result: Result<(ambre_bus::SegmentId, bool), String>,
     },
+    /// The answer to an amendments creation (`SyncCommand::CreateAmendments`):
+    /// the document the relay holds for the segment.
+    AmendmentsLinked {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        amendments: DocumentId,
+        result: Result<DocumentId, String>,
+    },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
     FinalizeLeaseAnswered {
@@ -1371,6 +1379,12 @@ impl SyncState {
                 closing,
                 successor,
             } => self.handle_close_segment(channel_id, meta, closing, successor),
+            SyncCommand::CreateAmendments {
+                channel_id,
+                meta,
+                segment,
+                amendments,
+            } => self.handle_create_amendments(channel_id, meta, segment, amendments),
             SyncCommand::TakeFinalizeLease {
                 channel_id,
                 segment,

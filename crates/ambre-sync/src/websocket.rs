@@ -835,6 +835,26 @@ impl SyncState {
                     },
                 });
             }
+            SyncEvent::AmendmentsLinked {
+                channel_id,
+                segment,
+                amendments,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok(held) => LogicEvent::AmendmentsLinked {
+                        channel_id,
+                        segment,
+                        amendments: held,
+                    },
+                    Err(message) => LogicEvent::AmendmentsLinkFailed {
+                        channel_id,
+                        segment,
+                        amendments,
+                        message,
+                    },
+                });
+            }
             SyncEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,

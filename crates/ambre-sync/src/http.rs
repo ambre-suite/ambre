@@ -877,6 +877,23 @@ pub(crate) struct ClosedSegmentResponse {
     pub created: bool,
 }
 
+/// `POST /api/channels/{id}/segments/{segment}/amendments`: the caller's new
+/// document, to register as the amendments of the locked segment.
+#[derive(Serialize)]
+pub(crate) struct RegisterAmendmentsRequest {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+}
+
+/// The amendments document of a segment after a registration. `created` is
+/// false when an earlier registration linked another.
+#[derive(Deserialize)]
+pub(crate) struct AmendmentsResponse {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+    pub created: bool,
+}
+
 /// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
 /// and when to ask again.
 #[derive(Deserialize)]

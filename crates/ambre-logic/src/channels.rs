@@ -12,8 +12,8 @@ use ambre_bus::{
 };
 use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
-    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample, Screened, Sent,
-    Signer, members_only, screen,
+    ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
+    Screened, Sent, Signer, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -349,6 +349,7 @@ impl LogicState {
         self.channel_watchers.remove(&channel_id);
         self.closing_segments.remove(&channel_id);
         self.close_successors.remove(&channel_id);
+        self.drop_replays(channel_id);
         self.channel_members.remove(&channel_id);
         let base = self
             .my_user_id
@@ -499,6 +500,7 @@ impl LogicState {
         self.channel_watchers.remove(&channel_id);
         self.closing_segments.remove(&channel_id);
         self.close_successors.remove(&channel_id);
+        self.drop_replays(channel_id);
         self.channel_members.remove(&channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
@@ -618,6 +620,10 @@ impl LogicState {
                     Ok(event) => {
                         self.send_to_ui(UiEvent::Channel { channel_id, event });
                         self.emit_count(channel_id);
+                        // An amendments document takes the changes that
+                        // waited on it, and a loaded segment may have some.
+                        self.release_waiting(document_id);
+                        self.open_amendments(channel_id);
                     }
                     Err(error) => {
                         tracing::warn!("Logic: older segment {document_id} refused: {error}");
@@ -669,6 +675,7 @@ impl LogicState {
                 for document_id in documents {
                     self.settle_murmure_session(document_id);
                 }
+                self.open_amendments(channel_id);
                 self.emit_count(channel_id);
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
@@ -830,10 +837,44 @@ impl LogicState {
         let target = match &command {
             MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
-            MurmureCommand::React { segment, .. }
-            | MurmureCommand::Unreact { segment, .. }
-            | MurmureCommand::EditMessage { segment, .. }
-            | MurmureCommand::DeleteMessage { segment, .. } => Some(segment.document_id()),
+            MurmureCommand::React { segment, .. } | MurmureCommand::Unreact { segment, .. } => {
+                Some(segment.document_id())
+            }
+            // A locked segment takes the change in its amendments document,
+            // which may first have to arrive or to be created
+            // (the Murmure messages spec).
+            MurmureCommand::EditMessage { segment, now, .. }
+            | MurmureCommand::DeleteMessage { segment, now, .. } => {
+                let (segment, now) = (*segment, *now);
+                let meta = channel.meta_id();
+                let (id, ask) = match channel.change_target(segment, now) {
+                    Ok(ChangeTarget::Write(id)) => (id, None),
+                    Ok(ChangeTarget::Open(id)) => (
+                        id,
+                        Some(SyncCommand::OpenDocument {
+                            document_id: id,
+                            doc_type: DocType::Murmure,
+                        }),
+                    ),
+                    Ok(ChangeTarget::Create(id)) => (
+                        id,
+                        Some(SyncCommand::CreateAmendments {
+                            channel_id,
+                            meta,
+                            segment,
+                            amendments: id,
+                        }),
+                    ),
+                    Err(error) => {
+                        tracing::warn!("Logic: change on {segment} refused: {error}");
+                        return;
+                    }
+                };
+                if let Some(ask) = ask {
+                    self.send_to_sync(ask);
+                }
+                Some(id)
+            }
             MurmureCommand::LoadOlder { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. }
@@ -841,7 +882,10 @@ impl LogicState {
             | MurmureCommand::Typing { .. } => None,
         };
         if let Some(document_id) = target {
-            let identified = channel.identified(document_id);
+            let identified = self
+                .channels
+                .get(&channel_id)
+                .is_some_and(|channel| channel.identified(document_id));
             if !self.murmure_writable(document_id, identified) {
                 return self
                     .wait_for_session(document_id, HeldCommand::Channel(channel_id, command));
@@ -1000,6 +1044,7 @@ impl LogicState {
                 segment,
                 message,
                 draft,
+                now: _,
             } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: edit on {channel_id} before the session; dropped");
@@ -1015,7 +1060,11 @@ impl LogicState {
                 let edited = channel.edit(segment, message, &draft, user);
                 self.send_change(channel_id, edited);
             }
-            MurmureCommand::DeleteMessage { segment, message } => {
+            MurmureCommand::DeleteMessage {
+                segment,
+                message,
+                now: _,
+            } => {
                 let Some(user) = self.my_user_id else {
                     tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
                     return;
@@ -1042,6 +1091,7 @@ impl LogicState {
                 if changed {
                     self.show_watchers(channel_id);
                 }
+                self.replay_owed(channel_id, now);
             }
             MurmureCommand::Typing { now } => {
                 let meta = channel.meta_id().document_id();
@@ -1186,7 +1236,7 @@ impl LogicState {
         match reacted {
             Ok(Some(sent)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
-                    document_id: sent.segment.document_id(),
+                    document_id: sent.document,
                     payload: sent.delta,
                     summary: Some(sent.summary),
                 });
@@ -2820,8 +2870,13 @@ mod tests {
                     mention(MentionTarget::User(UserId::new()), 11..15),
                 ],
             },
+            now: Timestamp(1),
         };
-        let delete = MurmureCommand::DeleteMessage { segment, message };
+        let delete = MurmureCommand::DeleteMessage {
+            segment,
+            message,
+            now: Timestamp(2),
+        };
 
         for command in [edit, delete.clone()] {
             state.handle_logic_command(LogicCommand::Channel {
@@ -3505,6 +3560,218 @@ mod tests {
         );
         let channel = &state.channels[&channel_id];
         assert!(channel.messages(old).expect("old").is_empty());
+    }
+
+    /// A closed channel whose closing segment the relay locked, with the id
+    /// of its one message.
+    fn locked_channel(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId, MessageId) {
+        let (channel_id, closing) = closed_channel(state, sync);
+        let active = state.channels[&channel_id].active_id();
+        state.grant_identity(active.document_id());
+        state.handle_logic_event(LogicEvent::DeltasLocked {
+            document_id: closing.document_id(),
+            deltas: Vec::new(),
+        });
+        drain(sync);
+        let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
+        (channel_id, closing, message)
+    }
+
+    fn edit_to(
+        segment: SegmentId,
+        message: MessageId,
+        text: &str,
+        now: Timestamp,
+    ) -> MurmureCommand {
+        MurmureCommand::EditMessage {
+            segment,
+            message,
+            draft: MessageDraft {
+                text: text.to_owned(),
+                mentions: Vec::new(),
+            },
+            now,
+        }
+    }
+
+    /// The amendments document Logic asked the Sync worker to create.
+    fn created_amendments(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, DocumentId)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::CreateAmendments {
+                    segment,
+                    amendments,
+                    ..
+                } => Some((segment, amendments)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An edit of a locked segment waits for the amendments document it
+    /// creates. The link leaves as a `meta` delta and the document opens.
+    /// The edit leaves once the document went up whole (the Murmure messages
+    /// spec).
+    #[test]
+    fn an_edit_of_a_locked_segment_waits_for_the_amendments_it_creates() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closing, message) = locked_channel(&mut state, &sync);
+        drain(&ui);
+        command(
+            &mut state,
+            channel_id,
+            edit_to(closing, message, "two", at(1)),
+        );
+        let [(segment, amendments)] = created_amendments(&sync).try_into().expect("one create");
+        assert_eq!(segment, closing);
+
+        state.handle_logic_event(LogicEvent::AmendmentsLinked {
+            channel_id,
+            segment: closing,
+            amendments,
+        });
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::SendUpdate { document_id, .. } if *document_id == meta)));
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::OpenDocument { document_id, .. } if *document_id == amendments)));
+        assert!(
+            !sent.iter().any(|c| matches!(c,
+                SyncCommand::SendUpdate { document_id, .. } if *document_id == amendments)),
+            "the edit waits for the document"
+        );
+
+        state.grant_identity(amendments);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: amendments,
+            role: ambre_bus::Role::Owner,
+        });
+        let updates: Vec<bool> = drain(&sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendUpdate {
+                    document_id,
+                    summary,
+                    ..
+                } if document_id == amendments => Some(summary.is_some()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(updates, [false, true], "the whole document, then the edit");
+        let shown = channel_events(&ui);
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::Messages { segment, messages }
+                    if *segment == closing && messages[0].text == "two" && messages[0].edited)),
+            "the view was told {shown:?}"
+        );
+    }
+
+    /// A link that lost its race names another member's document. What
+    /// waited on this client's own waits on the winner, which opens. A
+    /// failed link drops this client's own, so the next edit creates again.
+    #[test]
+    fn a_lost_or_failed_link_moves_the_edit_to_another_document() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, closing, message) = locked_channel(&mut state, &sync);
+        command(
+            &mut state,
+            channel_id,
+            edit_to(closing, message, "two", at(1)),
+        );
+        let [(_, mine)] = created_amendments(&sync).try_into().expect("one create");
+        let winner = DocumentId::new();
+        state.handle_logic_event(LogicEvent::AmendmentsLinked {
+            channel_id,
+            segment: closing,
+            amendments: winner,
+        });
+        assert!(drain(&sync).iter().any(|c| matches!(c,
+            SyncCommand::OpenDocument { document_id, .. } if *document_id == winner)));
+        assert!(!state.murmure_waiting.contains_key(&mine));
+        assert_eq!(state.murmure_waiting.get(&winner).map(Vec::len), Some(1));
+
+        let (channel_id, closing, message) = locked_channel(&mut state, &sync);
+        command(
+            &mut state,
+            channel_id,
+            edit_to(closing, message, "two", at(1)),
+        );
+        let [(_, first)] = created_amendments(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::AmendmentsLinkFailed {
+            channel_id,
+            segment: closing,
+            amendments: first,
+            message: "HTTP 500".to_owned(),
+        });
+        assert!(
+            !state.murmure_waiting.contains_key(&first),
+            "the edit is dropped"
+        );
+        command(
+            &mut state,
+            channel_id,
+            edit_to(closing, message, "three", at(2)),
+        );
+        let [(_, second)] = created_amendments(&sync)
+            .try_into()
+            .expect("a create again");
+        assert_ne!(second, first);
+    }
+
+    /// An edit the lock refused is replayed as an amendment at the
+    /// channel's next tick. The view reads the segment as the relay holds
+    /// it until then (the Murmure messages spec).
+    #[test]
+    fn an_edit_refused_by_the_lock_is_replayed_at_the_next_tick() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, closing) = closed_channel(&mut state, &sync);
+        let active = state.channels[&channel_id].active_id();
+        state.grant_identity(active.document_id());
+        let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
+        drain(&sync);
+        command(
+            &mut state,
+            channel_id,
+            edit_to(closing, message, "two", at(1)),
+        );
+        let refused: Vec<Vec<u8>> = drain(&sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendUpdate {
+                    document_id,
+                    payload,
+                    ..
+                } if document_id == closing.document_id() => Some(payload),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(refused.len(), 1, "the edit left in the segment");
+        drain(&ui);
+
+        state.handle_logic_event(LogicEvent::DeltasLocked {
+            document_id: closing.document_id(),
+            deltas: refused,
+        });
+        let shown = channel_events(&ui);
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::Messages { segment, messages }
+                    if *segment == closing && messages[0].text == "one")),
+            "the view was told {shown:?}"
+        );
+        assert!(
+            created_amendments(&sync).is_empty(),
+            "the replay waits for a tick"
+        );
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(2) });
+        let [(segment, _)] = created_amendments(&sync).try_into().expect("the replay");
+        assert_eq!(segment, closing);
     }
 
     /// The verdict Logic answers a pending snapshot of `document_id` with.

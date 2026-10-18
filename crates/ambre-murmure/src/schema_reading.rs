@@ -38,16 +38,18 @@ use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
 use ambre_core::{CategoryId, ChannelId};
 use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
+use crate::channel::read_messages;
 use crate::schema::{
-    CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
-    DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
-    HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MENTION, MESSAGE_AUTHOR, MESSAGE_CONTENT,
+    AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENTS, CATALOGUE, CATEGORIES,
+    CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
+    ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
+    HEADER_KIND, HEADER_SEGMENT, HEADER_SPACE, MENTION, MESSAGE_AUTHOR, MESSAGE_CONTENT,
     MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
-    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SPACE,
-    SPACE_NAME, SegmentState,
+    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENT_STATE,
+    SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
-    ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, channel_of_every_key,
+    ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, amended, channel_of_every_key,
     declared_string_consts, section_of, space_of_every_key,
 };
 use crate::{ChannelState, SpaceState};
@@ -56,7 +58,8 @@ use crate::{ChannelState, SpaceState};
 const FROZEN: &str = include_str!("../schema/readings.txt");
 
 /// The stored values no reader of this build reads.
-const UNREAD: [&str; 4] = [
+const UNREAD: [&str; 5] = [
+    "amendments:header/created_at",
     "meta:header/created_at",
     "meta:segments/*/from_ts",
     "segment:header/created_at",
@@ -129,38 +132,60 @@ fn stored_values(kind: DocumentKind, doc: &LoroDoc) -> Vec<Stored> {
     found
 }
 
-/// The marks over each message body, which the deep value drops.
+/// The marks over each message body and each amended body, which the deep
+/// value drops.
 fn stored_marks(kind: DocumentKind, doc: &LoroDoc, found: &mut Vec<Stored>) {
     let list = doc.get_list(MESSAGES);
     for at in 0..list.len() {
         let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(at) else {
             continue;
         };
-        let Some(ValueOrContainer::Container(Container::Text(content))) =
-            message.get(MESSAGE_CONTENT)
+        body_marks(kind, MESSAGES, Segment::At(at), &message, found);
+    }
+    doc.get_map(AMENDMENTS).for_each(|key, entry| {
+        if let ValueOrContainer::Container(Container::Map(entry)) = entry {
+            body_marks(
+                kind,
+                AMENDMENTS,
+                Segment::Key(key.to_owned()),
+                &entry,
+                found,
+            );
+        }
+    });
+}
+
+/// The marks over the `content` body of `entry`, found at `at` under `root`.
+fn body_marks(
+    kind: DocumentKind,
+    root: &str,
+    at: Segment,
+    entry: &loro::LoroMap,
+    found: &mut Vec<Stored>,
+) {
+    let Some(ValueOrContainer::Container(Container::Text(content))) = entry.get(MESSAGE_CONTENT)
+    else {
+        return;
+    };
+    for span in content.to_delta() {
+        let TextDelta::Insert {
+            attributes: Some(attributes),
+            ..
+        } = span
         else {
             continue;
         };
-        for span in content.to_delta() {
-            let TextDelta::Insert {
-                attributes: Some(attributes),
-                ..
-            } = span
-            else {
-                continue;
-            };
-            for (mark, value) in attributes {
-                found.push(Stored {
-                    kind,
-                    root: MESSAGES.to_owned(),
-                    segments: vec![
-                        Segment::At(at),
-                        Segment::Key(MESSAGE_CONTENT.to_owned()),
-                        Segment::Mark(mark),
-                    ],
-                    value,
-                });
-            }
+        for (mark, value) in attributes {
+            found.push(Stored {
+                kind,
+                root: root.to_owned(),
+                segments: vec![
+                    at.clone(),
+                    Segment::Key(MESSAGE_CONTENT.to_owned()),
+                    Segment::Mark(mark),
+                ],
+                value,
+            });
         }
     }
 }
@@ -240,9 +265,11 @@ struct Reader<'a> {
 impl Reader<'_> {
     /// The document of `kind` this reader holds.
     fn doc(&self, kind: DocumentKind) -> &LoroDoc {
+        let (segment, amendments) = amended(self.channel);
         match kind {
             DocumentKind::Meta => self.channel.doc(self.channel.meta_id().document_id()),
-            DocumentKind::Segment => self.channel.doc(self.channel.active_id().document_id()),
+            DocumentKind::Segment => self.channel.doc(segment.document_id()),
+            DocumentKind::Amendments => self.channel.doc(amendments),
             DocumentKind::Space => Some(self.space.doc()),
         }
         .expect("the reader holds every document of the scenario")
@@ -285,6 +312,7 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         },
         (SEGMENTS, DocumentKind::Meta) => segment_reading(reader, stored),
         (MESSAGES, DocumentKind::Segment) => message_reading(reader, stored),
+        (AMENDMENTS, DocumentKind::Amendments) => amendment_reading(reader, stored),
         (SPACE, DocumentKind::Space) if key == Some(SPACE_NAME) => {
             Some(format!("named {:?}", reader.space.name()?))
         }
@@ -306,6 +334,9 @@ fn header_reading(reader: &Reader<'_>, stored: &Stored, key: &str) -> Option<Str
         }
         HEADER_SPACE if value == reader.space.space_id().to_string() => {
             Some("the space it opens as".to_owned())
+        }
+        HEADER_SEGMENT if value == amended(reader.channel).0.to_string() => {
+            Some("the segment it amends".to_owned())
         }
         _ => None,
     }
@@ -334,14 +365,21 @@ fn segment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             "entry {entry} is {:?}",
             SegmentState::parse(stored.string()?)?
         )),
+        SEGMENT_AMENDMENTS if stored.string()? == amended(reader.channel).1.to_string() => {
+            Some(format!("entry {entry} names the amendments of its segment"))
+        }
         _ => None,
     }
 }
 
-/// The reading of one message field, through the list the view is given.
+/// The reading of one message field, through the segment alone: the
+/// amendments read over it are the amendment belt's.
 fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let at = stored.at(0)?;
-    let messages = reader.channel.messages(reader.channel.active_id()).ok()?;
+    let messages = read_messages(
+        reader.doc(DocumentKind::Segment),
+        reader.channel.channel_id(),
+    );
     let message = messages.get(at)?;
     let n = at + 1;
     match stored.key(1)? {
@@ -385,6 +423,38 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         },
         MESSAGE_EDITED if message.edited => Some(format!("message {n} is edited")),
         MESSAGE_DELETED if message.deleted => Some(format!("message {n} is deleted")),
+        _ => None,
+    }
+}
+
+/// The reading of one amendment field, through the messages the view is
+/// given once the amendments are read over the segment.
+fn amendment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
+    let (segment, _) = amended(reader.channel);
+    let messages = reader.channel.messages(segment).ok()?;
+    let id = stored.key(0)?;
+    let at = messages.iter().position(|m| m.id.to_string() == id)?;
+    let message = &messages[at];
+    let n = at + 1;
+    match stored.key(1)? {
+        AMENDMENT_CONTENT if stored.mark(2) == Some(MENTION) => {
+            match message.mentions.first()?.target {
+                MentionTarget::Channel => {
+                    Some(format!("message {n} amended to mention the channel"))
+                }
+                MentionTarget::User(_) => None,
+            }
+        }
+        AMENDMENT_CONTENT if message.edited => {
+            Some(format!("message {n} amended to read {:?}", message.text))
+        }
+        AMENDMENT_CONTENT if message.deleted => {
+            Some(format!("message {n} amended to read nothing"))
+        }
+        AMENDMENT_DELETED if message.deleted => Some(format!("message {n} deleted by amendment")),
+        AMENDMENT_BY if stored.string()? == "author" && message.author == AUTHOR => {
+            Some(format!("message {n} deleted by its author"))
+        }
         _ => None,
     }
 }
@@ -438,14 +508,17 @@ fn catalogue_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
 /// The scenario's channel, reopened from its snapshots by a second peer.
 fn reopened_channel(channel: &ChannelState) -> ChannelState {
     let meta = channel.meta_id();
-    let active = channel.active_id();
-    let segments = HashMap::from([(
-        active,
-        channel
-            .snapshot(active.document_id())
-            .expect("a segment exports"),
-    )]);
-    ChannelState::open(
+    let (closing, amendments) = amended(channel);
+    let segments: HashMap<_, _> = [channel.active_id(), closing]
+        .into_iter()
+        .map(|segment| {
+            let bytes = channel
+                .snapshot(segment.document_id())
+                .expect("a segment exports");
+            (segment, bytes)
+        })
+        .collect();
+    let mut reopened = ChannelState::open(
         channel.channel_id(),
         meta,
         &channel
@@ -453,7 +526,17 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
             .expect("a meta document exports"),
         &segments,
     )
-    .expect("a channel this build wrote reopens")
+    .expect("a channel this build wrote reopens");
+    // The amendments `meta` names arrive as a member fetches them.
+    assert_eq!(reopened.amendments_to_open(), [amendments]);
+    let bytes = channel.snapshot(amendments).expect("amendments export");
+    reopened
+        .apply_remote(amendments, &bytes)
+        .expect("the bytes wait");
+    reopened
+        .older_ready(amendments)
+        .expect("amendments this build wrote are admitted");
+    reopened
 }
 
 /// The scenario's space, reopened from its snapshot by a second peer.
@@ -480,6 +563,7 @@ impl Scenario {
 
     /// Every stored value of the scenario, document by document.
     fn stored(&self) -> Vec<Stored> {
+        let (segment, amendments) = amended(&self.channel);
         let docs = [
             (
                 DocumentKind::Meta,
@@ -487,8 +571,9 @@ impl Scenario {
             ),
             (
                 DocumentKind::Segment,
-                self.channel.doc(self.channel.active_id().document_id()),
+                self.channel.doc(segment.document_id()),
             ),
+            (DocumentKind::Amendments, self.channel.doc(amendments)),
             (DocumentKind::Space, Some(self.space.doc())),
         ];
         docs.into_iter()

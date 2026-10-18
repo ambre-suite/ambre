@@ -10,8 +10,8 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, MurmureEvent, SegmentId,
-    Timestamp,
+    ChannelDocument, ChannelDocumentKind, ChannelId, LeaseAnswer, MurmureCommand, MurmureEvent,
+    SegmentId, Timestamp,
 };
 
 impl LogicState {
@@ -239,22 +239,145 @@ impl LogicState {
         else {
             return;
         };
-        match channel.relocate_locked(document_id, deltas) {
-            Ok(Some(sent)) => {
-                self.send_to_sync(SyncCommand::SendUpdate {
-                    document_id: sent.segment.document_id(),
-                    payload: sent.delta,
-                    summary: Some(sent.summary),
-                });
-                self.send_to_ui(UiEvent::Channel {
-                    channel_id,
-                    event: sent.event,
-                });
-            }
-            Ok(None) => {}
+        let relocated = match channel.relocate_locked(document_id, deltas) {
+            Ok(relocated) => relocated,
             Err(error) => {
-                tracing::warn!("Logic: locked deltas of {document_id} not moved: {error}");
+                return tracing::warn!("Logic: locked deltas of {document_id} not moved: {error}");
             }
+        };
+        // The segment reads as the relay holds it until the replays land.
+        let segment = SegmentId::from_document(document_id);
+        let rewound = (!relocated.replay.is_empty())
+            .then(|| channel.messages(segment).ok())
+            .flatten();
+        if let Some(sent) = relocated.sent {
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id: sent.document,
+                payload: sent.delta,
+                summary: Some(sent.summary),
+            });
+            self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: sent.event,
+            });
+        }
+        if let Some(messages) = rewound {
+            self.send_to_ui(UiEvent::Channel {
+                channel_id,
+                event: MurmureEvent::Messages { segment, messages },
+            });
+        }
+        if !relocated.replay.is_empty() {
+            self.owed_replays
+                .entry(channel_id)
+                .or_default()
+                .extend(relocated.replay);
+        }
+    }
+
+    /// Write again, as amendments stamped `now`, the edits and deletes the
+    /// lock of a segment refused (the Murmure messages spec).
+    pub(crate) fn replay_owed(&mut self, channel_id: ChannelId, now: Timestamp) {
+        for replay in self.owed_replays.remove(&channel_id).unwrap_or_default() {
+            let command = match replay.draft {
+                Some(draft) => MurmureCommand::EditMessage {
+                    segment: replay.segment,
+                    message: replay.message,
+                    draft,
+                    now,
+                },
+                None => MurmureCommand::DeleteMessage {
+                    segment: replay.segment,
+                    message: replay.message,
+                    now,
+                },
+            };
+            self.handle_channel_command(channel_id, command);
+        }
+    }
+
+    /// Forget the replays a channel still owed, when it leaves memory before
+    /// its next tick.
+    pub(crate) fn drop_replays(&mut self, channel_id: ChannelId) {
+        if let Some(owed) = self.owed_replays.remove(&channel_id) {
+            tracing::warn!(
+                "Logic: {} refused changes of {channel_id} closed unreplayed",
+                owed.len()
+            );
+        }
+    }
+
+    /// The relay linked `amendments` to the locked `segment` (`SRV-201`).
+    /// `meta` names it, and it opens: this client's own for its session, or
+    /// the winner's for its bytes. What waited on a lost one waits on the
+    /// winner (`SRV-202`).
+    pub(crate) fn amendments_linked(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        amendments: DocumentId,
+    ) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        let linked = match channel.amendments_linked(segment, amendments) {
+            Ok(linked) => linked,
+            Err(error) => {
+                return tracing::warn!("Logic: amendments of {segment} not linked: {error}");
+            }
+        };
+        let meta = channel.meta_id().document_id();
+        if let Some(payload) = linked.meta {
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id: meta,
+                payload,
+                summary: None,
+            });
+        }
+        if let Some(lost) = linked.replaced {
+            let waiting = self.murmure_waiting.remove(&lost).unwrap_or_default();
+            self.murmure_waiting
+                .entry(amendments)
+                .or_default()
+                .extend(waiting);
+        }
+        if linked.open {
+            self.send_to_sync(SyncCommand::OpenDocument {
+                document_id: amendments,
+                doc_type: DocType::Murmure,
+            });
+        }
+    }
+
+    /// The creation or the link of this client's own `amendments` failed.
+    /// The changes that waited on it are dropped, and the next one creates
+    /// a document again.
+    pub(crate) fn amendments_link_failed(
+        &mut self,
+        channel_id: ChannelId,
+        segment: SegmentId,
+        amendments: DocumentId,
+        message: &str,
+    ) {
+        tracing::warn!("Logic: amendments of {segment} on {channel_id} failed: {message}");
+        if let Some(channel) = self.channels.get_mut(&channel_id)
+            && channel.amendments_failed(segment, amendments)
+        {
+            self.forget_murmure_session(amendments);
+        }
+    }
+
+    /// Open each amendments document `meta` names for a segment the channel
+    /// holds, so its messages read as amended.
+    pub(crate) fn open_amendments(&mut self, channel_id: ChannelId) {
+        let Some(channel) = self.channels.get_mut(&channel_id) else {
+            return;
+        };
+        for document_id in channel.amendments_to_open() {
+            self.send_to_sync(SyncCommand::OpenDocument {
+                document_id,
+                doc_type: DocType::Murmure,
+            });
         }
     }
 
@@ -266,13 +389,15 @@ impl LogicState {
             return;
         };
         channel.settle_final();
-        let Some(successor) = channel.successor_to_open() else {
-            return;
-        };
-        self.send_to_sync(SyncCommand::OpenDocument {
-            document_id: successor.document_id(),
-            doc_type: DocType::Murmure,
-        });
+        let successor = channel.successor_to_open();
+        if let Some(successor) = successor {
+            self.send_to_sync(SyncCommand::OpenDocument {
+                document_id: successor.document_id(),
+                doc_type: DocType::Murmure,
+            });
+        }
+        // The delta may name the amendments another member linked.
+        self.open_amendments(channel_id);
     }
 
     /// The `meta` of a closed channel moved: it may name a new segment, so

@@ -711,6 +711,10 @@ struct LogicState {
     /// so the next ask registers the one already created. Removed once the
     /// relay answers, and with the channel.
     close_successors: HashMap<ambre_bus::ChannelId, ambre_bus::SegmentId>,
+    /// The edits and deletes a segment's lock refused, owed again as
+    /// amendments. They leave at the channel's next tick, which stamps them.
+    /// Removed with the channel.
+    owed_replays: HashMap<ambre_bus::ChannelId, Vec<ambre_murmure::Replay>>,
     /// Who watches each open channel and who types in it, with this client's
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
@@ -837,6 +841,7 @@ impl LogicState {
             closed_channels: HashMap::new(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
+            owed_replays: HashMap::new(),
             channel_watchers: HashMap::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),

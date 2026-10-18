@@ -6,7 +6,7 @@
 //! also holds the older segments the view asked for. Each document keeps its own identifier, so a
 //! remote delta reaches the one it names and no other (`MURMURE-024`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget,
@@ -17,7 +17,7 @@ use loro::{
     Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer,
 };
 
-use crate::delta::{self, Arrival, Refusal, Signer};
+use crate::delta::{self, Arrival, Refusal, Rules, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MENTION, MESSAGE_AUTHOR,
@@ -30,13 +30,16 @@ use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
 use crate::{mention, reaction};
 
+mod amending;
 mod closing;
 mod confirming;
 mod finalizing;
 mod relocating;
 
+pub use amending::{ChangeTarget, Linked};
 pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
 pub use finalizing::{FINALIZE_RETRY_MS, FinalSnapshot};
+pub use relocating::{Relocated, Replay};
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -94,6 +97,9 @@ enum Created {
     },
     /// The first active segment, which holds no message yet.
     Segment { now: Timestamp },
+    /// The amendments document of a locked segment, which holds no
+    /// amendment yet.
+    Amendments { segment: SegmentId, now: Timestamp },
 }
 
 impl Created {
@@ -120,6 +126,11 @@ impl Created {
             Self::Segment { now } => {
                 schema::write_header(doc, DocumentKind::Segment, channel_id, now.0)?;
             }
+            Self::Amendments { segment, now } => {
+                schema::write_header(doc, DocumentKind::Amendments, channel_id, now.0)?;
+                doc.get_map(schema::HEADER)
+                    .insert(schema::HEADER_SEGMENT, segment.to_string())?;
+            }
         }
         doc.commit();
         Ok(())
@@ -130,8 +141,11 @@ impl Created {
 /// activity summary, and the event to hand the view.
 #[derive(Debug)]
 pub struct Sent {
-    /// The segment the message went to, the address of the delta.
+    /// The segment the message went to, or the locked segment it amends.
     pub segment: SegmentId,
+    /// The document the delta goes to: the segment, or its amendments
+    /// document.
+    pub document: DocumentId,
     /// Every operation of the send, as a Loro JSON update (`MURMURE-223`).
     pub delta: Vec<u8>,
     /// What the delta holds, readable with no document (`MURMURE-081`).
@@ -189,6 +203,14 @@ pub struct ChannelState {
     /// A final segment whose final snapshot a report dropped, finalized again
     /// before the closing one.
     refinalizing: Option<SegmentId>,
+    /// The amendments document of each locked segment it holds, by that
+    /// segment (`MURMURE-013`).
+    amendments: HashMap<SegmentId, Held>,
+    /// The amendments documents whose bytes are still arriving.
+    amendments_pending: HashMap<DocumentId, amending::Pending>,
+    /// The live segments the relay locked: a change of one of their
+    /// messages goes to an amendment (`MURMURE-073`).
+    locked: HashSet<SegmentId>,
 }
 
 impl ChannelState {
@@ -251,7 +273,9 @@ impl ChannelState {
         let channel_id = self.channel_id;
         let Some(held) = self.held_mut(document_id) else {
             let segment = SegmentId::from_document(document_id);
-            if self.note_successor_session(segment, peer, entry) {
+            if self.note_successor_session(segment, peer, entry.clone())
+                || self.note_amendments_session(document_id, peer, entry)
+            {
                 return Ok(None);
             }
             return if self.holds(document_id) {
@@ -271,10 +295,11 @@ impl ChannelState {
         let mut session = Session::adopt(&doc, peer, entry)?;
         created.write(&doc, channel_id)?;
         // A segment's first update is a delta like any other, so it travels
-        // as JSON (`MURMURE-223`). `meta` travels binary.
+        // as JSON, and so does an amendments document's (`MURMURE-223`).
+        // `meta` travels binary.
         let first = match created {
             Created::Meta { .. } => session.export(&doc)?,
-            Created::Segment { .. } => session.export_json(&doc)?,
+            Created::Segment { .. } | Created::Amendments { .. } => session.export_json(&doc)?,
         };
         held.doc = doc;
         held.session = Some(session);
@@ -301,12 +326,13 @@ impl ChannelState {
             .any(|held| held.id == document_id && held.session.is_some())
     }
 
-    /// The live documents: `meta`, the active segment and the one being
-    /// closed.
+    /// The live documents: `meta`, the active segment, the one being closed,
+    /// and the amendments documents.
     fn live(&self) -> impl Iterator<Item = &Held> {
         [Some(&self.meta), Some(&self.active), self.closing.as_ref()]
             .into_iter()
             .flatten()
+            .chain(self.amendments.values())
     }
 
     /// The live document of that identifier, to write it.
@@ -318,6 +344,7 @@ impl ChannelState {
         ]
         .into_iter()
         .flatten()
+        .chain(self.amendments.values_mut())
         .find(|held| held.id == document_id)
     }
 
@@ -339,6 +366,9 @@ impl ChannelState {
             successor_retry: None,
             finalizing: None,
             refinalizing: None,
+            amendments: HashMap::new(),
+            amendments_pending: HashMap::new(),
+            locked: HashSet::new(),
         }
     }
 
@@ -400,7 +430,7 @@ impl ChannelState {
                 .remove(&id)
                 .ok_or(MurmureError::SegmentMissing(id))?;
             let doc = schema::admit_with(DocumentKind::Segment, channel_id, id, |doc| {
-                delta::import_arrivals(doc, arrivals, id)
+                delta::import_arrivals(doc, arrivals, id, Rules::Segment)
             })?;
             Ok(Held::served(id, doc))
         };
@@ -508,12 +538,11 @@ impl ChannelState {
     /// Every document the channel holds or is loading, so a close can end
     /// the session of each.
     pub fn document_ids(&self) -> Vec<DocumentId> {
-        [Some(&self.meta), Some(&self.active), self.closing.as_ref()]
-            .into_iter()
-            .flatten()
+        self.live()
             .map(|held| held.id)
             .chain(self.loaded.keys().map(SegmentId::document_id))
             .chain(self.pending.keys().map(SegmentId::document_id))
+            .chain(self.amendments_pending.keys().copied())
             .collect()
     }
 
@@ -669,10 +698,18 @@ impl ChannelState {
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold.
     pub fn messages(&self, segment: SegmentId) -> Result<Vec<MessageView>, MurmureError> {
         let document_id = segment.document_id();
-        let doc = self
-            .doc(document_id)
-            .ok_or(MurmureError::NotHeld(document_id))?;
-        Ok(read_messages(doc, self.channel_id))
+        self.read_segment(segment)
+            .ok_or(MurmureError::NotHeld(document_id))
+    }
+
+    /// The messages of one held segment as its members read them: each
+    /// amendment of a locked segment over the message it names.
+    fn read_segment(&self, segment: SegmentId) -> Option<Vec<MessageView>> {
+        let mut messages = read_messages(self.doc(segment.document_id())?, self.channel_id);
+        if let Some(amendments) = self.amendments.get(&segment) {
+            amending::overlay(&amendments.doc, &mut messages, self.channel_id);
+        }
+        Some(messages)
     }
 
     /// The messages of every held segment that match `query`, and which
@@ -690,9 +727,9 @@ impl ChannelState {
             .collect();
         let matches = covered
             .iter()
-            .filter_map(|segment| Some((*segment, self.doc(segment.document_id())?)))
-            .flat_map(|(segment, doc)| {
-                read_messages(doc, self.channel_id)
+            .filter_map(|segment| Some((*segment, self.read_segment(*segment)?)))
+            .flat_map(|(segment, messages)| {
+                messages
                     .into_iter()
                     .filter(|message| query.matches(&message.text))
                     .map(move |message| SearchMatch { segment, message })
@@ -747,6 +784,7 @@ impl ChannelState {
         let mentions = mention::read(&content, channel);
         Ok(Sent {
             segment,
+            document: segment.document_id(),
             delta,
             summary: summary_of(&mentions),
             event: MurmureEvent::Messages {
@@ -796,6 +834,7 @@ impl ChannelState {
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
+            document: segment.document_id(),
             delta,
             summary: summary_of(&[]),
             event: MurmureEvent::Messages {
@@ -946,9 +985,13 @@ impl ChannelState {
     /// author and the reactions stay as they were (`MURMURE-086`). `None`
     /// when the draft is the body already, so nothing travels.
     ///
+    /// A message of a locked segment takes its edit as an amendment
+    /// (`MURMURE-073`).
+    ///
     /// # Errors
     /// [`MurmureError::BadMention`] for a mention past the draft, and every
-    /// refusal of [`ChannelState::own_message`].
+    /// refusal of [`ChannelState::own_message`]. A locked segment refuses as
+    /// [`ChannelState::amend`] does.
     pub fn edit(
         &mut self,
         segment: SegmentId,
@@ -958,6 +1001,9 @@ impl ChannelState {
     ) -> Result<Option<Sent>, MurmureError> {
         if !mention::fits(&draft.mentions, &draft.text) {
             return Err(MurmureError::BadMention);
+        }
+        if self.amendable(segment) {
+            return self.amend(segment, message, user, amending::Change::Edit(draft));
         }
         let channel = self.channel_id;
         let (doc, session, map) = self.own_message(segment, message, user)?;
@@ -985,15 +1031,24 @@ impl ChannelState {
     /// The text goes, so no member reads it again. The `thread` field and
     /// the reactions stay, and the replies with them (`MURMURE-090`).
     ///
+    /// A message of a locked segment takes its delete as an amendment, with
+    /// `by: author` (`MURMURE-088`).
+    ///
     /// # Errors
     /// Every refusal of [`ChannelState::own_message`]. A deleted message is
-    /// [`MurmureError::Deleted`], so a second delete writes nothing.
+    /// [`MurmureError::Deleted`], so a second delete writes nothing. A locked
+    /// segment refuses as [`ChannelState::amend`] does.
     pub fn delete(
         &mut self,
         segment: SegmentId,
         message: MessageId,
         user: UserId,
     ) -> Result<Sent, MurmureError> {
+        if self.amendable(segment) {
+            return self
+                .amend(segment, message, user, amending::Change::Delete)?
+                .ok_or(MurmureError::Deleted(message));
+        }
         let (doc, session, map) = self.own_message(segment, message, user)?;
         let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
         let len = content.len_unicode();
@@ -1017,12 +1072,10 @@ impl ChannelState {
     /// What a reaction delta produced: the delta, its summary of kind
     /// reaction (`MURMURE-093`), and the segment's messages for the view.
     fn reacted(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
-        let messages = self
-            .doc(segment.document_id())
-            .map(|doc| read_messages(doc, self.channel_id))
-            .unwrap_or_default();
+        let messages = self.read_segment(segment).unwrap_or_default();
         Sent {
             segment,
+            document: segment.document_id(),
             delta,
             summary: ActivitySummary {
                 kind: ActivityKind::Reaction,
@@ -1063,6 +1116,12 @@ impl ChannelState {
         order: Option<Order>,
         payload: &[u8],
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
+        // An amendments document still arriving keeps its bytes too. It has
+        // no message, so no number.
+        if let Some(pending) = self.amendments_pending.get_mut(&document_id) {
+            pending.arrivals.push(Arrival::Bytes(payload.to_vec()));
+            return Ok(Vec::new());
+        }
         // An older segment still arriving keeps its bytes until it is ready.
         // Its numbers are noted now and matched once it is admitted.
         if let Some(arrivals) = self.pending.get_mut(&SegmentId::from_document(document_id)) {
@@ -1143,6 +1202,9 @@ impl ChannelState {
         if !self.holds(document_id) {
             return Err(MurmureError::NotHeld(document_id));
         }
+        if self.is_amendments(document_id) {
+            return self.apply_amendment(document_id, payload, signer);
+        }
         let sequence = self.sequences.entry(document_id).or_default();
         sequence.passed(seq);
         let update = delta::read(payload)?;
@@ -1181,12 +1243,22 @@ impl ChannelState {
             // whole, so a delta that touched something else repeats it.
             return Ok(vec![MurmureEvent::Named { name: self.name() }]);
         }
-        // Every document but `meta` is a segment: a channel holds no thread
+        // An amendments document answers with the segment it amends.
+        if let Some(segment) = self.amended_by(document_id) {
+            let messages = self
+                .read_segment(segment)
+                .ok_or(MurmureError::NotHeld(segment.document_id()))?;
+            return Ok(vec![MurmureEvent::Messages { segment, messages }]);
+        }
+        // Every other document is a segment: a channel holds no thread
         // document yet.
+        let segment = SegmentId::from_document(document_id);
+        let messages = self
+            .read_segment(segment)
+            .ok_or(MurmureError::NotHeld(document_id))?;
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let messages = read_messages(doc, self.channel_id);
         let created = resolve.then(|| sequence::created(doc));
         if let Some(note) = note {
             let sequence = self.sequences.entry(document_id).or_default();
@@ -1195,10 +1267,7 @@ impl ChannelState {
                 sequence.resolve_created(&created);
             }
         }
-        Ok(vec![MurmureEvent::Messages {
-            segment: SegmentId::from_document(document_id),
-            messages,
-        }])
+        Ok(vec![MurmureEvent::Messages { segment, messages }])
     }
 
     /// The PeerID this session writes `document_id` under, `None` before the
@@ -1259,26 +1328,34 @@ impl ChannelState {
     pub fn is_pending(&self, document_id: DocumentId) -> bool {
         self.pending
             .contains_key(&SegmentId::from_document(document_id))
+            || self.amendments_pending.contains_key(&document_id)
     }
 
-    /// Give up an older segment or a successor that could not open, so it can
-    /// be asked again. Returns `false` when none of that identifier was asked
-    /// for.
+    /// Give up an older segment, a successor or an amendments document that
+    /// could not open, so it can be asked again. Returns `false` when none of
+    /// that identifier was asked for.
     pub fn cancel_older(&mut self, document_id: DocumentId) -> bool {
+        if self.amendments_pending.remove(&document_id).is_some() {
+            return true;
+        }
         let segment = SegmentId::from_document(document_id);
         self.sequences.remove(&document_id);
         self.forget_successor(segment);
         self.pending.remove(&segment).is_some()
     }
 
-    /// The older segment or the successor `document_id` has all its bytes:
-    /// check it and hold it (`MURMURE-023`, `MURMURE-065`).
+    /// The older segment, the successor or the amendments document
+    /// `document_id` has all its bytes: check it and hold it (`MURMURE-023`,
+    /// `MURMURE-065`).
     ///
     /// # Errors
-    /// [`MurmureError::NotHeld`] when no segment of that identifier was asked
-    /// for, and every refusal of [`ChannelState::load_older`]. A refused
-    /// segment is dropped, so it can be asked again.
+    /// [`MurmureError::NotHeld`] when no document of that identifier was
+    /// asked for, and every refusal of [`ChannelState::load_older`]. A
+    /// refused document is dropped, so it can be asked again.
     pub fn older_ready(&mut self, document_id: DocumentId) -> Result<MurmureEvent, MurmureError> {
+        if let Some(pending) = self.amendments_pending.remove(&document_id) {
+            return self.amendments_ready(document_id, pending);
+        }
         let segment = SegmentId::from_document(document_id);
         let arrivals = self
             .pending
@@ -1325,13 +1402,13 @@ impl ChannelState {
             return Err(MurmureError::NotOlder(document_id));
         }
         let doc = schema::admit_with(DocumentKind::Segment, self.channel_id, document_id, |doc| {
-            delta::import_arrivals(doc, arrivals, document_id)
+            delta::import_arrivals(doc, arrivals, document_id, Rules::Segment)
         })?;
-        let messages = read_messages(&doc, self.channel_id);
         if let Some(sequence) = self.sequences.get_mut(&document_id) {
             sequence.resolve(&doc);
         }
         self.loaded.insert(segment, doc);
+        let messages = self.read_segment(segment).unwrap_or_default();
         Ok(MurmureEvent::Messages { segment, messages })
     }
 }
@@ -1417,7 +1494,7 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
 
 /// The messages of a segment, in list order. A malformed message is skipped
 /// with a warn rather than failing the whole segment.
-fn read_messages(doc: &LoroDoc, channel: ChannelId) -> Vec<MessageView> {
+pub(crate) fn read_messages(doc: &LoroDoc, channel: ChannelId) -> Vec<MessageView> {
     let list = doc.get_list(MESSAGES);
     let mut messages = Vec::with_capacity(list.len());
     list.for_each(|item| match read_message(item, channel) {

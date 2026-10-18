@@ -284,17 +284,7 @@ impl SyncState {
         closing: SegmentId,
         successor: SegmentId,
     ) {
-        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
-            let meta_key = self
-                .documents
-                .get(&meta.document_id())
-                .map(|doc| doc.doc_key.clone())
-                .ok_or("the channel's meta has no open session")?;
-            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
-            let author = self.author().ok_or("session locked")?;
-            Ok((tx, meta_key, exchange_key, author))
-        });
-        let (tx, meta_key, exchange_key, author) = match prepared {
+        let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
             Err(message) => {
                 return self.send_to_logic(LogicEvent::SegmentCloseFailed {
@@ -322,6 +312,77 @@ impl SyncState {
             let _ = tx.send(SyncEvent::SegmentClosed {
                 channel_id,
                 closing,
+                result,
+            });
+        });
+    }
+
+    /// What a new document of the channel of `meta` is created with: the
+    /// current key of `meta`, whose members are the channel's, and this
+    /// user.
+    fn channel_creation(
+        &self,
+        meta: MetaId,
+    ) -> Result<
+        (
+            ambre_bus::conduit::UnboundedSender<SyncEvent>,
+            DocumentKey,
+            StaticSecret,
+            crate::sharing::Author,
+        ),
+        String,
+    > {
+        let tx = self.event_tx.clone().ok_or_else(no_relay)?;
+        let meta_key = self
+            .documents
+            .get(&meta.document_id())
+            .map(|doc| doc.doc_key.clone())
+            .ok_or("the channel's meta has no open session")?;
+        let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
+        let author = self.author().ok_or("session locked")?;
+        Ok((tx, meta_key, exchange_key, author))
+    }
+
+    /// Create the amendments document of the locked `segment`, then link it
+    /// (`SRV-201`). It opens under the current key of `meta`, as the
+    /// segment's successor did.
+    pub(crate) fn handle_create_amendments(
+        &self,
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        amendments: DocumentId,
+    ) {
+        let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
+            Ok(prepared) => prepared,
+            Err(message) => {
+                return self.send_to_logic(LogicEvent::AmendmentsLinkFailed {
+                    channel_id,
+                    segment,
+                    amendments,
+                    message,
+                });
+            }
+        };
+        let params = crate::sharing::AmendmentsParams {
+            channel_id,
+            segment,
+            amendments,
+            meta_key,
+            author,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+            exchange_key,
+        };
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = crate::sharing::amendments_task(&http, params).await;
+            let _ = tx.send(SyncEvent::AmendmentsLinked {
+                channel_id,
+                segment,
+                amendments,
                 result,
             });
         });

@@ -47,7 +47,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-010` | `INV` | The `segments` list MUST hold at most one `active` and at most one `closing` segment. | this spec section 3 | `ambre_murmure::closing_tests::two_writers_of_one_close_converge_on_one_successor` -- two merged `meta` documents read one active and one closing segment; `ambre_server::db::channels::tests::a_channel_holds_one_active_segment` -- database tier, the relay store refuses a second active or closing segment | none | verified |
 | `MURMURE-011` | `CONC` | Two peers closing the active segment at once MUST converge on one successor segment. | this spec section 5; this spec section 6 | `ambre_murmure::closing_tests::two_writers_of_one_close_converge_on_one_successor` -- the creator holds the successor and the other fetches it; `ambre_server::db::channels::tests::two_racing_closes_register_one_successor`; `ambre_server::routes::channels::tests::a_writer_closes_a_segment_and_a_late_close_learns_the_winner` -- database tier, the relay answers both closes one successor | none | verified |
 | `MURMURE-012` | `INV` | A final segment document MUST hold no operation later than its finalization. | this spec section 3 | `ambre_murmure::finalizing_tests::an_accepted_commit_marks_the_segment_final_for_every_member` -- a reaction to a final segment is refused; `::a_final_snapshot_at_odds_with_the_deltas_is_refused` -- a final snapshot holding an operation no delta carried is a mismatch | none | verified |
-| `MURMURE-013` | `INV` | An amendments document MUST hold entries only for messages of its own segment. | this spec section 2 | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-013` | `INV` | An amendments document MUST hold entries only for messages of its own segment. | this spec section 2 | `ambre_murmure::amending_tests::an_amendment_outside_its_segment_is_refused` -- an entry for a message the segment lacks, and a document whose header names another segment, are each refused | none | verified |
 | `MURMURE-014` | `INV` | The catalogue MUST list public channels only. | this spec section 3 | `ambre_murmure::space_tests::the_catalogue_refuses_a_private_channel_and_a_direct_message` -- the refusal writes nothing; `ambre_server::routes::channels::tests::an_editor_of_the_space_registers_a_public_channel` -- database tier, the relay holds the channel public in its space | none | verified |
 | `MURMURE-015` | `INV` | The `meta` document MUST NOT hold a member list. | this spec section 5; `ambre-spec-membership.md` | `ambre_murmure::channel_tests::meta_holds_no_member_list`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a member list is a root the frozen shape does not carry | none | verified |
 | `MURMURE-016` | `INV` | An unnamed direct message MUST hold no `name` key: a name composed from its members MUST NOT be stored. | this spec section 3; `CHROME-080` | `ambre_logic::direct::tests::a_created_direct_message_is_held_and_sent_whole` -- a new direct message holds no `name` key; `ambre_murmure::channel_tests::clearing_a_name_removes_its_key` -- nor does a cleared name | none | verified |
@@ -62,7 +62,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 19 `verified`, 3 `unimplemented`. The engine tests and the shape belt of
+* **Verification.** 20 `verified`, 2 `unimplemented`. The engine tests and the shape belt of
   `crates/ambre-murmure` hold every built container and the version gate.
 
 ---
@@ -124,7 +124,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | built |
-| `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amended: bool}` | the field | segments | built |
+| `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: DocumentId}` | the field | segments | built |
 | `meta` | `pinned` | Map | a `MessageId` | `{segment: SegmentId, pinned_at: Timestamp}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
@@ -136,8 +136,9 @@ names the unit two concurrent writers race for. Every document also carries the 
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | segment, thread | `messages/{n}/actions` | List | position | `{id: String, label: String}` | list order, no LWW | bots | design |
 | segment, thread | `messages/{n}/preview` | Map | `title`, `description`, `image` | String, String, a media reference | the key | link-previews | design |
-| amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | design |
-| amendments | `amendments/{id}/content` | Text | -- | the edited body | none: char-CRDT | messages | design |
+| amendments | `header` | Map | `segment_id` | `SegmentId` | the key | messages | built |
+| amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
+| amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark | none: char-CRDT | messages | built |
 | settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | a `ChannelId` | `NotifyLevel` | the entry | notifications | design |
@@ -151,8 +152,8 @@ to nothing: text typed beside it is not part of the mention. **The `emoji` mark*
 `CustomEmojiId` and draws its image.
 
 **Absence is a value** (`MURMURE-018`). No `name` on a direct message means the client composes one
-at display (`MURMURE-016`). No `thread` means the message has no reply. No `amended` segment has no
-amendments document.
+at display (`MURMURE-016`). No `thread` means the message has no reply. A segment entry with no
+`amendments` has no amendments document.
 
 ---
 
@@ -167,7 +168,7 @@ amendments document.
 * a segment document, one per time slice of a channel
   * `header`, and `messages`, per message: its fields, `content`, `attachments`, `reactions` and
     `tags`
-* an amendments document, one per amended final segment
+* an amendments document, one per amended locked segment
   * `header`, and `amendments`, per message: `content`, or the delete
 * a thread document, one per message with a reply
   * `header`, and `messages`, the same message shape

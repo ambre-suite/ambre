@@ -10,12 +10,17 @@
 use ambre_core::authorship::{PEERS_MAP, PeerEntry, peer_key};
 use ambre_core::{DocumentId, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
-use loro::{ContainerID, ContainerType, LoroDoc, LoroValue, ValueOrContainer, VersionVector};
+use loro::{
+    Container, ContainerID, ContainerType, LoroDoc, LoroValue, ValueOrContainer, VersionVector,
+};
 use serde::Deserialize;
 
 use crate::error::MurmureError;
 use crate::reaction;
-use crate::schema::{MESSAGE_AUTHOR, MESSAGE_REACTIONS, MESSAGES};
+use crate::schema::{
+    self, AMENDMENT_BY, AMENDMENTS, DeletedBy, MESSAGE_AUTHOR, MESSAGE_ID, MESSAGE_REACTIONS,
+    MESSAGES,
+};
 
 /// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
 /// change of it is a bump of `SCHEMA_VERSION` (`MURMURE-020`).
@@ -67,6 +72,10 @@ pub enum Refusal {
     /// after its message was sent (`MURMURE-094`).
     #[error("a reaction its signer may not write")]
     ForeignReaction,
+    /// An amendment of a message its locked segment does not hold
+    /// (`MURMURE-013`).
+    #[error("an amendment of a message its segment does not hold")]
+    NotInSegment,
 }
 
 impl Refusal {
@@ -238,6 +247,83 @@ pub(crate) fn check(
     Ok(())
 }
 
+/// Check every operation of an amendments delta against what its signer may
+/// write (`features/ambre-spec-murmure-messages.md section 3`, step 6).
+///
+/// `author_of` names the author the locked segment holds for a message key,
+/// `None` when it holds no such message. An entry is created under the key of
+/// one of the signer's own messages, and only its creator's user writes in it.
+///
+/// # Errors
+/// The first [`Refusal`] an operation earns. [`Refusal::NotInSegment`] marks an
+/// entry of a message the segment does not hold (`MURMURE-013`).
+/// [`Refusal::ForeignMessage`] marks one of another author (`MURMURE-253`).
+pub(crate) fn check_amendments(
+    update: &JsonSchema,
+    signer: Signer,
+    registered: impl Fn(u64) -> Option<UserId>,
+    author_of: impl Fn(&str) -> Option<UserId>,
+) -> Result<(), Refusal> {
+    let user = signer.user.ok_or(Refusal::Unattributed)?;
+    if update.changes.iter().any(|c| c.id.peer != signer.peer) {
+        return Err(Refusal::NotSigners);
+    }
+    for op in update.changes.iter().flat_map(|c| &c.ops) {
+        match &op.container {
+            ContainerID::Normal { peer, .. } => {
+                let owner = if *peer == signer.peer {
+                    Some(user)
+                } else {
+                    registered(*peer)
+                };
+                if owner != Some(user) {
+                    return Err(Refusal::ForeignMessage);
+                }
+                // An author deletes under their own name. A removal by a
+                // moderator is the moderation feature's, and no build writes
+                // it yet.
+                if let JsonOpContent::Map(MapOp::Insert { key, value }) = &op.content
+                    && key == AMENDMENT_BY
+                    && !matches!(value, LoroValue::String(s) if s.as_str() == DeletedBy::Author.as_str())
+                {
+                    return Err(Refusal::ForeignMessage);
+                }
+            }
+            root if is_root(root, AMENDMENTS, ContainerType::Map) => match &op.content {
+                JsonOpContent::Map(MapOp::Insert {
+                    key,
+                    value: LoroValue::Container(_),
+                }) => match author_of(key) {
+                    None => return Err(Refusal::NotInSegment),
+                    Some(author) if author != user => return Err(Refusal::ForeignMessage),
+                    Some(_) => {}
+                },
+                _ => return Err(Refusal::Removed),
+            },
+            root if is_root(root, PEERS_MAP, ContainerType::Map) => {
+                entry_allowed(&op.content, signer.peer, user)?;
+            }
+            // The header and the version register hold no amendment.
+            ContainerID::Root { .. } => {}
+        }
+    }
+    Ok(())
+}
+
+/// The author `segment` holds for the message `key` names, `None` when it
+/// holds no such message.
+pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
+    let list = segment.get_list(MESSAGES);
+    (0..list.len()).find_map(|index| match list.get(index) {
+        Some(ValueOrContainer::Container(Container::Map(map)))
+            if schema::string(&map, MESSAGE_ID).as_deref() == Some(key) =>
+        {
+            UserId::parse_str(&schema::string(&map, MESSAGE_AUTHOR)?).ok()
+        }
+        _ => None,
+    })
+}
+
 /// Whether a registry write is the signer's own: its PeerID's key alone. An
 /// entry that reads as one must name the signer. An unreadable one names
 /// nobody, so it grants nothing.
@@ -322,6 +408,42 @@ pub(crate) enum Arrival {
     Signed { update: JsonSchema, signer: Signer },
 }
 
+/// What the deltas of a document are checked against.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Rules<'a> {
+    /// A segment: its own registry and its own messages.
+    Segment,
+    /// An amendments document: its own registry, and the locked segment that
+    /// names the author of each message.
+    Amendments { segment: &'a LoroDoc },
+}
+
+/// Check `update` against what its signer may write in `doc`, under `rules`.
+///
+/// # Errors
+/// The first [`Refusal`] an operation earns.
+pub(crate) fn verdict(
+    doc: &LoroDoc,
+    rules: Rules<'_>,
+    update: &JsonSchema,
+    signer: Signer,
+) -> Result<(), Refusal> {
+    match rules {
+        Rules::Segment => check(
+            update,
+            signer,
+            |peer| registered(doc, peer),
+            |id| reaction::is_map(doc, id),
+        ),
+        Rules::Amendments { segment } => check_amendments(
+            update,
+            signer,
+            |peer| registered(doc, peer),
+            |key| author_in(segment, key),
+        ),
+    }
+}
+
 /// Import `arrivals` into `doc`, in order. A signed delta passes the check
 /// first, against the registry `doc` holds so far. A refused one is left out,
 /// and changes nothing (`MURMURE-030`).
@@ -333,17 +455,13 @@ pub(crate) fn import_arrivals(
     doc: &LoroDoc,
     arrivals: Vec<Arrival>,
     document_id: DocumentId,
+    rules: Rules<'_>,
 ) -> Result<(), MurmureError> {
     for arrival in arrivals {
         match arrival {
             Arrival::Bytes(bytes) => crate::schema::import_bytes(doc, &bytes, document_id)?,
             Arrival::Signed { update, signer } => {
-                let verdict = check(
-                    &update,
-                    signer,
-                    |peer| registered(doc, peer),
-                    |id| reaction::is_map(doc, id),
-                );
+                let verdict = verdict(doc, rules, &update, signer);
                 if let Err(refusal) = verdict {
                     tracing::warn!("[Murmure] a delta for {document_id} refused: {refusal}");
                     continue;

@@ -12,6 +12,21 @@
 # make visible in review.
 
 == v1
+amendments:amendments/{id}/by: string
+amendments:amendments/{id}/content#mention: string
+amendments:amendments/{id}/content: text
+amendments:amendments/{id}/deleted: bool
+amendments:amendments/{id}: map
+amendments:amendments: map
+amendments:header/channel_id: string
+amendments:header/created_at: i64
+amendments:header/kind: string
+amendments:header/segment_id: string
+amendments:header: map
+amendments:meta/schema_version: i64
+amendments:meta: map
+amendments:peers/{id}: binary
+amendments:peers: map
 meta:channel/name: string
 meta:channel/type: string
 meta:channel: map
@@ -23,6 +38,7 @@ meta:meta/schema_version: i64
 meta:meta: map
 meta:peers/{id}: binary
 meta:peers: map
+meta:segments/*/amendments: string
 meta:segments/*/document_id: string
 meta:segments/*/from_ts: i64
 meta:segments/*/state: string

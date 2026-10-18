@@ -33,6 +33,9 @@ pub(crate) const HEADER_CHANNEL: &str = "channel_id";
 pub(crate) const HEADER_CREATED_AT: &str = "created_at";
 /// The key a space document names its space under, in place of a channel.
 pub(crate) const HEADER_SPACE: &str = "space_id";
+/// The key an amendments document names its segment under, beside its
+/// channel (`MURMURE-013`).
+pub(crate) const HEADER_SEGMENT: &str = "segment_id";
 
 /// The `space` root of a space document.
 pub(crate) const SPACE: &str = "space";
@@ -62,6 +65,18 @@ pub(crate) const SEGMENTS: &str = "segments";
 pub(crate) const SEGMENT_DOCUMENT: &str = "document_id";
 pub(crate) const SEGMENT_FROM: &str = "from_ts";
 pub(crate) const SEGMENT_STATE: &str = "state";
+/// The amendments document of a locked segment, absent while it has none.
+pub(crate) const SEGMENT_AMENDMENTS: &str = "amendments";
+
+/// The `amendments` root of an amendments document, one entry per
+/// `MessageId` of its segment, and the fields of one entry.
+pub(crate) const AMENDMENTS: &str = "amendments";
+/// The edited body, a char CRDT like the body of a message.
+pub(crate) const AMENDMENT_CONTENT: &str = "content";
+/// `true` once the message is deleted, its edited body emptied.
+pub(crate) const AMENDMENT_DELETED: &str = "deleted";
+/// Who deleted the message, a [`DeletedBy`] word.
+pub(crate) const AMENDMENT_BY: &str = "by";
 
 /// The `messages` root of a segment, and the fields of one message.
 pub(crate) const MESSAGES: &str = "messages";
@@ -96,8 +111,8 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The document kinds this build writes and reads.
 ///
-/// The spec names five. The amendments and thread kinds arrive with the
-/// Stories that build them; until then a header naming one reads as foreign.
+/// The spec names five. The thread kind arrives with the Story that builds
+/// it; until then a header naming one reads as foreign.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentKind {
     /// The one document of a space: its name, categories and catalogue.
@@ -106,6 +121,8 @@ pub enum DocumentKind {
     Meta,
     /// One time slice of a channel's messages.
     Segment,
+    /// The late edits and deletes of one locked segment (`MURMURE-013`).
+    Amendments,
 }
 
 impl DocumentKind {
@@ -115,6 +132,23 @@ impl DocumentKind {
             Self::Space => "space",
             Self::Meta => "meta",
             Self::Segment => "segment",
+            Self::Amendments => "amendments",
+        }
+    }
+}
+
+/// Who deleted a message of a locked segment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeletedBy {
+    /// Its author (`MURMURE-088`).
+    Author,
+}
+
+impl DeletedBy {
+    /// The word an amendment stores under `by`.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Author => "author",
         }
     }
 }

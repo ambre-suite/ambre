@@ -1,0 +1,458 @@
+//! The amendments of a locked segment against their contract rows. They hold
+//! where a late change writes, what a member reads over the segment, and the
+//! step of the authorship check that guards the document.
+
+use std::collections::HashMap;
+
+use ambre_bus::{MessageDraft, MessageView, MurmureEvent, Timestamp};
+use ambre_core::{DocumentId, MessageId, SegmentId, Seq, UserId};
+use loro::{Container, LoroDoc, LoroMap, ValueOrContainer, VersionVector};
+
+use crate::channel::read_messages;
+use crate::schema::{AMENDMENT_BY, AMENDMENTS, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENTS};
+use crate::session::next_peer;
+use crate::{ChangeTarget, ChannelState, ChannelType, MurmureError, Refusal, Replay, Signer};
+
+const NOW: Timestamp = Timestamp(1_700_000_000_000);
+
+fn draft(text: &str) -> MessageDraft {
+    MessageDraft {
+        text: text.to_owned(),
+        mentions: Vec::new(),
+    }
+}
+
+/// A channel whose active segment holds `texts` by `author`, and is closing.
+fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
+    let mut state =
+        ChannelState::create(ambre_core::ChannelId::new(), ChannelType::Public, None, NOW)
+            .expect("create")
+            .identify();
+    for text in texts {
+        state.send(&draft(text), author, NOW).expect("send");
+    }
+    let closing = state.active_id();
+    let successor = SegmentId::new();
+    state
+        .close_into(closing, successor, true, NOW)
+        .expect("close");
+    let peer = next_peer();
+    state
+        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    (state, closing)
+}
+
+/// The same channel, its closing segment locked as the relay does once a
+/// member holds its finalize lease.
+fn locked_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
+    let (mut state, segment) = closing_with(texts, author);
+    state
+        .relocate_locked(segment.document_id(), &[])
+        .expect("lock");
+    (state, segment)
+}
+
+/// Create the amendments of `segment`, adopt their session and link them.
+/// Returns them, their first update, and the `meta` delta that names them.
+fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, Vec<u8>, Vec<u8>) {
+    let ChangeTarget::Create(amendments) = state.change_target(segment, NOW).expect("target")
+    else {
+        panic!("a locked segment with no amendments creates them");
+    };
+    let peer = next_peer();
+    let first = state
+        .adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+        .expect("adopt")
+        .expect("the header travels");
+    let linked = state.amendments_linked(segment, amendments).expect("link");
+    assert!(linked.open && linked.replaced.is_none());
+    (amendments, first, linked.meta.expect("meta names them"))
+}
+
+/// A second member's copy of `state`, opened from its live segments.
+fn peer_of(state: &ChannelState) -> ChannelState {
+    let segments: HashMap<SegmentId, Vec<u8>> = state
+        .held_segments()
+        .into_iter()
+        .map(|segment| {
+            let bytes = state.snapshot(segment.document_id()).expect("segment");
+            (segment, bytes)
+        })
+        .collect();
+    let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
+    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify()
+}
+
+fn signer(state: &ChannelState, document_id: DocumentId, user: UserId) -> Signer {
+    Signer {
+        peer: state.peer(document_id).expect("a session"),
+        user: Some(user),
+    }
+}
+
+fn messages_of(event: &MurmureEvent) -> &[MessageView] {
+    let MurmureEvent::Messages { messages, .. } = event else {
+        panic!("messages");
+    };
+    messages
+}
+
+/// Every operation of `doc` past `before`, as a delta travels.
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> Vec<u8> {
+    doc.commit();
+    crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
+        .expect("encode")
+}
+
+/// Bob's copy of Alice's amendments, held with a session of his own.
+fn bob_holding(
+    alice: &ChannelState,
+    segment: SegmentId,
+    amendments: DocumentId,
+    first: &[u8],
+    meta: &[u8],
+    author: UserId,
+) -> ChannelState {
+    let mut bob = peer_of(alice);
+    bob.apply_remote(bob.meta_id().document_id(), meta)
+        .expect("meta");
+    assert_eq!(bob.amendments_to_open(), [amendments]);
+    bob.apply_signed(amendments, Seq(1), first, signer(alice, amendments, author))
+        .expect("the header waits");
+    bob.older_ready(amendments).expect("admitted");
+    let peer = next_peer();
+    bob.adopt_session(amendments, peer, peer.to_le_bytes().to_vec())
+        .expect("adopt");
+    assert_eq!(bob.amendments_id(segment), Some(amendments));
+    bob
+}
+
+// --- MURMURE-073 ---
+
+/// A change of a locked segment waits for its amendments: the first one
+/// creates them, and every later one writes them.
+#[test]
+fn a_change_of_a_locked_segment_waits_for_its_amendments() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let message = alice.messages(segment).expect("held")[0].id;
+    assert!(matches!(
+        alice.edit(segment, message, &draft("uno"), author),
+        Err(MurmureError::NoAmendments(s)) if s == segment
+    ));
+    let ChangeTarget::Create(amendments) = alice.change_target(segment, NOW).expect("target")
+    else {
+        panic!("the first change creates the amendments");
+    };
+    assert_eq!(
+        alice.change_target(segment, NOW),
+        Ok(ChangeTarget::Write(amendments))
+    );
+    assert_eq!(
+        alice.change_target(alice.active_id(), NOW),
+        Ok(ChangeTarget::Write(alice.active_id().document_id())),
+        "a live segment takes its own changes"
+    );
+    assert!(alice.amendments_failed(segment, amendments));
+    assert!(matches!(
+        alice.change_target(segment, NOW),
+        Ok(ChangeTarget::Create(other)) if other != amendments
+    ));
+}
+
+/// Two members created amendments for one segment, and the relay linked
+/// the other's: this client drops its own and fetches the winner.
+#[test]
+fn a_lost_race_fetches_the_amendments_the_relay_linked() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let ChangeTarget::Create(own) = alice.change_target(segment, NOW).expect("target") else {
+        panic!("created");
+    };
+    let winner = DocumentId::new();
+    let linked = alice.amendments_linked(segment, winner).expect("link");
+    assert_eq!((linked.open, linked.replaced), (true, Some(own)));
+    assert!(linked.meta.is_some(), "meta names the winner");
+    assert_eq!(
+        alice.change_target(segment, NOW),
+        Ok(ChangeTarget::Write(winner)),
+        "a change waits for the winner"
+    );
+    assert!(!alice.amendments_failed(segment, own), "already dropped");
+}
+
+/// An edit and a delete of a locked segment write its amendments, and the
+/// segment itself never moves. The view reads each one over its message.
+#[test]
+fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["one", "two"], author);
+    let (amendments, _, _) = amended(&mut alice, segment);
+    let ids: Vec<MessageId> = alice
+        .messages(segment)
+        .expect("held")
+        .iter()
+        .map(|m| m.id)
+        .collect();
+
+    let edited = alice
+        .edit(segment, ids[0], &draft("uno"), author)
+        .expect("edit")
+        .expect("a change");
+    assert_eq!((edited.segment, edited.document), (segment, amendments));
+    let read = messages_of(&edited.event);
+    assert_eq!((read[0].text.as_str(), read[0].edited), ("uno", true));
+    assert!(
+        matches!(alice.edit(segment, ids[0], &draft("uno"), author), Ok(None)),
+        "the body reads so already"
+    );
+
+    let deleted = alice.delete(segment, ids[1], author).expect("delete");
+    assert_eq!(deleted.document, amendments);
+    let read = alice.messages(segment).expect("held");
+    assert!(read[1].deleted && read[1].text.is_empty());
+    assert!(matches!(
+        alice.edit(segment, ids[1], &draft("back"), author),
+        Err(MurmureError::Deleted(id)) if id == ids[1]
+    ));
+
+    // `MURMURE-088`: the delete names its author.
+    let doc = alice.doc(amendments).expect("held");
+    let Some(ValueOrContainer::Container(Container::Map(entry))) =
+        doc.get_map(AMENDMENTS).get(&ids[1].to_string())
+    else {
+        panic!("an entry per message");
+    };
+    assert_eq!(
+        crate::schema::string(&entry, AMENDMENT_BY).as_deref(),
+        Some("author")
+    );
+    let raw = read_messages(
+        alice.doc(segment.document_id()).expect("held"),
+        alice.channel_id(),
+    );
+    assert_eq!(
+        raw.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+        ["one", "two"],
+        "the segment holds what it held when it locked"
+    );
+}
+
+/// A second member fetches the amendments `meta` names, and reads them over
+/// the segment: those that arrived first, then each later one.
+#[test]
+fn a_member_reads_the_amendments_over_the_segment() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["one", "two"], author);
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let ids: Vec<MessageId> = alice
+        .messages(segment)
+        .expect("held")
+        .iter()
+        .map(|m| m.id)
+        .collect();
+    let edited = alice
+        .edit(segment, ids[0], &draft("uno"), author)
+        .expect("edit")
+        .expect("a change");
+
+    let mut bob = peer_of(&alice);
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.amendments_to_open(), [amendments]);
+    assert_eq!(bob.amendments_to_open(), [], "asked once");
+    let by_alice = signer(&alice, amendments, author);
+    for (seq, payload) in [(1, &first), (2, &edited.delta)] {
+        let events = bob
+            .apply_signed(amendments, Seq(seq), payload, by_alice)
+            .expect("waits");
+        assert!(events.is_empty());
+    }
+    let ready = bob.older_ready(amendments).expect("admitted");
+    assert_eq!(messages_of(&ready)[0].text, "uno");
+
+    let deleted = alice.delete(segment, ids[1], author).expect("delete");
+    let events = bob
+        .apply_signed(amendments, Seq(3), &deleted.delta, by_alice)
+        .expect("applies");
+    assert_eq!(events.len(), 1);
+    assert!(messages_of(&events[0])[1].deleted);
+    assert_eq!(bob.messages(segment), alice.messages(segment));
+}
+
+// --- MURMURE-253 ---
+
+/// The check refuses an amendment of another author's message, whether it
+/// creates the entry or writes into the author's own.
+#[test]
+fn an_amendment_of_another_authors_message_is_refused() {
+    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (mut alice, segment) = locked_with(&["one"], alice_user);
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let message = alice.messages(segment).expect("held")[0].id;
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, alice_user);
+    assert!(
+        matches!(
+            bob.edit(segment, message, &draft("mine"), bob_user),
+            Err(MurmureError::NotAuthor(id)) if id == message
+        ),
+        "refused before it is written"
+    );
+
+    let doc = bob.doc(amendments).expect("held");
+    let before = doc.oplog_vv();
+    doc.get_map(AMENDMENTS)
+        .insert_container(&message.to_string(), LoroMap::new())
+        .expect("forge");
+    let forged = json_since(doc, &before);
+    let by_bob = signer(&bob, amendments, bob_user);
+    assert_eq!(
+        alice.apply_signed(amendments, Seq(2), &forged, by_bob),
+        Err(MurmureError::Refused(Refusal::ForeignMessage))
+    );
+
+    // Into the author's own entry, once she wrote it.
+    let edited = alice
+        .edit(segment, message, &draft("uno"), alice_user)
+        .expect("edit")
+        .expect("a change");
+    let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, alice_user);
+    bob.apply_signed(
+        amendments,
+        Seq(2),
+        &edited.delta,
+        signer(&alice, amendments, alice_user),
+    )
+    .expect("the author's amendment");
+    let doc = bob.doc(amendments).expect("held");
+    let before = doc.oplog_vv();
+    let Some(ValueOrContainer::Container(Container::Map(entry))) =
+        doc.get_map(AMENDMENTS).get(&message.to_string())
+    else {
+        panic!("the author's entry");
+    };
+    entry
+        .insert(crate::schema::AMENDMENT_DELETED, true)
+        .expect("forge");
+    let forged = json_since(doc, &before);
+    assert_eq!(
+        alice.apply_signed(
+            amendments,
+            Seq(3),
+            &forged,
+            signer(&bob, amendments, bob_user)
+        ),
+        Err(MurmureError::Refused(Refusal::ForeignMessage))
+    );
+    assert!(!alice.messages(segment).expect("held")[0].deleted);
+}
+
+// --- MURMURE-013 ---
+
+/// The check refuses an entry for a message the segment does not hold, and
+/// an amendments document whose header names another segment is refused.
+#[test]
+fn an_amendment_outside_its_segment_is_refused() {
+    let author = UserId::new();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    // Carol opens the channel before `meta` names the amendments.
+    let mut carol = peer_of(&alice);
+    let (amendments, first, meta) = amended(&mut alice, segment);
+    let bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
+
+    let doc = bob.doc(amendments).expect("held");
+    let before = doc.oplog_vv();
+    doc.get_map(AMENDMENTS)
+        .insert_container(&MessageId::new().to_string(), LoroMap::new())
+        .expect("forge");
+    let forged = json_since(doc, &before);
+    assert_eq!(
+        alice.apply_signed(
+            amendments,
+            Seq(2),
+            &forged,
+            signer(&bob, amendments, author)
+        ),
+        Err(MurmureError::Refused(Refusal::NotInSegment))
+    );
+
+    // Her `meta` names them for the active segment instead.
+    let active = carol.active_id();
+    let list = carol
+        .doc(carol.meta_id().document_id())
+        .expect("meta")
+        .get_list(SEGMENTS);
+    for index in 0..list.len() {
+        let Some(ValueOrContainer::Container(Container::Map(entry))) = list.get(index) else {
+            continue;
+        };
+        if crate::schema::string(&entry, SEGMENT_DOCUMENT) == Some(active.to_string()) {
+            entry
+                .insert(SEGMENT_AMENDMENTS, amendments.to_string())
+                .expect("forge");
+        }
+    }
+    assert_eq!(carol.amendments_to_open(), [amendments]);
+    carol
+        .apply_signed(
+            amendments,
+            Seq(1),
+            &first,
+            signer(&alice, amendments, author),
+        )
+        .expect("waits");
+    assert_eq!(
+        carol.older_ready(amendments),
+        Err(MurmureError::ForeignSegment(amendments))
+    );
+}
+
+/// An edit and a delete the lock refused come back as replays. The segment
+/// reads as the relay holds it until they are written again.
+#[test]
+fn a_change_refused_by_the_lock_is_replayed() {
+    let author = UserId::new();
+    let (mut alice, segment) = closing_with(&["one", "two"], author);
+    let ids: Vec<MessageId> = alice
+        .messages(segment)
+        .expect("held")
+        .iter()
+        .map(|m| m.id)
+        .collect();
+    let edited = alice
+        .edit(segment, ids[0], &draft("uno"), author)
+        .expect("edit")
+        .expect("a change");
+    assert_eq!(edited.document, segment.document_id(), "not locked yet");
+    let deleted = alice.delete(segment, ids[1], author).expect("delete");
+
+    let relocated = alice
+        .relocate_locked(segment.document_id(), &[edited.delta, deleted.delta])
+        .expect("relocate");
+    assert!(relocated.sent.is_none(), "no new message moves");
+    assert_eq!(
+        relocated.replay,
+        [
+            Replay {
+                segment,
+                message: ids[0],
+                draft: Some(draft("uno")),
+            },
+            Replay {
+                segment,
+                message: ids[1],
+                draft: None,
+            },
+        ]
+    );
+    let read = alice.messages(segment).expect("held");
+    assert_eq!(read[0].text, "one");
+    assert!(!read[1].deleted);
+    assert!(matches!(
+        alice.change_target(segment, NOW),
+        Ok(ChangeTarget::Create(_))
+    ));
+}

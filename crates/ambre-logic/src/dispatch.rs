@@ -111,6 +111,7 @@ impl LogicState {
                         self.closed_channels.clear();
                         self.closing_segments.clear();
                         self.close_successors.clear();
+                        self.owed_replays.clear();
                         self.channel_watchers.clear();
                         self.channel_members.clear();
                         self.spaces.clear();
@@ -538,6 +539,17 @@ impl LogicState {
                 closing,
                 message,
             } => self.segment_close_failed(channel_id, closing, &message),
+            LogicEvent::AmendmentsLinked {
+                channel_id,
+                segment,
+                amendments,
+            } => self.amendments_linked(channel_id, segment, amendments),
+            LogicEvent::AmendmentsLinkFailed {
+                channel_id,
+                segment,
+                amendments,
+                message,
+            } => self.amendments_link_failed(channel_id, segment, amendments, &message),
             LogicEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,

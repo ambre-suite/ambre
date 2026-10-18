@@ -168,6 +168,16 @@ pub enum SyncCommand {
         closing: SegmentId,
         successor: SegmentId,
     },
+    /// Create `amendments` on the relay under the current key of `meta`,
+    /// then register it as the amendments of the locked `segment`
+    /// (`SRV-201`). Answered by [`crate::LogicEvent::AmendmentsLinked`] or
+    /// by [`crate::LogicEvent::AmendmentsLinkFailed`].
+    CreateAmendments {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        amendments: DocumentId,
+    },
     /// Ask the relay for the finalize lease of the closing segment `segment`
     /// (the Murmure segments spec). Answered by
     /// [`crate::LogicEvent::FinalizeLeaseAnswered`] or by

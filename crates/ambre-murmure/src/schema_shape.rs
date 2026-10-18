@@ -29,11 +29,11 @@ use std::collections::BTreeSet;
 use ambre_bus::{Mention, MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use ambre_core::{CategoryId, ChannelId, SpaceId, UserId};
+use ambre_core::{CategoryId, ChannelId, DocumentId, SegmentId, SpaceId, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
-use crate::{ChannelState, ChannelType, Listing, SpaceState};
+use crate::{ChangeTarget, ChannelState, ChannelType, Listing, SpaceState};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/shapes.txt");
@@ -57,6 +57,8 @@ pub(crate) const ID: &str = "{id}";
 pub(crate) const META_PEER: u64 = 0x11;
 pub(crate) const SEGMENT_PEER: u64 = 0x12;
 pub(crate) const SPACE_PEER: u64 = 0x13;
+pub(crate) const SUCCESSOR_PEER: u64 = 0x14;
+pub(crate) const AMENDMENTS_PEER: u64 = 0x15;
 
 /// The user who writes every document of the scenario.
 pub(crate) const AUTHOR: UserId = UserId::from_bytes([0xa1; 16]);
@@ -78,7 +80,9 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 6] = [
+pub(crate) const KEYED_BY_ID: [&str; 8] = [
+    "amendments:amendments",
+    "amendments:peers",
     "meta:peers",
     "segment:messages/*/reactions",
     "segment:peers",
@@ -245,7 +249,57 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     state
         .delete(segment, messages[3].id, AUTHOR)
         .expect("delete");
+    amend_after_lock(&mut state, segment);
     state
+}
+
+/// Close `segment`, lock it as the relay does, and amend it: the first
+/// message edited, the third one deleted.
+fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
+    let successor = SegmentId::new();
+    state
+        .close_into(segment, successor, true, Timestamp(1_700_000_000_006))
+        .expect("close");
+    state
+        .adopt_session(successor.document_id(), SUCCESSOR_PEER, entry())
+        .expect("adopt");
+    state
+        .relocate_locked(segment.document_id(), &[])
+        .expect("lock");
+    let ChangeTarget::Create(amendments) = state
+        .change_target(segment, Timestamp(1_700_000_000_007))
+        .expect("target")
+    else {
+        panic!("a locked segment with no amendments creates them");
+    };
+    state
+        .adopt_session(amendments, AMENDMENTS_PEER, entry())
+        .expect("adopt");
+    state.amendments_linked(segment, amendments).expect("link");
+    let messages = state.messages(segment).expect("held");
+    let amended = MessageDraft {
+        text: "hi @channel".to_owned(),
+        mentions: vec![Mention {
+            target: MentionTarget::Channel,
+            range: 3..11,
+        }],
+    };
+    state
+        .edit(segment, messages[0].id, &amended, AUTHOR)
+        .expect("amend");
+    state
+        .delete(segment, messages[2].id, AUTHOR)
+        .expect("amend");
+}
+
+/// The segment of the scenario that holds its messages, and its
+/// amendments document.
+pub(crate) fn amended(state: &ChannelState) -> (SegmentId, DocumentId) {
+    let segment = state
+        .closing_id()
+        .expect("the scenario's segment is closing");
+    let amendments = state.amendments_id(segment).expect("amended");
+    (segment, amendments)
 }
 
 /// A space that reaches every key the schema declares: a name, a category,
@@ -273,9 +327,11 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
 
 fn shape_of(state: &ChannelState) -> Shape {
     let mut shape = Shape::default();
+    let (segment, amendments) = amended(state);
     for (kind, id) in [
         (DocumentKind::Meta, state.meta_id().document_id()),
-        (DocumentKind::Segment, state.active_id().document_id()),
+        (DocumentKind::Segment, segment.document_id()),
+        (DocumentKind::Amendments, amendments),
     ] {
         shape.walk_doc(kind, state.doc(id).expect("held"));
     }
@@ -381,6 +437,7 @@ fn writers(kind: DocumentKind, doc: &LoroDoc, session: u64) -> String {
 fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
     let channel = channel_of_every_key();
     let space = space_of_every_key(&channel);
+    let (segment, amendments) = amended(&channel);
     let written = [
         writers(
             DocumentKind::Meta,
@@ -389,10 +446,13 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
         ),
         writers(
             DocumentKind::Segment,
-            channel
-                .doc(channel.active_id().document_id())
-                .expect("held"),
+            channel.doc(segment.document_id()).expect("held"),
             SEGMENT_PEER,
+        ),
+        writers(
+            DocumentKind::Amendments,
+            channel.doc(amendments).expect("held"),
+            AMENDMENTS_PEER,
         ),
         writers(DocumentKind::Space, space.doc(), SPACE_PEER),
     ]
@@ -481,7 +541,7 @@ fn every_declared_key_appears_in_the_shape() {
 fn a_body_stored_as_a_string_moves_the_shape() {
     let state = channel_of_every_key();
     let before = render(&shape_of(&state));
-    let doc = state.doc(state.active_id().document_id()).expect("active");
+    let doc = state.doc(amended(&state).0.document_id()).expect("held");
     let Some(ValueOrContainer::Container(Container::Map(message))) =
         doc.get_list(crate::schema::MESSAGES).get(0)
     else {

@@ -910,6 +910,62 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
     Ok((closed.active, closed.created))
 }
 
+/// Inputs for [`amendments_task`], gathered from `SyncState` before
+/// spawning.
+pub(crate) struct AmendmentsParams {
+    pub channel_id: ChannelId,
+    pub segment: SegmentId,
+    pub amendments: DocumentId,
+    /// The current key of the channel's `meta`, which opens every document
+    /// of the channel.
+    pub meta_key: DocumentKey,
+    /// This user, who creates the document.
+    pub author: Author,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Create the amendments document of a locked segment under the key of
+/// `meta`, then register it for the segment (`SRV-201`). Returns the
+/// document the relay holds for the segment.
+///
+/// A registration that lost its race deletes the document it created
+/// (`SYNC-166`). A failed request deletes nothing, as at a close.
+pub(crate) async fn amendments_task<H: ShareHttp>(
+    http: &H,
+    p: AmendmentsParams,
+) -> Result<DocumentId, String> {
+    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let (doc_key_enc, entry) = creation(p.amendments, &p.meta_key, &p.exchange_key, &p.author)?;
+    let body = http::CreateDocumentRequest {
+        doc_type: ambre_core::DocType::Murmure,
+        name_enc: None,
+        doc_key_enc,
+        document_id: Some(p.amendments),
+        entry: Some(entry),
+    };
+    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+        .await?;
+    let body = http::RegisterAmendmentsRequest {
+        amendments: p.amendments,
+    };
+    let url = format!(
+        "{base}/channels/{}/segments/{}/amendments",
+        p.channel_id, p.segment
+    );
+    let linked = http
+        .post_json::<_, http::AmendmentsResponse>(&url, &body)
+        .await?;
+    if !linked.created {
+        let url = format!("{base}/documents/{}", p.amendments);
+        if let Err(e) = http.delete(&url, &()).await {
+            tracing::warn!("[Sync] the amendments of a lost registration stay on the relay: {e}");
+        }
+    }
+    Ok(linked.amendments)
+}
+
 /// Inputs for [`settle_task`].
 pub(crate) struct SettleParams {
     pub document_id: DocumentId,
@@ -2115,6 +2171,76 @@ mod tests {
         };
         assert_eq!(create["document_id"], mine.document_id().to_string());
         assert_eq!(close["successor"], mine.to_string());
+    }
+
+    fn amendments_params(amendments: DocumentId) -> AmendmentsParams {
+        AmendmentsParams {
+            channel_id: ChannelId::new(),
+            segment: SegmentId::new(),
+            amendments,
+            meta_key: DocumentKey::generate(),
+            author: author(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: keypair(1).0,
+        }
+    }
+
+    /// Holds `SYNC-166`. The amendments document is created, then
+    /// registered. A loser deletes its own and learns the winner's; a failed
+    /// registration deletes nothing.
+    #[tokio::test]
+    async fn a_lost_registration_deletes_the_amendments_it_created() {
+        let mine = DocumentId::new();
+        let created = serde_json::json!({
+            "document_id": mine.to_string(), "doc_type": "murmure",
+        });
+        let answer = |held: DocumentId, created: bool| serde_json::json!({ "amendments": held.to_string(), "created": created });
+        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
+        assert_eq!(
+            amendments_task(&http, amendments_params(mine)).await,
+            Ok(mine)
+        );
+        {
+            let calls = http.calls();
+            let [Call::Post(create, body), Call::Post(link, linked)] = calls.as_slice() else {
+                panic!(
+                    "expected a create then a registration, got {:?}",
+                    calls.len()
+                );
+            };
+            assert!(create.ends_with("/api/documents"));
+            assert_eq!(body["document_id"], mine.to_string());
+            assert!(link.ends_with("/amendments"));
+            assert_eq!(linked["amendments"], mine.to_string());
+        }
+
+        let winner = DocumentId::new();
+        let http = FakeHttp::new(vec![
+            Ok(created.clone()),
+            Ok(answer(winner, false)),
+            Ok(serde_json::Value::Null),
+        ]);
+        assert_eq!(
+            amendments_task(&http, amendments_params(mine)).await,
+            Ok(winner)
+        );
+        {
+            let calls = http.calls();
+            let Some(Call::Delete(url, _)) = calls.last() else {
+                panic!("the loser deleted nothing");
+            };
+            assert!(url.ends_with(&format!("/documents/{mine}")));
+        }
+
+        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 409".into())]);
+        let failed = amendments_task(&http, amendments_params(mine)).await;
+        assert_eq!(failed, Err("HTTP 409".into()));
+        assert_eq!(
+            http.calls().len(),
+            2,
+            "a failed registration deletes nothing"
+        );
     }
 
     /// A revoke the relay refuses changes nothing here either: no key is

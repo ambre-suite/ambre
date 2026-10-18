@@ -55,8 +55,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | `ambre_murmure::amending_tests::a_change_refused_by_the_lock_is_replayed` -- the refused edit and delete come back as replays; `::a_change_of_a_locked_segment_waits_for_its_amendments` -- a later change goes to the amendments, created once; `::an_edit_and_a_delete_of_a_locked_segment_write_amendments` -- the amendment holds the new body; `ambre_logic::channels::tests::an_edit_refused_by_the_lock_is_replayed_at_the_next_tick` -- the replay leaves at the next tick; `ambre_logic::channels::tests::an_edit_of_a_locked_segment_waits_for_the_amendments_it_creates` -- the edit leaves once the document is up | none | verified |
+| `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | `ambre_murmure::amending_tests::a_change_refused_by_the_lock_is_replayed` -- the segment reads as the relay holds it, and the edit survives as a replay; `::a_lost_race_fetches_the_amendments_the_relay_linked` -- a lost race keeps the change for the winner; `ambre_logic::channels::tests::a_lost_or_failed_link_moves_the_edit_to_another_document` -- the waiting edit moves to the winner | none | verified |
 | `MURMURE-263` | `FAIL` | Given a new message the relay refuses for a locked segment, the client MUST send it again to the active segment. | this spec section 3; `SRV-115` | `ambre_murmure::closing_tests::a_message_refused_by_the_lock_moves_to_the_active_segment` -- the segment goes back to the relay's state, and the message moves with its identifier and reaction; `::a_refused_reaction_alone_moves_nothing` -- nothing moves, and the active segment is never rewound; `ambre_logic::channels::tests::a_message_refused_by_the_lock_leaves_for_the_active_segment` -- the moved message leaves for the active segment, and the view moves it | none | verified |
 
 ### 1.6 Re-finalize an amended segment
@@ -78,11 +78,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 20 `verified`, 5 `unimplemented`. The engine tests hold the close on one peer
+* **Verification.** 22 `verified`, 3 `unimplemented`. The engine tests hold the close on one peer
   and on two, the byte bound, and the fetch again of a successor. They hold the lease, the shallow
-  snapshot, the final mark, the lock's refusal, the check of a final snapshot and the seal again.
-  The Logic tests hold the close, each remote successor, the tick, the verdict and the drop. The
-  Sync tests hold the lease, the upload, the commit, the report, the drop and the quarantine.
+  snapshot, the final mark, the lock, its replays, the check and the seal again. The Logic tests
+  hold the close, each successor, the tick, the verdict and the replay. The Sync tests hold the
+  lease, the upload, the commit, the report and the quarantine.
 
 ---
 
@@ -177,6 +177,16 @@ Each message they created is written again in the active segment, with its ident
 body and its author's reactions (`MURMURE-263`). The view moves it by its identifier, so it never
 shows twice.
 
+Each edit or delete they carried of an older message comes back as a replay (`MURMURE-074`). The
+segment counts as locked from then on. The Logic thread writes each replay again at the channel's
+next tick, as an amendment (`MURMURE-073`).
+
+**An amendment, on the client.** A change of a message of a locked segment goes to its amendments
+document. The first change creates it, and the Sync worker links it to the segment (`SRV-201`).
+The link lands in the segment's entry of `meta`, so every member opens it. A link that lost its race
+names the winner's document. The client deletes its own, and the change waits on the winner
+(`SRV-202`, `SYNC-166`).
+
 **A confirmation, on the client.** A final snapshot is shallow, so it holds no operation to compare
 one by one. A member holding every delta up to the horizon compares states instead (`MURMURE-071`).
 The snapshot must hold no operation the deltas lack, and every delta the relay sequenced
@@ -189,10 +199,12 @@ member who seals a false one cannot purge the deltas (`SRV-118`).
 **Code.** `ChannelState::wants_close`, `close_into`, `successor_to_open` and `successor_to_retry`,
 in `crates/ambre-murmure/src/channel/closing.rs`. `ChannelState::lease_to_ask`, `final_snapshot`,
 `mark_final`, `settle_final` and `refinalize` are in `crates/ambre-murmure/src/channel/finalizing.rs`.
-`ChannelState::relocate_locked` is in `crates/ambre-murmure/src/channel/relocating.rs`, and
+`ChannelState::relocate_locked` is in `crates/ambre-murmure/src/channel/relocating.rs`.
+
+`change_target` and `amendments_linked` are in `crates/ambre-murmure/src/channel/amending.rs`, and
 `ChannelState::check_snapshot` in `crates/ambre-murmure/src/channel/confirming.rs`. The Logic side
 is `crates/ambre-logic/src/segments.rs`, and the verdict `check_channel_snapshot` in
-`crates/ambre-logic/src/channels.rs`. The requests are `close_segment_task` in
+`crates/ambre-logic/src/channels.rs`. The requests are `close_segment_task` and `amendments_task` in
 `crates/ambre-sync/src/sharing.rs`, and `take_lease` and `commit_final` in
 `crates/ambre-sync/src/finalize.rs`.
 
@@ -230,13 +242,13 @@ The segments have no control of their own. A user meets them only as a channel t
 
 * **A dropped final snapshot is sealed again only by a member holding the segment open.** A member
   who loads it later reads its deltas, and waits for the next seal.
-* **No amendment or re-finalization exists.** A channel refuses a second close while the first is
-  still `closing`.
+* **No re-finalization folds the amendments yet.** A channel refuses a second close while the first
+  is still `closing`. The fold lands with
+  the `A re-finalization folds the amendments` Story (`ambre-roadmap.md` E5).
 * **A final snapshot carries no search index.** The index lands with the `Search on a new device`
   Story (`ambre-roadmap.md` E5).
-* **A reaction or an edit the lock refused alone is lost.** Only a new message moves to the active
-  segment. The amendments of the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5)
-  carry the rest.
+* **A reaction the lock refused alone is lost.** A new message moves, and an edit or a delete is
+  replayed as an amendment. An amendment carries no reaction, and none is ruled yet.
 * **A successor fetched five times in vain is given up.** The member keeps writing to the old
   segment until the next `meta` delta names the successor again (`MURMURE-482`).
 * **A closed channel counts what its `meta` names.** After a key rotation, a new segment counts its

@@ -13,6 +13,16 @@
 # to the section above: a section is the record of what that version meant.
 
 == v1
+amendments:amendments/{id}/by = "author" => message 3 deleted by its author
+amendments:amendments/{id}/content = "hi @channel" => message 1 amended to read "hi @channel"
+amendments:amendments/{id}/content#mention = {uuid} => message 1 amended to mention the channel
+amendments:amendments/{id}/deleted = true => message 3 deleted by amendment
+amendments:header/channel_id = {uuid} => the channel it opens as
+amendments:header/created_at = 1700000000007 => read by no reader of this build
+amendments:header/kind = "amendments" => admitted as Amendments
+amendments:header/segment_id = {uuid} => the segment it amends
+amendments:meta/schema_version = 1 => version 1, Current
+amendments:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 meta:channel/name = "general" => named "general"
 meta:channel/type = "public" => Public
 meta:header/channel_id = {uuid} => the channel it opens as
@@ -20,9 +30,13 @@ meta:header/created_at = 1700000000000 => read by no reader of this build
 meta:header/kind = "meta" => admitted as Meta
 meta:meta/schema_version = 1 => version 1, Current
 meta:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
-meta:segments/*/document_id = {uuid} => entry 1 lists the active segment
+meta:segments/*/amendments = {uuid} => entry 1 names the amendments of its segment
+meta:segments/*/document_id = {uuid} => entry 1 lists the closing segment
+meta:segments/*/document_id = {uuid} => entry 2 lists the active segment
 meta:segments/*/from_ts = 1700000000000 => read by no reader of this build
-meta:segments/*/state = "active" => entry 1 is Active
+meta:segments/*/from_ts = 1700000000006 => read by no reader of this build
+meta:segments/*/state = "active" => entry 2 is Active
+meta:segments/*/state = "closing" => entry 1 is Closing
 segment:header/channel_id = {uuid} => the channel it opens as
 segment:header/created_at = 1700000000000 => read by no reader of this build
 segment:header/kind = "segment" => admitted as Segment

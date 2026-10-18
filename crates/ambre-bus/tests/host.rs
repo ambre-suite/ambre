@@ -270,6 +270,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::CreateChannel { .. } => "CreateChannel",
         SyncCommand::RotateSpace { .. } => "RotateSpace",
         SyncCommand::CloseSegment { .. } => "CloseSegment",
+        SyncCommand::CreateAmendments { .. } => "CreateAmendments",
         SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
         SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
@@ -318,6 +319,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelKeyResealed { .. } => "ChannelKeyResealed",
         LogicEvent::SegmentClosed { .. } => "SegmentClosed",
         LogicEvent::SegmentCloseFailed { .. } => "SegmentCloseFailed",
+        LogicEvent::AmendmentsLinked { .. } => "AmendmentsLinked",
+        LogicEvent::AmendmentsLinkFailed { .. } => "AmendmentsLinkFailed",
         LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
         LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
         LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
@@ -340,8 +343,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 30;
-const EVENT_VARIANTS: usize = 44;
+const SYNC_VARIANTS: usize = 31;
+const EVENT_VARIANTS: usize = 46;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -446,6 +449,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             closing: segment,
             successor: SegmentId::from_document(DocumentId::new()),
+        },
+        SyncCommand::CreateAmendments {
+            channel_id: chan,
+            meta,
+            segment,
+            amendments: DocumentId::new(),
         },
         SyncCommand::TakeFinalizeLease {
             channel_id: chan,
@@ -613,6 +622,17 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,
             closing: segment,
+            message: "refused".to_owned(),
+        },
+        LogicEvent::AmendmentsLinked {
+            channel_id: chan,
+            segment,
+            amendments: DocumentId::new(),
+        },
+        LogicEvent::AmendmentsLinkFailed {
+            channel_id: chan,
+            segment,
+            amendments: DocumentId::new(),
             message: "refused".to_owned(),
         },
         LogicEvent::FinalizeLeaseAnswered {

@@ -209,12 +209,17 @@ pub enum MurmureCommand {
         segment: SegmentId,
         message: MessageId,
         draft: MessageDraft,
+        /// The instant the author edited, stamped by the view. A locked
+        /// segment takes the edit in an amendments document created then.
+        now: Timestamp,
     },
     /// Delete this session's own `message`: it reads deleted, with an empty
     /// body (`MURMURE-087`). Its thread stays (`MURMURE-090`).
     DeleteMessage {
         segment: SegmentId,
         message: MessageId,
+        /// The instant the author deleted, stamped by the view.
+        now: Timestamp,
     },
     /// The view's tick of the open channel, once a second while it shows
     /// it. It expires the indicators and refreshes this user's presence in

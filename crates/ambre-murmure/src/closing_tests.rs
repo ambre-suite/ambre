@@ -335,10 +335,11 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     bob.adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
         .expect("adopt");
 
-    let sent = bob
+    let relocated = bob
         .relocate_locked(old.document_id(), &[waiting.delta, reacted.delta])
-        .expect("relocate")
-        .expect("a message moves");
+        .expect("relocate");
+    assert!(relocated.replay.is_empty(), "no older message changed");
+    let sent = relocated.sent.expect("a message moves");
     assert_eq!(sent.segment, successor);
     let MurmureEvent::Messages { segment, messages } = &sent.event else {
         panic!("the moved message");
@@ -391,7 +392,8 @@ fn a_refused_reaction_alone_moves_nothing() {
     let moved = alice
         .relocate_locked(old.document_id(), &[reacted.delta])
         .expect("relocate");
-    assert!(moved.is_none());
+    assert!(moved.sent.is_none());
+    assert!(moved.replay.is_empty(), "a reaction is not replayed");
     let kept = alice.messages(old).expect("old");
     assert!(kept[0].reactions.is_empty(), "the refused reaction is gone");
     assert!(matches!(
