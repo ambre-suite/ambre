@@ -30,20 +30,41 @@ pub(crate) struct LightSubscription {
     /// Whether a reconnect asks for what it missed. One watched from the
     /// head asks for nothing until its first delta gives it a number.
     replays: bool,
+    /// The first number sealed under a key this subscription lacked, since
+    /// the last key it took. A new key replays from it (`RESID-024`).
+    unopened_from: Option<Seq>,
+    /// The keys a frame was sealed under that the relay was asked for, so
+    /// each is asked once.
+    asked: HashSet<KeyId>,
 }
 
 impl LightSubscription {
+    /// A light subscription under `doc_key` that read up to `seen`.
+    fn new(doc_key: DocumentKey, doc_type: DocType, horizon: Seq, seen: Seq) -> Self {
+        Self {
+            doc_key,
+            doc_type,
+            on_relay: true,
+            horizon,
+            seen,
+            counters: ActivityCounters::default(),
+            replays: true,
+            unopened_from: None,
+            asked: HashSet::new(),
+        }
+    }
+
     /// The light subscription a full session leaves behind. The horizon never
     /// passes what the session itself received.
     fn of(doc: SyncDocumentState, applied: Seq) -> Self {
         Self {
-            horizon: Seq(applied.0.min(doc.last_seq.0)),
-            seen: doc.last_seq,
-            doc_key: doc.doc_key,
-            doc_type: doc.doc_type,
             on_relay: doc.server_created,
-            counters: ActivityCounters::default(),
-            replays: true,
+            ..Self::new(
+                doc.doc_key,
+                doc.doc_type,
+                Seq(applied.0.min(doc.last_seq.0)),
+                doc.last_seq,
+            )
         }
     }
 
@@ -65,6 +86,9 @@ impl LightSubscription {
         self.replays = true;
         if mine == Some(&update.public_data.pub_key) {
             return None;
+        }
+        if update.public_data.key_id != self.doc_key.id() {
+            self.unopened_from.get_or_insert(seq);
         }
         let summary = pipeline::open_update(update, &self.doc_key)
             .ok()
@@ -123,7 +147,9 @@ impl SyncState {
     }
 
     /// Counts an update of a document held as a light subscription. Returns
-    /// whether the document is one.
+    /// whether the document is one. A frame sealed under a key it lacks asks
+    /// the relay for the document's current key, once per key. A rotation
+    /// notice may have been lost while the socket was down (`RESID-024`).
     pub(crate) fn count_light(&mut self, seq: Seq, update: &Update) -> bool {
         let document_id = update.public_data.document_id;
         let me = self.user_id;
@@ -131,11 +157,17 @@ impl SyncState {
         let Some(light) = self.light.get_mut(&document_id) else {
             return false;
         };
-        if let Some(counters) = light.count(seq, update, me, mine.as_ref()) {
+        let counted = light.count(seq, update, me, mine.as_ref());
+        let key_id = update.public_data.key_id;
+        let ask = counted.is_some() && key_id != light.doc_key.id() && light.asked.insert(key_id);
+        if let Some(counters) = counted {
             self.send_to_logic(LogicEvent::Activity {
                 document_id,
                 counters,
             });
+        }
+        if ask {
+            self.fetch_rotated_key(document_id);
         }
         true
     }
@@ -144,15 +176,35 @@ impl SyncState {
     /// key (`RESID-023`). Its next summaries open under it, and so do those
     /// of a document watched later under its key. The listed key of a
     /// channel whose `meta` it is follows.
+    ///
+    /// The frames read under a key it lacked counted as activity alone. They
+    /// are asked again, so their summaries count under the new key
+    /// (`RESID-024`). A key it already held replays nothing.
     pub(crate) fn rekey_light(&mut self, document_id: DocumentId, new_key: DocumentKey) {
         let Some(light) = self.light.get_mut(&document_id) else {
             return;
         };
+        let unopened = light.unopened_from.take();
+        if light.doc_key.id() == new_key.id() {
+            return;
+        }
         light.doc_key = new_key.clone();
+        // A frame is counted once its number passes `seen`, so the cursor
+        // steps back below the first frame that did not open.
+        let replay = unopened.map(|from| Seq(from.0.saturating_sub(1)));
+        if let Some(after) = replay {
+            light.seen = after;
+        }
         for (meta, key) in self.listed_keys.values_mut() {
             if meta.document_id() == document_id {
                 *key = new_key.clone();
             }
+        }
+        if let Some(after_seq) = replay {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
         }
     }
 
@@ -190,15 +242,7 @@ impl SyncState {
         };
         self.light.insert(
             document_id,
-            LightSubscription {
-                doc_key,
-                doc_type: DocType::Murmure,
-                on_relay: true,
-                horizon: after,
-                seen: after,
-                counters: ActivityCounters::default(),
-                replays: true,
-            },
+            LightSubscription::new(doc_key, DocType::Murmure, after, after),
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
         self.ws_send(&WsClientMsg::RequestMissing {
@@ -244,13 +288,13 @@ impl SyncState {
         self.light.insert(
             document_id,
             LightSubscription {
-                doc_key: key.clone(),
-                doc_type: DocType::Murmure,
-                on_relay: true,
-                horizon: Seq(0),
-                seen: last.unwrap_or(Seq(0)),
-                counters: ActivityCounters::default(),
                 replays: last.is_some(),
+                ..LightSubscription::new(
+                    key.clone(),
+                    DocType::Murmure,
+                    Seq(0),
+                    last.unwrap_or(Seq(0)),
+                )
             },
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
@@ -831,6 +875,71 @@ mod tests {
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         state.receive_update(Seq(1), mentioned(segment.document_id(), &new_key));
         assert_eq!(mentions(&rx), vec![(segment.document_id(), 1)]);
+    }
+
+    /// Holds `RESID-024`. A rotation missed offline leaves a watched `meta`
+    /// under its old key. A frame under the new key marks activity and asks
+    /// for the key once. The key, once taken, replays from that frame, which
+    /// counts.
+    #[test]
+    fn a_frame_under_a_missing_key_fetches_it_and_replays() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.user_id = Some(UserId::from_bytes([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        let (old_key, new_key) = (DocumentKey::generate(), DocumentKey::generate());
+        state.listed_keys.insert(channel_id, (meta, old_key));
+        state.handle_command(SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            meta_last: Some(Seq(1)),
+            documents: Vec::new(),
+        });
+        let m = meta.document_id();
+        let requests = || -> Vec<Seq> {
+            ws_rx
+                .try_iter()
+                .filter_map(|wire| match ambre_protocol::ws::decode_client_msg(&wire) {
+                    Ok(WsClientMsg::RequestMissing { after_seq, .. }) => Some(after_seq),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mentions = || -> Vec<u32> {
+            drain(&rx)
+                .into_iter()
+                .filter_map(|event| match event {
+                    LogicEvent::Activity { counters, .. } => Some(counters.mentions),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(requests(), vec![Seq(1)]);
+        let mentioned = || update(m, SnapshotId::new(), &new_key, Some(&mention()));
+        state.receive_update(Seq(2), mentioned());
+        state.receive_update(Seq(3), mentioned());
+        assert_eq!(mentions(), vec![0, 0], "a key it lacks counts nothing");
+        let asked: Vec<_> = state.light[&m].asked.iter().copied().collect();
+        assert_eq!(asked, vec![new_key.id()], "each key is asked once");
+
+        let rotated = |key: &DocumentKey| SyncEvent::KeyRotated {
+            document_id: m,
+            new_doc_key: key.clone(),
+            links: Vec::new(),
+        };
+        state.handle_sync_event(rotated(&new_key));
+        assert_eq!(
+            requests(),
+            vec![Seq(1)],
+            "replayed from the first unopened frame"
+        );
+        state.receive_update(Seq(2), mentioned());
+        state.receive_update(Seq(3), mentioned());
+        assert_eq!(mentions(), vec![1, 2]);
+        state.handle_sync_event(rotated(&new_key));
+        assert!(requests().is_empty(), "a key already held replays nothing");
     }
 
     /// A thread held in full or light hears its deltas on its own topic, so

@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3576 rows: 2949 shipped, of which 2 loose. 627 unbuilt.**
+**3577 rows: 2950 shipped, of which 2 loose. 627 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 850 | 418 | 816 | 609 | 254 | 2947 |
+| `verified` | 851 | 418 | 816 | 609 | 254 | 2948 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
@@ -67,7 +67,7 @@
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-profile.md` | 9 | 1 | 1 |  | 8 |
 | `ambre-spec-render-assets.md` | 18 | 15 | 15 |  | 3 |
-| `ambre-spec-residency.md` | 23 | 23 | 23 |  |  |
+| `ambre-spec-residency.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
@@ -276,7 +276,7 @@
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127,312 |
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073 |
-| `ambre-spec-residency.md` | RESID-001..023 |
+| `ambre-spec-residency.md` | RESID-001..024 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
