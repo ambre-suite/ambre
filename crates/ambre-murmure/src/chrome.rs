@@ -155,15 +155,29 @@ impl MurmureRelay {
             }
             SpaceEvent::ChannelLeft { channel_id } | SpaceEvent::ChannelDeleted { channel_id } => {
                 self.sidebar.update(|s| s.forget(*channel_id));
-                self.opened.update(|o| {
-                    o.remove(channel_id);
-                });
-                if self.pane.get_untracked().shown_channel() == Some(*channel_id) {
-                    self.pane.set(MurmurePane::ChannelList);
-                }
+                self.drop_channels(&[*channel_id]);
+                Vec::new()
+            }
+            // The space leaves with every channel of it (`MURMURE-488`).
+            SpaceEvent::Left => {
+                let dropped = self
+                    .sidebar
+                    .try_update(|s| s.forget_space(space))
+                    .unwrap_or_default();
+                self.drop_channels(&dropped);
                 Vec::new()
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// Forget the channels this page opened among `channels`, and leave the
+    /// pane that shows one of them.
+    fn drop_channels(&self, channels: &[ChannelId]) {
+        self.opened.update(|o| o.retain(|c| !channels.contains(c)));
+        let shown = self.pane.get_untracked().shown_channel();
+        if shown.is_some_and(|c| channels.contains(&c)) {
+            self.pane.set(MurmurePane::ChannelList);
         }
     }
 

@@ -120,6 +120,22 @@ pub async fn list_member_spaces(
     Ok(ids.into_iter().map(uuid_row_to_id).collect())
 }
 
+/// Every user holding a row of `document`, when it is a space; none for any
+/// other document (`SRV-218`).
+pub async fn space_members(
+    pool: &PgPool,
+    document: &ambre_core::DocumentId,
+) -> Result<Vec<ambre_core::UserId>, AppError> {
+    let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT m.user_id FROM spaces s JOIN document_members m ON m.document_id = s.id \
+         WHERE s.id = $1 ORDER BY m.user_id",
+    )
+    .bind(id_to_uuid(*document))
+    .fetch_all(pool)
+    .await?;
+    Ok(ids.into_iter().map(uuid_row_to_id).collect())
+}
+
 /// The channels the relay holds as public in `space`, by identifier.
 pub async fn list_space_public_channels(
     pool: &PgPool,

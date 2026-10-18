@@ -642,3 +642,37 @@ async fn a_channel_left_leaves_the_sidebar_and_the_pane() {
         ["sales", "random"]
     );
 }
+
+/// A space the user lost leaves the sidebar with every channel of it, and a
+/// pane showing one goes back to the channel list. A later invite shows it
+/// again (`MURMURE-488`).
+#[wasm_bindgen_test]
+async fn a_space_lost_leaves_the_sidebar_with_its_channels() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    frame.select("sales").await;
+    let lost = UiEvent::Space {
+        space_id: acme.space,
+        event: SpaceEvent::Left,
+    };
+    assert!(frame.absorb(lost).await.is_empty());
+    assert_eq!(frame.pane.get_untracked(), MurmurePane::ChannelList);
+    assert_eq!(frame.texts(".murmure-section-title"), ["Direct messages"]);
+
+    let again = frame.absorb(acme.members(&[])).await;
+    assert!(
+        matches!(again[..], [LogicCommand::OpenSpace { space_id }] if space_id == acme.space),
+        "{again:?}"
+    );
+    assert!(frame.absorb(acme.catalogue()).await.is_empty());
+    frame.select("sales").await;
+    let sent = frame.sent.get_untracked();
+    assert!(
+        matches!(
+            sent[..],
+            [LogicCommand::OpenChannel { channel_id: a }, LogicCommand::OpenChannel { channel_id: b }]
+                if a == acme.sales && b == acme.sales
+        ),
+        "the channel opens again: {sent:?}"
+    );
+}

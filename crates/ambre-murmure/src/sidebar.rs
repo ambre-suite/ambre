@@ -170,6 +170,31 @@ impl Sidebar {
         self.names.remove(&channel);
     }
 
+    /// Drop a space the user lost, with its catalogue and every channel of
+    /// it, joined or to join. Returns the channels dropped (`MURMURE-488`).
+    pub fn forget_space(&mut self, space: SpaceId) -> Vec<ChannelId> {
+        self.spaces.retain(|s| *s != space);
+        let mut dropped: Vec<ChannelId> = self
+            .catalogues
+            .remove(&space)
+            .map(|c| c.channels.iter().map(|e| e.channel_id).collect())
+            .unwrap_or_default();
+        dropped.extend(
+            self.members
+                .iter()
+                .filter(|m| {
+                    matches!(m.place, ChannelPlace::Public(s) | ChannelPlace::Private(s) if s == space)
+                })
+                .map(|m| m.channel_id),
+        );
+        dropped.sort_unstable_by_key(|c| *c.as_bytes());
+        dropped.dedup();
+        for &channel in &dropped {
+            self.forget(channel);
+        }
+        dropped
+    }
+
     /// Whether the user belongs to the channel.
     pub fn is_member(&self, channel: ChannelId) -> bool {
         self.members.iter().any(|m| m.channel_id == channel)
@@ -494,6 +519,53 @@ mod tests {
                 .set_member_channels(vec![general_m], &[space, other])
                 .is_empty()
         );
+    }
+
+    /// A space the user lost leaves the sidebar with its catalogue, its
+    /// joined channels, public and private, and those to join. Another space
+    /// and the direct messages stay (`MURMURE-488`).
+    #[test]
+    fn a_space_lost_leaves_the_sidebar_with_every_channel_of_it() {
+        let (space, other) = (SpaceId::new(), SpaceId::new());
+        let (general, general_m) = public(space);
+        let (kept, kept_m) = public(other);
+        let (random, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
+        let mut sidebar = Sidebar::default();
+        let place = |channel_id, place| MemberChannel { channel_id, place };
+        sidebar.set_member_channels(
+            vec![
+                general_m,
+                kept_m,
+                place(private, ChannelPlace::Private(space)),
+                place(direct, ChannelPlace::Direct),
+            ],
+            &[space, other],
+        );
+        sidebar.set_catalogue(
+            space,
+            Some("Acme".to_owned()),
+            Vec::new(),
+            vec![
+                listed(general, "general", None, 0),
+                listed(random, "random", None, 1),
+            ],
+        );
+        sidebar.set_name(private, Some("board".to_owned()));
+
+        let mut dropped = sidebar.forget_space(space);
+        dropped.sort_unstable_by_key(|c| *c.as_bytes());
+        let mut expected = vec![general, random, private];
+        expected.sort_unstable_by_key(|c| *c.as_bytes());
+        assert_eq!(dropped, expected);
+        let shown: Vec<ChannelId> = sidebar
+            .sections()
+            .iter()
+            .flat_map(|s| s.entries.iter().map(|e| e.channel))
+            .collect();
+        assert_eq!(shown, vec![kept, direct]);
+        assert_eq!(sidebar.listed_in(random), None);
+        assert_eq!(sidebar.name_of(private), None);
+        assert!(sidebar.forget_space(space).is_empty(), "already gone");
     }
 
     /// The relay's mark shows before any count, and a count replaces it once

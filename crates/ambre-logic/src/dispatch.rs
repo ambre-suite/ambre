@@ -490,6 +490,7 @@ impl LogicState {
             } => {
                 if Some(revoked_user_id) == self.my_user_id {
                     self.channel_revoked(document_id);
+                    self.space_revoked(document_id);
                 }
                 self.send_to_ui(UiEvent::MemberRevoked {
                     document_id,

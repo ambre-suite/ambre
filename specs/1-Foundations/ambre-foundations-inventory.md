@@ -50,7 +50,7 @@
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 17 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 18 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
-| `server` | The one process every client talks to. | partial | 73 | 1 |
+| `server` | The one process every client talks to. | partial | 74 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 47 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 20 partial, 6 design-only. 1035 contract rows, 2 loose.**
+**46 features: 20 implemented, 20 partial, 6 design-only. 1036 contract rows, 2 loose.**

@@ -797,6 +797,21 @@ impl LogicState {
         });
     }
 
+    /// The relay removed this user from `document_id`. Is it a space held
+    /// here? Then the user left it, an owner removed them, or it was deleted.
+    /// The space closes, and the view learns it (the Murmure spaces spec).
+    pub(crate) fn space_revoked(&mut self, document_id: DocumentId) {
+        let space_id = SpaceId::from_document(document_id);
+        if !self.spaces.contains_key(&space_id) && !self.space_opening.contains_key(&space_id) {
+            return;
+        }
+        self.close_space(space_id);
+        self.send_to_ui(UiEvent::Space {
+            space_id,
+            event: SpaceEvent::Left,
+        });
+    }
+
     /// The relay removed this user from `document_id` (`SRV-187`,
     /// `SRV-188`). Is it the `meta` of a channel held here? Then the user
     /// left it from another client, or its owner deleted it. A leave or a
@@ -2382,5 +2397,43 @@ mod tests {
                 ));
             }
         }
+    }
+
+    /// The relay's notice that this user left a space, or lost it, closes the
+    /// space and tells the view once. Another user's removal, or a document
+    /// no space holds, changes nothing (the Murmure spaces spec).
+    #[test]
+    fn a_space_the_user_lost_closes_and_the_view_learns_it() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        state.my_user_id = Some(me);
+        let space_id = created_space(&mut state, &ui, &sync);
+        let revoked = |document_id, revoked_user_id| LogicEvent::MemberRevoked {
+            document_id,
+            revoked_user_id,
+        };
+        state.handle_logic_event(revoked(space_id.document_id(), UserId::new()));
+        state.handle_logic_event(revoked(DocumentId::new(), me));
+        assert!(state.spaces.contains_key(&space_id), "kept");
+        assert!(drain(&sync).is_empty());
+        let _ = drain(&ui);
+
+        state.handle_logic_event(revoked(space_id.document_id(), me));
+        assert!(!state.spaces.contains_key(&space_id));
+        assert!(matches!(
+            drain(&sync).as_slice(),
+            [SyncCommand::CloseDocument { document_id }] if *document_id == space_id.document_id()
+        ));
+        let left = |shown: &[UiEvent]| {
+            shown
+                .iter()
+                .filter(|e| {
+                    matches!(e, UiEvent::Space { space_id: s, event: SpaceEvent::Left } if *s == space_id)
+                })
+                .count()
+        };
+        assert_eq!(left(&drain(&ui)), 1);
+        state.handle_logic_event(revoked(space_id.document_id(), me));
+        assert_eq!(left(&drain(&ui)), 0, "once");
     }
 }

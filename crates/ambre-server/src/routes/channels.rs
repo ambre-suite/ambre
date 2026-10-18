@@ -2956,6 +2956,65 @@ mod tests {
         }
     }
 
+    /// `SRV-218`: a space delete reaches the topic of each member of the
+    /// space, one in no channel of it included. The delete of a document
+    /// that is no space tells its members nothing.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_space_delete_reaches_every_member_of_the_space(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
+        use futures_util::StreamExt;
+        use rustis::commands::PubSubCommands;
+
+        let (state, _stub) = with_store(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let gone = space(&state, alice, &[(bob, Role::Viewer)]).await;
+        db::register_space(&state.db, &gone)
+            .await
+            .expect("register");
+        let plain = document(&state, alice).await;
+        grant(&state, plain, carol, Role::Viewer).await;
+        let mut topics = Vec::new();
+        for member in [bob, carol] {
+            let listener = rustis::client::Client::connect("redis://localhost:6379")
+                .await
+                .expect("redis");
+            topics.push(
+                listener
+                    .subscribe(format!("user:{member}"))
+                    .await
+                    .expect("subscribe"),
+            );
+        }
+        let mut outside = topics.pop().expect("carol's topic");
+        let mut inside = topics.pop().expect("bob's topic");
+
+        assert_eq!(delete_space(&state, alice, gone).await, StatusCode::OK);
+        let heard = tokio::time::timeout(std::time::Duration::from_secs(5), inside.next())
+            .await
+            .expect("the notice arrives")
+            .expect("a message")
+            .expect("readable");
+        let notice = decode_server_msg(heard.payload()).expect("decodes");
+        assert!(
+            matches!(notice, WsServerMsg::DocumentRevoked { document_id } if document_id == gone.document_id()),
+            "heard {notice:?}"
+        );
+
+        assert_eq!(
+            delete_space(&state, alice, SpaceId::from_document(plain)).await,
+            StatusCode::OK
+        );
+        let silent =
+            tokio::time::timeout(std::time::Duration::from_millis(300), outside.next()).await;
+        assert!(
+            silent.is_err(),
+            "a member of a document that is no space heard it"
+        );
+    }
+
     /// A space delete from an editor or a stranger is refused, and every
     /// channel of the space stays (the Murmure spaces spec).
     #[sqlx::test]

@@ -699,6 +699,9 @@ pub enum SpaceEvent {
     },
     /// The space could not open. Nothing of it is held.
     OpenFailed { message: String },
+    /// The user is no longer a member of the space: they left it, an owner
+    /// removed them, or it was deleted. Nothing of it is held.
+    Left,
 }
 
 #[cfg(test)]
