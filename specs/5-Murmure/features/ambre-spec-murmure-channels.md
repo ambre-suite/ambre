@@ -2,7 +2,7 @@
 **Type:** Vertical (feature)
 **Implementation:** partial -- a private channel is created, left and deleted. The relay keeps the
 key links of a channel under its `meta` document. A direct message is opened, reused and
-named. No invitation exists yet.
+named. An invite opens a channel.
 
 > A few people talk where nobody else reads: a private channel of a space, or a direct message
 > between two or more members. Opening a direct message with the same people finds the one that
@@ -55,8 +55,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119` | not built | unbuilt -- lands with the `Invites into a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3 | not built | unbuilt -- lands with the `Invites into a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119`; `ambre-spec-server.md`, `SRV-190` | `ambre_server::routes::channels::tests::an_invite_on_meta_opens_every_document_of_the_channel` -- the invite on `meta` opens the segment to the invitee, with the links kept under `meta`, database tier; `ambre_sync::sharing::tests::an_invite_posts_its_signed_entry_beside_the_copy` -- the copy wraps the current key and the entry names it; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open walks back from it | none | verified |
+| `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3 | not built | unbuilt -- lands with the `The third member notice` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-058` | `FRAME` | An invite MUST NOT hand the invitee a key older than the latest history boundary. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Leave a channel
@@ -117,11 +117,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 28 `verified`, 18 `unimplemented`. The relay holds a private channel, its leave
+* **Verification.** 29 `verified`, 17 `unimplemented`. The relay holds a private channel, its leave
   and its delete, and the key links of a channel under its `meta` document. The Logic thread creates
   a private channel without the catalogue, the owner's client deletes one, and a member's client
-  leaves one. A direct message opens, is reused for one set of members, and takes a name. Invites,
-  the segment a rotation closes, conversion and archive are not built.
+  leaves one. A direct message opens, is reused, and takes a name; an invite opens a channel. The
+  third member notice, the segment a rotation closes, conversion and archive are not built.
 
 ---
 
@@ -176,7 +176,8 @@ a leave.
 
 1. The inviting client wraps the current key for the invitee, and its signed entry names that key
    (`SYNC-123`).
-2. It posts the wrap and the entry in one request (`SYNC-105`).
+2. It posts the wrap and the entry in one request on `meta`, whose rows open every document of the
+   channel. The relay refuses an invite on any other document of it (`SRV-190`, `SYNC-105`).
 3. The invitee walks the key chain back to the latest history boundary (`SYNC-119`), so it reads
    every segment since.
 4. For a direct message of two, both members see the notice before the invite applies.
@@ -242,6 +243,7 @@ who writes its key into the catalogue.
 
 * `ambre-server/src/routes/channels.rs` -- the `public` flag at creation, the owner's delete, and
   the direct message route with the log it checks.
+* `ambre-server/src/routes/share.rs` -- an invite into a channel, taken on its `meta` alone.
 * `ambre-server/src/db/channels.rs` -- deleting a channel with every document it groups, and
   finding or creating a direct message under its lock.
 * `ambre-server/src/db/members.rs` -- a leave: the owed rotation, and the delete of an emptied
@@ -289,4 +291,5 @@ who writes its key into the catalogue.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No invite exists.** It lands with the `Invites into a channel` Story (`ambre-roadmap.md` E5).
+* **No notice of a third member.** It is a message kind, so it waits for messages.
+  It lands with the `The third member notice` Story (`ambre-roadmap.md` E5).

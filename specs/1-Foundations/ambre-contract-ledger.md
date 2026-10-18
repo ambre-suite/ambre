@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3504 rows: 2713 shipped, of which 2 loose. 791 unbuilt.**
+**3505 rows: 2715 shipped, of which 2 loose. 790 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 781 | 418 | 816 | 609 | 87 | 2711 |
+| `verified` | 782 | 418 | 816 | 609 | 88 | 2713 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 213 | 55 | 29 | 109 | 385 | 791 |
+| `unimplemented` | 213 | 55 | 29 | 109 | 384 | 790 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -70,7 +70,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 22 | 22 |  | 2 |
 | `ambre-spec-sequencer.md` | 48 | 39 | 39 |  | 9 |
-| `ambre-spec-server.md` | 67 | 58 | 57 | 1 | 9 |
+| `ambre-spec-server.md` | 68 | 59 | 58 | 1 | 9 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-sync.md` | 39 | 38 | 38 |  | 1 |
 | `ambre-spec-text-editor.md` | 13 | 11 | 11 |  | 2 |
@@ -160,7 +160,7 @@
 | `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 22 | 13 | 13 |  | 9 |
-| `ambre-spec-murmure-channels.md` | 46 | 28 | 28 |  | 18 |
+| `ambre-spec-murmure-channels.md` | 46 | 29 | 29 |  | 17 |
 | `ambre-spec-murmure-engine.md` | 10 | 7 | 7 |  | 3 |
 | `ambre-spec-murmure-members.md` | 21 | 11 | 11 |  | 10 |
 | `ambre-spec-murmure-messages.md` | 22 | 3 | 3 |  | 19 |
@@ -269,7 +269,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..189 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..190 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050; UI-THREAD-014,018 |

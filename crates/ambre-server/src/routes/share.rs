@@ -152,6 +152,18 @@ pub async fn invite_to_document(
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
+    // The rows of a channel's `meta` grant every document of it, so an
+    // invite into a channel goes there and nowhere else (`SRV-190`).
+    if let Some(channel_id) = db::channel_of_document(&state.db, &doc_id).await? {
+        let meta = db::get_channel(&state.db, &channel_id)
+            .await?
+            .and_then(|channel| channel.meta_id);
+        if meta.map(|meta| meta.document_id()) != Some(doc_id) {
+            return Err(AppError::Conflict {
+                detail: "a channel takes its invites on its meta document".into(),
+            });
+        }
+    }
     let invalid_role = || AppError::Conflict {
         detail: "invalid role".into(),
     };

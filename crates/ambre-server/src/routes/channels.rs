@@ -1220,6 +1220,87 @@ mod tests {
         channel
     }
 
+    /// `who` invites `invitee` into `document` as an editor, with a copy of
+    /// the key `key` names.
+    async fn invite(
+        state: &Arc<AppState>,
+        who: UserId,
+        document: DocumentId,
+        invitee: &str,
+        key: [u8; 16],
+    ) -> StatusCode {
+        status(
+            crate::routes::share::invite_to_document(
+                State(state.clone()),
+                session(who),
+                Path(document.to_string()),
+                Json(crate::routes::share::InviteRequest {
+                    invitee_email: invitee.into(),
+                    role: Role::Editor,
+                    doc_key_enc: base64::engine::general_purpose::URL_SAFE.encode([9u8; 48]),
+                    key_id: ambre_core::KeyId::from_array(key),
+                    entry: None,
+                }),
+            )
+            .await,
+        )
+    }
+
+    /// An invite on a private channel's `meta` opens every document of the
+    /// channel to the invitee, with the key links kept under `meta`. One on
+    /// the segment is refused, and adds no row anywhere.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_invite_on_meta_opens_every_document_of_the_channel(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[]).await;
+        let channel = private_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        let segment = channel.segment.document_id();
+        sqlx::query(
+            "INSERT INTO document_key_links (document_id, key_id, previous_key_id, link) \
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(uuid_of_doc(meta))
+        .bind([2u8; 16].as_slice())
+        .bind([1u8; 16].as_slice())
+        .bind(b"link".as_slice())
+        .execute(&state.db)
+        .await
+        .expect("insert a link");
+
+        assert_eq!(
+            invite(&state, alice, segment, "carol@test.dev", [2; 16]).await,
+            StatusCode::CONFLICT
+        );
+        let rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE user_id = $1")
+                .bind(uuid::Uuid::from_bytes(*carol.as_bytes()))
+                .fetch_one(&state.db)
+                .await
+                .expect("count");
+        assert_eq!(rows, 0, "the refused invite adds no row");
+
+        assert_eq!(
+            invite(&state, alice, meta, "carol@test.dev", [2; 16]).await,
+            StatusCode::OK
+        );
+        let row = db::get_document_member(&state.db, &segment, &carol)
+            .await
+            .expect("query")
+            .expect("carol reaches the segment");
+        assert_eq!(row.doc_key_enc, vec![9u8; 48]);
+        assert_eq!(
+            db::document_key_links(&state.db, &segment)
+                .await
+                .expect("links"),
+            vec![b"link".to_vec()],
+            "the chain under meta serves the segment"
+        );
+    }
+
     /// A member of a space lists the channels the relay holds public in it.
     /// A private one, a deleted one and one of another space stay out. A
     /// stranger to the space, and a malformed id, get a 403.

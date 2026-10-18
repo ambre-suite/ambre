@@ -78,6 +78,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-159` | `POST` | A conversion of a direct message MUST record the space of the channel and mark it private. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-160` | `FAIL` | Given a wire message on a document of an archived channel, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
+| `SRV-190` | `FAIL` | Given an invite on a document of a channel other than its `meta`, the relay MUST refuse it and add no row. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-channels.md` | `ambre_server::routes::channels::tests::an_invite_on_meta_opens_every_document_of_the_channel` -- an invite on the segment answers `409` and adds no row, database tier | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_deleted_document_leaves_nothing` -- a delete purges the sequence, clock, pending, presence and dead-letter keys before the rows go, and the tombstone refuses every late write after | none | verified |
 | `SRV-165` | `POST` | A delete that has begun MUST complete, even when a store fails or restarts before the end. | this spec section 3; `SRV-017`, `SRV-057` | `ambre_server::routes::tests::handler_tests::a_delete_interrupted_is_finished_by_the_pass` -- a delete the object store stops keeps its mark, and the pass empties the document, sets the lost tombstone again, then sweeps and drops the mark | none | verified |
@@ -134,7 +135,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 57 `verified`, 1 `qa-manual`, 9 `unimplemented`. A request test drives what
+* **Verification.** 58 `verified`, 1 `qa-manual`, 9 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -261,6 +262,9 @@ with no document open (`ambre-spec-launcher.md`).
 path. A clamp on the granted role alone lets an editor re-invite an owner as an editor, and
 overwrite that owner's sealed key on the way. The target's current rank is clamped as well
 (`SRV-070`).
+
+**A channel is invited into on `meta`.** The rows of `meta` grant every document of the channel.
+A row on a segment would grant nothing, so an invite there is refused (`SRV-190`).
 
 **The request pipeline.** Four gates, in this order, and each one is the reason the next is cheap.
 
