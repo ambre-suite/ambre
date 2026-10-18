@@ -72,6 +72,11 @@ pub(crate) const MESSAGE_CONTENT: &str = "content";
 /// The flat map of a message's reactions, one entry per member and emoji
 /// (`MURMURE-006`). Each entry holds the instant of its reaction.
 pub(crate) const MESSAGE_REACTIONS: &str = "reactions";
+/// `true` once the author edited the body (`MURMURE-084`).
+pub(crate) const MESSAGE_EDITED: &str = "edited";
+/// `true` once the author deleted the message, its body emptied
+/// (`MURMURE-087`).
+pub(crate) const MESSAGE_DELETED: &str = "deleted";
 /// The kind of a notice, absent from a message a member wrote
 /// (`MURMURE-057`). A notice keeps an empty body.
 pub(crate) const MESSAGE_NOTICE: &str = "notice";
@@ -271,6 +276,12 @@ pub(crate) fn unsigned(map: &LoroMap, key: &str) -> Option<u64> {
         LoroValue::I64(n) => u64::try_from(n).ok(),
         _ => None,
     }
+}
+
+/// Whether the boolean under `key` is `true`. Absent, or of another type,
+/// reads as `false`.
+pub(crate) fn flag(map: &LoroMap, key: &str) -> bool {
+    matches!(value(map, key), Some(LoroValue::Bool(true)))
 }
 
 /// The schema version a document carries.

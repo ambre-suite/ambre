@@ -202,6 +202,20 @@ pub enum MurmureCommand {
         message: MessageId,
         emoji: String,
     },
+    /// Replace the body of this session's own `message` with `draft`, and
+    /// mark it edited (`MURMURE-084`). Its author, identity and reactions
+    /// stay (`MURMURE-086`).
+    EditMessage {
+        segment: SegmentId,
+        message: MessageId,
+        draft: MessageDraft,
+    },
+    /// Delete this session's own `message`: it reads deleted, with an empty
+    /// body (`MURMURE-087`). Its thread stays (`MURMURE-090`).
+    DeleteMessage {
+        segment: SegmentId,
+        message: MessageId,
+    },
     /// The view's tick of the open channel, once a second while it shows
     /// it. It expires the indicators and refreshes this user's presence in
     /// the channel (the Murmure typing and presence spec).
@@ -221,7 +235,9 @@ impl MurmureCommand {
             Self::SendMessage { .. }
             | Self::Name { .. }
             | Self::React { .. }
-            | Self::Unreact { .. } => true,
+            | Self::Unreact { .. }
+            | Self::EditMessage { .. }
+            | Self::DeleteMessage { .. } => true,
             Self::LoadOlder { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
@@ -249,6 +265,10 @@ pub struct MessageView {
     /// What the channel announces, `None` for a message a member wrote. A
     /// notice has an empty body (`MURMURE-057`).
     pub notice: Option<Notice>,
+    /// The author edited the body (`MURMURE-084`).
+    pub edited: bool,
+    /// The author deleted the message: its body is empty (`MURMURE-087`).
+    pub deleted: bool,
 }
 
 /// An event of the channel itself, shown in its message list.

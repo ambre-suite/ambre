@@ -35,6 +35,8 @@ segment:header: map
 segment:messages/*/author: string
 segment:messages/*/content#mention: string
 segment:messages/*/content: text
+segment:messages/*/deleted: bool
+segment:messages/*/edited: bool
 segment:messages/*/id: string
 segment:messages/*/member: string
 segment:messages/*/notice: string

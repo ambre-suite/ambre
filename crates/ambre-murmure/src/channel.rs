@@ -13,14 +13,17 @@ use ambre_bus::{
     MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, Timestamp, UnreadCount,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
-use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrContainer};
+use loro::{
+    Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, UpdateOptions, ValueOrContainer,
+};
 
 use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
-    self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MESSAGE_AUTHOR,
-    MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_TS,
-    MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM, SEGMENT_STATE, SEGMENTS, SegmentState,
+    self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MENTION, MESSAGE_AUTHOR,
+    MESSAGE_CONTENT, MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE,
+    MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM,
+    SEGMENT_STATE, SEGMENTS, SegmentState,
 };
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
@@ -756,6 +759,8 @@ impl ChannelState {
                     mentions,
                     reactions: Vec::new(),
                     notice: None,
+                    edited: false,
+                    deleted: false,
                 }],
             },
         })
@@ -803,6 +808,8 @@ impl ChannelState {
                     mentions: Vec::new(),
                     reactions: Vec::new(),
                     notice: Some(Notice::MemberAdded { member }),
+                    edited: false,
+                    deleted: false,
                 }],
             },
         })
@@ -873,6 +880,27 @@ impl ChannelState {
         segment: SegmentId,
         message: MessageId,
     ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
+        let (doc, session, map) = self.live_message(segment, message)?;
+        let reactions = match map.get(MESSAGE_REACTIONS) {
+            Some(ValueOrContainer::Container(Container::Map(reactions))) => reactions,
+            _ => return Err(MurmureError::NoMessage(message)),
+        };
+        Ok((doc, session, reactions))
+    }
+
+    /// The map of `message` in the live segment `segment`, with the session
+    /// it is written under.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a segment the channel does not hold, and
+    /// [`MurmureError::Final`] for a final one. [`MurmureError::NoSession`]
+    /// before its PeerID landed, and [`MurmureError::NoMessage`] for a
+    /// message it does not hold.
+    fn live_message(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+    ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
         let document_id = segment.document_id();
         if !self.holds(document_id) {
             return Err(MurmureError::NotHeld(document_id));
@@ -881,13 +909,109 @@ impl ChannelState {
             .held_mut(document_id)
             .ok_or(MurmureError::Final(document_id))?;
         let (doc, session) = held.session()?;
-        let map = message_map(doc, message)
-            .and_then(|map| match map.get(MESSAGE_REACTIONS) {
-                Some(ValueOrContainer::Container(Container::Map(reactions))) => Some(reactions),
-                _ => None,
-            })
-            .ok_or(MurmureError::NoMessage(message))?;
+        let map = message_map(doc, message).ok_or(MurmureError::NoMessage(message))?;
         Ok((doc, session, map))
+    }
+
+    /// The map of `message`, as [`ChannelState::live_message`], when `user`
+    /// wrote it and has not deleted it.
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::live_message`], then
+    /// [`MurmureError::NotAuthor`] for a message of another user and
+    /// [`MurmureError::Deleted`] for a deleted one.
+    fn own_message(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+        user: UserId,
+    ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
+        let (doc, session, map) = self.live_message(segment, message)?;
+        // The check refuses a foreign change at every receiver, so a local
+        // one is refused before it is written (`MURMURE-085`).
+        if identity_of(&map).map(|(_, author)| author) != Some(user) {
+            return Err(MurmureError::NotAuthor(message));
+        }
+        if schema::flag(&map, MESSAGE_DELETED) {
+            return Err(MurmureError::Deleted(message));
+        }
+        Ok((doc, session, map))
+    }
+
+    /// Replace the body of `message` with `draft`, and mark it edited
+    /// (`MURMURE-084`).
+    ///
+    /// The body takes the difference alone, so a concurrent edit from
+    /// another session of the author merges char by char. The identity, the
+    /// author and the reactions stay as they were (`MURMURE-086`). `None`
+    /// when the draft is the body already, so nothing travels.
+    ///
+    /// # Errors
+    /// [`MurmureError::BadMention`] for a mention past the draft, and every
+    /// refusal of [`ChannelState::own_message`].
+    pub fn edit(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+        draft: &MessageDraft,
+        user: UserId,
+    ) -> Result<Option<Sent>, MurmureError> {
+        if !mention::fits(&draft.mentions, &draft.text) {
+            return Err(MurmureError::BadMention);
+        }
+        let channel = self.channel_id;
+        let (doc, session, map) = self.own_message(segment, message, user)?;
+        let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
+        if content.to_string() == draft.text && mention::read(&content, channel) == draft.mentions {
+            return Ok(None);
+        }
+        // The marks are written again from the draft, so a mention the edit
+        // took out leaves no mark on the text that stays.
+        let len = content.len_unicode();
+        if len > 0 {
+            content.unmark(0..len, MENTION)?;
+        }
+        content
+            .update(&draft.text, UpdateOptions::default())
+            .map_err(|error| MurmureError::Crdt(error.to_string()))?;
+        mention::write(doc, &content, &draft.mentions, channel)?;
+        map.insert(MESSAGE_EDITED, true)?;
+        let delta = session.export_json(doc)?;
+        Ok(Some(self.changed(segment, delta)))
+    }
+
+    /// Delete `message`: mark it deleted and empty its body (`MURMURE-087`).
+    ///
+    /// The text goes, so no member reads it again. The `thread` field and
+    /// the reactions stay, and the replies with them (`MURMURE-090`).
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::own_message`]. A deleted message is
+    /// [`MurmureError::Deleted`], so a second delete writes nothing.
+    pub fn delete(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+        user: UserId,
+    ) -> Result<Sent, MurmureError> {
+        let (doc, session, map) = self.own_message(segment, message, user)?;
+        let content = content_of(&map).ok_or(MurmureError::NoMessage(message))?;
+        let len = content.len_unicode();
+        if len > 0 {
+            content.delete(0, len)?;
+        }
+        map.insert(MESSAGE_DELETED, true)?;
+        let delta = session.export_json(doc)?;
+        Ok(self.changed(segment, delta))
+    }
+
+    /// What an edit or a delete produced: the delta, its summary of kind
+    /// edit, and the segment's messages for the view. An edit names no one,
+    /// so its summary lists no mention.
+    fn changed(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
+        let mut sent = self.reacted(segment, delta);
+        sent.summary.kind = ActivityKind::Edit;
+        sent
     }
 
     /// What a reaction delta produced: the delta, its summary of kind
@@ -1335,6 +1459,8 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         mentions: mention::read(&content, channel),
         reactions: reaction::read(&map),
         notice: notice_of(&map)?,
+        edited: schema::flag(&map, MESSAGE_EDITED),
+        deleted: schema::flag(&map, MESSAGE_DELETED),
     })
 }
 

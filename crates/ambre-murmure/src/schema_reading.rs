@@ -42,8 +42,9 @@ use crate::schema::{
     CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
     DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
     HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MENTION, MESSAGE_AUTHOR, MESSAGE_CONTENT,
-    MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES,
-    SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS,
+    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SPACE,
+    SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, channel_of_every_key,
@@ -203,6 +204,7 @@ fn stored_text(value: &LoroValue) -> String {
         LoroValue::String(text) => format!("{:?}", text.as_str()),
         LoroValue::Binary(bytes) => bytes.iter().map(|b| format!("{b:02x}")).collect(),
         LoroValue::I64(n) => n.to_string(),
+        LoroValue::Bool(flag) => flag.to_string(),
         other => format!("{other:?}"),
     }
 }
@@ -381,6 +383,8 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             }
             Notice::MemberAdded { .. } => None,
         },
+        MESSAGE_EDITED if message.edited => Some(format!("message {n} is edited")),
+        MESSAGE_DELETED if message.deleted => Some(format!("message {n} is deleted")),
         _ => None,
     }
 }

@@ -28,16 +28,26 @@ segment:header/created_at = 1700000000000 => read by no reader of this build
 segment:header/kind = "segment" => admitted as Segment
 segment:messages/*/author = {uuid} => message 1 by the author
 segment:messages/*/author = {uuid} => message 2 by the author
+segment:messages/*/author = {uuid} => message 3 by the author
+segment:messages/*/author = {uuid} => message 4 by the author
 segment:messages/*/content = "" => message 2 reads ""
+segment:messages/*/content = "" => message 4 reads ""
+segment:messages/*/content = "edited" => message 3 reads "edited"
 segment:messages/*/content = "hello @channel" => message 1 reads "hello @channel"
 segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
+segment:messages/*/deleted = true => message 4 is deleted
+segment:messages/*/edited = true => message 3 is edited
 segment:messages/*/id = {uuid} => message 1
 segment:messages/*/id = {uuid} => message 2
+segment:messages/*/id = {uuid} => message 3
+segment:messages/*/id = {uuid} => message 4
 segment:messages/*/member = {uuid} => message 2 names the member who joins
 segment:messages/*/notice = "member_added" => message 2 announces a member
 segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
 segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
 segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
+segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
+segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
 segment:meta/schema_version = 1 => version 1, Current
 segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:categories/{id}/name = "Teams" => category 1 named "Teams"

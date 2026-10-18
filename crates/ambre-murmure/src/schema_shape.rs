@@ -226,6 +226,25 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     state
         .announce(MEMBER, AUTHOR, Timestamp(1_700_000_000_003))
         .expect("announce");
+    // A third message the author edits, and a fourth one she deletes.
+    for (text, ts) in [("draft", 1_700_000_000_004), ("gone", 1_700_000_000_005)] {
+        let draft = MessageDraft {
+            text: text.to_owned(),
+            mentions: Vec::new(),
+        };
+        state.send(&draft, AUTHOR, Timestamp(ts)).expect("send");
+    }
+    let messages = state.messages(segment).expect("held");
+    let edited = MessageDraft {
+        text: "edited".to_owned(),
+        mentions: Vec::new(),
+    };
+    state
+        .edit(segment, messages[2].id, &edited, AUTHOR)
+        .expect("edit");
+    state
+        .delete(segment, messages[3].id, AUTHOR)
+        .expect("delete");
     state
 }
 

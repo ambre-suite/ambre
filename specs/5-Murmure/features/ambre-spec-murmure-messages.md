@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- the send and the authorship check are built; the edit and the delete are not
+**Implementation:** partial -- built in a live segment; the amendments are not
 
 > A member writes a message, edits it, or deletes it. Nobody else can change it: every client
 > refuses a change that does not come from its author.
@@ -36,19 +36,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-084` | `POST` | An edit MUST change the content of the message and mark it edited. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-084` | `POST` | An edit MUST change the content of the message and mark it edited. | this spec section 3 | `ambre_murmure::edit_tests::an_edit_changes_the_body_and_marks_the_message_edited` -- here and at a peer, the marks following the draft; `::an_edit_with_a_mention_past_its_body_is_refused` -- nothing written; `ambre_logic::channels::tests::an_edit_and_a_delete_leave_as_edits_and_show_the_message` -- the delta leaves as an edit | none | verified |
 | `MURMURE-085` | `FAIL` | Given a delta that edits a message of another author, every client MUST refuse the delta. | this spec section 3 | `ambre_murmure::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing`; `ambre_murmure::authorship_tests::a_later_session_of_the_author_edits_its_own_message` -- the author's later PeerID passes and another user's is refused | none | verified |
-| `MURMURE-253` | `FAIL` | Given a delta that amends a message of another author, with no moderator standing behind it, every client MUST refuse the delta. | this spec section 3; `MURMURE-073`; `MURMURE-307` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-086` | `FRAME` | Editing a message MUST NOT change its author, its identity or its reactions. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-253` | `FAIL` | Given a delta that amends a message of another author, with no moderator standing behind it, every client MUST refuse the delta. | this spec section 3; `MURMURE-073`; `MURMURE-307` | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-086` | `FRAME` | Editing a message MUST NOT change its author, its identity or its reactions. | this spec section 3 | `ambre_murmure::edit_tests::an_edit_and_a_concurrent_reaction_both_hold` -- an edit crossing a reaction, both peers reading the same message | none | verified |
 
 ### 1.4 Delete a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-087` | `POST` | A delete MUST mark the message deleted and empty its content. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-088` | `POST` | A delete of a message in a locked segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-087` | `POST` | A delete MUST mark the message deleted and empty its content. | this spec section 3 | `ambre_murmure::edit_tests::a_delete_empties_the_body_and_marks_the_message_deleted` -- here and at a peer, then no edit and no second delete; `::an_edit_or_a_delete_of_a_message_not_ones_own_is_refused`; `ambre_logic::channels::tests::an_edit_and_a_delete_leave_as_edits_and_show_the_message` | none | verified |
+| `MURMURE-088` | `POST` | A delete of a message in a locked segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, with no moderator standing behind it, every client MUST refuse the delta. | this spec section 3; `MURMURE-307` | `ambre_murmure::authorship_tests::a_delete_of_another_authors_message_is_refused` -- no moderator standing exists yet, so every foreign removal is refused | none | verified |
-| `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | `ambre_murmure::edit_tests::a_delete_keeps_the_thread_and_the_reactions` -- the `thread` field reads the same here and at a peer | none | verified |
 
 ### 1.5 Receive a delta
 
@@ -64,8 +64,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 15 `verified`, 7 `unimplemented`: the send and the authorship check are built,
-  and no edit or delete exists.
+* **Verification.** 19 `verified`, 3 `unimplemented`: the send, the authorship check, and the edit
+  and the delete in a live segment are built. No amendment exists.
 
 ---
 
@@ -74,9 +74,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | Alice does | Bob does | The segment holds | Each user sees | Test |
 |---|---|---|---|---|
 | sends a message | -- | one message, authored by Alice | the message, by Alice | none |
-| edits her message | reacts to it at the same instant | the edit and the reaction | the edited message, with Bob's reaction (`MURMURE-086`) | none |
+| edits her message | reacts to it at the same instant | the edit and the reaction | the edited message, with Bob's reaction (`MURMURE-086`) | `ambre_murmure::edit_tests::an_edit_and_a_concurrent_reaction_both_hold` |
 | -- | Mallory sends a delta that edits Alice's message | Alice's message unchanged | the message as Alice wrote it (`MURMURE-085`) | `ambre_murmure::authorship_tests::an_edit_of_another_authors_message_is_refused_and_changes_nothing` |
-| deletes a message that has replies | -- | a deleted message, and its thread | the replies stay reachable (`MURMURE-090`) | none |
+| deletes a message that has replies | -- | a deleted message, and its thread | the replies stay reachable (`MURMURE-090`) | `ambre_murmure::edit_tests::a_delete_keeps_the_thread_and_the_reactions` |
 
 ---
 
@@ -119,7 +119,12 @@ check on the same delta, so every client reaches the same verdict (`MURMURE-079`
 **Moderation is the one exception.** Only the author changes a message, except a removal by a
 moderator whose standing the membership log proves (`features/ambre-spec-murmure-moderation.md`).
 
-**Code.** the send is `ChannelState::send`, in `crates/ambre-murmure/src/channel.rs`. The check is
+**An edit and a delete in a live segment.** An edit replaces the body by its difference alone, writes
+the marks again from the draft, and sets `edited`. A delete empties the body and sets `deleted`. It
+leaves `thread` and `reactions` as they were. Both take a summary of kind edit, which names no one.
+
+**Code.** the send is `ChannelState::send`, in `crates/ambre-murmure/src/channel.rs`, beside
+`ChannelState::edit` and `ChannelState::delete`. The check is
 `delta::check`, in `crates/ambre-murmure/src/delta.rs`, and `ChannelState::apply_signed` runs it on
 each received segment delta.
 
@@ -155,7 +160,10 @@ each received segment delta.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No edit and no delete are built.** The check refuses a foreign one, but no client writes one yet.
+* **A locked segment takes no edit yet.** The relay refuses it, and the amendment that would carry it
+  lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5).
+* **A mention added by an edit notifies no one.** The edit summary lists no mention. Whether it
+  should is not yet ruled.
 * **A segment is the only document the check reads.** The thread and amendments documents do not
   exist yet. Each lands with its own story and takes the same JSON path.
 * **The JSON form costs bytes.** A message delta weighs 346 bytes compressed, against 214 for the

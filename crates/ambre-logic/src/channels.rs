@@ -13,7 +13,7 @@ use ambre_bus::{
 use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
     ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample, Screened, Sent,
-    Signer, screen,
+    Signer, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -830,9 +830,10 @@ impl LogicState {
         let target = match &command {
             MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
-            MurmureCommand::React { segment, .. } | MurmureCommand::Unreact { segment, .. } => {
-                Some(segment.document_id())
-            }
+            MurmureCommand::React { segment, .. }
+            | MurmureCommand::Unreact { segment, .. }
+            | MurmureCommand::EditMessage { segment, .. }
+            | MurmureCommand::DeleteMessage { segment, .. } => Some(segment.document_id()),
             MurmureCommand::LoadOlder { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. }
@@ -981,7 +982,7 @@ impl LogicState {
                     return;
                 };
                 let reacted = channel.react(segment, message, &emoji, user, now);
-                self.send_reaction(channel_id, reacted);
+                self.send_change(channel_id, reacted);
             }
             MurmureCommand::Unreact {
                 segment,
@@ -993,7 +994,34 @@ impl LogicState {
                     return;
                 };
                 let removed = channel.unreact(segment, message, &emoji, user);
-                self.send_reaction(channel_id, removed);
+                self.send_change(channel_id, removed);
+            }
+            MurmureCommand::EditMessage {
+                segment,
+                message,
+                draft,
+            } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: edit on {channel_id} before the session; dropped");
+                    return;
+                };
+                // A mention of anyone outside the channel is no mark. An edit
+                // notifies no one, so an `@channel` asks for nothing.
+                let members: Option<Vec<UserId>> = self
+                    .channel_members
+                    .get(&channel_id)
+                    .map(|rows| rows.iter().map(|row| row.user_id).collect());
+                let draft = members_only(draft, members.as_deref());
+                let edited = channel.edit(segment, message, &draft, user);
+                self.send_change(channel_id, edited);
+            }
+            MurmureCommand::DeleteMessage { segment, message } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: delete on {channel_id} before the session; dropped");
+                    return;
+                };
+                let deleted = channel.delete(segment, message, user).map(Some);
+                self.send_change(channel_id, deleted);
             }
             MurmureCommand::Tick { now } => {
                 let meta = channel.meta_id().document_id();
@@ -1150,10 +1178,11 @@ impl LogicState {
         true
     }
 
-    /// Hand a reaction delta to the Sync worker with its summary of kind
-    /// reaction, and the segment's messages to the view (the Murmure
-    /// reactions spec). A reaction that changed nothing sends nothing.
-    fn send_reaction(&self, channel_id: ChannelId, reacted: Result<Option<Sent>, MurmureError>) {
+    /// Hand the delta of a reaction, an edit or a delete to the Sync worker
+    /// with its summary. The view takes the segment's messages (the Murmure
+    /// reactions and messages specs). A change that wrote nothing sends
+    /// nothing.
+    fn send_change(&self, channel_id: ChannelId, reacted: Result<Option<Sent>, MurmureError>) {
         match reacted {
             Ok(Some(sent)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
@@ -1168,7 +1197,7 @@ impl LogicState {
             }
             Ok(None) => {}
             Err(error) => {
-                tracing::warn!("Logic: reaction on channel {channel_id} refused: {error}");
+                tracing::warn!("Logic: change on channel {channel_id} refused: {error}");
             }
         }
     }
@@ -2753,6 +2782,99 @@ mod tests {
             command: unreact,
         });
         assert!(drain(&sync).is_empty(), "no entry left, nothing leaves");
+        assert!(drain(&ui).is_empty());
+    }
+
+    /// An edit leaves with a summary of kind edit and shows the new body,
+    /// marked edited, with no mark for a user outside the channel. A delete
+    /// leaves the same way and shows the message deleted. A second delete
+    /// is refused, so nothing leaves.
+    #[test]
+    fn an_edit_and_a_delete_leave_as_edits_and_show_the_message() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        let bob = UserId::new();
+        signed_in(&mut state, me);
+        let (channel_id, segment) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        assert!(
+            state
+                .channel_members_changed(meta, vec![member(me), member(bob)])
+                .is_none()
+        );
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: send("lunch?", Vec::new()),
+        });
+        drain(&sync);
+        drain(&ui);
+        let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
+        let mention = |target, range| Mention { target, range };
+        let edit = MurmureCommand::EditMessage {
+            segment,
+            message,
+            draft: MessageDraft {
+                text: "lunch @bob @eve?".to_owned(),
+                mentions: vec![
+                    mention(MentionTarget::User(bob), 6..10),
+                    mention(MentionTarget::User(UserId::new()), 11..15),
+                ],
+            },
+        };
+        let delete = MurmureCommand::DeleteMessage { segment, message };
+
+        for command in [edit, delete.clone()] {
+            state.handle_logic_command(LogicCommand::Channel {
+                channel_id,
+                command,
+            });
+            let sent = drain(&sync);
+            assert!(
+                matches!(
+                    sent.as_slice(),
+                    [SyncCommand::SendUpdate { document_id, summary: Some(summary), .. }]
+                        if *document_id == segment.document_id()
+                            && summary.kind == ActivityKind::Edit
+                ),
+                "one edit delta, got {sent:?}"
+            );
+        }
+        let shown = drain(&ui);
+        let [
+            UiEvent::Channel {
+                event:
+                    MurmureEvent::Messages {
+                        messages: edited, ..
+                    },
+                ..
+            },
+            UiEvent::Channel {
+                event:
+                    MurmureEvent::Messages {
+                        messages: deleted, ..
+                    },
+                ..
+            },
+        ] = shown.as_slice()
+        else {
+            panic!("the messages twice, got {shown:?}");
+        };
+        assert_eq!(
+            (edited[0].text.as_str(), edited[0].edited, edited[0].deleted),
+            ("lunch @bob @eve?", true, false)
+        );
+        assert_eq!(
+            edited[0].mentions,
+            [mention(MentionTarget::User(bob), 6..10)],
+            "no mark for a user outside the channel"
+        );
+        assert_eq!((deleted[0].text.as_str(), deleted[0].deleted), ("", true));
+
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: delete,
+        });
+        assert!(drain(&sync).is_empty(), "a deleted message takes no delete");
         assert!(drain(&ui).is_empty());
     }
 

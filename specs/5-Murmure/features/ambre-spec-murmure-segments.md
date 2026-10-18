@@ -55,17 +55,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | not built | unbuilt -- lands with the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-263` | `FAIL` | Given a new message the relay refuses for a locked segment, the client MUST send it again to the active segment. | this spec section 3; `SRV-115` | `ambre_murmure::closing_tests::a_message_refused_by_the_lock_moves_to_the_active_segment` -- the segment goes back to the relay's state, and the message moves with its identifier and reaction; `::a_refused_reaction_alone_moves_nothing` -- nothing moves, and the active segment is never rewound; `ambre_logic::channels::tests::a_message_refused_by_the_lock_leaves_for_the_active_segment` -- the moved message leaves for the active segment, and the view moves it | none | verified |
 
 ### 1.6 Re-finalize an amended segment
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-075` | `POST` | A re-finalization MUST fold the amendments into a new shallow snapshot. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-076` | `POST` | A re-finalization MUST remove from the amendments document the entries it folded in. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-075` | `POST` | A re-finalization MUST fold the amendments into a new shallow snapshot. | this spec section 3 | not built | unbuilt -- lands with the `A re-finalization folds the amendments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-076` | `POST` | A re-finalization MUST remove from the amendments document the entries it folded in. | this spec section 3 | not built | unbuilt -- lands with the `A re-finalization folds the amendments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | not built | unbuilt -- lands with the `A re-finalization folds the amendments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Fill a gap in a final segment
 
@@ -235,8 +235,8 @@ The segments have no control of their own. A user meets them only as a channel t
 * **A final snapshot carries no search index.** The index lands with the `Search on a new device`
   Story (`ambre-roadmap.md` E5).
 * **A reaction or an edit the lock refused alone is lost.** Only a new message moves to the active
-  segment. The amendments of the `Message edits and deletes` Story (`ambre-roadmap.md` E5) carry the
-  rest.
+  segment. The amendments of the `Amendments to a locked segment` Story (`ambre-roadmap.md` E5)
+  carry the rest.
 * **A successor fetched five times in vain is given up.** The member keeps writing to the old
   segment until the next `meta` delta names the successor again (`MURMURE-482`).
 * **A closed channel counts what its `meta` names.** After a key rotation, a new segment counts its

@@ -91,6 +91,14 @@ pub enum MurmureError {
     #[error("no message {0} in the segment")]
     NoMessage(MessageId),
 
+    /// An edit or a delete of a message another user wrote (`MURMURE-085`).
+    #[error("message {0} has another author")]
+    NotAuthor(MessageId),
+
+    /// An edit of a message its author deleted (`MURMURE-087`).
+    #[error("message {0} is deleted")]
+    Deleted(MessageId),
+
     /// A reaction that is not one emoji (`MURMURE-092`).
     #[error("a reaction that is not one emoji")]
     NotEmoji,

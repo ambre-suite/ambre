@@ -120,14 +120,11 @@ pub enum Screened {
 /// the relay has listed them: every mention stays, and the relay still
 /// routes nothing of the channel to a user outside it. `confirmed` says the
 /// author confirmed an `@channel`.
-pub fn screen(mut draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) -> Screened {
+pub fn screen(draft: MessageDraft, members: Option<&[UserId]>, confirmed: bool) -> Screened {
     let Some(members) = members else {
         return Screened::Send(draft);
     };
-    draft.mentions.retain(|mention| match mention.target {
-        MentionTarget::User(user) => members.contains(&user),
-        MentionTarget::Channel => true,
-    });
+    let draft = members_only(draft, Some(members));
     let all = draft
         .mentions
         .iter()
@@ -138,6 +135,19 @@ pub fn screen(mut draft: MessageDraft, members: Option<&[UserId]>, confirmed: bo
         };
     }
     Screened::Send(draft)
+}
+
+/// `draft` with no mark for a user outside `members`: their text stays
+/// (`MURMURE-099`). `None` before the relay has listed them keeps every
+/// mention, as [`screen`] does.
+pub fn members_only(mut draft: MessageDraft, members: Option<&[UserId]>) -> MessageDraft {
+    if let Some(members) = members {
+        draft.mentions.retain(|mention| match mention.target {
+            MentionTarget::User(user) => members.contains(&user),
+            MentionTarget::Channel => true,
+        });
+    }
+    draft
 }
 
 /// Whether `mentions` names `me`, or the channel and so every member

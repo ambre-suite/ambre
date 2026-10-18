@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3531 rows: 2838 shipped, of which 2 loose. 693 unbuilt.**
+**3531 rows: 2842 shipped, of which 2 loose. 689 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 811 | 418 | 816 | 609 | 182 | 2836 |
+| `verified` | 811 | 418 | 816 | 609 | 186 | 2840 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 200 | 55 | 29 | 109 | 300 | 693 |
+| `unimplemented` | 200 | 55 | 29 | 109 | 296 | 689 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -164,7 +164,7 @@
 | `ambre-spec-murmure-engine.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-murmure-members.md` | 21 | 11 | 11 |  | 10 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
-| `ambre-spec-murmure-messages.md` | 22 | 15 | 15 |  | 7 |
+| `ambre-spec-murmure-messages.md` | 22 | 19 | 19 |  | 3 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
 | `ambre-spec-murmure-segments.md` | 25 | 20 | 20 |  | 5 |
