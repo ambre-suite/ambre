@@ -21,11 +21,11 @@
 
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelName,
-    ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId, FoldAnswer,
-    LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId,
-    RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
-    UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelMeta,
+    ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId,
+    FoldAnswer, LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding,
+    MessageId, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp,
+    TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -279,6 +279,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::FoldSegment { .. } => "FoldSegment",
         SyncCommand::WatchSegment { .. } => "WatchSegment",
         SyncCommand::WatchThread { .. } => "WatchThread",
+        SyncCommand::WatchChannel { .. } => "WatchChannel",
         SyncCommand::NameChannel { .. } => "NameChannel",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
@@ -360,7 +361,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 38;
+const SYNC_VARIANTS: usize = 39;
 const EVENT_VARIANTS: usize = 55;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -512,6 +513,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             after: Seq(3),
         },
+        SyncCommand::WatchChannel {
+            channel_id: chan,
+            meta,
+            documents: vec![doc],
+        },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
         SyncCommand::ListSpaceChannels { space_id: space },
@@ -649,6 +655,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             documents: vec![DocumentActivity {
                 channel_id: chan,
                 document_id: segment.document_id(),
+                kind: ChannelDocumentKind::Segment,
                 active: true,
                 read: Seq(2),
             }],
@@ -778,6 +785,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             peers: vec![DirectPeers {
                 channel_id: direct,
                 names: vec!["Bob".into()],
+            }],
+            metas: vec![ChannelMeta {
+                channel_id: chan,
+                meta: MetaId::from_document(doc),
             }],
         },
         LogicEvent::MeetingParticipantJoined {

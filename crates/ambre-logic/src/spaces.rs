@@ -878,6 +878,7 @@ impl LogicState {
         for document_id in cursored {
             self.read_cursors.remove(&document_id);
         }
+        self.listed_channels.forget(channel_id);
         self.end_channel(channel_id);
     }
 

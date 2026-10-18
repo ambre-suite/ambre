@@ -51,6 +51,7 @@ mod spaces;
 pub mod store_ledger;
 /// The threads of a channel: a reply, and the link of its thread.
 mod threads;
+mod unopened;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 
@@ -715,6 +716,9 @@ struct LogicState {
     watched_threads: HashMap<DocumentId, threads::WatchedThread>,
     /// The signalled threads whose channel the next activity answer names.
     unplaced_threads: HashSet<DocumentId>,
+    /// The channels of the user this session may watch unopened (the
+    /// Murmure notifications spec). Cleared on `Logout`.
+    listed_channels: unopened::ListedChannels,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
@@ -854,6 +858,7 @@ impl LogicState {
             document_channels: HashMap::new(),
             watched_threads: HashMap::new(),
             unplaced_threads: HashSet::new(),
+            listed_channels: unopened::ListedChannels::default(),
             closing_segments: HashMap::new(),
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),

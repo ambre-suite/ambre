@@ -777,12 +777,17 @@ impl SyncState {
                             }
                             None => Vec::new(),
                         };
+                        let keys = exchange_key
+                            .as_ref()
+                            .map(|key| listed_keys(&answer, key))
+                            .unwrap_or_default();
                         let (channels, spaces, peers) = answer.listing();
                         Ok(MemberListing {
                             channels,
                             spaces,
                             names,
                             peers,
+                            keys,
                         })
                     }
                     Err(message) => Err(message),
@@ -795,7 +800,13 @@ impl SyncState {
     /// [`handle_list_member_channels`](Self::handle_list_member_channels), on
     /// the Sync loop. A failure answers nothing: the next share asks again.
     /// An answer a later listing overtook answers nothing either.
-    pub(crate) fn member_channels_listed(&self, asked: u32, result: Result<MemberListing, String>) {
+    /// The key of each listed `meta` is kept, and the Logic thread learns
+    /// which `meta` it may watch.
+    pub(crate) fn member_channels_listed(
+        &mut self,
+        asked: u32,
+        result: Result<MemberListing, String>,
+    ) {
         if asked != self.member_channels_asked {
             return;
         }
@@ -805,12 +816,19 @@ impl SyncState {
                 spaces,
                 names,
                 peers,
+                keys,
             }) => {
+                let metas = keys.iter().map(|(listed, _)| *listed).collect::<Vec<_>>();
+                self.listed_keys = keys
+                    .into_iter()
+                    .map(|(listed, key)| (listed.channel_id, (listed.meta, key)))
+                    .collect();
                 self.send_to_logic(LogicEvent::MemberChannels {
                     channels,
                     spaces,
                     names,
                     peers,
+                    metas,
                 });
             }
             Err(message) => {
@@ -828,6 +846,32 @@ pub(crate) struct MemberListing {
     pub(crate) spaces: Vec<SpaceId>,
     pub(crate) names: Vec<ChannelName>,
     pub(crate) peers: Vec<ambre_bus::DirectPeers>,
+    /// The key of each channel's `meta` that opened, with its channel.
+    pub(crate) keys: Vec<(ambre_bus::ChannelMeta, DocumentKey)>,
+}
+
+/// The key of each `meta` of `answer`, unwrapped with the user's exchange
+/// key. A key that does not open is left out: its channel is not watched.
+fn listed_keys(
+    answer: &http::MemberChannelsResponse,
+    exchange_key: &StaticSecret,
+) -> Vec<(ambre_bus::ChannelMeta, DocumentKey)> {
+    answer
+        .channels
+        .iter()
+        .filter_map(|entry| {
+            let key = crate::documents::unwrap_listed_key(
+                &entry.doc_key_enc,
+                &entry.wrapper_exchange_pub_key,
+                exchange_key,
+            )?;
+            let listed = ambre_bus::ChannelMeta {
+                channel_id: entry.channel_id,
+                meta: entry.meta_id,
+            };
+            Some((listed, key))
+        })
+        .collect()
 }
 
 /// The names sealed beside each meta of `answer`, opened with the user's
@@ -1099,6 +1143,7 @@ pub(crate) fn activity_of(entries: &[http::ActivityEntry]) -> Vec<DocumentActivi
         .map(|e| DocumentActivity {
             channel_id: e.channel_id,
             document_id: e.document_id,
+            kind: e.kind,
             active: e.active,
             read: e.read,
         })
@@ -1176,6 +1221,7 @@ pub(crate) mod tests {
         let row = serde_json::json!({
             "channel_id": channel_id,
             "document_id": document_id,
+            "kind": "thread",
             "active": active,
             "read": 7,
         });
@@ -1193,6 +1239,7 @@ pub(crate) mod tests {
             [DocumentActivity {
                 channel_id: channel,
                 document_id: segment,
+                kind: ChannelDocumentKind::Thread,
                 active: true,
                 read: Seq(7),
             }]
@@ -1554,15 +1601,22 @@ pub(crate) mod tests {
             channel_id: private,
             name: "Design".into(),
         }];
-        let listing = |(channels, spaces, peers), names| MemberListing {
+        let listed = ambre_bus::ChannelMeta {
+            channel_id: private,
+            meta,
+        };
+        let key = DocumentKey::generate();
+        let listing = |(channels, spaces, peers), names, keys| MemberListing {
             channels,
             spaces,
             names,
             peers,
+            keys,
         };
         let empty = (Vec::new(), Vec::new(), Vec::new());
-        state.member_channels_listed(1, Ok(listing(empty, Vec::new())));
-        state.member_channels_listed(2, Ok(listing(answer.listing(), named.clone())));
+        state.member_channels_listed(1, Ok(listing(empty, Vec::new(), Vec::new())));
+        let keys = vec![(listed, key.clone())];
+        state.member_channels_listed(2, Ok(listing(answer.listing(), named.clone(), keys)));
         state.member_channels_listed(2, Err("HTTP 500".into()));
         let events: Vec<_> = rx
             .try_iter()
@@ -1572,10 +1626,16 @@ pub(crate) mod tests {
                     spaces,
                     names,
                     peers,
-                } => Some((channels, spaces, names, peers)),
+                    metas,
+                } => {
+                    assert_eq!(metas, vec![listed], "the watchable meta of each channel");
+                    Some((channels, spaces, names, peers))
+                }
                 _ => None,
             })
             .collect();
+        let kept = state.listed_keys.get(&private).map(|(m, k)| (*m, k.id()));
+        assert_eq!(kept, Some((meta, key.id())), "the listed key is kept");
         // A channel of a space composes no name, whatever the relay lists.
         let peers = vec![ambre_bus::DirectPeers {
             channel_id: direct,
@@ -1648,6 +1708,15 @@ pub(crate) mod tests {
                 name: "Design".into(),
             }]
         );
+        // Each key opens, and one that does not is left out.
+        let mut answer = answer;
+        answer.channels[3].doc_key_enc = "AA".into();
+        let keys: Vec<_> = listed_keys(&answer, &own)
+            .into_iter()
+            .map(|(listed, opened)| (listed.meta, opened.id()))
+            .collect();
+        let held = [named, elsewhere, cleared].map(|meta| (meta, key.id()));
+        assert_eq!(keys, held);
     }
 
     /// `SYNC-171`: the name a new private channel carries rides sealed beside

@@ -17,8 +17,8 @@ use std::ops::Range;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, Seq, SpaceId,
-    UserId,
+    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq,
+    SpaceId, UserId,
 };
 
 /// One document a channel groups, as the relay lists it.
@@ -34,6 +34,8 @@ pub struct ChannelDocument {
 pub struct DocumentActivity {
     pub channel_id: ChannelId,
     pub document_id: DocumentId,
+    /// A segment or a thread. A thread counts its mentions alone.
+    pub kind: ChannelDocumentKind,
     pub active: bool,
     /// The caller's own read cursor on the document: the sequence number it
     /// has read up to. The client counts against it once it holds the
@@ -106,6 +108,15 @@ impl From<SegmentId> for MessageAt {
 pub struct MemberChannel {
     pub channel_id: ChannelId,
     pub place: ChannelPlace,
+}
+
+/// The `meta` of a channel the user is a member of, as the relay's listing
+/// names it. The Logic thread watches a channel it never opened through it
+/// (the Murmure notifications spec).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelMeta {
+    pub channel_id: ChannelId,
+    pub meta: MetaId,
 }
 
 /// The name a channel not yet open shows, read from the name sealed beside

@@ -51,7 +51,7 @@ pub async fn list_channel_documents(
 
 /// A stored kind. A word no build wrote is a decode error: the column's
 /// check constraint admits none.
-fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind, AppError> {
+pub(super) fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind, AppError> {
     ambre_core::ChannelDocumentKind::parse(word).ok_or_else(|| {
         AppError::Database(sqlx::Error::Decode(
             format!("unknown channel document kind {word:?}").into(),

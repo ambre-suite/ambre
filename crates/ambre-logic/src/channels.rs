@@ -92,6 +92,21 @@ fn change_ask(
 }
 
 impl ClosedChannel {
+    /// A channel this session never opened, counted from its light
+    /// subscriptions (the Murmure notifications spec). Nothing is known of
+    /// its count, and no copy of it is in the local store.
+    pub(crate) fn watched(meta: MetaId, documents: Vec<DocumentId>) -> Self {
+        Self {
+            meta,
+            documents,
+            finals: Vec::new(),
+            base: None,
+            counted: HashMap::new(),
+            copies: HashMap::new(),
+            reading: HashMap::new(),
+        }
+    }
+
     /// Whether the channel held `document_id` at close.
     pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
         self.documents.contains(&document_id)
@@ -1548,6 +1563,7 @@ impl LogicState {
             }
         }
         self.send_to_ui(UiEvent::ChannelActivity { channels });
+        self.segments_listed(documents);
         self.place_threads();
     }
 
@@ -2718,6 +2734,7 @@ mod tests {
         let entry = |channel_id, active| DocumentActivity {
             channel_id,
             document_id: DocumentId::new(),
+            kind: ChannelDocumentKind::Segment,
             active,
             read: Seq::ZERO,
         };
@@ -2794,6 +2811,10 @@ mod tests {
             spaces: spaces.clone(),
             names: names.clone(),
             peers: peers.clone(),
+            metas: vec![ambre_bus::ChannelMeta {
+                channel_id: channels[0].channel_id,
+                meta: MetaId::new(),
+            }],
         });
         let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(
@@ -2900,6 +2921,7 @@ mod tests {
                 documents: vec![DocumentActivity {
                     channel_id: self.channel_id,
                     document_id: self.active.document_id(),
+                    kind: ChannelDocumentKind::Segment,
                     active: true,
                     read: Seq(read),
                 }],
@@ -5091,6 +5113,7 @@ mod tests {
                 .map(|&(document_id, read)| DocumentActivity {
                     channel_id,
                     document_id,
+                    kind: ChannelDocumentKind::Thread,
                     active: true,
                     read,
                 })

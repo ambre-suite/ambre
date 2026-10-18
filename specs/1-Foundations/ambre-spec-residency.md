@@ -56,6 +56,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-015` | `FAIL` | Given an update with no summary, the client MUST mark its document as active, with no count. | this spec section 3 | `ambre_sync::light::tests::a_light_update_with_no_summary_marks_activity_alone` -- an update with no summary, and one that does not open, each mark activity and count nothing | none | verified |
 | `RESID-016` | `FRAME` | Counting activity MUST NOT load the document. | this spec section 3 | `ambre_sync::light::tests::a_light_update_moves_its_counters_from_the_summary` -- nothing but the counters reaches the Logic thread, and no full session appears | none | verified |
 | `RESID-021` | `FRAME` | An update this user signed MUST NOT advance the counters of its document. | this spec section 3; `RESID-014` | `ambre_sync::light::tests::an_update_this_user_signed_counts_nothing` -- an update under the user's own key counts nothing, and another member's counts | none | verified |
+| `RESID-022` | `POST` | A document the client never held MUST be counted from its next update, with no replay of the deltas before it. | this spec section 3; `RESID-014` | `ambre_sync::light::tests::a_channel_never_opened_is_watched_from_the_head` -- each document subscribes with no request for the past, a reconnection replays nothing, and the first live update counts | none | verified |
 
 ### 1.5 Meet the browser quota
 
@@ -71,7 +72,7 @@ The browser can refuse a write before the local store reaches its own budget.
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 21 `verified`, by host tests on the Logic, Sync and ledger states. The browser
+* **Verification.** 22 `verified`, by host tests on the Logic, Sync and ledger states. The browser
   tier holds the quota refusal and the persistent storage request.
 
 ---
@@ -196,6 +197,9 @@ Residency has no control of its own.
   Murmure will mark its final segments.
 * **No application writes a summary yet.** Every update counts as activity alone, until an
   application writes summaries with its own messages.
+* **A document watched from its head may miss an update.** One that lands before its subscription,
+  or during a disconnection before its first live update, counts nothing. It lands with
+  the `Catch up a channel watched from its head` Story (`ambre-roadmap.md` E5).
 * **The three budgets are not measured.** The figures in `ambre-spec-budgets.md section 6` are
   estimates, marked as such.
 

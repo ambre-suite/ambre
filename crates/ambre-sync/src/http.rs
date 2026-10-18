@@ -818,6 +818,8 @@ pub(crate) struct ActivityEntry {
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
     pub active: bool,
     /// The caller's own cursor. A relay that predates it answers none, which
     /// reads as nothing read.

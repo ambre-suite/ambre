@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-142` | `INV` | Without a push subscription, a notification MUST be raised only while a tab of the client is open. | this spec section 3 | `ambre_canvas::frame::tests::a_hidden_page_relays_on_its_timer_and_a_shown_one_does_not` -- a hidden tab still drains its events, so it raises; type-level -- the workspace enables no service-worker type of `web-sys`, so nothing outside a tab can raise one | none | verified |
 | `MURMURE-143` | `INV` | A notification MUST be raised for a mention of the user or a direct message. | this spec section 3 | `ambre_murmure::tests::chrome_relay::a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not` -- a mention and a direct message each notify under their title, and a plain public message does not | none | verified |
 | `MURMURE-493` | `INV` | When its channel is at the all level, a notification MUST be raised for any other message. | this spec section 3 | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-494` | `INV` | A channel of the user never opened in the session MUST notify its first message, as an opened one does. | this spec section 3; `MURMURE-144` | not built | unbuilt -- lands with the `The activity of a channel never opened` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-494` | `INV` | A channel of the user never opened in the session MUST notify its first message, as an opened one does. | this spec section 3; `MURMURE-144`; `RESID-022` | `ambre_logic::unopened::tests::the_first_message_of_a_channel_never_opened_notifies` -- a listed channel no session held is watched once its segments are known, and its first message is news; `ambre_logic::unopened::tests::a_channel_never_opened_is_watched_once_listed_and_answered` -- the watch waits on both the listing and the activity | none | verified |
 | `MURMURE-265` | `INV` | Every push MUST raise a visible notification. | this spec section 3 | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-266` | `INV` | A push MUST carry no content: it names a mention or a direct message, and nothing more. | this spec section 3; `ZK-016` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-267` | `INV` | A channel past the member threshold of the budget register MUST default to the mentions level, and any other channel to all. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Push notifications` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -58,7 +58,7 @@ The relay decides which device to wake, from a copy of the levels and from the m
 * **Boundary.** in an open tab the client decides from the sealed summary (`SYNC-113`), so the
   relay learns nothing. A push is the one path that tells the relay the levels and the members a
   message names, and `ZK-016` bounds it to those.
-* **Verification.** 5 `verified`, 12 `unimplemented`. Logic reads the news off the summaries, a
+* **Verification.** 6 `verified`, 11 `unimplemented`. Logic reads the news off the summaries, a
   host test. The view decides which news notifies, and the page raises it: two browser-tier tests.
   The levels and the push are not built.
 
@@ -135,8 +135,11 @@ decides in `MurmureRelay::notice` of `ambre-murmure`. The page raises it in `not
 
 * **The levels and the push are not built.** No channel has a level, and no tab closed notifies.
   They land with the `Push notifications` Story (`ambre-roadmap.md` E5).
-* **A channel never opened notifies nothing.** Only a channel Logic holds or counts sends news
-  (`MURMURE-494`).
+* **A channel never opened is watched under the key the listing carried.** After a rotation of
+  its key, its new summaries count as activity alone. It lands with
+  the `The key of a channel watched unopened` Story (`ambre-roadmap.md` E5).
+* **Each channel never opened costs a subscription per live segment.** No ceiling bounds them yet.
+  It lands with the `A ceiling on the channels watched unopened` Story (`ambre-roadmap.md` E5).
 * **A click opens the channel, not the message.** The list scrolls to it once the message list
   lands, the `The message list and the composer` Story (`ambre-roadmap.md` E5).
 * **A long-hidden tab may lag.** A browser may slow the timers of a tab hidden for minutes, which

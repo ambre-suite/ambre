@@ -9,6 +9,8 @@ use super::*;
 pub struct ActivityRow {
     pub channel_id: ambre_core::ChannelId,
     pub document_id: ambre_core::DocumentId,
+    /// A segment or a thread: the client counts a thread's mentions alone.
+    pub kind: ambre_core::ChannelDocumentKind,
     /// The caller's cursor on the document, 0 when it never wrote one.
     pub cursor: i64,
     /// The highest sequence number the register holds for the document: its
@@ -64,7 +66,7 @@ pub async fn channel_activity(
     user_id: &ambre_core::UserId,
 ) -> Result<Vec<ActivityRow>, AppError> {
     let rows = sqlx::query(
-        "SELECT d.channel_id, d.document_id, COALESCE(c.seq, 0) AS cursor, \
+        "SELECT d.channel_id, d.document_id, d.kind, COALESCE(c.seq, 0) AS cursor, \
                 GREATEST( \
                     COALESCE((SELECT MAX(u.seq) FROM updates u \
                               WHERE u.document_id = d.document_id), 0), \
@@ -87,6 +89,7 @@ pub async fn channel_activity(
             Ok(ActivityRow {
                 channel_id: r.try_get::<PgId, _>("channel_id")?.into(),
                 document_id: r.try_get::<PgId, _>("document_id")?.into(),
+                kind: channels::decode_kind(r.try_get("kind")?)?,
                 cursor: r.try_get("cursor")?,
                 durable_last: r.try_get("durable_last")?,
             })

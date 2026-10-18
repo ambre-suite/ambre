@@ -136,6 +136,10 @@ impl SyncState {
                 after_seq: seen,
             });
         }
+        // A channel watched from the head has no cursor to replay from yet.
+        for document_id in self.light_heads() {
+            self.ws_send(&WsClientMsg::Subscribe { document_id });
+        }
     }
 
     /// Attaches onmessage / onclose / onerror closures to `ws`. Each closure

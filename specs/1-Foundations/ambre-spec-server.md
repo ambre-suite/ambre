@@ -114,6 +114,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- a document past the cursor, one at it, and a `meta` document that never appears | none | verified |
 | `SRV-110` | `FRAME` | The answer MUST NOT carry a count of deltas. | this spec section 3; `ZK-015` | `ambre_server::routes::read_cursors::tests::the_activity_answer_compares_each_last_number_with_the_callers_cursor` -- every entry carries exactly a channel, a document, a yes or no, and the caller's own cursor, which counts nothing | none | verified |
+| `SRV-221` | `POST` | Each entry of the activity answer MUST name its document's kind, a segment or a thread. | this spec section 3; `SRV-109` | `ambre_server::routes::read_cursors::tests::each_activity_entry_names_its_kind` -- a segment answers `segment` and a thread of the same channel `thread`, database tier | none | verified |
 
 ### 1.7 A space applies its retention
 
@@ -143,7 +144,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 69 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
+* **Verification.** 70 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---

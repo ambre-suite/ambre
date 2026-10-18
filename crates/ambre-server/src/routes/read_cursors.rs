@@ -28,6 +28,9 @@ pub struct ActivityJson {
     pub channel_id: ambre_core::ChannelId,
     #[serde(with = "ambre_core::serde_id::document_id")]
     pub document_id: ambre_core::DocumentId,
+    /// A segment or a thread, which the relay already routes on.
+    #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
+    pub kind: ambre_core::ChannelDocumentKind,
     /// The document's last number is past the caller's cursor.
     pub active: bool,
     /// The caller's own cursor. The client counts its new messages against
@@ -79,6 +82,7 @@ pub async fn get_activity(
             ActivityJson {
                 channel_id,
                 document_id,
+                kind: row.kind,
                 active: last > row.cursor,
                 read: ambre_core::Seq(u64::try_from(row.cursor).unwrap_or(0)),
             }
@@ -253,6 +257,15 @@ mod tests {
         state: &Arc<AppState>,
         who: auth::AuthSession,
     ) -> (Vec<(String, bool)>, Vec<Vec<String>>) {
+        let (answer, keys, _) = activity_kinds(state, who).await;
+        (answer, keys)
+    }
+
+    /// The activity answer, with every entry's keys and `document -> kind`.
+    async fn activity_kinds(
+        state: &Arc<AppState>,
+        who: auth::AuthSession,
+    ) -> (Vec<(String, bool)>, Vec<Vec<String>>, Vec<(String, String)>) {
         let resp = get_activity(State(state.clone()), who)
             .await
             .expect("activity")
@@ -279,7 +292,16 @@ mod tests {
                 k
             })
             .collect();
-        (answer, keys)
+        let kinds = entries
+            .iter()
+            .map(|e| {
+                (
+                    e["document_id"].as_str().expect("id").to_owned(),
+                    e["kind"].as_str().expect("kind").to_owned(),
+                )
+            })
+            .collect();
+        (answer, keys, kinds)
     }
 
     fn active_of(answer: &[(String, bool)], document: DocumentId) -> Option<bool> {
@@ -332,6 +354,7 @@ mod tests {
 
         let (answer, keys) = activity(&state, me()).await;
         assert_eq!(active_of(&answer, read), Some(false), "read up to its last");
+        let kinds = ["active", "channel_id", "document_id", "kind", "read"];
         assert_eq!(
             active_of(&answer, unread),
             Some(true),
@@ -344,14 +367,44 @@ mod tests {
         );
         assert_eq!(active_of(&answer, meta), None, "meta carries no message");
         assert!(
-            keys.iter()
-                .all(|k| *k == ["active", "channel_id", "document_id", "read"]),
+            keys.iter().all(|k| *k == kinds),
             "an entry carries a yes or no, the caller's own cursor, and nothing to count: {keys:?}"
         );
         let reads = read_of(&state, me()).await;
         for (document, cursor) in [(read, 5), (unread, 0), (flushed, 2)] {
             assert_eq!(reads.get(&document.to_string()), Some(&cursor));
         }
+    }
+
+    /// `SRV-221`: each entry names its document's kind, a segment or a
+    /// thread. A client that holds nothing of the channel counts a thread
+    /// apart from its segments.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn each_activity_entry_names_its_kind(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = crate::test_helpers::create_test_user(&state.db, "alice@test.dev").await;
+        let (channel, _, segments) = channel(&state, alice, &[], &[2]).await;
+        let thread = crate::test_helpers::create_test_document(&state.db, alice, "murmure").await;
+        sqlx::query(
+            "INSERT INTO channel_documents (document_id, channel_id, kind, thread_root) \
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(uuid_of(thread))
+        .bind(uuid_of(channel))
+        .bind(ambre_core::ChannelDocumentKind::Thread.as_str())
+        .bind(uuid::Uuid::new_v4())
+        .execute(&state.db)
+        .await
+        .expect("thread");
+        let (_, _, mut kinds) = activity_kinds(&state, session(alice, 1)).await;
+        kinds.sort();
+        let mut expected = vec![
+            (segments[0].to_string(), "segment".to_owned()),
+            (thread.to_string(), "thread".to_owned()),
+        ];
+        expected.sort();
+        assert_eq!(kinds, expected);
     }
 
     /// The activity answer, as `document -> the caller's cursor`.

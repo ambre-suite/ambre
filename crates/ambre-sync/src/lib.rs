@@ -44,7 +44,7 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
+    ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, MetaId, RequestId,
     RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotId,
     SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand, UserId, UserInfo,
 };
@@ -1057,6 +1057,10 @@ pub struct SyncState {
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
     member_channels_asked: u32,
+    /// The key of each channel's `meta` the latest listing wrapped for this
+    /// user. A channel never opened is watched under it (the Murmure
+    /// notifications spec).
+    listed_keys: HashMap<ChannelId, (MetaId, DocumentKey)>,
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
     new_spaces: HashSet<DocumentId>,
@@ -1153,6 +1157,7 @@ impl SyncState {
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
             member_channels_asked: 0,
+            listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
             mock_ws_tx: None,
             event_tx: None,
@@ -1470,6 +1475,11 @@ impl SyncState {
                 meta,
                 after,
             } => self.handle_watch_thread(thread, meta, after),
+            SyncCommand::WatchChannel {
+                channel_id,
+                meta,
+                documents,
+            } => self.handle_watch_channel(channel_id, meta, &documents),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
             SyncCommand::CreateDirectMessage {

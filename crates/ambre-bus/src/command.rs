@@ -256,6 +256,15 @@ pub enum SyncCommand {
         meta: MetaId,
         after: Seq,
     },
+    /// Count a channel this session never opened, as light subscriptions
+    /// (the Murmure notifications spec). Its `meta` and each of `documents`
+    /// count from the next delta: nothing older is news. They open under
+    /// the key of `meta` the listing wrapped, and an open fetches them whole.
+    WatchChannel {
+        channel_id: ChannelId,
+        meta: MetaId,
+        documents: Vec<DocumentId>,
+    },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.
     /// Answered by [`crate::LogicEvent::ChannelJoined`] or

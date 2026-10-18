@@ -27,6 +27,9 @@ pub(crate) struct LightSubscription {
     seen: Seq,
     /// The activity read from the summaries since the eviction.
     counters: ActivityCounters,
+    /// Whether a reconnect asks for what it missed. One watched from the
+    /// head asks for nothing until its first delta gives it a number.
+    replays: bool,
 }
 
 impl LightSubscription {
@@ -40,6 +43,7 @@ impl LightSubscription {
             doc_type: doc.doc_type,
             on_relay: doc.server_created,
             counters: ActivityCounters::default(),
+            replays: true,
         }
     }
 
@@ -58,6 +62,7 @@ impl LightSubscription {
             return None;
         }
         self.seen = seq;
+        self.replays = true;
         if mine == Some(&update.public_data.pub_key) {
             return None;
         }
@@ -176,6 +181,7 @@ impl SyncState {
                 horizon: after,
                 seen: after,
                 counters: ActivityCounters::default(),
+                replays: true,
             },
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
@@ -183,6 +189,52 @@ impl SyncState {
             document_id,
             after_seq: after,
         });
+    }
+
+    /// Counts a channel this session never opened, under the key of its
+    /// `meta` the latest listing wrapped (the Murmure notifications spec).
+    /// Its `meta` and each document count from the next delta. A channel
+    /// the listing gave no key for watches nothing.
+    pub(crate) fn handle_watch_channel(
+        &mut self,
+        channel_id: ChannelId,
+        meta: MetaId,
+        documents: &[DocumentId],
+    ) {
+        let Some(doc_key) = self
+            .listed_keys
+            .get(&channel_id)
+            .filter(|(listed, _)| *listed == meta)
+            .map(|(_, key)| key.clone())
+        else {
+            tracing::warn!("[Sync] no listed key to watch channel {channel_id}");
+            return;
+        };
+        for &document_id in std::iter::once(&meta.document_id()).chain(documents) {
+            self.watch_from_head(document_id, &doc_key);
+        }
+    }
+
+    /// Holds one document of a channel never opened as a light subscription.
+    /// No copy of it exists, so its horizon is the first number: an open
+    /// fetches it whole (`RESID-010`). Nothing the relay holds is asked.
+    fn watch_from_head(&mut self, document_id: DocumentId, key: &DocumentKey) {
+        if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
+            return;
+        }
+        self.light.insert(
+            document_id,
+            LightSubscription {
+                doc_key: key.clone(),
+                doc_type: DocType::Murmure,
+                on_relay: true,
+                horizon: Seq(0),
+                seen: Seq(0),
+                counters: ActivityCounters::default(),
+                replays: false,
+            },
+        );
+        self.ws_send(&WsClientMsg::Subscribe { document_id });
     }
 
     /// A thread took a delta (the Murmure threads spec). A thread held in
@@ -201,13 +253,23 @@ impl SyncState {
         self.light.remove(&document_id).map(|light| light.horizon)
     }
 
-    /// The light subscriptions the socket subscribes, with the cursor each
-    /// resumes after.
+    /// The light subscriptions the socket subscribes and replays, with the
+    /// cursor each resumes after.
     pub(crate) fn light_cursors(&self) -> Vec<(DocumentId, Seq)> {
         self.light
             .iter()
-            .filter(|(_, light)| light.on_relay)
+            .filter(|(_, light)| light.on_relay && light.replays)
             .map(|(id, light)| (*id, light.seen))
+            .collect()
+    }
+
+    /// The light subscriptions watched from the head that took no delta
+    /// yet: the socket subscribes them and asks for nothing.
+    pub(crate) fn light_heads(&self) -> Vec<DocumentId> {
+        self.light
+            .iter()
+            .filter(|(_, light)| light.on_relay && !light.replays)
+            .map(|(id, _)| *id)
             .collect()
     }
 
@@ -534,6 +596,102 @@ mod tests {
         };
         assert_eq!((*document_id, counters.mentions), (thread, 1));
         assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
+    }
+
+    /// A channel never opened is watched under the key its listing wrapped
+    /// (the Murmure notifications spec). Its documents ask for nothing, and
+    /// a reconnect replays nothing until a delta gives one a number. Every
+    /// horizon is the first number, so an open fetches each document whole.
+    #[test]
+    fn a_channel_never_opened_is_watched_from_the_head() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.user_id = Some(UserId::from_bytes([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let sent = || -> Vec<WsClientMsg> {
+            ws_rx
+                .try_iter()
+                .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+                .collect()
+        };
+        let (channel_id, meta, doc_key) =
+            (ChannelId::new(), MetaId::new(), DocumentKey::generate());
+        let (segment, older) = (DocumentId::new(), DocumentId::new());
+        let watch = SyncCommand::WatchChannel {
+            channel_id,
+            meta,
+            documents: vec![segment, older],
+        };
+        state.handle_command(watch.clone());
+        assert!(
+            sent().is_empty(),
+            "a channel with no listed key was watched"
+        );
+
+        state
+            .listed_keys
+            .insert(channel_id, (MetaId::new(), doc_key.clone()));
+        state.handle_command(watch.clone());
+        assert!(sent().is_empty(), "the key of another meta was used");
+
+        state
+            .listed_keys
+            .insert(channel_id, (meta, doc_key.clone()));
+        state.handle_command(watch.clone());
+        let (m, s, o) = (meta.document_id(), segment, older);
+        assert!(
+            matches!(
+                sent().as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::Subscribe { document_id: b },
+                    WsClientMsg::Subscribe { document_id: c },
+                ] if (*a, *b, *c) == (m, s, o)
+            ),
+            "expected three subscribes and no request"
+        );
+        state.handle_command(watch);
+        assert!(sent().is_empty(), "a held document was watched again");
+
+        let heads: HashSet<_> = state.light_heads().into_iter().collect();
+        assert_eq!(heads, HashSet::from([m, s, o]));
+        assert!(state.light_cursors().is_empty());
+        state.resubscribe_all();
+        let resent = sent();
+        assert_eq!(resent.len(), 3, "each watched document resubscribes");
+        assert!(
+            resent
+                .iter()
+                .all(|msg| matches!(msg, WsClientMsg::Subscribe { .. })),
+            "a head replayed on a reconnect: {resent:?}"
+        );
+
+        // The first live delta counts, and gives the head a cursor.
+        state.receive_update(
+            Seq(7),
+            update(segment, SnapshotId::new(), &doc_key, Some(&mention())),
+        );
+        let events = drain(&rx);
+        let [
+            LogicEvent::Activity {
+                document_id,
+                counters,
+            },
+        ] = events.as_slice()
+        else {
+            panic!("expected the segment's counters, got {events:?}");
+        };
+        assert_eq!((*document_id, counters.mentions), (segment, 1));
+        let heads: HashSet<_> = state.light_heads().into_iter().collect();
+        assert_eq!(heads, HashSet::from([m, o]));
+        assert_eq!(state.light_cursors(), vec![(segment, Seq(7))]);
+        assert_eq!(
+            state.take_light(segment),
+            Some(Seq(0)),
+            "an open replays from the start"
+        );
+        assert_eq!(state.documents_len(), 0, "watching loads nothing");
     }
 
     /// A thread held in full or light hears its deltas on its own topic, so

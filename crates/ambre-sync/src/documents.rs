@@ -372,22 +372,11 @@ impl ListedName<'_> {
 
     /// The current key, ECDH-unwrapped against the wrapper's exchange key.
     fn unwrap_key(&self, exchange_key: &x25519_dalek::StaticSecret) -> Option<DocumentKey> {
-        let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
-            .decode(self.doc_key_enc)
-            .ok()?;
-        let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
-        let wrapped = ambre_crypto::WrappedKey {
-            nonce: *nonce,
-            ciphertext: ciphertext.to_vec(),
-        };
-        let wrapper_hex = if self.wrapper_exchange_pub_key.is_empty() {
-            // Self-wrapped owner row: the DH peer is our own public key.
-            hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
-        } else {
-            self.wrapper_exchange_pub_key.to_owned()
-        };
-        let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
-        ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
+        unwrap_listed_key(
+            self.doc_key_enc,
+            self.wrapper_exchange_pub_key,
+            exchange_key,
+        )
     }
 
     fn sealed(&self) -> Option<Vec<u8>> {
@@ -395,6 +384,33 @@ impl ListedName<'_> {
             .decode(self.name_enc)
             .ok()
     }
+}
+
+/// The key a listing wrapped for this user, ECDH-unwrapped against the
+/// wrapper's exchange key. The key is base64 of `nonce || ciphertext`, and
+/// the wrapper is hex, empty for a self-wrapped owner row. `None` on any
+/// decode or crypto failure.
+pub(crate) fn unwrap_listed_key(
+    doc_key_enc: &str,
+    wrapper_exchange_pub_key: &str,
+    exchange_key: &x25519_dalek::StaticSecret,
+) -> Option<DocumentKey> {
+    let wrapped_bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(doc_key_enc)
+        .ok()?;
+    let (nonce, ciphertext) = wrapped_bytes.split_first_chunk::<24>()?;
+    let wrapped = ambre_crypto::WrappedKey {
+        nonce: *nonce,
+        ciphertext: ciphertext.to_vec(),
+    };
+    let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
+        // Self-wrapped owner row: the DH peer is our own public key.
+        hex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
+    } else {
+        wrapper_exchange_pub_key.to_owned()
+    };
+    let peer_pub: [u8; 32] = hex::decode(wrapper_hex).ok()?.try_into().ok()?;
+    ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
 }
 
 /// Opens a sealed name with the key it names: `current`, or one the chain

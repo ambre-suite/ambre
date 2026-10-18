@@ -112,6 +112,7 @@ impl LogicState {
                         self.document_channels.clear();
                         self.watched_threads.clear();
                         self.unplaced_threads.clear();
+                        self.listed_channels = Default::default();
                         self.closing_segments.clear();
                         self.close_successors.clear();
                         self.owed_replays.clear();
@@ -629,12 +630,13 @@ impl LogicState {
                 self.space_channels(space_id, &channels);
             }
             // The sidebar learns of the channels, and none of them opens
-            // (the Murmure channels spec).
+            // (the Murmure channels spec). Each is watched unopened.
             LogicEvent::MemberChannels {
                 channels,
                 spaces,
                 names,
                 peers,
+                metas,
             } => {
                 self.send_to_ui(UiEvent::MemberChannels {
                     channels,
@@ -642,6 +644,7 @@ impl LogicState {
                     names,
                     peers,
                 });
+                self.channels_listed(&metas);
             }
 
             // -- Meetings (participant push) -----------------------------------
