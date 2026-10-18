@@ -13,8 +13,13 @@
 #![forbid(unsafe_code)]
 
 mod channel;
+/// Murmure-specific chrome, built on the `ambre-chrome` toolkit. Wasm-only
+/// (leptos CSR + DOM).
+#[cfg(target_arch = "wasm32")]
+pub mod chrome;
 mod delta;
 mod error;
+mod layout;
 mod members;
 mod mention;
 mod opening;
@@ -62,6 +67,7 @@ pub use channel::{
 };
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;
+pub use layout::{MessageRef, MurmurePane};
 pub use members::{
     PRESENCE_EXPIRY_MS, REFRESH_PERIOD_MS, Roster, find_members, is_presence_sample,
     presence_sample,

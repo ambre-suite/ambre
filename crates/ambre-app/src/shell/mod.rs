@@ -14,6 +14,8 @@ use super::*;
 mod app_root;
 mod commands;
 #[cfg(test)]
+mod murmure_regions;
+#[cfg(test)]
 mod narrow;
 pub(crate) mod prose_status;
 mod share;
@@ -44,6 +46,7 @@ pub(crate) fn mount_shell(
     relays_slot: Slot<(trame_chrome::TrameRelay, toile_chrome::ToileRelay)>,
     boot_is_toile: bool,
     boot_is_prose: bool,
+    boot_is_murmure: bool,
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
     prose_signals: crate::host::ProseSignals,
     style_slot: Slot<trame_chrome::StyleState>,
@@ -225,6 +228,7 @@ pub(crate) fn mount_shell(
             find_result_toile,
             boot_is_toile,
             boot_is_prose,
+            boot_is_murmure,
             prose_figures,
             prose_signals,
             formula_ref,

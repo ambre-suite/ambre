@@ -2,10 +2,12 @@
 // ============================================================================
 // AppShell -- the CSS-grid chrome layout (ambre-spec-chrome.md, CHROME-009).
 //
-// Rows: header, command bar (contextual toolbar), content, status bar. The
-// content row hosts the wgpu `<canvas>` cell. The shell OWNS that element, so
-// the DOM chrome and the canvas content share one layout. The canvas resizes to
-// its grid cell, not the viewport.
+// Rows: header, command bar (contextual toolbar), body, status bar. The body
+// row holds an optional sidebar, the content and an optional panel, and the
+// content hosts the wgpu `<canvas>` cell. The shell OWNS that element, so the
+// DOM chrome and the canvas content share one layout. The canvas resizes to its
+// grid cell, not the viewport. Which body regions sit side by side at a width
+// is the stylesheet's alone (`CHROME-056`): the shell only names the focus.
 //
 // The shell is app-agnostic: every region is a slot the app fills. ambre-chrome
 // knows nothing about Trame, Prose or any other app -- it lays out whatever
@@ -43,9 +45,52 @@ pub struct Tabs {
 }
 
 /// Status bar: cursor position, zoom, sync state, counters (app-provided).
+/// Optional: an application that reports nothing omits it, and the row is absent.
 #[slot]
 pub struct StatusBar {
     children: ChildrenFn,
+}
+
+/// Sidebar: the navigation region before the content (app-provided). It folds
+/// to a strip from its own control, and stays on screen (`CHROME-033`).
+#[slot]
+pub struct Sidebar {
+    /// The accessible name of the region, such as "Channels".
+    #[prop(into)]
+    label: String,
+    children: ChildrenFn,
+}
+
+/// Panel: the region after the content (app-provided), such as an open thread.
+#[slot]
+pub struct Panel {
+    /// The accessible name of the region, such as "Thread".
+    #[prop(into)]
+    label: String,
+    children: ChildrenFn,
+}
+
+/// The region a narrow window shows when it cannot show them all. The
+/// stylesheet decides, at each width, which regions sit beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellRegion {
+    /// The sidebar.
+    Sidebar,
+    /// The content, between the sidebar and the panel.
+    Content,
+    /// The panel.
+    Panel,
+}
+
+impl ShellRegion {
+    /// The word the stylesheet reads off `data-focus`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sidebar => "sidebar",
+            Self::Content => "content",
+            Self::Panel => "panel",
+        }
+    }
 }
 
 /// The application shell. Renders the chrome grid around a central `<canvas>`
@@ -59,36 +104,74 @@ pub fn AppShell(
     toolbar: Toolbar,
     #[prop(optional)] formula_bar: Option<FormulaBar>,
     #[prop(optional)] tabs: Option<Tabs>,
-    status_bar: StatusBar,
+    #[prop(optional)] status_bar: Option<StatusBar>,
+    #[prop(optional)] sidebar: Option<Sidebar>,
+    #[prop(optional)] panel: Option<Panel>,
+    /// The region in focus, for the widths that show one region alone. The
+    /// content when unset.
+    #[prop(optional, into)]
+    focus: Option<Signal<ShellRegion>>,
+    /// Whether the panel is open. A closed panel leaves the DOM. Open when unset.
+    #[prop(optional, into)]
+    panel_open: Option<Signal<bool>>,
 ) -> impl IntoView {
     let canvas_id = canvas_id.unwrap_or_else(|| "ambre-canvas".to_owned());
+    let focus = focus.unwrap_or_else(|| Signal::stored(ShellRegion::Content));
+    let panel_open = panel_open.unwrap_or_else(|| Signal::stored(true));
+    let folded = RwSignal::new(false);
     view! {
         <div class="ambre-shell">
             <header class="ambre-header">{(header.children)()}</header>
             <div class="ambre-commandbar">{(toolbar.children)()}</div>
-            {if let Some(fb) = formula_bar {
-                Some(view! { <div class="ambre-formulabar">{(fb.children)()}</div> })
-            } else {
-                None
-            }}
-            <main class="ambre-content">
-                // The canvas host (ambre-canvas) attaches wgpu to this element
-                // by id and sizes its backing store to the cell.
-                <canvas id=canvas_id class="ambre-canvas" tabindex="0"></canvas>
-                // The layer a board's sandboxed web embeds are mounted into
-                // (`toile-embeds`, `TOILE-088`). Empty for every other app and
-                // for a board with no web embed on screen. It sits over the
-                // canvas and clips to it. Each frame decides for itself whether
-                // it takes the pointer, so an embed nobody has entered leaves
-                // the board's own gestures reachable.
-                <div id="ambre-web-embeds" class="ambre-web-embeds"></div>
-            </main>
-            {if let Some(tabs) = tabs {
-                Some(view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })
-            } else {
-                None
-            }}
-            <footer class="ambre-statusbar">{(status_bar.children)()}</footer>
+            {formula_bar.map(|fb| view! { <div class="ambre-formulabar">{(fb.children)()}</div> })}
+            <div class="ambre-body" data-focus=move || focus.get().as_str()>
+                {sidebar.map(|sidebar| {
+                    view! {
+                        <nav
+                            class="ambre-sidebar"
+                            aria-label=sidebar.label
+                            data-folded=move || crate::aria_bool(folded.get())
+                        >
+                            <button
+                                class="icon ambre-sidebar-fold"
+                                aria-label="Fold the sidebar"
+                                aria-expanded=move || crate::aria_bool(!folded.get())
+                                on:click=move |_| folded.update(|f| *f = !*f)
+                            >
+                                {move || if folded.get() { "\u{203a}" } else { "\u{2039}" }}
+                            </button>
+                            <div class="ambre-sidebar-body">{(sidebar.children)()}</div>
+                        </nav>
+                    }
+                })}
+                <main class="ambre-content">
+                    // The canvas host (ambre-canvas) attaches wgpu to this element
+                    // by id and sizes its backing store to the cell.
+                    <canvas id=canvas_id class="ambre-canvas" tabindex="0"></canvas>
+                    // The layer a board's sandboxed web embeds are mounted into
+                    // (`toile-embeds`, `TOILE-088`). Empty for every other app and
+                    // for a board with no web embed on screen. It sits over the
+                    // canvas and clips to it. Each frame decides for itself whether
+                    // it takes the pointer, so an embed nobody has entered leaves
+                    // the board's own gestures reachable.
+                    <div id="ambre-web-embeds" class="ambre-web-embeds"></div>
+                </main>
+                {panel.map(|panel| {
+                    let label = panel.label;
+                    let children = panel.children;
+                    move || {
+                        panel_open.get().then(|| {
+                            view! {
+                                <aside class="ambre-panel" aria-label=label.clone()>
+                                    {children()}
+                                </aside>
+                            }
+                        })
+                    }
+                })}
+            </div>
+            {tabs.map(|tabs| view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })}
+            {status_bar.map(|sb| view! { <footer class="ambre-statusbar">{(sb.children)()}</footer> })}
         </div>
     }
 }

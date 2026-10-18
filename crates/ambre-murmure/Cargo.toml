@@ -18,6 +18,13 @@ unicode-segmentation = { workspace = true }
 # CRDT
 loro = { workspace = true }
 
+# Murmure-specific chrome (the `chrome` module): the channel header and the
+# regions of the layout. Wasm-only -- leptos CSR + DOM, like ambre-chrome --
+# so it is scoped to the wasm32 target and never compiled into host logic tests.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+ambre-chrome = { path = "../ambre-chrome" }
+leptos       = { workspace = true }
+
 [dev-dependencies]
 criterion = { workspace = true }
 serde_json = { workspace = true }

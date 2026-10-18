@@ -58,12 +58,14 @@ mod pipe;
 mod probe;
 
 pub(crate) use probe::{PageClock, mark};
+mod murmure;
 mod prose;
 mod run;
 mod web_embed;
 
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
+pub use murmure::MurmureView;
 pub use prose::{ProseSignals, ProseView};
 
 /// Where a finger is in its gesture.
@@ -232,6 +234,8 @@ pub enum AppView {
     Toile(ToileView),
     /// A Prose (text) document.
     Prose(ProseView),
+    /// A Murmure page: its channels, not one document.
+    Murmure(MurmureView),
 }
 
 impl AppView {
@@ -241,6 +245,7 @@ impl AppView {
             AppView::Trame(v) => v.update(),
             AppView::Toile(v) => v.update(),
             AppView::Prose(v) => v.update(),
+            AppView::Murmure(v) => v.update(),
         }
     }
 
@@ -250,6 +255,7 @@ impl AppView {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Prose(v) => v.plan_repaint(now_ms, hud_tick),
+            AppView::Murmure(v) => v.plan_repaint(now_ms, hud_tick),
         }
     }
 
@@ -265,6 +271,7 @@ impl AppView {
             AppView::Trame(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Toile(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Prose(v) => v.paint_content(surface, font_cx, text_cache, strip),
+            AppView::Murmure(v) => v.paint_content(surface, font_cx, text_cache, strip),
         }
     }
 
@@ -280,6 +287,7 @@ impl AppView {
             AppView::Trame(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Toile(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Prose(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
+            AppView::Murmure(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
         }
     }
 
@@ -289,6 +297,7 @@ impl AppView {
             AppView::Trame(v) => v.resize(width, height),
             AppView::Toile(v) => v.resize(width, height),
             AppView::Prose(v) => v.resize(width, height),
+            AppView::Murmure(v) => v.resize(width, height),
         }
     }
 
@@ -298,6 +307,7 @@ impl AppView {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
             AppView::Prose(v) => v.handle_input(ev),
+            AppView::Murmure(v) => v.handle_input(ev),
         }
     }
 
@@ -312,6 +322,7 @@ impl AppView {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
             AppView::Prose(v) => v.clipboard_write(cut),
+            AppView::Murmure(_) => ambre_bus::CopyOutcome::Nothing,
         }
     }
 
@@ -323,6 +334,7 @@ impl AppView {
             AppView::Trame(v) => v.poll_clipboard(),
             AppView::Toile(v) => v.poll_clipboard(),
             AppView::Prose(v) => v.poll_clipboard(),
+            AppView::Murmure(_) => None,
         }
     }
 
@@ -336,13 +348,14 @@ impl AppView {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
             AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
             AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
+            AppView::Murmure(_) => {}
         }
     }
 
     /// Text dropped at a canvas point. Only Prose takes it.
     fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
         match self {
-            AppView::Trame(_) | AppView::Toile(_) => false,
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => false,
             AppView::Prose(v) => v.drop_text(x, y, text),
         }
     }
@@ -370,6 +383,7 @@ impl AppView {
                 true
             }
             AppView::Prose(v) => v.touch(phase, x, y, now_ms),
+            AppView::Murmure(_) => false,
         }
     }
 
@@ -385,6 +399,7 @@ impl AppView {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
             AppView::Prose(v) => v.set_document(document_id),
+            AppView::Murmure(v) => v.set_document(document_id),
         }
     }
 
@@ -394,7 +409,7 @@ impl AppView {
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
-            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => Vec::new(),
         }
     }
 
@@ -404,7 +419,7 @@ impl AppView {
     fn visible_web_embeds(&self) -> Vec<VisibleWebEmbed> {
         match self {
             AppView::Toile(v) => v.visible_web_embeds(),
-            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => Vec::new(),
         }
     }
 
@@ -416,7 +431,7 @@ impl AppView {
     fn child_route(&self) -> Option<ElementId> {
         match self {
             AppView::Toile(v) => v.child_route(),
-            AppView::Trame(_) | AppView::Prose(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
         }
     }
 
@@ -425,7 +440,7 @@ impl AppView {
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
             AppView::Toile(v) => v.embed_to_child_space(screen),
-            AppView::Trame(_) | AppView::Prose(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
         }
     }
 }

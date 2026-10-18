@@ -48,7 +48,9 @@ mod shortcut;
 mod status;
 mod toast;
 
-pub use app_shell::{AppShell, FormulaBar, Header, StatusBar, Tabs, Toolbar};
+pub use app_shell::{
+    AppShell, FormulaBar, Header, Panel, ShellRegion, Sidebar, StatusBar, Tabs, Toolbar,
+};
 pub use color::{ColorPopover, color_hex, parse_hex_color};
 pub use command::{CommandStates, keybinding_from_event};
 pub use composed::ComposedName;

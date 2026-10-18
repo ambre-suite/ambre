@@ -39,6 +39,13 @@ impl Route {
             Route::Landing => None,
         }
     }
+
+    /// The document the route binds the engine to. A Murmure page binds none:
+    /// it opens the channels its sidebar selects, never a document by address.
+    pub fn document(&self) -> Option<(DocType, DocumentId)> {
+        self.doc()
+            .filter(|(doc_type, _)| *doc_type != DocType::Murmure)
+    }
 }
 
 /// What the per-frame route poll does on a route change. Each field acts on
@@ -61,8 +68,8 @@ pub fn step(prev: Option<&Route>, cur: &Route) -> Option<Step> {
     if prev == Some(cur) {
         return None;
     }
-    let prev_doc = prev.and_then(Route::doc);
-    let cur_doc = cur.doc();
+    let prev_doc = prev.and_then(Route::document);
+    let cur_doc = cur.document();
     let moved = prev_doc.map(|(_, id)| id) != cur_doc.map(|(_, id)| id);
     Some(Step {
         close: prev_doc.filter(|_| moved).map(|(_, id)| id),
@@ -116,10 +123,6 @@ pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
     format!("/{}/{}", type_slug(doc_type), document_id)
 }
 
-/// Whether the render kind of `doc_type` is the Toile canvas view. The booted
-/// `AppView` is a binary split today (`lib.rs`, `boot_is_toile`): the Toile
-/// vector board vs. everything else (the Trame grid). Prose/Murmure have no view
-/// yet, so they fall on the non-Toile side like Trame.
 /// Whether opening `target` from a page booted onto `booted` requires a
 /// **full page reload** rather than an in-place `AppView::set_document` swap.
 ///
@@ -135,11 +138,13 @@ pub fn needs_reload(target: DocType, booted: DocType) -> bool {
 
 /// The type of the view a page booted with. The landing route boots the
 /// Trame view on a throwaway document.
-pub fn booted_kind(boot_is_toile: bool, boot_is_prose: bool) -> DocType {
+pub fn booted_kind(boot_is_toile: bool, boot_is_prose: bool, boot_is_murmure: bool) -> DocType {
     if boot_is_toile {
         DocType::Toile
     } else if boot_is_prose {
         DocType::Prose
+    } else if boot_is_murmure {
+        DocType::Murmure
     } else {
         DocType::Trame
     }
@@ -266,6 +271,25 @@ mod tests {
                 s(None, Some(a), Some(a)),
             ]
         );
+    }
+
+    #[wasm_bindgen_test]
+    fn a_murmure_page_opens_no_document() {
+        let page = Route::Doc {
+            doc_type: DocType::Murmure,
+            document_id: DocumentId::new(),
+        };
+        assert_eq!(page.document(), None);
+        assert_eq!(
+            step(Some(&Route::Landing), &page),
+            Some(Step {
+                close: None,
+                open: None,
+                show: None
+            })
+        );
+        assert_eq!(booted_kind(false, false, true), DocType::Murmure);
+        assert_eq!(booted_kind(false, false, false), DocType::Trame);
     }
 
     #[wasm_bindgen_test]

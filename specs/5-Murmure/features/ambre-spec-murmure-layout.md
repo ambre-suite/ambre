@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE MURMURE LAYOUT
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the regions at each width, the back control and the rows of the
+shell are built. The sidebar lists no channel, and the canvas paints no message.
 
 > Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of
 > them at a time on a phone. The layout follows the three widths every application shares.
@@ -17,17 +18,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-158` | `OBS` | Over the desktop width, the sidebar, the message list and an open thread MUST sit side by side. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-159` | `OBS` | Between the phone and the desktop widths, an open thread MUST replace the message list, with a way back to it. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-158` | `OBS` | Over the desktop width, the sidebar, the message list and an open thread MUST sit side by side. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_desktop_shows_the_sidebar_the_channel_and_the_thread_side_by_side` -- the shell mounted on a thread in a frame of 1025 and 1024 pixels, each region's width read off the layout | none | verified |
+| `MURMURE-159` | `OBS` | Between the phone and the desktop widths, an open thread MUST replace the message list, with a way back to it. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_tablet_thread_replaces_the_channel_with_a_way_back` -- a thread in a frame of 600 and 1024 pixels shows the sidebar and the thread, and the back control shows the channel | none | verified |
+| `MURMURE-160` | `OBS` | Under the phone width, Murmure MUST show one view at a time: the channel list, a channel, or a thread. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | `ambre_app::shell::murmure_regions::a_phone_shows_one_view_at_a_time` -- each pane in a frame of 360 and 599 pixels shows one region, as wide as the frame | none | verified |
+| `MURMURE-161` | `INV` | A region MUST collapse at a narrow width, never disappear. | this spec section 3; `CHROME-033` | `ambre_app::shell::murmure_regions::a_region_collapses_and_never_disappears` -- the folded sidebar of a tablet is a strip that unfolds, and a phone reaches the channel list through the back control | none | verified |
+| `MURMURE-162` | `INV` | The layout MUST read the three widths of the adaptive layout, never a device class. | this spec section 3; `CHROME-034` | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` -- a channel and a thread in frames of 599, 600, 1024 and 1025 pixels, each region flipping at the two thresholds alone | none | verified |
 | `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The Murmure sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the channel name is read inside the channel header, inside the command bar | none | verified |
+| `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | `ambre_app::shell::murmure_regions::the_command_bar_holds_the_channel_header_and_no_status_bar_shows` -- the mounted shell holds no status bar, formula bar or tab strip | none | verified |
 
 ### 1.2 Select a channel
 
@@ -40,8 +41,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-168` | `POST` | Back from a thread MUST show its channel at the root message; back from a channel MUST show the channel list. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-169` | `FRAME` | Going back MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure view and its regions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-168` | `POST` | Back from a thread MUST show its channel at the root message; back from a channel MUST show the channel list. | this spec section 3 | `ambre_murmure::layout::tests::back_from_a_thread_shows_its_channel_at_the_root_then_the_list` -- the pane before a thread, a channel and the list; `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` -- the back control clicked twice on a phone | none | verified |
+| `MURMURE-169` | `FRAME` | Going back MUST NOT move a read cursor. | this spec section 3 | `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` -- the back control writes the pane alone; structural -- going back is a value of the pane, and the shell holding the control holds no command sender | none | verified |
 
 ### 1.4 Show two channels side by side
 
@@ -55,7 +56,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 19 `unimplemented`: no Murmure view exists.
+* **Verification.** 9 `verified`, 10 `unimplemented`. The regions, the back control and the rows
+  of the shell are built. The sidebar entries and the split view are not.
 
 ---
 
@@ -63,10 +65,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | At the width | Alice sees | Test |
 |---|---|---|---|
-| opens a thread | desktop | the sidebar, the channel and the thread, side by side (`MURMURE-158`) | none |
-| opens a thread | tablet | the sidebar and the thread, with a way back to the channel (`MURMURE-159`) | none |
-| opens a thread, then goes back | phone | the thread alone, then the channel at the root message (`MURMURE-168`) | none |
-| widens the window from phone to desktop | phone, then desktop | the same channel, now with the sidebar beside it (`MURMURE-161`) | none |
+| opens a thread | desktop | the sidebar, the channel and the thread, side by side (`MURMURE-158`) | `ambre_app::shell::murmure_regions::a_desktop_shows_the_sidebar_the_channel_and_the_thread_side_by_side` |
+| opens a thread | tablet | the sidebar and the thread, with a way back to the channel (`MURMURE-159`) | `ambre_app::shell::murmure_regions::a_tablet_thread_replaces_the_channel_with_a_way_back` |
+| opens a thread, then goes back | phone | the thread alone, then the channel at the root message (`MURMURE-168`) | `ambre_app::shell::murmure_regions::back_shows_the_channel_at_the_root_then_the_list` |
+| widens the window from phone to desktop | phone, then desktop | the same channel, now with the sidebar beside it (`MURMURE-161`) | `ambre_app::shell::murmure_regions::the_layout_reads_the_three_widths` |
 
 ---
 
@@ -105,7 +107,7 @@ The channel list is a Murmure view inside it, not a second drawer.
 ```rust
 pub enum MurmurePane {
     ChannelList,
-    Channel(ChannelId),
+    Channel { channel: ChannelId, at: Option<MessageRef> },
     Thread { channel: ChannelId, root: MessageRef },
 }
 pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
@@ -116,7 +118,12 @@ pub struct MessageCount(u32);
 pub struct MentionCount(u32);
 ```
 
-**Code.** not built.
+A channel keeps the message it shows, so back from a thread lands on its root (`MURMURE-168`).
+The pane names the region in focus, and the stylesheet alone decides which regions sit beside it.
+
+**Code.** `crates/ambre-murmure/src/layout.rs` holds the pane, and `crates/ambre-murmure/src/chrome.rs`
+maps it onto the regions of `crates/ambre-chrome/src/app_shell.rs`. The launcher mounts them in
+`crates/ambre-app/src/shell/app_root.rs`, and `crates/ambre-app/styles.css` lays them out.
 
 ---
 
@@ -148,7 +155,9 @@ in a cell of its own (`MURMURE-421`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No Murmure view exists, and the adaptive chrome has no sidebar yet
-  (`CHROME-033`).
+* **The canvas paints its backdrop alone.** The messages land with the
+  `The message list and the composer` Story (`ambre-roadmap.md` E5).
+* **The sidebar lists no channel.** Its entries, and what the id of a Murmure route names, land with
+  the `The Murmure sidebar` Story (`ambre-roadmap.md` E5).
 * **The personal order of the sidebar is not here.** Groups, order, mute, hide and bookmarks are
   `features/ambre-spec-murmure-sidebar.md`.

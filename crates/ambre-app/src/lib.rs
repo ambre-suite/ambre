@@ -44,8 +44,8 @@ use ambre_bus::{
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
-    AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, StatusBar,
-    Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
+    AppShell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header, Panel, Sidebar,
+    StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
@@ -279,6 +279,9 @@ struct Wiring {
     /// Whether the booted document is a Prose document: the canvas mounts the
     /// page view and the status bar shows the five figures.
     boot_is_prose: bool,
+    /// Whether the page is a Murmure page: the shell lays out its channel
+    /// list, its channel and its thread (the Murmure layout spec).
+    boot_is_murmure: bool,
     /// The five figures of the open Prose document, for the status bar slot
     /// (`PROSE-FEAT-040`). Published by the Prose view.
     prose_figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -731,8 +734,10 @@ pub fn main() {
     // The routed document with its type (`/trame/<id>` -> (Trame, id)), kept for
     // the local restore. That restore must materialise the doc with the right
     // type if it wins the startup race against `OpenDocument`.
-    let boot_doc_typed = boot_route.doc();
+    // A Murmure page binds no document, so it restores and opens none.
+    let boot_doc_typed = boot_route.document();
     let boot_doc = boot_doc_typed.map(|(_, id)| id);
+    let boot_is_murmure = matches!(boot_route.doc(), Some((ambre_bus::DocType::Murmure, _)));
     // Cross-type in-session navigation reloads the page (the `DocSwitcher` only
     // swaps the id within one `AppView`). So the booted app kind is fixed here,
     // and gates both the render view (below) and the app-specific chrome (Find
@@ -746,6 +751,8 @@ pub fn main() {
         toile_chrome::bind_keys(&mut keymap);
     } else if boot_is_prose {
         ambre_prose::commands::bind_keys(&mut keymap);
+    } else if boot_is_murmure {
+        // The Murmure shortcuts land with its palette; until then it binds none.
     } else {
         trame_chrome::bind_keys(&mut keymap);
     }
@@ -879,6 +886,7 @@ pub fn main() {
         Rc::clone(&relays_slot),
         boot_is_toile,
         boot_is_prose,
+        boot_is_murmure,
         prose_figures,
         prose_signals,
         Rc::clone(&style_slot),
@@ -1726,7 +1734,9 @@ pub fn main() {
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
-            if boot_is_prose {
+            if boot_is_murmure {
+                AppView::Murmure(host::MurmureView::new(view_rx, w, h, theme_ctl))
+            } else if boot_is_prose {
                 AppView::Prose(host::ProseView::new(
                     initial_doc,
                     view_tx_logic,

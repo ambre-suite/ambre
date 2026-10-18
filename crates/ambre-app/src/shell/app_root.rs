@@ -8,15 +8,122 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
+use ambre_murmure::MurmurePane;
+use ambre_murmure::chrome::ChannelHeader;
 
 /// The table the command palette searches: the booted application's whole
-/// declaration, never a menu's subset (`CHROME-008`). Murmure has no view yet
-/// and falls on the Trame side, like every non-Toile, non-Prose kind.
+/// declaration, never a menu's subset (`CHROME-008`). Murmure declares none
+/// until its palette lands, and never borrows another application's table.
 pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::Command] {
     match kind {
         DocType::Toile => ambre_toile::ui::commands::COMMANDS,
         DocType::Prose => ambre_prose::commands::COMMANDS,
-        DocType::Trame | DocType::Murmure => trame_chrome::COMMANDS,
+        DocType::Trame => trame_chrome::COMMANDS,
+        DocType::Murmure => &[],
+    }
+}
+
+/// The shell of a Murmure page: its channel list, its channel and its thread
+/// (the Murmure layout spec). The pane names the region in focus, and the
+/// command bar holds the channel header. No formula bar, tabs or status bar:
+/// each row is absent.
+#[component]
+pub(crate) fn MurmureShell(
+    /// The pane the user is in.
+    pane: RwSignal<MurmurePane>,
+    /// The name of the current channel, once its engine has read it.
+    channel_name: RwSignal<Option<String>>,
+    /// The shared header.
+    children: ChildrenFn,
+) -> impl IntoView {
+    view! {
+        <AppShell
+            focus=Signal::derive(move || ambre_murmure::chrome::focus_of(pane.get()))
+            panel_open=Signal::derive(move || ambre_murmure::chrome::thread_open(pane.get()))
+        >
+            <Header slot>{children()}</Header>
+            <Toolbar slot>
+                <ChannelHeader pane=pane name=channel_name />
+            </Toolbar>
+            <Sidebar slot label="Channels">
+                <ul class="murmure-channel-list"></ul>
+            </Sidebar>
+            <Panel slot label="Thread">
+                <div class="murmure-thread"></div>
+            </Panel>
+        </AppShell>
+    }
+}
+
+/// The header every application shares: the title, the sync badge, the theme
+/// switch, the share and about buttons and the avatar.
+#[component]
+fn ShellHeader(
+    theme_ctl: ambre_canvas::ThemeControl,
+    theme_sig: RwSignal<ambre_canvas::Theme>,
+    toasts: Toasts,
+    chrome_status: RwSignal<ChromeStatus>,
+    current_doc: RwSignal<Option<DocumentId>>,
+    share_open: RwSignal<bool>,
+    about_open: RwSignal<bool>,
+    username: RwSignal<Option<String>>,
+) -> impl IntoView {
+    view! {
+        <span class="title">"Ambre"</span>
+        <span class="spacer"></span>
+        <SyncBadge status=chrome_status.into() />
+        <button
+            class="icon"
+            title="Toggle theme"
+            aria-label="Toggle colour theme"
+            on:click=move |_| {
+                let next = switch_theme(&theme_ctl);
+                theme_sig.set(next);
+                let label = if next == ambre_canvas::Theme::Dark {
+                    "Dark theme"
+                } else {
+                    "Light theme"
+                };
+                toasts.info(label);
+            }
+        >
+            {move || {
+                let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
+                    icondata::AiMoonFilled
+                } else {
+                    icondata::AiSunFilled
+                };
+                view! { <Icon icon=icon /> }
+            }}
+        </button>
+        <Show when=move || current_doc.get().is_some()>
+            <button
+                class="icon"
+                title="Share"
+                aria-label="Share document"
+                aria-haspopup="dialog"
+                aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
+                on:click=move |_| share_open.set(true)
+            >
+                <Icon icon=icondata::AiShareAltOutlined />
+            </button>
+        </Show>
+        <button
+            class="icon"
+            title="About"
+            aria-label="About Ambre"
+            aria-haspopup="dialog"
+            aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
+            on:click=move |_| about_open.set(true)
+        >
+            "?"
+        </button>
+        <span
+            class="ambre-avatar"
+            title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
+        >
+            {move || initials(username.get().as_deref())}
+        </span>
     }
 }
 
@@ -88,6 +195,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         find_result_toile,
         boot_is_toile,
         boot_is_prose,
+        boot_is_murmure,
         prose_figures,
         prose_signals,
         formula_ref,
@@ -144,6 +252,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // Theme toggle drives only the button glyph; `theme_ctl` (canvas) and the
     // document `data-theme` (CSS custom properties) are the real switches.
     let theme_sig = RwSignal::new(theme_ctl.get());
+    // The kind of the view this page booted, fixed per page load.
+    let booted = crate::route::booted_kind(boot_is_toile, boot_is_prose, boot_is_murmure);
 
     // About modal. Every `Dialog` suspends the canvas rAF through the
     // `ModalHold` the shell provides, so no modal here wires the loop.
@@ -174,11 +284,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             toile_followed_link.set(None);
-            follow_shell_nav(
-                nav,
-                &navigate,
-                crate::route::booted_kind(boot_is_toile, boot_is_prose),
-            );
+            follow_shell_nav(nav, &navigate, booted);
         });
     }
     // A Prose link followed with the modifier leaves through the same shell
@@ -190,11 +296,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             prose_signals.followed.set(None);
-            follow_shell_nav(
-                toile_chrome::ShellNav::Url(url),
-                &navigate,
-                crate::route::booted_kind(boot_is_toile, boot_is_prose),
-            );
+            follow_shell_nav(toile_chrome::ShellNav::Url(url), &navigate, booted);
         });
         // The link cursor over a link's text, the text cursor elsewhere
         // (`PROSE-UI-153`).
@@ -368,73 +470,41 @@ pub(crate) fn AppRoot() -> impl IntoView {
         docs,
         username,
         dev_mode,
-        booted: crate::route::booted_kind(boot_is_toile, boot_is_prose),
+        booted,
         toasts,
     };
     let landing_tx = to_logic.clone();
 
-    view! {
+    let header = {
+        let theme_ctl = theme_ctl.clone();
+        move || {
+            view! {
+                <ShellHeader
+                    theme_ctl=theme_ctl.clone()
+                    theme_sig=theme_sig
+                    toasts=toasts
+                    chrome_status=chrome_status
+                    current_doc=current_doc
+                    share_open=share_open
+                    about_open=about_open
+                    username=username
+                />
+            }
+        }
+    };
+    // A Murmure page lays out its channel list, its channel and its thread
+    // (the Murmure layout spec). It has no formula bar, tabs or status bar.
+    let shell = if boot_is_murmure {
+        let pane = RwSignal::new(MurmurePane::default());
+        let channel_name = RwSignal::new(None::<String>);
+        view! {
+            <MurmureShell pane=pane channel_name=channel_name>{header.clone()}</MurmureShell>
+        }
+        .into_any()
+    } else {
+        view! {
         <AppShell>
-            <Header slot>
-                <span class="title">"Ambre"</span>
-                <span class="spacer"></span>
-                <SyncBadge status=chrome_status.into() />
-                <button
-                    class="icon"
-                    title="Toggle theme"
-                    aria-label="Toggle colour theme"
-                    on:click={
-                        let theme_ctl = theme_ctl.clone();
-                        move |_| {
-                            let next = switch_theme(&theme_ctl);
-                            theme_sig.set(next);
-                            let label = if next == ambre_canvas::Theme::Dark {
-                                "Dark theme"
-                            } else {
-                                "Light theme"
-                            };
-                            toasts.info(label);
-                        }
-                    }
-                >
-                    {move || {
-                        let icon = if theme_sig.get() == ambre_canvas::Theme::Dark {
-                            icondata::AiMoonFilled
-                        } else {
-                            icondata::AiSunFilled
-                        };
-                        view! { <Icon icon=icon /> }
-                    }}
-                </button>
-                <Show when=move || current_doc.get().is_some()>
-                    <button
-                        class="icon"
-                        title="Share"
-                        aria-label="Share document"
-                        aria-haspopup="dialog"
-                        aria-expanded=move || ambre_chrome::aria_bool(share_open.get())
-                        on:click=move |_| share_open.set(true)
-                    >
-                        <Icon icon=icondata::AiShareAltOutlined />
-                    </button>
-                </Show>
-                <button
-                    class="icon"
-                    title="About"
-                    aria-label="About Ambre"
-                    aria-haspopup="dialog"
-                    aria-expanded=move || ambre_chrome::aria_bool(about_open.get())
-                    on:click=move |_| about_open.set(true)
-                >
-                    "?"
-                </button>
-                <span
-                    class="ambre-avatar"
-                    title=move || username.get().unwrap_or_else(|| "Signed out".to_owned())
-                >
-                    {move || initials(username.get().as_deref())}
-                </span>
-            </Header>
+            <Header slot>{header.clone()}</Header>
             // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
             // (`trame-cell-styles`, `trame-cell-editing`, `trame-sheets`,
             // `trame-status-bar`). A Toile board renders none of them. Its tool palette,
@@ -497,6 +567,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }}
             </StatusBar>
         </AppShell>
+        }
+        .into_any()
+    };
+
+    view! {
+        {shell}
 
         <ambre_chrome::PassphraseDialog
             open=seal_open
@@ -651,7 +727,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // overlay for both, fed by the app's own table.
         <ambre_chrome::CommandPalette
             open=palette_open
-            table=palette_table(crate::route::booted_kind(boot_is_toile, boot_is_prose))
+            table=palette_table(booted)
             on_command=on_command
         />
         // Find panel, pinned top-right. Trame ships `trame-find-replace`;

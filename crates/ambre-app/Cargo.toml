@@ -21,6 +21,9 @@ ambre-toile  = { path = "../ambre-toile" }
 # The Prose view state and its page painter; already in the graph through
 # ambre-logic, named here because the host drives the view directly.
 ambre-prose  = { path = "../ambre-prose" }
+# The Murmure pane and the chrome that lays it out; already in the graph through
+# ambre-logic, named here because the shell mounts that chrome.
+ambre-murmure = { path = "../ambre-murmure" }
 # `toile-pdf`: the deck's PDF export runs on the Logic thread, where the base
 # font faces live (`toile-pdf-export`). The launcher is the build that ships it.
 ambre-logic  = { path = "../ambre-logic", features = ["toile-pdf"] }
