@@ -126,14 +126,31 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `A key rotation locks the segments it leaves behind` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-199` | `FAIL` | Given a lease asked before the grace period has passed since the segment closed and since its latest delta, the relay MUST refuse it. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::a_lease_waits_out_the_grace_then_goes_to_one_writer_at_a_time` -- database tier, a fresh close and a delta an hour old each answer a wait, and lock nothing | none | verified |
 
+### 1.9 A locked segment is amended
+
+A late edit of a locked segment goes to an amendments document beside it. The relay keeps one per
+segment, and names it to every writer that asks.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-201` | `POST` | A registration by a writer of the channel MUST link the caller's document to a locked segment of the channel as its one amendments document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md`, `MURMURE-013` | `ambre_server::db::channels::tests::a_locked_segment_registers_one_amendments_document` -- database tier, a second ask answers the same document; `::an_unlocked_or_foreign_segment_registers_no_amendments` -- database tier, both answer a conflict and register nothing; `ambre_server::routes::channels::tests::a_writer_registers_the_amendments_and_a_late_one_learns_them` -- database tier, a viewer and a document of another member are refused | none | verified |
+| `SRV-203` | `FRAME` | A registration MUST NOT change the state, the lock or the horizon of the segment it amends. | this spec section 3 | `ambre_server::db::channels::tests::a_locked_segment_registers_one_amendments_document` -- database tier, the segment keeps its state and its horizon | none | verified |
+
+### 1.10 Two registrations race
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-202` | `CONC` | Two registrations for one segment MUST link one document, and each MUST be answered that document. | this spec section 3 | `ambre_server::db::channels::tests::two_racing_registrations_keep_one_amendments_document` -- database tier, both answer the one linked document; `ambre_server::routes::channels::tests::a_writer_registers_the_amendments_and_a_late_one_learns_them` -- database tier, the late caller reads `created: false` | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 54 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
-  lives, the replay, the close of a segment, its finalization, the purge and the finalization again.
+* **Verification.** 57 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
+  lives and the replay. So do the close of a segment, its finalization, the purge, the finalization
+  again and the amendments link.
   The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
@@ -284,6 +301,12 @@ The lease names the segment by its `SegmentId`, and the commit carries the lease
 `SnapshotId`, whose horizon the relay checks. The durations are rows of
 `ambre-spec-budgets.md section 8`.
 
+**An amendments link.** A writer creates a document, then asks the relay to link it to a locked
+segment of the channel. One transaction, under the channel row lock, links it as that segment's
+amendments document (`SRV-201`). Of two racing links one is kept, and the other caller is answered
+it and deletes its own (`SRV-202`). A segment not yet locked takes none: its deltas still enter. The
+relay learns that a segment was amended, never what changed.
+
 **A replay.** A client asks for everything after a number it names.
 
 1. refuse, and answer nothing, on three counts: no subscription, a replay under a second old
@@ -332,6 +355,7 @@ sees is how long a document takes to open.
 | the hour turns | the oldest snapshots beyond ten are removed, and the index is trimmed to the horizon |
 | a writer asks for the finalize lease of a closing segment | a wait, or the lease with its horizon, the segment then locked for good |
 | a writer commits a final snapshot under its lease | the segment becomes `final`, and every delta stays |
+| a writer links a document to a locked segment | the one amendments document of the segment, its own or an earlier one |
 
 ---
 

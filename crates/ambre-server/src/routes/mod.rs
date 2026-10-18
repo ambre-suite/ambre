@@ -152,6 +152,10 @@ pub fn api_router(
             axum::routing::post(finalize_segment),
         )
         .route(
+            "/channels/{id}/segments/{segment}/amendments",
+            axum::routing::post(register_amendments),
+        )
+        .route(
             "/spaces/{id}/channels",
             axum::routing::get(list_space_channels),
         )

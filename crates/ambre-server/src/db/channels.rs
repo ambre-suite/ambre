@@ -330,6 +330,70 @@ pub async fn segment_locked(
     Ok(locked.unwrap_or(false))
 }
 
+/// Register `amendments` as the one amendments document of the locked
+/// segment `segment` (`SRV-201`), and answer the one the segment holds after.
+///
+/// The channel row is locked first, so two registrations take turns. The
+/// second finds the first one's document, and is answered it (`SRV-202`).
+/// A segment of another channel, or not yet locked, is refused with a 409.
+/// So is an `amendments` already registered.
+pub async fn register_amendments(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
+    amendments: ambre_core::DocumentId,
+) -> Result<ambre_core::DocumentId, AppError> {
+    let channel = id_to_uuid(*channel_id);
+    let conflict = |detail: &str| AppError::Conflict {
+        detail: detail.into(),
+    };
+    let mut tx = pool.begin().await?;
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+        .bind(channel)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "channel",
+        })?;
+    let segment = id_to_uuid(segment.document_id());
+    let locked: Option<bool> = sqlx::query_scalar(
+        "SELECT horizon IS NOT NULL FROM channel_documents \
+         WHERE document_id = $1 AND channel_id = $2 AND kind = 'segment'",
+    )
+    .bind(segment)
+    .bind(channel)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if locked != Some(true) {
+        return Err(conflict(
+            "the segment is not a locked segment of the channel",
+        ));
+    }
+    let held: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT document_id FROM channel_documents WHERE amends = $1")
+            .bind(segment)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if let Some(held) = held {
+        return Ok(uuid_row_to_id(held));
+    }
+    let inserted = sqlx::query(
+        "INSERT INTO channel_documents (document_id, channel_id, kind, amends) \
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+    )
+    .bind(id_to_uuid(amendments))
+    .bind(channel)
+    .bind(ChannelDocumentKind::Amendments.as_str())
+    .bind(segment)
+    .execute(&mut *tx)
+    .await?;
+    if inserted.rows_affected() != 1 {
+        return Err(conflict("the amendments document is already registered"));
+    }
+    tx.commit().await?;
+    Ok(amendments)
+}
+
 /// How long a finalize lease waits, and how long it lasts
 /// (`ambre-spec-budgets.md section 8`).
 #[derive(Debug, Clone, Copy)]
@@ -1215,6 +1279,116 @@ mod tests {
         );
     }
 
+    /// Lock `segment` as a first finalize lease would, at `horizon`.
+    async fn lock(pool: &PgPool, segment: DocumentId, horizon: i64) {
+        sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
+            .bind(id_to_uuid(segment))
+            .bind(horizon)
+            .execute(pool)
+            .await
+            .expect("lock segment");
+    }
+
+    /// The amendments documents of a channel, with the segment each amends.
+    async fn amended(pool: &PgPool, channel: ChannelId) -> Vec<(DocumentId, DocumentId)> {
+        let rows: Vec<(uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+            "SELECT document_id, amends FROM channel_documents \
+             WHERE channel_id = $1 AND kind = 'amendments'",
+        )
+        .bind(id_to_uuid(channel))
+        .fetch_all(pool)
+        .await
+        .expect("amendments");
+        rows.into_iter()
+            .map(|(d, s)| (uuid_row_to_id(d), uuid_row_to_id(s)))
+            .collect()
+    }
+
+    /// `SRV-201`: a locked segment takes one amendments document, which the
+    /// channel then groups. Asked again, it answers that document.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_locked_segment_registers_one_amendments_document(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let next = document(&pool, owner).await;
+        close_segment(&pool, &id, segment(first), segment(next))
+            .await
+            .expect("close");
+        lock(&pool, first, 7).await;
+        let amendments = document(&pool, owner).await;
+        for _ in 0..2 {
+            let held = register_amendments(&pool, &id, segment(first), amendments)
+                .await
+                .expect("register");
+            assert_eq!(held, amendments);
+        }
+        assert_eq!(amended(&pool, id).await, [(amendments, first)]);
+        assert_eq!(
+            states(&pool, id).await,
+            [(next, "active".to_owned()), (first, "closing".to_owned())],
+            "the amended segment keeps its state"
+        );
+        let horizon: Option<i64> =
+            sqlx::query_scalar("SELECT horizon FROM channel_documents WHERE document_id = $1")
+                .bind(id_to_uuid(first))
+                .fetch_one(&pool)
+                .await
+                .expect("horizon");
+        assert_eq!(horizon, Some(7), "and its lock");
+        let kinds: Vec<_> = list_channel_documents(&pool, &id)
+            .await
+            .expect("listing")
+            .into_iter()
+            .filter(|d| d.document_id == amendments)
+            .map(|d| d.kind)
+            .collect();
+        assert_eq!(kinds, [ChannelDocumentKind::Amendments]);
+    }
+
+    /// `SRV-201`: a segment not yet locked, or of another channel, takes no
+    /// amendments document, and nothing is registered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_unlocked_or_foreign_segment_registers_no_amendments(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let (other, _, foreign) = channel_of(&pool, owner).await;
+        lock(&pool, foreign, 3).await;
+        let amendments = document(&pool, owner).await;
+        let open = register_amendments(&pool, &id, segment(first), amendments).await;
+        assert!(matches!(open, Err(AppError::Conflict { .. })), "{open:?}");
+        let elsewhere = register_amendments(&pool, &id, segment(foreign), amendments).await;
+        assert!(
+            matches!(elsewhere, Err(AppError::Conflict { .. })),
+            "{elsewhere:?}"
+        );
+        let unknown =
+            register_amendments(&pool, &ChannelId::new(), segment(foreign), amendments).await;
+        assert!(matches!(unknown, Err(AppError::NotFound { .. })));
+        assert!(amended(&pool, id).await.is_empty());
+        assert!(amended(&pool, other).await.is_empty());
+    }
+
+    /// `SRV-202`: two registrations for one segment race, and both answer the
+    /// one document that was registered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn two_racing_registrations_keep_one_amendments_document(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        lock(&pool, first, 1).await;
+        let (a, b) = (document(&pool, owner).await, document(&pool, owner).await);
+        let (left, right) = tokio::join!(
+            register_amendments(&pool, &id, segment(first), a),
+            register_amendments(&pool, &id, segment(first), b),
+        );
+        let (left, right) = (left.expect("register"), right.expect("register"));
+        assert_eq!(left, right, "both answer the same document");
+        assert!(left == a || left == b);
+        assert_eq!(amended(&pool, id).await, [(left, first)]);
+    }
+
     /// `SRV-196`: a close while another segment of the channel is closing is
     /// refused. So is a close of a segment that is not the active one.
     #[sqlx::test]
@@ -1280,7 +1454,8 @@ mod tests {
     /// `ZK-015`: the channel tables hold the channel's space and public flag,
     /// each document's channel and kind, and the state of each segment. A
     /// segment adds its close time, its finalize lease, and the horizon, time
-    /// and snapshot of its finalization. The cursor table holds a member, a
+    /// and snapshot of its finalization. An amendments document names the
+    /// segment it amends. The cursor table holds a member, a
     /// document and a number. Nothing else: no name, no member and no key. A
     /// column added here widens what the relay learns, so it fails this test
     /// before it ships.
@@ -1302,6 +1477,7 @@ mod tests {
         assert_eq!(
             got,
             [
+                ("channel_documents", "amends"),
                 ("channel_documents", "channel_id"),
                 ("channel_documents", "closed_at"),
                 ("channel_documents", "document_id"),

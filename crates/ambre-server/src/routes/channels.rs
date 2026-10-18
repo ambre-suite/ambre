@@ -382,8 +382,9 @@ pub struct FinalizeSegmentRequest {
     pub snapshot_id: ambre_core::SnapshotId,
 }
 
-/// The channel and the segment of a finalize path, once the caller is a
-/// writer of the channel. A viewer posts nothing, so it finalizes nothing.
+/// The channel and the segment of a segment path, once the caller is a
+/// writer of the channel. A viewer posts nothing, so it finalizes nothing and
+/// amends nothing.
 async fn finalize_target(
     state: &AppState,
     auth: &auth::AuthSession,
@@ -467,6 +468,49 @@ pub async fn finalize_segment(
     .await?;
     tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, "segment finalized");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The body of an amendments registration: the caller's new document.
+#[derive(serde::Deserialize)]
+pub struct RegisterAmendmentsRequest {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+}
+
+/// The amendments document of a segment after a registration, and whether
+/// it is the caller's. `false` means an earlier one registered another.
+#[derive(serde::Serialize)]
+pub struct AmendmentsJson {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/amendments`: register the
+/// caller's document as the amendments of a locked segment (`SRV-201`).
+///
+/// The caller writes to the channel, and owns the document, as at a close.
+/// A registration that lost its race answers the winner's document
+/// (`SRV-202`), and the caller deletes its own.
+pub async fn register_amendments(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((channel_id, segment)): Path<(String, String)>,
+    Json(req): Json<RegisterAmendmentsRequest>,
+) -> Result<axum::Json<AmendmentsJson>, AppError> {
+    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let document = free_murmure_document(&state, &req.amendments, Some(channel_id)).await?;
+    let own_role = db::member_role(&state.db, &req.amendments, &auth.user_id).await?;
+    if document.owner_id != auth.user_id || own_role != Some(Role::Owner) {
+        return Err(AppError::Forbidden);
+    }
+    let held = db::register_amendments(&state.db, &channel_id, segment, req.amendments).await?;
+    let created = held == req.amendments;
+    tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %held, created, "amendments registered");
+    Ok(axum::Json(AmendmentsJson {
+        amendments: held,
+        created,
+    }))
 }
 
 /// `POST /api/channels/direct`: open the direct message of the caller and
@@ -2853,6 +2897,77 @@ mod tests {
                 .err(),
             Some(StatusCode::FORBIDDEN),
             "a segment is not its own successor"
+        );
+    }
+
+    // --- The amendments of a locked segment ---
+
+    async fn amend(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        amendments: DocumentId,
+    ) -> Result<AmendmentsJson, StatusCode> {
+        register_amendments(
+            State(state.clone()),
+            session(who),
+            Path((channel.id.to_string(), channel.segment.to_string())),
+            Json(RegisterAmendmentsRequest { amendments }),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    /// `SRV-201`, `SRV-202`: a writer registers its own document as the
+    /// amendments of a locked segment, and a late writer learns the winner.
+    /// A viewer amends nothing, nor does a document of another member.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_registers_the_amendments_and_a_late_one_learns_them(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel) = closed_channel(&state, 2).await;
+        let vera = user(&state, "vera@test.dev").await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        let mine = document(&state, alice).await;
+        assert_eq!(
+            amend(&state, alice, &channel, mine).await.err(),
+            Some(StatusCode::CONFLICT),
+            "the segment is not locked yet"
+        );
+        on_segment(
+            &state,
+            &channel,
+            "UPDATE channel_documents SET horizon = 2 WHERE document_id = $1",
+        )
+        .await;
+        let veras = document(&state, vera).await;
+        assert_eq!(
+            amend(&state, vera, &channel, veras).await.err(),
+            Some(StatusCode::FORBIDDEN)
+        );
+        assert_eq!(
+            amend(&state, bob, &channel, mine).await.err(),
+            Some(StatusCode::FORBIDDEN),
+            "the document belongs to another member"
+        );
+
+        let first = amend(&state, alice, &channel, mine).await.expect("amend");
+        assert_eq!((first.amendments, first.created), (mine, true));
+        let theirs = document(&state, bob).await;
+        let late = amend(&state, bob, &channel, theirs).await.expect("amend");
+        assert_eq!((late.amendments, late.created), (mine, false));
+        assert_eq!(
+            db::channel_document_kind(&state.db, &mine)
+                .await
+                .expect("query"),
+            Some(ambre_core::ChannelDocumentKind::Amendments)
+        );
+        assert_eq!(
+            db::channel_document_kind(&state.db, &theirs)
+                .await
+                .expect("query"),
+            None
         );
     }
 
