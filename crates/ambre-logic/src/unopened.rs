@@ -8,6 +8,10 @@
 use super::*;
 use ambre_bus::{ChannelDocumentKind, ChannelId, ChannelMeta, DocumentActivity, MetaId};
 
+/// The segments of a channel, each with the last number the activity
+/// answer gave, if any.
+type Segments = Vec<(DocumentId, Option<Seq>)>;
+
 /// What the Logic thread knows of the channels it may watch unopened.
 #[derive(Debug, Default)]
 pub(crate) struct ListedChannels {
@@ -15,9 +19,9 @@ pub(crate) struct ListedChannels {
     metas: HashMap<ChannelId, MetaId>,
     /// Whether a listing answered in this session.
     listed: bool,
-    /// The segments of each channel the latest activity answer named, or
-    /// `None` before any answer.
-    segments: Option<HashMap<ChannelId, Vec<DocumentId>>>,
+    /// The segments of each channel the latest activity answer named, each
+    /// with its last number then, or `None` before any answer.
+    segments: Option<HashMap<ChannelId, Segments>>,
     /// The channels watched unopened, so a listing that drops one ends it.
     watched: HashSet<ChannelId>,
 }
@@ -61,7 +65,7 @@ impl LogicState {
 
     /// The relay's activity answer named the segments of each channel.
     pub(crate) fn segments_listed(&mut self, documents: &[DocumentActivity]) {
-        let mut segments: HashMap<ChannelId, Vec<DocumentId>> = HashMap::new();
+        let mut segments: HashMap<ChannelId, Segments> = HashMap::new();
         for document in documents
             .iter()
             .filter(|d| d.kind == ChannelDocumentKind::Segment)
@@ -69,20 +73,22 @@ impl LogicState {
             segments
                 .entry(document.channel_id)
                 .or_default()
-                .push(document.document_id);
+                .push((document.document_id, document.last));
         }
         self.listed_channels.segments = Some(segments);
         self.watch_unheld();
     }
 
     /// Watch each listed channel this session neither holds, opens nor
-    /// counts. A thread is left to its own signal, which counts its
-    /// mentions alone. A channel no answer names a segment of waits.
+    /// counts. Each segment counts after the last number the answer gave,
+    /// so nothing landing since is missed (`RESID-022`). A thread is left to
+    /// its own signal, which counts its mentions alone. A channel no answer
+    /// names a segment of waits.
     fn watch_unheld(&mut self) {
         let Some(segments) = &self.listed_channels.segments else {
             return;
         };
-        let unheld: Vec<(ChannelId, MetaId, Vec<DocumentId>)> = self
+        let unheld: Vec<(ChannelId, MetaId, Segments)> = self
             .listed_channels
             .metas
             .iter()
@@ -96,7 +102,7 @@ impl LogicState {
         for (channel_id, meta, documents) in unheld {
             let held = documents
                 .iter()
-                .copied()
+                .map(|(document_id, _)| *document_id)
                 .chain([meta.document_id()])
                 .collect();
             self.closed_channels
@@ -129,6 +135,9 @@ mod tests {
         std::iter::from_fn(|| rx.try_recv().ok()).collect()
     }
 
+    /// The last number the activity answer gives every document.
+    const LAST: Seq = Seq(3);
+
     fn list(state: &mut LogicState, metas: &[(ChannelId, MetaId)]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: Vec::new(),
@@ -152,13 +161,14 @@ mod tests {
                     kind,
                     active: false,
                     read: Seq::ZERO,
+                    last: Some(LAST),
                 })
                 .collect(),
         });
     }
 
     /// Every channel the Sync worker was asked to watch, with its documents.
-    fn watches(sync: &Receiver<SyncCommand>) -> Vec<(ChannelId, MetaId, Vec<DocumentId>)> {
+    fn watches(sync: &Receiver<SyncCommand>) -> Vec<(ChannelId, MetaId, Segments)> {
         drain(sync)
             .into_iter()
             .filter_map(|command| match command {
@@ -173,8 +183,9 @@ mod tests {
     }
 
     /// A channel listed with its key, and named by the activity answer, is
-    /// watched once, whichever lands first. Its threads are left to their
-    /// own signal, and a channel listed with no key watches nothing.
+    /// watched once, whichever lands first, each segment after its last
+    /// number (`RESID-022`). Its threads are left to their own signal, and a
+    /// channel listed with no key watches nothing.
     #[test]
     fn a_channel_never_opened_is_watched_once_listed_and_answered() {
         use ChannelDocumentKind::{Segment, Thread};
@@ -192,7 +203,10 @@ mod tests {
             (keyless, other, Segment),
         ];
         answer(&mut state, &documents);
-        assert_eq!(watches(&sync), vec![(channel, meta, vec![segment])]);
+        assert_eq!(
+            watches(&sync),
+            vec![(channel, meta, vec![(segment, Some(LAST))])]
+        );
         answer(&mut state, &documents);
         list(&mut state, &[(channel, meta)]);
         assert!(
@@ -205,7 +219,41 @@ mod tests {
         answer(&mut state, &documents);
         assert!(watches(&sync).is_empty());
         list(&mut state, &[(channel, meta)]);
-        assert_eq!(watches(&sync), vec![(channel, meta, vec![segment])]);
+        assert_eq!(
+            watches(&sync),
+            vec![(channel, meta, vec![(segment, Some(LAST))])]
+        );
+    }
+
+    /// The last number of an active document is far past its cursor. The
+    /// view still gets a mark, never a count (the Murmure unread spec).
+    /// It would count deltas, edits and reactions among them.
+    #[test]
+    fn the_last_number_counts_nothing() {
+        let (mut state, ui, _sync) = harness();
+        let (channel, segment) = (ChannelId::new(), DocumentId::new());
+        state.handle_logic_event(LogicEvent::ChannelActivity {
+            documents: vec![DocumentActivity {
+                channel_id: channel,
+                document_id: segment,
+                kind: ChannelDocumentKind::Segment,
+                active: true,
+                read: Seq(2),
+                last: Some(Seq(50)),
+            }],
+        });
+        let mark = ChannelActivity {
+            channel_id: channel,
+            active: true,
+            unread: None,
+            mentions: None,
+        };
+        let shown = drain(&ui);
+        assert!(
+            matches!(shown.as_slice(),
+                [UiEvent::ChannelActivity { channels }] if *channels == [mark]),
+            "got {shown:?}"
+        );
     }
 
     /// The first message of a channel never opened marks it and notifies,
@@ -289,7 +337,10 @@ mod tests {
             &mut state,
             &[(first, segment, Segment), (joined, later, Segment)],
         );
-        assert_eq!(watches(&sync), vec![(joined, joined_meta, vec![later])]);
+        assert_eq!(
+            watches(&sync),
+            vec![(joined, joined_meta, vec![(later, Some(LAST))])]
+        );
 
         list(&mut state, &[(joined, joined_meta)]);
         let mut closed: Vec<DocumentId> = drain(&sync)

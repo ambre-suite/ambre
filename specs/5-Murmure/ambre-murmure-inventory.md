@@ -30,7 +30,7 @@
 | `murmure-spaces` | A team gathers in a space. | partial | 34 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 19 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 9 |  |
-| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 15 |  |
+| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 16 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 5 implemented, 11 partial, 12 design-only. 472 contract rows, 0 loose.**
+**28 features: 5 implemented, 11 partial, 12 design-only. 473 contract rows, 0 loose.**

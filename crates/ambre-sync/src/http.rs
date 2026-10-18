@@ -825,6 +825,10 @@ pub(crate) struct ActivityEntry {
     /// reads as nothing read.
     #[serde(default)]
     pub read: ambre_core::Seq,
+    /// The document's last number. A relay that predates it answers none,
+    /// and a watch then starts from the head.
+    #[serde(default)]
+    pub last: Option<ambre_core::Seq>,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`.

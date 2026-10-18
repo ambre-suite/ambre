@@ -41,6 +41,10 @@ pub struct DocumentActivity {
     /// has read up to. The client counts against it once it holds the
     /// document.
     pub read: Seq,
+    /// The document's last number when the relay answered. A watch of a
+    /// document the client never held resumes after it; nothing counts with
+    /// it. `None` from a relay that predates it.
+    pub last: Option<Seq>,
 }
 
 /// Whether a channel holds something new, and how much once the client

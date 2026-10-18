@@ -36,6 +36,9 @@ pub struct ActivityJson {
     /// The caller's own cursor. The client counts its new messages against
     /// it; the relay still states no count (`SRV-110`).
     pub read: ambre_core::Seq,
+    /// The document's last number. A client that holds nothing of the
+    /// document resumes after it (`SRV-222`); it counts nothing with it.
+    pub last: ambre_core::Seq,
 }
 
 /// `PUT /api/documents/{id}/read-cursor`: move the caller's cursor on one
@@ -85,6 +88,7 @@ pub async fn get_activity(
                 kind: row.kind,
                 active: last > row.cursor,
                 read: ambre_core::Seq(u64::try_from(row.cursor).unwrap_or(0)),
+                last: ambre_core::Seq(u64::try_from(last).unwrap_or(0)),
             }
         })
         .collect();
@@ -354,7 +358,14 @@ mod tests {
 
         let (answer, keys) = activity(&state, me()).await;
         assert_eq!(active_of(&answer, read), Some(false), "read up to its last");
-        let kinds = ["active", "channel_id", "document_id", "kind", "read"];
+        let kinds = [
+            "active",
+            "channel_id",
+            "document_id",
+            "kind",
+            "last",
+            "read",
+        ];
         assert_eq!(
             active_of(&answer, unread),
             Some(true),
@@ -368,7 +379,7 @@ mod tests {
         assert_eq!(active_of(&answer, meta), None, "meta carries no message");
         assert!(
             keys.iter().all(|k| *k == kinds),
-            "an entry carries a yes or no, the caller's own cursor, and nothing to count: {keys:?}"
+            "an entry carries a yes or no and two numbers, and no count: {keys:?}"
         );
         let reads = read_of(&state, me()).await;
         for (document, cursor) in [(read, 5), (unread, 0), (flushed, 2)] {
@@ -412,6 +423,15 @@ mod tests {
         state: &Arc<AppState>,
         who: auth::AuthSession,
     ) -> std::collections::HashMap<String, u64> {
+        number_of(state, who, "read").await
+    }
+
+    /// The activity answer, as `document -> number`, read under `field`.
+    async fn number_of(
+        state: &Arc<AppState>,
+        who: auth::AuthSession,
+        field: &str,
+    ) -> std::collections::HashMap<String, u64> {
         let resp = get_activity(State(state.clone()), who)
             .await
             .expect("activity")
@@ -427,10 +447,38 @@ mod tests {
             .map(|e| {
                 (
                     e["document_id"].as_str().expect("id").to_owned(),
-                    e["read"].as_u64().expect("read"),
+                    e[field].as_u64().expect("number"),
                 )
             })
             .collect()
+    }
+
+    /// `SRV-222`: each entry carries its document's last number, the higher
+    /// of the ephemeral counter and the register's horizon, whatever the
+    /// caller's cursor.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn each_activity_entry_carries_its_last_number(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = crate::test_helpers::create_test_user(&state.db, "alice@test.dev").await;
+        let (_, _, segments) = channel(&state, alice, &[], &[5, 3, 0]).await;
+        sqlx::query(
+            "INSERT INTO snapshots (document_id, author_pubkey, s3_key, covered_seq) \
+             VALUES ($1, $2, 'k', 7)",
+        )
+        .bind(uuid_of(segments[2]))
+        .bind([1u8; 32].as_slice())
+        .execute(&state.db)
+        .await
+        .expect("snapshot");
+        assert_eq!(
+            put_cursor(&state, session(alice, 1), segments[0], 5).await,
+            StatusCode::NO_CONTENT
+        );
+        let lasts = number_of(&state, session(alice, 1), "last").await;
+        for (document, last) in [(segments[0], 5), (segments[1], 3), (segments[2], 7)] {
+            assert_eq!(lasts.get(&document.to_string()), Some(&last));
+        }
     }
 
     /// The cursor belongs to the user, so a second device of

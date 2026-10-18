@@ -2737,6 +2737,7 @@ mod tests {
             kind: ChannelDocumentKind::Segment,
             active,
             read: Seq::ZERO,
+            last: None,
         };
 
         state.handle_logic_event(LogicEvent::ChannelActivity {
@@ -2924,6 +2925,7 @@ mod tests {
                     kind: ChannelDocumentKind::Segment,
                     active: true,
                     read: Seq(read),
+                    last: None,
                 }],
             });
         }
@@ -5116,6 +5118,7 @@ mod tests {
                     kind: ChannelDocumentKind::Thread,
                     active: true,
                     read,
+                    last: None,
                 })
                 .collect(),
         });

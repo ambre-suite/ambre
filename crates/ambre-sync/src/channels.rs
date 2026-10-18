@@ -1146,6 +1146,7 @@ pub(crate) fn activity_of(entries: &[http::ActivityEntry]) -> Vec<DocumentActivi
             kind: e.kind,
             active: e.active,
             read: e.read,
+            last: e.last,
         })
         .collect()
 }
@@ -1224,6 +1225,7 @@ pub(crate) mod tests {
             "kind": "thread",
             "active": active,
             "read": 7,
+            "last": 9,
         });
         let body = serde_json::json!({ "documents": [row] });
         serde_json::from_value::<http::ActivityResponse>(body)
@@ -1242,10 +1244,27 @@ pub(crate) mod tests {
                 kind: ChannelDocumentKind::Thread,
                 active: true,
                 read: Seq(7),
+                last: Some(Seq(9)),
             }]
         );
         let bad = activity(&channel.to_string(), "nope", false);
         assert!(bad.is_err(), "one bad row fails the answer");
+        // A relay that predates the last number answers none.
+        let row = serde_json::json!({
+            "channel_id": channel.to_string(),
+            "document_id": segment.to_string(),
+            "kind": "segment",
+            "active": false,
+        });
+        let older = serde_json::from_value::<http::ActivityResponse>(
+            serde_json::json!({ "documents": [row] }),
+        )
+        .map(|resp| activity_of(&resp.documents))
+        .expect("ok");
+        assert_eq!(
+            older.first().map(|d| (d.read, d.last)),
+            Some((Seq::ZERO, None))
+        );
     }
 
     /// An anchor of meta's log, as the creator's `Create` entry would give it.

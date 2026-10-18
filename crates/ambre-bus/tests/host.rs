@@ -516,7 +516,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::WatchChannel {
             channel_id: chan,
             meta,
-            documents: vec![doc],
+            documents: vec![(doc, Some(Seq(3))), (doc, None)],
         },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
@@ -658,6 +658,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 kind: ChannelDocumentKind::Segment,
                 active: true,
                 read: Seq(2),
+                last: Some(Seq(5)),
             }],
         },
         LogicEvent::ChannelCreated {

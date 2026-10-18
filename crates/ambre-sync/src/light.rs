@@ -193,13 +193,14 @@ impl SyncState {
 
     /// Counts a channel this session never opened, under the key of its
     /// `meta` the latest listing wrapped (the Murmure notifications spec).
-    /// Its `meta` and each document count from the next delta. A channel
-    /// the listing gave no key for watches nothing.
+    /// Each document counts after the last number beside it (`RESID-022`),
+    /// and its `meta` from the next delta. A channel the listing gave no key
+    /// for watches nothing.
     pub(crate) fn handle_watch_channel(
         &mut self,
         channel_id: ChannelId,
         meta: MetaId,
-        documents: &[DocumentId],
+        documents: &[(DocumentId, Option<Seq>)],
     ) {
         let Some(doc_key) = self
             .listed_keys
@@ -210,15 +211,16 @@ impl SyncState {
             tracing::warn!("[Sync] no listed key to watch channel {channel_id}");
             return;
         };
-        for &document_id in std::iter::once(&meta.document_id()).chain(documents) {
-            self.watch_from_head(document_id, &doc_key);
+        for &(document_id, last) in std::iter::once(&(meta.document_id(), None)).chain(documents) {
+            self.watch_unheld(document_id, &doc_key, last);
         }
     }
 
     /// Holds one document of a channel never opened as a light subscription.
     /// No copy of it exists, so its horizon is the first number: an open
-    /// fetches it whole (`RESID-010`). Nothing the relay holds is asked.
-    fn watch_from_head(&mut self, document_id: DocumentId, key: &DocumentKey) {
+    /// fetches it whole (`RESID-010`). The relay is asked for what follows
+    /// `last`, and for nothing when there is none: the head.
+    fn watch_unheld(&mut self, document_id: DocumentId, key: &DocumentKey, last: Option<Seq>) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
         }
@@ -229,12 +231,18 @@ impl SyncState {
                 doc_type: DocType::Murmure,
                 on_relay: true,
                 horizon: Seq(0),
-                seen: Seq(0),
+                seen: last.unwrap_or(Seq(0)),
                 counters: ActivityCounters::default(),
-                replays: false,
+                replays: last.is_some(),
             },
         );
         self.ws_send(&WsClientMsg::Subscribe { document_id });
+        if let Some(after_seq) = last {
+            self.ws_send(&WsClientMsg::RequestMissing {
+                document_id,
+                after_seq,
+            });
+        }
     }
 
     /// A thread took a delta (the Murmure threads spec). A thread held in
@@ -598,12 +606,14 @@ mod tests {
         assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
     }
 
-    /// A channel never opened is watched under the key its listing wrapped
-    /// (the Murmure notifications spec). Its documents ask for nothing, and
-    /// a reconnect replays nothing until a delta gives one a number. Every
-    /// horizon is the first number, so an open fetches each document whole.
+    /// Holds `RESID-022`. A channel never opened is watched under the key its
+    /// listing wrapped (the Murmure notifications spec). A segment with a
+    /// last number asks for what follows it, and a reconnect resumes there.
+    /// A document with none asks for nothing, and a reconnect replays nothing
+    /// until a delta gives it a number. Every horizon is the first number, so
+    /// an open fetches each document whole.
     #[test]
-    fn a_channel_never_opened_is_watched_from_the_head() {
+    fn a_channel_never_opened_is_watched_after_its_last_number() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, String::new(), None);
         state.user_id = Some(UserId::from_bytes([7; 16]));
@@ -621,7 +631,7 @@ mod tests {
         let watch = SyncCommand::WatchChannel {
             channel_id,
             meta,
-            documents: vec![segment, older],
+            documents: vec![(segment, Some(Seq(4))), (older, None)],
         };
         state.handle_command(watch.clone());
         assert!(
@@ -646,32 +656,43 @@ mod tests {
                 [
                     WsClientMsg::Subscribe { document_id: a },
                     WsClientMsg::Subscribe { document_id: b },
-                    WsClientMsg::Subscribe { document_id: c },
-                ] if (*a, *b, *c) == (m, s, o)
+                    WsClientMsg::RequestMissing {
+                        document_id: c,
+                        after_seq: Seq(4),
+                    },
+                    WsClientMsg::Subscribe { document_id: d },
+                ] if (*a, *b, *c, *d) == (m, s, s, o)
             ),
-            "expected three subscribes and no request"
+            "expected three subscribes and one request after the last number"
         );
         state.handle_command(watch);
         assert!(sent().is_empty(), "a held document was watched again");
 
         let heads: HashSet<_> = state.light_heads().into_iter().collect();
-        assert_eq!(heads, HashSet::from([m, s, o]));
-        assert!(state.light_cursors().is_empty());
+        assert_eq!(heads, HashSet::from([m, o]));
+        assert_eq!(state.light_cursors(), vec![(s, Seq(4))]);
         state.resubscribe_all();
-        let resent = sent();
-        assert_eq!(resent.len(), 3, "each watched document resubscribes");
-        assert!(
-            resent
-                .iter()
-                .all(|msg| matches!(msg, WsClientMsg::Subscribe { .. })),
-            "a head replayed on a reconnect: {resent:?}"
+        let requests: Vec<(DocumentId, Seq)> = sent()
+            .into_iter()
+            .filter_map(|msg| match msg {
+                WsClientMsg::RequestMissing {
+                    document_id,
+                    after_seq,
+                } => Some((document_id, after_seq)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            requests,
+            vec![(s, Seq(4))],
+            "a reconnect resumes after the last number, and a head replays nothing"
         );
 
-        // The first live delta counts, and gives the head a cursor.
-        state.receive_update(
-            Seq(7),
-            update(segment, SnapshotId::new(), &doc_key, Some(&mention())),
-        );
+        // A delta at or below the last number was news before the answer.
+        let mentioned = || update(segment, SnapshotId::new(), &doc_key, Some(&mention()));
+        state.receive_update(Seq(4), mentioned());
+        assert!(drain(&rx).is_empty(), "a delta the answer covered counted");
+        state.receive_update(Seq(7), mentioned());
         let events = drain(&rx);
         let [
             LogicEvent::Activity {
@@ -683,9 +704,11 @@ mod tests {
             panic!("expected the segment's counters, got {events:?}");
         };
         assert_eq!((*document_id, counters.mentions), (segment, 1));
-        let heads: HashSet<_> = state.light_heads().into_iter().collect();
-        assert_eq!(heads, HashSet::from([m, o]));
         assert_eq!(state.light_cursors(), vec![(segment, Seq(7))]);
+
+        // The first live delta of a head gives it a cursor.
+        state.receive_update(Seq(2), update(older, SnapshotId::new(), &doc_key, None));
+        assert_eq!(state.light_heads(), vec![m]);
         assert_eq!(
             state.take_light(segment),
             Some(Seq(0)),
