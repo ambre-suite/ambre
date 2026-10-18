@@ -109,6 +109,7 @@ impl LogicState {
                         self.opening.clear();
                         self.read_cursors.clear();
                         self.closed_channels.clear();
+                        self.closing_segments.clear();
                         self.channel_watchers.clear();
                         self.channel_members.clear();
                         self.spaces.clear();
@@ -415,6 +416,7 @@ impl LogicState {
                         counters,
                     });
                 }
+                self.closed_meta_moved(document_id);
             }
             LogicEvent::Released { document_id } => {
                 self.store_sent(document_id);
@@ -514,6 +516,17 @@ impl LogicState {
                 channel_id,
                 key,
             } => self.channel_resealed(space_id, channel_id, &key),
+            LogicEvent::SegmentClosed {
+                channel_id,
+                closing,
+                active,
+                created,
+            } => self.segment_closed(channel_id, closing, active, created),
+            LogicEvent::SegmentCloseFailed {
+                channel_id,
+                closing,
+                message,
+            } => self.segment_close_failed(channel_id, closing, &message),
             LogicEvent::ChannelJoined { channel_id } => self.channel_joined(channel_id),
             LogicEvent::ChannelDeleted { channel_id } => self.channel_deleted(channel_id),
             LogicEvent::ChannelLeft { channel_id } => self.channel_left(channel_id),

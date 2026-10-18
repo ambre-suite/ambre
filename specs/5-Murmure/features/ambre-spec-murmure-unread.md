@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: MURMURE UNREAD STATE
 **Type:** Vertical (feature)
-**Implementation:** partial -- cursors, marks and the count of an open channel are built; no
-  count of an unloaded channel, no view
+**Implementation:** partial -- cursors, marks and the count of every channel are built; no view
 
 > The sidebar shows where something new is, and how much. The count follows the user across their
 > devices, and a reaction or an edit never makes a channel unread.
@@ -51,14 +50,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-471` | `POST` | The activity answer of the relay MUST reach the view as one mark per channel, before any count is known. | this spec section 3; `SRV-109` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- Logic hands the view one mark per channel | none | verified |
 | `MURMURE-120` | `POST` | A count MUST replace the activity mark once the loaded document gives it. | this spec section 3 | `ambre_logic::channels::tests::an_open_channel_counts_the_messages_past_its_cursor`; `ambre_murmure::unread_tests::a_snapshot_hands_on_the_numbers_its_writer_knew`; `ambre_murmure::unread_tests::a_message_known_only_from_a_snapshot_lies_within_its_horizon` -- an open channel whose cursors are known hands the view a count with each delta and each answer, and none before | none | verified |
 | `MURMURE-460` | `POST` | A count MUST replace the activity mark of a channel not loaded once the summaries give it. | this spec section 3; `RESID-014` | `ambre_logic::channels::tests::a_closed_channel_counts_its_unread_from_the_summaries`; `ambre_logic::channels::tests::a_closed_channel_with_no_count_is_marked_by_a_counted_message` -- a channel counted at close adds the messages its summaries count, and one not counted is marked by the first | none | verified |
-| `MURMURE-477` | `POST` | A segment that goes live while its channel is closed MUST count toward the channel's unread. | this spec section 3; `RESID-014` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-477` | `POST` | A segment that goes live while its channel is closed MUST count toward the channel's unread. | this spec section 3; `RESID-014` | `ambre_logic::channels::tests::a_closed_channel_watches_a_segment_opened_since` -- a moved `meta` lists the channel again, and each new segment is watched once; `ambre_sync::light::tests::a_watched_segment_counts_from_its_first_number` -- the watched segment counts from its first number | none | verified |
 | `MURMURE-156` | `FRAME` | Showing activity MUST NOT load a document. | this spec section 3; `RESID-016` | `ambre_logic::channels::tests::an_activity_answer_marks_each_channel_once_and_opens_nothing` -- the answer reaches the view and no open reaches the Sync worker | none | verified |
 
 * **Budget.** the counters cost a light subscription per channel not held
   (`ambre-spec-budgets.md section 6`).
 * **Boundary.** the relay holds the read cursors and answers yes or no, never a count
   (`SRV-110`, `ZK-015`). The kind of each update stays sealed.
-* **Verification.** 12 `verified`, 3 `unimplemented`. The read cursor route tests hold the relay
+* **Verification.** 13 `verified`, 2 `unimplemented`. The read cursor route tests hold the relay
   rows against a real database. The engine, Logic and Sync unit tests hold the client rows. A
   closed channel counts from its summaries, and a segment it opens meanwhile is not counted yet.
 
@@ -161,9 +160,9 @@ so the relay moves its cursor to its own last number, and the client need not lo
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A segment that goes live while its channel is closed.** No light subscription holds it, so
-  its messages count nothing until the reopen. No segment goes live before segments chain:
-  the `Channel segments and finalization` Story (`ambre-roadmap.md` E5), `MURMURE-477`.
+* **A segment that goes live while its channel is closed** counts what its `meta` names. After a
+  key rotation, it counts its activity alone. A `meta` write from another device of the same user
+  lists nothing new, so its segment counts nothing until the reopen.
 * **No view.** No sidebar draws the mark or the count, and no message list sends mark read or
   mark unread.
 * **A snapshot from a member who knows no number.** Its messages read as bounded by its horizon,

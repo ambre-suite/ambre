@@ -6,6 +6,16 @@
 use super::*;
 use ambre_core::ChannelDocumentKind;
 
+/// Insert one channel document, by its id, channel and kind. A segment enters
+/// `active`, and no other kind carries a state. A macro rather than a `const`,
+/// so `concat!` keeps each query `&'static`.
+macro_rules! insert_channel_document {
+    () => {
+        "INSERT INTO channel_documents (document_id, channel_id, kind, state) \
+         VALUES ($1, $2, $3, CASE WHEN $3 = 'segment' THEN 'active' END)"
+    };
+}
+
 /// One document a channel groups.
 #[derive(Debug)]
 pub struct ChannelDocumentRow {
@@ -213,10 +223,10 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
         (new.segment_id.document_id(), ChannelDocumentKind::Segment),
     ] {
         let document = id_to_uuid(document);
-        sqlx::query(
-            "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3) \
-             ON CONFLICT DO NOTHING",
-        )
+        sqlx::query(concat!(
+            insert_channel_document!(),
+            " ON CONFLICT DO NOTHING"
+        ))
         .bind(document)
         .bind(channel)
         .bind(kind.as_str())
@@ -233,6 +243,86 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
     }
     tx.commit().await?;
     Ok(())
+}
+
+/// Close the active segment `closing` of a channel into `successor`, in one
+/// transaction (`SRV-194`), and answer the channel's active segment after it.
+///
+/// The channel row is locked first, so two closes take turns. The second
+/// finds `closing` already closing, and answers the successor the first
+/// registered (`SRV-195`). A close while another segment of the channel is
+/// still closing is refused with a 409 (`SRV-196`). So is a `closing` that is
+/// not the active segment, or a successor already registered.
+pub async fn close_segment(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    closing: ambre_core::SegmentId,
+    successor: ambre_core::SegmentId,
+) -> Result<ambre_core::SegmentId, AppError> {
+    let channel = id_to_uuid(*channel_id);
+    let conflict = |detail: &str| AppError::Conflict {
+        detail: detail.into(),
+    };
+    let mut tx = pool.begin().await?;
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+        .bind(channel)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "channel",
+        })?;
+    let live: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT document_id, state FROM channel_documents \
+         WHERE channel_id = $1 AND state IN ('active', 'closing')",
+    )
+    .bind(channel)
+    .fetch_all(&mut *tx)
+    .await?;
+    let of = |state: &str| live.iter().find(|(_, s)| s == state).map(|(d, _)| *d);
+    let (active, closing_now) = (of("active"), of("closing"));
+    let closing = id_to_uuid(closing.document_id());
+    if closing_now == Some(closing) {
+        let active = active.ok_or_else(|| conflict("the channel has no active segment"))?;
+        return Ok(ambre_core::SegmentId::from_document(uuid_row_to_id(active)));
+    }
+    if active != Some(closing) {
+        return Err(conflict("the segment is not the active one"));
+    }
+    if closing_now.is_some() {
+        return Err(conflict("another segment of the channel is still closing"));
+    }
+    sqlx::query("UPDATE channel_documents SET state = 'closing' WHERE document_id = $1")
+        .bind(closing)
+        .execute(&mut *tx)
+        .await?;
+    let inserted = sqlx::query(concat!(
+        insert_channel_document!(),
+        " ON CONFLICT DO NOTHING"
+    ))
+    .bind(id_to_uuid(successor.document_id()))
+    .bind(channel)
+    .bind(ChannelDocumentKind::Segment.as_str())
+    .execute(&mut *tx)
+    .await?;
+    if inserted.rows_affected() != 1 {
+        return Err(conflict("the successor is already registered"));
+    }
+    tx.commit().await?;
+    Ok(successor)
+}
+
+/// The kind of a channel document, or `None` for a document outside every
+/// channel.
+pub async fn channel_document_kind(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+) -> Result<Option<ChannelDocumentKind>, AppError> {
+    let kind: Option<String> =
+        sqlx::query_scalar("SELECT kind FROM channel_documents WHERE document_id = $1")
+            .bind(id_to_uuid(*document_id))
+            .fetch_optional(pool)
+            .await?;
+    kind.as_deref().map(decode_kind).transpose()
 }
 
 /// Delete a channel, and mark the delete of every document it groups
@@ -598,14 +688,12 @@ pub async fn find_or_create_direct_message(
         (new.meta_id.document_id(), ChannelDocumentKind::Meta),
         (new.segment_id.document_id(), ChannelDocumentKind::Segment),
     ] {
-        sqlx::query(
-            "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
-        )
-        .bind(id_to_uuid(document))
-        .bind(channel)
-        .bind(kind.as_str())
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query(insert_channel_document!())
+            .bind(id_to_uuid(document))
+            .bind(channel)
+            .bind(kind.as_str())
+            .execute(&mut *tx)
+            .await?;
     }
     let meta = id_to_uuid(new.meta_id);
     for (member, doc_key_enc) in new.members {
@@ -658,15 +746,13 @@ mod tests {
         document: DocumentId,
         kind: ChannelDocumentKind,
     ) {
-        sqlx::query(
-            "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
-        )
-        .bind(id_to_uuid(document))
-        .bind(id_to_uuid(channel))
-        .bind(kind.as_str())
-        .execute(pool)
-        .await
-        .expect("group document");
+        sqlx::query(insert_channel_document!())
+            .bind(id_to_uuid(document))
+            .bind(id_to_uuid(channel))
+            .bind(kind.as_str())
+            .execute(pool)
+            .await
+            .expect("group document");
     }
 
     async fn grant(pool: &PgPool, document: DocumentId, member: UserId, owner: UserId) {
@@ -799,6 +885,115 @@ mod tests {
         assert_eq!(row.role, ambre_core::Role::Owner);
     }
 
+    async fn states(pool: &PgPool, channel: ChannelId) -> Vec<(DocumentId, String)> {
+        let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+            "SELECT document_id, state FROM channel_documents \
+             WHERE channel_id = $1 AND kind = 'segment' ORDER BY state",
+        )
+        .bind(id_to_uuid(channel))
+        .fetch_all(pool)
+        .await
+        .expect("query");
+        rows.into_iter()
+            .map(|(d, s)| (uuid_row_to_id(d), s))
+            .collect()
+    }
+
+    fn segment(document: DocumentId) -> ambre_core::SegmentId {
+        ambre_core::SegmentId::from_document(document)
+    }
+
+    /// `SRV-194`, `SRV-197`: a close marks the active segment closing and
+    /// registers its successor as active, in one transaction. Another
+    /// channel keeps its segments.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_close_registers_the_successor_and_marks_the_segment_closing(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let (other, _, other_first) = channel_of(&pool, owner).await;
+        let next = document(&pool, owner).await;
+        let active = close_segment(&pool, &id, segment(first), segment(next))
+            .await
+            .expect("close");
+        assert_eq!(active, segment(next));
+        assert_eq!(
+            states(&pool, id).await,
+            [(next, "active".to_owned()), (first, "closing".to_owned())]
+        );
+        assert_eq!(
+            channel_document_kind(&pool, &next).await.expect("query"),
+            Some(ChannelDocumentKind::Segment)
+        );
+        assert_eq!(
+            states(&pool, other).await,
+            [(other_first, "active".to_owned())]
+        );
+    }
+
+    /// `SRV-195`: two closes of one segment race, and both answer the one
+    /// successor that was registered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn two_racing_closes_register_one_successor(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let (a, b) = (document(&pool, owner).await, document(&pool, owner).await);
+        let (left, right) = tokio::join!(
+            close_segment(&pool, &id, segment(first), segment(a)),
+            close_segment(&pool, &id, segment(first), segment(b)),
+        );
+        let (left, right) = (left.expect("close"), right.expect("close"));
+        assert_eq!(left, right, "both closes answer the same successor");
+        let winner = left.document_id();
+        assert!(winner == a || winner == b);
+        assert_eq!(
+            states(&pool, id).await,
+            [(winner, "active".to_owned()), (first, "closing".to_owned())],
+            "the losing successor is never registered"
+        );
+    }
+
+    /// `SRV-196`: a close while another segment of the channel is closing is
+    /// refused. So is a close of a segment that is not the active one.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_close_while_a_segment_is_closing_is_refused(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let (second, third) = (document(&pool, owner).await, document(&pool, owner).await);
+        close_segment(&pool, &id, segment(first), segment(second))
+            .await
+            .expect("close");
+        let refused = close_segment(&pool, &id, segment(second), segment(third)).await;
+        assert!(
+            matches!(refused, Err(AppError::Conflict { .. })),
+            "{refused:?}"
+        );
+        let stale = close_segment(&pool, &id, segment(third), segment(first)).await;
+        assert!(matches!(stale, Err(AppError::Conflict { .. })), "{stale:?}");
+        assert_eq!(states(&pool, id).await.len(), 2, "nothing was registered");
+        let unknown = close_segment(&pool, &ChannelId::new(), segment(first), segment(third)).await;
+        assert!(matches!(unknown, Err(AppError::NotFound { .. })));
+    }
+
+    /// The database holds one active and one closing segment per channel,
+    /// whatever writes it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_channel_holds_one_active_segment(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, _) = channel_of(&pool, owner).await;
+        let second = document(&pool, owner).await;
+        let refused = sqlx::query(insert_channel_document!())
+            .bind(id_to_uuid(second))
+            .bind(id_to_uuid(id))
+            .bind(ChannelDocumentKind::Segment.as_str())
+            .execute(&pool)
+            .await;
+        assert!(refused.is_err(), "a second active segment is refused");
+    }
+
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn the_listing_puts_meta_first(pool: PgPool) {
@@ -822,7 +1017,8 @@ mod tests {
     }
 
     /// `ZK-015`: the channel tables hold the channel's space and public flag,
-    /// and each document's channel and kind. The cursor table holds a member,
+    /// each document's channel and kind, and the state of each segment. The
+    /// cursor table holds a member,
     /// a document and a number. Nothing else: no name, no member,
     /// no key and no timestamp. A column added here widens what the relay
     /// learns, so it fails this test before it ships.
@@ -847,6 +1043,7 @@ mod tests {
                 ("channel_documents", "channel_id"),
                 ("channel_documents", "document_id"),
                 ("channel_documents", "kind"),
+                ("channel_documents", "state"),
                 ("channels", "id"),
                 ("channels", "is_public"),
                 ("channels", "space_id"),

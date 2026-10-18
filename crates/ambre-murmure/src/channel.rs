@@ -27,6 +27,10 @@ use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
 use crate::{mention, reaction};
 
+mod closing;
+
+pub use closing::{Closed, SEGMENT_MESSAGES};
+
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
 #[derive(Debug)]
@@ -157,6 +161,14 @@ pub struct ChannelState {
     /// (`features/ambre-spec-murmure-unread.md section 3`). A segment that
     /// came with no number has no entry.
     sequences: HashMap<DocumentId, Sequence>,
+    /// The messages past which the active segment asks to close.
+    segment_size: usize,
+    /// Whether the active segment asked to close and waits for the answer.
+    close_asked: bool,
+    /// The successor another client created, whose bytes are in `pending`.
+    successor: Option<SegmentId>,
+    /// The identity issued for that successor, adopted once it is admitted.
+    successor_session: Option<(u64, Vec<u8>)>,
 }
 
 impl ChannelState {
@@ -218,6 +230,10 @@ impl ChannelState {
     ) -> Result<Option<Vec<u8>>, MurmureError> {
         let channel_id = self.channel_id;
         let Some(held) = self.held_mut(document_id) else {
+            let segment = SegmentId::from_document(document_id);
+            if self.note_successor_session(segment, peer, entry) {
+                return Ok(None);
+            }
             return if self.holds(document_id) {
                 Ok(None)
             } else {
@@ -295,6 +311,10 @@ impl ChannelState {
             loaded: HashMap::new(),
             pending: HashMap::new(),
             sequences: HashMap::new(),
+            segment_size: SEGMENT_MESSAGES,
+            close_asked: false,
+            successor: None,
+            successor_session: None,
         }
     }
 
@@ -1065,29 +1085,34 @@ impl ChannelState {
             .contains_key(&SegmentId::from_document(document_id))
     }
 
-    /// Give up an older segment that could not open, so the view can ask
-    /// again. Returns `false` when none of that identifier was asked for.
+    /// Give up an older segment or a successor that could not open, so it can
+    /// be asked again. Returns `false` when none of that identifier was asked
+    /// for.
     pub fn cancel_older(&mut self, document_id: DocumentId) -> bool {
+        let segment = SegmentId::from_document(document_id);
         self.sequences.remove(&document_id);
-        self.pending
-            .remove(&SegmentId::from_document(document_id))
-            .is_some()
+        self.forget_successor(segment);
+        self.pending.remove(&segment).is_some()
     }
 
-    /// The older segment `document_id` has all its bytes: check it and hold
-    /// it (`MURMURE-023`).
+    /// The older segment or the successor `document_id` has all its bytes:
+    /// check it and hold it (`MURMURE-023`, `MURMURE-065`).
     ///
     /// # Errors
-    /// [`MurmureError::NotHeld`] when no older segment of that identifier was
-    /// asked for, and every refusal of [`ChannelState::load_older`]. A refused
-    /// segment is dropped, so the view can ask again.
+    /// [`MurmureError::NotHeld`] when no segment of that identifier was asked
+    /// for, and every refusal of [`ChannelState::load_older`]. A refused
+    /// segment is dropped, so it can be asked again.
     pub fn older_ready(&mut self, document_id: DocumentId) -> Result<MurmureEvent, MurmureError> {
         let segment = SegmentId::from_document(document_id);
         let arrivals = self
             .pending
             .remove(&segment)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let loaded = self.load_older_from(segment, arrivals);
+        let loaded = if self.is_successor(segment) {
+            self.successor_ready(segment, arrivals)
+        } else {
+            self.load_older_from(segment, arrivals)
+        };
         if loaded.is_err() {
             self.sequences.remove(&document_id);
         }
@@ -1187,7 +1212,9 @@ pub(crate) fn push_segment_entry(
 }
 
 /// The segments `meta` lists, in list order. A malformed entry is skipped
-/// with a warn: one bad entry must not close the channel.
+/// with a warn: one bad entry must not close the channel. A segment listed
+/// twice reads as its first entry: two clients writing one close may both
+/// list the successor (`MURMURE-010`).
 fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
     let list: LoroList = meta.get_list(SEGMENTS);
     let mut entries = Vec::with_capacity(list.len());
@@ -1200,6 +1227,7 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
             schema::string(&entry, SEGMENT_DOCUMENT).and_then(|s| SegmentId::parse_str(&s).ok());
         let state = schema::string(&entry, SEGMENT_STATE).and_then(|s| SegmentState::parse(&s));
         match (id, state) {
+            (Some(id), Some(_)) if entries.iter().any(|(listed, _)| *listed == id) => {}
             (Some(id), Some(state)) => entries.push((id, state)),
             _ => tracing::warn!("[Murmure] a segments entry is malformed; skipped"),
         }

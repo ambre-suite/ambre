@@ -8,6 +8,7 @@
 
 use super::*;
 
+use ambre_bus::{MetaId, SegmentId};
 use ambre_core::activity::ActivityCounters;
 
 /// What the Sync worker keeps of a document the Logic thread evicted.
@@ -132,6 +133,43 @@ impl SyncState {
             });
         }
         true
+    }
+
+    /// Counts a segment of a closed channel from its first number, as a
+    /// light subscription under the key of `meta` (`SYNC-162`). A segment
+    /// already held, in full or light, is left as it is. A `meta` this
+    /// worker holds no key for watches nothing.
+    pub(crate) fn handle_watch_segment(&mut self, segment: SegmentId, meta: MetaId) {
+        let document_id = segment.document_id();
+        if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
+            return;
+        }
+        let meta = meta.document_id();
+        let Some(doc_key) = self
+            .light
+            .get(&meta)
+            .map(|light| light.doc_key.clone())
+            .or_else(|| self.documents.get(&meta).map(|doc| doc.doc_key.clone()))
+        else {
+            tracing::warn!("[Sync] no key to watch segment {segment}");
+            return;
+        };
+        self.light.insert(
+            document_id,
+            LightSubscription {
+                doc_key,
+                doc_type: DocType::Murmure,
+                on_relay: true,
+                horizon: Seq(0),
+                seen: Seq(0),
+                counters: ActivityCounters::default(),
+            },
+        );
+        self.ws_send(&WsClientMsg::Subscribe { document_id });
+        self.ws_send(&WsClientMsg::RequestMissing {
+            document_id,
+            after_seq: Seq(0),
+        });
     }
 
     /// Takes the light subscription of a document being reopened: its kind
@@ -376,5 +414,51 @@ mod tests {
     fn the_horizon_never_passes_what_the_session_received() {
         let (mut state, _rx, document_id, _, _) = released(40);
         assert_eq!(state.take_light(document_id), Some(Seq(9)));
+    }
+
+    /// Holds `SYNC-162`: a segment of a closed channel is watched under the
+    /// key of its `meta`, and asked from its first number. Its updates count
+    /// as any light document's.
+    #[test]
+    fn a_watched_segment_counts_from_its_first_number() {
+        let (mut state, rx, meta, doc_key, _) = released(9);
+        drain(&rx);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let segment = SegmentId::new();
+        let meta = MetaId::from_document(meta);
+        state.handle_command(SyncCommand::WatchSegment { segment, meta });
+        let document_id = segment.document_id();
+        let sent: Vec<WsClientMsg> = ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .collect();
+        assert!(
+            matches!(
+                sent.as_slice(),
+                [
+                    WsClientMsg::Subscribe { document_id: a },
+                    WsClientMsg::RequestMissing {
+                        document_id: b,
+                        after_seq: Seq(0),
+                    },
+                ] if *a == document_id && *b == document_id
+            ),
+            "expected a subscribe and a request from 0, got {sent:?}"
+        );
+        assert_eq!(state.light_cursor(document_id), Some(Seq(0)));
+        state.receive_update(
+            Seq(1),
+            update(document_id, SnapshotId::new(), &doc_key, Some(&mention())),
+        );
+        let events = drain(&rx);
+        let [LogicEvent::Activity { counters, .. }] = events.as_slice() else {
+            panic!("expected the segment's counters, got {events:?}");
+        };
+        assert_eq!(counters.mentions, 1);
+
+        state.handle_command(SyncCommand::WatchSegment { segment, meta });
+        assert!(ws_rx.try_recv().is_err(), "a held segment is watched again");
+        assert_eq!(state.light_cursor(document_id), Some(Seq(1)));
     }
 }

@@ -2599,16 +2599,22 @@ mod channel_gate_tests {
             .expect("channel");
         let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
         let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
-        for (document, kind) in [
-            (meta, ambre_core::ChannelDocumentKind::Meta),
-            (segment, ambre_core::ChannelDocumentKind::Segment),
+        for (document, kind, segment_state) in [
+            (meta, ambre_core::ChannelDocumentKind::Meta, None),
+            (
+                segment,
+                ambre_core::ChannelDocumentKind::Segment,
+                Some("active"),
+            ),
         ] {
             sqlx::query(
-                "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
+                "INSERT INTO channel_documents (document_id, channel_id, kind, state) \
+                 VALUES ($1, $2, $3, $4)",
             )
             .bind(uuid_of(document))
             .bind(uuid_of(channel))
             .bind(kind.as_str())
+            .bind(segment_state)
             .execute(pool)
             .await
             .expect("group");

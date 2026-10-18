@@ -274,6 +274,59 @@ impl SyncState {
         });
     }
 
+    /// Close the active segment `closing` of an open channel into
+    /// `successor` (the Murmure segments spec). The successor opens under
+    /// the current key of `meta`, whose members are the channel's.
+    pub(crate) fn handle_close_segment(
+        &self,
+        channel_id: ChannelId,
+        meta: MetaId,
+        closing: SegmentId,
+        successor: SegmentId,
+    ) {
+        let prepared = self.event_tx.clone().ok_or_else(no_relay).and_then(|tx| {
+            let meta_key = self
+                .documents
+                .get(&meta.document_id())
+                .map(|doc| doc.doc_key.clone())
+                .ok_or("the channel's meta has no open session")?;
+            let exchange_key = self.exchange_key.clone().ok_or("session locked")?;
+            let author = self.author().ok_or("session locked")?;
+            Ok((tx, meta_key, exchange_key, author))
+        });
+        let (tx, meta_key, exchange_key, author) = match prepared {
+            Ok(prepared) => prepared,
+            Err(message) => {
+                return self.send_to_logic(LogicEvent::SegmentCloseFailed {
+                    channel_id,
+                    closing,
+                    message,
+                });
+            }
+        };
+        let params = crate::sharing::SegmentCloseParams {
+            channel_id,
+            closing,
+            successor,
+            meta_key,
+            author,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+            exchange_key,
+        };
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = crate::sharing::close_segment_task(&http, params).await;
+            let _ = tx.send(SyncEvent::SegmentClosed {
+                channel_id,
+                closing,
+                result,
+            });
+        });
+    }
+
     /// Ask the relay to delete a channel with every document it groups
     /// (`SRV-142`). The documents stay open here until the Logic thread hears
     /// the answer and closes them, so a refusal leaves the channel whole.

@@ -43,6 +43,7 @@ mod replay;
 /// Which documents this thread holds, and the reopen of one that left
 /// (`ambre-spec-residency.md`).
 mod residency;
+mod segments;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
 mod spaces;
@@ -702,6 +703,10 @@ struct LogicState {
     /// counts them from their summaries alone (`RESID-004`). Removed on a
     /// reopen, a delete, a leave or `Logout`.
     closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
+    /// The close each open channel asked of the Sync worker, with the time
+    /// of the send that filled its segment (the Murmure segments spec).
+    /// Removed on the answer, and with the channel.
+    closing_segments: HashMap<ambre_bus::ChannelId, ambre_bus::Timestamp>,
     /// Who watches each open channel and who types in it, with this client's
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
@@ -826,6 +831,7 @@ impl LogicState {
             channel_ledgers: HashMap::new(),
             read_cursors: HashMap::new(),
             closed_channels: HashMap::new(),
+            closing_segments: HashMap::new(),
             channel_watchers: HashMap::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),

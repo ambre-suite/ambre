@@ -140,6 +140,10 @@ pub fn api_router(
             axum::routing::get(list_channel_documents),
         )
         .route(
+            "/channels/{id}/segments",
+            axum::routing::post(close_segment),
+        )
+        .route(
             "/spaces/{id}/channels",
             axum::routing::get(list_space_channels),
         )

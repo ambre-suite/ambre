@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, MemberInfo, RequestId,
-    RestEvent, Role, SealedChannelKey, SnapshotId, SpaceId, UserId,
+    RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId, UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -210,6 +210,23 @@ pub enum LogicEvent {
     ChannelCreated {
         channel_id: ChannelId,
         key: Option<SealedChannelKey>,
+    },
+    /// The relay closed `closing`, answering
+    /// [`SyncCommand::CloseSegment`](crate::SyncCommand::CloseSegment).
+    /// `active` is the successor the relay registered. `created` says it is
+    /// the one this client asked for. A close that lost its race names the
+    /// winner's, and the Sync worker deleted its own.
+    SegmentClosed {
+        channel_id: ChannelId,
+        closing: SegmentId,
+        active: SegmentId,
+        created: bool,
+    },
+    /// The relay refused the close of `closing`, or never answered it.
+    SegmentCloseFailed {
+        channel_id: ChannelId,
+        closing: SegmentId,
+        message: String,
     },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering

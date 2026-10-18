@@ -20,7 +20,8 @@ use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
 
 use ambre_bus::{
-    ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo, RequestId, Role, UserId,
+    ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo, RequestId, Role, SegmentId,
+    UserId,
 };
 
 use crate::http;
@@ -850,6 +851,63 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
         .ok_or("the channel has no meta document")?
         .document_id;
     leave_document(http, meta, &p.author, scheme, base, &p.exchange_key).await
+}
+
+/// Inputs for [`close_segment_task`], gathered from `SyncState` before
+/// spawning.
+pub(crate) struct SegmentCloseParams {
+    pub channel_id: ChannelId,
+    pub closing: SegmentId,
+    pub successor: SegmentId,
+    /// The current key of the channel's `meta`, which opens every document
+    /// of the channel.
+    pub meta_key: DocumentKey,
+    /// This user, who creates the successor.
+    pub author: Author,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Close the active segment of a channel (the Murmure segments spec).
+/// Create the successor under the key of `meta`, then ask the relay to close
+/// into it. Returns the active segment after the close, and whether it is
+/// this successor.
+///
+/// A close that lost its race deletes the successor it created, which no
+/// channel lists (`SYNC-163`). A failed request deletes nothing: the relay
+/// may have registered the successor before the answer was lost.
+pub(crate) async fn close_segment_task<H: ShareHttp>(
+    http: &H,
+    p: SegmentCloseParams,
+) -> Result<(SegmentId, bool), String> {
+    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let successor = p.successor.document_id();
+    let (doc_key_enc, entry) = creation(successor, &p.meta_key, &p.exchange_key, &p.author)?;
+    let body = http::CreateDocumentRequest {
+        doc_type: ambre_core::DocType::Murmure,
+        name_enc: None,
+        doc_key_enc,
+        document_id: Some(successor),
+        entry: Some(entry),
+    };
+    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+        .await?;
+    let body = http::CloseSegmentRequest {
+        closing: p.closing,
+        successor: p.successor,
+    };
+    let url = format!("{base}/channels/{}/segments", p.channel_id);
+    let closed = http
+        .post_json::<_, http::ClosedSegmentResponse>(&url, &body)
+        .await?;
+    if !closed.created {
+        let url = format!("{base}/documents/{successor}");
+        if let Err(e) = http.delete(&url, &()).await {
+            tracing::warn!("[Sync] the successor of a lost close stays on the relay: {e}");
+        }
+    }
+    Ok((closed.active, closed.created))
 }
 
 /// Inputs for [`settle_task`].
@@ -1978,6 +2036,64 @@ mod tests {
         ]);
         assert!(leave_channel_task(&http, params()).await.is_err());
         assert_eq!(http.calls().len(), 3, "a refusal is not tried again");
+    }
+
+    fn close_params(successor: SegmentId) -> SegmentCloseParams {
+        SegmentCloseParams {
+            channel_id: ChannelId::new(),
+            closing: SegmentId::new(),
+            successor,
+            meta_key: DocumentKey::generate(),
+            author: author(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: keypair(1).0,
+        }
+    }
+
+    /// Holds `SYNC-163`. A close creates its successor, then asks the relay.
+    /// A winner deletes nothing; a loser deletes the successor it created,
+    /// and both learn the active segment.
+    #[tokio::test]
+    async fn a_lost_close_deletes_the_successor_it_created() {
+        let created = serde_json::json!({
+            "document_id": DocumentId::new().to_string(), "doc_type": "murmure",
+        });
+        let mine = SegmentId::new();
+        let answer = |active: SegmentId, created: bool| serde_json::json!({ "active": active.to_string(), "created": created });
+        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
+        let won = close_segment_task(&http, close_params(mine)).await;
+        assert_eq!(won, Ok((mine, true)));
+        {
+            let calls = http.calls();
+            let [Call::Post(create, body), Call::Post(close, _)] = calls.as_slice() else {
+                panic!("expected a create then a close, got {:?}", calls.len());
+            };
+            assert!(create.ends_with("/api/documents"));
+            assert_eq!(body["document_id"], mine.document_id().to_string());
+            assert!(close.ends_with("/segments"));
+        }
+
+        let winner = SegmentId::new();
+        let http = FakeHttp::new(vec![
+            Ok(created.clone()),
+            Ok(answer(winner, false)),
+            Ok(serde_json::Value::Null),
+        ]);
+        let lost = close_segment_task(&http, close_params(mine)).await;
+        assert_eq!(lost, Ok((winner, false)));
+        {
+            let calls = http.calls();
+            let Some(Call::Delete(url, _)) = calls.last() else {
+                panic!("the loser deleted nothing");
+            };
+            assert!(url.ends_with(&format!("/documents/{}", mine.document_id())));
+        }
+
+        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 500".into())]);
+        let failed = close_segment_task(&http, close_params(mine)).await;
+        assert_eq!(failed, Err("HTTP 500".into()));
+        assert_eq!(http.calls().len(), 2, "a failed close deletes nothing");
     }
 
     /// A revoke the relay refuses changes nothing here either: no key is

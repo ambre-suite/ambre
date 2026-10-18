@@ -852,6 +852,25 @@ pub(crate) struct CreateChannelRequest {
     pub segment_id: ambre_core::SegmentId,
 }
 
+/// `POST /api/channels/{id}/segments`: close the active segment `closing`
+/// into `successor`, a document this user created for it.
+#[derive(Serialize)]
+pub(crate) struct CloseSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub closing: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub successor: ambre_core::SegmentId,
+}
+
+/// The active segment after a close. `created` is false when an earlier
+/// close registered another successor.
+#[derive(Deserialize)]
+pub(crate) struct ClosedSegmentResponse {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub active: ambre_core::SegmentId,
+    pub created: bool,
+}
+
 /// One member of a direct message, other than the caller, and the channel
 /// key wrapped for them.
 #[derive(Serialize)]

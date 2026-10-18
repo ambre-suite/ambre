@@ -217,6 +217,25 @@ pub struct JoinHeadJson {
     pub last: Option<String>,
 }
 
+/// The body of a segment close: the active segment the caller saw, and the
+/// successor it created, which no channel groups yet.
+#[derive(serde::Deserialize)]
+pub struct CloseSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub closing: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub successor: ambre_core::SegmentId,
+}
+
+/// The active segment after a close, and whether it is the caller's
+/// successor. `false` means an earlier close registered another one.
+#[derive(serde::Serialize)]
+pub struct ClosedSegmentJson {
+    #[serde(with = "ambre_core::serde_id::segment_id")]
+    pub active: ambre_core::SegmentId,
+    pub created: bool,
+}
+
 /// Parse an id of the path or the body. A malformed id answers the 403 of an
 /// id the caller may not use, so it tells nothing apart.
 fn parse<T: From<ambre_core::Uuid>>(s: &str) -> Result<T, AppError> {
@@ -287,6 +306,40 @@ pub async fn create_channel(
     db::register_channel(&state.db, &new).await?;
     tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.is_public, "channel registered");
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /api/channels/{id}/segments`: close the active segment of a channel
+/// into the caller's successor (`SRV-194`).
+///
+/// The caller writes to the channel: a viewer posts nothing, so it fills no
+/// segment. The successor is a Murmure document the caller owns, as at a
+/// registration. A close that lost its race answers the winner's successor
+/// (`SRV-195`), and the caller deletes its own.
+pub async fn close_segment(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(channel_id): Path<String>,
+    Json(req): Json<CloseSegmentRequest>,
+) -> Result<axum::Json<ClosedSegmentJson>, AppError> {
+    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
+    let meta = db::get_channel(&state.db, &channel_id)
+        .await?
+        .and_then(|channel| channel.meta_id)
+        .ok_or(AppError::Forbidden)?;
+    let role = db::member_role(&state.db, &meta.document_id(), &auth.user_id).await?;
+    if !role.is_some_and(Role::can_write_document) || req.closing == req.successor {
+        return Err(AppError::Forbidden);
+    }
+    let successor = req.successor.document_id();
+    let document = free_murmure_document(&state, &successor, Some(channel_id)).await?;
+    let own_role = db::member_role(&state.db, &successor, &auth.user_id).await?;
+    if document.owner_id != auth.user_id || own_role != Some(Role::Owner) {
+        return Err(AppError::Forbidden);
+    }
+    let active = db::close_segment(&state.db, &channel_id, req.closing, req.successor).await?;
+    let created = active == req.successor;
+    tracing::info!(channel_id = %channel_id, closing = %req.closing, active = %active, created, "segment closed");
+    Ok(axum::Json(ClosedSegmentJson { active, created }))
 }
 
 /// `POST /api/channels/direct`: open the direct message of the caller and
@@ -2591,6 +2644,88 @@ mod tests {
                 .expect("links")
                 .len(),
             1
+        );
+    }
+
+    // --- Closing a segment into its successor ---
+
+    async fn close(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        successor: DocumentId,
+    ) -> Result<ClosedSegmentJson, StatusCode> {
+        close_segment(
+            State(state.clone()),
+            session(who),
+            Path(channel.id.to_string()),
+            Json(CloseSegmentRequest {
+                closing: channel.segment,
+                successor: SegmentId::from_document(successor),
+            }),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    /// `SRV-194`, `SRV-195`: a writer closes the active segment into its own
+    /// successor, and a second writer racing it is answered that successor.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_closes_a_segment_and_a_late_close_learns_the_winner(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), bob, Role::Editor).await;
+
+        let mine = document(&state, alice).await;
+        let first = close(&state, alice, &channel, mine).await.expect("close");
+        assert_eq!(first.active, SegmentId::from_document(mine));
+        assert!(first.created);
+
+        let theirs = document(&state, bob).await;
+        let late = close(&state, bob, &channel, theirs).await.expect("close");
+        assert_eq!(late.active, SegmentId::from_document(mine));
+        assert!(!late.created, "the late close registered nothing");
+        assert_eq!(
+            db::channel_document_kind(&state.db, &theirs)
+                .await
+                .expect("query"),
+            None
+        );
+    }
+
+    /// A viewer fills no segment, so closes none, and a successor the caller
+    /// does not own is refused.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_close_needs_a_writer_and_its_own_successor(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let space = space(&state, alice, &[(vera, Role::Viewer)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+
+        let veras = document(&state, vera).await;
+        assert_eq!(
+            close(&state, vera, &channel, veras).await.err(),
+            Some(StatusCode::FORBIDDEN)
+        );
+        assert_eq!(
+            close(&state, alice, &channel, veras).await.err(),
+            Some(StatusCode::FORBIDDEN),
+            "the successor belongs to another member"
+        );
+        assert_eq!(
+            close(&state, alice, &channel, channel.segment.document_id())
+                .await
+                .err(),
+            Some(StatusCode::FORBIDDEN),
+            "a segment is not its own successor"
         );
     }
 }

@@ -360,6 +360,13 @@ enum SyncEvent {
         channel_id: ChannelId,
         result: Result<(), String>,
     },
+    /// The answer to a segment close (`SyncCommand::CloseSegment`): the
+    /// active segment after it, and whether it is the successor asked for.
+    SegmentClosed {
+        channel_id: ChannelId,
+        closing: ambre_bus::SegmentId,
+        result: Result<(ambre_bus::SegmentId, bool), String>,
+    },
     /// The answer to a direct message request
     /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
     /// under the requested id, or the one that already held its members.
@@ -1344,6 +1351,13 @@ impl SyncState {
                 space_id,
                 key,
             } => self.handle_join_channel(channel_id, space_id, &key),
+            SyncCommand::CloseSegment {
+                channel_id,
+                meta,
+                closing,
+                successor,
+            } => self.handle_close_segment(channel_id, meta, closing, successor),
+            SyncCommand::WatchSegment { segment, meta } => self.handle_watch_segment(segment, meta),
             SyncCommand::DeleteChannel { channel_id } => self.handle_delete_channel(channel_id),
             SyncCommand::LeaveChannel { channel_id } => self.handle_leave_channel(channel_id),
             SyncCommand::CreateDirectMessage {

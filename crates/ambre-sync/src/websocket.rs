@@ -816,6 +816,25 @@ impl SyncState {
                     result.map(|()| LogicEvent::ChannelLeft { channel_id }),
                 );
             }
+            SyncEvent::SegmentClosed {
+                channel_id,
+                closing,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok((active, created)) => LogicEvent::SegmentClosed {
+                        channel_id,
+                        closing,
+                        active,
+                        created,
+                    },
+                    Err(message) => LogicEvent::SegmentCloseFailed {
+                        channel_id,
+                        closing,
+                        message,
+                    },
+                });
+            }
             SyncEvent::DirectMessageOpened { requested, result } => {
                 self.channel_answered(
                     requested,

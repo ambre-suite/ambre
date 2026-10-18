@@ -1,6 +1,6 @@
 # AMBRE -- FEATURE: CHANNEL SEGMENTS AND FINALIZATION
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- a full segment closes into its successor; no segment is finalized yet.
 
 > A channel grows for years and still opens fast. Its history is cut into segments. A full segment
 > closes, stays open to edits for a day, then becomes one immutable snapshot another member checks.
@@ -19,17 +19,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-062` | `INV` | A message sent live, and younger than the grace period, MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-435` | `INV` | Every Murmure document MUST take the delta order and the quarantine of the document plane. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | `ambre_server::compaction::tests::a_segment_is_asked_before_its_250th_delta` -- a segment past its snapshot is asked for a compaction before its 250th delta | none | verified |
+| `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-435` | `INV` | Every Murmure document MUST take the delta order and the quarantine of the document plane. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Close the active segment
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-064` | `POST` | A client MUST ask the relay to close the active segment once it passes the segment size of the budget register. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-065` | `POST` | A close MUST make the old segment `closing` and its successor `active`. | this spec section 3; `MURMURE-010` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-066` | `FRAME` | Closing a segment MUST NOT move a message from one segment to another. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-064` | `POST` | A client MUST ask the relay to close the active segment once it passes the segment size of the budget register. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_murmure::closing_tests::a_full_segment_asks_to_close_once` -- the segment asks once, and again only after a refusal; `ambre_logic::channels::tests::a_full_segment_closes_into_the_successor_the_relay_names` -- the send that fills it asks the Sync worker for one close; `ambre_logic::channels::tests::a_failed_close_is_asked_again` -- a failed close asks again on the next send | none | verified |
+| `MURMURE-065` | `POST` | A close MUST make the old segment `closing` and its successor `active`. | this spec section 3; `MURMURE-010` | `ambre_murmure::closing_tests::a_close_makes_the_segment_closing_and_its_successor_active` -- in the channel and in `meta`; `ambre_murmure::closing_tests::a_close_while_a_segment_is_closing_is_refused` -- a second close is refused; `ambre_logic::channels::tests::a_full_segment_closes_into_the_successor_the_relay_names` -- the answer leaves as a `meta` delta, and the successor takes the next message | none | verified |
+| `MURMURE-066` | `FRAME` | Closing a segment MUST NOT move a message from one segment to another. | this spec section 3 | `ambre_murmure::closing_tests::a_close_makes_the_segment_closing_and_its_successor_active` -- every message stays where it was; `ambre_murmure::closing_tests::a_remote_close_is_followed_once_its_successor_arrives` -- a member following the close keeps sending to the old segment until the successor is in; `ambre_logic::channels::tests::a_remote_close_fetches_its_successor` -- the Logic thread fetches it once | none | verified |
+| `MURMURE-481` | `POST` | A client MUST ask to close the active segment once its bytes pass the size of the budget register, whatever its message count. | this spec section 3; `ambre-spec-budgets.md section 6`; `MURMURE-064` | not built | unbuilt -- lands with the `A segment close recovers from its failures` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-482` | `FAIL` | Given a successor whose open fails, the client MUST fetch it again, never write to it before it opens. | this spec section 3; `MURMURE-066` | not built | unbuilt -- lands with the `A segment close recovers from its failures` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Finalize a closing segment
 
@@ -44,10 +46,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-071` | `POST` | A confirming client MUST rebuild the state from the deltas and compare it with the snapshot before it confirms. | this spec section 3; `SRV-118` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-072` | `FAIL` | Given a snapshot that differs from the deltas, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-238` | `POST` | A dropped final snapshot MUST let another member client finalize the segment again. | this spec section 3; `SRV-133`, `SRV-134` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-153` | `FRAME` | Confirming a finalization MUST NOT change the snapshot or the deltas. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-071` | `POST` | A confirming client MUST rebuild the state from the deltas and compare it with the snapshot before it confirms. | this spec section 3; `SRV-118` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-072` | `FAIL` | Given a snapshot that differs from the deltas, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-238` | `POST` | A dropped final snapshot MUST let another member client finalize the segment again. | this spec section 3; `SRV-133`, `SRV-134` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-153` | `FRAME` | Confirming a finalization MUST NOT change the snapshot or the deltas. | this spec section 3 | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Edit a message of a locked segment
 
@@ -69,14 +71,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-436` | `FAIL` | Given a gap in the deltas of a final segment, the client MUST load its final snapshot, never wait for the purged deltas. | this spec section 3; `SYNC-031`; `SRV-118` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-436` | `FAIL` | Given a gap in the deltas of a final segment, the client MUST load its final snapshot, never wait for the purged deltas. | this spec section 3; `SYNC-031`; `SRV-118` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the grace period, the lease and the erasure delay are rows
   of `ambre-spec-budgets.md section 8`. The segment size row of section 6 bounds every snapshot here,
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 23 `unimplemented`: no segment exists in the code.
+* **Verification.** 4 `verified`, 21 `unimplemented`. The engine tests hold the close on one peer
+  and on two. The Logic tests hold the request, the answer and the fetch of a remote successor. The
+  relay holds the count that asks for a compaction. No lease, amendment or final snapshot exists.
 
 ---
 
@@ -84,7 +88,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | Bob does | The channel holds | Each user sees | Test |
 |---|---|---|---|---|
-| posts the message that fills the segment | posts at the same instant | one successor segment | both messages, in order (`MURMURE-011`) | none |
+| posts the message that fills the segment | posts at the same instant | one successor segment | both messages, in order (`MURMURE-011`) | `ambre_murmure::closing_tests::two_writers_of_one_close_converge_on_one_successor` |
 | fixes a typo an hour later | -- | the edit in the closing segment | the fixed message, with no amendment (`MURMURE-062`) | none |
 | edits a message of last month | -- | an entry in the amendments document | the edited message | none |
 | -- | Mallory finalizes a snapshot that drops Alice's message | the deltas, kept | Bob's client refuses to confirm, and the deltas stay (`MURMURE-072`) | none |
@@ -132,7 +136,17 @@ waits for no delta the relay has purged.
 **A re-finalization** runs rarely and in batches. It is what turns a delete into an erasure: the
 deleted text leaves the ciphertext only then.
 
-**Code.** not built.
+**A close, in steps.**
+
+1. A send that fills the active segment asks the Sync worker to close it (`MURMURE-064`).
+2. The worker creates a successor and asks the relay to close into it (`SRV-194`).
+3. The relay names the one successor. A client that lost the race deletes its own (`SRV-195`).
+4. The Logic thread writes the close into `meta`, and opens the successor (`MURMURE-065`).
+5. Every other member reads the close in `meta`, and fetches the successor once (`MURMURE-066`).
+
+**Code.** `ChannelState::wants_close`, `close_into` and `successor_to_open`, in
+`crates/ambre-murmure/src/channel.rs`. The Logic side is `crates/ambre-logic/src/segments.rs`, and
+the request is `close_segment_task` in `crates/ambre-sync/src/sharing.rs`.
 
 ---
 
@@ -166,6 +180,13 @@ The segments have no control of their own. A user meets them only as a channel t
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing is built.** No segment, lease, amendment or re-finalization exists.
-* **The compaction waits on the relay.** `SRV-038` lands with the `A document is compacted as its
-  history grows` Story (`ambre-roadmap.md` E7), which `MURMURE-222` needs first.
+* **No segment is finalized.** No lease, amendment or re-finalization exists. A channel closes one
+  segment, and refuses a second close while the first is still `closing`.
+* **The size is counted in messages.** The 2 MB bound of the segment size row is not measured
+  (`MURMURE-481`).
+* **A successor may be fetched before its first update.** Its open then fails, and the member keeps
+  writing to the old segment until the next `meta` delta (`MURMURE-482`).
+* **A failed close leaves its successor on the relay.** Only a lost race deletes it. An orphan holds
+  no message and no member reads it (`SYNC-164`).
+* **A closed channel counts what its `meta` names.** After a key rotation, a new segment counts its
+  activity alone. A `meta` write from another device of the same user counts nothing.

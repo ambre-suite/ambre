@@ -12,6 +12,12 @@ use crate::{db, redis_ops};
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
 pub const SNAPSHOT_THRESHOLD: u64 = 500;
 
+/// The threshold of a Murmure segment, whose cold open replays its deltas one
+/// by one (`ambre-spec-budgets.md section 6`, the active segment row). A
+/// crossing is seen at most `CHECK_EVERY - 1` deltas late, so the ask leaves
+/// before the 250th delta past the snapshot (the Murmure segments spec).
+pub const SEGMENT_SNAPSHOT_THRESHOLD: u64 = 250 - CHECK_EVERY;
+
 /// How often, in deltas, the write path compares a document to the threshold.
 /// The numbers of a document are consecutive, so one write in this many reads
 /// the horizon, and no crossing goes unseen.
@@ -21,9 +27,21 @@ const CHECK_EVERY: u64 = 32;
 /// never answers is asked again on the next crossing past it.
 const ASK_TTL_SECS: u64 = 300;
 
-/// Whether the history past `horizon` at delta `seq` warrants a snapshot.
-pub fn past_threshold(seq: u64, horizon: i64) -> bool {
-    seq.saturating_sub(u64::try_from(horizon).unwrap_or(0)) >= SNAPSHOT_THRESHOLD
+/// Whether the history past `horizon` at delta `seq` reaches `threshold`.
+pub fn past_threshold(seq: u64, horizon: i64, threshold: u64) -> bool {
+    seq.saturating_sub(u64::try_from(horizon).unwrap_or(0)) >= threshold
+}
+
+/// The threshold of a document: a Murmure segment's own, or the default.
+async fn threshold_of(state: &AppState, document_id: &ambre_core::DocumentId) -> u64 {
+    match db::channel_document_kind(&state.db, document_id).await {
+        Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
+        Ok(_) => SNAPSHOT_THRESHOLD,
+        Err(e) => {
+            tracing::warn!("channel document kind read failed doc={document_id}: {e}");
+            SNAPSHOT_THRESHOLD
+        }
+    }
 }
 
 /// Whether the writer of delta `seq` is the one to ask for a snapshot: the
@@ -39,7 +57,7 @@ pub async fn should_ask(state: &AppState, document_id: &ambre_core::DocumentId, 
             return false;
         }
     };
-    if !past_threshold(seq, horizon) {
+    if !past_threshold(seq, horizon, threshold_of(state, document_id).await) {
         return false;
     }
     match redis_ops::claim_snapshot_ask(&state.redis, document_id, ASK_TTL_SECS).await {
@@ -83,12 +101,25 @@ mod tests {
     #[test]
     fn the_history_past_the_served_snapshot_decides() {
         let threshold = SNAPSHOT_THRESHOLD;
-        assert!(!past_threshold(threshold - 1, 0));
-        assert!(past_threshold(threshold, 0));
-        assert!(!past_threshold(threshold + 10, 20));
-        assert!(past_threshold(threshold + 20, 20));
+        assert!(!past_threshold(threshold - 1, 0, threshold));
+        assert!(past_threshold(threshold, 0, threshold));
+        assert!(!past_threshold(threshold + 10, 20, threshold));
+        assert!(past_threshold(threshold + 20, 20, threshold));
         // A horizon past the counter, as after a cold counter, asks nothing.
-        assert!(!past_threshold(10, 900));
+        assert!(!past_threshold(10, 900, threshold));
+    }
+
+    /// The bound of the Murmure segments spec: a segment's crossing is seen
+    /// by the 250th delta past its snapshot, wherever the snapshot fell.
+    #[test]
+    fn a_segment_is_asked_before_its_250th_delta() {
+        for horizon in 0..CHECK_EVERY {
+            let seen = (horizon + 1..)
+                .filter(|seq| seq.is_multiple_of(CHECK_EVERY))
+                .find(|&seq| past_threshold(seq, horizon as i64, SEGMENT_SNAPSHOT_THRESHOLD))
+                .expect("a crossing");
+            assert!(seen - horizon < 250, "seen {} deltas past", seen - horizon);
+        }
     }
 }
 

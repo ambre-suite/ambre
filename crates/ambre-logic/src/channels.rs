@@ -30,7 +30,10 @@ pub(crate) struct ReadCursor {
 /// are light subscriptions, and their summaries count its new messages.
 #[derive(Debug)]
 pub(crate) struct ClosedChannel {
-    /// The documents released at close, each a light subscription now.
+    /// The channel's `meta`, whose activity may name a new segment.
+    meta: MetaId,
+    /// The documents released at close, and the segments watched since,
+    /// each a light subscription now.
     documents: Vec<DocumentId>,
     /// The final segments not held at close, whose cursors a drop forgets.
     finals: Vec<DocumentId>,
@@ -62,6 +65,21 @@ impl ClosedChannel {
     /// Whether the channel held `document_id` at close.
     pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
         self.documents.contains(&document_id)
+    }
+
+    /// The channel's `meta`.
+    pub(crate) fn meta(&self) -> MetaId {
+        self.meta
+    }
+
+    /// Count a document the channel did not hold at close, a segment
+    /// opened since (the Murmure unread spec). Returns whether it is new.
+    pub(crate) fn watch(&mut self, document_id: DocumentId) -> bool {
+        if self.holds(document_id) {
+            return false;
+        }
+        self.documents.push(document_id);
+        true
     }
 
     /// Every document whose read cursor the channel may carry.
@@ -329,6 +347,7 @@ impl LogicState {
         // Its documents leave the relay's watch, so the other members see
         // this user go (`SRV-097`). A reopen lists the members again.
         self.channel_watchers.remove(&channel_id);
+        self.closing_segments.remove(&channel_id);
         self.channel_members.remove(&channel_id);
         let base = self
             .my_user_id
@@ -367,6 +386,7 @@ impl LogicState {
         self.closed_channels.insert(
             channel_id,
             ClosedChannel {
+                meta: channel.meta_id(),
                 documents,
                 finals,
                 base,
@@ -476,6 +496,7 @@ impl LogicState {
     pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
         self.end_light_channel(channel_id);
         self.channel_watchers.remove(&channel_id);
+        self.closing_segments.remove(&channel_id);
         self.channel_members.remove(&channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
@@ -535,7 +556,11 @@ impl LogicState {
     /// The relay listed the documents of a channel: open its `meta` first,
     /// which names the live segments (the Murmure engine spec).
     pub(crate) fn channel_listed(&mut self, channel_id: ChannelId, documents: &[ChannelDocument]) {
-        // A listing for a channel closed meanwhile, or listed twice, is stale.
+        // A closed channel was listed again for a segment opened since.
+        if !self.opening.contains_key(&channel_id) {
+            return self.watch_listed(channel_id, documents);
+        }
+        // A listing for a channel listed twice is stale.
         let Some(slot @ None) = self.opening.get_mut(&channel_id) else {
             return;
         };
@@ -822,6 +847,7 @@ impl LogicState {
                             channel_id,
                             event: sent.event,
                         });
+                        self.close_if_full(channel_id, now);
                     }
                     Err(error) => {
                         tracing::warn!("Logic: send on channel {channel_id} refused: {error}");
@@ -1215,6 +1241,7 @@ impl LogicState {
             self.send_to_ui(UiEvent::Channel { channel_id, event });
             self.emit_count(channel_id);
         }
+        self.follow_close(channel_id);
         true
     }
 
@@ -1298,6 +1325,9 @@ impl LogicState {
         if let (Some(channel_id), Some(event)) = (open, events.pop()) {
             self.send_to_ui(UiEvent::Channel { channel_id, event });
             self.emit_count(channel_id);
+        }
+        if let Some(channel_id) = open {
+            self.follow_close(channel_id);
         }
         true
     }
@@ -2965,5 +2995,183 @@ mod tests {
         command(&mut state, channel_id, confirmed);
         let [summary] = summaries(&sync).try_into().expect("one update");
         assert!(summary.mentions_all);
+    }
+
+    // --- The close of a full segment ---
+
+    /// An open channel whose segments close past `size` messages.
+    fn small_channel(state: &mut LogicState, size: usize) -> (ChannelId, SegmentId) {
+        signed_in(state, UserId::new());
+        let channel_id = ChannelId::new();
+        let channel = ChannelState::create(channel_id, ChannelType::Public, None, NOW)
+            .expect("create")
+            .with_segment_size(size);
+        let active = channel.active_id();
+        state.hold_channel(channel);
+        (channel_id, active)
+    }
+
+    /// The closes Logic asked of the Sync worker.
+    fn closes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, SegmentId)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::CloseSegment {
+                    closing, successor, ..
+                } => Some((closing, successor)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The close of the Murmure segments spec, in Logic. The send that fills
+    /// the segment asks for one close. The relay's answer leaves as a `meta`
+    /// delta, and the successor opens and takes the next message.
+    #[test]
+    fn a_full_segment_closes_into_the_successor_the_relay_names() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 1);
+        command(&mut state, channel_id, send("one", Vec::new()));
+        let [(closing, successor)] = closes(&sync).try_into().expect("one close");
+        assert_eq!(closing, old);
+        command(&mut state, channel_id, send("two", Vec::new()));
+        assert!(closes(&sync).is_empty(), "the close is asked once");
+
+        state.handle_logic_event(LogicEvent::SegmentClosed {
+            channel_id,
+            closing,
+            active: successor,
+            created: true,
+        });
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(
+            c,
+            SyncCommand::SendUpdate { document_id, summary: None, .. } if *document_id == meta
+        )));
+        assert!(sent.iter().any(|c| matches!(
+            c,
+            SyncCommand::OpenDocument { document_id, .. }
+                if *document_id == successor.document_id()
+        )));
+        let channel = &state.channels[&channel_id];
+        assert_eq!(
+            (channel.active_id(), channel.closing_id()),
+            (successor, Some(old))
+        );
+    }
+
+    /// A failed close asks again on the next send that finds the segment
+    /// full, and an answer nobody asked for changes nothing.
+    #[test]
+    fn a_failed_close_is_asked_again() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 1);
+        command(&mut state, channel_id, send("one", Vec::new()));
+        let [(closing, _)] = closes(&sync).try_into().expect("one close");
+        state.handle_logic_event(LogicEvent::SegmentCloseFailed {
+            channel_id,
+            closing,
+            message: "HTTP 500".into(),
+        });
+        state.handle_logic_event(LogicEvent::SegmentClosed {
+            channel_id,
+            closing,
+            active: SegmentId::new(),
+            created: true,
+        });
+        assert_eq!(state.channels[&channel_id].active_id(), old);
+        command(&mut state, channel_id, send("two", Vec::new()));
+        assert_eq!(closes(&sync).len(), 1, "the close is asked again");
+    }
+
+    /// A close another member wrote reaches this client in `meta`, which
+    /// fetches the successor it names (the Murmure segments spec).
+    #[test]
+    fn a_remote_close_fetches_its_successor() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 1);
+        let channel = &state.channels[&channel_id];
+        let meta = channel.meta_id();
+        let segments = HashMap::from([(old, channel.snapshot(old.document_id()).expect("old"))]);
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let mut bob = crate::identified(
+            ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("bob"),
+        );
+        let successor = SegmentId::new();
+        let closed = bob
+            .close_into(old, successor, true, NOW)
+            .expect("bob closes");
+        drain(&sync);
+
+        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        assert!(
+            sent(&sync).contains(&Sent::Open(successor.document_id())),
+            "the successor is fetched"
+        );
+        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        assert!(
+            !sent(&sync).contains(&Sent::Open(successor.document_id())),
+            "fetched once"
+        );
+    }
+
+    /// A closed channel whose `meta` moves is listed again, and each segment
+    /// it did not hold is watched once and counts (the Murmure unread spec).
+    #[test]
+    fn a_closed_channel_watches_a_segment_opened_since() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, active, meta) = closed_counted(&mut state);
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: meta.document_id(),
+            counters: activity(0),
+        });
+        assert_eq!(sent(&sync), [Sent::List(channel_id)]);
+
+        let successor = SegmentId::new();
+        let listing = || LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: vec![
+                ChannelDocument {
+                    document_id: meta.document_id(),
+                    kind: ChannelDocumentKind::Meta,
+                },
+                ChannelDocument {
+                    document_id: active.document_id(),
+                    kind: ChannelDocumentKind::Segment,
+                },
+                ChannelDocument {
+                    document_id: successor.document_id(),
+                    kind: ChannelDocumentKind::Segment,
+                },
+            ],
+        };
+        state.handle_logic_event(listing());
+        let watched: Vec<SyncCommand> = drain(&sync);
+        assert!(
+            matches!(
+                watched.as_slice(),
+                [SyncCommand::WatchSegment { segment, meta: m }] if *segment == successor && *m == meta
+            ),
+            "one watch for the new segment, got {watched:?}"
+        );
+        state.handle_logic_event(listing());
+        assert!(drain(&sync).is_empty(), "a segment is watched once");
+        assert!(
+            !state.channels.contains_key(&channel_id),
+            "the channel stays closed"
+        );
+
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: successor.document_id(),
+            counters: activity(2),
+        });
+        assert!(drain(&ui).iter().any(|event| matches!(
+            event,
+            UiEvent::ChannelActivity { channels }
+                if channels.first().is_some_and(|mark| mark.unread == Some(UnreadCount(2)))
+        )));
     }
 }

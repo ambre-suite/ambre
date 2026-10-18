@@ -70,6 +70,15 @@ pub enum MurmureError {
     #[error("document {0} is not held by this channel")]
     NotHeld(DocumentId),
 
+    /// A close names a segment that is no longer the active one.
+    #[error("segment {0} is not the active segment")]
+    NotActive(DocumentId),
+
+    /// A close while another segment of the channel is still closing, which
+    /// would list two closing segments (`MURMURE-010`).
+    #[error("a segment of channel {0} is still closing")]
+    StillClosing(ChannelId),
+
     /// The document is not a final segment the `meta` document lists.
     #[error("document {0} is not an older segment of this channel")]
     NotOlder(DocumentId),

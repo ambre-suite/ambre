@@ -1,0 +1,200 @@
+//! The close of the active segment against its contract rows. They hold the
+//! size that asks for it, the states it writes, and two writers of one close.
+
+use std::collections::HashMap;
+
+use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
+use ambre_core::{ChannelId, SegmentId, Seq, UserId};
+
+use crate::channel::live_segments;
+use crate::session::next_peer;
+use crate::{ChannelState, ChannelType, MurmureError, Signer};
+
+const NOW: Timestamp = Timestamp(1_700_000_000_000);
+
+fn draft(text: &str) -> MessageDraft {
+    MessageDraft {
+        text: text.to_owned(),
+        mentions: Vec::new(),
+    }
+}
+
+/// A channel whose segments close past `size` messages.
+fn channel(size: usize) -> ChannelState {
+    ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .with_segment_size(size)
+        .identify()
+}
+
+/// A second member's copy of `state`, opened from its live documents.
+fn peer_of(state: &ChannelState) -> ChannelState {
+    let segments: HashMap<SegmentId, Vec<u8>> = state
+        .held_segments()
+        .into_iter()
+        .map(|segment| {
+            let bytes = state.snapshot(segment.document_id()).expect("segment");
+            (segment, bytes)
+        })
+        .collect();
+    let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
+    ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify()
+}
+
+/// Close the active segment of `state` into a successor it created, and
+/// adopt the successor's identity. Returns the successor, the `meta` delta,
+/// and the successor's first update.
+fn close_created(state: &mut ChannelState) -> (SegmentId, Vec<u8>, Vec<u8>) {
+    let closing = state.active_id();
+    let successor = SegmentId::new();
+    let closed = state
+        .close_into(closing, successor, true, NOW)
+        .expect("close");
+    assert_eq!(closed.fetch, None, "the creator fetches nothing");
+    let peer = next_peer();
+    let first = state
+        .adopt_session(successor.document_id(), peer, peer.to_le_bytes().to_vec())
+        .expect("adopt")
+        .expect("the successor's first update");
+    (successor, closed.meta, first)
+}
+
+fn live_of(state: &ChannelState) -> (SegmentId, Option<SegmentId>) {
+    let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
+    let doc = loro::LoroDoc::new();
+    doc.import(&meta).expect("import");
+    let live = live_segments(&doc, state.channel_id()).expect("live");
+    (live.active, live.closing)
+}
+
+// --- MURMURE-064 ---
+
+/// A segment that reaches the segment size asks to close once, and asks
+/// again only after a refusal.
+#[test]
+fn a_full_segment_asks_to_close_once() {
+    let mut alice = channel(2);
+    let author = UserId::new();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    assert_eq!(alice.wants_close(), None, "below the segment size");
+    alice.send(&draft("two"), author, NOW).expect("send");
+    assert_eq!(alice.wants_close(), Some(alice.active_id()));
+    assert_eq!(alice.wants_close(), None, "asked once");
+    alice.close_refused();
+    assert_eq!(alice.wants_close(), Some(alice.active_id()));
+}
+
+// --- MURMURE-065, MURMURE-066 ---
+
+/// A close makes the old segment `closing` and the successor `active`, in
+/// the channel and in `meta`. No message moves, and the next one goes to the
+/// successor.
+#[test]
+fn a_close_makes_the_segment_closing_and_its_successor_active() {
+    let mut alice = channel(1);
+    let author = UserId::new();
+    let before = alice.send(&draft("before"), author, NOW).expect("send");
+    let old = alice.active_id();
+    let kept = alice.messages(old).expect("messages");
+    let (successor, _, _) = close_created(&mut alice);
+
+    assert_eq!(alice.active_id(), successor);
+    assert_eq!(alice.closing_id(), Some(old));
+    assert_eq!(live_of(&alice), (successor, Some(old)));
+    assert_eq!(alice.messages(old).expect("messages"), kept);
+    assert!(alice.messages(successor).expect("messages").is_empty());
+
+    let after = alice.send(&draft("after"), author, NOW).expect("send");
+    assert_eq!((before.segment, after.segment), (old, successor));
+    assert_eq!(alice.messages(old).expect("messages"), kept);
+    assert_eq!(alice.messages(successor).expect("messages").len(), 1);
+}
+
+/// A close of a segment no longer active, or while another one is still
+/// closing, is refused, and asks for none.
+#[test]
+fn a_close_while_a_segment_is_closing_is_refused() {
+    let mut alice = channel(1);
+    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    let old = alice.active_id();
+    let (successor, _, _) = close_created(&mut alice);
+    alice.send(&draft("two"), UserId::new(), NOW).expect("send");
+    assert_eq!(alice.wants_close(), None, "a segment is still closing");
+    assert!(matches!(
+        alice.close_into(old, SegmentId::new(), true, NOW),
+        Err(MurmureError::NotActive(_))
+    ));
+    assert!(matches!(
+        alice.close_into(successor, SegmentId::new(), true, NOW),
+        Err(MurmureError::StillClosing(_))
+    ));
+}
+
+// --- MURMURE-010, MURMURE-011 ---
+
+/// Two members write one close at once: the creator holds the successor,
+/// the other fetches it. Their `meta` documents merge into one active and
+/// one closing segment.
+#[test]
+fn two_writers_of_one_close_converge_on_one_successor() {
+    let mut alice = channel(1);
+    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (successor, alice_meta, _) = close_created(&mut alice);
+    let bob_close = bob
+        .close_into(old, successor, false, NOW)
+        .expect("the loser writes the same answer");
+    assert_eq!(bob_close.fetch, Some(successor));
+
+    let meta = alice.meta_id().document_id();
+    alice.apply_remote(meta, &bob_close.meta).expect("merge");
+    bob.apply_remote(meta, &alice_meta).expect("merge");
+    for state in [&alice, &bob] {
+        assert_eq!(live_of(state), (successor, Some(old)));
+        assert_eq!(state.segments_after(old), [successor], "one successor");
+    }
+}
+
+// --- MURMURE-066 ---
+
+/// A member who did not write the close follows it from `meta`. It fetches
+/// the successor once and keeps sending to the old segment meanwhile. Once
+/// the successor is in, it holds it as active.
+#[test]
+fn a_remote_close_is_followed_once_its_successor_arrives() {
+    let mut alice = channel(1);
+    let author = UserId::new();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (successor, meta, first) = close_created(&mut alice);
+
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+    assert_eq!(bob.successor_to_open(), None, "asked once");
+    let waiting = bob.send(&draft("meanwhile"), author, NOW).expect("send");
+    assert_eq!(
+        waiting.segment, old,
+        "the old segment takes it while it closes"
+    );
+
+    let signer = Signer {
+        peer: alice.peer(successor.document_id()).expect("a session"),
+        user: Some(author),
+    };
+    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+        .expect("arrival");
+    let event = bob.older_ready(successor.document_id()).expect("ready");
+    assert_eq!(
+        event,
+        MurmureEvent::Messages {
+            segment: successor,
+            messages: Vec::new()
+        }
+    );
+    assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
+}

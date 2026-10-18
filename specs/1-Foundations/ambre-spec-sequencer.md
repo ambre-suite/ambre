@@ -89,7 +89,24 @@ sequence has already moved.
 | `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_second_replay_inside_the_window_is_answered_with_nothing` -- the first call is served, and the same call at once after it sends nothing | none | verified |
 | `SRV-184` | `POST` | A replay that stops before its end MUST name the last delta it delivered. | this spec section 3; `ambre-spec-sync.md`, `SYNC-153` | `ambre_server::ws::handler::message::delivery_tests::a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered` -- three deltas, the second lost: the first is delivered and the stop names it; `ambre_server::ws::handler::message::delivery_tests::a_replay_over_a_broken_index_is_still_answered` -- nothing delivered, so the stop names the caller's cursor | none | verified |
 
-### 1.6 A segment is finalized
+### 1.6 A segment closes into its successor
+
+A full Murmure segment closes. The relay registers its successor, and names the one it kept to a
+close that came later.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-194` | `POST` | A close by a writer of the channel MUST register the caller's successor as the active segment, and mark the old one `closing`. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-segments.md` | `ambre_server::db::channels::tests::a_close_registers_the_successor_and_marks_the_segment_closing`; `ambre_server::routes::channels::tests::a_writer_closes_a_segment_and_a_late_close_learns_the_winner`; `::a_close_needs_a_writer_and_its_own_successor` -- database tier, a viewer, a successor of another member and a segment closed into itself are refused | none | verified |
+| `SRV-196` | `FAIL` | Given a close while a segment of the channel is still `closing`, or of a segment no longer active, the relay MUST refuse it. | this spec section 3 | `ambre_server::db::channels::tests::a_close_while_a_segment_is_closing_is_refused` -- database tier, both closes answer a conflict and nothing is registered | none | verified |
+| `SRV-197` | `FRAME` | A close MUST NOT change the segments of any other channel. | this spec section 3 | `ambre_server::db::channels::tests::a_close_registers_the_successor_and_marks_the_segment_closing` -- database tier, a second channel keeps its one active segment | none | verified |
+
+### 1.7 Two closes race
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-195` | `CONC` | Two closes of one active segment MUST register one successor, and each MUST be answered that successor. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md`, `MURMURE-011` | `ambre_server::db::channels::tests::two_racing_closes_register_one_successor`; `ambre_server::routes::channels::tests::a_writer_closes_a_segment_and_a_late_close_learns_the_winner` -- database tier, two closes at once answer one successor, and the late one registers nothing | none | verified |
+
+### 1.8 A segment is finalized
 
 A Murmure segment is a document the relay closes to deltas for good. The client writes the final
 snapshot, and the relay arbitrates who writes it.
@@ -101,7 +118,7 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `A finalization is confirmed` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-147` | `POST` | A rotation of a channel key MUST lock every segment of the channel sealed under the previous key. | this spec section 3; `SRV-114`, `SYNC-125` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -112,9 +129,10 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 39 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
-  lives, and the replay. The recovery paths are driven through real failures: a register that
-  refuses inserts, a queue that refuses pushes, an index that cannot be read.
+* **Verification.** 43 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
+  lives, the replay, and the close of a segment. The recovery paths are driven through real
+  failures: a register that refuses inserts, a queue that refuses pushes, an index that cannot be
+  read.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -231,6 +249,12 @@ past the last number it gave, since a snapshot cannot fold in a delta that does 
 drop their own deltas. Neither snapshot then holds the other's, and the deltas that proved them are
 gone. So an author's own confirmation waits while another author's stands past the reference.
 
+**A close.** A writer creates the successor document, then asks the relay to close the active
+segment into it. One transaction marks the old segment `closing` and registers the successor as
+`active` (`SRV-194`). The database holds one of each per channel, so of two racing closes one
+registers, and the other is answered the winner (`SRV-195`). A close while a segment is still
+`closing` is refused (`SRV-196`): only a finalization ends that state.
+
 **A finalization.** A Murmure segment ends as one immutable snapshot
 (`5-Murmure/ambre-spec-murmure-schema.md`).
 
@@ -341,8 +365,8 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
-* **Finalization is unbuilt.** No segment exists, and no lease, lock or purge after confirmation
-  (`SRV-113` to `SRV-120`).
+* **Finalization is unbuilt.** A segment closes, and no lease, lock or purge after confirmation
+  exists (`SRV-113` to `SRV-120`). So a channel closes one segment, and refuses every later close.
 * **No test drives a failing store.** Every recovery path here is reached only when the index, the
   queue or object storage refuses a single operation. The suite has no way to make one refuse
   (`ambre-spec-testing.md section 9`).

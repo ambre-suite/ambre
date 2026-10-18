@@ -156,6 +156,24 @@ pub enum SyncCommand {
         segment: SegmentId,
         public: bool,
     },
+    /// Close the active segment `closing` of an open channel into
+    /// `successor` (the Murmure segments spec). The Sync worker creates the
+    /// successor on the relay under the current key of `meta`, then asks the
+    /// relay to close. Answered by [`crate::LogicEvent::SegmentClosed`] or
+    /// by [`crate::LogicEvent::SegmentCloseFailed`].
+    CloseSegment {
+        channel_id: ChannelId,
+        meta: MetaId,
+        closing: SegmentId,
+        successor: SegmentId,
+    },
+    /// Count a segment of a closed channel as a light subscription, from its
+    /// first number. It opens under the key of the light subscription of
+    /// `meta`, as every document of the channel does.
+    WatchSegment {
+        segment: SegmentId,
+        meta: MetaId,
+    },
     /// Join a public channel alone. The Sync worker unseals `key` with the
     /// space key, wraps it for this user alone, and asks for the member row.
     /// Answered by [`crate::LogicEvent::ChannelJoined`] or

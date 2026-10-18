@@ -269,6 +269,8 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::OpenChannel { .. } => "OpenChannel",
         SyncCommand::CreateChannel { .. } => "CreateChannel",
         SyncCommand::RotateSpace { .. } => "RotateSpace",
+        SyncCommand::CloseSegment { .. } => "CloseSegment",
+        SyncCommand::WatchSegment { .. } => "WatchSegment",
         SyncCommand::JoinChannel { .. } => "JoinChannel",
         SyncCommand::DeleteChannel { .. } => "DeleteChannel",
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
@@ -311,6 +313,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelActivity { .. } => "ChannelActivity",
         LogicEvent::ChannelCreated { .. } => "ChannelCreated",
         LogicEvent::ChannelKeyResealed { .. } => "ChannelKeyResealed",
+        LogicEvent::SegmentClosed { .. } => "SegmentClosed",
+        LogicEvent::SegmentCloseFailed { .. } => "SegmentCloseFailed",
         LogicEvent::ChannelJoined { .. } => "ChannelJoined",
         LogicEvent::DirectMessageOpened { .. } => "DirectMessageOpened",
         LogicEvent::ChannelDeleted { .. } => "ChannelDeleted",
@@ -329,8 +333,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 26;
-const EVENT_VARIANTS: usize = 37;
+const SYNC_VARIANTS: usize = 28;
+const EVENT_VARIANTS: usize = 39;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -430,6 +434,13 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             space_id: space,
             key: SealedChannelKey::from_bytes(vec![6; 3]),
         },
+        SyncCommand::CloseSegment {
+            channel_id: chan,
+            meta,
+            closing: segment,
+            successor: SegmentId::from_document(DocumentId::new()),
+        },
+        SyncCommand::WatchSegment { segment, meta },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
         SyncCommand::ListSpaceChannels { space_id: space },
@@ -568,6 +579,17 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             space_id: space,
             channel_id: chan,
             key: SealedChannelKey::from_bytes(vec![9; 2]),
+        },
+        LogicEvent::SegmentClosed {
+            channel_id: chan,
+            closing: segment,
+            active: SegmentId::from_document(DocumentId::new()),
+            created: false,
+        },
+        LogicEvent::SegmentCloseFailed {
+            channel_id: chan,
+            closing: segment,
+            message: "refused".to_owned(),
         },
         LogicEvent::ChannelJoined { channel_id: chan },
         LogicEvent::DirectMessageOpened {

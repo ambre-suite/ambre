@@ -180,25 +180,33 @@ mod tests {
             .await
             .expect("channel");
         let meta = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
-        let mut documents = vec![(meta, ambre_core::ChannelDocumentKind::Meta)];
+        let mut documents = vec![(meta, ambre_core::ChannelDocumentKind::Meta, None)];
         let mut segments = Vec::new();
-        for &counter in counters {
+        for (index, &counter) in counters.iter().enumerate() {
             let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
             state
                 .redis
                 .set(format!("doc:{segment}:seq"), counter)
                 .await
                 .expect("counter");
-            documents.push((segment, ambre_core::ChannelDocumentKind::Segment));
+            // One active segment per channel, the older ones final.
+            let segment_state = if index == 0 { "active" } else { "final" };
+            documents.push((
+                segment,
+                ambre_core::ChannelDocumentKind::Segment,
+                Some(segment_state),
+            ));
             segments.push(segment);
         }
-        for (document, kind) in documents {
+        for (document, kind, segment_state) in documents {
             sqlx::query(
-                "INSERT INTO channel_documents (document_id, channel_id, kind) VALUES ($1, $2, $3)",
+                "INSERT INTO channel_documents (document_id, channel_id, kind, state) \
+                 VALUES ($1, $2, $3, $4)",
             )
             .bind(uuid_of(document))
             .bind(uuid_of(channel))
             .bind(kind.as_str())
+            .bind(segment_state)
             .execute(pool)
             .await
             .expect("group");
