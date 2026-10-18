@@ -470,6 +470,118 @@ pub async fn finalize_segment(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The delay before amendments fold into their segment, since the last fold
+/// or since the amendments document was created
+/// (`ambre-spec-budgets.md section 8`).
+pub const FOLD_DELAY: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
+
+/// The answer to a fold lease request: the lease, or none and when to ask
+/// again.
+#[derive(Debug, serde::Serialize)]
+pub struct FoldLeaseJson {
+    pub lease: Option<GrantedFoldJson>,
+    /// Milliseconds before asking again, `0` with a lease.
+    pub retry_in: u64,
+}
+
+/// A granted fold lease (`SRV-204`).
+#[derive(Debug, serde::Serialize)]
+pub struct GrantedFoldJson {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    /// The last delta number of the segment, which the fold snapshot covers.
+    pub horizon: u64,
+    /// The amendments document to fold.
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub amendments: ambre_core::DocumentId,
+    /// The last delta number of the amendments the fold holds.
+    pub amendments_seq: u64,
+    /// Milliseconds before the lease expires.
+    pub expires_in: u64,
+}
+
+/// The body of a fold commit: the lease, the fold snapshot, and how far into
+/// the amendments it reaches.
+#[derive(serde::Deserialize)]
+pub struct FoldSegmentRequest {
+    #[serde(with = "ambre_core::serde_id::lease_id")]
+    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::snapshot_id")]
+    pub snapshot_id: ambre_core::SnapshotId,
+    pub amendments_seq: u64,
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/fold-lease`: take the lease
+/// that folds the amendments of a final segment into it (`SRV-204`).
+///
+/// It is granted once a fold is owed (`SRV-205`) and the delay has run out
+/// (`SRV-206`). The amendments stay open to deltas meanwhile.
+pub async fn take_fold_lease(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((channel_id, segment)): Path<(String, String)>,
+) -> Result<axum::Json<FoldLeaseJson>, AppError> {
+    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    let terms = db::FoldTerms {
+        delay: FOLD_DELAY,
+        lease: FINALIZE_LEASE,
+    };
+    let relayed = async |document: ambre_core::DocumentId| {
+        crate::redis_ops::current_seq(&state.redis, &document).await
+    };
+    let answer = db::take_fold_lease(&state.db, &channel_id, segment, terms, relayed).await?;
+    let millis = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
+    Ok(axum::Json(match answer {
+        db::FoldLease::Granted {
+            lease_id,
+            horizon,
+            amendments,
+            amendments_seq,
+            expires_in,
+        } => {
+            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq, "fold lease granted");
+            FoldLeaseJson {
+                lease: Some(GrantedFoldJson {
+                    lease_id,
+                    horizon,
+                    amendments,
+                    amendments_seq,
+                    expires_in: millis(expires_in),
+                }),
+                retry_in: 0,
+            }
+        }
+        db::FoldLease::Wait { retry_in } => FoldLeaseJson {
+            lease: None,
+            retry_in: millis(retry_in),
+        },
+    }))
+}
+
+/// `POST /api/channels/{id}/segments/{segment}/fold`: record the snapshot that
+/// folds the amendments of a final segment, under the caller's live lease
+/// (`SRV-207`). It becomes the final snapshot once another member confirms
+/// it (`SRV-208`).
+pub async fn fold_segment(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path((channel_id, segment)): Path<(String, String)>,
+    Json(req): Json<FoldSegmentRequest>,
+) -> Result<StatusCode, AppError> {
+    let (channel_id, segment) = finalize_target(&state, &auth, &channel_id, &segment).await?;
+    db::commit_fold(
+        &state.db,
+        &channel_id,
+        segment,
+        req.lease_id,
+        req.snapshot_id,
+        req.amendments_seq,
+    )
+    .await?;
+    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq, "amendments folded");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// The body of an amendments registration: the caller's new document.
 #[derive(serde::Deserialize)]
 pub struct RegisterAmendmentsRequest {
@@ -1077,6 +1189,10 @@ mod tests {
     }
 
     fn uuid_of_doc(id: DocumentId) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*ambre_core::Uuid::from(id).as_bytes())
+    }
+
+    fn uuid_of_snap(id: ambre_core::SnapshotId) -> uuid::Uuid {
         uuid::Uuid::from_bytes(*ambre_core::Uuid::from(id).as_bytes())
     }
 
@@ -3380,6 +3496,307 @@ mod tests {
             count().await,
             0,
             "a confirmed final snapshot purges every delta"
+        );
+        forget_store(&state, &channel).await;
+    }
+
+    // --- Folding the amendments of a final segment ---
+
+    async fn fold_lease(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+    ) -> Result<FoldLeaseJson, StatusCode> {
+        take_fold_lease(
+            State(state.clone()),
+            session(who),
+            Path((channel.id.to_string(), channel.segment.to_string())),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    async fn fold(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        lease_id: ambre_core::LeaseId,
+        snapshot_id: ambre_core::SnapshotId,
+        amendments_seq: u64,
+    ) -> StatusCode {
+        status(
+            fold_segment(
+                State(state.clone()),
+                session(who),
+                Path((channel.id.to_string(), channel.segment.to_string())),
+                Json(FoldSegmentRequest {
+                    lease_id,
+                    snapshot_id,
+                    amendments_seq,
+                }),
+            )
+            .await,
+        )
+    }
+
+    /// The confirmation of `snapshot_id` of the segment by `who`, a member
+    /// other than its author.
+    async fn confirm(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        snapshot_id: ambre_core::SnapshotId,
+    ) -> Option<DocumentId> {
+        let document = channel.segment.document_id();
+        let axum::Json(answer) = crate::routes::confirm_snapshot(
+            State(state.clone()),
+            session(who),
+            Path((document.to_string(), snapshot_id.to_string())),
+        )
+        .await
+        .expect("confirm");
+        answer.folded
+    }
+
+    async fn set_seq(state: &AppState, document: DocumentId, seq: u64) {
+        use rustis::commands::StringCommands;
+        let key = format!("doc:{document}:seq");
+        state.redis.set(key, seq).await.expect("seq");
+    }
+
+    /// A final segment of `alice` and `bob` at the horizon 2, and the
+    /// amendments document `alice` registered for it, created 8 days ago.
+    async fn amended_channel(state: &Arc<AppState>) -> (UserId, UserId, Channel, DocumentId) {
+        let (alice, bob, channel) = closed_channel(state, 2).await;
+        on_segment(
+            state,
+            &channel,
+            "UPDATE channel_documents SET closed_at = now() - interval '2 days' \
+             WHERE document_id = $1",
+        )
+        .await;
+        let held = lease(state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let sealed = snapshot(state, channel.segment.document_id(), 2).await;
+        assert_eq!(
+            finalize(state, alice, &channel, held.lease_id, sealed).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            fold_lease(state, alice, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "no amendments to fold"
+        );
+        let amendments = document(state, alice).await;
+        amend(state, alice, &channel, amendments)
+            .await
+            .expect("amend");
+        sqlx::query("UPDATE documents SET created_at = now() - interval '8 days' WHERE id = $1")
+            .bind(uuid_of_doc(amendments))
+            .execute(&state.db)
+            .await
+            .expect("age");
+        (alice, bob, channel, amendments)
+    }
+
+    /// The fold of the amendments, as the register holds it.
+    async fn folded(state: &AppState, amendments: DocumentId) -> (Option<uuid::Uuid>, Option<i64>) {
+        sqlx::query_as("SELECT folded_by, folded_seq FROM channel_documents WHERE document_id = $1")
+            .bind(uuid_of_doc(amendments))
+            .fetch_one(&state.db)
+            .await
+            .expect("row")
+    }
+
+    async fn final_snapshot(state: &AppState, channel: &Channel) -> Option<uuid::Uuid> {
+        sqlx::query_scalar("SELECT final_snapshot FROM channel_documents WHERE document_id = $1")
+            .bind(uuid_of_doc(channel.segment.document_id()))
+            .fetch_one(&state.db)
+            .await
+            .expect("row")
+    }
+
+    /// `SRV-204`, `SRV-205`, `SRV-206`: no fold lease while the amendments
+    /// hold nothing, nor before the delay since their creation. Then one
+    /// writer at a time holds it, and a viewer never does.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_fold_lease_waits_for_a_fold_owed_and_its_delay(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel, amendments) = amended_channel(&state).await;
+        let vera = user(&state, "vera@test.dev").await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        assert_eq!(
+            fold_lease(&state, alice, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "nothing to fold"
+        );
+        set_seq(&state, amendments, 3).await;
+        sqlx::query("UPDATE documents SET created_at = now() WHERE id = $1")
+            .bind(uuid_of_doc(amendments))
+            .execute(&state.db)
+            .await
+            .expect("age");
+        let early = fold_lease(&state, alice, &channel).await.expect("lease");
+        assert!(early.lease.is_none());
+        assert!(early.retry_in > 6 * 24 * 3600 * 1000, "{}", early.retry_in);
+        sqlx::query("UPDATE documents SET created_at = now() - interval '8 days' WHERE id = $1")
+            .bind(uuid_of_doc(amendments))
+            .execute(&state.db)
+            .await
+            .expect("age");
+
+        assert_eq!(
+            fold_lease(&state, vera, &channel).await.err(),
+            Some(StatusCode::FORBIDDEN)
+        );
+        let held = fold_lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        assert_eq!(
+            (held.horizon, held.amendments, held.amendments_seq),
+            (2, amendments, 3)
+        );
+        let second = fold_lease(&state, bob, &channel).await.expect("lease");
+        assert!(second.lease.is_none(), "one writer at a time");
+        assert!(second.retry_in > 0);
+        forget_store(&state, &channel).await;
+        set_seq(&state, amendments, 0).await;
+    }
+
+    /// `SRV-207`, `SRV-210`, `SRV-212`: a fold commit needs the live lease, a
+    /// snapshot of the segment at its horizon, and a reach past the last fold.
+    /// The final snapshot stays. A dropped fold snapshot owes the fold again
+    /// at once.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let (alice, bob, channel, amendments) = amended_channel(&state).await;
+        let segment = channel.segment.document_id();
+        let before = final_snapshot(&state, &channel).await;
+        set_seq(&state, amendments, 3).await;
+        let held = fold_lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let short = snapshot(&state, segment, 1).await;
+        let exact = snapshot(&state, segment, 2).await;
+        for (who, lease_id, snapshot_id) in [
+            (bob, ambre_core::LeaseId::new(), exact),
+            (alice, held.lease_id, short),
+        ] {
+            assert_eq!(
+                fold(&state, who, &channel, lease_id, snapshot_id, 3).await,
+                StatusCode::CONFLICT
+            );
+        }
+        assert_eq!(
+            fold(&state, alice, &channel, held.lease_id, exact, 3).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            fold(&state, alice, &channel, held.lease_id, exact, 3).await,
+            StatusCode::NO_CONTENT,
+            "a retry of the accepted commit"
+        );
+        assert_eq!(
+            folded(&state, amendments).await,
+            (Some(uuid_of_snap(exact)), Some(3))
+        );
+        assert_eq!(final_snapshot(&state, &channel).await, before);
+        assert_eq!(
+            fold_lease(&state, bob, &channel).await.err(),
+            Some(StatusCode::CONFLICT),
+            "the fold holds every delta"
+        );
+        set_seq(&state, amendments, 4).await;
+        let waits = fold_lease(&state, bob, &channel).await.expect("lease");
+        assert!(waits.retry_in > 6 * 24 * 3600 * 1000, "the delay restarts");
+
+        db::drop_pending_snapshot(&state.db, &segment, &exact)
+            .await
+            .expect("drop")
+            .expect("pending");
+        assert_eq!(folded(&state, amendments).await.0, None);
+        let again = fold_lease(&state, bob, &channel).await.expect("lease");
+        let again = again.lease.expect("owed at once");
+        assert_eq!(again.amendments_seq, 4);
+        forget_store(&state, &channel).await;
+        set_seq(&state, amendments, 0).await;
+    }
+
+    /// `SRV-208`, `SRV-209`, `SRV-211`: a fold confirmed by a member other
+    /// than its author becomes the final snapshot, and the older snapshots
+    /// go. A delta past the fold keeps the amendments. A fold that holds them
+    /// all erases them.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_confirmed_fold_becomes_final_and_erases_the_amendments(pool: sqlx::PgPool) {
+        let (state, _stub) = with_store(pool).await;
+        let (alice, bob, channel, amendments) = amended_channel(&state).await;
+        let segment = channel.segment.document_id();
+        set_seq(&state, amendments, 3).await;
+        let held = fold_lease(&state, alice, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        let first = snapshot(&state, segment, 2).await;
+        assert_eq!(
+            fold(&state, alice, &channel, held.lease_id, first, 3).await,
+            StatusCode::NO_CONTENT
+        );
+        set_seq(&state, amendments, 4).await;
+        assert_eq!(confirm(&state, bob, &channel, first).await, None);
+        assert_eq!(
+            final_snapshot(&state, &channel).await,
+            Some(uuid_of_snap(first))
+        );
+        let kept: Vec<uuid::Uuid> =
+            sqlx::query_scalar("SELECT id FROM snapshots WHERE document_id = $1")
+                .bind(uuid_of_doc(segment))
+                .fetch_all(&state.db)
+                .await
+                .expect("snapshots");
+        assert_eq!(
+            kept,
+            [uuid_of_snap(first)],
+            "the replaced final snapshot goes"
+        );
+        assert_eq!(
+            db::channel_document_kind(&state.db, &amendments)
+                .await
+                .expect("query"),
+            Some(ambre_core::ChannelDocumentKind::Amendments),
+            "a delta past the fold keeps the amendments"
+        );
+
+        sqlx::query(
+            "UPDATE channel_documents SET folded_at = now() - interval '8 days' \
+             WHERE document_id = $1",
+        )
+        .bind(uuid_of_doc(amendments))
+        .execute(&state.db)
+        .await
+        .expect("age");
+        let held = fold_lease(&state, bob, &channel).await.expect("lease");
+        let held = held.lease.expect("granted");
+        assert_eq!(held.amendments_seq, 4);
+        let second = snapshot(&state, segment, 2).await;
+        assert_eq!(
+            fold(&state, bob, &channel, held.lease_id, second, 4).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            confirm(&state, alice, &channel, second).await,
+            Some(amendments)
+        );
+        assert_eq!(
+            final_snapshot(&state, &channel).await,
+            Some(uuid_of_snap(second))
+        );
+        assert_eq!(
+            db::channel_document_kind(&state.db, &amendments)
+                .await
+                .expect("query"),
+            None,
+            "the amendments are erased"
         );
         forget_store(&state, &channel).await;
     }

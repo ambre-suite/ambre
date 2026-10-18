@@ -2890,14 +2890,14 @@ mod handler_tests {
 
         let confirm = format!("/api/documents/{doc_id}/snapshots/{snap}/confirm");
         let status = post_json(&app, &owner, confirm.clone(), serde_json::json!({})).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &owner, &doc_id).await.unwrap();
         assert_eq!(served["status"], "self");
         assert_eq!(served["snapshot_id"], snap.as_str());
         assert!(served["reference"].is_null());
 
         let status = post_json(&app, &checker, confirm, serde_json::json!({})).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(status, StatusCode::OK);
         let served = served_snapshot(&app, &checker, &doc_id).await.unwrap();
         assert_eq!(served["status"], "confirmed");
 

@@ -142,15 +142,32 @@ segment, and names it to every writer that asks.
 |---|---|---|---|---|---|---|
 | `SRV-202` | `CONC` | Two registrations for one segment MUST link one document, and each MUST be answered that document. | this spec section 3 | `ambre_server::db::channels::tests::two_racing_registrations_keep_one_amendments_document` -- database tier, both answer the one linked document; `ambre_server::routes::channels::tests::a_writer_registers_the_amendments_and_a_late_one_learns_them` -- database tier, the late caller reads `created: false` | none | verified |
 
+### 1.11 Amendments fold into their segment
+
+A writer folds the amendments of a final segment into a new snapshot of it. The relay arbitrates
+who folds, and erases the amendments once another member confirms the fold.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-204` | `POST` | The relay MUST grant the fold lease of a final segment to one writer of the channel at a time. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-075` | `ambre_server::routes::channels::tests::a_fold_lease_waits_for_a_fold_owed_and_its_delay` -- database tier, a second writer waits out the live lease, and a viewer takes none | none | verified |
+| `SRV-205` | `FAIL` | Given a fold lease asked while the amendments hold no delta past the last fold, the relay MUST refuse it. | this spec section 3 | `ambre_server::routes::channels::tests::a_fold_lease_waits_for_a_fold_owed_and_its_delay` -- database tier, a segment without amendments and empty amendments are refused; `::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- a fold of every delta refuses the next lease | none | verified |
+| `SRV-206` | `FAIL` | Given a fold lease asked before the fold delay has passed since the last fold, or since the amendments were created, the relay MUST refuse it. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::a_fold_lease_waits_for_a_fold_owed_and_its_delay` -- database tier, fresh amendments answer a wait of about the delay; `::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- the delay restarts at the fold | none | verified |
+| `SRV-207` | `FAIL` | Given a fold commit without the live lease, with a snapshot off the horizon of the segment, or reaching no further than the last fold, the relay MUST refuse it. | this spec section 3 | `ambre_server::routes::channels::tests::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- database tier, another lease and a short snapshot are refused, and a retry of the accepted commit is answered alike | none | verified |
+| `SRV-208` | `POST` | A fold confirmed by a member other than its author MUST become the final snapshot of the segment. | this spec section 3; `SRV-118`; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-076` | `ambre_server::routes::channels::tests::a_confirmed_fold_becomes_final_and_erases_the_amendments` -- database tier, each confirmed fold is the final snapshot after it | none | verified |
+| `SRV-209` | `POST` | A settled fold MUST delete every other snapshot of the segment. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::routes::channels::tests::a_confirmed_fold_becomes_final_and_erases_the_amendments` -- database tier, the replaced final snapshot goes | none | verified |
+| `SRV-210` | `FRAME` | A fold commit MUST NOT change the final snapshot of the segment. | this spec section 3 | `ambre_server::routes::channels::tests::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- database tier, the final snapshot stays after the commit | none | verified |
+| `SRV-211` | `POST` | A settled fold MUST delete the amendments only when it holds their last delta. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-076` | `ambre_server::routes::channels::tests::a_confirmed_fold_becomes_final_and_erases_the_amendments` -- database tier, a delta past the fold keeps them, and a fold of them all erases them; `ambre_server::redis_ops::lua_tests::a_fold_seals_only_the_amendments_it_holds` -- a pending or a later delta holds the seal back | none | verified |
+| `SRV-212` | `POST` | A report that drops a fold snapshot MUST leave the fold owed at once. | this spec section 3; `SRV-133` | `ambre_server::routes::channels::tests::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- database tier, the drop grants the next lease with no delay | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 57 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
+* **Verification.** 66 `verified`, 1 `unimplemented`. What holds is the ordering, where each delta
   lives and the replay. So do the close of a segment, its finalization, the purge, the finalization
-  again and the amendments link.
+  again, the amendments link and their fold.
   The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
@@ -307,6 +324,25 @@ amendments document (`SRV-201`). Of two racing links one is kept, and the other 
 it and deletes its own (`SRV-202`). A segment not yet locked takes none: its deltas still enter. The
 relay learns that a segment was amended, never what changed.
 
+**A fold.** A delete in the amendments erases nothing while the final snapshot still holds the
+text. So a writer folds the amendments into a new snapshot of the segment.
+
+1. A writer asks for the fold lease of a final segment. The relay refuses it while the amendments
+   hold no delta past the last fold (`SRV-205`). It answers a wait until the fold delay has passed
+   since the last fold, or since the amendments were created (`SRV-206`).
+2. The relay grants the lease to one writer at a time (`SRV-204`). The lease names the amendments
+   and their last delta number, which the fold holds. The amendments still take deltas meanwhile.
+3. The writer uploads the fold snapshot at the horizon of the segment, and commits it under the
+   lease (`SRV-207`). The final snapshot stays until a confirmation (`SRV-210`).
+4. Another member's confirmation makes the fold the final snapshot (`SRV-208`). Every other
+   snapshot of the segment goes (`SRV-209`).
+5. The relay then seals the amendments, unless a delta came past the fold, and deletes them
+   (`SRV-211`). The confirmation names them, so the confirmer drops them from `meta`. A later
+   delta waits for the next fold.
+
+A report that drops the fold snapshot leaves the fold owed at once (`SRV-212`). The delay is a row
+of `ambre-spec-budgets.md section 8`.
+
 **A replay.** A client asks for everything after a number it names.
 
 1. refuse, and answer nothing, on three counts: no subscription, a replay under a second old
@@ -356,6 +392,9 @@ sees is how long a document takes to open.
 | a writer asks for the finalize lease of a closing segment | a wait, or the lease with its horizon, the segment then locked for good |
 | a writer commits a final snapshot under its lease | the segment becomes `final`, and every delta stays |
 | a writer links a document to a locked segment | the one amendments document of the segment, its own or an earlier one |
+| a writer asks for the fold lease of a final segment | a refusal with nothing to fold, a wait, or the lease with the amendments and their reach |
+| a writer commits a fold snapshot under its lease | the fold is recorded, and the final snapshot stays |
+| another member confirms a fold snapshot | it becomes final, the older snapshots go, and the amendments are erased when the fold holds them all |
 
 ---
 

@@ -616,6 +616,289 @@ pub async fn commit_finalization(
     Ok(())
 }
 
+/// How long a fold lease waits, and how long it lasts
+/// (`ambre-spec-budgets.md section 8`).
+#[derive(Debug, Clone, Copy)]
+pub struct FoldTerms {
+    /// Since the last fold, or since the amendments document was created.
+    pub delay: std::time::Duration,
+    /// How long a granted lease lasts.
+    pub lease: std::time::Duration,
+}
+
+/// The answer to a fold lease request.
+#[derive(Debug, PartialEq, Eq)]
+pub enum FoldLease {
+    /// The caller holds the lease. It folds `amendments` up to its delta
+    /// `amendments_seq` into the snapshot of the segment at `horizon`.
+    Granted {
+        lease_id: ambre_core::LeaseId,
+        horizon: u64,
+        amendments: ambre_core::DocumentId,
+        amendments_seq: u64,
+        expires_in: std::time::Duration,
+    },
+    /// No lease now: ask again after `retry_in`.
+    Wait { retry_in: std::time::Duration },
+}
+
+/// What a fold lease request reads of a segment and of its amendments, the
+/// waits in milliseconds by the register's clock.
+#[derive(sqlx::FromRow)]
+struct FoldRow {
+    state: Option<String>,
+    horizon: Option<i64>,
+    final_snapshot: Option<uuid::Uuid>,
+    lease_left_ms: Option<i64>,
+    amendments: Option<uuid::Uuid>,
+    folded_seq: Option<i64>,
+    delay_left_ms: Option<i64>,
+    stored_seq: Option<i64>,
+}
+
+/// Take the fold lease of the final segment `segment` of a channel
+/// (`SRV-204`), in one transaction that locks its row.
+///
+/// A fold is owed while the amendments document holds a delta past the last
+/// fold (`SRV-205`). `relayed` answers the last delta number the store gave
+/// it. The lease then waits out the delay since the last fold, or since the
+/// document was created (`SRV-206`). A live lease answers its time left. A
+/// segment of another channel, not finalized, without amendments or with
+/// nothing to fold, is refused with a 409.
+pub async fn take_fold_lease(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
+    terms: FoldTerms,
+    relayed: impl AsyncFnOnce(ambre_core::DocumentId) -> Result<u64, AppError>,
+) -> Result<FoldLease, AppError> {
+    let document = id_to_uuid(segment.document_id());
+    let conflict = |detail: &str| AppError::Conflict {
+        detail: detail.into(),
+    };
+    let mut tx = pool.begin().await?;
+    let row: Option<FoldRow> = sqlx::query_as(
+        "SELECT d.state, d.horizon, d.final_snapshot, \
+           CEIL(EXTRACT(EPOCH FROM d.lease_until - now()) * 1000)::BIGINT AS lease_left_ms, \
+           a.document_id AS amendments, \
+           CASE WHEN a.folded_by IS NOT NULL THEN a.folded_seq END AS folded_seq, \
+           CEIL(EXTRACT(EPOCH FROM COALESCE(CASE WHEN a.folded_by IS NOT NULL \
+             THEN a.folded_at END, o.created_at) + make_interval(secs => $3) - now()) \
+             * 1000)::BIGINT AS delay_left_ms, \
+           (SELECT max(u.seq) FROM updates u WHERE u.document_id = a.document_id) AS stored_seq \
+         FROM channel_documents d \
+         LEFT JOIN channel_documents a ON a.amends = d.document_id \
+         LEFT JOIN documents o ON o.id = a.document_id \
+         WHERE d.document_id = $1 AND d.channel_id = $2 AND d.kind = 'segment' \
+         FOR UPDATE OF d",
+    )
+    .bind(document)
+    .bind(id_to_uuid(*channel_id))
+    .bind(terms.delay.as_secs_f64())
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(FoldRow {
+        state: _,
+        horizon: Some(horizon),
+        final_snapshot: Some(_),
+        lease_left_ms,
+        amendments,
+        folded_seq,
+        delay_left_ms,
+        stored_seq,
+    }) = row.filter(|row| row.state.as_deref() == Some("final"))
+    else {
+        return Err(conflict("the segment is not finalized"));
+    };
+    let Some(amendments) = amendments.map(uuid_row_to_id) else {
+        return Err(conflict("the segment has no amendments"));
+    };
+    let seq = relayed(amendments)
+        .await?
+        .max(stored_seq.unwrap_or(0).unsigned_abs());
+    if seq <= folded_seq.unwrap_or(0).unsigned_abs() {
+        return Err(conflict("nothing to fold"));
+    }
+    let wait = |ms: i64| FoldLease::Wait {
+        retry_in: std::time::Duration::from_millis(ms.unsigned_abs()),
+    };
+    if let Some(ms) = delay_left_ms.filter(|ms| *ms > 0) {
+        return Ok(wait(ms));
+    }
+    if let Some(ms) = lease_left_ms.filter(|ms| *ms > 0) {
+        return Ok(wait(ms));
+    }
+    let lease_id = ambre_core::LeaseId::new();
+    sqlx::query(
+        "UPDATE channel_documents SET lease_id = $2, \
+         lease_until = now() + make_interval(secs => $3) WHERE document_id = $1",
+    )
+    .bind(document)
+    .bind(id_to_uuid(lease_id))
+    .bind(terms.lease.as_secs_f64())
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(FoldLease::Granted {
+        lease_id,
+        horizon: horizon.unsigned_abs(),
+        amendments,
+        amendments_seq: seq,
+        expires_in: terms.lease,
+    })
+}
+
+/// What a fold commit reads of a segment and of its amendments.
+#[derive(sqlx::FromRow)]
+struct FoldCommitRow {
+    state: Option<String>,
+    held: Option<uuid::Uuid>,
+    live: bool,
+    horizon: Option<i64>,
+    final_snapshot: Option<uuid::Uuid>,
+    amendments: Option<uuid::Uuid>,
+    folded_by: Option<uuid::Uuid>,
+    folded_seq: Option<i64>,
+}
+
+/// Record the fold of the amendments of `segment` up to their delta
+/// `amendments_seq` by the snapshot `snapshot_id`, under `lease_id`
+/// (`SRV-207`). The lease ends, and the final snapshot stays until a member
+/// confirms the fold (`SRV-208`).
+///
+/// A commit without the live lease is refused with a 409. So is a snapshot of
+/// another document, one that does not cover the horizon, or a fold that
+/// reaches no further than the last one. A retry of an accepted commit
+/// answers `Ok`.
+pub async fn commit_fold(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    segment: ambre_core::SegmentId,
+    lease_id: ambre_core::LeaseId,
+    snapshot_id: ambre_core::SnapshotId,
+    amendments_seq: u64,
+) -> Result<(), AppError> {
+    let document = id_to_uuid(segment.document_id());
+    let (lease_id, snapshot_id) = (id_to_uuid(lease_id), id_to_uuid(snapshot_id));
+    let conflict = |detail: &str| AppError::Conflict {
+        detail: detail.into(),
+    };
+    let seq =
+        i64::try_from(amendments_seq).map_err(|_| conflict("the delta number is out of range"))?;
+    let mut tx = pool.begin().await?;
+    let row: Option<FoldCommitRow> = sqlx::query_as(
+        "SELECT d.state, d.lease_id AS held, COALESCE(d.lease_until > now(), false) AS live, \
+           d.horizon, d.final_snapshot, a.document_id AS amendments, a.folded_by, a.folded_seq \
+         FROM channel_documents d \
+         LEFT JOIN channel_documents a ON a.amends = d.document_id \
+         WHERE d.document_id = $1 AND d.channel_id = $2 AND d.kind = 'segment' \
+         FOR UPDATE OF d",
+    )
+    .bind(document)
+    .bind(id_to_uuid(*channel_id))
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(row) = row.filter(|row| row.state.as_deref() == Some("final")) else {
+        return Err(conflict("the segment is not finalized"));
+    };
+    let Some(amendments) = row.amendments else {
+        return Err(conflict("the segment has no amendments"));
+    };
+    if row.folded_by == Some(snapshot_id) && row.folded_seq == Some(seq) {
+        return Ok(());
+    }
+    if row.final_snapshot.is_none() {
+        return Err(conflict("the segment is not finalized"));
+    }
+    if row.held != Some(lease_id) || !row.live {
+        return Err(conflict("the caller holds no live lease"));
+    }
+    if row.folded_by.is_some() && row.folded_seq.is_some_and(|folded| seq <= folded) {
+        return Err(conflict("the fold reaches no further than the last one"));
+    }
+    let covered: Option<i64> =
+        sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
+            .bind(snapshot_id)
+            .bind(document)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if covered.is_none() || covered != row.horizon {
+        return Err(conflict("the snapshot does not cover the horizon"));
+    }
+    sqlx::query(
+        "UPDATE channel_documents SET folded_by = $2, folded_seq = $3, folded_at = now() \
+         WHERE document_id = $1",
+    )
+    .bind(amendments)
+    .bind(snapshot_id)
+    .bind(seq)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE channel_documents SET lease_id = NULL, lease_until = NULL WHERE document_id = $1",
+    )
+    .bind(document)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// A fold a confirmation settled: the amendments document it folds, its last
+/// delta number the fold holds, and the objects of the snapshots it replaced.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SettledFold {
+    pub amendments: ambre_core::DocumentId,
+    pub folded_seq: u64,
+    pub dropped_keys: Vec<String>,
+}
+
+/// Settle the fold `snapshot_id` makes of the amendments of the segment
+/// `document_id`, once a member other than its author confirmed it
+/// (`SRV-208`). The snapshot becomes the final one, and every other snapshot
+/// of the segment goes, since each still holds what the amendments erase
+/// (`SRV-209`). Answers the fold, `None` when the snapshot folds nothing.
+pub async fn settle_fold(
+    pool: &PgPool,
+    document_id: &ambre_core::DocumentId,
+    snapshot_id: &ambre_core::SnapshotId,
+) -> Result<Option<SettledFold>, AppError> {
+    let (document, snapshot) = (id_to_uuid(*document_id), id_to_uuid(*snapshot_id));
+    let mut tx = pool.begin().await?;
+    let fold: Option<(uuid::Uuid, Option<i64>)> = sqlx::query_as(
+        "SELECT document_id, folded_seq FROM channel_documents \
+         WHERE amends = $1 AND folded_by = $2 FOR UPDATE",
+    )
+    .bind(document)
+    .bind(snapshot)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((amendments, folded_seq)) = fold else {
+        return Ok(None);
+    };
+    sqlx::query(
+        "UPDATE channel_documents SET final_snapshot = $2, finalized_at = now() \
+         WHERE document_id = $1",
+    )
+    .bind(document)
+    .bind(snapshot)
+    .execute(&mut *tx)
+    .await?;
+    let dropped_keys: Vec<String> = sqlx::query_scalar(
+        "DELETE FROM snapshots WHERE document_id = $1 AND id <> $2 RETURNING s3_key",
+    )
+    .bind(document)
+    .bind(snapshot)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some(SettledFold {
+        amendments: uuid_row_to_id(amendments),
+        folded_seq: folded_seq.unwrap_or(0).unsigned_abs(),
+        dropped_keys,
+    }))
+}
+
 /// The kind of a channel document, or `None` for a document outside every
 /// channel.
 pub async fn channel_document_kind(
@@ -1455,7 +1738,8 @@ mod tests {
     /// each document's channel and kind, and the state of each segment. A
     /// segment adds its close time, its finalize lease, and the horizon, time
     /// and snapshot of its finalization. An amendments document names the
-    /// segment it amends. The cursor table holds a member, a
+    /// segment it amends, and the snapshot, reach and time of its fold. The
+    /// cursor table holds a member, a
     /// document and a number. Nothing else: no name, no member and no key. A
     /// column added here widens what the relay learns, so it fails this test
     /// before it ships.
@@ -1483,6 +1767,9 @@ mod tests {
                 ("channel_documents", "document_id"),
                 ("channel_documents", "final_snapshot"),
                 ("channel_documents", "finalized_at"),
+                ("channel_documents", "folded_at"),
+                ("channel_documents", "folded_by"),
+                ("channel_documents", "folded_seq"),
                 ("channel_documents", "horizon"),
                 ("channel_documents", "kind"),
                 ("channel_documents", "lease_id"),

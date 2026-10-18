@@ -156,6 +156,14 @@ pub fn api_router(
             axum::routing::post(register_amendments),
         )
         .route(
+            "/channels/{id}/segments/{segment}/fold-lease",
+            axum::routing::post(take_fold_lease),
+        )
+        .route(
+            "/channels/{id}/segments/{segment}/fold",
+            axum::routing::post(fold_segment),
+        )
+        .route(
             "/spaces/{id}/channels",
             axum::routing::get(list_space_channels),
         )

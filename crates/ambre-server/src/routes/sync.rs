@@ -86,25 +86,58 @@ pub async fn get_snapshot_metadata(
     }))
 }
 
+/// The answer to a confirmation: the amendments document it erased, if the
+/// snapshot folded one in (`SRV-211`).
+#[derive(Debug, serde::Serialize)]
+pub struct ConfirmedSnapshotJson {
+    #[serde(with = "ambre_core::serde_id::document_id::option")]
+    pub folded: Option<ambre_core::DocumentId>,
+}
+
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
 /// Any member may confirm, since any member holds the deltas. The author's
 /// own confirmation makes it `self`, anyone else's `confirmed`.
+///
+/// A `confirmed` snapshot that folds amendments in becomes the final one of
+/// its segment (`SRV-208`), and the snapshots it replaces go (`SRV-209`). The
+/// amendments are sealed and deleted, unless a delta came past the fold
+/// (`SRV-211`).
 pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
     Path((document_id, snapshot_id)): Path<(String, String)>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
     let doc_id = parse_doc_id(&document_id)?;
     let snap_id = parse_snap_id(&snapshot_id)?;
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    db::confirm_snapshot(&state.db, &doc_id, &snap_id, auth.signing_pubkey.as_array())
+    let confirmer = auth.signing_pubkey.as_array();
+    let status = db::confirm_snapshot(&state.db, &doc_id, &snap_id, confirmer)
         .await?
         .ok_or(AppError::NotFound {
             resource: "snapshot",
         })?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    if status != db::SnapshotStatus::Confirmed {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    }
+    let Some(fold) = db::settle_fold(&state.db, &doc_id, &snap_id).await? else {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    };
+    for key in &fold.dropped_keys {
+        let deleted = state.s3.delete_object().bucket(&state.s3_bucket).key(key);
+        if let Err(e) = deleted.send().await {
+            tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
+        }
+    }
+    if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq).await? {
+        return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
+    }
+    crate::deletion::delete_document(&state, &fold.amendments).await?;
+    tracing::info!(document_id = %doc_id, amendments = %fold.amendments, "folded amendments erased");
+    Ok(axum::Json(ConfirmedSnapshotJson {
+        folded: Some(fold.amendments),
+    }))
 }
 
 /// A signed mismatch report (`AUTHOR-023`).
