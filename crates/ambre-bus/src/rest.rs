@@ -42,7 +42,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
 
-use crate::{DocType, DocumentId, MeetingId, Role, UserId};
+use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
 
 // -----------------------------------------------------------------------------
 // Secret-carrying IPC fields (H5)
@@ -303,11 +303,18 @@ pub enum RestCommand {
     /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
     /// between the two phases. On mismatch the invite fails with an explicit error. ->
     /// `InviteSent`.
+    ///
+    /// `invitee` is the user phase 1 answered, whom Sync finds again or
+    /// refuses the invite. `now` is the instant the user confirmed, since
+    /// Logic has no clock. A direct message of two stamps its notice of
+    /// the third member with it (the Murmure channels spec).
     InviteToDocument {
         document_id: DocumentId,
         invitee_email: String,
+        invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
+        now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
     RevokeFromDocument {

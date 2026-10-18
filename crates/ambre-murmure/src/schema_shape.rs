@@ -61,6 +61,9 @@ pub(crate) const SPACE_PEER: u64 = 0x13;
 /// The user who writes every document of the scenario.
 pub(crate) const AUTHOR: UserId = UserId::from_bytes([0xa1; 16]);
 
+/// The member the scenario's notice announces.
+pub(crate) const MEMBER: UserId = UserId::from_bytes([0xb2; 16]);
+
 /// The registry entry the scenario's session carries: its author, a fixed
 /// nonce and a fixed signature, so the stored bytes are the same each run.
 pub(crate) fn entry() -> Vec<u8> {
@@ -220,6 +223,9 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             Timestamp(1_700_000_000_002),
         )
         .expect("react");
+    state
+        .announce(MEMBER, AUTHOR, Timestamp(1_700_000_000_003))
+        .expect("announce");
     state
 }
 

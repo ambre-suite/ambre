@@ -1425,16 +1425,21 @@ impl SyncState {
             } => {
                 self.handle_fetch_invitee_key(id, document_id, invitee_email);
             }
+            // The instant stamps a notice Logic already wrote; Sync has no
+            // use for it.
             RestCommand::InviteToDocument {
                 document_id,
                 invitee_email,
+                invitee,
                 role,
                 expect_exchange_pub_key,
+                now: _,
             } => {
                 self.handle_invite_to_document(
                     id,
                     document_id,
                     invitee_email,
+                    invitee,
                     role,
                     expect_exchange_pub_key,
                 );

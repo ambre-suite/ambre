@@ -136,6 +136,11 @@ impl LogicState {
                     {
                         return;
                     }
+                    RestCommand::InviteToDocument { .. }
+                        if self.announce_before_invite(id, &cmd) =>
+                    {
+                        return;
+                    }
                     _ => {}
                 }
                 self.send_to_sync(SyncCommand::Rest { id, cmd });
@@ -1841,8 +1846,10 @@ mod tests {
             RestCommand::InviteToDocument {
                 document_id: doc,
                 invitee_email: "a@b.c".to_owned(),
+                invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: [0; 32],
+                now: ambre_bus::Timestamp(0),
             },
             RestCommand::RevokeFromDocument {
                 document_id: doc,

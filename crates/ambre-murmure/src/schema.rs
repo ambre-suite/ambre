@@ -72,6 +72,11 @@ pub(crate) const MESSAGE_CONTENT: &str = "content";
 /// The flat map of a message's reactions, one entry per member and emoji
 /// (`MURMURE-006`). Each entry holds the instant of its reaction.
 pub(crate) const MESSAGE_REACTIONS: &str = "reactions";
+/// The kind of a notice, absent from a message a member wrote
+/// (`MURMURE-057`). A notice keeps an empty body.
+pub(crate) const MESSAGE_NOTICE: &str = "notice";
+/// The member a `member_added` notice names.
+pub(crate) const MESSAGE_MEMBER: &str = "member";
 /// The mark over a mention in a body. Its value is a user identifier, or the
 /// channel identifier for an `@channel` (`MURMURE-008`).
 pub(crate) const MENTION: &str = "mention";
@@ -136,6 +141,30 @@ impl ChannelType {
             "direct" => Some(Self::Direct),
             "private" => Some(Self::Private),
             "public" => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+
+/// What a notice announces (`MURMURE-057`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NoticeKind {
+    /// A member joins; the message names them under `member`.
+    MemberAdded,
+}
+
+impl NoticeKind {
+    /// The word a message stores under `notice`.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::MemberAdded => "member_added",
+        }
+    }
+
+    /// The kind a stored word names, or `None` for a word no build wrote.
+    pub(crate) fn parse(word: &str) -> Option<Self> {
+        match word {
+            "member_added" => Some(Self::MemberAdded),
             _ => None,
         }
     }

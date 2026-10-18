@@ -11,6 +11,8 @@ use super::*;
 use ambre_bus::{ChannelId, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Timestamp};
 use ambre_murmure::{ChannelState, ChannelType};
 
+use crate::channels::HeldCommand;
+
 impl LogicState {
     /// Ask the relay for the direct message of this user and the draft's
     /// members. The channel it would create is built now, unnamed, and held
@@ -73,12 +75,88 @@ impl LogicState {
             event: DirectMessageEvent::Failed { message },
         });
     }
+
+    /// An invite into a direct message of two announces the member who joins
+    /// first (the Murmure channels spec). The notice leaves before the invite,
+    /// on the same queue to Sync, so it is written before the invite applies.
+    ///
+    /// A direct message whose members are not listed yet announces too: a
+    /// notice too many is harmless, a missing one is not. Returns `true` when
+    /// the invite does not leave now. It waits for the active segment to be
+    /// writable, or it is refused because the notice could not be written.
+    pub(crate) fn announce_before_invite(&mut self, id: RequestId, cmd: &RestCommand) -> bool {
+        let RestCommand::InviteToDocument {
+            document_id,
+            invitee,
+            now,
+            ..
+        } = cmd
+        else {
+            return false;
+        };
+        let Some(channel_id) = self.channel_of_meta(*document_id) else {
+            return false;
+        };
+        let Some(channel) = self.channels.get(&channel_id) else {
+            return false;
+        };
+        let of_two = self
+            .channel_members
+            .get(&channel_id)
+            .is_none_or(|members| members.len() == 2);
+        if channel.channel_type() != Some(ChannelType::Direct) || !of_two {
+            return false;
+        }
+        let active = channel.active_id().document_id();
+        if !self.murmure_writable(active, channel.identified(active)) {
+            self.wait_for_session(active, HeldCommand::Invite(id, cmd.clone()));
+            return true;
+        }
+        let announced = match (self.my_user_id, self.channels.get_mut(&channel_id)) {
+            (Some(author), Some(channel)) => channel
+                .announce(*invitee, author, *now)
+                .map_err(|error| error.to_string()),
+            _ => Err("no session".to_owned()),
+        };
+        match announced {
+            Ok(sent) => {
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: sent.segment.document_id(),
+                    payload: sent.delta,
+                    summary: Some(sent.summary),
+                });
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: sent.event,
+                });
+                false
+            }
+            Err(message) => {
+                self.refuse_invite(
+                    id,
+                    format!("the notice of the new member failed: {message}"),
+                );
+                true
+            }
+        }
+    }
+
+    /// Refuse an invite this thread did not let leave.
+    pub(crate) fn refuse_invite(&self, id: RequestId, message: String) {
+        tracing::warn!("Logic: invite refused: {message}");
+        self.send_to_ui(UiEvent::ApiError {
+            id: Some(id),
+            request: "InviteToDocument".to_owned(),
+            code: 409,
+            message,
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{DirectMember, MetaId, MurmureCommand, SegmentId, UserId};
+    use ambre_bus::{DirectMember, MetaId, MurmureCommand, Notice, SegmentId, UserId};
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -233,6 +311,137 @@ mod tests {
                 event: DirectMessageEvent::Failed { .. },
                 ..
             }
+        )));
+    }
+
+    /// A direct message the relay created, with `listed` members, and this
+    /// user signed in. Its documents have no identity yet.
+    fn created_with(
+        state: &mut LogicState,
+        sync_rx: &Receiver<SyncCommand>,
+        listed: usize,
+    ) -> (ChannelId, MetaId, SegmentId) {
+        let (channel_id, meta, segment) = request(state, sync_rx, vec![bob()]);
+        state.handle_logic_event(LogicEvent::DirectMessageOpened {
+            requested: channel_id,
+            channel_id,
+        });
+        state.my_user_id = Some(UserId::new());
+        let member = |_| ambre_bus::MemberInfo {
+            user_id: UserId::new(),
+            display_name: "M".to_owned(),
+            email: "m@test.local".to_owned(),
+            role: ambre_bus::Role::Editor,
+            standing: ambre_bus::MemberStanding::Verified,
+        };
+        state
+            .channel_members
+            .insert(channel_id, (0..listed).map(member).collect());
+        drain(sync_rx);
+        (channel_id, meta, segment)
+    }
+
+    fn invite(document_id: DocumentId, invitee: UserId) -> RestCommand {
+        RestCommand::InviteToDocument {
+            document_id,
+            invitee_email: "carol@test.local".to_owned(),
+            invitee,
+            role: ambre_bus::Role::Editor,
+            expect_exchange_pub_key: [3; 32],
+            now: NOW,
+        }
+    }
+
+    /// Ready `document_id` under a fresh identity, as Sync would.
+    fn ready(state: &mut LogicState, document_id: DocumentId) {
+        state.grant_identity(document_id);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id,
+            role: ambre_bus::Role::Editor,
+        });
+    }
+
+    /// An invite into a direct message of two waits for its active segment,
+    /// then leaves behind the notice that names the member who joins.
+    #[test]
+    fn an_invite_into_a_direct_message_of_two_leaves_behind_its_notice() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let (channel_id, meta, segment) = created_with(&mut state, &sync_rx, 2);
+        let (id, carol) = (RequestId::next(), UserId::new());
+
+        state.handle_logic_command(LogicCommand::Rest {
+            id,
+            cmd: invite(meta.document_id(), carol),
+        });
+        assert!(
+            drain(&sync_rx).is_empty(),
+            "the invite waits for its notice"
+        );
+
+        ready(&mut state, segment.document_id());
+        let sent = drain(&sync_rx);
+        let notice = sent.iter().position(|c| {
+            matches!(c, SyncCommand::SendUpdate { document_id, summary: Some(_), .. }
+                if *document_id == segment.document_id())
+        });
+        let invited = sent.iter().position(|c| {
+            matches!(c, SyncCommand::Rest { id: sent, cmd: RestCommand::InviteToDocument { .. } }
+                if *sent == id)
+        });
+        assert!(
+            matches!((notice, invited), (Some(n), Some(i)) if n < i),
+            "the notice, then the invite: {sent:?}"
+        );
+        let shown = drain(&ui_rx).into_iter().any(|e| match e {
+            UiEvent::Channel {
+                channel_id: on,
+                event: MurmureEvent::Messages { messages, .. },
+            } => {
+                on == channel_id
+                    && messages[0].notice == Some(Notice::MemberAdded { member: carol })
+            }
+            _ => false,
+        });
+        assert!(shown, "the view draws the notice");
+    }
+
+    /// A direct message of three, or a channel of no direct message, takes
+    /// the invite with no notice.
+    #[test]
+    fn an_invite_into_a_larger_direct_message_writes_no_notice() {
+        let (mut state, _ui_rx, sync_rx) = harness();
+        let (_, meta, segment) = created_with(&mut state, &sync_rx, 3);
+        ready(&mut state, segment.document_id());
+        drain(&sync_rx);
+
+        let id = RequestId::next();
+        state.handle_logic_command(LogicCommand::Rest {
+            id,
+            cmd: invite(meta.document_id(), UserId::new()),
+        });
+        assert!(matches!(
+            drain(&sync_rx).as_slice(),
+            [SyncCommand::Rest { id: sent, cmd: RestCommand::InviteToDocument { .. } }] if *sent == id
+        ));
+    }
+
+    /// An invite held for its notice is refused when the session of the
+    /// segment ends, and never leaves.
+    #[test]
+    fn an_invite_whose_notice_cannot_be_written_is_refused() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let (_, meta, segment) = created_with(&mut state, &sync_rx, 2);
+        let id = RequestId::next();
+        state.handle_logic_command(LogicCommand::Rest {
+            id,
+            cmd: invite(meta.document_id(), UserId::new()),
+        });
+        state.forget_murmure_session(segment.document_id());
+
+        assert!(drain(&sync_rx).is_empty(), "no invite leaves");
+        assert!(drain(&ui_rx).iter().any(|e| matches!(
+            e,
+            UiEvent::ApiError { id: Some(refused), code: 409, .. } if *refused == id
         )));
     }
 

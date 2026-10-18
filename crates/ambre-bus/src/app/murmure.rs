@@ -119,7 +119,7 @@ impl UnreadCount {
 /// Display only: a peer's clock is untrusted, so no rule orders or refuses a
 /// message on it (`ambre-spec-murmure-schema.md section 2`). The view stamps
 /// it, because the Logic thread reads no clock.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Timestamp(pub u64);
 
 /// What a mention names: one member, or every member of the channel.
@@ -246,6 +246,19 @@ pub struct MessageView {
     pub mentions: Vec<Mention>,
     /// One per emoji, in emoji order (`MURMURE-006`).
     pub reactions: Vec<Reaction>,
+    /// What the channel announces, `None` for a message a member wrote. A
+    /// notice has an empty body (`MURMURE-057`).
+    pub notice: Option<Notice>,
+}
+
+/// An event of the channel itself, shown in its message list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Notice {
+    /// A member joins a direct message (`MURMURE-057`).
+    MemberAdded {
+        /// The member who joins.
+        member: UserId,
+    },
 }
 
 impl MessageView {

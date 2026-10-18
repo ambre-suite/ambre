@@ -37,6 +37,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-036` | `POST` | The re-fetched invitee key MUST equal the one the user confirmed. | `ambre-spec-key-verification.md` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` -- a key substituted at the second phase answers a 409 naming the change; `::fetch_invitee_key_emits_key_and_matching_fingerprint` -- the fingerprint the user reads is the one that will be compared | none | verified |
+| `SYNC-161` | `FAIL` | Given an invitee email the relay answers with another user than the one confirmed, the invite MUST be refused before any wrap. | `ambre-spec-key-verification.md`; this spec section 3 | `ambre_sync::sharing::tests::an_email_naming_another_user_refuses_the_invite` -- a 409 naming the change, and only the search ran | none | verified |
 | `SYNC-010` | `POST` | A shared document key MUST be wrapped for the invitee's exchange key alone. | this spec section 3 | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` -- the invitee unwraps and a third party's key fails closed; `ambre_crypto::tests::kek_binds_peer_identity`; `::wrap_unwrap_roundtrip` -- the primitive under it | none | verified |
 | `SYNC-073` | `POST` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` -- a key derived for one pair does not open for another, which is what keeps a wrap from being replayed between members | none | verified |
 | `SYNC-035` | `FAIL` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected` -- the key is refused at the primitive; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`; `::decode_exchange_pubkey_rejects_bad_input` -- the refusal survives the layer above rather than being swallowed | none | verified |
@@ -88,8 +89,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 32 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the directory, the role and the log walk. What is loose is the branches that
+* **Verification.** 33 `verified`. Every pure transform holds, out of the browser: the wrap, the
+  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that
   only run against a live relay.
 ---
 
@@ -144,8 +145,9 @@ the first shared document, which is why the rule is stated rather than left to t
 1. resolve the invitee, fetch their exchange key and compute its fingerprint. **Nothing is
    wrapped**;
 2. the user confirms the fingerprint out of band;
-3. re-resolve the invitee, and refuse the invite when the key served now differs from the confirmed
-   one (`SYNC-036`);
+3. re-resolve the invitee. Refuse the invite when the key served now differs from the confirmed one
+   (`SYNC-036`), or the email now names another user (`SYNC-161`). A direct message may already
+   have named that user in its notice of a third member;
 4. wrap the document key for that key, and refuse a key with no contribution (`SYNC-035`);
 5. post the wrapped copy. The relay pushes a notice to the invitee, who is not yet subscribed to
    the document.

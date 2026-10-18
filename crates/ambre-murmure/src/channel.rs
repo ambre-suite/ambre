@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{
     ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget,
-    MessageDraft, MessageView, MurmureEvent, SearchMatch, Timestamp, UnreadCount,
+    MessageDraft, MessageView, MurmureEvent, Notice, SearchMatch, Timestamp, UnreadCount,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrContainer};
@@ -19,8 +19,8 @@ use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MESSAGE_AUTHOR,
-    MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SEGMENT_DOCUMENT,
-    SEGMENT_FROM, SEGMENT_STATE, SEGMENTS, SegmentState,
+    MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_TS,
+    MESSAGES, NoticeKind, SEGMENT_DOCUMENT, SEGMENT_FROM, SEGMENT_STATE, SEGMENTS, SegmentState,
 };
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
@@ -714,6 +714,54 @@ impl ChannelState {
                     text: draft.text.clone(),
                     mentions,
                     reactions: Vec::new(),
+                    notice: None,
+                }],
+            },
+        })
+    }
+
+    /// Announce in the active segment that `member` joins the channel
+    /// (`MURMURE-057`).
+    ///
+    /// The notice is a message with an empty body, written by `author`, the
+    /// member who invites. It names the member who joins.
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    /// [`MurmureError::NoSession`] before the PeerID of the active segment
+    /// landed.
+    pub fn announce(
+        &mut self,
+        member: UserId,
+        author: UserId,
+        now: Timestamp,
+    ) -> Result<Sent, MurmureError> {
+        let segment = self.active_id();
+        let (doc, session) = self.active.session()?;
+        let id = MessageId::new();
+        let message = doc.get_list(MESSAGES).push_container(LoroMap::new())?;
+        message.insert(MESSAGE_ID, id.to_string())?;
+        message.insert(MESSAGE_AUTHOR, author.to_string())?;
+        message.insert(MESSAGE_TS, schema::ts_value(now.0))?;
+        message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
+        message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
+        message.insert(MESSAGE_NOTICE, NoticeKind::MemberAdded.as_str())?;
+        message.insert(MESSAGE_MEMBER, member.to_string())?;
+        let delta = session.export_json(doc)?;
+        Ok(Sent {
+            segment,
+            delta,
+            summary: summary_of(&[]),
+            event: MurmureEvent::Messages {
+                segment,
+                messages: vec![MessageView {
+                    id,
+                    author,
+                    ts: now,
+                    text: String::new(),
+                    mentions: Vec::new(),
+                    reactions: Vec::new(),
+                    notice: Some(Notice::MemberAdded { member }),
                 }],
             },
         })
@@ -1202,7 +1250,22 @@ fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageVie
         text: content.to_string(),
         mentions: mention::read(&content, channel),
         reactions: reaction::read(&map),
+        notice: notice_of(&map)?,
     })
+}
+
+/// The notice a message carries: `Some(None)` for a message a member wrote,
+/// and `None` for a notice this build cannot read, which is skipped.
+fn notice_of(map: &LoroMap) -> Option<Option<Notice>> {
+    let Some(word) = schema::string(map, MESSAGE_NOTICE) else {
+        return Some(None);
+    };
+    match NoticeKind::parse(&word)? {
+        NoticeKind::MemberAdded => {
+            let member = UserId::parse_str(&schema::string(map, MESSAGE_MEMBER)?).ok()?;
+            Some(Some(Notice::MemberAdded { member }))
+        }
+    }
 }
 
 /// The map of the message `id` in `doc`, `None` when the segment holds none.

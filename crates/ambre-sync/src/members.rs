@@ -55,6 +55,7 @@ impl SyncState {
         id: RequestId,
         document_id: DocumentId,
         invitee_email: String,
+        invitee: UserId,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
     ) {
@@ -108,6 +109,7 @@ impl SyncState {
             url_scheme,
             api_base,
             invitee_email,
+            invitee,
             role,
             exchange_key,
             doc_key,

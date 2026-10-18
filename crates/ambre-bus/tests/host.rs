@@ -23,7 +23,7 @@ use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport a
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
     ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, MemberChannel, MemberInfo,
-    MemberStanding, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand,
+    MemberStanding, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp,
     TrameCommand, UserId,
 };
 
@@ -679,8 +679,10 @@ fn request_id_echo_is_preserved_across_the_hop() {
         cmd: RestCommand::InviteToDocument {
             document_id: DocumentId::new(),
             invitee_email: "x@y.z".to_string(),
+            invitee: UserId::new(),
             role: Role::Editor,
             expect_exchange_pub_key: [0u8; 32],
+            now: Timestamp(0),
         },
     };
     let bytes = postcard::to_allocvec(&cmd).unwrap();

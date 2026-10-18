@@ -378,6 +378,8 @@ pub(crate) struct InviteParams {
     pub url_scheme: &'static str,
     pub api_base: String,
     pub invitee_email: String,
+    /// The user phase 1 answered for that email, whom the user confirmed.
+    pub invitee: UserId,
     pub role: Role,
     pub exchange_key: StaticSecret,
     pub doc_key: DocumentKey,
@@ -424,6 +426,16 @@ pub(crate) async fn invite_task<H: ShareHttp>(
     let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
         return api_error(logic_tx, "InviteToDocument", 404, "User not found".into());
     };
+    // The email must still name the user confirmed in phase 1, whom a
+    // notice of the channel may already name (`SYNC-161`).
+    if invitee.id != p.invitee {
+        return api_error(
+            logic_tx,
+            "InviteToDocument",
+            409,
+            "Invitee changed since confirmation; invite refused".into(),
+        );
+    }
     // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
     match decode_exchange_pubkey(&invitee.exchange_pubkey) {
         Ok(fetched) if fetched == p.expect_exchange_pub_key => {}
@@ -1444,9 +1456,12 @@ mod tests {
         (etx, erx, sink, lrx)
     }
 
+    /// The user the search answers, and whom phase 1 confirmed.
+    const INVITEE: &str = "55555555-5555-5555-5555-555555555555";
+
     fn user_search_json(email: &str, exchange_pub_hex: &str) -> serde_json::Value {
         serde_json::json!({ "users": [ {
-            "id": "55555555-5555-5555-5555-555555555555",
+            "id": INVITEE,
             "email": email,
             "display_name": "Invitee",
             "signing_pubkey": "00".repeat(32),
@@ -1461,6 +1476,7 @@ mod tests {
             url_scheme: "https",
             api_base: "api.test".into(),
             invitee_email: "invitee@test.local".into(),
+            invitee: UserId::parse_str(INVITEE).expect("an id"),
             role: Role::Editor,
             exchange_key: my_xk.clone(),
             doc_key: DocumentKey::generate(),
@@ -1568,6 +1584,33 @@ mod tests {
         assert!(erx.try_recv().is_err(), "no InviteSent on mismatch");
         // Only the search ran: nothing was wrapped, no share POST fired.
         assert_eq!(http.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_email_naming_another_user_refuses_the_invite() {
+        // The relay answers the email with the confirmed key, but under
+        // another user than the one phase 1 answered.
+        let (my_xk, _) = keypair(1);
+        let (_invitee_xk, invitee_hex) = keypair(2);
+        let invitee_pub = decode_exchange_pubkey(&invitee_hex).unwrap();
+        let http = FakeHttp::new(vec![Ok(user_search_json(
+            "invitee@test.local",
+            &invitee_hex,
+        ))]);
+        let (etx, erx, sink, lrx) = channels();
+        let mut params = invite_params(&my_xk, invitee_pub);
+        params.invitee = UserId::new();
+        invite_task(&http, params, &etx, &sink).await;
+
+        match lrx.try_recv().expect("ApiError emitted") {
+            LogicEvent::ApiError { code, message, .. } => {
+                assert_eq!(code, 409);
+                assert!(message.contains("Invitee changed"), "got: {message}");
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+        assert!(erx.try_recv().is_err(), "no InviteSent for another user");
+        assert_eq!(http.calls().len(), 1, "nothing wrapped, no share posted");
     }
 
     fn fetch_key_params() -> FetchInviteeKeyParams {

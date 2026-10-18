@@ -36,6 +36,8 @@ segment:messages/*/author: string
 segment:messages/*/content#mention: string
 segment:messages/*/content: text
 segment:messages/*/id: string
+segment:messages/*/member: string
+segment:messages/*/notice: string
 segment:messages/*/reactions/{id}: i64
 segment:messages/*/reactions: map
 segment:messages/*/ts: i64

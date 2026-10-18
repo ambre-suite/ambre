@@ -31,7 +31,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use ambre_bus::MentionTarget;
+use ambre_bus::{MentionTarget, Notice};
 use ambre_core::Uuid;
 use ambre_core::authorship::{PEERS_MAP, PeerEntry};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
@@ -42,12 +42,12 @@ use crate::schema::{
     CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
     DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
     HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MENTION, MESSAGE_AUTHOR, MESSAGE_CONTENT,
-    MESSAGE_ID, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT,
-    SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES,
+    SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
-    ANY, AUTHOR, ID, KEYED_BY_ID, SCHEMA_SOURCE, channel_of_every_key, declared_string_consts,
-    section_of, space_of_every_key,
+    ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, channel_of_every_key,
+    declared_string_consts, section_of, space_of_every_key,
 };
 use crate::{ChannelState, SpaceState};
 
@@ -371,6 +371,16 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
                 )
             })
         }
+        // A notice is read through the notice the view is given.
+        MESSAGE_NOTICE => match message.notice? {
+            Notice::MemberAdded { .. } => Some(format!("message {n} announces a member")),
+        },
+        MESSAGE_MEMBER => match message.notice? {
+            Notice::MemberAdded { member } if member == MEMBER => {
+                Some(format!("message {n} names the member who joins"))
+            }
+            Notice::MemberAdded { .. } => None,
+        },
         _ => None,
     }
 }

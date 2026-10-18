@@ -102,6 +102,7 @@ pub enum ChannelType { Direct, Private, Public }
 pub enum ChannelLayout { Stream, Forum }  // absent means a stream
 pub enum SegmentState { Active, Closing, Final }
 pub enum DeletedBy { Author, Moderator }
+pub enum NoticeKind { MemberAdded }     // a notice has an empty body; absent on a written message
 pub enum MentionTarget { User(UserId), Channel }
 pub enum NotifyLevel { All, Mentions, None }
 ```
@@ -128,7 +129,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId` | the key | messages | built |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | built |

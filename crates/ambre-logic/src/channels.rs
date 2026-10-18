@@ -120,6 +120,9 @@ pub(crate) enum HeldCommand {
     Channel(ChannelId, MurmureCommand),
     /// A command of an open space.
     Space(ambre_bus::SpaceId, ambre_bus::SpaceCommand),
+    /// An invite into a direct message, held until its notice can be
+    /// written (the Murmure channels spec).
+    Invite(ambre_bus::RequestId, ambre_bus::RestCommand),
 }
 
 /// The counts of an open channel, `None` when a part of them is unknown
@@ -291,15 +294,27 @@ impl LogicState {
                 HeldCommand::Space(space_id, command) => {
                     self.handle_space_command(space_id, command);
                 }
+                HeldCommand::Invite(id, cmd) => {
+                    self.handle_logic_command(LogicCommand::Rest { id, cmd });
+                }
             }
         }
     }
 
-    /// Forget what waited on a document whose session ended.
+    /// Forget what waited on a document whose session ended. An invite held
+    /// for its notice is refused, so the view does not wait for it.
     pub(crate) fn forget_murmure_session(&mut self, document_id: DocumentId) {
         self.murmure_identities.remove(&document_id);
-        self.murmure_waiting.remove(&document_id);
         self.unsent.remove(&document_id);
+        for held in self
+            .murmure_waiting
+            .remove(&document_id)
+            .unwrap_or_default()
+        {
+            if let HeldCommand::Invite(id, _) = held {
+                self.refuse_invite(id, "the direct message closed before its notice".to_owned());
+            }
+        }
     }
 
     /// The view of a channel closed. Each document of an open channel reaches
@@ -996,7 +1011,7 @@ impl LogicState {
     }
 
     /// The open channel whose `meta` is `document_id`.
-    fn channel_of_meta(&self, document_id: DocumentId) -> Option<ChannelId> {
+    pub(crate) fn channel_of_meta(&self, document_id: DocumentId) -> Option<ChannelId> {
         self.channels
             .iter()
             .find(|(_, channel)| channel.meta_id().document_id() == document_id)

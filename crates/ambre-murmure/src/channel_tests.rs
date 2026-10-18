@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{Mention, MentionTarget, MessageDraft, MurmureEvent, Timestamp};
+use ambre_bus::{Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
 use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
@@ -11,7 +11,7 @@ use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 use crate::channel::push_segment_entry;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, DocumentKind, HEADER, HEADER_CHANNEL, HEADER_KIND,
-    MESSAGE_CONTENT, MESSAGES, SEGMENTS, SegmentState,
+    MESSAGE_CONTENT, MESSAGE_NOTICE, MESSAGES, SEGMENTS, SegmentState,
 };
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
@@ -734,6 +734,53 @@ fn a_name_one_member_sets_reaches_every_member() {
         .apply_remote(renamed.meta.document_id(), &renamed.delta)
         .expect("apply");
     assert_eq!(alice.name().as_deref(), Some("holiday"));
+}
+
+#[test]
+fn a_notice_names_the_member_who_joins_for_every_member() {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+        .expect("create")
+        .identify();
+    let mut bob = peer_of(&alice);
+    let (author, carol) = (UserId::new(), UserId::new());
+
+    let sent = alice.announce(carol, author, NOW).expect("announce");
+    assert_eq!(sent.segment, alice.active_id());
+    let notice = Some(Notice::MemberAdded { member: carol });
+    let MurmureEvent::Messages { messages, .. } = &sent.event else {
+        panic!("a notice is a message: {:?}", sent.event);
+    };
+    assert_eq!(
+        (messages[0].notice, messages[0].text.as_str()),
+        (notice, "")
+    );
+    // The authorship check admits it: every key belongs to the inviter.
+    let by = signer(&alice, sent.segment, author);
+    bob.apply_signed(sent.segment.document_id(), Seq(1), &sent.delta, by)
+        .expect("apply");
+    let read = bob.messages(bob.active_id()).expect("held");
+    assert_eq!(read.len(), 1);
+    assert_eq!((read[0].author, read[0].notice), (author, notice));
+    assert!(read[0].text.is_empty() && read[0].mentions.is_empty());
+}
+
+#[test]
+fn a_notice_of_a_kind_no_build_wrote_is_skipped() {
+    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+        .expect("create")
+        .identify();
+    alice
+        .announce(UserId::new(), UserId::new(), NOW)
+        .expect("announce");
+    let doc = alice.doc(alice.active_id().document_id()).expect("held");
+    let Some(ValueOrContainer::Container(Container::Map(message))) = doc.get_list(MESSAGES).get(0)
+    else {
+        panic!("the notice is a map");
+    };
+    message
+        .insert(MESSAGE_NOTICE, "member_renamed")
+        .expect("insert");
+    assert!(alice.messages(alice.active_id()).expect("held").is_empty());
 }
 
 #[test]

@@ -4,7 +4,7 @@
 // and the prompt live here. This file alone builds the second phase of an
 // invitation, so every route to it passes a decision.
 
-use ambre_bus::{DocumentId, RestCommand, Role, UserId};
+use ambre_bus::{DocumentId, RestCommand, Role, Timestamp, UserId};
 use ambre_chrome::Dialog;
 use leptos::prelude::*;
 
@@ -74,12 +74,17 @@ pub(crate) fn confirm(
 /// The second phase, carrying the key the user saw so Sync can refuse a
 /// substitution (`CHROME-047`). Private: [`classify`] and [`confirm`] are the
 /// only routes to it.
+///
+/// It names the user the key came with, and the instant it leaves, which the
+/// Logic thread cannot read for itself.
 fn invitation(prompt: &TofuPrompt, role: Role) -> RestCommand {
     RestCommand::InviteToDocument {
         document_id: prompt.document_id,
         invitee_email: prompt.email.clone(),
+        invitee: prompt.user_id,
         role,
         expect_exchange_pub_key: prompt.exchange_pub_key,
+        now: Timestamp(js_sys::Date::now() as u64),
     }
 }
 
