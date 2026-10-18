@@ -199,6 +199,13 @@ pub enum MurmureCommand {
         message: MessageId,
         emoji: String,
     },
+    /// The view's tick of the open channel, once a second while it shows
+    /// it. It expires the indicators and refreshes this user's presence in
+    /// the channel (the Murmure typing and presence spec).
+    Tick { now: Timestamp },
+    /// A keystroke in the composer of the channel (`MURMURE-124`). An
+    /// ephemeral, never a document write (`MURMURE-125`).
+    Typing { now: Timestamp },
 }
 
 impl MurmureCommand {
@@ -212,7 +219,11 @@ impl MurmureCommand {
             | Self::Name { .. }
             | Self::React { .. }
             | Self::Unreact { .. } => true,
-            Self::LoadOlder { .. } | Self::MarkRead | Self::MarkUnread { .. } => false,
+            Self::LoadOlder { .. }
+            | Self::MarkRead
+            | Self::MarkUnread { .. }
+            | Self::Tick { .. }
+            | Self::Typing { .. } => false,
         }
     }
 }
@@ -315,6 +326,13 @@ pub enum MurmureEvent {
     /// another client, or the relay refused its open. Nothing of it is held
     /// any more (`MURMURE-468`, `MURMURE-469`).
     Left,
+    /// The other members who watch the channel, and those of them who type,
+    /// each in the order of their identifiers. Sent whenever either changes
+    /// (`MURMURE-124`, `MURMURE-126`).
+    Watchers {
+        watching: Vec<UserId>,
+        typing: Vec<UserId>,
+    },
 }
 
 /// A channel key sealed under the key of its space (`MURMURE-157`).

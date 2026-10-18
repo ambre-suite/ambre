@@ -109,6 +109,7 @@ impl LogicState {
                         self.opening.clear();
                         self.read_cursors.clear();
                         self.closed_channels.clear();
+                        self.channel_watchers.clear();
                         self.spaces.clear();
                         self.space_opening.clear();
                         self.creating.clear();
@@ -328,7 +329,9 @@ impl LogicState {
                 from_user_id,
                 payload,
             } => {
-                if !self.space_presence_heard(document_id, from_user_id, &payload) {
+                if !self.space_presence_heard(document_id, from_user_id, &payload)
+                    && !self.channel_sample_heard(document_id, from_user_id, &payload)
+                {
                     self.apply_ephemeral(document_id, from_user_id, &payload);
                 }
             }
@@ -337,7 +340,9 @@ impl LogicState {
                 document_id,
                 user_id,
             } => {
-                if !self.space_peer_left(document_id, user_id) {
+                if !self.space_peer_left(document_id, user_id)
+                    && !self.channel_peer_left(document_id, user_id)
+                {
                     self.peer_left(document_id, user_id);
                 }
             }

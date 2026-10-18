@@ -12,7 +12,7 @@ use ambre_bus::{
 };
 use ambre_bus::{MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
-    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sent, Signer,
+    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample, Sent, Signer,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -310,6 +310,9 @@ impl LogicState {
         let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
+        // Its documents leave the relay's watch, so the other members see
+        // this user go (`SRV-097`).
+        self.channel_watchers.remove(&channel_id);
         let base = self
             .my_user_id
             .and_then(|me| counts_of(&channel, &self.read_cursors, me));
@@ -455,6 +458,7 @@ impl LogicState {
     /// subscription of each of its documents ends, so Sync forgets its key.
     pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
         self.end_light_channel(channel_id);
+        self.channel_watchers.remove(&channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
             self.opening.remove(&channel_id),
@@ -743,7 +747,9 @@ impl LogicState {
             }
             MurmureCommand::LoadOlder { .. }
             | MurmureCommand::MarkRead
-            | MurmureCommand::MarkUnread { .. } => None,
+            | MurmureCommand::MarkUnread { .. }
+            | MurmureCommand::Tick { .. }
+            | MurmureCommand::Typing { .. } => None,
         };
         if let Some(document_id) = target {
             let identified = channel.identified(document_id);
@@ -880,7 +886,114 @@ impl LogicState {
                 let removed = channel.unreact(segment, message, &emoji, user);
                 self.send_reaction(channel_id, removed);
             }
+            MurmureCommand::Tick { now } => {
+                let meta = channel.meta_id().document_id();
+                let watchers = self.channel_watchers.entry(channel_id).or_default();
+                let changed = watchers.tick(now);
+                if watchers.owes_watching(now) {
+                    self.send_sample(meta, Sample::Watching);
+                }
+                if changed {
+                    self.show_watchers(channel_id);
+                }
+            }
+            MurmureCommand::Typing { now } => {
+                let meta = channel.meta_id().document_id();
+                if self
+                    .channel_watchers
+                    .entry(channel_id)
+                    .or_default()
+                    .owes_typing(now)
+                {
+                    self.send_sample(meta, Sample::Typing);
+                }
+            }
         }
+    }
+
+    // --- Who watches a channel, and who types in it ---
+
+    /// Send a sample of this user on the `meta` document of a channel, and on
+    /// no other. Only its members hold that key (the Murmure typing and
+    /// presence spec), and an ephemeral reaches no history.
+    fn send_sample(&self, meta: DocumentId, sample: Sample) {
+        self.send_to_sync(SyncCommand::SendEphemeral {
+            document_id: meta,
+            payload: sample.bytes(),
+        });
+    }
+
+    /// Hand the view who watches a channel and who types in it.
+    fn show_watchers(&self, channel_id: ChannelId) {
+        let Some(watchers) = self.channel_watchers.get(&channel_id) else {
+            return;
+        };
+        let (watching, typing) = watchers.view();
+        self.send_to_ui(UiEvent::Channel {
+            channel_id,
+            event: MurmureEvent::Watchers { watching, typing },
+        });
+    }
+
+    /// The open channel whose `meta` is `document_id`.
+    fn channel_of_meta(&self, document_id: DocumentId) -> Option<ChannelId> {
+        self.channels
+            .iter()
+            .find(|(_, channel)| channel.meta_id().document_id() == document_id)
+            .map(|(&channel_id, _)| channel_id)
+    }
+
+    /// An ephemeral on a document. Returns `false` when it is no `meta` of an
+    /// open channel. A payload that is no sample is dropped without an error
+    /// (`PRESENCE-013`), and so is a sample of this user's.
+    ///
+    /// A member heard for the first time gets this user's watching sample at
+    /// once, so a newcomer sees who watches without waiting a refresh period.
+    pub(crate) fn channel_sample_heard(
+        &mut self,
+        document_id: DocumentId,
+        from: UserId,
+        payload: &[u8],
+    ) -> bool {
+        let Some(channel_id) = self.channel_of_meta(document_id) else {
+            return false;
+        };
+        let Some(sample) = Sample::read(payload) else {
+            return true;
+        };
+        if Some(from) == self.my_user_id {
+            return true;
+        }
+        let watchers = self.channel_watchers.entry(channel_id).or_default();
+        let newcomer = watchers.is_new(from);
+        if watchers.heard(from, sample) {
+            self.show_watchers(channel_id);
+        }
+        if newcomer {
+            self.send_sample(document_id, Sample::Watching);
+        }
+        true
+    }
+
+    /// The relay says a peer stopped watching a document. Returns `false`
+    /// when it is no `meta` of an open channel.
+    ///
+    /// Another connection of this user leaving turns no one away: this one
+    /// answers with its sample, so the other members still see it.
+    pub(crate) fn channel_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
+        let Some(channel_id) = self.channel_of_meta(document_id) else {
+            return false;
+        };
+        if Some(user) == self.my_user_id {
+            self.send_sample(document_id, Sample::Watching);
+        } else if self
+            .channel_watchers
+            .get_mut(&channel_id)
+            .is_some_and(|watchers| watchers.left(user))
+        {
+            self.show_watchers(channel_id);
+        }
+        true
     }
 
     /// Hand a reaction delta to the Sync worker with its summary of kind
@@ -2482,5 +2595,182 @@ mod tests {
         });
         assert!(drain(&sync).is_empty(), "no entry left, nothing leaves");
         assert!(drain(&ui).is_empty());
+    }
+
+    // --- Who watches a channel, and who types in it ---
+
+    fn at(offset: u64) -> Timestamp {
+        Timestamp(NOW.0 + offset)
+    }
+
+    fn command(state: &mut LogicState, channel_id: ChannelId, command: MurmureCommand) {
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command,
+        });
+    }
+
+    /// The ephemerals that left for the Sync worker, by document. Any other
+    /// command fails the test.
+    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, Vec<u8>)> {
+        drain(sync)
+            .into_iter()
+            .map(|sent| match sent {
+                SyncCommand::SendEphemeral {
+                    document_id,
+                    payload,
+                } => (document_id, payload),
+                other => panic!("only an ephemeral leaves, got {other:?}"),
+            })
+            .collect()
+    }
+
+    fn watchers(ui: &Receiver<UiEvent>) -> Vec<(ChannelId, Vec<UserId>, Vec<UserId>)> {
+        drain(ui)
+            .into_iter()
+            .filter_map(|event| match event {
+                UiEvent::Channel {
+                    channel_id,
+                    event: MurmureEvent::Watchers { watching, typing },
+                } => Some((channel_id, watching, typing)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn hear(state: &mut LogicState, document_id: DocumentId, from: UserId, sample: Sample) {
+        state.handle_logic_event(LogicEvent::RemoteEphemeral {
+            document_id,
+            from_user_id: from,
+            payload: sample.bytes(),
+        });
+    }
+
+    /// The view's tick sends this user's watching sample on the channel's
+    /// `meta` alone, once per refresh period, with no setting to turn on.
+    /// Only the members of the channel hold the key Sync seals it with (the
+    /// Murmure typing and presence spec).
+    #[test]
+    fn a_channel_tick_sends_its_watching_sample_on_its_meta_alone() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        drain(&sync);
+
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        assert_eq!(ephemerals(&sync), [(meta, Sample::Watching.bytes())]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(1_000) },
+        );
+        assert!(ephemerals(&sync).is_empty(), "within the refresh period");
+        let refreshed = MurmureCommand::Tick {
+            now: at(ambre_murmure::REFRESH_PERIOD_MS),
+        };
+        command(&mut state, channel_id, refreshed);
+        assert_eq!(ephemerals(&sync), [(meta, Sample::Watching.bytes())]);
+    }
+
+    /// A keystroke sends a typing sample once per typing period, as an
+    /// ephemeral of the `meta`. No document of the channel moves.
+    #[test]
+    fn typing_leaves_as_an_ephemeral_and_writes_no_document() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, _active) = open_channel(&mut state);
+        let channel = &state.channels[&channel_id];
+        let meta = channel.meta_id().document_id();
+        let versions = |state: &LogicState| {
+            let channel = &state.channels[&channel_id];
+            channel
+                .document_ids()
+                .into_iter()
+                .map(|id| channel.snapshot(id).expect("held"))
+                .collect::<Vec<_>>()
+        };
+        let before = versions(&state);
+        drain(&sync);
+
+        for offset in [0, 500, ambre_murmure::TYPING_REFRESH_MS] {
+            command(
+                &mut state,
+                channel_id,
+                MurmureCommand::Typing { now: at(offset) },
+            );
+        }
+        assert_eq!(
+            ephemerals(&sync),
+            [
+                (meta, Sample::Typing.bytes()),
+                (meta, Sample::Typing.bytes())
+            ]
+        );
+        assert_eq!(versions(&state), before);
+    }
+
+    /// A sample heard shows its member, and a newcomer gets this user's own
+    /// sample at once. Typing expires once no sample refreshes it, and the
+    /// relay's notice of a leave drops the member.
+    #[test]
+    fn a_sample_heard_shows_its_member_until_the_expiry_or_a_leave() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        signed_in(&mut state, me);
+        let (channel_id, _active) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        drain(&sync);
+        drain(&ui);
+        let bob = UserId::new();
+
+        hear(&mut state, meta, bob, Sample::Typing);
+        assert_eq!(watchers(&ui), [(channel_id, vec![bob], vec![bob])]);
+        assert_eq!(ephemerals(&sync), [(meta, Sample::Watching.bytes())]);
+        hear(&mut state, meta, me, Sample::Typing);
+        assert!(
+            watchers(&ui).is_empty(),
+            "this user's own sample shows nothing"
+        );
+
+        let expired = MurmureCommand::Tick {
+            now: at(ambre_murmure::TYPING_EXPIRY_MS + 1),
+        };
+        command(&mut state, channel_id, expired);
+        assert_eq!(watchers(&ui), [(channel_id, vec![bob], Vec::new())]);
+
+        state.handle_logic_event(LogicEvent::PeerLeft {
+            document_id: meta,
+            user_id: bob,
+        });
+        assert_eq!(watchers(&ui), [(channel_id, Vec::new(), Vec::new())]);
+    }
+
+    /// A sample names no channel: the same bytes leave for two channels, each
+    /// on its own `meta`. One heard on a channel shows in that channel alone.
+    #[test]
+    fn a_sample_shows_in_its_own_channel_alone() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (first, _) = open_channel(&mut state);
+        let (second, _) = open_channel(&mut state);
+        let meta_of = |state: &LogicState, id| state.channels[&id].meta_id().document_id();
+        let (first_meta, second_meta) = (meta_of(&state, first), meta_of(&state, second));
+        drain(&sync);
+
+        command(&mut state, first, MurmureCommand::Tick { now: NOW });
+        command(&mut state, second, MurmureCommand::Tick { now: NOW });
+        assert_eq!(
+            ephemerals(&sync),
+            [
+                (first_meta, Sample::Watching.bytes()),
+                (second_meta, Sample::Watching.bytes())
+            ]
+        );
+        drain(&ui);
+        let bob = UserId::new();
+        hear(&mut state, first_meta, bob, Sample::Watching);
+        assert_eq!(watchers(&ui), [(first, vec![bob], Vec::new())]);
     }
 }

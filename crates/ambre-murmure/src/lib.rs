@@ -24,6 +24,7 @@ mod search;
 mod sequence;
 mod session;
 mod space;
+mod watchers;
 
 #[cfg(test)]
 mod authorship_tests;
@@ -54,3 +55,4 @@ pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
 pub use search::Query;
 pub use sequence::{Order, Position};
 pub use space::{Listing, SpaceState};
+pub use watchers::{Sample, TICK_MS, TYPING_EXPIRY_MS, TYPING_REFRESH_MS, Watchers};

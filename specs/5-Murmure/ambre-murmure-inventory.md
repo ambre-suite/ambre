@@ -23,6 +23,7 @@
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 17 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 31 |  |
+| `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 15 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
@@ -42,6 +43,5 @@
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 23 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
-| `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 
-**28 features: 2 implemented, 7 partial, 19 design-only. 456 contract rows, 0 loose.**
+**28 features: 2 implemented, 8 partial, 18 design-only. 456 contract rows, 0 loose.**

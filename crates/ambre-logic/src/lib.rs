@@ -702,6 +702,10 @@ struct LogicState {
     /// counts them from their summaries alone (`RESID-004`). Removed on a
     /// reopen, a delete, a leave or `Logout`.
     closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
+    /// Who watches each open channel and who types in it, with this client's
+    /// own samples (the Murmure typing and presence spec). Taken on the
+    /// first tick, removed with the channel and on `Logout`.
+    channel_watchers: HashMap<ambre_bus::ChannelId, ambre_murmure::Watchers>,
     /// Open Murmure spaces, keyed by `space_id`: one document each, apart
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
@@ -813,6 +817,7 @@ impl LogicState {
             channel_ledgers: HashMap::new(),
             read_cursors: HashMap::new(),
             closed_channels: HashMap::new(),
+            channel_watchers: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
             creating: HashMap::new(),
