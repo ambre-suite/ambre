@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-149` | `POST` | A result list MUST state which segments it covered. | this spec section 3 | `ambre_murmure::channel_tests::a_search_reads_the_held_segments_and_lists_the_rest`; `ambre_logic::channels::tests::a_search_covers_every_open_channel_and_leaves_nothing` -- each channel names the segments read and the count listed | none | verified |
 | `MURMURE-150` | `POST` | A result MUST open its message in its channel. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-478` | `POST` | A search MUST fold the diacritics of every script the client draws. | this spec section 3 | not built | unbuilt -- lands with the `A search fold for every script` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-478` | `POST` | A search MUST fold the precomposed Latin, Greek and Cyrillic accents, and drop the combining marks of every script. | this spec section 3 | `ambre_murmure::search::tests::every_script_folds_its_diacritics`; `ambre_murmure::search::tests::a_query_matches_its_words_with_diacritics_folded` -- Vietnamese, pinyin, polytonic Greek, Hebrew points and Arabic vowel signs | none | verified |
 | `MURMURE-151` | `FRAME` | A search MUST NOT load a segment that holds no match. | this spec section 3; `RESID-016` | type-level -- `ChannelState::search` takes `&self` and cannot load; `ambre_murmure::channel_tests::a_search_reads_the_held_segments_and_lists_the_rest` | none | verified |
 
 **Frame:** `FIND-001`
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** a search over the loaded segments reads memory the client holds, inside the rows
   of `ambre-spec-budgets.md section 6`.
 * **Boundary.** none: the query never leaves the client, and the relay searches nothing.
-* **Verification.** 4 `verified`, 13 `unimplemented`: the search over the loaded segments is
+* **Verification.** 5 `verified`, 12 `unimplemented`: the search over the loaded segments is
   built, and no index exists.
 
 ---
@@ -74,8 +74,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** none: a search reads the messages the loaded documents hold.
 
 **The words** are cut by UAX #29, lowercased, with diacritics folded. A query word matches when it
-begins a word of the message, and a message matches when it holds every word of the query. The fold
-covers Latin-1 and Latin Extended-A by a table, and drops any combining mark.
+begins a word of the message, and a message matches when it holds every word of the query. A table
+folds the precomposed accents, and any combining mark is dropped (`MURMURE-478`); `й` stays.
 
 **The scope.** A search reads every open channel, in the segments each one holds. A final segment
 not loaded is counted in the coverage and never fetched (`MURMURE-151`).
@@ -83,7 +83,7 @@ not loaded is counted in the coverage and never fetched (`MURMURE-151`).
 **The find of the suite, across channels.** The find chord opens this search (`MURMURE-213`). The
 search follows `ambre-spec-find.md` in two points. A search changes no document (`FIND-001`), and a
 result brings its message into view (`MURMURE-150`). The scope differs: a Murmure search covers
-every channel the member reads, not one document. A search offers no replace.
+every channel the member reads, not one document.
 
 **An index per final segment.** The finalizing client builds, seals, signs and uploads it beside
 the snapshot (`MURMURE-313`, `MURMURE-314`). Only a re-finalization replaces it (`MURMURE-319`).
@@ -127,7 +127,5 @@ The stack is `unicode-segmentation`, `fst` and `roaring`.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **No index is built.** A search reads only the segments the client holds.
-* **The fold stops at Latin-1 and Latin Extended-A.** A Greek or a Vietnamese accent stays as
-  typed, until `MURMURE-478` lands.
 * **tantivy is not measured.** It is richer than `fst` and `roaring`, and its WASM build is
   fragile. A prototype decides before the index format is frozen.

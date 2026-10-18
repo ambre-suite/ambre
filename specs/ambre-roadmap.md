@@ -172,7 +172,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` The third member notice | MVP | a third member invited into a direct message of two is announced to both members by a notice in the channel, written before the invite is posted. The notice is a message kind the schema does not hold yet, drawn by the message list. Done when `MURMURE-057` reads `verified` |
 | `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
 | `[x]` Search in loaded segments | MVP | local search over the active segment and the final segments already fetched. The jump to a result lands with the message list. Done when `MURMURE-147`, `MURMURE-148`, `MURMURE-149` and `MURMURE-151` read `verified` |
-| `[ ]` A search fold for every script | MVP | the search folds the diacritics of Greek, Vietnamese and every script the client draws, past the Latin table, within the Main instance budget. Done when `MURMURE-478` reads `verified` |
+| `[x]` A search fold for every script | MVP | the search folds the diacritics of Greek, Vietnamese and every script the client draws, past the Latin table, within the Main instance budget. Done when `MURMURE-478` reads `verified` |
 | `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[ ]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
