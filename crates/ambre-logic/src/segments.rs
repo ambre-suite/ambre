@@ -561,6 +561,8 @@ impl LogicState {
         // The delta may name the amendments another member linked, or mark
         // some folded.
         self.open_amendments(channel_id);
+        // A segment delta may name a thread another member linked.
+        self.open_threads(channel_id);
         self.settle_folds(channel_id);
     }
 

@@ -43,13 +43,16 @@ segment:header/created_at = 1700000000000 => read by no reader of this build
 segment:header/folded = {uuid} => folds the amendments of its segment
 segment:header/folded_seq = 0 => folds its amendments up to delta 0
 segment:header/kind = "segment" => admitted as Segment
+segment:messages/*/also_in_thread = {uuid} => message 5 is a copy of a reply in its thread
 segment:messages/*/author = {uuid} => message 1 by the author
 segment:messages/*/author = {uuid} => message 2 by the author
 segment:messages/*/author = {uuid} => message 3 by the author
 segment:messages/*/author = {uuid} => message 4 by the author
+segment:messages/*/author = {uuid} => message 5 by the author
 segment:messages/*/content = "" => message 2 reads ""
 segment:messages/*/content = "" => message 3 reads ""
 segment:messages/*/content = "" => message 4 reads ""
+segment:messages/*/content = "a reply" => message 5 reads "a reply"
 segment:messages/*/content = "hi @channel" => message 1 reads "hi @channel"
 segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
 segment:messages/*/deleted = true => message 3 is deleted
@@ -60,13 +63,16 @@ segment:messages/*/id = {uuid} => message 1
 segment:messages/*/id = {uuid} => message 2
 segment:messages/*/id = {uuid} => message 3
 segment:messages/*/id = {uuid} => message 4
+segment:messages/*/id = {uuid} => message 5
 segment:messages/*/member = {uuid} => message 2 names the member who joins
 segment:messages/*/notice = "member_added" => message 2 announces a member
 segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
+segment:messages/*/thread = {uuid} => message 1 names its thread
 segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
 segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
 segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
 segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
+segment:messages/*/ts = 1700000000005 => message 5 sent at 1700000000005 ms
 segment:meta/schema_version = 1 => version 1, Current
 segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:categories/{id}/name = "Teams" => category 1 named "Teams"
@@ -82,3 +88,14 @@ space:header/space_id = {uuid} => the space it opens as
 space:meta/schema_version = 1 => version 1, Current
 space:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:space/name = "Acme" => named "Acme"
+thread:header/channel_id = {uuid} => the channel it opens as
+thread:header/created_at = 1700000000005 => read by no reader of this build
+thread:header/kind = "thread" => admitted as Thread
+thread:header/root_id = {uuid} => the message it threads
+thread:header/segment_id = {uuid} => the segment of its root
+thread:messages/*/author = {uuid} => message 1 by the author
+thread:messages/*/content = "a reply" => message 1 reads "a reply"
+thread:messages/*/id = {uuid} => message 1
+thread:messages/*/ts = 1700000000005 => message 1 sent at 1700000000005 ms
+thread:meta/schema_version = 1 => version 1, Current
+thread:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author

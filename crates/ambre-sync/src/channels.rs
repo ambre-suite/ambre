@@ -388,6 +388,53 @@ impl SyncState {
         });
     }
 
+    /// Create the thread document of `root`, then register it (`SRV-213`).
+    /// It opens under the current key of `meta`, as amendments do.
+    pub(crate) fn handle_create_thread(
+        &self,
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        root: ambre_bus::MessageId,
+        thread: DocumentId,
+    ) {
+        let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
+            Ok(prepared) => prepared,
+            Err(message) => {
+                return self.send_to_logic(LogicEvent::ThreadLinkFailed {
+                    channel_id,
+                    segment,
+                    root,
+                    thread,
+                    message,
+                });
+            }
+        };
+        let params = crate::sharing::ThreadParams {
+            channel_id,
+            root,
+            thread,
+            meta_key,
+            author,
+            url_scheme: self.url_scheme,
+            api_base: self.api_base.clone(),
+            exchange_key,
+        };
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = crate::sharing::thread_task(&http, params).await;
+            let _ = tx.send(SyncEvent::ThreadLinked {
+                channel_id,
+                segment,
+                root,
+                thread,
+                result,
+            });
+        });
+    }
+
     /// Ask the relay to delete a channel with every document it groups
     /// (`SRV-142`). The documents stay open here until the Logic thread hears
     /// the answer and closes them, so a refusal leaves the channel whole.

@@ -221,6 +221,21 @@ pub enum MurmureCommand {
         /// The instant the author deleted, stamped by the view.
         now: Timestamp,
     },
+    /// Reply to `root` in its thread, under this session's user
+    /// (`MURMURE-105`). The first reply opens the thread (`MURMURE-107`).
+    /// The engine finds the segment that holds `root`.
+    Reply {
+        root: MessageId,
+        draft: MessageDraft,
+        /// The reply also goes to the channel, as a copy that names its
+        /// thread (`MURMURE-109`).
+        also_in_channel: bool,
+        /// The instant the author replied, stamped by the view.
+        now: Timestamp,
+        /// The author confirmed the `@channel` the Logic thread asked about
+        /// (`MURMURE-231`). `false` on a first reply.
+        confirmed: bool,
+    },
     /// The view's tick of the open channel, once a second while it shows
     /// it. It expires the indicators and refreshes this user's presence in
     /// the channel (the Murmure typing and presence spec).
@@ -242,7 +257,8 @@ impl MurmureCommand {
             | Self::React { .. }
             | Self::Unreact { .. }
             | Self::EditMessage { .. }
-            | Self::DeleteMessage { .. } => true,
+            | Self::DeleteMessage { .. }
+            | Self::Reply { .. } => true,
             Self::LoadOlder { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
@@ -274,6 +290,24 @@ pub struct MessageView {
     pub edited: bool,
     /// The author deleted the message: its body is empty (`MURMURE-087`).
     pub deleted: bool,
+    /// The thread of replies to this message, `None` when it has no reply
+    /// (`MURMURE-106`).
+    pub thread: Option<ThreadHead>,
+    /// The thread a reply also sent to the channel came from, `None` for
+    /// any other message (`MURMURE-109`).
+    pub also_in_thread: Option<DocumentId>,
+}
+
+/// What a root shows of its thread (`MURMURE-106`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThreadHead {
+    /// The thread document its `thread` field names.
+    pub document: DocumentId,
+    /// The replies the thread document holds, deleted ones aside. Zero
+    /// until the document is held.
+    pub replies: u32,
+    /// The author of the latest reply, `None` until the document is held.
+    pub last_replier: Option<UserId>,
 }
 
 /// An event of the channel itself, shown in its message list.
@@ -355,6 +389,14 @@ pub enum MurmureEvent {
     /// `messages` keeps the order of the segment.
     Messages {
         segment: SegmentId,
+        messages: Vec<MessageView>,
+    },
+    /// These replies of the thread of `root` are new or changed, keyed as
+    /// [`MurmureEvent::Messages`] keys its own. `messages` keeps the order
+    /// of the thread document (`MURMURE-105`).
+    ThreadMessages {
+        root: MessageId,
+        thread: DocumentId,
         messages: Vec<MessageView>,
     },
     /// The channel could not open: the relay refused it, or one of its

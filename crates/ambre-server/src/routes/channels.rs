@@ -646,6 +646,60 @@ pub async fn register_amendments(
     }))
 }
 
+/// The body of a thread registration: the root message, and the caller's new
+/// document.
+#[derive(serde::Deserialize)]
+pub struct RegisterThreadRequest {
+    #[serde(with = "ambre_core::serde_id::message_id")]
+    pub root: ambre_core::MessageId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+}
+
+/// The thread document of a root after a registration, and whether it is
+/// the caller's. `false` means an earlier one registered another.
+#[derive(serde::Serialize)]
+pub struct ThreadJson {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+    pub created: bool,
+}
+
+/// `POST /api/channels/{id}/threads`: register the caller's document as the
+/// thread of a root message (`SRV-213`).
+///
+/// The caller writes to the channel, and owns the document, as at a close.
+/// A registration that lost its race answers the winner's document
+/// (`SRV-214`), and the caller deletes its own.
+pub async fn register_thread(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+    Path(channel_id): Path<String>,
+    Json(req): Json<RegisterThreadRequest>,
+) -> Result<axum::Json<ThreadJson>, AppError> {
+    let channel_id: ambre_core::ChannelId = parse(&channel_id)?;
+    let meta = db::get_channel(&state.db, &channel_id)
+        .await?
+        .and_then(|channel| channel.meta_id)
+        .ok_or(AppError::Forbidden)?;
+    let role = db::member_role(&state.db, &meta.document_id(), &auth.user_id).await?;
+    if !role.is_some_and(Role::can_write_document) {
+        return Err(AppError::Forbidden);
+    }
+    let document = free_murmure_document(&state, &req.thread, Some(channel_id)).await?;
+    let own_role = db::member_role(&state.db, &req.thread, &auth.user_id).await?;
+    if document.owner_id != auth.user_id || own_role != Some(Role::Owner) {
+        return Err(AppError::Forbidden);
+    }
+    let held = db::register_thread(&state.db, &channel_id, req.root, req.thread).await?;
+    let created = held == req.thread;
+    tracing::info!(channel_id = %channel_id, thread = %held, created, "thread registered");
+    Ok(axum::Json(ThreadJson {
+        thread: held,
+        created,
+    }))
+}
+
 /// `POST /api/channels/direct`: open the direct message of the caller and
 /// `members`, created when none holds exactly them (`SRV-175`, `SRV-176`).
 ///
@@ -3106,6 +3160,82 @@ mod tests {
                 .expect("query"),
             None
         );
+    }
+
+    // --- The thread of a root message ---
+
+    async fn thread(
+        state: &Arc<AppState>,
+        who: UserId,
+        channel: &Channel,
+        root: ambre_core::MessageId,
+        thread: DocumentId,
+    ) -> Result<ThreadJson, StatusCode> {
+        register_thread(
+            State(state.clone()),
+            session(who),
+            Path(channel.id.to_string()),
+            Json(RegisterThreadRequest { root, thread }),
+        )
+        .await
+        .map(|axum::Json(answer)| answer)
+        .map_err(|e| e.into_response().status())
+    }
+
+    /// `SRV-213`, `SRV-214`: a writer registers its own document as the
+    /// thread of a root, and a late writer learns the winner. A viewer opens
+    /// no thread, nor does a document of another member.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_writer_registers_a_thread_and_a_late_one_learns_it(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let vera = user(&state, "vera@test.dev").await;
+        let space = space(&state, alice, &[(bob, Role::Editor), (vera, Role::Viewer)]).await;
+        let channel = public_channel(&state, alice, space).await;
+        grant(&state, channel.meta.document_id(), bob, Role::Editor).await;
+        grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
+        let root = ambre_core::MessageId::new();
+
+        let veras = document(&state, vera).await;
+        assert_eq!(
+            thread(&state, vera, &channel, root, veras).await.err(),
+            Some(StatusCode::FORBIDDEN)
+        );
+        let mine = document(&state, alice).await;
+        assert_eq!(
+            thread(&state, bob, &channel, root, mine).await.err(),
+            Some(StatusCode::FORBIDDEN),
+            "the document belongs to another member"
+        );
+
+        let first = thread(&state, alice, &channel, root, mine)
+            .await
+            .expect("thread");
+        assert_eq!((first.thread, first.created), (mine, true));
+        let theirs = document(&state, bob).await;
+        let late = thread(&state, bob, &channel, root, theirs)
+            .await
+            .expect("thread");
+        assert_eq!((late.thread, late.created), (mine, false));
+        assert_eq!(
+            db::channel_document_kind(&state.db, &mine)
+                .await
+                .expect("query"),
+            Some(ambre_core::ChannelDocumentKind::Thread)
+        );
+        assert_eq!(
+            db::channel_document_kind(&state.db, &theirs)
+                .await
+                .expect("query"),
+            None
+        );
+        let row = db::get_document_member(&state.db, &mine, &bob)
+            .await
+            .expect("query")
+            .expect("a member of the channel reaches its thread");
+        assert_eq!(row.role, Role::Editor);
     }
 
     // --- Finalizing a closed segment ---

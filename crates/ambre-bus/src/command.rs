@@ -23,9 +23,9 @@ use ambre_core::SessionNonce;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, LeaseId, MetaId, RequestId,
-    RestCommand, SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose, SnapshotVerdict,
-    SpaceId,
+    ActivitySummary, ChannelId, DirectMember, DocType, DocumentId, LeaseId, MessageId, MetaId,
+    RequestId, RestCommand, SealedChannelKey, SegmentId, Seq, SnapshotId, SnapshotPurpose,
+    SnapshotVerdict, SpaceId,
 };
 
 /// Command sent from the Logic thread to the Sync thread.
@@ -177,6 +177,17 @@ pub enum SyncCommand {
         meta: MetaId,
         segment: SegmentId,
         amendments: DocumentId,
+    },
+    /// Create `thread` on the relay under the current key of `meta`, then
+    /// register it as the thread of `root`, a message of `segment`
+    /// (`SRV-213`). Answered by [`crate::LogicEvent::ThreadLinked`] or by
+    /// [`crate::LogicEvent::ThreadLinkFailed`].
+    CreateThread {
+        channel_id: ChannelId,
+        meta: MetaId,
+        segment: SegmentId,
+        root: MessageId,
+        thread: DocumentId,
     },
     /// Ask the relay for the finalize lease of the closing segment `segment`
     /// (the Murmure segments spec). Answered by

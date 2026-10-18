@@ -23,8 +23,8 @@ use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport a
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
     ClipboardCell, ClipboardPayload, DocType, DocumentId, FoldAnswer, LeaseAnswer, LeaseId,
-    LogicEvent, MemberChannel, MemberInfo, MemberStanding, RequestId, RestCommand, RestEvent, Role,
-    SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
+    LogicEvent, MemberChannel, MemberInfo, MemberStanding, MessageId, RequestId, RestCommand,
+    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -271,6 +271,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::RotateSpace { .. } => "RotateSpace",
         SyncCommand::CloseSegment { .. } => "CloseSegment",
         SyncCommand::CreateAmendments { .. } => "CreateAmendments",
+        SyncCommand::CreateThread { .. } => "CreateThread",
         SyncCommand::TakeFinalizeLease { .. } => "TakeFinalizeLease",
         SyncCommand::FinalizeSegment { .. } => "FinalizeSegment",
         SyncCommand::TakeFoldLease { .. } => "TakeFoldLease",
@@ -325,6 +326,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::SegmentCloseFailed { .. } => "SegmentCloseFailed",
         LogicEvent::AmendmentsLinked { .. } => "AmendmentsLinked",
         LogicEvent::AmendmentsLinkFailed { .. } => "AmendmentsLinkFailed",
+        LogicEvent::ThreadLinked { .. } => "ThreadLinked",
+        LogicEvent::ThreadLinkFailed { .. } => "ThreadLinkFailed",
         LogicEvent::FinalizeLeaseAnswered { .. } => "FinalizeLeaseAnswered",
         LogicEvent::SegmentFinalized { .. } => "SegmentFinalized",
         LogicEvent::SegmentFinalizeFailed { .. } => "SegmentFinalizeFailed",
@@ -351,8 +354,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 33;
-const EVENT_VARIANTS: usize = 52;
+const SYNC_VARIANTS: usize = 34;
+const EVENT_VARIANTS: usize = 54;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -463,6 +466,13 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             meta,
             segment,
             amendments: DocumentId::new(),
+        },
+        SyncCommand::CreateThread {
+            channel_id: chan,
+            meta,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
         },
         SyncCommand::TakeFinalizeLease {
             channel_id: chan,
@@ -655,6 +665,19 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             amendments: DocumentId::new(),
+            message: "refused".to_owned(),
+        },
+        LogicEvent::ThreadLinked {
+            channel_id: chan,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
+        },
+        LogicEvent::ThreadLinkFailed {
+            channel_id: chan,
+            segment,
+            root: MessageId::new(),
+            thread: DocumentId::new(),
             message: "refused".to_owned(),
         },
         LogicEvent::FinalizeLeaseAnswered {

@@ -29,11 +29,11 @@ use std::collections::BTreeSet;
 use ambre_bus::{Mention, MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use ambre_core::{CategoryId, ChannelId, DocumentId, SegmentId, SpaceId, UserId};
+use ambre_core::{CategoryId, ChannelId, DocumentId, MessageId, SegmentId, SpaceId, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
-use crate::{ChangeTarget, ChannelState, ChannelType, Listing, SpaceState};
+use crate::{ChangeTarget, ChannelState, ChannelType, Listing, SpaceState, ThreadTarget};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../schema/shapes.txt");
@@ -59,6 +59,7 @@ pub(crate) const SEGMENT_PEER: u64 = 0x12;
 pub(crate) const SPACE_PEER: u64 = 0x13;
 pub(crate) const SUCCESSOR_PEER: u64 = 0x14;
 pub(crate) const AMENDMENTS_PEER: u64 = 0x15;
+pub(crate) const THREAD_PEER: u64 = 0x16;
 
 /// The user who writes every document of the scenario.
 pub(crate) const AUTHOR: UserId = UserId::from_bytes([0xa1; 16]);
@@ -80,7 +81,7 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 8] = [
+pub(crate) const KEYED_BY_ID: [&str; 10] = [
     "amendments:amendments",
     "amendments:peers",
     "meta:peers",
@@ -89,6 +90,8 @@ pub(crate) const KEYED_BY_ID: [&str; 8] = [
     "space:categories",
     "space:channels",
     "space:peers",
+    "thread:messages/*/reactions",
+    "thread:peers",
 ];
 
 /// The declared `&str` constants that are stored values, not keys.
@@ -249,8 +252,51 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     state
         .delete(segment, messages[3].id, AUTHOR)
         .expect("delete");
+    reply_in_thread(&mut state, segment, messages[0].id);
     amend_after_lock(&mut state, segment);
     state
+}
+
+/// Start the thread of `root`, link it as the relay does, and reply in it
+/// with a copy sent to the channel.
+fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId) {
+    let ThreadTarget::Create(thread) = state
+        .reply_target(root, Timestamp(1_700_000_000_005))
+        .expect("target")
+    else {
+        panic!("a root with no thread creates one");
+    };
+    state
+        .adopt_session(thread, THREAD_PEER, entry())
+        .expect("adopt");
+    state.thread_linked(segment, root, thread).expect("link");
+    let reply = MessageDraft {
+        text: "a reply".to_owned(),
+        mentions: Vec::new(),
+    };
+    state
+        .reply(root, &reply, AUTHOR, Timestamp(1_700_000_000_005), true)
+        .expect("reply");
+}
+
+/// The root of the scenario's thread: the first message of its segment. It
+/// is read from the stored list, so a belt that breaks its body finds it.
+pub(crate) fn scenario_root(state: &ChannelState) -> Option<MessageId> {
+    let doc = state.doc(amended(state).0.document_id())?;
+    let Some(ValueOrContainer::Container(Container::Map(message))) =
+        doc.get_list(crate::schema::MESSAGES).get(0)
+    else {
+        return None;
+    };
+    let id = crate::schema::string(&message, crate::schema::MESSAGE_ID)?;
+    MessageId::parse_str(&id).ok()
+}
+
+/// The thread document of the scenario: the one of its first message.
+pub(crate) fn scenario_thread(state: &ChannelState) -> DocumentId {
+    scenario_root(state)
+        .and_then(|root| state.thread_id(root))
+        .expect("the first message has a thread")
 }
 
 /// Close `segment`, lock it as the relay does, and amend it: the first
@@ -337,6 +383,7 @@ fn shape_of(state: &ChannelState) -> Shape {
         (DocumentKind::Meta, state.meta_id().document_id()),
         (DocumentKind::Segment, segment.document_id()),
         (DocumentKind::Amendments, amendments),
+        (DocumentKind::Thread, scenario_thread(state)),
     ] {
         shape.walk_doc(kind, state.doc(id).expect("held"));
     }
@@ -458,6 +505,11 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
             DocumentKind::Amendments,
             channel.doc(amendments).expect("held"),
             AMENDMENTS_PEER,
+        ),
+        writers(
+            DocumentKind::Thread,
+            channel.doc(scenario_thread(&channel)).expect("held"),
+            THREAD_PEER,
         ),
         writers(DocumentKind::Space, space.doc(), SPACE_PEER),
     ]

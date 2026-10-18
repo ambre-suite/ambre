@@ -49,6 +49,8 @@ mod snapshot_check;
 mod spaces;
 /// What the local store holds, and which copies leave it (`RESID-002`).
 pub mod store_ledger;
+/// The threads of a channel: a reply, and the link of its thread.
+mod threads;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
 

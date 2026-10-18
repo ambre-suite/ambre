@@ -34,8 +34,10 @@ pub(crate) const HEADER_CREATED_AT: &str = "created_at";
 /// The key a space document names its space under, in place of a channel.
 pub(crate) const HEADER_SPACE: &str = "space_id";
 /// The key an amendments document names its segment under, beside its
-/// channel (`MURMURE-013`).
+/// channel (`MURMURE-013`). A thread document names its root's segment so.
 pub(crate) const HEADER_SEGMENT: &str = "segment_id";
+/// The key a thread document names its root message under (`MURMURE-009`).
+pub(crate) const HEADER_ROOT: &str = "root_id";
 /// The amendments document a fold snapshot of a segment folded in, absent
 /// from every other snapshot.
 pub(crate) const HEADER_FOLDED: &str = "folded";
@@ -105,6 +107,12 @@ pub(crate) const MESSAGE_DELETED: &str = "deleted";
 pub(crate) const MESSAGE_NOTICE: &str = "notice";
 /// The member a `member_added` notice names.
 pub(crate) const MESSAGE_MEMBER: &str = "member";
+/// The thread document of a root message, absent while it has no reply
+/// (`MURMURE-107`).
+pub(crate) const MESSAGE_THREAD: &str = "thread";
+/// The thread document a reply also sent to the channel came from
+/// (`MURMURE-109`).
+pub(crate) const MESSAGE_ALSO_IN_THREAD: &str = "also_in_thread";
 /// The mark over a mention in a body. Its value is a user identifier, or the
 /// channel identifier for an `@channel` (`MURMURE-008`).
 pub(crate) const MENTION: &str = "mention";
@@ -118,9 +126,6 @@ pub(crate) const MENTION: &str = "mention";
 pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 
 /// The document kinds this build writes and reads.
-///
-/// The spec names five. The thread kind arrives with the Story that builds
-/// it; until then a header naming one reads as foreign.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentKind {
     /// The one document of a space: its name, categories and catalogue.
@@ -131,6 +136,8 @@ pub enum DocumentKind {
     Segment,
     /// The late edits and deletes of one locked segment (`MURMURE-013`).
     Amendments,
+    /// The replies to one root message (`MURMURE-105`).
+    Thread,
 }
 
 impl DocumentKind {
@@ -141,6 +148,7 @@ impl DocumentKind {
             Self::Meta => "meta",
             Self::Segment => "segment",
             Self::Amendments => "amendments",
+            Self::Thread => "thread",
         }
     }
 }

@@ -20,8 +20,8 @@ use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
 
 use ambre_bus::{
-    ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo, RequestId, Role, SegmentId,
-    UserId,
+    ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo, MessageId, RequestId, Role,
+    SegmentId, UserId,
 };
 
 use crate::http;
@@ -964,6 +964,59 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
         }
     }
     Ok(linked.amendments)
+}
+
+/// Inputs for [`thread_task`], gathered from `SyncState` before spawning.
+pub(crate) struct ThreadParams {
+    pub channel_id: ChannelId,
+    pub root: MessageId,
+    pub thread: DocumentId,
+    /// The current key of the channel's `meta`, which opens every document
+    /// of the channel.
+    pub meta_key: DocumentKey,
+    /// This user, who creates the document.
+    pub author: Author,
+    pub url_scheme: &'static str,
+    pub api_base: String,
+    pub exchange_key: StaticSecret,
+}
+
+/// Create the thread document of a root under the key of `meta`, then
+/// register it for the root (`SRV-213`). Returns the document the relay
+/// holds for the root.
+///
+/// A registration that lost its race deletes the document it created
+/// (`SYNC-169`). A failed request deletes nothing, as for amendments.
+pub(crate) async fn thread_task<H: ShareHttp>(
+    http: &H,
+    p: ThreadParams,
+) -> Result<DocumentId, String> {
+    let base = format!("{}://{}/api", p.url_scheme, p.api_base);
+    let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
+    let body = http::CreateDocumentRequest {
+        doc_type: ambre_core::DocType::Murmure,
+        name_enc: None,
+        doc_key_enc,
+        document_id: Some(p.thread),
+        entry: Some(entry),
+    };
+    http.post_json::<_, http::CreateDocumentResponse>(&format!("{base}/documents"), &body)
+        .await?;
+    let body = http::RegisterThreadRequest {
+        root: p.root,
+        thread: p.thread,
+    };
+    let url = format!("{base}/channels/{}/threads", p.channel_id);
+    let linked = http
+        .post_json::<_, http::ThreadResponse>(&url, &body)
+        .await?;
+    if !linked.created {
+        let url = format!("{base}/documents/{}", p.thread);
+        if let Err(e) = http.delete(&url, &()).await {
+            tracing::warn!("[Sync] the thread of a lost registration stays on the relay: {e}");
+        }
+    }
+    Ok(linked.thread)
 }
 
 /// Inputs for [`settle_task`].
@@ -2236,6 +2289,70 @@ mod tests {
         let http = FakeHttp::new(vec![Ok(created), Err("HTTP 409".into())]);
         let failed = amendments_task(&http, amendments_params(mine)).await;
         assert_eq!(failed, Err("HTTP 409".into()));
+        assert_eq!(
+            http.calls().len(),
+            2,
+            "a failed registration deletes nothing"
+        );
+    }
+
+    fn thread_params(thread: DocumentId) -> ThreadParams {
+        ThreadParams {
+            channel_id: ChannelId::new(),
+            root: MessageId::new(),
+            thread,
+            meta_key: DocumentKey::generate(),
+            author: author(),
+            url_scheme: "https",
+            api_base: "api.test".into(),
+            exchange_key: keypair(1).0,
+        }
+    }
+
+    /// Holds `SYNC-169`. The thread document is created, then registered
+    /// for its root. A loser deletes its own and learns the winner's; a
+    /// failed registration deletes nothing.
+    #[tokio::test]
+    async fn a_lost_registration_deletes_the_thread_it_created() {
+        let mine = DocumentId::new();
+        let params = thread_params(mine);
+        let root = params.root;
+        let created = serde_json::json!({
+            "document_id": mine.to_string(), "doc_type": "murmure",
+        });
+        let answer = |held: DocumentId, created: bool| serde_json::json!({ "thread": held.to_string(), "created": created });
+        let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
+        assert_eq!(thread_task(&http, params).await, Ok(mine));
+        {
+            let calls = http.calls();
+            let [Call::Post(create, body), Call::Post(link, linked)] = calls.as_slice() else {
+                panic!("expected a create then a registration");
+            };
+            assert!(create.ends_with("/api/documents"));
+            assert_eq!(body["document_id"], mine.to_string());
+            assert!(link.ends_with("/threads"));
+            assert_eq!(linked["thread"], mine.to_string());
+            assert_eq!(linked["root"], root.to_string());
+        }
+
+        let winner = DocumentId::new();
+        let http = FakeHttp::new(vec![
+            Ok(created.clone()),
+            Ok(answer(winner, false)),
+            Ok(serde_json::Value::Null),
+        ]);
+        assert_eq!(thread_task(&http, thread_params(mine)).await, Ok(winner));
+        {
+            let calls = http.calls();
+            let Some(Call::Delete(url, _)) = calls.last() else {
+                panic!("the loser deleted nothing");
+            };
+            assert!(url.ends_with(&format!("/documents/{mine}")));
+        }
+
+        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 404".into())]);
+        let failed = thread_task(&http, thread_params(mine)).await;
+        assert_eq!(failed, Err("HTTP 404".into()));
         assert_eq!(
             http.calls().len(),
             2,

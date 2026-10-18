@@ -377,6 +377,15 @@ enum SyncEvent {
         amendments: DocumentId,
         result: Result<DocumentId, String>,
     },
+    /// The answer to a thread creation (`SyncCommand::CreateThread`): the
+    /// document the relay holds for the root.
+    ThreadLinked {
+        channel_id: ChannelId,
+        segment: ambre_bus::SegmentId,
+        root: ambre_bus::MessageId,
+        thread: DocumentId,
+        result: Result<DocumentId, String>,
+    },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
     FinalizeLeaseAnswered {
@@ -1404,6 +1413,13 @@ impl SyncState {
                 segment,
                 amendments,
             } => self.handle_create_amendments(channel_id, meta, segment, amendments),
+            SyncCommand::CreateThread {
+                channel_id,
+                meta,
+                segment,
+                root,
+                thread,
+            } => self.handle_create_thread(channel_id, meta, segment, root, thread),
             SyncCommand::TakeFinalizeLease {
                 channel_id,
                 segment,

@@ -13,7 +13,7 @@ use ambre_bus::{
 use ambre_bus::{MemberInfo, MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
     ChangeTarget, ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sample,
-    Screened, Sent, Signer, members_only, screen,
+    Screened, Sent, Signer, ThreadTarget, members_only, screen,
 };
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
@@ -619,11 +619,14 @@ impl LogicState {
                 match channel.older_ready(document_id) {
                     Ok(event) => {
                         self.send_to_ui(UiEvent::Channel { channel_id, event });
+                        self.show_thread(channel_id, document_id);
                         self.emit_count(channel_id);
-                        // An amendments document takes the changes that
-                        // waited on it, and a loaded segment may have some.
+                        // An amendments document or a thread takes the
+                        // changes that waited on it, and a loaded segment
+                        // may have some.
                         self.release_waiting(document_id);
                         self.open_amendments(channel_id);
+                        self.open_threads(channel_id);
                     }
                     Err(error) => {
                         tracing::warn!("Logic: older segment {document_id} refused: {error}");
@@ -676,6 +679,7 @@ impl LogicState {
                     self.settle_murmure_session(document_id);
                 }
                 self.open_amendments(channel_id);
+                self.open_threads(channel_id);
                 self.emit_count(channel_id);
             }
             Err(error) => self.end_opening(channel_id, error.to_string()),
@@ -867,6 +871,44 @@ impl LogicState {
                     ),
                     Err(error) => {
                         tracing::warn!("Logic: change on {segment} refused: {error}");
+                        return;
+                    }
+                };
+                if let Some(ask) = ask {
+                    self.send_to_sync(ask);
+                }
+                Some(id)
+            }
+            // A reply writes in the thread of its root, which may first have
+            // to arrive or to be created (the Murmure threads spec).
+            MurmureCommand::Reply { root, now, .. } => {
+                let (root, now) = (*root, *now);
+                let meta = channel.meta_id();
+                // A target is found only for a root a held segment holds.
+                let segment = channel
+                    .root_segment(root)
+                    .unwrap_or_else(|| channel.active_id());
+                let (id, ask) = match channel.reply_target(root, now) {
+                    Ok(ThreadTarget::Write(id)) => (id, None),
+                    Ok(ThreadTarget::Open(id)) => (
+                        id,
+                        Some(SyncCommand::OpenDocument {
+                            document_id: id,
+                            doc_type: DocType::Murmure,
+                        }),
+                    ),
+                    Ok(ThreadTarget::Create(id)) => (
+                        id,
+                        Some(SyncCommand::CreateThread {
+                            channel_id,
+                            meta,
+                            segment,
+                            root,
+                            thread: id,
+                        }),
+                    ),
+                    Err(error) => {
+                        tracing::warn!("Logic: reply to {root} refused: {error}");
                         return;
                     }
                 };
@@ -1071,6 +1113,39 @@ impl LogicState {
                 };
                 let deleted = channel.delete(segment, message, user).map(Some);
                 self.send_change(channel_id, deleted);
+            }
+            MurmureCommand::Reply {
+                root,
+                draft,
+                also_in_channel,
+                now,
+                confirmed,
+            } => {
+                // A reply is screened as a message is: a copy to the channel
+                // notifies it as one (the Murmure threads spec).
+                let members: Option<Vec<UserId>> = self
+                    .channel_members
+                    .get(&channel_id)
+                    .map(|rows| rows.iter().map(|row| row.user_id).collect());
+                let draft = match screen(draft, members.as_deref(), confirmed) {
+                    Screened::Send(draft) => draft,
+                    Screened::Confirm { members } => {
+                        return self.send_to_ui(UiEvent::Channel {
+                            channel_id,
+                            event: MurmureEvent::ConfirmChannelMention { members },
+                        });
+                    }
+                };
+                let Some(author) = self.my_user_id else {
+                    tracing::warn!("Logic: reply on {channel_id} before the session; dropped");
+                    return;
+                };
+                match channel.reply(root, &draft, author, now, also_in_channel) {
+                    Ok(replied) => self.send_reply(channel_id, replied, now),
+                    Err(error) => {
+                        tracing::warn!("Logic: reply on channel {channel_id} refused: {error}");
+                    }
+                }
             }
             MurmureCommand::Tick { now } => {
                 let meta = channel.meta_id().document_id();
@@ -1379,8 +1454,10 @@ impl LogicState {
         }
         // One segment answers with its whole list, so only the last answer of
         // a batch is news to the view.
-        if let Some(event) = events.pop() {
-            self.send_to_ui(UiEvent::Channel { channel_id, event });
+        if !events.is_empty() {
+            for event in threads::latest_answers(events) {
+                self.send_to_ui(UiEvent::Channel { channel_id, event });
+            }
             self.emit_count(channel_id);
         }
         self.follow_close(channel_id);
@@ -1464,8 +1541,10 @@ impl LogicState {
         }
         // One segment answers with its whole list, so only the last answer of
         // a batch is news to the view.
-        if let (Some(channel_id), Some(event)) = (open, events.pop()) {
-            self.send_to_ui(UiEvent::Channel { channel_id, event });
+        if let Some(channel_id) = open.filter(|_| !events.is_empty()) {
+            for event in threads::latest_answers(events) {
+                self.send_to_ui(UiEvent::Channel { channel_id, event });
+            }
             self.emit_count(channel_id);
         }
         if let Some(channel_id) = open {
@@ -4203,5 +4282,247 @@ mod tests {
             UiEvent::ChannelActivity { channels }
                 if channels.first().is_some_and(|mark| mark.unread == Some(UnreadCount(2)))
         )));
+    }
+
+    // --- The threads of a channel ---
+
+    fn reply_to(root: MessageId, text: &str, also_in_channel: bool) -> MurmureCommand {
+        MurmureCommand::Reply {
+            root,
+            draft: MessageDraft {
+                text: text.to_owned(),
+                mentions: Vec::new(),
+            },
+            also_in_channel,
+            now: at(1),
+            confirmed: false,
+        }
+    }
+
+    /// The thread documents Logic asked the Sync worker to create.
+    fn created_threads(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, MessageId, DocumentId)> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::CreateThread {
+                    segment,
+                    root,
+                    thread,
+                    ..
+                } => Some((segment, root, thread)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An open channel whose active segment holds one message, sent by a
+    /// signed-in user. Returns its root.
+    fn rooted_channel(
+        state: &mut LogicState,
+        sync: &Receiver<SyncCommand>,
+    ) -> (ChannelId, SegmentId, MessageId) {
+        let (channel_id, active) = open_channel(state);
+        command(state, channel_id, send("root", Vec::new()));
+        drain(sync);
+        let root = state.channels[&channel_id].messages(active).expect("held")[0].id;
+        (channel_id, active, root)
+    }
+
+    /// A first reply waits for the thread it creates. The link names the
+    /// thread in the root and opens it. The reply leaves once the thread
+    /// went up whole, and its copy leaves under the active segment.
+    #[test]
+    fn a_first_reply_waits_for_the_thread_it_creates() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active, root) = rooted_channel(&mut state, &sync);
+        drain(&ui);
+        command(&mut state, channel_id, reply_to(root, "a reply", true));
+        let [(segment, created, thread)] = created_threads(&sync).try_into().expect("one create");
+        assert_eq!((segment, created), (active, root));
+        assert_eq!(state.murmure_waiting.get(&thread).map(Vec::len), Some(1));
+
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread,
+        });
+        let sent = drain(&sync);
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::SendUpdate { document_id, summary: None, .. }
+                if *document_id == active.document_id())));
+        assert!(sent.iter().any(|c| matches!(c,
+            SyncCommand::OpenDocument { document_id, .. } if *document_id == thread)));
+        assert!(
+            !sent.iter().any(|c| matches!(c,
+                SyncCommand::SendUpdate { document_id, .. } if *document_id == thread)),
+            "the reply waits for the thread"
+        );
+
+        state.grant_identity(thread);
+        state.handle_logic_event(LogicEvent::DocumentReady {
+            document_id: thread,
+            role: ambre_bus::Role::Owner,
+        });
+        let updates: Vec<(DocumentId, bool)> = drain(&sync)
+            .into_iter()
+            .filter_map(|c| match c {
+                SyncCommand::SendUpdate {
+                    document_id,
+                    summary,
+                    ..
+                } => Some((document_id, summary.is_some())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            updates,
+            [
+                (thread, false),
+                (thread, true),
+                (active.document_id(), true)
+            ],
+            "the whole thread, the reply, then its copy"
+        );
+        let shown = channel_events(&ui);
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::ThreadMessages { root: r, thread: t, messages }
+                    if *r == root && *t == thread && messages[0].text == "a reply")),
+            "the view was told {shown:?}"
+        );
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::Messages { segment, messages }
+                    if *segment == active
+                        && messages[0].thread.is_some_and(|head| head.replies == 1))),
+            "the root's head counts the reply, {shown:?}"
+        );
+    }
+
+    /// A link that lost its race names another member's thread. What waited
+    /// on this client's own waits on the winner, which opens. A failed link
+    /// drops this client's own, so the next reply creates again.
+    #[test]
+    fn a_lost_or_failed_thread_link_moves_the_reply_to_another_document() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, segment, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "two", false));
+        let [(_, _, mine)] = created_threads(&sync).try_into().expect("one create");
+        let winner = DocumentId::new();
+        state.handle_logic_event(LogicEvent::ThreadLinked {
+            channel_id,
+            segment,
+            root,
+            thread: winner,
+        });
+        assert!(drain(&sync).iter().any(|c| matches!(c,
+            SyncCommand::OpenDocument { document_id, .. } if *document_id == winner)));
+        assert!(!state.murmure_waiting.contains_key(&mine));
+        assert_eq!(state.murmure_waiting.get(&winner).map(Vec::len), Some(1));
+
+        let (channel_id, segment, root) = rooted_channel(&mut state, &sync);
+        command(&mut state, channel_id, reply_to(root, "two", false));
+        let [(_, _, first)] = created_threads(&sync).try_into().expect("one create");
+        state.handle_logic_event(LogicEvent::ThreadLinkFailed {
+            channel_id,
+            segment,
+            root,
+            thread: first,
+            message: "HTTP 500".to_owned(),
+        });
+        assert!(
+            !state.murmure_waiting.contains_key(&first),
+            "the reply is dropped"
+        );
+        command(&mut state, channel_id, reply_to(root, "three", false));
+        let [(_, _, second)] = created_threads(&sync).try_into().expect("a create again");
+        assert_ne!(second, first);
+    }
+
+    /// A root another member threaded names its thread. The member who did
+    /// not link it opens the thread, and its view reads the replies once the
+    /// bytes arrived.
+    #[test]
+    fn a_root_another_member_threaded_opens_its_thread() {
+        let mut m = members();
+        m.deliver("root", 1);
+        let root = m.alice.messages(m.active).expect("held")[0].id;
+        let ThreadTarget::Create(thread) = m.alice.reply_target(root, NOW).expect("target") else {
+            panic!("a root with no thread creates one");
+        };
+        let peer = crate::test_peer();
+        m.alice
+            .adopt_session(thread, peer, peer.to_le_bytes().to_vec())
+            .expect("adopt");
+        let named = m
+            .alice
+            .thread_linked(m.active, root, thread)
+            .expect("link")
+            .root
+            .expect("the root names it");
+        let draft = MessageDraft {
+            text: "a reply".to_owned(),
+            mentions: Vec::new(),
+        };
+        m.alice
+            .reply(root, &draft, m.author, NOW, false)
+            .expect("reply");
+        let document_id = m.active.document_id();
+        m.bob.handle_logic_event(LogicEvent::RemoteUpdate {
+            document_id,
+            delta: ambre_bus::SignedDelta {
+                peer: m.alice.peer(document_id).expect("a session"),
+                user: Some(m.author),
+                ..crate::remote_delta(2, named.delta)
+            },
+        });
+        assert!(drain(&m.bob_sync).iter().any(|c| matches!(c,
+            SyncCommand::OpenDocument { document_id, .. } if *document_id == thread)));
+
+        drain(&m.bob_ui);
+        serve(&mut m.bob, &m.alice, thread);
+        let shown = channel_events(&m.bob_ui);
+        assert!(
+            shown.iter().any(|(_, event)| matches!(event,
+                MurmureEvent::ThreadMessages { thread: t, messages, .. }
+                    if *t == thread && messages[0].text == "a reply")),
+            "bob's view was told {shown:?}"
+        );
+    }
+
+    /// One batch answers once per list: the last answer of the segment, and
+    /// the last of each thread, in their order.
+    #[test]
+    fn a_batch_keeps_the_last_answer_of_each_list() {
+        let segment = SegmentId::new();
+        let (first, second) = (DocumentId::new(), DocumentId::new());
+        let root = MessageId::new();
+        let list = || MurmureEvent::Messages {
+            segment,
+            messages: Vec::new(),
+        };
+        let replies = |thread: DocumentId| MurmureEvent::ThreadMessages {
+            root,
+            thread,
+            messages: Vec::new(),
+        };
+        let kept = threads::latest_answers(vec![
+            list(),
+            replies(first),
+            replies(second),
+            list(),
+            replies(first),
+        ]);
+        assert_eq!(kept.len(), 3, "{kept:?}");
+        assert!(
+            matches!(&kept[0], MurmureEvent::ThreadMessages { thread, .. } if *thread == second)
+        );
+        assert!(matches!(&kept[1], MurmureEvent::Messages { .. }));
+        assert!(
+            matches!(&kept[2], MurmureEvent::ThreadMessages { thread, .. } if *thread == first)
+        );
     }
 }

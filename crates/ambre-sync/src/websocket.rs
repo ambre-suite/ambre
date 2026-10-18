@@ -855,6 +855,29 @@ impl SyncState {
                     },
                 });
             }
+            SyncEvent::ThreadLinked {
+                channel_id,
+                segment,
+                root,
+                thread,
+                result,
+            } => {
+                self.send_to_logic(match result {
+                    Ok(held) => LogicEvent::ThreadLinked {
+                        channel_id,
+                        segment,
+                        root,
+                        thread: held,
+                    },
+                    Err(message) => LogicEvent::ThreadLinkFailed {
+                        channel_id,
+                        segment,
+                        root,
+                        thread,
+                        message,
+                    },
+                });
+            }
             SyncEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,

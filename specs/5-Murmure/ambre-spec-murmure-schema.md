@@ -43,7 +43,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-006` | `INV` | A reaction MUST be one entry of one flat map, keyed by the pair of its emoji and its reacting user. | this spec section 3 | `ambre_murmure::reaction_tests::two_members_reacting_at_once_both_stay`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- one flat map per message, one key per member and emoji | none | verified |
 | `MURMURE-007` | `CONC` | Two members reacting with the same emoji at once MUST both appear in the merged reaction. | this spec section 3; this spec section 6 | `ambre_murmure::reaction_tests::two_members_reacting_at_once_both_stay` -- both peers read both members under one emoji | none | verified |
 | `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier or the channel itself. | this spec section 3 | `ambre_murmure::mention_tests::a_mention_is_a_mark_that_carries_its_member`; `ambre_murmure::mention_tests::an_at_channel_names_the_channel_and_no_member` -- the mark holds a user or the channel identifier | none | verified |
-| `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | not built | unbuilt -- lands with the `Threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | `ambre_murmure::thread_tests::a_thread_opens_once_its_header_names_the_root_that_names_it` -- a thread whose header names the root opens, and one naming another root is refused | none | verified |
 | `MURMURE-010` | `INV` | The `segments` list MUST hold at most one `active` and at most one `closing` segment. | this spec section 3 | `ambre_murmure::closing_tests::two_writers_of_one_close_converge_on_one_successor` -- two merged `meta` documents read one active and one closing segment; `ambre_server::db::channels::tests::a_channel_holds_one_active_segment` -- database tier, the relay store refuses a second active or closing segment | none | verified |
 | `MURMURE-011` | `CONC` | Two peers closing the active segment at once MUST converge on one successor segment. | this spec section 5; this spec section 6 | `ambre_murmure::closing_tests::two_writers_of_one_close_converge_on_one_successor` -- the creator holds the successor and the other fetches it; `ambre_server::db::channels::tests::two_racing_closes_register_one_successor`; `ambre_server::routes::channels::tests::a_writer_closes_a_segment_and_a_late_close_learns_the_winner` -- database tier, the relay answers both closes one successor | none | verified |
 | `MURMURE-012` | `INV` | A final segment document MUST hold no operation later than its finalization. | this spec section 3 | `ambre_murmure::finalizing_tests::an_accepted_commit_marks_the_segment_final_for_every_member` -- a reaction to a final segment is refused; `::a_final_snapshot_at_odds_with_the_deltas_is_refused` -- a final snapshot holding an operation no delta carried is a mismatch | none | verified |
@@ -62,7 +62,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 20 `verified`, 2 `unimplemented`. The engine tests and the shape belt of
+* **Verification.** 21 `verified`, 1 `unimplemented`. The engine tests and the shape belt of
   `crates/ambre-murmure` hold every built container and the version gate.
 
 ---
@@ -77,7 +77,8 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   position in a list moves with every concurrent append.
 * A **segment** is identified by its `document_id`. A thread reply, a pin and an amendment reach a
   message through the pair of its segment and its `MessageId`.
-* A **thread** document names its channel and its root message (`MURMURE-009`).
+* A **thread** document names its channel, its root message and the segment of that root
+  (`MURMURE-009`).
 * An **amendments** document names its channel and its segment, and holds only that segment's
   messages (`MURMURE-013`).
 
@@ -129,8 +130,9 @@ names the unit two concurrent writers race for. Every document also carries the 
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
 | segment | `header` | Map | `folded`, `folded_seq` | `DocumentId`, `u64`, on a fold snapshot | the key | segments | built |
+| thread | `header` | Map | `root_id`, `segment_id` | `MessageId`, `SegmentId` | the key | threads | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `DocumentId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | built |

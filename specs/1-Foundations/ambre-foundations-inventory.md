@@ -31,7 +31,7 @@
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 21 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
-| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 67 |  |
+| `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 70 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 18 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 11 |  |
@@ -51,7 +51,7 @@
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 18 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `server` | The one process every client talks to. | partial | 71 | 1 |
-| `sync` | The one part of the client that talks to the network. | partial | 45 |  |
+| `sync` | The one part of the client that talks to the network. | partial | 46 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 18 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 20 partial, 6 design-only. 1028 contract rows, 2 loose.**
+**46 features: 20 implemented, 20 partial, 6 design-only. 1032 contract rows, 2 loose.**

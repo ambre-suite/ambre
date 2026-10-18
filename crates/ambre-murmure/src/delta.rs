@@ -11,7 +11,8 @@ use ambre_core::authorship::{PEERS_MAP, PeerEntry, peer_key};
 use ambre_core::{DocumentId, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
-    Container, ContainerID, ContainerType, LoroDoc, LoroValue, ValueOrContainer, VersionVector,
+    Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
+    VersionVector,
 };
 use serde::Deserialize;
 
@@ -19,7 +20,7 @@ use crate::error::MurmureError;
 use crate::reaction;
 use crate::schema::{
     self, AMENDMENT_BY, AMENDMENTS, DeletedBy, MESSAGE_AUTHOR, MESSAGE_ID, MESSAGE_REACTIONS,
-    MESSAGES,
+    MESSAGE_THREAD, MESSAGES,
 };
 
 /// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
@@ -157,9 +158,11 @@ fn restore_entries(update: &mut JsonSchema) {
 ///
 /// `registered` names the user a PeerID of an earlier session stands for, as
 /// the registry of the segment holds it. `reactions` says whether a container
-/// is the `reactions` map of a message the segment holds. The check takes no
-/// document, so it copies none (`MURMURE-226`). Every client runs it on the
-/// same delta, so every client reaches the same verdict (`MURMURE-079`).
+/// is the `reactions` map of a message the segment holds. `thread_of` reads
+/// the `thread` field of a message map the segment holds, `None` for any
+/// other container. The check takes no document, so it copies none
+/// (`MURMURE-226`). Every client runs it on the same delta, so every client
+/// reaches the same verdict (`MURMURE-079`).
 ///
 /// # Errors
 /// The first [`Refusal`] an operation earns.
@@ -168,6 +171,7 @@ pub(crate) fn check(
     signer: Signer,
     registered: impl Fn(u64) -> Option<UserId>,
     reactions: impl Fn(&ContainerID) -> bool,
+    thread_of: impl Fn(&ContainerID) -> Option<Option<String>>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer) {
@@ -195,8 +199,12 @@ pub(crate) fn check(
                     continue;
                 }
                 // A message, its body and every child of it belong to the
-                // user whose PeerID created them.
+                // user whose PeerID created them. Its `thread` field is the
+                // one exception (`MURMURE-255`).
                 if owner(*peer) != Some(user) {
+                    if thread_set(&op.content, thread_of(id)) {
+                        continue;
+                    }
                     return Err(Refusal::ForeignMessage);
                 }
                 match &op.content {
@@ -324,6 +332,45 @@ pub(crate) fn author_in(segment: &LoroDoc, key: &str) -> Option<UserId> {
     })
 }
 
+/// Whether a write to another author's message sets its `thread` field to a
+/// thread document, where `current` is what the field holds. An absent field
+/// takes one, and a set one takes the same again (`MURMURE-108`).
+///
+/// The verdict reads the field as the receiver holds it. A member who sets a
+/// first value thus refuses every other one, the relay's included. The relay
+/// links one document per root (`SRV-214`), so only one value is due.
+fn thread_set(content: &JsonOpContent, current: Option<Option<String>>) -> bool {
+    let JsonOpContent::Map(MapOp::Insert {
+        key,
+        value: LoroValue::String(value),
+    }) = content
+    else {
+        return false;
+    };
+    let Some(current) = current else {
+        return false;
+    };
+    key == MESSAGE_THREAD
+        && DocumentId::parse_str(value).is_ok()
+        && current.is_none_or(|set| set.as_str() == value.as_str())
+}
+
+/// The `thread` field of `id` when it is a message map of `doc`, `None` for
+/// any other container.
+pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<Option<String>> {
+    let path = doc.get_path_to_container(id)?;
+    let [(list, _), (_, Index::Seq(_))] = path.as_slice() else {
+        return None;
+    };
+    if !is_root(list, MESSAGES, ContainerType::List) {
+        return None;
+    }
+    let Some(Container::Map(map)) = doc.get_container(id.clone()) else {
+        return None;
+    };
+    Some(schema::string(&map, MESSAGE_THREAD))
+}
+
 /// Whether a registry write is the signer's own: its PeerID's key alone. An
 /// entry that reads as one must name the signer. An unreadable one names
 /// nobody, so it grants nothing.
@@ -411,8 +458,12 @@ pub(crate) enum Arrival {
 /// What the deltas of a document are checked against.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Rules<'a> {
-    /// A segment: its own registry and its own messages.
+    /// A segment: its own registry and its own messages, whose `thread`
+    /// field any member sets once (`MURMURE-255`).
     Segment,
+    /// A thread document: its own registry and its own replies. A reply
+    /// starts no thread, so no other member writes in it.
+    Thread,
     /// An amendments document: its own registry, and the locked segment that
     /// names the author of each message.
     Amendments { segment: &'a LoroDoc },
@@ -434,6 +485,14 @@ pub(crate) fn verdict(
             signer,
             |peer| registered(doc, peer),
             |id| reaction::is_map(doc, id),
+            |id| thread_field(doc, id),
+        ),
+        Rules::Thread => check(
+            update,
+            signer,
+            |peer| registered(doc, peer),
+            |id| reaction::is_map(doc, id),
+            |_| None,
         ),
         Rules::Amendments { segment } => check_amendments(
             update,

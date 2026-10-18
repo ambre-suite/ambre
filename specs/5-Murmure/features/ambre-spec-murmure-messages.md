@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-224` | `FAIL` | Given a binary delta on a segment, a thread or an amendments document, every client MUST refuse it. | this spec section 3; `MURMURE-223` | `ambre_murmure::authorship_tests::a_binary_delta_on_a_segment_is_refused` -- the segment is unchanged and the delta counts as delivered | none | verified |
 | `MURMURE-225` | `POST` | An accepted delta MUST be imported exactly as the check read it. | this spec section 3 | type-level -- `apply_signed` imports the parsed update it checked, never the bytes again; `ambre_murmure::authorship_tests::a_later_session_of_the_author_edits_its_own_message` | none | verified |
-| `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | not built | unbuilt -- lands with the `Threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | `ambre_murmure::thread_tests::the_check_lets_another_member_set_an_absent_thread_field_alone` -- a second value, another field, or a field set on a reply are refused; `::a_reply_takes_no_thread_field_from_another_member` -- a reply of a thread takes no `thread` field | none | verified |
 | `MURMURE-228` | `FAIL` | Given a JSON update of a schema version the client does not compile, the client MUST refuse it and ask the user to update. | this spec section 3; `MURMURE-019` | `ambre_murmure::authorship_tests::a_json_update_of_another_version_is_refused_and_asks_an_update`; `ambre_logic::channels::tests::a_delta_from_a_newer_build_asks_the_user_to_update` -- the view gets `UpdateRequired` | none | verified |
 | `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | type-level -- `delta::check` takes the JSON update, a registry lookup and a reactions lookup, never a document | none | verified |
 
@@ -64,8 +64,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 21 `verified`, 1 `unimplemented`. The send, the authorship check, the edit and
-  the delete are built, live and as amendments. The thread field waits.
+* **Verification.** 22 `verified`. The send, the authorship check, the edit and the delete are
+  built, live and as amendments. So is the `thread` field another member sets once.
 
 ---
 

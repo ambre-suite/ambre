@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, LeaseId, MemberInfo,
-    RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId, UserId,
+    MessageId, RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId,
+    UserId,
 };
 use ambre_core::SessionNonce;
 
@@ -264,6 +265,25 @@ pub enum LogicEvent {
         channel_id: ChannelId,
         segment: SegmentId,
         amendments: DocumentId,
+        message: String,
+    },
+    /// The relay registered `thread` for `root`, a message of `segment`,
+    /// answering [`SyncCommand::CreateThread`](crate::SyncCommand::CreateThread).
+    /// A registration that lost its race names the winner's, and the Sync
+    /// worker deleted its own (`SRV-214`).
+    ThreadLinked {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        root: MessageId,
+        thread: DocumentId,
+    },
+    /// The relay refused the creation or the registration of `thread` for
+    /// `root`, or never answered it.
+    ThreadLinkFailed {
+        channel_id: ChannelId,
+        segment: SegmentId,
+        root: MessageId,
+        thread: DocumentId,
         message: String,
     },
     /// The relay's answer to

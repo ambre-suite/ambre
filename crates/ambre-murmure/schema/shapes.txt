@@ -51,6 +51,7 @@ segment:header/folded: string
 segment:header/folded_seq: i64
 segment:header/kind: string
 segment:header: map
+segment:messages/*/also_in_thread: string
 segment:messages/*/author: string
 segment:messages/*/content#mention: string
 segment:messages/*/content: text
@@ -61,6 +62,7 @@ segment:messages/*/member: string
 segment:messages/*/notice: string
 segment:messages/*/reactions/{id}: i64
 segment:messages/*/reactions: map
+segment:messages/*/thread: string
 segment:messages/*/ts: i64
 segment:messages/*: map
 segment:messages: list
@@ -89,3 +91,20 @@ space:peers/{id}: binary
 space:peers: map
 space:space/name: string
 space:space: map
+thread:header/channel_id: string
+thread:header/created_at: i64
+thread:header/kind: string
+thread:header/root_id: string
+thread:header/segment_id: string
+thread:header: map
+thread:messages/*/author: string
+thread:messages/*/content: text
+thread:messages/*/id: string
+thread:messages/*/reactions: map
+thread:messages/*/ts: i64
+thread:messages/*: map
+thread:messages: list
+thread:meta/schema_version: i64
+thread:meta: map
+thread:peers/{id}: binary
+thread:peers: map

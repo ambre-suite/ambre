@@ -97,6 +97,21 @@ pub enum MurmureError {
     #[error("amendments document {0} names another segment")]
     ForeignSegment(DocumentId),
 
+    /// The header of a thread document names another root, or another
+    /// segment, than the one it was opened for (`MURMURE-009`).
+    #[error("thread document {0} names another root")]
+    ForeignRoot(DocumentId),
+
+    /// A reply before the channel holds the thread document of its root,
+    /// which the reply waits for.
+    #[error("message {0} has no thread document held")]
+    NoThread(MessageId),
+
+    /// A first reply to a message of a final or locked segment, whose
+    /// `thread` field no delta may set.
+    #[error("message {0} lies in a locked segment, so no thread starts on it")]
+    RootLocked(MessageId),
+
     /// The segment holds no message of that identifier.
     #[error("no message {0} in the segment")]
     NoMessage(MessageId),

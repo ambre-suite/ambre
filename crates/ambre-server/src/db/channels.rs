@@ -429,6 +429,57 @@ pub async fn register_amendments(
     Ok(amendments)
 }
 
+/// Register `thread` as the one thread document of the root message `root`
+/// (`SRV-213`), and answer the one the root holds after.
+///
+/// The channel row is locked first, so two registrations take turns. The
+/// second finds the first one's document, and is answered it (`SRV-214`).
+/// A `thread` already registered is refused with a 409.
+pub async fn register_thread(
+    pool: &PgPool,
+    channel_id: &ambre_core::ChannelId,
+    root: ambre_core::MessageId,
+    thread: ambre_core::DocumentId,
+) -> Result<ambre_core::DocumentId, AppError> {
+    let channel = id_to_uuid(*channel_id);
+    let root = id_to_uuid(root);
+    let mut tx = pool.begin().await?;
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
+        .bind(channel)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(AppError::NotFound {
+            resource: "channel",
+        })?;
+    let held: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT document_id FROM channel_documents WHERE channel_id = $1 AND thread_root = $2",
+    )
+    .bind(channel)
+    .bind(root)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(held) = held {
+        return Ok(uuid_row_to_id(held));
+    }
+    let inserted = sqlx::query(
+        "INSERT INTO channel_documents (document_id, channel_id, kind, thread_root) \
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+    )
+    .bind(id_to_uuid(thread))
+    .bind(channel)
+    .bind(ChannelDocumentKind::Thread.as_str())
+    .bind(root)
+    .execute(&mut *tx)
+    .await?;
+    if inserted.rows_affected() != 1 {
+        return Err(AppError::Conflict {
+            detail: "the thread document is already registered".into(),
+        });
+    }
+    tx.commit().await?;
+    Ok(thread)
+}
+
 /// How long a finalize lease waits, and how long it lasts
 /// (`ambre-spec-budgets.md section 8`).
 #[derive(Debug, Clone, Copy)]
@@ -1342,7 +1393,7 @@ pub async fn find_or_create_direct_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, DocumentId, UserId};
+    use ambre_core::{ChannelId, DocumentId, MessageId, UserId};
 
     async fn user(pool: &PgPool, email: &str) -> UserId {
         crate::test_helpers::create_test_user(pool, email).await
@@ -1707,6 +1758,79 @@ mod tests {
         assert_eq!(amended(&pool, id).await, [(left, first)]);
     }
 
+    /// Every row of the channel that is not a thread, each column read.
+    async fn rows_beside_threads(pool: &PgPool, channel: ChannelId) -> Vec<String> {
+        sqlx::query_scalar(
+            "SELECT to_jsonb(d)::text FROM channel_documents d \
+             WHERE channel_id = $1 AND kind <> 'thread' ORDER BY document_id",
+        )
+        .bind(id_to_uuid(channel))
+        .fetch_all(pool)
+        .await
+        .expect("query")
+    }
+
+    /// `SRV-213`, `SRV-215`: a root takes one thread document, which the
+    /// channel then groups. Asked again, it answers that document. Another
+    /// root of the same channel takes its own. No other row moves.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_root_registers_one_thread_document(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, _) = channel_of(&pool, owner).await;
+        let before = rows_beside_threads(&pool, id).await;
+        let (root, other) = (MessageId::new(), MessageId::new());
+        let thread = document(&pool, owner).await;
+        for _ in 0..2 {
+            let held = register_thread(&pool, &id, root, thread)
+                .await
+                .expect("register");
+            assert_eq!(held, thread);
+        }
+        let second = document(&pool, owner).await;
+        let held = register_thread(&pool, &id, other, second)
+            .await
+            .expect("register");
+        assert_eq!(held, second);
+        let threads: Vec<_> = list_channel_documents(&pool, &id)
+            .await
+            .expect("listing")
+            .into_iter()
+            .filter(|d| d.kind == ChannelDocumentKind::Thread)
+            .map(|d| d.document_id)
+            .collect();
+        assert_eq!(threads.len(), 2);
+        assert!(threads.contains(&thread) && threads.contains(&second));
+        assert_eq!(rows_beside_threads(&pool, id).await, before);
+        let unknown = register_thread(&pool, &ChannelId::new(), root, thread).await;
+        assert!(matches!(unknown, Err(AppError::NotFound { .. })));
+    }
+
+    /// `SRV-214`: two registrations for one root race, and both answer the
+    /// one document that was registered.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn two_racing_registrations_keep_one_thread_document(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, _) = channel_of(&pool, owner).await;
+        let root = MessageId::new();
+        let (a, b) = (document(&pool, owner).await, document(&pool, owner).await);
+        let (left, right) = tokio::join!(
+            register_thread(&pool, &id, root, a),
+            register_thread(&pool, &id, root, b),
+        );
+        let (left, right) = (left.expect("register"), right.expect("register"));
+        assert_eq!(left, right, "both answer the same document");
+        assert!(left == a || left == b);
+        let threads = list_channel_documents(&pool, &id)
+            .await
+            .expect("listing")
+            .into_iter()
+            .filter(|d| d.kind == ChannelDocumentKind::Thread)
+            .count();
+        assert_eq!(threads, 1);
+    }
+
     /// `SRV-196`: a close while another segment of the channel is closing is
     /// refused. So is a close of a segment that is not the active one.
     #[sqlx::test]
@@ -1812,6 +1936,7 @@ mod tests {
                 ("channel_documents", "lease_id"),
                 ("channel_documents", "lease_until"),
                 ("channel_documents", "state"),
+                ("channel_documents", "thread_root"),
                 ("channels", "id"),
                 ("channels", "is_public"),
                 ("channels", "space_id"),

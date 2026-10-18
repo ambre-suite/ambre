@@ -159,15 +159,30 @@ who folds, and erases the amendments once another member confirms the fold.
 | `SRV-211` | `POST` | A settled fold MUST delete the amendments only when it holds their last delta. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-segments.md`, `MURMURE-076` | `ambre_server::routes::channels::tests::a_confirmed_fold_becomes_final_and_erases_the_amendments` -- database tier, a delta past the fold keeps them, and a fold of them all erases them; `ambre_server::redis_ops::lua_tests::a_fold_seals_only_the_amendments_it_holds` -- a pending or a later delta holds the seal back | none | verified |
 | `SRV-212` | `POST` | A report that drops a fold snapshot MUST leave the fold owed at once. | this spec section 3; `SRV-133` | `ambre_server::routes::channels::tests::a_fold_commit_needs_the_lease_and_a_snapshot_of_the_horizon` -- database tier, the drop grants the next lease with no delay | none | verified |
 
+### 1.12 A root message takes one thread
+
+The first reply to a message creates a thread document. The relay keeps one per root, and names
+it to every writer that asks.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-213` | `POST` | A registration by a writer of the channel MUST link the caller's document to a root message of the channel as its one thread document. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-threads.md`, `MURMURE-105` | `ambre_server::db::channels::tests::a_root_registers_one_thread_document` -- database tier, a second ask answers the same document, and another root takes its own; `ambre_server::routes::channels::tests::a_writer_registers_a_thread_and_a_late_one_learns_it` -- database tier, a viewer and a document of another member are refused | none | verified |
+| `SRV-215` | `FRAME` | A thread registration MUST NOT change any other document of the channel. | this spec section 3 | `ambre_server::db::channels::tests::a_root_registers_one_thread_document` -- database tier, every other row of the channel reads the same columns after both registrations | none | verified |
+
+### 1.13 Two thread registrations race
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-214` | `CONC` | Two registrations for one root MUST link one document, and each MUST be answered that document. | this spec section 3; `MURMURE-108` | `ambre_server::db::channels::tests::two_racing_registrations_keep_one_thread_document` -- database tier, both answer the one linked document; `ambre_server::routes::channels::tests::a_writer_registers_a_thread_and_a_late_one_learns_it` -- database tier, the late caller reads `created: false` | none | verified |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 67 `verified`. What holds is the ordering, where each delta lives and the
-  replay. So do the close of a segment, its finalization, the purge, the finalization again, the
-  amendments link, their fold and a rotation's lock.
+* **Verification.** 70 `verified`. The ordering, the storage and the replay hold. So does each
+  step of a segment's life, from its close to its fold, and the thread of a root.
   The recovery
   paths are driven through real failures: a register that refuses inserts, a queue that refuses
   pushes, an index that cannot be read.
@@ -328,6 +343,11 @@ segment of the channel. One transaction, under the channel row lock, links it as
 amendments document (`SRV-201`). Of two racing links one is kept, and the other caller is answered
 it and deletes its own (`SRV-202`). A segment not yet locked takes none: its deltas still enter. The
 relay learns that a segment was amended, never what changed.
+
+**A thread link.** A writer creates a document, then asks the relay to link it to a root message
+of the channel. One transaction, under the channel row lock, links it as that root's thread
+(`SRV-213`), and touches no other document (`SRV-215`). Of two racing links one is kept, and the
+other caller is answered it (`SRV-214`). The relay learns the identifier of the root, never its text.
 
 **A fold.** A delete in the amendments erases nothing while the final snapshot still holds the
 text. So a writer folds the amendments into a new snapshot of the segment.

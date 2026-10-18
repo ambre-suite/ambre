@@ -555,6 +555,19 @@ impl LogicState {
                 amendments,
                 message,
             } => self.amendments_link_failed(channel_id, segment, amendments, &message),
+            LogicEvent::ThreadLinked {
+                channel_id,
+                segment,
+                root,
+                thread,
+            } => self.thread_linked(channel_id, segment, root, thread),
+            LogicEvent::ThreadLinkFailed {
+                channel_id,
+                segment: _,
+                root,
+                thread,
+                message,
+            } => self.thread_link_failed(channel_id, root, thread, &message),
             LogicEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,

@@ -43,14 +43,15 @@ use crate::schema::{
     AMENDMENT_BY, AMENDMENT_CONTENT, AMENDMENT_DELETED, AMENDMENTS, CATALOGUE, CATEGORIES,
     CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, DocumentKind,
     ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER, HEADER_CHANNEL,
-    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_SEGMENT, HEADER_SPACE, MENTION,
-    MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED, MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER,
-    MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS,
-    SEGMENT_DOCUMENT, SEGMENT_FOLDED, SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    HEADER_FOLDED, HEADER_FOLDED_SEQ, HEADER_KIND, HEADER_ROOT, HEADER_SEGMENT, HEADER_SPACE,
+    MENTION, MESSAGE_ALSO_IN_THREAD, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_DELETED,
+    MESSAGE_EDITED, MESSAGE_ID, MESSAGE_MEMBER, MESSAGE_NOTICE, MESSAGE_REACTIONS, MESSAGE_THREAD,
+    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_AMENDMENTS, SEGMENT_DOCUMENT, SEGMENT_FOLDED,
+    SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, MEMBER, SCHEMA_SOURCE, amended, channel_of_every_key,
-    declared_string_consts, section_of, space_of_every_key,
+    declared_string_consts, scenario_root, scenario_thread, section_of, space_of_every_key,
 };
 use crate::{ChannelState, SpaceState};
 
@@ -58,12 +59,13 @@ use crate::{ChannelState, SpaceState};
 const FROZEN: &str = include_str!("../schema/readings.txt");
 
 /// The stored values no reader of this build reads.
-const UNREAD: [&str; 5] = [
+const UNREAD: [&str; 6] = [
     "amendments:header/created_at",
     "meta:header/created_at",
     "meta:segments/*/from_ts",
     "segment:header/created_at",
     "space:header/created_at",
+    "thread:header/created_at",
 ];
 
 /// One segment below a root: a map key, a position in a list, or a mark
@@ -270,6 +272,7 @@ impl Reader<'_> {
             DocumentKind::Meta => self.channel.doc(self.channel.meta_id().document_id()),
             DocumentKind::Segment => self.channel.doc(segment.document_id()),
             DocumentKind::Amendments => self.channel.doc(amendments),
+            DocumentKind::Thread => self.channel.doc(scenario_thread(self.channel)),
             DocumentKind::Space => Some(self.space.doc()),
         }
         .expect("the reader holds every document of the scenario")
@@ -311,7 +314,7 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             _ => None,
         },
         (SEGMENTS, DocumentKind::Meta) => segment_reading(reader, stored),
-        (MESSAGES, DocumentKind::Segment) => message_reading(reader, stored),
+        (MESSAGES, DocumentKind::Segment | DocumentKind::Thread) => message_reading(reader, stored),
         (AMENDMENTS, DocumentKind::Amendments) => amendment_reading(reader, stored),
         (SPACE, DocumentKind::Space) if key == Some(SPACE_NAME) => {
             Some(format!("named {:?}", reader.space.name()?))
@@ -341,7 +344,13 @@ fn header_reading(reader: &Reader<'_>, stored: &Stored, key: &str) -> Option<Str
             Some("the space it opens as".to_owned())
         }
         HEADER_SEGMENT if value == amended(reader.channel).0.to_string() => {
-            Some("the segment it amends".to_owned())
+            Some(match stored.kind {
+                DocumentKind::Thread => "the segment of its root".to_owned(),
+                _ => "the segment it amends".to_owned(),
+            })
+        }
+        HEADER_ROOT if value == scenario_root(reader.channel)?.to_string() => {
+            Some("the message it threads".to_owned())
         }
         HEADER_FOLDED
             if header_fold(reader.doc(stored.kind))?.0 == amended(reader.channel).1
@@ -393,13 +402,17 @@ fn segment_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
 /// amendments read over it are the amendment belt's.
 fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
     let at = stored.at(0)?;
-    let messages = read_messages(
-        reader.doc(DocumentKind::Segment),
-        reader.channel.channel_id(),
-    );
+    let messages = read_messages(reader.doc(stored.kind), reader.channel.channel_id());
     let message = messages.get(at)?;
     let n = at + 1;
+    let thread = scenario_thread(reader.channel);
     match stored.key(1)? {
+        MESSAGE_THREAD if message.thread.is_some_and(|head| head.document == thread) => {
+            Some(format!("message {n} names its thread"))
+        }
+        MESSAGE_ALSO_IN_THREAD if message.also_in_thread == Some(thread) => {
+            Some(format!("message {n} is a copy of a reply in its thread"))
+        }
         MESSAGE_ID if stored.string()? == message.id.to_string() => Some(format!("message {n}")),
         MESSAGE_AUTHOR if message.author == AUTHOR => Some(format!("message {n} by the author")),
         MESSAGE_TS => Some(format!("message {n} sent at {} ms", message.ts.0)),
@@ -555,6 +568,15 @@ fn reopened_channel(channel: &ChannelState) -> ChannelState {
     reopened
         .older_ready(amendments)
         .expect("amendments this build wrote are admitted");
+    let thread = scenario_thread(channel);
+    assert_eq!(reopened.threads_to_open(), [thread]);
+    let bytes = channel.snapshot(thread).expect("a thread exports");
+    reopened
+        .apply_remote(thread, &bytes)
+        .expect("the bytes wait");
+    reopened
+        .older_ready(thread)
+        .expect("a thread this build wrote is admitted");
     reopened
 }
 
@@ -593,6 +615,10 @@ impl Scenario {
                 self.channel.doc(segment.document_id()),
             ),
             (DocumentKind::Amendments, self.channel.doc(amendments)),
+            (
+                DocumentKind::Thread,
+                self.channel.doc(scenario_thread(&self.channel)),
+            ),
             (DocumentKind::Space, Some(self.space.doc())),
         ];
         docs.into_iter()

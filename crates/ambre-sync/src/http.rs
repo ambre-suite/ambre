@@ -894,6 +894,25 @@ pub(crate) struct AmendmentsResponse {
     pub created: bool,
 }
 
+/// `POST /api/channels/{id}/threads`: the caller's new document, to register
+/// as the thread of a root message.
+#[derive(Serialize)]
+pub(crate) struct RegisterThreadRequest {
+    #[serde(with = "ambre_core::serde_id::message_id")]
+    pub root: ambre_core::MessageId,
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+}
+
+/// The thread document of a root after a registration. `created` is false
+/// when an earlier registration linked another.
+#[derive(Deserialize)]
+pub(crate) struct ThreadResponse {
+    #[serde(with = "ambre_core::serde_id::document_id")]
+    pub thread: ambre_core::DocumentId,
+    pub created: bool,
+}
+
 /// `POST /api/channels/{id}/segments/{segment}/lease`: the lease, or none
 /// and when to ask again.
 #[derive(Deserialize)]
