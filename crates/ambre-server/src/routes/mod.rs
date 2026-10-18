@@ -126,7 +126,10 @@ pub fn api_router(
             "/documents/{id}/media",
             axum::routing::post(media_confirm_upload),
         )
-        .route("/channels", axum::routing::post(create_channel))
+        .route(
+            "/channels",
+            axum::routing::post(create_channel).get(list_member_channels),
+        )
         .route(
             "/channels/direct",
             axum::routing::post(create_direct_message),

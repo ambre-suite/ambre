@@ -165,6 +165,9 @@ impl LogicState {
             LogicCommand::CloseChannel { channel_id } => self.close_channel(channel_id),
             LogicCommand::OpenDirectMessage { draft, now } => self.open_direct_message(draft, now),
             LogicCommand::FetchActivity => self.send_to_sync(SyncCommand::FetchActivity),
+            LogicCommand::ListMemberChannels => {
+                self.send_to_sync(SyncCommand::ListMemberChannels);
+            }
             LogicCommand::MarkAllRead => self.send_to_sync(SyncCommand::MarkAllRead),
             LogicCommand::CreateSpace {
                 space_id,
@@ -485,6 +488,11 @@ impl LogicState {
             } => self.channel_request_failed(channel_id, message),
             LogicEvent::SpaceChannels { space_id, channels } => {
                 self.space_channels(space_id, &channels);
+            }
+            // The sidebar learns of the channels, and none of them opens
+            // (the Murmure channels spec).
+            LogicEvent::MemberChannels { channels } => {
+                self.send_to_ui(UiEvent::MemberChannels { channels });
             }
 
             // -- Meetings (participant push) -----------------------------------

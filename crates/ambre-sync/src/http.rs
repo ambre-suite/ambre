@@ -721,6 +721,39 @@ pub(crate) struct SpaceChannelsResponse {
     pub channels: Vec<ambre_core::ChannelId>,
 }
 
+/// `GET /api/channels`: every channel the caller is a member of.
+#[derive(Deserialize)]
+pub(crate) struct MemberChannelsResponse {
+    pub channels: Vec<MemberChannelEntry>,
+}
+
+/// One channel of [`MemberChannelsResponse`]: its space, none for a direct
+/// message, and whether the space lists it.
+#[derive(Deserialize)]
+pub(crate) struct MemberChannelEntry {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id::option")]
+    pub space_id: Option<ambre_core::SpaceId>,
+    pub public: bool,
+}
+
+impl MemberChannelEntry {
+    /// The entry as the bus carries it. A channel in no space is a direct
+    /// message, whatever its flag says.
+    pub(crate) fn into_member_channel(self) -> ambre_bus::MemberChannel {
+        let place = match (self.space_id, self.public) {
+            (Some(space), true) => ambre_bus::ChannelPlace::Public(space),
+            (Some(space), false) => ambre_bus::ChannelPlace::Private(space),
+            (None, _) => ambre_bus::ChannelPlace::Direct,
+        };
+        ambre_bus::MemberChannel {
+            channel_id: self.channel_id,
+            place,
+        }
+    }
+}
+
 /// `GET /api/activity`: per segment and thread of every channel of the
 /// caller, whether it holds something past the caller's cursor.
 #[derive(Deserialize)]

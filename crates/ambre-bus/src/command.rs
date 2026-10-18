@@ -183,6 +183,11 @@ pub enum SyncCommand {
     ListSpaceChannels {
         space_id: SpaceId,
     },
+    /// List every channel this user is a member of, private channels and
+    /// direct messages included (`SRV-191`). Answered by
+    /// [`crate::LogicEvent::MemberChannels`]; a failure is logged and answers
+    /// nothing, since the next share of a Murmure document asks again.
+    ListMemberChannels,
 
     // -- Flow control (posted by the Main relay, never by Logic) ---------------
     /// The path back to the Logic thread is full: stop reading the socket

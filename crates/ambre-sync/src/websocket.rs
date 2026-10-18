@@ -779,6 +779,9 @@ impl SyncState {
             SyncEvent::SpaceChannelsListed { space_id, result } => {
                 self.space_channels_listed(space_id, result);
             }
+            SyncEvent::MemberChannelsListed { asked, result } => {
+                self.member_channels_listed(asked, result);
+            }
             SyncEvent::ChannelCreated { channel_id, result } => {
                 self.channel_answered(
                     channel_id,
@@ -1285,6 +1288,11 @@ impl SyncState {
                     document_id,
                     doc_type,
                 });
+                // A channel reaches a new member as the share of its meta
+                // (`SRV-192`): the listing says which channel it is.
+                if doc_type == DocType::Murmure {
+                    self.handle_list_member_channels();
+                }
             }
 
             // Only a subscription is refused so: a removal missed while the

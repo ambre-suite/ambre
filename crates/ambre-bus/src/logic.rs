@@ -175,6 +175,11 @@ pub enum LogicCommand {
     /// [`crate::UiEvent::ChannelActivity`].
     FetchActivity,
 
+    /// Ask which channels this user belongs to, for the sidebar at start
+    /// (the Murmure channels spec). Opens nothing: answered by
+    /// [`crate::UiEvent::MemberChannels`].
+    ListMemberChannels,
+
     /// Mark every channel read (the Murmure unread spec).
     MarkAllRead,
 

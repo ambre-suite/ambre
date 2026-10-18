@@ -22,8 +22,8 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelActivity, ChannelId, DirectMessageEvent, DocType, DocumentId, MeetingId, MurmureEvent,
-    RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
+    ChannelActivity, ChannelId, DirectMessageEvent, DocType, DocumentId, MeetingId, MemberChannel,
+    MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -109,6 +109,10 @@ pub enum UiEvent {
     /// channel just read (the Murmure unread spec). A channel absent here keeps the
     /// mark the view last drew for it.
     ChannelActivity { channels: Vec<ChannelActivity> },
+
+    /// Every channel this user is a member of, whole. It comes at start, and
+    /// again each time the relay adds the user to one. None of them is open.
+    MemberChannels { channels: Vec<MemberChannel> },
 
     /// What an open space tells its view: its catalogue, and the outcome of
     /// a creation or a join.

@@ -64,6 +64,57 @@ pub struct SpaceChannelsJson {
     pub channels: Vec<ambre_core::ChannelId>,
 }
 
+/// Tells every connection of `user` that `meta` was shared with them. A
+/// channel has no wire message of its own (`SRV-102`), so this is how a
+/// member learns of one (`SRV-192`). Best-effort: the listing is the truth.
+pub(crate) async fn share_notice(
+    state: &AppState,
+    user: &ambre_core::UserId,
+    meta: ambre_core::DocumentId,
+) {
+    let msg =
+        crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
+            document_id: meta,
+            doc_type: ambre_core::DocType::Murmure,
+        });
+    let _ = crate::redis_ops::user_broadcast(&state.redis, user, &msg).await;
+}
+
+/// One channel of the caller, as their listing answers it. `space_id` is
+/// `null` for a direct message.
+#[derive(serde::Serialize)]
+pub struct MemberChannelJson {
+    #[serde(with = "ambre_core::serde_id::channel_id")]
+    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::space_id::option")]
+    pub space_id: Option<ambre_core::SpaceId>,
+    pub public: bool,
+}
+
+/// The channels of the caller.
+#[derive(serde::Serialize)]
+pub struct MemberChannelsJson {
+    pub channels: Vec<MemberChannelJson>,
+}
+
+/// `GET /api/channels`: every channel the caller is a member of, by its
+/// `meta` row, with its space and whether it is public (`SRV-191`).
+pub async fn list_member_channels(
+    State(state): State<Arc<AppState>>,
+    auth: auth::AuthSession,
+) -> Result<axum::Json<MemberChannelsJson>, AppError> {
+    let channels = db::list_member_channels(&state.db, &auth.user_id)
+        .await?
+        .into_iter()
+        .map(|row| MemberChannelJson {
+            channel_id: row.id,
+            space_id: row.space_id,
+            public: row.is_public,
+        })
+        .collect();
+    Ok(axum::Json(MemberChannelsJson { channels }))
+}
+
 /// `GET /api/spaces/{id}/channels`: the channels the relay holds as public
 /// in the space, to a member of the space document alone (`SRV-189`).
 ///
@@ -322,6 +373,13 @@ pub async fn create_direct_message(
         db::DirectMessage::Existing(channel_id) => (channel_id, false),
     };
     tracing::info!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created, "direct message");
+    // Each member's clients learn of the new channel as the share of its
+    // `meta`, the creator's other clients included (`SRV-192`).
+    if created {
+        for (member, _) in &keys {
+            share_notice(&state, member, meta).await;
+        }
+    }
     Ok(axum::Json(DirectMessageJson {
         channel_id,
         created,
@@ -1967,6 +2025,122 @@ mod tests {
                 .expect("a member");
             assert_eq!(row.doc_key_enc, [byte; 48]);
         }
+    }
+
+    /// `SRV-191`: a user lists each channel whose `meta` holds a row of
+    /// theirs. Here that is a public and a private channel of a space, and a
+    /// direct message with no space. A channel of someone else stays out.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_user_lists_every_channel_they_are_a_member_of(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let space = space(&state, alice, &[(carol, Role::Editor)]).await;
+        let public = public_channel(&state, alice, space).await;
+        let private = private_channel(&state, alice, space).await;
+        private_channel(&state, carol, space).await;
+        let req = direct_request(alice, &[bob]);
+        let direct = req.channel_id;
+        open_direct(&state, alice, req).await.expect("create");
+
+        let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
+        let mut want = vec![
+            (public.id, Some(space), true),
+            (private.id, Some(space), false),
+            (direct, None, false),
+        ];
+        want.sort_by_key(|(id, ..)| *id.as_bytes());
+        let got: Vec<_> = listed(alice)
+            .await
+            .expect("listed")
+            .0
+            .channels
+            .into_iter()
+            .map(|c| (c.channel_id, c.space_id, c.public))
+            .collect();
+        assert_eq!(got, want);
+        let bobs: Vec<_> = listed(bob)
+            .await
+            .expect("listed")
+            .0
+            .channels
+            .into_iter()
+            .map(|c| (c.channel_id, c.space_id, c.public))
+            .collect();
+        assert_eq!(bobs, vec![(direct, None, false)]);
+    }
+
+    /// The next message on `stream`, decoded, or `None` after `millis`.
+    async fn next_notice(
+        stream: &mut rustis::client::PubSubStream,
+        millis: u64,
+    ) -> Option<ambre_protocol::ws::WsServerMsg> {
+        use futures_util::StreamExt;
+        let heard = tokio::time::timeout(std::time::Duration::from_millis(millis), stream.next())
+            .await
+            .ok()?
+            .expect("a message")
+            .expect("readable");
+        Some(ambre_protocol::ws::decode_server_msg(heard.payload()).expect("decodes"))
+    }
+
+    /// `SRV-192`: a new direct message reaches the topic of each of its
+    /// members, its creator included, as the share of its `meta`. The same
+    /// request again finds the channel and says nothing. An invite into a
+    /// private channel reaches the invitee the same way.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_member_a_channel_adds_hears_the_share_of_its_meta(pool: sqlx::PgPool) {
+        use ambre_protocol::ws::WsServerMsg;
+        use rustis::commands::PubSubCommands;
+
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let bob = user(&state, "bob@test.dev").await;
+        let carol = user(&state, "carol@test.dev").await;
+        let mut topics = Vec::new();
+        for member in [alice, bob, carol] {
+            let listener = rustis::client::Client::connect("redis://localhost:6379")
+                .await
+                .expect("redis");
+            topics.push(
+                listener
+                    .subscribe(format!("user:{member}"))
+                    .await
+                    .expect("subscribe"),
+            );
+        }
+        let shared = |notice: Option<WsServerMsg>, meta: DocumentId| {
+            matches!(
+                notice,
+                Some(WsServerMsg::DocumentShared { document_id, doc_type })
+                    if document_id == meta && doc_type == ambre_core::DocType::Murmure
+            )
+        };
+
+        let req = direct_request(alice, &[bob]);
+        let meta = req.meta_id.document_id();
+        open_direct(&state, alice, req).await.expect("create");
+        for stream in &mut topics[..2] {
+            assert!(shared(next_notice(stream, 5000).await, meta));
+        }
+        open_direct(&state, bob, direct_request(bob, &[alice]))
+            .await
+            .expect("open");
+        for stream in &mut topics {
+            assert!(next_notice(stream, 300).await.is_none(), "a reuse spoke");
+        }
+
+        let space = space(&state, alice, &[]).await;
+        let channel = private_channel(&state, alice, space).await;
+        let meta = channel.meta.document_id();
+        assert_eq!(
+            invite(&state, alice, meta, "carol@test.dev", [6; 16]).await,
+            StatusCode::OK
+        );
+        assert!(shared(next_notice(&mut topics[2], 5000).await, meta));
     }
 
     /// `SRV-176`: a request for a set of members that already has a direct

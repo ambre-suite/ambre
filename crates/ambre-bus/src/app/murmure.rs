@@ -15,7 +15,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId,
+    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, SegmentId, Seq, SpaceId,
+    UserId,
 };
 
 /// One document a channel groups, as the relay lists it.
@@ -48,6 +49,26 @@ pub struct ChannelActivity {
     /// The new messages of the channel, once the loaded document gives the
     /// number (`MURMURE-120`). `None` while only the mark is known.
     pub unread: Option<UnreadCount>,
+}
+
+/// Where a channel the user belongs to lives, as the relay lists it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChannelPlace {
+    /// A public channel of the space: its catalogue lists it.
+    Public(SpaceId),
+    /// A private channel of the space: only its members know it.
+    Private(SpaceId),
+    /// A direct message, in no space.
+    Direct,
+}
+
+/// One channel the user is a member of, answering
+/// [`LogicCommand::ListMemberChannels`](crate::LogicCommand::ListMemberChannels).
+/// Learning of it opens nothing (`MURMURE-475`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemberChannel {
+    pub channel_id: ChannelId,
+    pub place: ChannelPlace,
 }
 
 /// How many messages of a channel are past the reader's cursor. A distinct

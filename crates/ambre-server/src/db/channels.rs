@@ -98,6 +98,42 @@ pub async fn list_space_public_channels(
     Ok(ids.into_iter().map(uuid_row_to_id).collect())
 }
 
+/// A channel `user` is a member of, as their listing answers it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct MemberChannelRow {
+    pub id: ambre_core::ChannelId,
+    /// `None` for a direct message.
+    pub space_id: Option<ambre_core::SpaceId>,
+    pub is_public: bool,
+}
+
+/// Every channel whose `meta` holds a row of `user`, by identifier
+/// (`SRV-191`).
+pub async fn list_member_channels(
+    pool: &PgPool,
+    user: &ambre_core::UserId,
+) -> Result<Vec<MemberChannelRow>, AppError> {
+    let rows = sqlx::query(
+        "SELECT c.id, c.space_id, c.is_public FROM channels c \
+         JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
+         JOIN document_members m ON m.document_id = d.document_id \
+         WHERE m.user_id = $1 ORDER BY c.id",
+    )
+    .bind(id_to_uuid(*user))
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            let space_id: Option<uuid::Uuid> = r.try_get("space_id")?;
+            Ok(MemberChannelRow {
+                id: uuid_row_to_id(r.try_get("id")?),
+                space_id: space_id.map(uuid_row_to_id),
+                is_public: r.try_get("is_public")?,
+            })
+        })
+        .collect()
+}
+
 /// The channel a document belongs to, or `None` for a document outside
 /// every channel.
 pub async fn channel_of_document(

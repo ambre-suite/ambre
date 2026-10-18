@@ -1282,6 +1282,43 @@ mod tests {
         );
     }
 
+    /// The view's ask for the user's channels reaches Sync, and the answer
+    /// reaches the view whole. It opens no channel and asks for no document.
+    #[test]
+    fn the_users_channels_reach_the_view_and_open_nothing() {
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::ListMemberChannels);
+        let sent = drain(&sync);
+        assert!(
+            matches!(sent.as_slice(), [SyncCommand::ListMemberChannels]),
+            "got {sent:?}"
+        );
+
+        let channels = vec![
+            ambre_bus::MemberChannel {
+                channel_id: ChannelId::new(),
+                place: ambre_bus::ChannelPlace::Private(ambre_bus::SpaceId::new()),
+            },
+            ambre_bus::MemberChannel {
+                channel_id: ChannelId::new(),
+                place: ambre_bus::ChannelPlace::Direct,
+            },
+        ];
+        state.handle_logic_event(LogicEvent::MemberChannels {
+            channels: channels.clone(),
+        });
+        let shown: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+        assert!(
+            matches!(shown.as_slice(), [UiEvent::MemberChannels { channels: c }] if *c == channels),
+            "got {shown:?}"
+        );
+        assert!(
+            drain(&sync).is_empty(),
+            "learning of a channel opens nothing"
+        );
+        assert!(state.channels.is_empty(), "no channel state is held");
+    }
+
     #[test]
     fn the_activity_commands_reach_the_sync_worker() {
         let (mut state, _, sync) = harness();

@@ -116,20 +116,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-473` | `POST` | At sign-in, the client MUST learn every channel its user belongs to, private channels and direct messages included, from the relay's listing. | this spec section 3; `ambre-spec-server.md`, `SRV-191` | not built | unbuilt -- lands with the `A member's channels` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-474` | `POST` | A channel its user is added to, by an invite or a new direct message, MUST reach every open client of that user with no reload. | this spec section 3; `ambre-spec-server.md`, `SRV-192` | not built | unbuilt -- lands with the `A member's channels` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-475` | `FRAME` | Learning of a channel MUST NOT open it, nor fetch any of its documents. | this spec section 3; `MURMURE-473` | not built | unbuilt -- lands with the `A member's channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-473` | `POST` | Asked for its user's channels, the client MUST learn every channel its user belongs to, private channels and direct messages included, from the relay's listing. | this spec section 3; `ambre-spec-server.md`, `SRV-191` | `ambre_logic::channels::tests::the_users_channels_reach_the_view_and_open_nothing` -- the view's ask reaches Sync and the answer reaches the view whole; `ambre_sync::channels::tests::a_listing_of_the_users_channels_forwards_their_places` -- the relay's listing decodes to each channel's place, and an overtaken answer hands nothing on | none | verified |
+| `MURMURE-474` | `POST` | A channel its user is added to, by an invite or a new direct message, MUST reach every open client of that user with no reload. | this spec section 3; `ambre-spec-server.md`, `SRV-192` | `ambre_sync::channels::tests::the_share_of_a_murmure_document_lists_the_users_channels` -- the relay's share of a `meta` lists the channels again, and no other share does | none | verified |
+| `MURMURE-475` | `FRAME` | Learning of a channel MUST NOT open it, nor fetch any of its documents. | this spec section 3; `MURMURE-473` | `ambre_logic::channels::tests::the_users_channels_reach_the_view_and_open_nothing` -- the answer sends nothing to Sync and holds no channel state | none | verified |
 
 * **Budget.** an invite wraps one key. The invitee then walks the key chain back to the boundary,
   one small open per rotation, charged to the crypto rows of `ambre-spec-budgets.md section 1`. A
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 29 `verified`, 20 `unimplemented`. The relay holds a private channel, its leave
-  and its delete, and the key links of a channel under its `meta` document. The Logic thread creates
-  a private channel without the catalogue, the owner's client deletes one, and a member's client
-  leaves one. A direct message opens, is reused, and takes a name; an invite opens a channel. The
-  third member notice, the segment a rotation closes, conversion and archive are not built.
+* **Verification.** 32 `verified`, 17 `unimplemented`. The relay holds a private channel, its leave,
+  its delete and its key links. A client creates, deletes and leaves one, and learns its user's
+  channels. A direct message opens, is reused and takes a name; an invite opens a channel. The third
+  member notice, the segment a rotation closes, conversion and archive are not built.
 
 ---
 
@@ -191,8 +190,9 @@ a leave.
 4. For a direct message of two, both members see the notice before the invite applies.
 
 **A member learns of a channel from the relay.** The membership is the channel list, so the relay
-lists each channel of a user at sign-in (`MURMURE-473`). An invite or a new direct message reaches
-every connection of the member it adds, naming the channel (`MURMURE-474`).
+lists each channel of a user when the client asks (`MURMURE-473`). An invite or a new direct message
+reaches every connection of the member it adds as the share of its `meta`. The client then lists
+its channels again (`MURMURE-474`).
 
 **A leave, in steps.** The leaving member adds a signed entry, and the relay removes the row and
 marks the rotation owed (`SYNC-127`). The first member client to send rotates the key and closes

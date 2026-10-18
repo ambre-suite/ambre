@@ -357,6 +357,13 @@ enum SyncEvent {
         space_id: ambre_bus::SpaceId,
         result: Result<Vec<ChannelId>, String>,
     },
+    /// The answer to a listing of the user's channels
+    /// (`SyncCommand::ListMemberChannels`).
+    MemberChannelsListed {
+        /// The listing this answers, as `member_channels_asked` counted it.
+        asked: u32,
+        result: Result<Vec<ambre_bus::MemberChannel>, String>,
+    },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
@@ -952,6 +959,10 @@ pub struct SyncState {
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
     socket_opens: u32,
+    /// The listings of the user's channels asked so far. Each answer is
+    /// whole, so only the latest one is handed on: an older one that
+    /// crossed it would drop a channel just added.
+    member_channels_asked: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Vec<u8>>>,
@@ -1042,6 +1053,7 @@ impl SyncState {
             resend_ticket: 0,
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
+            member_channels_asked: 0,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1311,6 +1323,7 @@ impl SyncState {
             SyncCommand::ListSpaceChannels { space_id } => {
                 self.handle_list_space_channels(space_id)
             }
+            SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

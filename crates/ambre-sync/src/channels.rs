@@ -1,7 +1,7 @@
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MetaId, SealedChannelKey,
-    SegmentId, SpaceId,
+    ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MemberChannel, MetaId,
+    SealedChannelKey, SegmentId, SpaceId,
 };
 use ambre_core::DocType;
 use ambre_crypto::aead::NONCE_LEN;
@@ -504,6 +504,53 @@ impl SyncState {
             Ok(channels) => self.send_to_logic(LogicEvent::SpaceChannels { space_id, channels }),
             Err(message) => {
                 tracing::warn!("Sync: listing the channels of space {space_id} failed: {message}");
+            }
+        }
+    }
+
+    /// List every channel this user is a member of (`SRV-191`), at start and
+    /// on each share of a Murmure document. That share is how the relay tells
+    /// a member a channel added them (`SRV-192`).
+    pub(crate) fn handle_list_member_channels(&mut self) {
+        self.member_channels_asked = self.member_channels_asked.wrapping_add(1);
+        let asked = self.member_channels_asked;
+        let Some(tx) = self.event_tx.clone() else {
+            tracing::warn!("Sync: no relay on this transport, no channels of the user");
+            return;
+        };
+        let api_base = self.api_base.clone();
+        let url_scheme = self.url_scheme;
+        let auth = self.auth_context();
+        wasm_bindgen_futures::spawn_local(async move {
+            let url = format!("{url_scheme}://{api_base}/api/channels");
+            let result = http::get_json_auth::<http::MemberChannelsResponse>(&url, auth)
+                .await
+                .map(|resp| {
+                    resp.channels
+                        .into_iter()
+                        .map(http::MemberChannelEntry::into_member_channel)
+                        .collect()
+                });
+            let _ = tx.send(SyncEvent::MemberChannelsListed { asked, result });
+        });
+    }
+
+    /// The answer of
+    /// [`handle_list_member_channels`](Self::handle_list_member_channels), on
+    /// the Sync loop. A failure answers nothing: the next share asks again.
+    /// An answer a later listing overtook answers nothing either.
+    pub(crate) fn member_channels_listed(
+        &self,
+        asked: u32,
+        result: Result<Vec<MemberChannel>, String>,
+    ) {
+        if asked != self.member_channels_asked {
+            return;
+        }
+        match result {
+            Ok(channels) => self.send_to_logic(LogicEvent::MemberChannels { channels }),
+            Err(message) => {
+                tracing::warn!("Sync: listing the channels of the user failed: {message}");
             }
         }
     }
@@ -1070,6 +1117,77 @@ mod tests {
             ),
             "{events:?}"
         );
+    }
+
+    /// The share of a Murmure document asks for the user's channels again,
+    /// since a channel reaches a new member as the share of its meta. The
+    /// share of any other document asks nothing.
+    #[test]
+    fn the_share_of_a_murmure_document_lists_the_users_channels() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        for doc_type in [DocType::Prose, DocType::Murmure] {
+            state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentShared {
+                document_id: DocumentId::new(),
+                doc_type,
+            });
+        }
+        assert_eq!(state.member_channels_asked, 1, "one listing");
+        let shared = rx
+            .try_iter()
+            .filter(|e| matches!(e, LogicEvent::DocumentShared { .. }))
+            .count();
+        assert_eq!(shared, 2, "each share still reaches Logic");
+    }
+
+    /// The relay's listing of the user's channels decodes to their places
+    /// and reaches the Logic thread. A failed listing answers nothing, nor
+    /// does one a later listing overtook.
+    #[test]
+    fn a_listing_of_the_users_channels_forwards_their_places() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(sink, String::new(), None);
+        state.handle_list_member_channels();
+        state.handle_list_member_channels();
+        let space = SpaceId::new();
+        let (public, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
+        let body = format!(
+            r#"{{"channels":[
+                {{"channel_id":"{public}","space_id":"{space}","public":true}},
+                {{"channel_id":"{private}","space_id":"{space}","public":false}},
+                {{"channel_id":"{direct}","space_id":null,"public":false}}]}}"#
+        );
+        let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
+        let channels = answer
+            .channels
+            .into_iter()
+            .map(http::MemberChannelEntry::into_member_channel)
+            .collect();
+        state.member_channels_listed(1, Ok(Vec::new()));
+        state.member_channels_listed(2, Ok(channels));
+        state.member_channels_listed(2, Err("HTTP 500".into()));
+        let events: Vec<_> = rx
+            .try_iter()
+            .filter_map(|e| match e {
+                LogicEvent::MemberChannels { channels } => Some(channels),
+                _ => None,
+            })
+            .collect();
+        let expected = vec![
+            MemberChannel {
+                channel_id: public,
+                place: ambre_bus::ChannelPlace::Public(space),
+            },
+            MemberChannel {
+                channel_id: private,
+                place: ambre_bus::ChannelPlace::Private(space),
+            },
+            MemberChannel {
+                channel_id: direct,
+                place: ambre_bus::ChannelPlace::Direct,
+            },
+        ];
+        assert_eq!(events, vec![expected], "the latest listing alone");
     }
 
     #[test]

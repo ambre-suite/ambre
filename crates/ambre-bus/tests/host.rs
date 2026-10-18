@@ -21,9 +21,10 @@
 
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId,
-    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, MemberInfo, MemberStanding,
-    RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand, UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelPlace,
+    ClipboardCell, ClipboardPayload, DocType, DocumentId, LogicEvent, MemberChannel, MemberInfo,
+    MemberStanding, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand,
+    TrameCommand, UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -266,6 +267,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::LeaveChannel { .. } => "LeaveChannel",
         SyncCommand::CreateDirectMessage { .. } => "CreateDirectMessage",
         SyncCommand::ListSpaceChannels { .. } => "ListSpaceChannels",
+        SyncCommand::ListMemberChannels => "ListMemberChannels",
         SyncCommand::HoldInbound => "HoldInbound",
         SyncCommand::ReleaseInbound => "ReleaseInbound",
         SyncCommand::MarkRead { .. } => "MarkRead",
@@ -307,6 +309,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::ChannelLeft { .. } => "ChannelLeft",
         LogicEvent::ChannelRequestFailed { .. } => "ChannelRequestFailed",
         LogicEvent::SpaceChannels { .. } => "SpaceChannels",
+        LogicEvent::MemberChannels { .. } => "MemberChannels",
         LogicEvent::MeetingParticipantJoined { .. } => "MeetingParticipantJoined",
         LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
         LogicEvent::DocumentOpenFailed { .. } => "DocumentOpenFailed",
@@ -318,8 +321,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 24;
-const EVENT_VARIANTS: usize = 35;
+const SYNC_VARIANTS: usize = 25;
+const EVENT_VARIANTS: usize = 36;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -417,6 +420,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
         SyncCommand::ListSpaceChannels { space_id: space },
+        SyncCommand::ListMemberChannels,
         SyncCommand::CreateDirectMessage {
             channel_id: chan,
             meta,
@@ -561,6 +565,18 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SpaceChannels {
             space_id: space,
             channels: vec![chan],
+        },
+        LogicEvent::MemberChannels {
+            channels: vec![
+                MemberChannel {
+                    channel_id: chan,
+                    place: ChannelPlace::Private(space),
+                },
+                MemberChannel {
+                    channel_id: ChannelId::new(),
+                    place: ChannelPlace::Direct,
+                },
+            ],
         },
         LogicEvent::MeetingParticipantJoined {
             meeting_id: MeetingId::new(),
