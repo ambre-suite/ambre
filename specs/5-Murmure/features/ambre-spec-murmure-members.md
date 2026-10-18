@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-452` | `POST` | The palette MUST list, after the channels, the members of the current space whose display name matches what the user types. | this spec section 4; `MURMURE-172` | not built | unbuilt -- lands with the `A direct message from a member` Story (`ambre-roadmap.md` E5). The palette lists the channels; a member listed there needs the key check before it can be chosen | unimplemented |
 | `MURMURE-453` | `POST` | The filter of the member list MUST keep only the members whose display name matches what the user types. | this spec section 4 | `ambre_murmure::members::tests::the_filter_keeps_the_members_whose_name_matches` -- a substring in any case, in the order of the list | none | verified |
 | `MURMURE-454` | `FRAME` | Finding a member MUST NOT send what the user types outside the client. | this spec section 3; `MURMURE-174` | type-level -- the filter takes the list the client holds and the query, and returns a borrow of that list: it holds no channel to the Sync worker | none | verified |
 
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-455` | `POST` | Choosing a member MUST open the direct message between the user and that member alone. | this spec section 4; `MURMURE-051` | not built | unbuilt -- lands with the `A direct message from a member` Story (`ambre-roadmap.md` E5). The key of the member is fetched by its user id and checked against the pin, which only an invite does today | unimplemented |
 
 **Frame:** `MURMURE-053`
 
@@ -166,8 +166,8 @@ the member reads it (`ambre-spec-user-settings.md`). A connection copies it into
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No member is chosen from the list.** The palette and the choice of a member wait on the
-  `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5). The choice needs the key
+* **No member is chosen from the list.** The choice of a member waits on the
+  `A direct message from a member` Story (`ambre-roadmap.md` E5). The choice needs the key
   check of `ambre-spec-key-verification.md` before a direct message wraps a key.
 * **A private channel or a direct message lists no members.** The list shows the members of the
   space, so its button shows on a channel in a space alone. The members of a channel wait on the

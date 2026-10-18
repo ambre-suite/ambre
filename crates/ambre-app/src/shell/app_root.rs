@@ -12,14 +12,14 @@ use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{ChannelHeader, ChannelList, MemberList, MurmureRelay};
 
 /// The table the command palette searches: the booted application's whole
-/// declaration, never a menu's subset (`CHROME-008`). Murmure declares none
-/// until its palette lands, and never borrows another application's table.
+/// declaration, never a menu's subset (`CHROME-008`). No application
+/// borrows another's table.
 pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::Command] {
     match kind {
         DocType::Toile => ambre_toile::ui::commands::COMMANDS,
         DocType::Prose => ambre_prose::commands::COMMANDS,
         DocType::Trame => trame_chrome::COMMANDS,
-        DocType::Murmure => &[],
+        DocType::Murmure => ambre_murmure::commands::COMMANDS,
     }
 }
 
@@ -381,6 +381,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let commands = commands.clone();
         move |id: CommandId| commands.run(id)
     });
+    // The entries the booted application adds to the palette: the channels
+    // of a Murmure page, none for the others.
+    let murmure = commands.handler.murmure();
+    let palette_entries = Signal::derive(move || {
+        murmure
+            .map(|h| h.relay.palette_entries().get())
+            .unwrap_or_default()
+    });
+    let on_palette_entry = Callback::new(move |key: [u8; 16]| {
+        if let Some(h) = murmure {
+            h.choose(key);
+        }
+    });
 
     // A panel's intent becomes its application's command in that application's
     // crate (`ARCH-018`). The shell only sends it to the routed document.
@@ -509,14 +522,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // A Murmure page lays out its channel list, its channel and its thread
     // (the Murmure layout spec). It has no formula bar, tabs or status bar.
     let shell = if boot_is_murmure {
-        let send = Callback::new({
-            let to_logic = to_logic.clone();
-            move |command: LogicCommand| {
-                if let Err(e) = to_logic.try_send(command) {
-                    tracing::warn!("Murmure command dropped, Logic channel full ({e:?})");
-                }
-            }
-        });
+        let send = super::commands::murmure_send(to_logic.clone());
         view! {
             <MurmureShell relay=murmure_relay send=send>{header.clone()}</MurmureShell>
         }
@@ -744,11 +750,14 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
         // The command palette (`CHROME-008`): every command the booted
         // application declares, searchable, whether or not a menu shows it. One
-        // overlay for both, fed by the app's own table.
+        // overlay for both, fed by the app's own table. Murmure lists its
+        // channels before its commands (the Murmure keyboard spec).
         <ambre_chrome::CommandPalette
             open=palette_open
             table=palette_table(booted)
             on_command=on_command
+            entries=palette_entries
+            on_entry=on_palette_entry
         />
         // Find panel, pinned top-right. Trame ships `trame-find-replace`;
         // Toile ships a find-only panel (`toile-find`). The booted app kind
@@ -990,6 +999,10 @@ mod tests {
         );
         assert_eq!(fed(DocType::Prose), ids(ambre_prose::commands::COMMANDS));
         assert_eq!(fed(DocType::Trame), ids(trame_chrome::COMMANDS));
+        assert_eq!(
+            fed(DocType::Murmure),
+            ids(ambre_murmure::commands::COMMANDS)
+        );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }
 

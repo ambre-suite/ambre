@@ -17,6 +17,7 @@ mod channel;
 /// (leptos CSR + DOM).
 #[cfg(target_arch = "wasm32")]
 pub mod chrome;
+pub mod commands;
 mod delta;
 mod error;
 mod layout;

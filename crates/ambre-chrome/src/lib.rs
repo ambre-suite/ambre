@@ -64,7 +64,10 @@ pub use font::{FONT_FAMILIES, FontPicker};
 pub use format::{FONT_SIZES, FontSizeSelect, FormatToggle};
 pub use handler::{CommandHandler, FilePick, KeyRoute, ShellAction};
 pub use menu::{MenuKey, aria_bool, focus_first_item, initial, menu_key, on_menu_keydown};
-pub use palette::{CommandPalette, filter as filter_commands, matches as command_matches};
+pub use palette::{
+    CommandPalette, PaletteEntry, PaletteRow, filter as filter_commands,
+    matches as command_matches, rows as palette_rows,
+};
 pub use passphrase::{PassphraseDialog, PassphraseIntent};
 pub use shortcut::Kbd;
 pub use status::{PerfChip, PerfDetail, StatusLabel, ZOOM_PRESETS, ZoomChip, ZoomFactor};

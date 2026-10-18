@@ -356,6 +356,31 @@ impl Sidebar {
         push(&mut sections, SidebarGroup::ToJoin, None, to_join);
         sections
     }
+
+    /// The channel a jump opens: the next one with activity after `from` in
+    /// sidebar order, or the previous one, wrapping round (`MURMURE-176`).
+    /// A channel to join is never one, so a jump joins nothing. `None` when
+    /// no other channel has activity.
+    pub fn next_with_activity(&self, from: Option<ChannelId>, forward: bool) -> Option<ChannelId> {
+        let mut order: Vec<SidebarEntry> = self
+            .sections()
+            .into_iter()
+            .filter(|s| s.group != SidebarGroup::ToJoin)
+            .flat_map(|s| s.entries)
+            .collect();
+        if !forward {
+            order.reverse();
+        }
+        let start = from
+            .and_then(|from| order.iter().position(|e| e.channel == from))
+            .map_or(0, |at| at + 1);
+        let (before, after) = order.split_at(start.min(order.len()));
+        after
+            .iter()
+            .chain(before)
+            .find(|e| e.activity != Activity::None && Some(e.channel) != from)
+            .map(|e| e.channel)
+    }
 }
 
 /// The order of a public channel: its rank in the catalogue, ties by
@@ -796,5 +821,60 @@ mod tests {
         sidebar.forget(b);
         assert!(!sidebar.is_member(b));
         assert_eq!(of(&sidebar, b), Activity::None);
+    }
+
+    /// A jump opens the next channel with activity in sidebar order, or the
+    /// previous one, wrapping round. It skips the quiet ones, the one it
+    /// starts from and the channels to join (`MURMURE-176`).
+    #[test]
+    fn a_jump_opens_the_next_channel_with_activity_in_sidebar_order() {
+        let space = SpaceId::new();
+        let (a, a_m) = public(space);
+        let (b, b_m) = public(space);
+        let (c, c_m) = public(space);
+        let open = ChannelId::new();
+        let mut sidebar = Sidebar::default();
+        sidebar.set_member_channels(vec![c_m, a_m, b_m], &[space]);
+        sidebar.set_catalogue(
+            space,
+            None,
+            Vec::new(),
+            vec![
+                listed(a, "a", None, 0),
+                listed(b, "b", None, 1),
+                listed(c, "c", None, 2),
+                listed(open, "open", None, 3),
+            ],
+        );
+        let active = |channel_id| ChannelActivity {
+            channel_id,
+            active: true,
+            unread: None,
+            mentions: None,
+        };
+        assert_eq!(sidebar.next_with_activity(None, true), None);
+
+        sidebar.set_activity(&[active(a), active(c), active(open)]);
+        assert_eq!(sidebar.next_with_activity(None, true), Some(a));
+        assert_eq!(sidebar.next_with_activity(Some(a), true), Some(c));
+        assert_eq!(sidebar.next_with_activity(Some(b), true), Some(c));
+        assert_eq!(
+            sidebar.next_with_activity(Some(c), true),
+            Some(a),
+            "it wraps"
+        );
+        assert_eq!(sidebar.next_with_activity(Some(a), false), Some(c));
+        assert_eq!(sidebar.next_with_activity(Some(c), false), Some(a));
+        assert_eq!(sidebar.next_with_activity(None, false), Some(c));
+
+        sidebar.set_activity(&[ChannelActivity {
+            active: false,
+            ..active(c)
+        }]);
+        assert_eq!(
+            sidebar.next_with_activity(Some(a), true),
+            None,
+            "the channel it starts from is not a jump"
+        );
     }
 }

@@ -48,11 +48,64 @@ pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a
         .collect()
 }
 
+/// One entry an application supplies to the palette, such as a channel to
+/// open. The entries come before the commands (`CHROME-093`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaletteEntry {
+    /// An opaque key the application chose. The palette hands it back when
+    /// the entry is chosen, so a list that changed meanwhile picks no other.
+    pub key: [u8; 16],
+    /// What the row reads, and what the query matches.
+    pub label: String,
+    /// A word beside the label, such as the section of the entry.
+    pub hint: Option<&'static str>,
+}
+
+/// One row of the palette: an entry of the application, or a command.
+#[derive(Clone, Copy)]
+pub enum PaletteRow<'a> {
+    Entry(&'a PaletteEntry),
+    Command(&'a Command),
+}
+
+/// The rows `query` lists: the entries whose label answers it, then the
+/// commands (`CHROME-093`). A query that starts with `>` lists the commands
+/// alone, matched against what follows it (`CHROME-094`).
+pub fn rows<'a>(
+    entries: &'a [PaletteEntry],
+    table: &'a [Command],
+    query: &str,
+    locale: &Locale,
+) -> Vec<PaletteRow<'a>> {
+    let (entries, query) = match query.trim_start().strip_prefix('>') {
+        Some(rest) => (&[][..], rest),
+        None => (entries, query),
+    };
+    entries
+        .iter()
+        .filter(|e| matches(&e.label, query))
+        .map(PaletteRow::Entry)
+        .chain(
+            filter(table, query, locale)
+                .into_iter()
+                .map(PaletteRow::Command),
+        )
+        .collect()
+}
+
+/// What a drawn row runs once chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Chosen {
+    Entry([u8; 16]),
+    Command(CommandId),
+}
+
 /// The command palette overlay.
 ///
 /// `table` is the active application's whole command table. Selecting a row
 /// invokes it through `on_command`, the same sink every other trigger uses, and
-/// closes the overlay.
+/// closes the overlay. An application may supply `entries` too, listed first,
+/// and `on_entry` receives the key of the one chosen.
 ///
 /// Every row reads enabled. The command store is `Rc` and stays in the mount
 /// owner, out of the `Send` router subtree, so this view cannot subscribe to it.
@@ -65,6 +118,12 @@ pub fn CommandPalette(
     /// Every command the active application declares (`CHROME-008`).
     table: &'static [Command],
     on_command: Callback<CommandId>,
+    /// The entries of the application, listed before the commands.
+    #[prop(optional, into)]
+    entries: Option<Signal<Vec<PaletteEntry>>>,
+    /// Receives the key of the entry chosen.
+    #[prop(optional)]
+    on_entry: Option<Callback<[u8; 16]>>,
 ) -> impl IntoView {
     let query = RwSignal::new(String::new());
     let focused = RwSignal::new(0usize);
@@ -84,15 +143,31 @@ pub fn CommandPalette(
     });
 
     let rows = Memo::new(move |_| {
-        filter(table, &query.get(), &Locale::En)
+        let entries = entries.map(|e| e.get()).unwrap_or_default();
+        self::rows(&entries, table, &query.get(), &Locale::En)
             .into_iter()
-            .map(|c| (c.id, (c.title)(&Locale::En), c.chord()))
+            .map(|row| match row {
+                PaletteRow::Entry(e) => (Chosen::Entry(e.key), e.label.clone(), e.hint, None),
+                PaletteRow::Command(c) => (
+                    Chosen::Command(c.id),
+                    (c.title)(&Locale::En),
+                    None,
+                    c.chord(),
+                ),
+            })
             .collect::<Vec<_>>()
     });
 
-    let run = move |id: CommandId| {
+    let run = move |chosen: Chosen| {
         open.set(false);
-        on_command.run(id);
+        match chosen {
+            Chosen::Command(id) => on_command.run(id),
+            Chosen::Entry(key) => {
+                if let Some(on_entry) = on_entry {
+                    on_entry.run(key);
+                }
+            }
+        }
     };
 
     let on_keydown = move |ev: web_sys::KeyboardEvent| {
@@ -108,8 +183,8 @@ pub fn CommandPalette(
             }
             "Enter" => {
                 ev.prevent_default();
-                if let Some((id, _, _)) = rows.get_untracked().get(focused.get_untracked()) {
-                    run(*id);
+                if let Some((chosen, ..)) = rows.get_untracked().get(focused.get_untracked()) {
+                    run(*chosen);
                 }
             }
             "Escape" => open.set(false),
@@ -142,7 +217,7 @@ pub fn CommandPalette(
                         rows.get()
                             .into_iter()
                             .enumerate()
-                            .map(|(i, (id, label, chord))| {
+                            .map(|(i, (chosen, label, hint, chord))| {
                                 view! {
                                     <li
                                         class="ambre-palette-row"
@@ -152,9 +227,15 @@ pub fn CommandPalette(
                                             crate::menu::aria_bool(focused.get() == i)
                                         }
                                         on:mouseenter=move |_| focused.set(i)
-                                        on:click=move |_| run(id)
+                                        on:click=move |_| run(chosen)
                                     >
                                         <span class="ambre-palette-label">{label}</span>
+                                        {hint
+                                            .map(|hint| {
+                                                view! {
+                                                    <span class="ambre-palette-hint">{hint}</span>
+                                                }
+                                            })}
                                         {chord
                                             .map(|kb| {
                                                 view! {
@@ -234,6 +315,47 @@ mod tests {
     #[test]
     fn a_query_that_answers_nothing_lists_nothing() {
         assert!(filter(TABLE, "zzz", &Locale::En).is_empty());
+    }
+
+    fn entry(key: u8, label: &str) -> PaletteEntry {
+        PaletteEntry {
+            key: [key; 16],
+            label: label.into(),
+            hint: None,
+        }
+    }
+
+    /// Each row as the label of its entry or the id of its command.
+    fn shown(entries: &[PaletteEntry], query: &str) -> Vec<String> {
+        rows(entries, TABLE, query, &Locale::En)
+            .into_iter()
+            .map(|row| match row {
+                PaletteRow::Entry(e) => e.label.clone(),
+                PaletteRow::Command(c) => c.id.0.to_owned(),
+            })
+            .collect()
+    }
+
+    /// The entries an application supplies come before its commands, each
+    /// side filtered by the one query.
+    #[test]
+    fn the_entries_of_the_application_come_before_the_commands() {
+        let entries = [entry(1, "budget"), entry(2, "general"), entry(3, "Bob")];
+        assert_eq!(shown(&entries, "b"), ["budget", "Bob", "t.format.bold"]);
+        // An application that supplies none sees the commands alone.
+        assert_eq!(shown(&[], "").len(), TABLE.len());
+    }
+
+    /// A query that starts with `>` drops the entries, and what follows it
+    /// filters the commands.
+    #[test]
+    fn a_query_that_starts_with_a_chevron_lists_the_commands_alone() {
+        let entries = [entry(1, "export-notes"), entry(2, "Bold ideas")];
+        assert_eq!(
+            shown(&entries, ">"),
+            ["t.format.bold", "t.sort.asc", "t.interop.export"]
+        );
+        assert_eq!(shown(&entries, " > export"), ["t.interop.export"]);
     }
 
     /// Rows keep the table's order, so they do not move under the user as the

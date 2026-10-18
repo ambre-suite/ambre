@@ -11,11 +11,14 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY};
 use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
+use ambre_bus::AppCommand;
 use ambre_bus::{
     LogicCommand, MemberView, MurmureEvent, Presence, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
 };
-use ambre_chrome::ShellRegion;
+use ambre_chrome::{CommandHandler, KeyRoute, PaletteEntry, ShellAction, ShellRegion};
+use ambre_commands::CommandId;
 use ambre_core::{ChannelId, SpaceId};
 use leptos::prelude::*;
 
@@ -363,6 +366,44 @@ impl MurmureRelay {
         }
     }
 
+    /// The channels the palette lists before the commands, in sidebar order,
+    /// each named as the sidebar names it (`MURMURE-172`).
+    pub fn palette_entries(&self) -> Signal<Vec<PaletteEntry>> {
+        let sidebar = self.sidebar;
+        Signal::derive(move || {
+            sidebar.with(|s| {
+                s.sections()
+                    .into_iter()
+                    .flat_map(|section| {
+                        let words = GroupWords::of(section.group);
+                        section.entries.into_iter().map(move |entry| PaletteEntry {
+                            key: *entry.channel.as_bytes(),
+                            label: entry.name.unwrap_or_else(|| words.unnamed.to_owned()),
+                            hint: Some(words.hint),
+                        })
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// Choose the palette entry of `key`: the channel it lists opens as a
+    /// click on the sidebar opens it (`MURMURE-173`).
+    pub fn choose(&self, key: [u8; 16]) -> Option<LogicCommand> {
+        self.select(ChannelId::from_bytes(key))
+    }
+
+    /// Open the next channel with activity after the shown one, or the
+    /// previous one (`MURMURE-176`). It sends no read cursor: the channel
+    /// opens as a click opens it (`MURMURE-177`).
+    pub fn jump(&self, forward: bool) -> Option<LogicCommand> {
+        let from = self.pane.get_untracked().shown_channel();
+        let to = self
+            .sidebar
+            .with_untracked(|s| s.next_with_activity(from, forward))?;
+        self.select(to)
+    }
+
     fn show(&self, channel: ChannelId) -> Option<LogicCommand> {
         self.pane.set(MurmurePane::channel(channel));
         let fresh = self
@@ -372,6 +413,71 @@ impl MurmureRelay {
         fresh.then_some(LogicCommand::OpenChannel {
             channel_id: channel,
         })
+    }
+}
+
+/// Murmure's half of the command path (`ARCH-018`). Its commands address the
+/// user's channels, not the routed document, so it sends them through `send`.
+/// It asks the shell for the palette alone.
+#[derive(Clone, Copy)]
+pub struct MurmureHandler {
+    pub relay: MurmureRelay,
+    pub send: Callback<LogicCommand>,
+}
+
+impl MurmureHandler {
+    /// Open the channel of the palette entry `key`, the palette closing
+    /// behind it (`MURMURE-173`).
+    pub fn choose(&self, key: [u8; 16]) {
+        if let Some(command) = self.relay.choose(key) {
+            self.send.run(command);
+        }
+    }
+
+    /// Run the command `id`. `false` for an id Murmure did not declare.
+    fn run(&self, id: CommandId) -> bool {
+        let command = match id {
+            NEXT_ACTIVITY => self.relay.jump(true),
+            PREVIOUS_ACTIVITY => self.relay.jump(false),
+            // The command of the unread feature, which the relay answers for
+            // every channel of the user (`MURMURE-180`).
+            MARK_ALL_READ => Some(LogicCommand::MarkAllRead),
+            _ => return false,
+        };
+        if let Some(command) = command {
+            self.send.run(command);
+        }
+        true
+    }
+}
+
+impl CommandHandler for MurmureHandler {
+    type Command = AppCommand;
+
+    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+        if id == PALETTE {
+            return vec![ShellAction::OpenPalette];
+        }
+        self.run(id);
+        Vec::new()
+    }
+
+    fn on_key(&self, id: CommandId, in_text_field: bool) -> KeyRoute<AppCommand> {
+        if id == PALETTE {
+            return KeyRoute::Run(vec![ShellAction::OpenPalette]);
+        }
+        // A text field keeps Alt+Shift with an arrow, which extends its
+        // selection on a Mac.
+        if in_text_field {
+            return KeyRoute::Yield;
+        }
+        self.run(id);
+        KeyRoute::Run(Vec::new())
+    }
+
+    fn sealed_save(&self, _passphrase: String) -> Option<AppCommand> {
+        // Murmure declares no sealed save.
+        None
     }
 }
 
@@ -395,22 +501,52 @@ pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl In
     }
 }
 
+/// What the chrome calls a group of the sidebar, and an entry with no name.
+#[derive(Clone, Copy)]
+struct GroupWords {
+    /// The word of the group in the markup.
+    word: &'static str,
+    /// The title of a section with none of its own.
+    title: &'static str,
+    /// The hint of an entry in the palette.
+    hint: &'static str,
+    /// The label of an entry nothing named yet.
+    unnamed: &'static str,
+}
+
+impl GroupWords {
+    fn of(group: SidebarGroup) -> Self {
+        let (word, title, hint) = match group {
+            SidebarGroup::Category { .. } => ("category", "Channels", "Channel"),
+            SidebarGroup::Private => ("private", "Private channels", "Private channel"),
+            SidebarGroup::Direct => ("direct", "Direct messages", "Direct message"),
+            SidebarGroup::ToJoin => ("to-join", "Channels to join", "To join"),
+        };
+        let unnamed = match group {
+            SidebarGroup::Direct => "Direct message",
+            _ => "Private channel",
+        };
+        Self {
+            word,
+            title,
+            hint,
+            unnamed,
+        }
+    }
+}
+
 fn section_view(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
     section: SidebarSection,
 ) -> impl IntoView {
-    let (word, fallback) = match section.group {
-        SidebarGroup::Category { .. } => ("category", "Channels"),
-        SidebarGroup::Private => ("private", "Private channels"),
-        SidebarGroup::Direct => ("direct", "Direct messages"),
-        SidebarGroup::ToJoin => ("to-join", "Channels to join"),
-    };
+    let GroupWords {
+        word,
+        title: fallback,
+        unnamed,
+        ..
+    } = GroupWords::of(section.group);
     let title = section.title.unwrap_or_else(|| fallback.to_owned());
-    let unnamed = match section.group {
-        SidebarGroup::Direct => "Direct message",
-        _ => "Private channel",
-    };
     view! {
         <section class="murmure-section" data-group=word>
             <h3 class="murmure-section-title">{title}</h3>

@@ -655,6 +655,55 @@ async fn palette_row_invokes_its_command_and_closes() {
     root.remove();
 }
 
+/// DOM test: the entries an application supplies are drawn before the
+/// commands. Choosing one hands its key back and closes the overlay, and runs
+/// no command.
+#[wasm_bindgen_test]
+async fn palette_entry_comes_first_and_hands_back_its_key() {
+    let owner = Owner::new();
+    owner.set();
+    let open = RwSignal::new(true);
+    let chosen: RwSignal<Option<[u8; 16]>> = RwSignal::new(None);
+    let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let entries = Signal::stored(vec![ambre_chrome::PaletteEntry {
+        key: [7; 16],
+        label: "budget".to_owned(),
+        hint: Some("Channel"),
+    }]);
+    let root = mount_in_container(move || {
+        view! {
+            <ambre_chrome::CommandPalette
+                open=open
+                table=PALETTE_TABLE
+                on_command=Callback::new(move |id| invoked.set(Some(id)))
+                entries=entries
+                on_entry=Callback::new(move |key| chosen.set(Some(key)))
+            />
+        }
+    });
+
+    let labels = palette_labels(&root);
+    assert_eq!(labels.len(), PALETTE_TABLE.len() + 1, "labels: {labels:?}");
+    assert_eq!(labels[0], "budget");
+    let first: web_sys::HtmlElement = root
+        .query_selector(".ambre-palette-row")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    first.click();
+
+    assert_eq!(chosen.get_untracked(), Some([7; 16]));
+    assert_eq!(invoked.get_untracked(), None);
+    assert!(
+        !open.get_untracked(),
+        "choosing an entry closes the palette"
+    );
+
+    leptos::task::tick().await;
+    root.remove();
+}
+
 // -- The modal (dialog.rs) ---------------------------------------------------
 
 /// A mounted modal, the hold count its `ModalHold` reached, and its element.

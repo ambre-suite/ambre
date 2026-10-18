@@ -30,8 +30,8 @@ the DOM side produces.
 | `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | none | verified |
 | `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
 | `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares; `ambre_app::shell::app_root::tests::the_palette_is_fed_the_whole_declared_table` -- the feed, per kind | none | verified |
-| `CHROME-093` | `INV` | The palette MUST list the entries an application supplies before the commands it declares. | this spec section 2 | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | not built | unbuilt -- lands with the `The Murmure palette and shortcuts` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CHROME-093` | `INV` | The palette MUST list the entries an application supplies before the commands it declares. | this spec section 2 | `ambre_chrome::palette::tests::the_entries_of_the_application_come_before_the_commands` -- the pure rows, one query over both sides; `ambre_chrome::chrome_ui::palette_entry_comes_first_and_hands_back_its_key` -- the DOM belt: the entry is the first row, and choosing it hands its key back | none | verified |
+| `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | `ambre_chrome::palette::tests::a_query_that_starts_with_a_chevron_lists_the_commands_alone` -- the bare chevron and one followed by a query, over entries that would match it | none | verified |
 
 ### 1.2 A floating menu is placed
 
@@ -79,7 +79,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 20 `verified`, 3 `unimplemented`. What holds is a crate-graph fact, placement
+* **Verification.** 22 `verified`, 1 `unimplemented`. What holds is a crate-graph fact, placement
   arithmetic, or a component mounted in a headless document and driven past its mount. The modal
   rows rest on one shared element, which a gate keeps the only one, and on a hold the loop counts.
   The drag rows rest on one debouncer, which a gate keeps every drag control behind.

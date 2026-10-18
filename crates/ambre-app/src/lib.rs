@@ -754,7 +754,7 @@ pub fn main() {
     } else if boot_is_prose {
         ambre_prose::commands::bind_keys(&mut keymap);
     } else if boot_is_murmure {
-        // The Murmure shortcuts land with its palette; until then it binds none.
+        ambre_murmure::commands::bind_keys(&mut keymap);
     } else {
         trame_chrome::bind_keys(&mut keymap);
     }

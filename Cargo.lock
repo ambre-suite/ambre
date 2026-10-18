@@ -231,6 +231,7 @@ version = "0.1.0"
 dependencies = [
  "ambre-bus",
  "ambre-chrome",
+ "ambre-commands",
  "ambre-core",
  "ambre-draw",
  "criterion",

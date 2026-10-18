@@ -183,6 +183,11 @@ pub(crate) fn mount_shell(
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
             })
+        } else if boot_is_murmure {
+            AppHandler::Murmure(ambre_murmure::chrome::MurmureHandler {
+                relay: murmure_relay,
+                send: commands::murmure_send(to_logic.clone()),
+            })
         } else {
             AppHandler::Trame(trame_chrome::TrameHandler {
                 find: find_state,
