@@ -44,12 +44,22 @@ impl LightSubscription {
 
     /// Counts one update from its summary alone (`RESID-014`, `RESID-015`).
     /// An update that does not open, or carries no summary, marks activity
-    /// and counts nothing. A number already read returns `None`.
-    fn count(&mut self, seq: Seq, update: &Update, me: Option<UserId>) -> Option<ActivityCounters> {
+    /// and counts nothing. A number already read returns `None`, and so does
+    /// an update `mine` signed, which is nothing new to this user (`RESID-021`).
+    fn count(
+        &mut self,
+        seq: Seq,
+        update: &Update,
+        me: Option<UserId>,
+        mine: Option<&PublicKey>,
+    ) -> Option<ActivityCounters> {
         if seq.0 <= self.seen.0 {
             return None;
         }
         self.seen = seq;
+        if mine == Some(&update.public_data.pub_key) {
+            return None;
+        }
         let summary = pipeline::open_update(update, &self.doc_key)
             .ok()
             .and_then(|body| pipeline::split_update_body(body).ok())
@@ -84,7 +94,7 @@ impl SyncState {
         let unsent_here = self
             .pending_pre_session_updates
             .iter()
-            .any(|(doc, _)| *doc == document_id);
+            .any(|(doc, ..)| *doc == document_id);
         let Some(doc) = self.documents.get(&document_id) else {
             return;
         };
@@ -111,10 +121,11 @@ impl SyncState {
     pub(crate) fn count_light(&mut self, seq: Seq, update: &Update) -> bool {
         let document_id = update.public_data.document_id;
         let me = self.user_id;
+        let mine = self.author_pub_key();
         let Some(light) = self.light.get_mut(&document_id) else {
             return false;
         };
-        if let Some(counters) = light.count(seq, update, me) {
+        if let Some(counters) = light.count(seq, update, me, mine.as_ref()) {
             self.send_to_logic(LogicEvent::Activity {
                 document_id,
                 counters,
@@ -279,6 +290,30 @@ mod tests {
             ..ActivityCounters::default()
         };
         assert_eq!(counters, vec![active, active]);
+    }
+
+    /// Holds `RESID-021`: an update this user signed, from this device or
+    /// another, moves no counter and marks nothing.
+    #[test]
+    fn an_update_this_user_signed_counts_nothing() {
+        let (mut state, rx, document_id, doc_key, snapshot) = released(9);
+        drain(&rx);
+        state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
+        state.receive_update(
+            Seq(10),
+            update(document_id, snapshot, &doc_key, Some(&mention())),
+        );
+        assert!(drain(&rx).is_empty(), "the user's own update counted");
+        state.signing_key = Some(MasterSeed::from_array([3; 32]).derive_signing_key());
+        state.receive_update(
+            Seq(11),
+            update(document_id, snapshot, &doc_key, Some(&mention())),
+        );
+        assert_eq!(
+            drain(&rx).len(),
+            1,
+            "another member's update counted nothing"
+        );
     }
 
     /// Holds `RESID-009`: a release waits while a frame this client sent is

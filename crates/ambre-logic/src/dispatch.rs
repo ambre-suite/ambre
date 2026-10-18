@@ -103,6 +103,7 @@ impl LogicState {
                         self.channel_ledgers.clear();
                         self.opening.clear();
                         self.read_cursors.clear();
+                        self.closed_channels.clear();
                         self.spaces.clear();
                         self.space_opening.clear();
                         self.creating.clear();
@@ -378,10 +379,13 @@ impl LogicState {
                 document_id,
                 counters,
             } => {
-                self.send_to_ui(UiEvent::Activity {
-                    document_id,
-                    counters,
-                });
+                // A channel's document counts for its channel, not alone.
+                if !self.count_closed(document_id, counters) {
+                    self.send_to_ui(UiEvent::Activity {
+                        document_id,
+                        counters,
+                    });
+                }
             }
             LogicEvent::Released { document_id } => {
                 self.store_sent(document_id);

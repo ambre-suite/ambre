@@ -41,6 +41,7 @@ use web_sys::WebSocket;
 #[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, MessageEvent};
 
+use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent, MemberInfo, RequestId,
@@ -857,6 +858,7 @@ impl SyncDocumentState {
             peer: ambre_crypto::peer::derive_peer_id(&signer, &body.nonce),
             nonce: body.nonce,
             user: self.signing_keys.get(&signer).copied(),
+            summary: body.summary.map(Into::into),
             payload: body.delta,
         })
     }
@@ -990,7 +992,8 @@ pub struct SyncState {
     /// once the document is open. A server-side doc flushes after its
     /// `RequestMissing` replay, so `local_clock` has caught up to the server and
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
-    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
+    /// Each keeps the summary it was sent with.
+    pending_pre_session_updates: Vec<(DocumentId, Vec<u8>, Option<ActivitySummary>)>,
 
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the
@@ -1249,15 +1252,13 @@ impl SyncState {
             SyncCommand::SendUpdate {
                 document_id,
                 payload,
-                // The summary rides sealed beside the delta once `SYNC-113`
-                // lands. Until then the worker drops it (the Murmure messages spec).
-                summary: _,
+                summary,
             } => {
                 tracing::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
                     payload.len()
                 );
-                self.handle_send_update(document_id, payload);
+                self.send_summarized_update(document_id, payload, summary);
             }
             SyncCommand::SendUnsent {
                 document_id,
@@ -1723,6 +1724,37 @@ mod seal_tests {
         wire.try_iter()
             .map(|bytes| decode_client_msg(&bytes).expect("decode"))
             .collect()
+    }
+
+    /// A summary the Logic thread hands with a delta leaves sealed beside it
+    /// (`SYNC-113`). One handed before the session holds survives the wait.
+    #[test]
+    fn a_summary_handed_with_a_delta_leaves_sealed_beside_it() {
+        use ambre_bus::ActivityKind;
+        let (mut state, id, wire) = with_socket();
+        let summary = ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: vec![UserId::from_bytes([5; 16])],
+            mentions_all: false,
+            anchor: None,
+        };
+        let signing_key = state.signing_key.take();
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: id,
+            payload: b"a message".to_vec(),
+            summary: Some(summary.clone()),
+        });
+        assert!(sent(&wire).is_empty(), "sent before the session held");
+        state.signing_key = signing_key;
+        state.flush_pre_session_updates(id);
+        let frames = sent(&wire);
+        let [WsClientMsg::Update(update)] = frames.as_slice() else {
+            panic!("expected one update, got {frames:?}");
+        };
+        let body = pipeline::open_update(update, &state.documents[&id].doc_key).expect("opens");
+        let body = pipeline::split_update_body(body).expect("splits");
+        assert_eq!(body.summary, Some(summary.to_sealed()));
+        assert_eq!(body.delta, b"a message");
     }
 
     /// A payload frame built by hand, its plaintext in the ciphertext field,

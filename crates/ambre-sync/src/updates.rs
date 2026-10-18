@@ -859,34 +859,42 @@ impl SyncState {
         if self.signing_key.is_none() || self.pending_pre_session_updates.is_empty() {
             return;
         }
-        let mut drained = Vec::new();
-        self.pending_pre_session_updates.retain(|(doc, payload)| {
-            if *doc == document_id {
-                drained.push(payload.clone());
-                false
-            } else {
-                true
-            }
-        });
+        let (drained, kept) = std::mem::take(&mut self.pending_pre_session_updates)
+            .into_iter()
+            .partition::<Vec<_>, _>(|(doc, ..)| *doc == document_id);
+        self.pending_pre_session_updates = kept;
         if !drained.is_empty() {
             tracing::info!(
                 "[Sync] flushing {} buffered pre-session update(s) doc={document_id}",
                 drained.len()
             );
         }
-        for payload in drained {
-            self.handle_send_update(document_id, payload);
+        for (_, payload, summary) in drained {
+            self.send_summarized_update(document_id, payload, summary);
         }
     }
 
+    /// An update with no summary, as most tests send one.
+    #[cfg(test)]
     pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+        self.send_summarized_update(document_id, payload, None);
+    }
+
+    /// Sends a delta the Logic thread wrote, with the summary of what it
+    /// holds sealed beside it (`SYNC-113`).
+    pub(crate) fn send_summarized_update(
+        &mut self,
+        document_id: DocumentId,
+        payload: Vec<u8>,
+        summary: Option<ActivitySummary>,
+    ) {
         if self.signing_key.is_none() {
             // Session not established yet (for example an edit landed in the gap between
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
             tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
             self.pending_pre_session_updates
-                .push((document_id, payload));
+                .push((document_id, payload, summary));
             return;
         }
         // The nonce rides inside the ciphertext, ahead of the delta
@@ -906,13 +914,19 @@ impl SyncState {
             tracing::warn!("[Sync] SendUpdate with no session nonce doc={document_id}, dropped");
             return;
         };
-        self.send_update_body(document_id, *nonce, &payload);
+        let summary = summary.as_ref().map(ActivitySummary::to_sealed);
+        self.send_update_body(document_id, *nonce, summary.as_ref(), &payload);
     }
 
-    /// Builds the body of a delta this client writes and sends it. No
-    /// application of this build writes a summary yet, so none rides along.
-    fn send_update_body(&mut self, document_id: DocumentId, nonce: SessionNonce, delta: &[u8]) {
-        match pipeline::update_body(&nonce, None, delta) {
+    /// Builds the body of a delta this client writes and sends it.
+    fn send_update_body(
+        &mut self,
+        document_id: DocumentId,
+        nonce: SessionNonce,
+        summary: Option<&ambre_core::activity::ActivitySummary>,
+        delta: &[u8],
+    ) {
+        match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
             Err(error) => tracing::warn!("[Sync] update body refused doc={document_id}: {error}"),
         }
@@ -932,7 +946,9 @@ impl SyncState {
             tracing::warn!("[Sync] SendUnsent before session ready doc={document_id}, dropped");
             return;
         }
-        self.send_update_body(document_id, nonce, &payload);
+        // What an earlier session left unsent is replayed with no summary:
+        // the Logic thread no longer knows what it held.
+        self.send_update_body(document_id, nonce, None, &payload);
     }
 
     /// Seals an update body and sends it, or holds it while the document is
@@ -1863,6 +1879,45 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), 0);
     }
 
+    /// Holds `SYNC-144`: an opened update hands the Logic thread the summary
+    /// its body carried, beside the delta. One with none hands none.
+    #[test]
+    fn an_opened_update_hands_logic_its_summary_beside_the_delta() {
+        use ambre_core::activity::{ActivityKind, ActivitySummary};
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let summary = ActivitySummary {
+            kind: ActivityKind::Reaction,
+            mentions: Vec::new(),
+            mentions_all: true,
+            anchor: None,
+        };
+        let public_data = UpdatePublicData {
+            document_id: doc,
+            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            key_id: key.id(),
+            snapshot_id: snap,
+            clock: Clock(1),
+        };
+        let body = pipeline::update_body(&TEST_NONCE, Some(&summary), b"liked").expect("bounds");
+        let sealed = pipeline::seal_update(&body, public_data, &key, &sk).expect("seal");
+        state.receive_update(Seq(1), sealed);
+        state.receive_update(Seq(2), make_update(doc, snap, 2, b"plain", &key, &sk));
+        let handed: Vec<_> = drain(&rx)
+            .into_iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => Some((delta.payload, delta.summary)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            handed,
+            vec![
+                (b"liked".to_vec(), Some(summary.into())),
+                (b"plain".to_vec(), None)
+            ]
+        );
+    }
+
     /// An opened update reaches the Logic thread with the nonce its body
     /// carried and the PeerID its signer and that nonce derive. It also names
     /// the member the directory holds for its signer (`SYNC-114`, `AUTHOR-013`). A signer the
@@ -1894,6 +1949,7 @@ mod tests {
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
             user: Some(alice),
+            summary: None,
         };
         assert_eq!(deltas.first(), Some(&expected));
         let unknown = deltas.get(1).unwrap();

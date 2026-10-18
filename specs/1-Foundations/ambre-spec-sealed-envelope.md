@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | `ambre_crypto::tests::every_seal_draws_a_fresh_nonce` -- one payload sealed sixty-four times under one key repeats no nonce and no ciphertext. The seal takes no nonce argument, so none can be passed in | none | verified |
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | `ambre_sync::pipeline::tests::a_snapshot_that_fails_a_wire_check_is_never_sealed` -- a parent clock list naming one author twice draws the check's own refusal and no snapshot. The empty-cipher refusal cannot arise from a seal, which always appends a tag | none | verified |
 | `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | `ambre_sync::pipeline::tests::the_session_nonce_is_sealed_inside_the_ciphertext` -- one delta sealed under two nonces shows the relay the same readable part, and each opens back to its own nonce | none | verified |
-| `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::pipeline::tests::the_activity_summary_is_sealed_inside_the_ciphertext` -- the relay's readable part is the same with or without a summary, and holds no mentioned member's bytes | none | verified |
+| `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::pipeline::tests::the_activity_summary_is_sealed_inside_the_ciphertext`; `ambre_sync::tests::a_summary_handed_with_a_delta_leaves_sealed_beside_it` -- the relay's readable part is the same with or without a summary, and the summary the Logic thread hands opens from inside the ciphertext | none | verified |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | `ambre_sync::pipeline::tests::the_compression_version_is_sealed_inside_the_ciphertext` -- the version byte is read back from the opened plaintext and from no public field | none | verified |
 
 ### 1.3 An inbound envelope is opened
@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-023` | `FRAME` | An envelope that fails any check MUST NOT be applied in part. | this spec section 2 | `ambre_sync::updates::tests::a_refused_frame_is_applied_in_no_part` -- a tampered and an unsigned envelope in one replay each deliver none of their payload, and their neighbours arrive whole | none | verified |
 | `SYNC-135` | `FAIL` | A document name or a media blob whose author key belongs to no member of its document MUST be refused. | this spec section 2; `SYNC-018` | not built | unbuilt -- lands with the `The author of a sealed object is a member` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce, the PeerID it derives and the user of its signer beside the delta. | this spec section 2; `AUTHOR-013` | `ambre_sync::updates::tests::an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer` -- the delta arrives with the nonce its body carried, the PeerID its signer derives, and the member the directory names, or none | none | verified |
-| `SYNC-144` | `POST` | An opened update that carries an activity summary MUST reach the Logic thread with it beside the delta. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Channels in the residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-144` | `POST` | An opened update that carries an activity summary MUST reach the Logic thread with it beside the delta. | this spec section 2; `ambre-spec-residency.md` | `ambre_sync::updates::tests::an_opened_update_hands_logic_its_summary_beside_the_delta` -- an update with a summary hands it beside its delta, and one with none hands none | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`. The outbound seal of 1 KB is under
   200 us, the inbound open under 350 us, and the round trip under 600 us. A 100 KB snapshot
@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 22 `verified`, 2 `unimplemented`. What holds is refusal: a tampered byte, a
+* **Verification.** 23 `verified`, 1 `unimplemented`. What holds is refusal: a tampered byte, a
   wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
   decompression bomb and an unknown codec. The nonce is drawn fresh, and the signature is checked
   first.

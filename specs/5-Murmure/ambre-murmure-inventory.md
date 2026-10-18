@@ -16,11 +16,11 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
-| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | partial | 10 |  |
+| `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | partial | 11 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 31 |  |
-| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 14 |  |
+| `murmure-unread` | The sidebar shows where something new is, and how much. | partial | 15 |  |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
 | `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
@@ -44,4 +44,4 @@
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 
-**28 features: 0 implemented, 6 partial, 22 design-only. 453 contract rows, 0 loose.**
+**28 features: 0 implemented, 6 partial, 22 design-only. 455 contract rows, 0 loose.**

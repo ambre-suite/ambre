@@ -704,7 +704,13 @@ impl LogicState {
                 .find(|(_, o)| o.as_ref().is_some_and(|o| o.meta_id() == meta))
                 .map(|(id, _)| *id)
         };
-        let Some(channel_id) = open.or_else(opening) else {
+        let closed = || {
+            self.closed_channels
+                .iter()
+                .find(|(_, c)| c.holds(document_id))
+                .map(|(id, _)| *id)
+        };
+        let Some(channel_id) = open.or_else(opening).or_else(closed) else {
             return;
         };
         if self.leaving.contains_key(&channel_id) {
@@ -720,19 +726,22 @@ impl LogicState {
         });
     }
 
-    /// Drop a channel, open or opening, with its read cursors. The session of
-    /// each document ends, so the Sync worker forgets their keys.
+    /// Drop a channel, open, opening or closed, with its read cursors. The
+    /// session or light subscription of each document ends, so the Sync
+    /// worker forgets their keys.
     fn drop_channel(&mut self, channel_id: ChannelId) {
-        if let Some(channel) = self.channels.get(&channel_id) {
-            let segments = channel
-                .final_segments()
-                .into_iter()
-                .map(|s| s.document_id());
-            for document_id in channel.document_ids().into_iter().chain(segments) {
-                self.read_cursors.remove(&document_id);
-            }
+        let cursored = match (
+            self.channels.get(&channel_id),
+            self.closed_channels.get(&channel_id),
+        ) {
+            (Some(channel), _) => channels::cursored_documents(channel),
+            (None, Some(closed)) => closed.cursored(),
+            (None, None) => Vec::new(),
+        };
+        for document_id in cursored {
+            self.read_cursors.remove(&document_id);
         }
-        self.close_channel(channel_id);
+        self.end_channel(channel_id);
     }
 
     /// A creation, a join, a delete or a leave failed on the relay, which

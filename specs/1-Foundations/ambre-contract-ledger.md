@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3510 rows: 2720 shipped, of which 2 loose. 790 unbuilt.**
+**3513 rows: 2725 shipped, of which 2 loose. 788 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 784 | 418 | 816 | 609 | 91 | 2718 |
+| `verified` | 787 | 418 | 816 | 609 | 93 | 2723 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 213 | 55 | 29 | 109 | 384 | 790 |
+| `unimplemented` | 211 | 55 | 29 | 109 | 384 | 788 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -66,9 +66,9 @@
 | `ambre-spec-pdf-export.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-presence.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-render-assets.md` | 18 | 15 | 15 |  | 3 |
-| `ambre-spec-residency.md` | 20 | 19 | 19 |  | 1 |
+| `ambre-spec-residency.md` | 21 | 21 | 21 |  |  |
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
-| `ambre-spec-sealed-envelope.md` | 24 | 22 | 22 |  | 2 |
+| `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 48 | 39 | 39 |  | 9 |
 | `ambre-spec-server.md` | 70 | 61 | 60 | 1 | 9 |
 | `ambre-spec-session.md` | 18 | 18 | 18 |  |  |
@@ -161,11 +161,11 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 22 | 13 | 13 |  | 9 |
 | `ambre-spec-murmure-channels.md` | 49 | 32 | 32 |  | 17 |
-| `ambre-spec-murmure-engine.md` | 10 | 7 | 7 |  | 3 |
+| `ambre-spec-murmure-engine.md` | 11 | 8 | 8 |  | 3 |
 | `ambre-spec-murmure-members.md` | 21 | 11 | 11 |  | 10 |
 | `ambre-spec-murmure-messages.md` | 22 | 3 | 3 |  | 19 |
 | `ambre-spec-murmure-spaces.md` | 31 | 14 | 14 |  | 17 |
-| `ambre-spec-murmure-unread.md` | 14 | 11 | 11 |  | 3 |
+| `ambre-spec-murmure-unread.md` | 15 | 12 | 12 |  | 3 |
 
 ## WHICH DOCUMENT DECLARES AN ID
 
@@ -206,7 +206,7 @@
 | `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475 |
 | `ambre-spec-murmure-composer.md` | MURMURE-193..204,210..212,214..217,259,430..434 |
 | `ambre-spec-murmure-emoji.md` | MURMURE-137..141,374..381 |
-| `ambre-spec-murmure-engine.md` | MURMURE-021..030 |
+| `ambre-spec-murmure-engine.md` | MURMURE-021..030,476 |
 | `ambre-spec-murmure-forums.md` | MURMURE-355..364,416 |
 | `ambre-spec-murmure-import.md` | MURMURE-365..373,438..439 |
 | `ambre-spec-murmure-keyboard.md` | MURMURE-170..181,213 |
@@ -228,7 +228,7 @@
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466 |
 | `ambre-spec-murmure-threads.md` | MURMURE-105..112,260..261,290..295,415 |
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297 |
-| `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471 |
+| `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
@@ -265,7 +265,7 @@
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212,217..218 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127,312 |
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069,073 |
-| `ambre-spec-residency.md` | RESID-001..020 |
+| `ambre-spec-residency.md` | RESID-001..021 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184 |

@@ -227,6 +227,12 @@ fn logic_event_roundtrips_through_postcard() {
             nonce: ambre_core::SessionNonce([2; 16]),
             peer: 7,
             user: Some(UserId::from_bytes([1; 16])),
+            summary: Some(ambre_bus::ActivitySummary {
+                kind: ambre_bus::ActivityKind::Content,
+                mentions: vec![UserId::from_bytes([3; 16])],
+                mentions_all: false,
+                anchor: None,
+            }),
         },
     });
     roundtrip_event(&LogicEvent::SessionIdentity {
@@ -350,6 +356,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         nonce: SessionNonce([4; 16]),
         peer: 9,
         user: Some(user),
+        summary: None,
     };
     let commands = [
         SyncCommand::Rest {

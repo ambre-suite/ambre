@@ -688,6 +688,10 @@ struct LogicState {
     /// spec). The relay's activity answer sets it, and this client's own
     /// marks move it. Cleared on `Logout`.
     read_cursors: HashMap<DocumentId, channels::ReadCursor>,
+    /// Channels whose view closed: their documents left memory, and Sync
+    /// counts them from their summaries alone (`RESID-004`). Removed on a
+    /// reopen, a delete, a leave or `Logout`.
+    closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
     /// Open Murmure spaces, keyed by `space_id`: one document each, apart
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
@@ -798,6 +802,7 @@ impl LogicState {
             opening: HashMap::new(),
             channel_ledgers: HashMap::new(),
             read_cursors: HashMap::new(),
+            closed_channels: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),
             creating: HashMap::new(),
@@ -1058,6 +1063,7 @@ fn remote_delta(seq: u64, payload: Vec<u8>) -> ambre_bus::SignedDelta {
         nonce: ambre_core::SessionNonce([0; 16]),
         peer,
         user: None,
+        summary: None,
     }
 }
 
@@ -1583,6 +1589,7 @@ mod authorship_tests {
             nonce: SessionNonce([0; 16]),
             peer,
             user: None,
+            summary: None,
         }
     }
 

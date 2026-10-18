@@ -338,4 +338,7 @@ pub struct SignedDelta {
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
     pub user: Option<UserId>,
+    /// What the update says of itself, when its author wrote a summary
+    /// (`ambre-spec-sealed-envelope.md`, `SYNC-144`).
+    pub summary: Option<crate::ActivitySummary>,
 }

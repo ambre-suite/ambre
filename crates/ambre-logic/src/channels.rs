@@ -23,6 +23,70 @@ pub(crate) struct ReadCursor {
     pub(crate) active: bool,
 }
 
+/// What the Logic thread keeps of a channel whose view closed. Its documents
+/// are light subscriptions, and their summaries count its new messages.
+#[derive(Debug)]
+pub(crate) struct ClosedChannel {
+    /// The documents released at close, each a light subscription now.
+    documents: Vec<DocumentId>,
+    /// The final segments not held at close, whose cursors a drop forgets.
+    finals: Vec<DocumentId>,
+    /// The unread count at close, `None` when it was not known then.
+    base: Option<UnreadCount>,
+    /// The messages each document's summaries counted since the close.
+    counted: HashMap<DocumentId, u32>,
+}
+
+/// Every document of an open channel that may carry a read cursor: those it
+/// holds, and its final segments.
+pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<DocumentId> {
+    let mut documents = channel.document_ids();
+    for segment in channel.final_segments() {
+        if !documents.contains(&segment.document_id()) {
+            documents.push(segment.document_id());
+        }
+    }
+    documents
+}
+
+impl ClosedChannel {
+    /// Whether the channel held `document_id` at close.
+    pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
+        self.documents.contains(&document_id)
+    }
+
+    /// Every document whose read cursor the channel may carry.
+    pub(crate) fn cursored(&self) -> Vec<DocumentId> {
+        self.documents.iter().chain(&self.finals).copied().collect()
+    }
+
+    /// The channel's mark: the count at close plus the messages counted
+    /// since. With no count at close, a counted message marks it active, and
+    /// none leaves the mark the view holds: `None`.
+    fn mark(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
+        let since = UnreadCount(
+            self.counted
+                .values()
+                .fold(0, |sum, n| sum.saturating_add(*n)),
+        );
+        match self.base {
+            Some(base) => {
+                let unread = base.plus(since);
+                Some(ChannelActivity {
+                    channel_id,
+                    active: !unread.is_zero(),
+                    unread: Some(unread),
+                })
+            }
+            None => (!since.is_zero()).then_some(ChannelActivity {
+                channel_id,
+                active: true,
+                unread: None,
+            }),
+        }
+    }
+}
+
 /// A command that writes a channel or a space document, held until that
 /// document may be written (`AUTHOR-026`).
 #[derive(Debug)]
@@ -83,6 +147,9 @@ impl LogicState {
         if self.channels.contains_key(&channel_id) || self.opening.contains_key(&channel_id) {
             return;
         }
+        // A channel closed earlier opens whole again. Its light subscriptions
+        // end first, and its read cursors stay where they were (`RESID-013`).
+        self.end_light_channel(channel_id);
         self.opening.insert(channel_id, None);
         // A channel a catalogue lists is public, and its log admits a member
         // who joined alone. Any other channel's log admits only invites
@@ -209,9 +276,48 @@ impl LogicState {
         self.unsent.remove(&document_id);
     }
 
-    /// Drop a channel, open or opening, and end the session of each of its
-    /// documents.
+    /// The view of a channel closed. An open channel's documents lose their
+    /// pin: each leaves memory as a light subscription, whose summaries
+    /// count the channel's new messages (`RESID-004`). A channel still
+    /// opening ends the session of each document it asked for.
     pub(crate) fn close_channel(&mut self, channel_id: ChannelId) {
+        let Some(channel) = self.channels.get(&channel_id) else {
+            return self.end_channel(channel_id);
+        };
+        let base = self
+            .my_user_id
+            .and_then(|me| unread_of(channel, &self.read_cursors, me));
+        let documents = channel.document_ids();
+        let finals = cursored_documents(channel)
+            .into_iter()
+            .filter(|id| !documents.contains(id))
+            .collect();
+        self.channels.remove(&channel_id);
+        for &document_id in &documents {
+            self.channel_ledgers.remove(&document_id);
+            self.forget_murmure_session(document_id);
+            // No local copy of a channel document is kept, so the light
+            // subscription holds no horizon: a reopen fetches it whole.
+            self.send_to_sync(SyncCommand::ReleaseDocument {
+                document_id,
+                applied_seq: 0,
+            });
+        }
+        self.closed_channels.insert(
+            channel_id,
+            ClosedChannel {
+                documents,
+                finals,
+                base,
+                counted: HashMap::new(),
+            },
+        );
+    }
+
+    /// End a channel, open, opening or closed: the session or the light
+    /// subscription of each of its documents ends, so Sync forgets its key.
+    pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
+        self.end_light_channel(channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
             self.opening.remove(&channel_id),
@@ -225,6 +331,40 @@ impl LogicState {
             self.forget_murmure_session(document_id);
             self.send_to_sync(SyncCommand::CloseDocument { document_id });
         }
+    }
+
+    /// End the light subscriptions a closed channel left, if it left any.
+    fn end_light_channel(&mut self, channel_id: ChannelId) {
+        let Some(closed) = self.closed_channels.remove(&channel_id) else {
+            return;
+        };
+        for document_id in closed.documents {
+            self.send_to_sync(SyncCommand::CloseDocument { document_id });
+        }
+    }
+
+    /// Count the activity of a closed channel's document for its channel,
+    /// and hand the view the channel's new mark (the Murmure unread spec).
+    /// Returns whether a closed channel holds the document.
+    pub(crate) fn count_closed(
+        &mut self,
+        document_id: DocumentId,
+        counters: ambre_core::activity::ActivityCounters,
+    ) -> bool {
+        let Some((&channel_id, closed)) = self
+            .closed_channels
+            .iter_mut()
+            .find(|(_, closed)| closed.holds(document_id))
+        else {
+            return false;
+        };
+        closed.counted.insert(document_id, counters.content);
+        if let Some(mark) = closed.mark(channel_id) {
+            self.send_to_ui(UiEvent::ChannelActivity {
+                channels: vec![mark],
+            });
+        }
+        true
     }
 
     /// The relay listed the documents of a channel: open its `meta` first,
@@ -913,6 +1053,7 @@ mod tests {
                 nonce: ambre_core::SessionNonce([0; 16]),
                 peer,
                 user: None,
+                summary: None,
             },
         });
 
@@ -927,16 +1068,163 @@ mod tests {
         assert_eq!(messages[0].text, "over the wire");
     }
 
+    /// An open channel keeps its documents while its view shows it (the
+    /// Murmure engine spec). Closing one channel releases its documents alone, as
+    /// light subscriptions, and the other stays whole.
     #[test]
-    fn closing_a_channel_drops_its_documents() {
+    fn closing_a_channel_releases_its_documents_and_no_others() {
         let (mut state, _, sync) = harness();
         let (channel_id, active) = open_channel(&mut state);
+        let (shown, shown_active) = open_channel(&mut state);
+        let released = state.channels[&channel_id].document_ids();
+        drain(&sync);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        assert!(state.channels.is_empty());
+        assert!(!state.channels.contains_key(&channel_id));
         assert!(!state.apply_channel_remote(active.document_id(), &[(None, &[])]));
-        let closed = sent(&sync);
-        assert!(closed.contains(&Sent::Close(active.document_id())));
-        assert!(closed.iter().all(|c| matches!(c, Sent::Close(_))));
+        let sent = sent(&sync);
+        assert_eq!(
+            sent,
+            released
+                .iter()
+                .map(|id| Sent::Release(*id))
+                .collect::<Vec<_>>()
+        );
+        assert!(state.channels[&shown].holds(shown_active.document_id()));
+        assert!(!sent.contains(&Sent::Release(shown_active.document_id())));
+    }
+
+    /// A closed channel with a cursor on each held segment: its count at
+    /// close was zero.
+    fn closed_counted(state: &mut LogicState) -> (ChannelId, SegmentId, MetaId) {
+        signed_in(state, UserId::new());
+        let (channel_id, active) = open_channel(state);
+        let meta = state.channels[&channel_id].meta_id();
+        state.read_cursors.insert(
+            active.document_id(),
+            ReadCursor {
+                read: Seq(0),
+                active: false,
+            },
+        );
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        (channel_id, active, meta)
+    }
+
+    fn activity(content: u32) -> ambre_core::activity::ActivityCounters {
+        ambre_core::activity::ActivityCounters {
+            active: true,
+            content,
+            ..Default::default()
+        }
+    }
+
+    /// The summaries of a closed channel's documents give it a count, over
+    /// the count it had at close (the Murmure unread spec). A document's own
+    /// badge is not shown, and an update with no message leaves the count.
+    #[test]
+    fn a_closed_channel_counts_its_unread_from_the_summaries() {
+        let (mut state, ui, _sync) = harness();
+        let (channel_id, active, meta) = closed_counted(&mut state);
+        drain(&ui);
+        for (document_id, content) in [
+            (active.document_id(), 2),
+            (active.document_id(), 3),
+            (meta.document_id(), 0),
+        ] {
+            state.handle_logic_event(LogicEvent::Activity {
+                document_id,
+                counters: activity(content),
+            });
+        }
+        let marks: Vec<_> = drain(&ui)
+            .into_iter()
+            .map(|event| match event {
+                UiEvent::ChannelActivity { channels } => channels,
+                other => panic!("a document badge leaked: {other:?}"),
+            })
+            .collect();
+        let mark = |unread| {
+            vec![ChannelActivity {
+                channel_id,
+                active: true,
+                unread: Some(UnreadCount(unread)),
+            }]
+        };
+        assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
+    }
+
+    /// A channel whose count was unknown at close keeps its mark until a
+    /// summary counts a message, then is marked with no count.
+    #[test]
+    fn a_closed_channel_with_no_count_is_marked_by_a_counted_message() {
+        let (mut state, ui, _sync) = harness();
+        signed_in(&mut state, UserId::new());
+        let (channel_id, active) = open_channel(&mut state);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: active.document_id(),
+            counters: activity(0),
+        });
+        assert!(
+            drain(&ui).is_empty(),
+            "an update with no message moved the mark"
+        );
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: active.document_id(),
+            counters: activity(1),
+        });
+        let shown = drain(&ui);
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
+            panic!("expected the channel's mark, got {shown:?}");
+        };
+        assert_eq!(
+            channels,
+            &[ChannelActivity {
+                channel_id,
+                active: true,
+                unread: None,
+            }]
+        );
+    }
+
+    /// Holds `RESID-013`: a reopen ends the light subscriptions and opens
+    /// the channel whole. Its read cursors stay where they were, and nothing
+    /// marks it read.
+    #[test]
+    fn reopening_a_channel_leaves_its_read_cursor_where_it_was() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, active, _) = closed_counted(&mut state);
+        let released = state.closed_channels[&channel_id].cursored();
+        let cursors = state.read_cursors.clone();
+        drain(&sync);
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        let mut expected: Vec<Sent> = released.into_iter().map(Sent::Close).collect();
+        expected.push(Sent::List(channel_id));
+        assert_eq!(sent(&sync), expected);
+        assert_eq!(state.read_cursors, cursors);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: active.document_id(),
+            counters: activity(1),
+        });
+        assert!(
+            matches!(drain(&ui).as_slice(), [UiEvent::Activity { .. }]),
+            "a reopened channel still counted from its summaries"
+        );
+    }
+
+    /// The relay removing the user from a closed channel ends its light
+    /// subscriptions and forgets its read cursors.
+    #[test]
+    fn a_closed_channel_the_user_left_ends_its_light_subscriptions() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, active, meta) = closed_counted(&mut state);
+        drain(&sync);
+        state.channel_revoked(meta.document_id());
+        assert!(!state.closed_channels.contains_key(&channel_id));
+        assert!(!state.read_cursors.contains_key(&active.document_id()));
+        assert!(sent(&sync).contains(&Sent::Close(active.document_id())));
     }
 
     // --- The staged open over the relay ---
@@ -997,6 +1285,7 @@ mod tests {
         List(ChannelId),
         Open(DocumentId),
         Close(DocumentId),
+        Release(DocumentId),
         Other,
     }
 
@@ -1010,6 +1299,10 @@ mod tests {
                     doc_type: DocType::Murmure,
                 } => Sent::Open(document_id),
                 SyncCommand::CloseDocument { document_id } => Sent::Close(document_id),
+                SyncCommand::ReleaseDocument {
+                    document_id,
+                    applied_seq: 0,
+                } => Sent::Release(document_id),
                 _ => Sent::Other,
             })
             .collect()
