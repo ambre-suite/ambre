@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-080` | `POST` | A sent message MUST be appended to the active segment with a fresh `MessageId` and its author. | this spec section 3; `MURMURE-002` | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author`; `ambre_murmure::channel_tests::a_sent_delta_brings_a_peer_to_the_same_messages`; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` -- the author is the session's user | none | verified |
-| `MURMURE-256` | `POST` | A sent message MUST create its `reactions` map, empty. | this spec section 3; `MURMURE-006` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-256` | `POST` | A sent message MUST create its `reactions` map, empty. | this spec section 3; `MURMURE-006` | `ambre_murmure::reaction_tests::a_reaction_adds_one_entry_and_leaves_the_message` -- the map of a sent message is there and empty | none | verified |
 | `MURMURE-081` | `POST` | A sent message MUST hand the Sync worker an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | `ambre_murmure::channel_tests::a_sent_message_carries_a_content_summary_with_its_mentions`; `ambre_logic::channels::tests::a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event` -- the summary leaves with the delta | none | verified |
 | `MURMURE-082` | `FAIL` | Given a delta that creates a message under another author, every client MUST refuse the delta. | this spec section 3 | `ambre_murmure::authorship_tests::a_message_carries_the_author_who_signed_it_and_no_other` -- a message forged under another user is refused and changes nothing | none | verified |
 | `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | `ambre_murmure::channel_tests::sending_a_message_changes_no_other_message` -- the deep value of every earlier message compares equal across the send | none | verified |
@@ -56,15 +56,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-224` | `FAIL` | Given a binary delta on a segment, a thread or an amendments document, every client MUST refuse it. | this spec section 3; `MURMURE-223` | `ambre_murmure::authorship_tests::a_binary_delta_on_a_segment_is_refused` -- the segment is unchanged and the delta counts as delivered | none | verified |
 | `MURMURE-225` | `POST` | An accepted delta MUST be imported exactly as the check read it. | this spec section 3 | type-level -- `apply_signed` imports the parsed update it checked, never the bytes again; `ambre_murmure::authorship_tests::a_later_session_of_the_author_edits_its_own_message` | none | verified |
-| `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | not built | unbuilt -- lands with the `Threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-228` | `FAIL` | Given a JSON update of a schema version the client does not compile, the client MUST refuse it and ask the user to update. | this spec section 3; `MURMURE-019` | `ambre_murmure::authorship_tests::a_json_update_of_another_version_is_refused_and_asks_an_update`; `ambre_logic::channels::tests::a_delta_from_a_newer_build_asks_the_user_to_update` -- the view gets `UpdateRequired` | none | verified |
-| `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | type-level -- `delta::check` takes the JSON update and a registry lookup, never a document | none | verified |
+| `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | type-level -- `delta::check` takes the JSON update, a registry lookup and a reactions lookup, never a document | none | verified |
 
 * **Budget.** the authorship check reads each received delta with no document, a row of
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a delta is a message, an edit or a delete.
-* **Verification.** 14 `verified`, 8 `unimplemented`: the send and the authorship check are built,
+* **Verification.** 15 `verified`, 7 `unimplemented`: the send and the authorship check are built,
   and no edit or delete exists.
 
 ---
@@ -104,7 +104,8 @@ no document, in microseconds.
    field, set once by the first reply, while it is absent (`MURMURE-255`). One change is open to a
    moderator: a removal whose standing the membership log proves (`MURMURE-307`).
 5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`). The `reactions`
-   map is the one container of a message that others write, entry by entry.
+   map is the one container of a message that others write, entry by entry. It comes with its
+   message, and a delta that replaces it later is refused.
 6. On an amendments document, read the message in its locked segment. Refuse the delta when the
    segment does not hold it, or when its `author` is another user (`MURMURE-013`, `MURMURE-253`).
 7. Import otherwise, from the update the check read (`MURMURE-225`).

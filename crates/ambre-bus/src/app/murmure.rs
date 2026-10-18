@@ -153,6 +153,22 @@ pub enum MurmureCommand {
     /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
     /// and every member reads it.
     Name { name: Option<String> },
+    /// React to `message` with `emoji`, under this session's user
+    /// (`MURMURE-092`). A reaction already there writes nothing.
+    React {
+        segment: SegmentId,
+        message: MessageId,
+        emoji: String,
+        /// The instant the member reacted, stamped by the view.
+        now: Timestamp,
+    },
+    /// Remove this session's own reaction `emoji` from `message`
+    /// (`MURMURE-096`). The entry of another member stays (`MURMURE-097`).
+    Unreact {
+        segment: SegmentId,
+        message: MessageId,
+        emoji: String,
+    },
 }
 
 impl MurmureCommand {
@@ -162,7 +178,10 @@ impl MurmureCommand {
     /// answers for a document. A load reads, and a cursor is no document.
     pub fn is_mutating(&self) -> bool {
         match self {
-            Self::SendMessage { .. } | Self::Name { .. } => true,
+            Self::SendMessage { .. }
+            | Self::Name { .. }
+            | Self::React { .. }
+            | Self::Unreact { .. } => true,
             Self::LoadOlder { .. } | Self::MarkRead | Self::MarkUnread { .. } => false,
         }
     }
@@ -179,6 +198,16 @@ pub struct MessageView {
     pub ts: Timestamp,
     /// The body, as plain text.
     pub text: String,
+    /// One per emoji, in emoji order (`MURMURE-006`).
+    pub reactions: Vec<Reaction>,
+}
+
+/// The members who reacted to a message with one emoji.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reaction {
+    pub emoji: String,
+    /// Each member once, in identifier order.
+    pub users: Vec<UserId>,
 }
 
 /// One message a search found, with the segment that holds it.

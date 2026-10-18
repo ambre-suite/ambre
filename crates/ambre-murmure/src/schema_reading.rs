@@ -41,8 +41,8 @@ use crate::schema::{
     CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
     DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
     HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_ID,
-    MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE, SEGMENTS, SPACE,
-    SPACE_NAME, SegmentState,
+    MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE,
+    SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, SCHEMA_SOURCE, channel_of_every_key, declared_string_consts,
@@ -293,6 +293,21 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         MESSAGE_AUTHOR if message.author == AUTHOR => Some(format!("message {n} by the author")),
         MESSAGE_TS => Some(format!("message {n} sent at {} ms", message.ts.0)),
         MESSAGE_CONTENT => Some(format!("message {n} reads {:?}", message.text)),
+        // The entry is read by its key: the member and the emoji. Its value,
+        // the instant, is kept for no reader yet.
+        MESSAGE_REACTIONS => {
+            let key = stored.key(2)?;
+            let reaction = message
+                .reactions
+                .iter()
+                .find(|r| key.ends_with(&format!(" {}", r.emoji)))?;
+            (reaction.users == [AUTHOR] && key.starts_with(&AUTHOR.to_string())).then(|| {
+                format!(
+                    "message {n} has a reaction of {} bytes by the author",
+                    reaction.emoji.len()
+                )
+            })
+        }
         _ => None,
     }
 }

@@ -17,34 +17,34 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-098` | `OBS` | A mention MUST show the current display name of the user it names. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-099` | `INV` | A mention of a user who is not a member of the channel MUST NOT notify that user. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-233` | `INV` | A mention of the channel MUST count as a mention for every member of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-098` | `OBS` | A mention MUST show the current display name of the user it names. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-099` | `INV` | A mention of a user who is not a member of the channel MUST NOT notify that user. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-233` | `INV` | A mention of the channel MUST count as a mention for every member of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Mention a member
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-100` | `POST` | The composer MUST write a `mention` mark over the displayed name, carrying the user identifier. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-101` | `POST` | The summary of a message MUST list the users it mentions. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-102` | `FRAME` | Mentioning a user MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-100` | `POST` | The composer MUST write a `mention` mark over the displayed name, carrying the user identifier. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-101` | `POST` | The summary of a message MUST list the users it mentions. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-102` | `FRAME` | Mentioning a user MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Read the mentions of a message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-103` | `POST` | A client MUST find the mentions of a message by its marks, never by parsing its text. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-104` | `FAIL` | Given a summary that lists a mention the message does not carry, the loaded message MUST correct the count. | this spec section 3; `RESID-011` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-152` | `FRAME` | Reading the mentions of a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-103` | `POST` | A client MUST find the mentions of a message by its marks, never by parsing its text. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-104` | `FAIL` | Given a summary that lists a mention the message does not carry, the loaded message MUST correct the count. | this spec section 3; `RESID-011` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-152` | `FRAME` | Reading the mentions of a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Mention the whole channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-229` | `POST` | An `@channel` MUST write a `mention` mark that names the channel and no user. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-230` | `POST` | The summary of a message that mentions the channel MUST say so, and list no member for it. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-231` | `POST` | In a channel past the member threshold of the budget register, the composer MUST ask for confirmation before it sends an `@channel`. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-232` | `FRAME` | Mentioning the channel MUST NOT write the list of its members into the message. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-229` | `POST` | An `@channel` MUST write a `mention` mark that names the channel and no user. | this spec section 3; `MURMURE-008` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-230` | `POST` | The summary of a message that mentions the channel MUST say so, and list no member for it. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-231` | `POST` | In a channel past the member threshold of the budget register, the composer MUST ask for confirmation before it sends an `@channel`. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-232` | `FRAME` | Mentioning the channel MUST NOT write the list of its members into the message. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a mention is a mark inside a message.
 * **Boundary.** the mentioned users ride in the sealed summary (`SYNC-113`), never in a field the

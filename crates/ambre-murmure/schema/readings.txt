@@ -29,6 +29,7 @@ segment:header/kind = "segment" => admitted as Segment
 segment:messages/*/author = {uuid} => message 1 by the author
 segment:messages/*/content = "hello" => message 1 reads "hello"
 segment:messages/*/id = {uuid} => message 1
+segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
 segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
 segment:meta/schema_version = 1 => version 1, Current
 segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author

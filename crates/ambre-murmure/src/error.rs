@@ -1,7 +1,7 @@
 //! Why the engine refused a document, a delta or a command.
 
 use ambre_core::schema::SchemaError;
-use ambre_core::{ChannelId, DocumentId, SpaceId};
+use ambre_core::{ChannelId, DocumentId, MessageId, SpaceId};
 use thiserror::Error;
 
 use crate::delta::Refusal;
@@ -73,6 +73,18 @@ pub enum MurmureError {
     /// The document is not a final segment the `meta` document lists.
     #[error("document {0} is not an older segment of this channel")]
     NotOlder(DocumentId),
+
+    /// A final segment changes through its amendments alone, never in place.
+    #[error("segment {0} is final")]
+    Final(DocumentId),
+
+    /// The segment holds no message of that identifier.
+    #[error("no message {0} in the segment")]
+    NoMessage(MessageId),
+
+    /// A reaction that is not one emoji (`MURMURE-092`).
+    #[error("a reaction that is not one emoji")]
+    NotEmoji,
 
     /// The authorship check refused a delta, which changed nothing
     /// (`MURMURE-030`).

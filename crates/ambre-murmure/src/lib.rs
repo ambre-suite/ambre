@@ -17,6 +17,7 @@ mod delta;
 mod error;
 mod members;
 mod opening;
+mod reaction;
 pub mod schema;
 mod search;
 mod sequence;
@@ -27,6 +28,8 @@ mod space;
 mod authorship_tests;
 #[cfg(test)]
 mod channel_tests;
+#[cfg(test)]
+mod reaction_tests;
 #[cfg(test)]
 mod schema_reading;
 #[cfg(test)]

@@ -43,7 +43,7 @@ pub use app::murmure::{
     CatalogueEntry, CategoryView, ChannelActivity, ChannelDocument, ChannelMatches, ChannelPlace,
     DirectMember, DirectMessageDraft, DirectMessageEvent, DocumentActivity, MemberChannel,
     MemberView, MentionTarget, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence,
-    PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SearchMatch, SpaceCommand,
+    PrivateChannelDraft, PublicChannelDraft, Reaction, SealedChannelKey, SearchMatch, SpaceCommand,
     SpaceEvent, Timestamp, Topic, UnreadCount,
 };
 pub use command::SyncCommand;

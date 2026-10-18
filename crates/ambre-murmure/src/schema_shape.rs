@@ -75,8 +75,9 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 5] = [
+pub(crate) const KEYED_BY_ID: [&str; 6] = [
     "meta:peers",
+    "segment:messages/*/reactions",
     "segment:peers",
     "space:categories",
     "space:channels",
@@ -164,7 +165,7 @@ impl Shape {
 }
 
 /// A channel that reaches every key the schema declares: a name, and a
-/// message in the active segment.
+/// message in the active segment, with a reaction.
 pub(crate) fn channel_of_every_key() -> ChannelState {
     let mut state = ChannelState::create(
         ChannelId::new(),
@@ -189,6 +190,17 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             Timestamp(1_700_000_000_001),
         )
         .expect("send");
+    let segment = state.active_id();
+    let message = state.messages(segment).expect("held")[0].id;
+    state
+        .react(
+            segment,
+            message,
+            "\u{1F44D}",
+            AUTHOR,
+            Timestamp(1_700_000_000_002),
+        )
+        .expect("react");
     state
 }
 

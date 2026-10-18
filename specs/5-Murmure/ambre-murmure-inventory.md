@@ -16,6 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 11 |  |
+| `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
@@ -38,10 +39,9 @@
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | design-only | 15 |  |
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
-| `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 23 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 
-**28 features: 1 implemented, 6 partial, 21 design-only. 456 contract rows, 0 loose.**
+**28 features: 2 implemented, 6 partial, 20 design-only. 456 contract rows, 0 loose.**

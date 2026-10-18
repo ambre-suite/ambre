@@ -17,10 +17,11 @@ use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrC
 
 use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
+use crate::reaction;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MESSAGE_AUTHOR,
-    MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_TS, MESSAGES, SEGMENT_DOCUMENT, SEGMENT_FROM,
-    SEGMENT_STATE, SEGMENTS, SegmentState,
+    MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SEGMENT_DOCUMENT,
+    SEGMENT_FROM, SEGMENT_STATE, SEGMENTS, SegmentState,
 };
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
@@ -651,6 +652,9 @@ impl ChannelState {
         // (`MURMURE-004`, `MURMURE-005`).
         let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
         content.insert(0, &draft.text)?;
+        // Created empty here, so no reaction ever creates a container, and
+        // two first reactors never race for one (`MURMURE-256`).
+        message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
         let delta = session.export_json(doc)?;
         Ok(Sent {
             segment,
@@ -663,9 +667,112 @@ impl ChannelState {
                     author,
                     ts: now,
                     text: draft.text.clone(),
+                    reactions: Vec::new(),
                 }],
             },
         })
+    }
+
+    /// Add the reaction of `user` with `emoji` to `message` (`MURMURE-092`).
+    ///
+    /// One entry, under the member's own key, and nothing else: the message
+    /// stays as it was (`MURMURE-095`). `None` when that reaction is already
+    /// there, so nothing travels.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotEmoji`] for a value that is not one emoji, and
+    /// every refusal of [`ChannelState::reactions_of`].
+    pub fn react(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+        emoji: &str,
+        user: UserId,
+        now: Timestamp,
+    ) -> Result<Option<Sent>, MurmureError> {
+        if !reaction::is_emoji(emoji) {
+            return Err(MurmureError::NotEmoji);
+        }
+        let key = reaction::key(user, emoji);
+        let (doc, session, map) = self.reactions_of(segment, message)?;
+        if map.get(&key).is_some() {
+            return Ok(None);
+        }
+        map.insert(&key, schema::ts_value(now.0))?;
+        let delta = session.export_json(doc)?;
+        Ok(Some(self.reacted(segment, delta)))
+    }
+
+    /// Remove the reaction of `user` with `emoji` from `message`: their own
+    /// entry alone (`MURMURE-096`, `MURMURE-097`). `None` when there is none.
+    ///
+    /// # Errors
+    /// Every refusal of [`ChannelState::reactions_of`].
+    pub fn unreact(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+        emoji: &str,
+        user: UserId,
+    ) -> Result<Option<Sent>, MurmureError> {
+        let key = reaction::key(user, emoji);
+        let (doc, session, map) = self.reactions_of(segment, message)?;
+        if map.get(&key).is_none() {
+            return Ok(None);
+        }
+        map.delete(&key)?;
+        let delta = session.export_json(doc)?;
+        Ok(Some(self.reacted(segment, delta)))
+    }
+
+    /// The `reactions` map of `message` in the live segment `segment`, with
+    /// the session it is written under.
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a segment the channel does not hold, and
+    /// [`MurmureError::Final`] for a final one. [`MurmureError::NoSession`]
+    /// before its PeerID landed, and [`MurmureError::NoMessage`] for a
+    /// message it does not hold.
+    fn reactions_of(
+        &mut self,
+        segment: SegmentId,
+        message: MessageId,
+    ) -> Result<(&LoroDoc, &mut Session, LoroMap), MurmureError> {
+        let document_id = segment.document_id();
+        if !self.holds(document_id) {
+            return Err(MurmureError::NotHeld(document_id));
+        }
+        let held = self
+            .held_mut(document_id)
+            .ok_or(MurmureError::Final(document_id))?;
+        let (doc, session) = held.session()?;
+        let map = message_map(doc, message)
+            .and_then(|map| match map.get(MESSAGE_REACTIONS) {
+                Some(ValueOrContainer::Container(Container::Map(reactions))) => Some(reactions),
+                _ => None,
+            })
+            .ok_or(MurmureError::NoMessage(message))?;
+        Ok((doc, session, map))
+    }
+
+    /// What a reaction delta produced: the delta, its summary of kind
+    /// reaction (`MURMURE-093`), and the segment's messages for the view.
+    fn reacted(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
+        let messages = self
+            .doc(segment.document_id())
+            .map(read_messages)
+            .unwrap_or_default();
+        Sent {
+            segment,
+            delta,
+            summary: ActivitySummary {
+                kind: ActivityKind::Reaction,
+                mentions: Vec::new(),
+                mentions_all: false,
+                anchor: None,
+            },
+            event: MurmureEvent::Messages { segment, messages },
+        }
     }
 
     /// Import a remote delta into the one document it names (`MURMURE-024`).
@@ -758,7 +865,12 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        delta::check(&update, signer, |peer| delta::registered(doc, peer))?;
+        delta::check(
+            &update,
+            signer,
+            |peer| delta::registered(doc, peer),
+            |id| reaction::is_map(doc, id),
+        )?;
         doc.import_json_updates(update)?;
         let note = move |sequence: &mut Sequence| sequence.note_range(seq, range);
         self.answer(document_id, true, Some(note))
@@ -1041,6 +1153,21 @@ fn read_message(item: ValueOrContainer) -> Option<MessageView> {
         author,
         ts,
         text: content.to_string(),
+        reactions: reaction::read(&map),
+    })
+}
+
+/// The map of the message `id` in `doc`, `None` when the segment holds none.
+fn message_map(doc: &LoroDoc, id: MessageId) -> Option<LoroMap> {
+    let wanted = id.to_string();
+    let list = doc.get_list(MESSAGES);
+    (0..list.len()).find_map(|index| match list.get(index) {
+        Some(ValueOrContainer::Container(Container::Map(map)))
+            if schema::string(&map, MESSAGE_ID).as_deref() == Some(wanted.as_str()) =>
+        {
+            Some(map)
+        }
+        _ => None,
     })
 }
 

@@ -11,7 +11,9 @@ use ambre_bus::{
     DocumentActivity, MetaId, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
-use ambre_murmure::{ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Signer};
+use ambre_murmure::{
+    ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sent, Signer,
+};
 
 /// This user's read cursor on one channel document (the Murmure unread spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -712,6 +714,9 @@ impl LogicState {
         let target = match &command {
             MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
+            MurmureCommand::React { segment, .. } | MurmureCommand::Unreact { segment, .. } => {
+                Some(segment.document_id())
+            }
             MurmureCommand::LoadOlder { .. }
             | MurmureCommand::MarkRead
             | MurmureCommand::MarkUnread { .. } => None,
@@ -824,6 +829,54 @@ impl LogicState {
             },
             MurmureCommand::MarkUnread { segment, message } => {
                 self.mark_unread(channel_id, segment, message);
+            }
+            MurmureCommand::React {
+                segment,
+                message,
+                emoji,
+                now,
+            } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: reaction on {channel_id} before the session; dropped");
+                    return;
+                };
+                let reacted = channel.react(segment, message, &emoji, user, now);
+                self.send_reaction(channel_id, reacted);
+            }
+            MurmureCommand::Unreact {
+                segment,
+                message,
+                emoji,
+            } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: reaction on {channel_id} before the session; dropped");
+                    return;
+                };
+                let removed = channel.unreact(segment, message, &emoji, user);
+                self.send_reaction(channel_id, removed);
+            }
+        }
+    }
+
+    /// Hand a reaction delta to the Sync worker with its summary of kind
+    /// reaction, and the segment's messages to the view (the Murmure
+    /// reactions spec). A reaction that changed nothing sends nothing.
+    fn send_reaction(&self, channel_id: ChannelId, reacted: Result<Option<Sent>, MurmureError>) {
+        match reacted {
+            Ok(Some(sent)) => {
+                self.send_to_sync(SyncCommand::SendUpdate {
+                    document_id: sent.segment.document_id(),
+                    payload: sent.delta,
+                    summary: Some(sent.summary),
+                });
+                self.send_to_ui(UiEvent::Channel {
+                    channel_id,
+                    event: sent.event,
+                });
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!("Logic: reaction on channel {channel_id} refused: {error}");
             }
         }
     }
@@ -2295,5 +2348,72 @@ mod tests {
             drain(&ui).as_slice(),
             [UiEvent::MessageSearch { channels, .. }] if channels.is_empty()
         ));
+    }
+
+    /// A reaction leaves for the relay with a summary of kind reaction, and
+    /// its removal too. A second removal writes nothing, so nothing leaves.
+    #[test]
+    fn a_reaction_leaves_with_its_summary_and_a_removal_with_it() {
+        let (mut state, ui, sync) = harness();
+        let me = UserId::new();
+        signed_in(&mut state, me);
+        let (channel_id, segment) = open_channel(&mut state);
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: send("lunch?", Vec::new()),
+        });
+        drain(&sync);
+        drain(&ui);
+        let message = state.channels[&channel_id].messages(segment).expect("held")[0].id;
+        let react = MurmureCommand::React {
+            segment,
+            message,
+            emoji: "\u{1F44D}".to_owned(),
+            now: NOW,
+        };
+        let unreact = MurmureCommand::Unreact {
+            segment,
+            message,
+            emoji: "\u{1F44D}".to_owned(),
+        };
+
+        for (command, users) in [(react, vec![me]), (unreact.clone(), Vec::new())] {
+            state.handle_logic_command(LogicCommand::Channel {
+                channel_id,
+                command,
+            });
+            let sent = drain(&sync);
+            assert!(
+                matches!(
+                    sent.as_slice(),
+                    [SyncCommand::SendUpdate { document_id, summary: Some(summary), .. }]
+                        if *document_id == segment.document_id()
+                            && summary.kind == ActivityKind::Reaction
+                ),
+                "one reaction delta, got {sent:?}"
+            );
+            let shown = drain(&ui);
+            let [
+                UiEvent::Channel {
+                    event: MurmureEvent::Messages { messages, .. },
+                    ..
+                },
+            ] = shown.as_slice()
+            else {
+                panic!("the messages, got {shown:?}");
+            };
+            let reacted: Vec<UserId> = messages[0]
+                .reactions
+                .iter()
+                .flat_map(|r| r.users.clone())
+                .collect();
+            assert_eq!(reacted, users);
+        }
+        state.handle_logic_command(LogicCommand::Channel {
+            channel_id,
+            command: unreact,
+        });
+        assert!(drain(&sync).is_empty(), "no entry left, nothing leaves");
+        assert!(drain(&ui).is_empty());
     }
 }

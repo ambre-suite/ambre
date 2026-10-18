@@ -40,10 +40,10 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-003` | `INV` | A message's `author` MUST hold a user identifier, never a display name and never a key. | this spec section 3; `ambre-spec-op-authorship.md` | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author`; type-level -- `MessageView` holds its author as a `UserId` | none | verified |
 | `MURMURE-004` | `INV` | All message text MUST live in a `LoroText`; a `LoroMap` MUST NOT hold message text. | this spec section 3 | `ambre_murmure::channel_tests::the_body_lives_in_a_text_and_no_map_holds_it`; `ambre_murmure::schema_shape::a_body_stored_as_a_string_moves_the_shape` -- a body stored as a map string turns the frozen shape red | none | verified |
 | `MURMURE-005` | `CONC` | Two peers typing in the same message MUST both keep their text. | this spec section 3 | `ambre_murmure::channel_tests::two_peers_typing_in_one_message_keep_both_texts` -- two peers type into one body at once, exchange deltas, and both read the same text holding both insertions | none | verified |
-| `MURMURE-006` | `INV` | A reaction MUST be one entry of one flat map, keyed by the pair of its emoji and its reacting user. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-007` | `CONC` | Two members reacting with the same emoji at once MUST both appear in the merged reaction. | this spec section 3; this spec section 6 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier or the channel itself. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-006` | `INV` | A reaction MUST be one entry of one flat map, keyed by the pair of its emoji and its reacting user. | this spec section 3 | `ambre_murmure::reaction_tests::two_members_reacting_at_once_both_stay`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- one flat map per message, one key per member and emoji | none | verified |
+| `MURMURE-007` | `CONC` | Two members reacting with the same emoji at once MUST both appear in the merged reaction. | this spec section 3; this spec section 6 | `ambre_murmure::reaction_tests::two_members_reacting_at_once_both_stay` -- both peers read both members under one emoji | none | verified |
+| `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier or the channel itself. | this spec section 3 | not built | unbuilt -- lands with the `Mentions` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | not built | unbuilt -- lands with the `Threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-010` | `INV` | The `segments` list MUST hold at most one `active` and at most one `closing` segment. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-011` | `CONC` | Two peers closing the active segment at once MUST converge on one successor segment. | this spec section 5; this spec section 6 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-012` | `INV` | A final segment document MUST hold no operation later than its finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -62,9 +62,8 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 13 `verified`, 9 `unimplemented`. The engine tests and the shape belt of
-  `crates/ambre-murmure` hold the header, the message map, the text body, the catalogue and the
-  version gate.
+* **Verification.** 15 `verified`, 7 `unimplemented`. The engine tests and the shape belt of
+  `crates/ambre-murmure` hold every built container and the version gate.
 
 ---
 
@@ -132,7 +131,7 @@ names the unit two concurrent writers race for. Every document also carries the 
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
-| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | design |
+| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | built |
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | segment, thread | `messages/{n}/actions` | List | position | `{id: String, label: String}` | list order, no LWW | bots | design |
 | segment, thread | `messages/{n}/preview` | Map | `title`, `description`, `image` | String, String, a media reference | the key | link-previews | design |

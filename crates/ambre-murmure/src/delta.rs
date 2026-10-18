@@ -14,7 +14,8 @@ use loro::{ContainerID, ContainerType, LoroDoc, LoroValue, ValueOrContainer, Ver
 use serde::Deserialize;
 
 use crate::error::MurmureError;
-use crate::schema::{MESSAGE_AUTHOR, MESSAGES};
+use crate::reaction;
+use crate::schema::{MESSAGE_AUTHOR, MESSAGE_REACTIONS, MESSAGES};
 
 /// The Loro JSON schema version a segment delta carries (`MURMURE-227`). A
 /// change of it is a bump of `SCHEMA_VERSION` (`MURMURE-020`).
@@ -62,6 +63,10 @@ pub enum Refusal {
     /// A message taken out of the list. A delete marks it instead.
     #[error("a message removed from the list")]
     Removed,
+    /// A reaction under another member's key, or a `reactions` map replaced
+    /// after its message was sent (`MURMURE-094`).
+    #[error("a reaction its signer may not write")]
+    ForeignReaction,
 }
 
 impl Refusal {
@@ -142,9 +147,10 @@ fn restore_entries(update: &mut JsonSchema) {
 /// Check every operation of `update` against what its signer may write.
 ///
 /// `registered` names the user a PeerID of an earlier session stands for, as
-/// the registry of the segment holds it. The check takes no document, so it
-/// copies none (`MURMURE-226`). Every client runs it on the same delta, so
-/// every client reaches the same verdict (`MURMURE-079`).
+/// the registry of the segment holds it. `reactions` says whether a container
+/// is the `reactions` map of a message the segment holds. The check takes no
+/// document, so it copies none (`MURMURE-226`). Every client runs it on the
+/// same delta, so every client reaches the same verdict (`MURMURE-079`).
 ///
 /// # Errors
 /// The first [`Refusal`] an operation earns.
@@ -152,6 +158,7 @@ pub(crate) fn check(
     update: &JsonSchema,
     signer: Signer,
     registered: impl Fn(u64) -> Option<UserId>,
+    reactions: impl Fn(&ContainerID) -> bool,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer) {
@@ -167,21 +174,43 @@ pub(crate) fn check(
     };
     let mut created: Vec<&ContainerID> = Vec::new();
     let mut authored: Vec<&ContainerID> = Vec::new();
+    // The `reactions` maps of the messages this delta creates.
+    let mut fresh: Vec<&ContainerID> = Vec::new();
     for op in update.changes.iter().flat_map(|c| &c.ops) {
         match &op.container {
-            ContainerID::Normal { peer, .. } => {
+            id @ ContainerID::Normal { peer, .. } => {
+                // A reactions map is open to every member, each under their
+                // own key (`MURMURE-094`).
+                if fresh.contains(&id) || reactions(id) {
+                    reaction_allowed(&op.content, user)?;
+                    continue;
+                }
                 // A message, its body and every child of it belong to the
                 // user whose PeerID created them.
                 if owner(*peer) != Some(user) {
                     return Err(Refusal::ForeignMessage);
                 }
-                if let JsonOpContent::Map(MapOp::Insert { key, value }) = &op.content
-                    && key == MESSAGE_AUTHOR
-                {
-                    if !names(value, user) {
-                        return Err(Refusal::ForeignAuthor);
+                match &op.content {
+                    JsonOpContent::Map(MapOp::Insert { key, value }) if key == MESSAGE_AUTHOR => {
+                        if !names(value, user) {
+                            return Err(Refusal::ForeignAuthor);
+                        }
+                        authored.push(id);
                     }
-                    authored.push(&op.container);
+                    // The map comes with its message, and is never replaced:
+                    // a new one would drop every member's reaction.
+                    JsonOpContent::Map(MapOp::Insert { key, value })
+                        if key == MESSAGE_REACTIONS =>
+                    {
+                        match value {
+                            LoroValue::Container(map) if created.contains(&id) => fresh.push(map),
+                            _ => return Err(Refusal::ForeignReaction),
+                        }
+                    }
+                    JsonOpContent::Map(MapOp::Delete { key }) if key == MESSAGE_REACTIONS => {
+                        return Err(Refusal::ForeignReaction);
+                    }
+                    _ => {}
                 }
             }
             root if is_root(root, MESSAGES, ContainerType::List) => match &op.content {
@@ -226,6 +255,21 @@ fn entry_allowed(content: &JsonOpContent, peer: u64, user: UserId) -> Result<(),
     match claimed {
         Some(entry) if entry.user != user => Err(Refusal::ForeignEntry),
         _ => Ok(()),
+    }
+}
+
+/// Whether a write to a `reactions` map is the signer's own: an entry under
+/// their key, set to a plain value or removed.
+fn reaction_allowed(content: &JsonOpContent, user: UserId) -> Result<(), Refusal> {
+    let own = |key: &str| reaction::user_of(key) == Some(user);
+    match content {
+        JsonOpContent::Map(MapOp::Insert { key, value })
+            if own(key) && !matches!(value, LoroValue::Container(_)) =>
+        {
+            Ok(())
+        }
+        JsonOpContent::Map(MapOp::Delete { key }) if own(key) => Ok(()),
+        _ => Err(Refusal::ForeignReaction),
     }
 }
 
@@ -294,7 +338,13 @@ pub(crate) fn import_arrivals(
         match arrival {
             Arrival::Bytes(bytes) => crate::schema::import_bytes(doc, &bytes, document_id)?,
             Arrival::Signed { update, signer } => {
-                if let Err(refusal) = check(&update, signer, |peer| registered(doc, peer)) {
+                let verdict = check(
+                    &update,
+                    signer,
+                    |peer| registered(doc, peer),
+                    |id| reaction::is_map(doc, id),
+                );
+                if let Err(refusal) = verdict {
                     tracing::warn!("[Murmure] a delta for {document_id} refused: {refusal}");
                     continue;
                 }
