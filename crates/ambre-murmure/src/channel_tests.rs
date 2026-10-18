@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_bus::{MentionTarget, MessageDraft, MurmureEvent, Timestamp};
+use ambre_bus::{Mention, MentionTarget, MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
 use ambre_core::{ChannelId, DocumentId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
@@ -485,10 +485,22 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
     let with_mentions = MessageDraft {
         text: "@bob @carol @bob @channel".to_owned(),
         mentions: vec![
-            MentionTarget::User(bob),
-            MentionTarget::User(carol),
-            MentionTarget::User(bob),
-            MentionTarget::Channel,
+            Mention {
+                target: MentionTarget::User(bob),
+                range: 0..4,
+            },
+            Mention {
+                target: MentionTarget::User(carol),
+                range: 5..11,
+            },
+            Mention {
+                target: MentionTarget::User(bob),
+                range: 12..16,
+            },
+            Mention {
+                target: MentionTarget::Channel,
+                range: 17..25,
+            },
         ],
     };
     let sent = state

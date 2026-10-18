@@ -31,18 +31,19 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use ambre_bus::MentionTarget;
 use ambre_core::Uuid;
 use ambre_core::authorship::{PEERS_MAP, PeerEntry};
 use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, verdict};
 use ambre_core::{CategoryId, ChannelId};
-use loro::{LoroDoc, LoroValue};
+use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{
     CATALOGUE, CATEGORIES, CATEGORY_NAME, CATEGORY_POSITION, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE,
     DocumentKind, ENTRY_CATEGORY, ENTRY_KEY, ENTRY_NAME, ENTRY_POSITION, ENTRY_TOPIC, HEADER,
-    HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MESSAGE_AUTHOR, MESSAGE_CONTENT, MESSAGE_ID,
-    MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT, SEGMENT_STATE,
-    SEGMENTS, SPACE, SPACE_NAME, SegmentState,
+    HEADER_CHANNEL, HEADER_KIND, HEADER_SPACE, MENTION, MESSAGE_AUTHOR, MESSAGE_CONTENT,
+    MESSAGE_ID, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SCHEMA_VERSION, SEGMENT_DOCUMENT,
+    SEGMENT_STATE, SEGMENTS, SPACE, SPACE_NAME, SegmentState,
 };
 use crate::schema_shape::{
     ANY, AUTHOR, ID, KEYED_BY_ID, SCHEMA_SOURCE, channel_of_every_key, declared_string_consts,
@@ -61,11 +62,13 @@ const UNREAD: [&str; 4] = [
     "space:header/created_at",
 ];
 
-/// One segment below a root: a map key, or a position in a list.
+/// One segment below a root: a map key, a position in a list, or a mark
+/// over a body.
 #[derive(Clone)]
 enum Segment {
     Key(String),
     At(usize),
+    Mark(String),
 }
 
 /// One stored value: its document, the root it sits under, the segments down
@@ -82,7 +85,7 @@ impl Stored {
     fn key(&self, depth: usize) -> Option<&str> {
         match self.segments.get(depth)? {
             Segment::Key(key) => Some(key),
-            Segment::At(_) => None,
+            Segment::At(_) | Segment::Mark(_) => None,
         }
     }
 
@@ -90,7 +93,15 @@ impl Stored {
     fn at(&self, depth: usize) -> Option<usize> {
         match self.segments.get(depth)? {
             Segment::At(at) => Some(*at),
-            Segment::Key(_) => None,
+            Segment::Key(_) | Segment::Mark(_) => None,
+        }
+    }
+
+    /// The mark at `depth`, or `None` for anything else.
+    fn mark(&self, depth: usize) -> Option<&str> {
+        match self.segments.get(depth)? {
+            Segment::Mark(mark) => Some(mark),
+            Segment::Key(_) | Segment::At(_) => None,
         }
     }
 
@@ -113,7 +124,44 @@ fn stored_values(kind: DocumentKind, doc: &LoroDoc) -> Vec<Stored> {
     for (root, value) in roots.iter() {
         walk(kind, root, Vec::new(), value, &mut found);
     }
+    stored_marks(kind, doc, &mut found);
     found
+}
+
+/// The marks over each message body, which the deep value drops.
+fn stored_marks(kind: DocumentKind, doc: &LoroDoc, found: &mut Vec<Stored>) {
+    let list = doc.get_list(MESSAGES);
+    for at in 0..list.len() {
+        let Some(ValueOrContainer::Container(Container::Map(message))) = list.get(at) else {
+            continue;
+        };
+        let Some(ValueOrContainer::Container(Container::Text(content))) =
+            message.get(MESSAGE_CONTENT)
+        else {
+            continue;
+        };
+        for span in content.to_delta() {
+            let TextDelta::Insert {
+                attributes: Some(attributes),
+                ..
+            } = span
+            else {
+                continue;
+            };
+            for (mark, value) in attributes {
+                found.push(Stored {
+                    kind,
+                    root: MESSAGES.to_owned(),
+                    segments: vec![
+                        Segment::At(at),
+                        Segment::Key(MESSAGE_CONTENT.to_owned()),
+                        Segment::Mark(mark),
+                    ],
+                    value,
+                });
+            }
+        }
+    }
 }
 
 fn walk(
@@ -168,6 +216,12 @@ fn frozen_path(stored: &Stored) -> String {
             Segment::At(_) => ANY.to_owned(),
             Segment::Key(_) if KEYED_BY_ID.contains(&path.as_str()) => ID.to_owned(),
             Segment::Key(key) => key.clone(),
+            // A mark reads as in the shape: `#` and its name.
+            Segment::Mark(mark) => {
+                path.push('#');
+                path.push_str(mark);
+                continue;
+            }
         };
         path.push('/');
         path.push_str(&part);
@@ -292,6 +346,15 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         MESSAGE_ID if stored.string()? == message.id.to_string() => Some(format!("message {n}")),
         MESSAGE_AUTHOR if message.author == AUTHOR => Some(format!("message {n} by the author")),
         MESSAGE_TS => Some(format!("message {n} sent at {} ms", message.ts.0)),
+        // A mention mark is read through the mentions the view is given.
+        MESSAGE_CONTENT if stored.mark(2) == Some(MENTION) => {
+            let named = match message.mentions.first()?.target {
+                MentionTarget::Channel => "the channel",
+                MentionTarget::User(user) if user == AUTHOR => "the author",
+                MentionTarget::User(_) => "another user",
+            };
+            Some(format!("message {n} mentions {named}"))
+        }
         MESSAGE_CONTENT => Some(format!("message {n} reads {:?}", message.text)),
         // The entry is read by its key: the member and the emoji. Its value,
         // the instant, is kept for no reader yet.
@@ -444,7 +507,7 @@ fn readings_of(scenario: &Scenario, reader: &Reader<'_>) -> Readings {
                 readings
                     .keys
                     .extend(stored.segments.iter().filter_map(|segment| match segment {
-                        Segment::Key(key) => Some(key.clone()),
+                        Segment::Key(key) | Segment::Mark(key) => Some(key.clone()),
                         Segment::At(_) => None,
                     }));
             }

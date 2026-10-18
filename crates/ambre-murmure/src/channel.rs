@@ -9,15 +9,14 @@
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, ChannelMatches, MentionTarget, MessageDraft, MessageView,
-    MurmureEvent, SearchMatch, Timestamp, UnreadCount,
+    ActivityKind, ActivitySummary, ChannelMatches, Mention, MentionCount, MentionTarget,
+    MessageDraft, MessageView, MurmureEvent, SearchMatch, Timestamp, UnreadCount,
 };
 use ambre_core::{ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroList, LoroMap, LoroText, ValueOrContainer};
 
 use crate::delta::{self, Arrival, Refusal, Signer};
 use crate::error::MurmureError;
-use crate::reaction;
 use crate::schema::{
     self, CHANNEL, CHANNEL_NAME, CHANNEL_TYPE, ChannelType, DocumentKind, MESSAGE_AUTHOR,
     MESSAGE_CONTENT, MESSAGE_ID, MESSAGE_REACTIONS, MESSAGE_TS, MESSAGES, SEGMENT_DOCUMENT,
@@ -26,6 +25,7 @@ use crate::schema::{
 use crate::search::Query;
 use crate::sequence::{self, Order, Position, Sequence};
 use crate::session::Session;
+use crate::{mention, reaction};
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -537,14 +537,50 @@ impl ChannelState {
         read: Seq,
         me: UserId,
     ) -> Result<UnreadCount, MurmureError> {
+        self.count_past(segment, read, me, |_| true)
+            .map(UnreadCount)
+    }
+
+    /// The messages [`ChannelState::unread`] counts that mention `me` or the
+    /// channel (`MURMURE-233`). The marks decide, never the summaries, so a
+    /// false claim reads as nothing here (`MURMURE-104`).
+    ///
+    /// # Errors
+    /// [`MurmureError::NotHeld`] for a segment the channel does not hold.
+    pub fn mentions(
+        &self,
+        segment: SegmentId,
+        read: Seq,
+        me: UserId,
+    ) -> Result<MentionCount, MurmureError> {
+        let channel = self.channel_id;
+        self.count_past(segment, read, me, |message| {
+            content_of(message)
+                .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
+        })
+        .map(MentionCount)
+    }
+
+    /// The messages of `segment` past `read`, written by someone other than
+    /// `me`, that `counts` keeps.
+    fn count_past(
+        &self,
+        segment: SegmentId,
+        read: Seq,
+        me: UserId,
+        counts: impl Fn(&LoroMap) -> bool,
+    ) -> Result<u32, MurmureError> {
         let document_id = segment.document_id();
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let sequence = self.sequences.get(&document_id);
-        let mut count = UnreadCount::ZERO;
+        let mut count: u32 = 0;
         doc.get_list(MESSAGES).for_each(|item| {
-            let Some((id, author)) = identity_of(item) else {
+            let ValueOrContainer::Container(Container::Map(message)) = item else {
+                return;
+            };
+            let Some((id, author)) = identity_of(&message) else {
                 return;
             };
             if author == me {
@@ -554,8 +590,8 @@ impl ChannelState {
                 Position::Exact(seq) | Position::AtMost(seq) => seq > read,
                 Position::Unknown => true,
             };
-            if past {
-                count = count.plus(UnreadCount(1));
+            if past && counts(&message) {
+                count = count.saturating_add(1);
             }
         });
         Ok(count)
@@ -592,7 +628,7 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        Ok(read_messages(doc))
+        Ok(read_messages(doc, self.channel_id))
     }
 
     /// The messages of every held segment that match `query`, and which
@@ -612,7 +648,7 @@ impl ChannelState {
             .iter()
             .filter_map(|segment| Some((*segment, self.doc(segment.document_id())?)))
             .flat_map(|(segment, doc)| {
-                read_messages(doc)
+                read_messages(doc, self.channel_id)
                     .into_iter()
                     .filter(|message| query.matches(&message.text))
                     .map(move |message| SearchMatch { segment, message })
@@ -641,6 +677,12 @@ impl ChannelState {
         author: UserId,
         now: Timestamp,
     ) -> Result<Sent, MurmureError> {
+        // Checked before the first write, so a refused draft leaves no
+        // message half written in the segment.
+        if !mention::fits(&draft.mentions, &draft.text) {
+            return Err(MurmureError::BadMention);
+        }
+        let channel = self.channel_id;
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
         let id = MessageId::new();
@@ -652,14 +694,17 @@ impl ChannelState {
         // (`MURMURE-004`, `MURMURE-005`).
         let content = message.insert_container(MESSAGE_CONTENT, LoroText::new())?;
         content.insert(0, &draft.text)?;
+        mention::write(doc, &content, &draft.mentions, channel)?;
         // Created empty here, so no reaction ever creates a container, and
         // two first reactors never race for one (`MURMURE-256`).
         message.insert_container(MESSAGE_REACTIONS, LoroMap::new())?;
         let delta = session.export_json(doc)?;
+        // The summary and the view read the marks as written.
+        let mentions = mention::read(&content, channel);
         Ok(Sent {
             segment,
             delta,
-            summary: summary_of(draft),
+            summary: summary_of(&mentions),
             event: MurmureEvent::Messages {
                 segment,
                 messages: vec![MessageView {
@@ -667,6 +712,7 @@ impl ChannelState {
                     author,
                     ts: now,
                     text: draft.text.clone(),
+                    mentions,
                     reactions: Vec::new(),
                 }],
             },
@@ -760,7 +806,7 @@ impl ChannelState {
     fn reacted(&self, segment: SegmentId, delta: Vec<u8>) -> Sent {
         let messages = self
             .doc(segment.document_id())
-            .map(read_messages)
+            .map(|doc| read_messages(doc, self.channel_id))
             .unwrap_or_default();
         Sent {
             segment,
@@ -896,7 +942,7 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let messages = read_messages(doc);
+        let messages = read_messages(doc, self.channel_id);
         let created = resolve.then(|| sequence::created(doc));
         if let Some(note) = note {
             let sequence = self.sequences.entry(document_id).or_default();
@@ -1028,7 +1074,7 @@ impl ChannelState {
         let doc = schema::admit_with(DocumentKind::Segment, self.channel_id, document_id, |doc| {
             delta::import_arrivals(doc, arrivals, document_id)
         })?;
-        let messages = read_messages(&doc);
+        let messages = read_messages(&doc, self.channel_id);
         if let Some(sequence) = self.sequences.get_mut(&document_id) {
             sequence.resolve(&doc);
         }
@@ -1115,10 +1161,10 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(SegmentId, SegmentState)> {
 
 /// The messages of a segment, in list order. A malformed message is skipped
 /// with a warn rather than failing the whole segment.
-fn read_messages(doc: &LoroDoc) -> Vec<MessageView> {
+fn read_messages(doc: &LoroDoc, channel: ChannelId) -> Vec<MessageView> {
     let list = doc.get_list(MESSAGES);
     let mut messages = Vec::with_capacity(list.len());
-    list.for_each(|item| match read_message(item) {
+    list.for_each(|item| match read_message(item, channel) {
         Some(view) => messages.push(view),
         None => tracing::warn!("[Murmure] a message is malformed; skipped"),
     });
@@ -1127,32 +1173,34 @@ fn read_messages(doc: &LoroDoc) -> Vec<MessageView> {
 
 /// The identifier and the author of one message, with no body read: what a
 /// count needs. `None` when either is absent or unreadable.
-fn identity_of(item: ValueOrContainer) -> Option<(MessageId, UserId)> {
-    let ValueOrContainer::Container(Container::Map(map)) = item else {
-        return None;
-    };
-    let id = MessageId::parse_str(&schema::string(&map, MESSAGE_ID)?).ok()?;
-    let author = UserId::parse_str(&schema::string(&map, MESSAGE_AUTHOR)?).ok()?;
+fn identity_of(map: &LoroMap) -> Option<(MessageId, UserId)> {
+    let id = MessageId::parse_str(&schema::string(map, MESSAGE_ID)?).ok()?;
+    let author = UserId::parse_str(&schema::string(map, MESSAGE_AUTHOR)?).ok()?;
     Some((id, author))
 }
 
+/// The body of one message, `None` when it is absent or not a text.
+fn content_of(map: &LoroMap) -> Option<LoroText> {
+    match map.get(MESSAGE_CONTENT) {
+        Some(ValueOrContainer::Container(Container::Text(content))) => Some(content),
+        _ => None,
+    }
+}
+
 /// One message, or `None` when a field is absent or unreadable.
-fn read_message(item: ValueOrContainer) -> Option<MessageView> {
+fn read_message(item: ValueOrContainer, channel: ChannelId) -> Option<MessageView> {
     let ValueOrContainer::Container(Container::Map(map)) = item else {
         return None;
     };
-    let id = MessageId::parse_str(&schema::string(&map, MESSAGE_ID)?).ok()?;
-    let author = UserId::parse_str(&schema::string(&map, MESSAGE_AUTHOR)?).ok()?;
+    let (id, author) = identity_of(&map)?;
     let ts = Timestamp(schema::unsigned(&map, MESSAGE_TS)?);
-    let Some(ValueOrContainer::Container(Container::Text(content))) = map.get(MESSAGE_CONTENT)
-    else {
-        return None;
-    };
+    let content = content_of(&map)?;
     Some(MessageView {
         id,
         author,
         ts,
         text: content.to_string(),
+        mentions: mention::read(&content, channel),
         reactions: reaction::read(&map),
     })
 }
@@ -1171,13 +1219,14 @@ fn message_map(doc: &LoroDoc, id: MessageId) -> Option<LoroMap> {
     })
 }
 
-/// The activity summary of a new message (`MURMURE-081`): kind content, each
-/// named user once in typing order, and whether the channel itself is named.
-fn summary_of(draft: &MessageDraft) -> ActivitySummary {
+/// The activity summary of a new message (`MURMURE-081`). It has kind content,
+/// lists each user its marks name once in text order, and says whether the
+/// channel itself is named. An `@channel` lists no member (`MURMURE-230`).
+fn summary_of(marked: &[Mention]) -> ActivitySummary {
     let mut mentions: Vec<UserId> = Vec::new();
     let mut mentions_all = false;
-    for target in &draft.mentions {
-        match target {
+    for mention in marked {
+        match &mention.target {
             MentionTarget::User(user) if !mentions.contains(user) => mentions.push(*user),
             MentionTarget::User(_) => {}
             MentionTarget::Channel => mentions_all = true,

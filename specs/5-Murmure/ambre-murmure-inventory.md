@@ -19,6 +19,7 @@
 | `murmure-reactions` | A member answers a message with an emoji. | implemented | 7 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 49 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 21 |  |
+| `murmure-mentions` | A member names another in a message with `@`. | partial | 13 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | partial | 22 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | partial | 17 |  |
 | `murmure-spaces` | A team gathers in a space. | partial | 31 |  |
@@ -33,7 +34,6 @@
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 19 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
-| `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 31 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
@@ -44,4 +44,4 @@
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 
-**28 features: 2 implemented, 6 partial, 20 design-only. 456 contract rows, 0 loose.**
+**28 features: 2 implemented, 7 partial, 19 design-only. 456 contract rows, 0 loose.**

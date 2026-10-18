@@ -26,11 +26,11 @@
 
 use std::collections::BTreeSet;
 
-use ambre_bus::{MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
+use ambre_bus::{Mention, MentionTarget, MessageDraft, SealedChannelKey, Timestamp, Topic};
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
 use ambre_core::schema::{migration_peer, step_fingerprint};
 use ambre_core::{CategoryId, ChannelId, SpaceId, UserId};
-use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
+use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
 use crate::{ChannelState, ChannelType, Listing, SpaceState};
@@ -132,8 +132,24 @@ impl Shape {
                 self.lines.insert(format!("{path}: list"));
                 list.for_each(|child| self.walk(&format!("{path}/{ANY}"), child));
             }
-            ValueOrContainer::Container(Container::Text(_)) => {
+            ValueOrContainer::Container(Container::Text(text)) => {
                 self.lines.insert(format!("{path}: text"));
+                // A mark is stored in the body, so its key and value type
+                // are part of the shape too: `#` names the mark.
+                for span in text.to_delta() {
+                    let TextDelta::Insert {
+                        attributes: Some(attributes),
+                        ..
+                    } = span
+                    else {
+                        continue;
+                    };
+                    for (key, value) in attributes {
+                        self.lines
+                            .insert(format!("{path}#{key}: {}", type_name(&value)));
+                        self.keys.insert(key);
+                    }
+                }
             }
             // Murmure writes no tree, movable list or counter. Naming the
             // container kind still moves a line if one ever appears.
@@ -183,8 +199,11 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     state
         .send(
             &MessageDraft {
-                text: "hello".to_owned(),
-                mentions: vec![MentionTarget::Channel],
+                text: "hello @channel".to_owned(),
+                mentions: vec![Mention {
+                    target: MentionTarget::Channel,
+                    range: 6..14,
+                }],
             },
             AUTHOR,
             Timestamp(1_700_000_000_001),

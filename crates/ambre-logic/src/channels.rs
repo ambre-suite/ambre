@@ -10,7 +10,7 @@ use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
     DocumentActivity, MetaId, MurmureCommand, MurmureEvent,
 };
-use ambre_bus::{MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
+use ambre_bus::{MentionCount, MessageId, SegmentId, Seq, SignedDelta, UnreadCount};
 use ambre_murmure::{
     ChannelState, MurmureError, Opening, OpeningChannel, Position, Query, Sent, Signer,
 };
@@ -33,10 +33,11 @@ pub(crate) struct ClosedChannel {
     documents: Vec<DocumentId>,
     /// The final segments not held at close, whose cursors a drop forgets.
     finals: Vec<DocumentId>,
-    /// The unread count at close, `None` when it was not known then.
-    base: Option<UnreadCount>,
-    /// The messages each document's summaries counted since the close.
-    counted: HashMap<DocumentId, u32>,
+    /// The counts at close, `None` when they were not known then.
+    base: Option<Counts>,
+    /// The messages and the mentions each document's summaries counted
+    /// since the close.
+    counted: HashMap<DocumentId, Counts>,
     /// The horizon of each document's copy in the local store, until a
     /// reopen asks for it.
     copies: HashMap<DocumentId, u64>,
@@ -71,25 +72,41 @@ impl ClosedChannel {
     /// since. With no count at close, a counted message marks it active, and
     /// none leaves the mark the view holds: `None`.
     fn mark(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
-        let since = UnreadCount(
-            self.counted
-                .values()
-                .fold(0, |sum, n| sum.saturating_add(*n)),
-        );
+        let since = self.counted.values().fold(Counts::default(), Counts::plus);
         match self.base {
-            Some(base) => {
-                let unread = base.plus(since);
-                Some(ChannelActivity {
-                    channel_id,
-                    active: !unread.is_zero(),
-                    unread: Some(unread),
-                })
-            }
-            None => (!since.is_zero()).then_some(ChannelActivity {
+            Some(base) => Some(base.plus(&since).activity(channel_id)),
+            None => (!since.unread.is_zero()).then_some(ChannelActivity {
                 channel_id,
                 active: true,
                 unread: None,
+                mentions: None,
             }),
+        }
+    }
+}
+
+/// The new messages of a channel, and those of them that mention this user.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Counts {
+    unread: UnreadCount,
+    mentions: MentionCount,
+}
+
+impl Counts {
+    fn plus(self, other: &Self) -> Self {
+        Self {
+            unread: self.unread.plus(other.unread),
+            mentions: self.mentions.plus(other.mentions),
+        }
+    }
+
+    /// The mark these counts give the channel.
+    fn activity(self, channel_id: ChannelId) -> ChannelActivity {
+        ChannelActivity {
+            channel_id,
+            active: !self.unread.is_zero(),
+            unread: Some(self.unread),
+            mentions: Some(self.mentions),
         }
     }
 }
@@ -104,19 +121,24 @@ pub(crate) enum HeldCommand {
     Space(ambre_bus::SpaceId, ambre_bus::SpaceCommand),
 }
 
-/// The unread count of an open channel, `None` when a part of it is unknown
+/// The counts of an open channel, `None` when a part of them is unknown
 /// (the Murmure unread spec). Unknown is a held segment with no cursor yet,
-/// or a final segment not loaded that may hold unread messages.
-fn unread_of(
+/// or a final segment not loaded that may hold unread messages. The
+/// mentions are read off the marks, never off a summary (the Murmure
+/// mentions spec).
+fn counts_of(
     channel: &ChannelState,
     cursors: &HashMap<DocumentId, ReadCursor>,
     me: UserId,
-) -> Option<UnreadCount> {
+) -> Option<Counts> {
     let held = channel.held_segments();
-    let mut count = UnreadCount::ZERO;
+    let mut count = Counts::default();
     for segment in &held {
         let cursor = cursors.get(&segment.document_id())?;
-        count = count.plus(channel.unread(*segment, cursor.read, me).ok()?);
+        count = count.plus(&Counts {
+            unread: channel.unread(*segment, cursor.read, me).ok()?,
+            mentions: channel.mentions(*segment, cursor.read, me).ok()?,
+        });
     }
     let unknown_final = channel
         .final_segments()
@@ -131,12 +153,8 @@ impl LogicState {
     /// not known yet.
     fn counted(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
         let channel = self.channels.get(&channel_id)?;
-        let unread = unread_of(channel, &self.read_cursors, self.my_user_id?)?;
-        Some(ChannelActivity {
-            channel_id,
-            active: !unread.is_zero(),
-            unread: Some(unread),
-        })
+        let counts = counts_of(channel, &self.read_cursors, self.my_user_id?)?;
+        Some(counts.activity(channel_id))
     }
 
     /// Hand the view the count of an open channel, once it is known.
@@ -294,7 +312,7 @@ impl LogicState {
         };
         let base = self
             .my_user_id
-            .and_then(|me| unread_of(&channel, &self.read_cursors, me));
+            .and_then(|me| counts_of(&channel, &self.read_cursors, me));
         let documents = channel.document_ids();
         let finals = cursored_documents(&channel)
             .into_iter()
@@ -477,7 +495,13 @@ impl LogicState {
         else {
             return false;
         };
-        closed.counted.insert(document_id, counters.content);
+        closed.counted.insert(
+            document_id,
+            Counts {
+                unread: UnreadCount(counters.content),
+                mentions: MentionCount(counters.mentions),
+            },
+        );
         if let Some(mark) = closed.mark(channel_id) {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
@@ -806,6 +830,7 @@ impl LogicState {
                     channel_id,
                     active: false,
                     unread: None,
+                    mentions: None,
                 });
                 self.send_to_ui(UiEvent::ChannelActivity {
                     channels: vec![mark],
@@ -946,6 +971,7 @@ impl LogicState {
                         channel_id: document.channel_id,
                         active: document.active,
                         unread: None,
+                        mentions: None,
                     });
                 }
             }
@@ -1122,7 +1148,8 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, MentionTarget, MessageDraft, MurmureEvent, RestEvent, SegmentId, Timestamp,
+        ActivityKind, Mention, MentionTarget, MessageDraft, MurmureEvent, RestEvent, SegmentId,
+        Timestamp,
     };
     use ambre_murmure::ChannelType;
 
@@ -1175,7 +1202,7 @@ mod tests {
         (channel_id, active)
     }
 
-    fn send(text: &str, mentions: Vec<MentionTarget>) -> MurmureCommand {
+    fn send(text: &str, mentions: Vec<Mention>) -> MurmureCommand {
         MurmureCommand::SendMessage {
             draft: MessageDraft {
                 text: text.to_owned(),
@@ -1196,7 +1223,13 @@ mod tests {
 
         state.handle_logic_command(LogicCommand::Channel {
             channel_id,
-            command: send("hi @bob", vec![MentionTarget::User(bob)]),
+            command: send(
+                "hi @bob",
+                vec![Mention {
+                    target: MentionTarget::User(bob),
+                    range: 3..7,
+                }],
+            ),
         });
 
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync.try_recv().ok()).collect();
@@ -1447,9 +1480,39 @@ mod tests {
                 channel_id,
                 active: true,
                 unread: Some(UnreadCount(unread)),
+                mentions: Some(MentionCount::ZERO),
             }]
         };
         assert_eq!(marks, vec![mark(2), mark(3), mark(3)]);
+    }
+
+    /// A closed channel counts its mentions from the summaries beside its
+    /// unread, over the count it had at close (the Murmure mentions spec).
+    #[test]
+    fn a_closed_channel_counts_its_mentions_from_the_summaries() {
+        let (mut state, ui, _sync) = harness();
+        let (channel_id, active, _meta) = closed_counted(&mut state);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::Activity {
+            document_id: active.document_id(),
+            counters: ambre_core::activity::ActivityCounters {
+                mentions: 1,
+                ..activity(2)
+            },
+        });
+        let shown = drain(&ui);
+        let [UiEvent::ChannelActivity { channels }] = shown.as_slice() else {
+            panic!("expected the channel's mark, got {shown:?}");
+        };
+        assert_eq!(
+            channels,
+            &[ChannelActivity {
+                channel_id,
+                active: true,
+                unread: Some(UnreadCount(2)),
+                mentions: Some(MentionCount(1)),
+            }]
+        );
     }
 
     /// A channel whose count was unknown at close keeps its mark until a
@@ -1483,6 +1546,7 @@ mod tests {
                 channel_id,
                 active: true,
                 unread: None,
+                mentions: None,
             }]
         );
     }
@@ -1917,6 +1981,7 @@ mod tests {
                 channel_id,
                 active: false,
                 unread: Some(UnreadCount::ZERO),
+                mentions: Some(MentionCount::ZERO),
             }]
         );
     }
@@ -1952,11 +2017,13 @@ mod tests {
                     channel_id: busy,
                     active: true,
                     unread: None,
+                    mentions: None,
                 },
                 ChannelActivity {
                     channel_id: quiet,
                     active: false,
                     unread: None,
+                    mentions: None,
                 },
             ]
         );

@@ -33,6 +33,7 @@ segment:header/created_at: i64
 segment:header/kind: string
 segment:header: map
 segment:messages/*/author: string
+segment:messages/*/content#mention: string
 segment:messages/*/content: text
 segment:messages/*/id: string
 segment:messages/*/reactions/{id}: i64

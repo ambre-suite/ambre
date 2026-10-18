@@ -12,6 +12,8 @@
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
 
+use std::ops::Range;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -49,6 +51,26 @@ pub struct ChannelActivity {
     /// The new messages of the channel, once the loaded document gives the
     /// number (`MURMURE-120`). `None` while only the mark is known.
     pub unread: Option<UnreadCount>,
+    /// The new messages that name this user or the channel. A loaded
+    /// document counts its marks, so a false summary does not stay
+    /// (`MURMURE-104`). `None` while only the mark is known.
+    pub mentions: Option<MentionCount>,
+}
+
+/// How many messages past the reader's cursor mention them, or the channel
+/// (`MURMURE-233`). A type of its own beside [`UnreadCount`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MentionCount(pub u32);
+
+impl MentionCount {
+    /// No mention.
+    pub const ZERO: Self = Self(0);
+
+    /// The two counts together, held at the top rather than wrapping.
+    #[must_use]
+    pub const fn plus(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
 }
 
 /// Where a channel the user belongs to lives, as the relay lists it.
@@ -109,17 +131,25 @@ pub enum MentionTarget {
     Channel,
 }
 
+/// One mention over the body of a message: what it names, and the run of
+/// text that shows it (`MURMURE-100`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mention {
+    pub target: MentionTarget,
+    /// In chars of the body, as the composer drew the name.
+    pub range: Range<usize>,
+}
+
 /// A message the view hands the engine to send.
 ///
-/// The text is plain. The `mention` marks over it are written by the mentions
-/// feature. Until then the mentions reach the activity summary alone
-/// (`MURMURE-081`).
+/// The engine writes each mention as a `mention` mark over its range, and
+/// the summary lists what the marks name (`MURMURE-101`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageDraft {
     /// The body, as the author typed it.
     pub text: String,
     /// Who the body names, in the order the author typed them.
-    pub mentions: Vec<MentionTarget>,
+    pub mentions: Vec<Mention>,
 }
 
 /// A command for an open channel, UI thread -> Logic thread.
@@ -198,8 +228,39 @@ pub struct MessageView {
     pub ts: Timestamp,
     /// The body, as plain text.
     pub text: String,
+    /// The `mention` marks of the body, in text order (`MURMURE-103`).
+    pub mentions: Vec<Mention>,
     /// One per emoji, in emoji order (`MURMURE-006`).
     pub reactions: Vec<Reaction>,
+}
+
+impl MessageView {
+    /// The body as the view shows it: each mention of a member reads as
+    /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
+    /// does not know keeps the text the author typed.
+    pub fn shown(&self, name_of: impl Fn(UserId) -> Option<String>) -> String {
+        let mut shown = String::with_capacity(self.text.len());
+        let mut at = 0;
+        for (i, c) in self.text.chars().enumerate() {
+            if i < at {
+                continue;
+            }
+            let mention = self.mentions.iter().find(|m| m.range.start == i);
+            let named = mention.and_then(|m| match m.target {
+                MentionTarget::User(user) => name_of(user).map(|name| (m, name)),
+                MentionTarget::Channel => None,
+            });
+            match named {
+                Some((m, name)) => {
+                    shown.push('@');
+                    shown.push_str(&name);
+                    at = m.range.end;
+                }
+                None => shown.push(c),
+            }
+        }
+        shown
+    }
 }
 
 /// The members who reacted to a message with one emoji.

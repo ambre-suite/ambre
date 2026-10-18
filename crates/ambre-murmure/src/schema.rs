@@ -72,6 +72,9 @@ pub(crate) const MESSAGE_CONTENT: &str = "content";
 /// The flat map of a message's reactions, one entry per member and emoji
 /// (`MURMURE-006`). Each entry holds the instant of its reaction.
 pub(crate) const MESSAGE_REACTIONS: &str = "reactions";
+/// The mark over a mention in a body. Its value is a user identifier, or the
+/// channel identifier for an `@channel` (`MURMURE-008`).
+pub(crate) const MENTION: &str = "mention";
 
 /// Murmure's migration registry: one row per version bump, appended never
 /// rewritten.

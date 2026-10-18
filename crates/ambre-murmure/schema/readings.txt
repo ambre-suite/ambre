@@ -27,7 +27,8 @@ segment:header/channel_id = {uuid} => the channel it opens as
 segment:header/created_at = 1700000000000 => read by no reader of this build
 segment:header/kind = "segment" => admitted as Segment
 segment:messages/*/author = {uuid} => message 1 by the author
-segment:messages/*/content = "hello" => message 1 reads "hello"
+segment:messages/*/content = "hello @channel" => message 1 reads "hello @channel"
+segment:messages/*/content#mention = {uuid} => message 1 mentions the channel
 segment:messages/*/id = {uuid} => message 1
 segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
 segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms

@@ -86,6 +86,10 @@ pub enum MurmureError {
     #[error("a reaction that is not one emoji")]
     NotEmoji,
 
+    /// A mention whose range is empty or past the body (`MURMURE-100`).
+    #[error("a mention outside the body of its message")]
+    BadMention,
+
     /// The authorship check refused a delta, which changed nothing
     /// (`MURMURE-030`).
     #[error("the authorship check refused a delta: {0}")]
