@@ -348,6 +348,7 @@ impl LogicState {
         // this user go (`SRV-097`). A reopen lists the members again.
         self.channel_watchers.remove(&channel_id);
         self.closing_segments.remove(&channel_id);
+        self.close_successors.remove(&channel_id);
         self.channel_members.remove(&channel_id);
         let base = self
             .my_user_id
@@ -497,6 +498,7 @@ impl LogicState {
         self.end_light_channel(channel_id);
         self.channel_watchers.remove(&channel_id);
         self.closing_segments.remove(&channel_id);
+        self.close_successors.remove(&channel_id);
         self.channel_members.remove(&channel_id);
         let documents = match (
             self.channels.remove(&channel_id),
@@ -953,6 +955,14 @@ impl LogicState {
             }
             MurmureCommand::Tick { now } => {
                 let meta = channel.meta_id().document_id();
+                // A successor that failed to open is fetched again past its
+                // delay (the Murmure segments spec).
+                if let Some(successor) = channel.successor_to_retry(now) {
+                    self.send_to_sync(SyncCommand::OpenDocument {
+                        document_id: successor.document_id(),
+                        doc_type: DocType::Murmure,
+                    });
+                }
                 let watchers = self.channel_watchers.entry(channel_id).or_default();
                 let changed = watchers.tick(now);
                 if watchers.owes_watching(now) {
@@ -3061,14 +3071,15 @@ mod tests {
         );
     }
 
-    /// A failed close asks again on the next send that finds the segment
-    /// full, and an answer nobody asked for changes nothing.
+    /// Holds `SYNC-164` in Logic. A failed close asks again on the next send
+    /// that finds the segment full, with the successor it already created.
+    /// An answer nobody asked for changes nothing.
     #[test]
     fn a_failed_close_is_asked_again() {
         let (mut state, _ui, sync) = harness();
         let (channel_id, old) = small_channel(&mut state, 1);
         command(&mut state, channel_id, send("one", Vec::new()));
-        let [(closing, _)] = closes(&sync).try_into().expect("one close");
+        let [(closing, successor)] = closes(&sync).try_into().expect("one close");
         state.handle_logic_event(LogicEvent::SegmentCloseFailed {
             channel_id,
             closing,
@@ -3082,7 +3093,19 @@ mod tests {
         });
         assert_eq!(state.channels[&channel_id].active_id(), old);
         command(&mut state, channel_id, send("two", Vec::new()));
-        assert_eq!(closes(&sync).len(), 1, "the close is asked again");
+        assert_eq!(
+            closes(&sync),
+            [(closing, successor)],
+            "the close is asked again, into the same successor"
+        );
+        state.handle_logic_event(LogicEvent::SegmentClosed {
+            channel_id,
+            closing,
+            active: successor,
+            created: true,
+        });
+        assert_eq!(state.channels[&channel_id].active_id(), successor);
+        assert!(state.close_successors.is_empty());
     }
 
     /// A close another member wrote reaches this client in `meta`, which
@@ -3113,6 +3136,46 @@ mod tests {
         assert!(
             !sent(&sync).contains(&Sent::Open(successor.document_id())),
             "fetched once"
+        );
+    }
+
+    /// A successor whose open failed is fetched again by a tick past its
+    /// delay (the Murmure segments spec).
+    #[test]
+    fn a_tick_fetches_again_a_successor_that_failed_to_open() {
+        let (mut state, _ui, sync) = harness();
+        let (channel_id, old) = small_channel(&mut state, 1);
+        let channel = &state.channels[&channel_id];
+        let meta = channel.meta_id();
+        let segments = HashMap::from([(old, channel.snapshot(old.document_id()).expect("old"))]);
+        let meta_bytes = channel.snapshot(meta.document_id()).expect("meta");
+        let mut bob = crate::identified(
+            ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("bob"),
+        );
+        let successor = SegmentId::new();
+        let closed = bob
+            .close_into(old, successor, true, NOW)
+            .expect("bob closes");
+        assert!(state.apply_channel_remote(meta.document_id(), &[(None, &closed.meta)]));
+        drain(&sync);
+
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: successor.document_id(),
+            message: "no update yet".to_owned(),
+        });
+        let tick = |ms: u64| MurmureCommand::Tick {
+            now: Timestamp(NOW.0 + ms),
+        };
+        command(&mut state, channel_id, tick(0));
+        command(&mut state, channel_id, tick(999));
+        assert!(
+            !sent(&sync).contains(&Sent::Open(successor.document_id())),
+            "not before its delay"
+        );
+        command(&mut state, channel_id, tick(1_000));
+        assert!(
+            sent(&sync).contains(&Sent::Open(successor.document_id())),
+            "fetched again"
         );
     }
 

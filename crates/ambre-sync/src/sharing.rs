@@ -2096,6 +2096,27 @@ mod tests {
         assert_eq!(http.calls().len(), 2, "a failed close deletes nothing");
     }
 
+    /// `SYNC-164`: a close asked again names the successor it created. The
+    /// relay's answer reads as this client's own close, so nothing is
+    /// deleted.
+    #[tokio::test]
+    async fn a_close_asked_again_keeps_its_successor() {
+        let mine = SegmentId::new();
+        let created = serde_json::json!({
+            "document_id": mine.document_id().to_string(), "doc_type": "murmure",
+        });
+        let answer = serde_json::json!({ "active": mine.to_string(), "created": true });
+        let http = FakeHttp::new(vec![Ok(created), Ok(answer)]);
+        let again = close_segment_task(&http, close_params(mine)).await;
+        assert_eq!(again, Ok((mine, true)));
+        let calls = http.calls();
+        let [Call::Post(_, create), Call::Post(_, close)] = calls.as_slice() else {
+            panic!("expected a create then a close, got {:?}", calls.len());
+        };
+        assert_eq!(create["document_id"], mine.document_id().to_string());
+        assert_eq!(close["successor"], mine.to_string());
+    }
+
     /// A revoke the relay refuses changes nothing here either: no key is
     /// swapped, and the user is told (`SYNC-041`).
     #[tokio::test]

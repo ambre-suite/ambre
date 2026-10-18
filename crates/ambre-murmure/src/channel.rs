@@ -29,7 +29,7 @@ use crate::{mention, reaction};
 
 mod closing;
 
-pub use closing::{Closed, SEGMENT_MESSAGES};
+pub use closing::{Closed, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS};
 
 /// One document the channel holds, with the identifier the Sync worker routes
 /// it by.
@@ -43,6 +43,9 @@ struct Held {
     /// What a document created here holds, written again under its PeerID
     /// once the session lands. `None` for a document the relay served.
     created: Option<Created>,
+    /// The message count at which an active segment next measures its
+    /// snapshot against the byte bound. Zero measures at the first ask.
+    probe_at: usize,
 }
 
 impl Held {
@@ -53,6 +56,7 @@ impl Held {
             doc,
             session: None,
             created: None,
+            probe_at: 0,
         }
     }
 
@@ -163,12 +167,16 @@ pub struct ChannelState {
     sequences: HashMap<DocumentId, Sequence>,
     /// The messages past which the active segment asks to close.
     segment_size: usize,
+    /// The snapshot bytes past which the active segment asks to close.
+    segment_bytes: usize,
     /// Whether the active segment asked to close and waits for the answer.
     close_asked: bool,
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
     successor_session: Option<(u64, Vec<u8>)>,
+    /// The successor that failed to open, fetched again on a later tick.
+    successor_retry: Option<closing::Retry>,
 }
 
 impl ChannelState {
@@ -312,9 +320,11 @@ impl ChannelState {
             pending: HashMap::new(),
             sequences: HashMap::new(),
             segment_size: SEGMENT_MESSAGES,
+            segment_bytes: SEGMENT_BYTES,
             close_asked: false,
             successor: None,
             successor_session: None,
+            successor_retry: None,
         }
     }
 
@@ -1109,7 +1119,11 @@ impl ChannelState {
             .remove(&segment)
             .ok_or(MurmureError::NotHeld(document_id))?;
         let loaded = if self.is_successor(segment) {
-            self.successor_ready(segment, arrivals)
+            let ready = self.successor_ready(segment, arrivals);
+            if ready.is_err() {
+                self.successor_failed(segment);
+            }
+            ready
         } else {
             self.load_older_from(segment, arrivals)
         };

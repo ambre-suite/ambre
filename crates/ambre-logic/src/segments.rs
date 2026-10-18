@@ -22,11 +22,15 @@ impl LogicState {
         };
         let meta = channel.meta_id();
         self.closing_segments.insert(channel_id, now);
+        // A close that failed may still have registered its successor, so a
+        // second ask names the same one (`SYNC-164`). The default is a fresh
+        // identifier.
+        let successor = *self.close_successors.entry(channel_id).or_default();
         self.send_to_sync(SyncCommand::CloseSegment {
             channel_id,
             meta,
             closing,
-            successor: SegmentId::new(),
+            successor,
         });
     }
 
@@ -43,6 +47,7 @@ impl LogicState {
         let Some(now) = self.closing_segments.remove(&channel_id) else {
             return;
         };
+        self.close_successors.remove(&channel_id);
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };

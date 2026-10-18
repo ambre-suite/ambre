@@ -98,6 +98,7 @@ close that came later.
 |---|---|---|---|---|---|---|
 | `SRV-194` | `POST` | A close by a writer of the channel MUST register the caller's successor as the active segment, and mark the old one `closing`. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-segments.md` | `ambre_server::db::channels::tests::a_close_registers_the_successor_and_marks_the_segment_closing`; `ambre_server::routes::channels::tests::a_writer_closes_a_segment_and_a_late_close_learns_the_winner`; `::a_close_needs_a_writer_and_its_own_successor` -- database tier, a viewer, a successor of another member and a segment closed into itself are refused | none | verified |
 | `SRV-196` | `FAIL` | Given a close while a segment of the channel is still `closing`, or of a segment no longer active, the relay MUST refuse it. | this spec section 3 | `ambre_server::db::channels::tests::a_close_while_a_segment_is_closing_is_refused` -- database tier, both closes answer a conflict and nothing is registered | none | verified |
+| `SRV-198` | `POST` | A close asked again with the successor it registered MUST be answered that successor, as the caller's own. | this spec section 3; `ambre-spec-sync.md`, `SYNC-164` | `ambre_server::db::channels::tests::a_close_asked_again_answers_its_own_successor` -- database tier, the second close answers the same successor and registers nothing | none | verified |
 | `SRV-197` | `FRAME` | A close MUST NOT change the segments of any other channel. | this spec section 3 | `ambre_server::db::channels::tests::a_close_registers_the_successor_and_marks_the_segment_closing` -- database tier, a second channel keeps its one active segment | none | verified |
 
 ### 1.7 Two closes race
@@ -129,7 +130,7 @@ snapshot, and the relay arbitrates who writes it.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 43 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
+* **Verification.** 44 `verified`, 9 `unimplemented`. What holds is the ordering, where each delta
   lives, the replay, and the close of a segment. The recovery paths are driven through real
   failures: a register that refuses inserts, a queue that refuses pushes, an index that cannot be
   read.

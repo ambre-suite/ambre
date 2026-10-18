@@ -110,6 +110,7 @@ impl LogicState {
                         self.read_cursors.clear();
                         self.closed_channels.clear();
                         self.closing_segments.clear();
+                        self.close_successors.clear();
                         self.channel_watchers.clear();
                         self.channel_members.clear();
                         self.spaces.clear();

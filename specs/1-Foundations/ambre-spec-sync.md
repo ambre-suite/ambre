@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-159` | `POST` | Given a delta the relay failed to sequence through a fault of its own, the worker MUST send it again, with every delta that left after it, within the resend budget. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-186`; `SYNC-155`; `ambre-spec-budgets.md` section 8 | `ambre_sync::updates::tests::a_delta_the_relay_failed_to_sequence_leaves_again_with_every_later_one` -- once its timer fires, the answer leaves first, then the delta at its own clock with the one behind it, and a stale timer sends nothing; `ambre_sync::updates::tests::a_delta_failing_past_the_budget_holds_its_document` -- the delay doubles per failure, and past the budget the document holds the delta and reports it once | none | verified |
 | `SYNC-162` | `POST` | A segment a closed channel watches MUST be counted from its first number, under the key of its `meta`. | `5-Murmure/features/ambre-spec-murmure-unread.md`, `MURMURE-477`; this spec section 2 | `ambre_sync::light::tests::a_watched_segment_counts_from_its_first_number` -- the watch subscribes the segment and asks for everything after number zero, a delta sealed under the `meta` key is counted, and a second watch sends nothing | none | verified |
 | `SYNC-163` | `FAIL` | A close that lost its race MUST delete the successor it created, and a close that failed MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-195`, `SRV-196` | `ambre_sync::sharing::tests::a_lost_close_deletes_the_successor_it_created` -- a won close creates then closes, a `created: false` answer deletes the minted successor, and a failed close sends no delete | none | verified |
-| `SYNC-164` | `FAIL` | Given a close that failed after its successor was created, the worker MUST ask the close again with that successor, so no successor stays unregistered. | `SYNC-163`; `ambre-spec-sequencer.md`, `SRV-196` | not built | unbuilt -- lands with the `A segment close recovers from its failures` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-164` | `FAIL` | Given a close that failed, the client MUST ask it again with the successor it already created, so no successor stays unregistered. | `SYNC-163`; `ambre-spec-sequencer.md`, `SRV-198` | `ambre_logic::channels::tests::a_failed_close_is_asked_again` -- the next send asks the same close into the same successor, and the answer makes it active; `ambre_sync::sharing::tests::a_close_asked_again_keeps_its_successor` -- the worker creates and closes into that successor again, and deletes nothing | none | verified |
 
 ### 1.6 The session ends
 
@@ -98,7 +98,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 40 `verified`, 2 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 41 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.

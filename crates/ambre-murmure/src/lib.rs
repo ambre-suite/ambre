@@ -45,7 +45,9 @@ mod space_tests;
 #[cfg(test)]
 mod unread_tests;
 
-pub use channel::{ChannelState, Closed, Named, SEGMENT_MESSAGES, Sent};
+pub use channel::{
+    ChannelState, Closed, Named, SEGMENT_BYTES, SEGMENT_MESSAGES, SUCCESSOR_RETRY_MS, Sent,
+};
 pub use delta::{JSON_SCHEMA_VERSION, Refusal, Signer};
 pub use error::MurmureError;
 pub use members::{

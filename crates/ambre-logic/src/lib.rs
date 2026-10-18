@@ -707,6 +707,10 @@ struct LogicState {
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
     closing_segments: HashMap<ambre_bus::ChannelId, ambre_bus::Timestamp>,
+    /// The successor each channel's close names, kept across a failed close
+    /// so the next ask registers the one already created. Removed once the
+    /// relay answers, and with the channel.
+    close_successors: HashMap<ambre_bus::ChannelId, ambre_bus::SegmentId>,
     /// Who watches each open channel and who types in it, with this client's
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
@@ -832,6 +836,7 @@ impl LogicState {
             read_cursors: HashMap::new(),
             closed_channels: HashMap::new(),
             closing_segments: HashMap::new(),
+            close_successors: HashMap::new(),
             channel_watchers: HashMap::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),

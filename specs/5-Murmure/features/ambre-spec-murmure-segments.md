@@ -30,8 +30,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-064` | `POST` | A client MUST ask the relay to close the active segment once it passes the segment size of the budget register. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_murmure::closing_tests::a_full_segment_asks_to_close_once` -- the segment asks once, and again only after a refusal; `ambre_logic::channels::tests::a_full_segment_closes_into_the_successor_the_relay_names` -- the send that fills it asks the Sync worker for one close; `ambre_logic::channels::tests::a_failed_close_is_asked_again` -- a failed close asks again on the next send | none | verified |
 | `MURMURE-065` | `POST` | A close MUST make the old segment `closing` and its successor `active`. | this spec section 3; `MURMURE-010` | `ambre_murmure::closing_tests::a_close_makes_the_segment_closing_and_its_successor_active` -- in the channel and in `meta`; `ambre_murmure::closing_tests::a_close_while_a_segment_is_closing_is_refused` -- a second close is refused; `ambre_logic::channels::tests::a_full_segment_closes_into_the_successor_the_relay_names` -- the answer leaves as a `meta` delta, and the successor takes the next message | none | verified |
 | `MURMURE-066` | `FRAME` | Closing a segment MUST NOT move a message from one segment to another. | this spec section 3 | `ambre_murmure::closing_tests::a_close_makes_the_segment_closing_and_its_successor_active` -- every message stays where it was; `ambre_murmure::closing_tests::a_remote_close_is_followed_once_its_successor_arrives` -- a member following the close keeps sending to the old segment until the successor is in; `ambre_logic::channels::tests::a_remote_close_fetches_its_successor` -- the Logic thread fetches it once | none | verified |
-| `MURMURE-481` | `POST` | A client MUST ask to close the active segment once its bytes pass the size of the budget register, whatever its message count. | this spec section 3; `ambre-spec-budgets.md section 6`; `MURMURE-064` | not built | unbuilt -- lands with the `A segment close recovers from its failures` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-482` | `FAIL` | Given a successor whose open fails, the client MUST fetch it again, never write to it before it opens. | this spec section 3; `MURMURE-066` | not built | unbuilt -- lands with the `A segment close recovers from its failures` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-481` | `POST` | A client MUST ask to close the active segment once its bytes pass the size of the budget register, whatever its message count. | this spec section 3; `ambre-spec-budgets.md section 6`; `MURMURE-064` | `ambre_murmure::closing_tests::a_segment_past_its_bytes_asks_to_close_whatever_its_count` -- long messages ask at the send that passes the bound, far below the count | none | verified |
+| `MURMURE-482` | `FAIL` | Given a successor whose open fails, the client MUST fetch it again, never write to it before it opens. | this spec section 3; `MURMURE-066` | `ambre_murmure::closing_tests::a_successor_that_fails_to_open_is_fetched_again` -- past a delay that doubles, the old segment taking every message meanwhile; `::a_successor_is_fetched_again_four_times_at_most` -- the fifth failure gives up; `ambre_logic::channels::tests::a_tick_fetches_again_a_successor_that_failed_to_open` -- the tick asks the Sync worker | none | verified |
 
 ### 1.3 Finalize a closing segment
 
@@ -78,8 +78,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 4 `verified`, 21 `unimplemented`. The engine tests hold the close on one peer
-  and on two. The Logic tests hold the request, the answer and the fetch of a remote successor. The
+* **Verification.** 6 `verified`, 19 `unimplemented`. The engine tests hold the close on one peer
+  and on two, the byte bound, and the fetch again of a successor. The Logic tests hold the request,
+  the answer, and each fetch of a remote successor. The
   relay holds the count that asks for a compaction. No lease, amendment or final snapshot exists.
 
 ---
@@ -138,14 +139,17 @@ deleted text leaves the ciphertext only then.
 
 **A close, in steps.**
 
-1. A send that fills the active segment asks the Sync worker to close it (`MURMURE-064`).
-2. The worker creates a successor and asks the relay to close into it (`SRV-194`).
+1. A send that fills the active segment asks the Sync worker to close it. It is full by its count
+   (`MURMURE-064`) or by its bytes (`MURMURE-481`).
+2. The worker creates a successor and asks the relay to close into it (`SRV-194`). A close that
+   failed is asked again with the same successor (`SYNC-164`).
 3. The relay names the one successor. A client that lost the race deletes its own (`SRV-195`).
 4. The Logic thread writes the close into `meta`, and opens the successor (`MURMURE-065`).
 5. Every other member reads the close in `meta`, and fetches the successor once (`MURMURE-066`).
+   An open that fails is fetched again on a later tick (`MURMURE-482`).
 
-**Code.** `ChannelState::wants_close`, `close_into` and `successor_to_open`, in
-`crates/ambre-murmure/src/channel.rs`. The Logic side is `crates/ambre-logic/src/segments.rs`, and
+**Code.** `ChannelState::wants_close`, `close_into`, `successor_to_open` and `successor_to_retry`,
+in `crates/ambre-murmure/src/channel/closing.rs`. The Logic side is `crates/ambre-logic/src/segments.rs`, and
 the request is `close_segment_task` in `crates/ambre-sync/src/sharing.rs`.
 
 ---
@@ -182,11 +186,7 @@ The segments have no control of their own. A user meets them only as a channel t
 
 * **No segment is finalized.** No lease, amendment or re-finalization exists. A channel closes one
   segment, and refuses a second close while the first is still `closing`.
-* **The size is counted in messages.** The 2 MB bound of the segment size row is not measured
-  (`MURMURE-481`).
-* **A successor may be fetched before its first update.** Its open then fails, and the member keeps
-  writing to the old segment until the next `meta` delta (`MURMURE-482`).
-* **A failed close leaves its successor on the relay.** Only a lost race deletes it. An orphan holds
-  no message and no member reads it (`SYNC-164`).
+* **A successor fetched five times in vain is given up.** The member keeps writing to the old
+  segment until the next `meta` delta names the successor again (`MURMURE-482`).
 * **A closed channel counts what its `meta` names.** After a key rotation, a new segment counts its
   activity alone. A `meta` write from another device of the same user counts nothing.

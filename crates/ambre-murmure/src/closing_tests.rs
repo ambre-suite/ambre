@@ -86,6 +86,104 @@ fn a_full_segment_asks_to_close_once() {
     assert_eq!(alice.wants_close(), Some(alice.active_id()));
 }
 
+// --- MURMURE-481 ---
+
+/// A segment of long messages asks to close at the send that takes its
+/// snapshot past the byte bound, far below its message count.
+#[test]
+fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
+    const BYTES: usize = 16 * 1024;
+    let mut alice = channel(10_000).with_segment_bytes(BYTES);
+    let author = UserId::new();
+    let mut sent = 0;
+    loop {
+        // Distinct words per message, so the snapshot does not compress them.
+        let body: String = (0..40)
+            .map(|w| format!("w{}x{w} ", sent * 97 + w))
+            .collect();
+        alice.send(&draft(&body), author, NOW).expect("send");
+        sent += 1;
+        let segment = alice.active_id();
+        let bytes = alice
+            .snapshot(segment.document_id())
+            .expect("snapshot")
+            .len();
+        let asked = alice.wants_close();
+        if bytes >= BYTES {
+            assert_eq!(asked, Some(segment), "asked at the send that passes");
+            break;
+        }
+        assert_eq!(asked, None, "below the bound at {sent} messages");
+    }
+    assert!(sent < 10_000, "the bytes bind before the count");
+}
+
+// --- MURMURE-482 ---
+
+/// A successor that fails to open is fetched again past a delay that doubles
+/// at each failure. Messages go to the old segment until it opens.
+#[test]
+fn a_successor_that_fails_to_open_is_fetched_again() {
+    let mut alice = channel(1);
+    let author = UserId::new();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (successor, meta, first) = close_created(&mut alice);
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+
+    // The Sync worker could not open it.
+    assert!(bob.cancel_older(successor.document_id()));
+    let at = |ms: u64| Timestamp(NOW.0 + ms);
+    assert_eq!(bob.successor_to_retry(NOW), None, "the tick dates it");
+    assert_eq!(bob.successor_to_retry(at(999)), None);
+    assert_eq!(bob.successor_to_retry(at(1_000)), Some(successor));
+    assert_eq!(bob.successor_to_retry(at(1_000)), None, "on its way");
+
+    // It opened with no update yet, so its header check fails.
+    assert!(bob.older_ready(successor.document_id()).is_err());
+    let waiting = bob.send(&draft("meanwhile"), author, NOW).expect("send");
+    assert_eq!(waiting.segment, old, "never written before it opens");
+    assert_eq!(bob.successor_to_retry(at(5_000)), None, "the tick dates it");
+    assert_eq!(bob.successor_to_retry(at(6_999)), None, "doubled");
+    assert_eq!(bob.successor_to_retry(at(7_000)), Some(successor));
+
+    let signer = Signer {
+        peer: alice.peer(successor.document_id()).expect("a session"),
+        user: Some(author),
+    };
+    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+        .expect("arrival");
+    bob.older_ready(successor.document_id()).expect("ready");
+    assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
+    assert_eq!(bob.successor_to_retry(at(1_000_000)), None, "nothing left");
+}
+
+/// A successor that failed five times is no longer fetched.
+#[test]
+fn a_successor_is_fetched_again_four_times_at_most() {
+    let mut alice = channel(1);
+    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let (successor, meta, _) = close_created(&mut alice);
+    bob.apply_remote(bob.meta_id().document_id(), &meta)
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+    let mut now = NOW.0;
+    let mut fetches = 0;
+    for _ in 0..10 {
+        bob.cancel_older(successor.document_id());
+        assert_eq!(bob.successor_to_retry(Timestamp(now)), None);
+        now += 60_000;
+        if bob.successor_to_retry(Timestamp(now)).is_some() {
+            fetches += 1;
+        }
+    }
+    assert_eq!(fetches, 4);
+}
+
 // --- MURMURE-065, MURMURE-066 ---
 
 /// A close makes the old segment `closing` and the successor `active`, in

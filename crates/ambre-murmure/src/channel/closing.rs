@@ -7,7 +7,7 @@
 
 use ambre_bus::{MurmureEvent, Timestamp};
 use ambre_core::SegmentId;
-use loro::{Container, LoroDoc, ValueOrContainer};
+use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
 use crate::delta::{self, Arrival};
@@ -18,9 +18,29 @@ use crate::schema::{
 use crate::session::Session;
 
 /// The messages past which an active segment asks to close: the segment size
-/// row of `ambre-spec-budgets.md section 6`. The 2 MB bound of the row is not
-/// checked here: 5000 chat-length messages stay well under it.
+/// row of `ambre-spec-budgets.md section 6`.
 pub const SEGMENT_MESSAGES: usize = 5000;
+
+/// The snapshot bytes past which an active segment asks to close, whatever
+/// its message count: the 2 MB bound of the same row (`MURMURE-481`).
+pub const SEGMENT_BYTES: usize = 2 * 1024 * 1024;
+
+/// The delay before a successor that failed to open is fetched again,
+/// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
+pub const SUCCESSOR_RETRY_MS: u64 = 1_000;
+
+/// The failures past which a successor is no longer fetched again.
+const SUCCESSOR_FAILURES: u32 = 5;
+
+/// A successor that failed to open, and when to fetch it again
+/// (`MURMURE-482`).
+#[derive(Debug)]
+pub(super) struct Retry {
+    segment: SegmentId,
+    failures: u32,
+    /// Stamped by the first tick past the failure: the engine reads no clock.
+    at: Option<Timestamp>,
+}
 
 /// What writing a close produced: the `meta` delta to send, and the successor
 /// to fetch when another client created it.
@@ -42,9 +62,17 @@ impl ChannelState {
         self
     }
 
-    /// The active segment to close, once it holds the segment size
-    /// (`MURMURE-064`). It is answered once per active segment, until the
-    /// relay answers or refuses.
+    /// This channel, with segments that ask to close past `bytes` of
+    /// snapshot.
+    #[must_use]
+    pub fn with_segment_bytes(mut self, bytes: usize) -> Self {
+        self.segment_bytes = bytes;
+        self
+    }
+
+    /// The active segment to close, once it holds the segment size in
+    /// messages (`MURMURE-064`) or in bytes (`MURMURE-481`). It is answered
+    /// once per active segment, until the relay answers or refuses.
     ///
     /// `None` while a segment is still closing: the relay refuses a second
     /// close then (`SRV-196`), and the finalization frees the slot.
@@ -52,11 +80,34 @@ impl ChannelState {
         if self.close_asked || self.closing.is_some() || self.successor.is_some() {
             return None;
         }
-        if self.active.doc.get_list(MESSAGES).len() < self.segment_size {
+        let messages = self.active.doc.get_list(MESSAGES).len();
+        if messages < self.segment_size && !self.passes_bytes(messages) {
             return None;
         }
         self.close_asked = true;
         Some(self.active_id())
+    }
+
+    /// Whether the snapshot of the active segment passes the byte bound.
+    ///
+    /// An export costs milliseconds at 5000 messages, so it is not paid at
+    /// each send. Each probe spaces the next by half the messages that would
+    /// fill the bound at the mean size seen so far.
+    fn passes_bytes(&mut self, messages: usize) -> bool {
+        if messages < self.active.probe_at {
+            return false;
+        }
+        let Ok(snapshot) = self.active.doc.export(ExportMode::Snapshot) else {
+            return false;
+        };
+        let bytes = snapshot.len();
+        if bytes >= self.segment_bytes {
+            return true;
+        }
+        let per_message = (bytes / messages.max(1)).max(1);
+        let step = ((self.segment_bytes - bytes) / per_message / 2).max(1);
+        self.active.probe_at = messages + step;
+        false
     }
 
     /// The relay refused the close, or never answered: the next send asks
@@ -156,13 +207,58 @@ impl ChannelState {
         self.successor == Some(segment)
     }
 
-    /// Forget the successor that could not open. The next `meta` delta asks
-    /// for it again.
+    /// Forget the successor that could not open. A later tick fetches it
+    /// again (`MURMURE-482`).
     pub(super) fn forget_successor(&mut self, segment: SegmentId) {
         if self.successor == Some(segment) {
             self.successor = None;
             self.successor_session = None;
+            self.successor_failed(segment);
         }
+    }
+
+    /// Count one more failure of `segment`, timed by the next tick.
+    pub(super) fn successor_failed(&mut self, segment: SegmentId) {
+        match &mut self.successor_retry {
+            Some(retry) if retry.segment == segment => {
+                retry.failures += 1;
+                retry.at = None;
+            }
+            _ => {
+                self.successor_retry = Some(Retry {
+                    segment,
+                    failures: 1,
+                    at: None,
+                });
+            }
+        }
+    }
+
+    /// The successor that failed to open, to fetch again at `now`
+    /// (`MURMURE-482`). Each failure doubles the delay from
+    /// [`SUCCESSOR_RETRY_MS`], and the fifth gives up. `None` while a
+    /// successor is on its way, or before the delay ends.
+    ///
+    /// Messages still go to the active segment meanwhile, never to the
+    /// successor that did not open.
+    pub fn successor_to_retry(&mut self, now: Timestamp) -> Option<SegmentId> {
+        if self.successor.is_some() || self.closing.is_some() {
+            return None;
+        }
+        let retry = self.successor_retry.as_mut()?;
+        if retry.failures >= SUCCESSOR_FAILURES {
+            return None;
+        }
+        let Some(at) = retry.at else {
+            let delay = SUCCESSOR_RETRY_MS << (retry.failures - 1);
+            retry.at = Some(Timestamp(now.0.saturating_add(delay)));
+            return None;
+        };
+        if now < at {
+            return None;
+        }
+        let segment = retry.segment;
+        self.await_successor(segment)
     }
 
     /// The successor has all its bytes: check it, and hold it as the active
@@ -188,6 +284,7 @@ impl ChannelState {
         }
         self.closing = Some(std::mem::replace(&mut self.active, held));
         self.close_asked = false;
+        self.successor_retry = None;
         Ok(MurmureEvent::Messages { segment, messages })
     }
 }

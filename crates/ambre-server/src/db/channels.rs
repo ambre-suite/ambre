@@ -931,6 +931,26 @@ mod tests {
         );
     }
 
+    /// `SRV-198`: a close asked again with the successor it registered is
+    /// answered that successor, and registers nothing more.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_close_asked_again_answers_its_own_successor(pool: PgPool) {
+        let owner = user(&pool, "owner@test.dev").await;
+        let (id, _, first) = channel_of(&pool, owner).await;
+        let next = document(&pool, owner).await;
+        for _ in 0..2 {
+            let active = close_segment(&pool, &id, segment(first), segment(next))
+                .await
+                .expect("close");
+            assert_eq!(active, segment(next));
+        }
+        assert_eq!(
+            states(&pool, id).await,
+            [(next, "active".to_owned()), (first, "closing".to_owned())]
+        );
+    }
+
     /// `SRV-195`: two closes of one segment race, and both answer the one
     /// successor that was registered.
     #[sqlx::test]
