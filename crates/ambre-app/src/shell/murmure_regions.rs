@@ -5,9 +5,9 @@
 
 use super::app_root::MurmureShell;
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace, DirectPeers,
-    LogicCommand, MemberChannel, MemberView, MentionCount, Presence, SpaceCommand, SpaceEvent,
-    Timestamp, UiEvent, UnreadCount,
+    CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace,
+    DirectPeers, LogicCommand, MemberChannel, MemberView, MentionCount, MessageView, Presence,
+    SearchMatch, SpaceCommand, SpaceEvent, Timestamp, UiEvent, UnreadCount,
 };
 use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::chrome::MurmureRelay;
@@ -1001,4 +1001,109 @@ async fn a_refresh_reaches_every_space_and_a_space_lost_drops_its_members() {
         frame.relay.shown_members().get_untracked().is_empty(),
         "the old list is gone"
     );
+}
+
+impl Frame {
+    /// The field of the search box, once open.
+    fn search_field(&self) -> web_sys::HtmlInputElement {
+        self.query(".murmure-search-field")
+            .expect("the search box is open")
+            .dyn_into()
+            .unwrap()
+    }
+
+    async fn type_search(&self, text: &str) {
+        let input = self.search_field();
+        input.set_value(text);
+        input
+            .dispatch_event(&web_sys::Event::new("input").unwrap())
+            .unwrap();
+        leptos::task::tick().await;
+    }
+}
+
+/// The search box opens in the command bar and takes the caret
+/// (`MURMURE-213`). Its words ask the Logic thread, and the answer lists
+/// each match under its channel and the coverage (`MURMURE-149`). A match
+/// opens its channel, and Escape closes the box.
+#[wasm_bindgen_test]
+async fn the_search_box_asks_lists_and_opens_a_match() {
+    let acme = Acme::new();
+    let frame = acme.frame().await;
+    assert!(frame.query(".murmure-search").is_none(), "closed at first");
+    frame.relay.open_search();
+    leptos::task::tick().await;
+    let field = frame.search_field();
+    assert!(
+        frame.query(".ambre-commandbar .murmure-search").is_some(),
+        "in the command bar"
+    );
+    assert_eq!(
+        frame.inner.active_element(),
+        Some(field.clone().into()),
+        "the box takes the caret"
+    );
+
+    frame.type_search("budget").await;
+    let asked = frame.sent.get_untracked();
+    assert!(
+        matches!(asked[..], [LogicCommand::SearchMessages { ref query }] if query == "budget"),
+        "{asked:?}"
+    );
+    let segment = SegmentId::new();
+    let message = MessageView {
+        id: MessageId::new(),
+        author: UserId::new(),
+        ts: Timestamp(1),
+        text: "the budget for May".to_owned(),
+        mentions: Vec::new(),
+        reactions: Vec::new(),
+        notice: None,
+        edited: false,
+        deleted: false,
+        thread: None,
+        also_in_thread: None,
+    };
+    let answer = UiEvent::MessageSearch {
+        query: "budget".to_owned(),
+        channels: vec![ChannelMatches {
+            channel_id: acme.general,
+            covered: vec![segment],
+            listed: 1,
+            matches: vec![SearchMatch { segment, message }],
+        }],
+    };
+    assert!(frame.absorb(answer).await.is_empty());
+    assert_eq!(
+        frame.texts(".murmure-search-coverage"),
+        ["Searched 1 of 1 segment in 1 open channel"]
+    );
+    assert_eq!(
+        frame.texts(".murmure-search-channel"),
+        ["general1 of 1 segment"]
+    );
+    assert_eq!(frame.texts(".murmure-search-match"), ["the budget for May"]);
+
+    frame.click(".murmure-search-match").await;
+    assert!(
+        frame.query(".murmure-search").is_none(),
+        "a match closes it"
+    );
+    assert_eq!(
+        frame.pane.get_untracked().shown_channel(),
+        Some(acme.general)
+    );
+    assert!(matches!(
+        frame.sent.get_untracked().last(),
+        Some(LogicCommand::OpenChannel { channel_id }) if *channel_id == acme.general
+    ));
+
+    frame.relay.open_search();
+    leptos::task::tick().await;
+    let escape = web_sys::KeyboardEventInit::new();
+    escape.set_key("Escape");
+    let key = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &escape);
+    frame.search_field().dispatch_event(&key.unwrap()).unwrap();
+    leptos::task::tick().await;
+    assert!(frame.query(".murmure-search").is_none(), "Escape closes it");
 }

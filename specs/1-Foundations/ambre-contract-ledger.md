@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3577 rows: 2950 shipped, of which 2 loose. 627 unbuilt.**
+**3578 rows: 2952 shipped, of which 2 loose. 626 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 851 | 418 | 816 | 609 | 254 | 2948 |
+| `verified` | 851 | 418 | 816 | 609 | 256 | 2950 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` |  |  |  |  |  | 0 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 193 | 55 | 29 | 109 | 241 | 627 |
+| `unimplemented` | 193 | 55 | 29 | 109 | 240 | 626 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -163,7 +163,7 @@
 | `ambre-spec-murmure-schema.md` | 22 | 21 | 21 |  | 1 |
 | `ambre-spec-murmure-channels.md` | 50 | 36 | 36 |  | 14 |
 | `ambre-spec-murmure-engine.md` | 11 | 11 | 11 |  |  |
-| `ambre-spec-murmure-keyboard.md` | 13 | 8 | 8 |  | 5 |
+| `ambre-spec-murmure-keyboard.md` | 13 | 9 | 9 |  | 4 |
 | `ambre-spec-murmure-layout.md` | 24 | 18 | 18 |  | 6 |
 | `ambre-spec-murmure-members.md` | 21 | 16 | 16 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 13 | 13 | 13 |  |  |
@@ -171,7 +171,7 @@
 | `ambre-spec-murmure-messages.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-murmure-notifications.md` | 17 | 6 | 6 |  | 11 |
 | `ambre-spec-murmure-reactions.md` | 7 | 7 | 7 |  |  |
-| `ambre-spec-murmure-search.md` | 17 | 5 | 5 |  | 12 |
+| `ambre-spec-murmure-search.md` | 18 | 6 | 6 |  | 12 |
 | `ambre-spec-murmure-segments.md` | 26 | 26 | 26 |  |  |
 | `ambre-spec-murmure-spaces.md` | 34 | 29 | 29 |  | 5 |
 | `ambre-spec-murmure-threads.md` | 19 | 13 | 13 |  | 6 |
@@ -233,7 +233,7 @@
 | `ambre-spec-murmure-pins.md` | MURMURE-338..347 |
 | `ambre-spec-murmure-reactions.md` | MURMURE-091..097 |
 | `ambre-spec-murmure-schema.md` | MURMURE-001..020,157,437 |
-| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478 |
+| `ambre-spec-murmure-search.md` | MURMURE-147..151,313..316,318..322,336..337,478,496 |
 | `ambre-spec-murmure-segments.md` | MURMURE-062..077,153,222,238..239,263,435..436,481..483 |
 | `ambre-spec-murmure-sidebar.md` | MURMURE-275..289,298 |
 | `ambre-spec-murmure-spaces.md` | MURMURE-031..045,234..237,247..250,254,258,301..304,317,466,479..480,487 |

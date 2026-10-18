@@ -2,8 +2,8 @@
 //! (the Murmure keyboard spec, `UI-THREAD-019`).
 //!
 //! The chords that act inside a conversation, such as the up arrow of an empty
-//! composer, land with the message list. The find chord stays the browser's
-//! until the search has a view of its own.
+//! composer, land with the message list. The find chord opens the search of
+//! Murmure, as it opens the find of the other applications.
 
 use ambre_commands::{
     Command, CommandCategory, CommandId, Key, KeyBinding, Keymap, Locale, Modifiers,
@@ -15,6 +15,8 @@ const GENERAL: CommandCategory = CommandCategory("general");
 const NAVIGATE: CommandCategory = CommandCategory("navigate");
 /// The read state of the channels.
 const UNREAD: CommandCategory = CommandCategory("unread");
+/// Finding a message by its words.
+const SEARCH_CATEGORY: CommandCategory = CommandCategory("search");
 
 /// Open the command palette, channels first: a UI-only intent the shell
 /// intercepts (`CHROME-008`).
@@ -25,6 +27,9 @@ pub const NEXT_ACTIVITY: CommandId = CommandId("murmure.navigate.next_activity")
 pub const PREVIOUS_ACTIVITY: CommandId = CommandId("murmure.navigate.previous_activity");
 /// Mark every channel of the user read (the Murmure unread spec).
 pub const MARK_ALL_READ: CommandId = CommandId("murmure.unread.mark_all_read");
+/// Open the search over the loaded segments, on the find chord of every
+/// application (the Murmure search spec).
+pub const SEARCH: CommandId = CommandId("murmure.search.open");
 
 /// Alt and Shift together, the modifiers of the jumps.
 const ALT_SHIFT: Modifiers = Modifiers {
@@ -47,6 +52,10 @@ fn previous_activity_title(_: &Locale) -> String {
 
 fn mark_all_read_title(_: &Locale) -> String {
     "Mark everything read".into()
+}
+
+fn search_title(_: &Locale) -> String {
+    "Search messages".into()
 }
 
 /// Every command Murmure contributes, described once.
@@ -80,6 +89,13 @@ pub const COMMANDS: &[Command] = &[
         // page never sees the key.
         keybindings: &[KeyBinding::new(ALT_SHIFT, Key::Char('a'))],
         category: UNREAD,
+    },
+    Command {
+        id: SEARCH,
+        title: search_title,
+        icon: None,
+        keybindings: &[KeyBinding::primary('f')],
+        category: SEARCH_CATEGORY,
     },
 ];
 

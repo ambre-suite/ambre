@@ -14,16 +14,18 @@
 )]
 
 use ambre_bus::{
-    CatalogueEntry, ChannelActivity, ChannelName, ChannelPlace, DirectMessageEvent, LogicCommand,
-    MemberChannel, MemberView, MurmureEvent, Presence, RequestId, RestCommand, RestEvent,
-    SpaceEvent, UiEvent,
+    CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
+    LogicCommand, MemberChannel, MemberView, MessageView, MurmureEvent, Presence, RequestId,
+    RestCommand, RestEvent, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteRow, ShellAction};
-use ambre_commands::Locale;
-use ambre_core::{ChannelId, SpaceId, UserId};
+use ambre_commands::{KeyBinding, Locale};
+use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId};
 use ambre_murmure::MurmurePane;
-use ambre_murmure::chrome::{MurmureHandler, MurmureRelay};
-use ambre_murmure::commands::{COMMANDS, MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY};
+use ambre_murmure::chrome::{MurmureHandler, MurmureRelay, SearchBox, coverage};
+use ambre_murmure::commands::{
+    COMMANDS, MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH,
+};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
 
@@ -359,6 +361,112 @@ fn the_mark_all_read_chord_runs_the_command_of_the_unread_feature() {
         handler.on_key(PALETTE, true),
         KeyRoute::Run(actions) if matches!(actions[..], [ShellAction::OpenPalette])
     ));
+}
+
+/// What a search of `query` found: `budget` holds one match in the one
+/// segment of two it read, and `zeta` holds none.
+fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
+    let segment = SegmentId::new();
+    let message = MessageView {
+        id: MessageId::new(),
+        author: UserId::new(),
+        ts: Timestamp(1),
+        text: "the budget for May".to_owned(),
+        mentions: Vec::new(),
+        reactions: Vec::new(),
+        notice: None,
+        edited: false,
+        deleted: false,
+        thread: None,
+        also_in_thread: None,
+    };
+    UiEvent::MessageSearch {
+        query: query.to_owned(),
+        channels: vec![
+            ChannelMatches {
+                channel_id: budget,
+                covered: vec![segment],
+                listed: 2,
+                matches: vec![SearchMatch { segment, message }],
+            },
+            ChannelMatches {
+                channel_id: zeta,
+                covered: vec![SegmentId::new()],
+                listed: 1,
+                matches: Vec::new(),
+            },
+        ],
+    }
+}
+
+/// The find chord opens the search, from a text field too, and keeps the
+/// meaning the other applications give it (`MURMURE-213`). Each change of
+/// the words asks once, and an answer to an older query is dropped.
+#[wasm_bindgen_test]
+fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
+    let (_owner, relay, [budget, zeta, _]) = three_named();
+    let binding = COMMANDS.iter().find(|c| c.id == SEARCH).unwrap();
+    assert_eq!(binding.keybindings, [KeyBinding::primary('f')]);
+    let (handler, sent) = handler(relay);
+    assert!(matches!(
+        handler.on_key(SEARCH, true),
+        KeyRoute::Run(actions) if actions.is_empty()
+    ));
+    assert!(relay.search.get_untracked().open);
+    assert!(sent.get_untracked().is_empty(), "opening asks nothing");
+
+    let asked = relay.search_for("bud".to_owned());
+    assert!(matches!(asked, Some(LogicCommand::SearchMessages { ref query }) if query == "bud"));
+    assert!(
+        relay.search_for("bud".to_owned()).is_none(),
+        "the same words ask once"
+    );
+    assert!(relay.search_for("budget".to_owned()).is_some());
+
+    relay.absorb(&found("bud", budget, zeta));
+    assert!(
+        relay.search_groups().get_untracked().is_empty(),
+        "a stale answer"
+    );
+    relay.absorb(&found("budget", budget, zeta));
+    let groups = relay.search_groups().get_untracked();
+    assert_eq!(groups.len(), 1, "a channel with no match shows no group");
+    assert_eq!(groups[0].name, "budget");
+    assert_eq!(groups[0].texts, ["the budget for May"]);
+    assert_eq!(groups[0].coverage, "1 of 2 segments");
+    let channels = relay.search.get_untracked().channels;
+    assert_eq!(
+        coverage(&channels),
+        "Searched 2 of 3 segments in 2 open channels"
+    );
+
+    assert!(
+        relay.search_for("  ".to_owned()).is_none(),
+        "no word asks nothing"
+    );
+    assert!(relay.search.get_untracked().channels.is_empty());
+}
+
+/// A match opens its channel and closes the box. An answer that arrives
+/// after the box closed shows nothing.
+#[wasm_bindgen_test]
+fn a_match_opens_its_channel_and_closes_the_search() {
+    let (_owner, relay, [budget, zeta, _]) = three_named();
+    let (handler, _) = handler(relay);
+    handler.on_command(SEARCH);
+    relay.search_for("budget".to_owned());
+    relay.absorb(&found("budget", budget, zeta));
+
+    let opened = relay.choose_result(budget);
+    assert!(
+        matches!(opened, Some(LogicCommand::OpenChannel { channel_id }) if channel_id == budget),
+        "{opened:?}"
+    );
+    assert_eq!(relay.pane.get_untracked().shown_channel(), Some(budget));
+    assert_eq!(relay.search.get_untracked(), SearchBox::default());
+    relay.absorb(&found("", budget, zeta));
+    relay.absorb(&found("budget", budget, zeta));
+    assert!(relay.search_groups().get_untracked().is_empty());
 }
 
 fn news(channel_id: ChannelId, mention: bool) -> UiEvent {

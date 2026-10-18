@@ -569,6 +569,61 @@ input[type="radio"] {
     margin-left: auto;
 }
 
+/* The search box of the command bar, its results under it. */
+.murmure-search {
+    position: relative;
+    margin-left: var(--space-2);
+}
+
+.murmure-search-results {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 10;
+    width: min(28rem, 90vw);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--space-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-mid);
+}
+
+.murmure-search-coverage,
+.murmure-search-segments {
+    color: var(--text-dim);
+    font-size: var(--font-small);
+}
+
+.murmure-search-coverage {
+    margin: 0 0 var(--space-2);
+}
+
+.murmure-search-channel {
+    display: flex;
+    gap: var(--space-2);
+    margin: var(--space-2) 0 var(--space-1);
+    font-size: var(--font-small);
+}
+
+.murmure-search-group ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.murmure-search-match {
+    width: 100%;
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    border-radius: var(--radius);
+}
+
+.murmure-search-match:hover {
+    background: var(--surface-hover);
+}
+
 .murmure-members {
     display: flex;
     flex-direction: column;

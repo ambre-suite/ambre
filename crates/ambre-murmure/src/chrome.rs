@@ -11,12 +11,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY};
+use crate::commands::{MARK_ALL_READ, NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, SEARCH};
 use crate::{Activity, MurmurePane, Sidebar, SidebarEntry, SidebarGroup, SidebarSection};
 use ambre_bus::AppCommand;
 use ambre_bus::{
-    DirectMessageEvent, LogicCommand, MemberView, MurmureEvent, Presence, RequestId, RestCommand,
-    RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
+    ChannelMatches, DirectMessageEvent, LogicCommand, MemberView, MurmureEvent, Presence,
+    RequestId, RestCommand, RestEvent, SpaceCommand, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, PaletteEntry, ShellAction, ShellRegion};
 use ambre_commands::CommandId;
@@ -210,6 +210,53 @@ pub struct MurmureRelay {
     /// This user, once the session names them. The palette never offers a
     /// direct message with oneself.
     me: RwSignal<Option<UserId>>,
+    /// The search box of the command bar, closed until the find chord.
+    pub search: RwSignal<SearchBox>,
+}
+
+/// The search box: whether it is open, the query typed, and the last answer
+/// to that query (the Murmure search spec).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchBox {
+    /// The box shows in the command bar.
+    pub open: bool,
+    /// The words typed.
+    pub query: String,
+    /// What the Logic thread answered for `query`, one entry per open channel.
+    pub channels: Vec<ChannelMatches>,
+}
+
+/// The matches of one channel, as the result list shows them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchGroup {
+    /// The channel a click on a match opens.
+    pub channel_id: ChannelId,
+    /// The name the sidebar shows.
+    pub name: String,
+    /// The texts of the matching messages, in channel order.
+    pub texts: Vec<String>,
+    /// Which part of its history was read, as "2 of 14 segments".
+    pub coverage: String,
+}
+
+/// "1 segment", or "2 segments": the coverage line counts in segments.
+fn segments(count: usize) -> String {
+    match count {
+        1 => "1 segment".to_owned(),
+        n => format!("{n} segments"),
+    }
+}
+
+/// What the search read, in all: "Searched 2 of 14 segments in 3 channels".
+/// A result list states its coverage, matches or not (`MURMURE-149`).
+pub fn coverage(channels: &[ChannelMatches]) -> String {
+    let covered: usize = channels.iter().map(|c| c.covered.len()).sum();
+    let listed: usize = channels.iter().map(|c| c.listed).sum();
+    let open = match channels.len() {
+        1 => "1 open channel".to_owned(),
+        n => format!("{n} open channels"),
+    };
+    format!("Searched {covered} of {} in {open}", segments(listed))
 }
 
 /// A system notification the view asks the page to raise (the Murmure
@@ -238,7 +285,68 @@ impl MurmureRelay {
             opened: RwSignal::new(HashSet::new()),
             members: RwSignal::new(HashMap::new()),
             me: RwSignal::new(None),
+            search: RwSignal::new(SearchBox::default()),
         }
+    }
+
+    /// Open the search box, on the find chord (`MURMURE-213`). An open box
+    /// keeps its query.
+    pub fn open_search(&self) {
+        self.search.update(|s| s.open = true);
+    }
+
+    /// Close the search box, and forget its query and its answer.
+    pub fn close_search(&self) {
+        self.search.set(SearchBox::default());
+    }
+
+    /// Type `query` in the search box, and return the search it calls for.
+    /// A query with no word asks nothing. The last answer shows until the
+    /// new one arrives.
+    pub fn search_for(&self, query: String) -> Option<LogicCommand> {
+        let blank = query.trim().is_empty();
+        let changed = self
+            .search
+            .try_update(|s| {
+                let changed = s.query != query;
+                s.query.clone_from(&query);
+                if blank {
+                    s.channels.clear();
+                }
+                changed
+            })
+            .unwrap_or(false);
+        (changed && !blank).then_some(LogicCommand::SearchMessages { query })
+    }
+
+    /// The matches of the last answer, one group per channel with a match, in
+    /// the order the answer gives.
+    pub fn search_groups(&self) -> Signal<Vec<SearchGroup>> {
+        let (search, sidebar) = (self.search, self.sidebar);
+        Signal::derive(move || {
+            search.with(|s| {
+                s.channels
+                    .iter()
+                    .filter(|c| !c.matches.is_empty())
+                    .map(|c| SearchGroup {
+                        channel_id: c.channel_id,
+                        name: sidebar
+                            .with(|side| side.name_of(c.channel_id))
+                            .unwrap_or_else(|| "Unnamed channel".to_owned()),
+                        texts: c.matches.iter().map(|m| m.message.text.clone()).collect(),
+                        coverage: format!("{} of {}", c.covered.len(), segments(c.listed)),
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// Choose a match of `channel`: the box closes, and the channel opens as
+    /// a click on the sidebar opens it. The jump to the message itself lands
+    /// with the message list (`MURMURE-150`).
+    pub fn choose_result(&self, channel: ChannelId) -> Option<LogicCommand> {
+        self.close_search();
+        self.select(channel)
     }
 
     /// The notification an event calls for, if any (`MURMURE-143`). A
@@ -392,6 +500,16 @@ impl MurmureRelay {
                 Vec::new()
             }
             UiEvent::Space { space_id, event } => self.absorb_space(*space_id, event),
+            // An answer to the query the box holds. One to an older query, or
+            // to a box closed since, is dropped: typing outruns the answers.
+            UiEvent::MessageSearch { query, channels } => {
+                self.search.update(|s| {
+                    if s.open && s.query == *query {
+                        s.channels.clone_from(channels);
+                    }
+                });
+                Vec::new()
+            }
             _ => Vec::new(),
         }
     }
@@ -581,6 +699,10 @@ impl MurmureHandler {
             // The command of the unread feature, which the relay answers for
             // every channel of the user (`MURMURE-180`).
             MARK_ALL_READ => Some(LogicCommand::MarkAllRead),
+            SEARCH => {
+                self.relay.open_search();
+                None
+            }
             _ => return false,
         };
         if let Some(command) = command {
@@ -606,8 +728,9 @@ impl CommandHandler for MurmureHandler {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
         // A text field keeps Alt+Shift with an arrow, which extends its
-        // selection on a Mac.
-        if in_text_field {
+        // selection on a Mac. The find chord opens the search from any field,
+        // or the browser's find would take it (`MURMURE-213`).
+        if in_text_field && id != SEARCH {
             return KeyRoute::Yield;
         }
         self.run(id);
@@ -637,6 +760,104 @@ pub fn ChannelList(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl In
                     .collect_view()
             }}
         </nav>
+    }
+}
+
+/// The search box of the command bar, open on the find chord (`MURMURE-213`).
+/// Each change of its words asks the Logic thread, and the answer lists the
+/// matches by channel under the coverage line (`MURMURE-149`). Escape closes
+/// it, and a match opens its channel. `send` carries what the relay answers.
+#[component]
+pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl IntoView {
+    let input = NodeRef::<leptos::html::Input>::new();
+    // The box takes the caret as it opens, and again on each find chord.
+    Effect::new(move |_| {
+        if relay.search.with(|s| s.open)
+            && let Some(el) = input.get()
+        {
+            let _ = el.focus();
+        }
+    });
+    let groups = relay.search_groups();
+    let answered = move || relay.search.with(|s| !s.query.trim().is_empty());
+    let on_input = move |ev| {
+        if let Some(command) = relay.search_for(event_target_value(&ev)) {
+            send.run(command);
+        }
+    };
+    let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
+        if ev.key() == "Escape" {
+            relay.close_search();
+        }
+    };
+    view! {
+        <Show when=move || relay.search.with(|s| s.open)>
+            <div class="murmure-search" role="search">
+                <input
+                    node_ref=input
+                    class="murmure-search-field"
+                    type="search"
+                    aria-label="Search messages"
+                    placeholder="Search messages"
+                    prop:value=move || relay.search.with(|s| s.query.clone())
+                    on:input=on_input
+                    on:keydown=on_keydown
+                />
+                <Show when=answered>
+                    <div class="murmure-search-results">
+                        <p class="murmure-search-coverage">
+                            {move || relay.search.with(|s| coverage(&s.channels))}
+                        </p>
+                        {move || {
+                            groups
+                                .get()
+                                .into_iter()
+                                .map(|group| search_group_view(relay, send, group))
+                                .collect_view()
+                        }}
+                    </div>
+                </Show>
+            </div>
+        </Show>
+    }
+}
+
+fn search_group_view(
+    relay: MurmureRelay,
+    send: Callback<LogicCommand>,
+    group: SearchGroup,
+) -> impl IntoView {
+    let channel = group.channel_id;
+    view! {
+        <section class="murmure-search-group">
+            <h3 class="murmure-search-channel">
+                {group.name}
+                <span class="murmure-search-segments">{group.coverage}</span>
+            </h3>
+            <ul>
+                {group
+                    .texts
+                    .into_iter()
+                    .map(|text| {
+                        view! {
+                            <li>
+                                <button
+                                    r#type="button"
+                                    class="murmure-search-match"
+                                    on:click=move |_| {
+                                        if let Some(command) = relay.choose_result(channel) {
+                                            send.run(command);
+                                        }
+                                    }
+                                >
+                                    {text}
+                                </button>
+                            </li>
+                        }
+                    })
+                    .collect_view()}
+            </ul>
+        </section>
     }
 }
 
